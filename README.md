@@ -1,36 +1,28 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EarlyCV
 
-## Getting Started
+EarlyCV e um produto focado em acelerar a busca por emprego com mais contexto, velocidade e aderencia.
 
-First, run the development server:
+Em vez de depender apenas dos grandes portais no momento em que todo mundo ja viu a vaga, a proposta do app e ajudar a pessoa candidata a encontrar oportunidades antes da maioria, entender melhor o fit com cada posicao e adaptar o curriculo para cada candidatura com mais precisao.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## O que o app faz
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- monitora vagas e destaca oportunidades relevantes
+- ajuda a encontrar vagas antes do fluxo massivo de candidaturas
+- mostra sinais de aderencia para priorizar onde vale investir tempo
+- apoia a adaptacao de curriculo para cada vaga
+- organiza alertas e acompanhamentos para diferentes perfis de busca
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Experiencia do produto
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- landing page com proposta clara de valor
+- paginas publicas de vagas com foco em descoberta e indexacao
+- biblioteca visual propria para manter consistencia entre telas
+- navegacao com transicoes suaves para uma experiencia mais agradavel
 
-## Learn More
+## Para quem e
 
-To learn more about Next.js, take a look at the following resources:
+EarlyCV e pensado para pessoas que buscam vagas em tecnologia, dados, produto e areas digitais e querem uma busca mais estrategica, menos generica e mais orientada a relevancia.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Visao do projeto
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+O app trata SEO como requisito de produto. Isso significa que paginas publicas, especialmente paginas de vagas, devem ser facilmente encontradas por mecanismos de busca e apresentar conteudo rico, bem estruturado e util para quem esta pesquisando.
