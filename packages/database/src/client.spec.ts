@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+
+process.env.DATABASE_URL ??=
+  "postgresql://earlycv:earlycv@localhost:5432/earlycv?schema=public";
+
+const packageJson = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as {
+  exports: {
+    ".": {
+      development?: string;
+      default: string;
+      types: string;
+    };
+  };
+};
+
+const { createDatabaseClient, databaseScaffold, getDatabaseClient } =
+  await import("./index.js");
+
+test("createDatabaseClient returns a Prisma client instance", async () => {
+  const client = createDatabaseClient({
+    log: ["warn"],
+  });
+
+  assert.equal(typeof client.$connect, "function");
+  await client.$disconnect();
+});
+
+test("getDatabaseClient reuses a singleton outside production", async () => {
+  const databaseScope = globalThis as typeof globalThis & {
+    __earlycvPrisma?: unknown;
+  };
+  const processEnv = process.env as Record<string, string | undefined>;
+  const previousNodeEnv = process.env.NODE_ENV;
+
+  databaseScope.__earlycvPrisma = undefined;
+  processEnv.NODE_ENV = "test";
+
+  const firstClient = getDatabaseClient();
+  const secondClient = getDatabaseClient();
+
+  assert.equal(firstClient, secondClient);
+
+  await firstClient.$disconnect();
+
+  databaseScope.__earlycvPrisma = undefined;
+
+  if (previousNodeEnv === undefined) {
+    delete processEnv.NODE_ENV;
+  } else {
+    processEnv.NODE_ENV = previousNodeEnv;
+  }
+});
+
+test("database package exposes development source exports and compiled default runtime", () => {
+  assert.equal(packageJson.exports["."].development, "./src/index.ts");
+  assert.equal(packageJson.exports["."].default, "./dist/index.js");
+  assert.equal(packageJson.exports["."].types, "./src/index.ts");
+});
+
+test("database scaffolding is explicitly marked as bootstrap infrastructure", () => {
+  assert.deepEqual(databaseScaffold, {
+    description:
+      "Minimal Prisma bootstrap scaffolding for EarlyCV workspace development.",
+    stage: "bootstrap",
+  });
+});

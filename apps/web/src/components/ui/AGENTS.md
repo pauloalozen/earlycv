@@ -1,6 +1,6 @@
 # UI Component Rules
 
-Use estas regras ao criar ou evoluir componentes em `src/components/ui`.
+Use estas regras ao criar ou evoluir componentes em `apps/web/src/components/ui`.
 
 ## Objetivo
 
@@ -24,7 +24,7 @@ Se o padrao ja existir, extraia para um componente generico em vez de duplicar m
 
 ## Regras de implementacao
 
-- Sempre usar named exports. Nunca usar `default export` em `src/components/ui`.
+- Sempre usar named exports. Nunca usar `default export` em `apps/web/src/components/ui`.
 - Sempre estender props nativas apropriadas do HTML com TypeScript.
 - Para elementos interativos, usar `forwardRef` quando fizer sentido, como em `button`, `input` e futuros `textarea`, `select`, `dialog`.
 - Usar Tailwind para composicao visual.
@@ -37,8 +37,8 @@ Se o padrao ja existir, extraia para um componente generico em vez de duplicar m
 ## Padrao de arquivos
 
 - Um componente por arquivo, em kebab-case: `job-card.tsx`, `search-input.tsx`.
-- Exportar tudo por `src/components/ui/index.ts`.
-- Helpers compartilhados de classe ou formatacao leve podem ir para `src/lib`, como `src/lib/cn.ts`.
+- Exportar tudo por `apps/web/src/components/ui/index.ts`.
+- Helpers compartilhados de classe ou formatacao leve podem ir para `apps/web/src/lib`, como `apps/web/src/lib/cn.ts`.
 
 ## API dos componentes
 
@@ -81,7 +81,7 @@ Evite variantes demais no primeiro momento. Comece enxuto e expanda com necessid
 
 ## Showcase e validacao
 
-- Todo componente novo relevante deve aparecer na rota `src/app/ui/page.tsx` para validacao visual.
+- Todo componente novo relevante deve aparecer na rota `apps/web/src/app/ui/page.tsx` para validacao visual.
 - Sempre que criar ou alterar componentes, validar pelo menos com:
   - `npm run check`
   - `npm run build`
@@ -104,6 +104,6 @@ Se for uma composicao muito especifica de uma tela, mantenha fora de `ui` ate su
 - usa `tailwind-variants` apenas se houver variantes reais?
 - suporta `className` com `cn()`?
 - segue a paleta e tipografia da biblioteca?
-- foi exportado em `src/components/ui/index.ts`?
-- foi adicionado ao showcase em `src/app/ui/page.tsx`?
+- foi exportado em `apps/web/src/components/ui/index.ts`?
+- foi adicionado ao showcase em `apps/web/src/app/ui/page.tsx`?
 - passou em `npm run check` e `npm run build`?
