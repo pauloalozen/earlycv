@@ -1,15 +1,21 @@
-import { Card, EmptyState } from "@/components/ui";
+import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
+import { filterJobs } from "@/lib/admin-operations";
 import { getPhaseOneAdminData } from "@/lib/admin-phase-one-data";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
 
 type JobsPageProps = {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{
+    query?: string;
+    sourceName?: string;
+    status?: string;
+    token?: string;
+  }>;
 };
 
 export default async function AdminJobsPage({ searchParams }: JobsPageProps) {
-  const { token } = await searchParams;
+  const { query, sourceName, status, token } = await searchParams;
 
   if (!token) {
     return (
@@ -24,6 +30,23 @@ export default async function AdminJobsPage({ searchParams }: JobsPageProps) {
 
   const { jobs, sourceViews } = await getPhaseOneAdminData(token);
   const sourceMap = new Map(sourceViews.map((source) => [source.id, source]));
+  const availableSourceNames = [
+    ...new Set(sourceViews.map((source) => source.sourceName)),
+  ].sort();
+  const filteredJobs = filterJobs(
+    jobs.map((job) => ({
+      companyName:
+        sourceMap.get(job.jobSourceId)?.company.name ?? job.companyId,
+      id: job.id,
+      locationText: job.locationText,
+      sourceName: sourceMap.get(job.jobSourceId)?.sourceName ?? job.jobSourceId,
+      status: job.status,
+      title: job.title,
+    })),
+    { query, sourceName, status },
+  );
+  const filteredJobIds = new Set(filteredJobs.map((job) => job.id));
+  const visibleJobs = jobs.filter((job) => filteredJobIds.has(job.id));
 
   return (
     <div className="px-6 py-10 md:px-10">
@@ -34,14 +57,60 @@ export default async function AdminJobsPage({ searchParams }: JobsPageProps) {
           title="Vagas"
         />
 
-        {jobs.length === 0 ? (
+        <Card
+          className="grid gap-3 lg:grid-cols-[1.3fr_1fr_0.8fr_auto]"
+          padding="sm"
+          variant="ghost"
+        >
+          <Input
+            defaultValue={query}
+            form="jobs-filter"
+            name="query"
+            placeholder="Buscar por titulo, empresa ou local"
+          />
+          <select
+            className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
+            defaultValue={sourceName ?? ""}
+            form="jobs-filter"
+            name="sourceName"
+          >
+            <option value="">Todas as fontes</option>
+            {availableSourceNames.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+          <select
+            className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
+            defaultValue={status ?? ""}
+            form="jobs-filter"
+            name="status"
+          >
+            <option value="">Todos os status</option>
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+            <option value="removed">removed</option>
+          </select>
+          <form className="contents" id="jobs-filter" method="GET">
+            <input name="token" type="hidden" value={token} />
+            <button
+              className={buttonVariants({ variant: "outline" })}
+              type="submit"
+            >
+              Filtrar
+            </button>
+          </form>
+        </Card>
+
+        {filteredJobs.length === 0 ? (
           <EmptyState
-            description="Ainda nao existem vagas ingeridas para listar."
-            title="Sem vagas"
+            description="Nenhuma vaga corresponde aos filtros atuais."
+            title="Nenhum resultado"
           />
         ) : (
           <div className="grid gap-4">
-            {jobs.map((job) => {
+            {visibleJobs.map((job) => {
               const source = sourceMap.get(job.jobSourceId);
 
               return (

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { buttonVariants, Card, EmptyState } from "@/components/ui";
+import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
+import { filterCompanies } from "@/lib/admin-operations";
 import { getPhaseOneAdminData } from "@/lib/admin-phase-one-data";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
@@ -8,13 +9,13 @@ import { AdminStatusBadge } from "../_components/admin-status-badge";
 import { AdminTokenState } from "../_components/admin-token-state";
 
 type CompaniesPageProps = {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ query?: string; status?: string; token?: string }>;
 };
 
 export default async function AdminCompaniesPage({
   searchParams,
 }: CompaniesPageProps) {
-  const { token } = await searchParams;
+  const { query, status, token } = await searchParams;
 
   if (!token) {
     return (
@@ -28,6 +29,7 @@ export default async function AdminCompaniesPage({
   }
 
   const { companyViews } = await getPhaseOneAdminData(token);
+  const filteredCompanies = filterCompanies(companyViews, { query, status });
 
   return (
     <div className="px-6 py-10 md:px-10">
@@ -46,14 +48,50 @@ export default async function AdminCompaniesPage({
           title="Empresas"
         />
 
-        {companyViews.length === 0 ? (
+        <Card
+          className="grid gap-3 md:grid-cols-[1.4fr_0.9fr_auto]"
+          padding="sm"
+          variant="ghost"
+        >
+          <Input
+            defaultValue={query}
+            form="companies-filter"
+            name="query"
+            placeholder="Buscar empresa"
+          />
+          <select
+            className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
+            defaultValue={status ?? ""}
+            form="companies-filter"
+            name="status"
+          >
+            <option value="">Todos os status</option>
+            <option value="incompleta">incompleta</option>
+            <option value="aguardando primeiro run">
+              aguardando primeiro run
+            </option>
+            <option value="com falha recente">com falha recente</option>
+            <option value="completa">completa</option>
+          </select>
+          <form className="contents" id="companies-filter" method="GET">
+            <input name="token" type="hidden" value={token} />
+            <button
+              className={buttonVariants({ variant: "outline" })}
+              type="submit"
+            >
+              Filtrar
+            </button>
+          </form>
+        </Card>
+
+        {filteredCompanies.length === 0 ? (
           <EmptyState
-            description="Nenhuma empresa cadastrada ainda. Comece criando a primeira empresa e sua fonte de vagas."
-            title="Sem empresas"
+            description="Nenhuma empresa corresponde aos filtros atuais. Ajuste a busca ou crie uma nova empresa com sua fonte inicial."
+            title="Nenhum resultado"
           />
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
-            {companyViews.map((company) => (
+            {filteredCompanies.map((company) => (
               <Card className="space-y-4" key={company.id}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">

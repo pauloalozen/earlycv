@@ -53,6 +53,64 @@ export type OverviewMetric = {
   value: number;
 };
 
+type SearchableCompany = {
+  careersUrl?: string | null;
+  country?: string | null;
+  id: string;
+  name: string;
+  relatedSources: Array<{ id: string }>;
+  status: AdminStatus;
+  websiteUrl?: string | null;
+};
+
+type SearchableSource = {
+  company: { name: string };
+  id: string;
+  ingestionRuns?: IngestionRunSummary[];
+  parserKey?: string;
+  sourceName: string;
+  sourceType: string;
+  sourceUrl?: string;
+  status: AdminStatus;
+};
+
+type SearchableRun = {
+  companyName: string;
+  id: string;
+  sourceName: string;
+  status: string;
+};
+
+type SearchableJob = {
+  companyName: string;
+  id: string;
+  locationText: string;
+  sourceName: string;
+  status: string;
+  title: string;
+};
+
+type SearchablePendingItem = Pick<
+  PendingItem,
+  "cta" | "description" | "entityId" | "href" | "priority" | "title" | "type"
+>;
+
+function normalizeSearchValue(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function matchesQuery(haystacks: Array<string | undefined>, query?: string) {
+  if (!query) {
+    return true;
+  }
+
+  const normalizedQuery = normalizeSearchValue(query);
+
+  return haystacks.some((value) =>
+    normalizeSearchValue(value ?? "").includes(normalizedQuery),
+  );
+}
+
 export function buildSourceDetailHref(jobSourceId: string, token: string) {
   return `/admin/fontes/${jobSourceId}?token=${encodeURIComponent(token)}`;
 }
@@ -186,6 +244,69 @@ export function buildOverviewMetrics({
     { label: "pendencias", value: pendingCount },
     { label: "runs ok", value: successfulRunsCount },
   ];
+}
+
+export function filterCompanies(
+  companies: SearchableCompany[],
+  filters: { query?: string; status?: string },
+) {
+  return companies.filter(
+    (company) =>
+      matchesQuery([company.name], filters.query) &&
+      (!filters.status || company.status.label === filters.status),
+  );
+}
+
+export function filterSources(
+  sources: SearchableSource[],
+  filters: { query?: string; status?: string; type?: string },
+) {
+  return sources.filter(
+    (source) =>
+      matchesQuery([source.sourceName, source.company.name], filters.query) &&
+      (!filters.status || source.status.label === filters.status) &&
+      (!filters.type || source.sourceType === filters.type),
+  );
+}
+
+export function filterRuns(
+  runs: SearchableRun[],
+  filters: { query?: string; status?: string },
+) {
+  return runs.filter(
+    (run) =>
+      matchesQuery([run.companyName, run.sourceName, run.id], filters.query) &&
+      (!filters.status || run.status === filters.status),
+  );
+}
+
+export function filterJobs(
+  jobs: SearchableJob[],
+  filters: { query?: string; sourceName?: string; status?: string },
+) {
+  return jobs.filter(
+    (job) =>
+      matchesQuery(
+        [job.title, job.companyName, job.locationText, job.sourceName],
+        filters.query,
+      ) &&
+      (!filters.sourceName || job.sourceName === filters.sourceName) &&
+      (!filters.status || job.status === filters.status),
+  );
+}
+
+export function filterPendingItems(
+  pendingItems: SearchablePendingItem[],
+  filters: { query?: string; type?: string },
+) {
+  return pendingItems.filter(
+    (item) =>
+      matchesQuery(
+        [item.title, item.description, item.entityId],
+        filters.query,
+      ) &&
+      (!filters.type || item.type === filters.type),
+  );
 }
 
 export function groupSourcesByCompany(jobSources: JobSourceRecord[]) {

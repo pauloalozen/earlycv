@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { buttonVariants, Card, EmptyState } from "@/components/ui";
+import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
+import { filterRuns } from "@/lib/admin-operations";
 import { getPhaseOneAdminData } from "@/lib/admin-phase-one-data";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
@@ -8,11 +9,11 @@ import { AdminStatusBadge } from "../_components/admin-status-badge";
 import { AdminTokenState } from "../_components/admin-token-state";
 
 type RunsPageProps = {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ query?: string; status?: string; token?: string }>;
 };
 
 export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
-  const { token } = await searchParams;
+  const { query, status, token } = await searchParams;
 
   if (!token) {
     return (
@@ -27,6 +28,17 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
 
   const { orderedRuns, sourceViews } = await getPhaseOneAdminData(token);
   const sourceMap = new Map(sourceViews.map((source) => [source.id, source]));
+  const filteredRuns = filterRuns(
+    orderedRuns.map((run) => ({
+      companyName: sourceMap.get(run.jobSourceId)?.company.name ?? "",
+      id: run.id,
+      sourceName: sourceMap.get(run.jobSourceId)?.sourceName ?? run.jobSourceId,
+      status: run.status,
+    })),
+    { query, status },
+  );
+  const filteredRunIds = new Set(filteredRuns.map((run) => run.id));
+  const visibleRuns = orderedRuns.filter((run) => filteredRunIds.has(run.id));
 
   return (
     <div className="px-6 py-10 md:px-10">
@@ -37,14 +49,47 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
           title="Runs de ingestao"
         />
 
-        {orderedRuns.length === 0 ? (
+        <Card
+          className="grid gap-3 md:grid-cols-[1.4fr_1fr_auto]"
+          padding="sm"
+          variant="ghost"
+        >
+          <Input
+            defaultValue={query}
+            form="runs-filter"
+            name="query"
+            placeholder="Buscar por empresa, fonte ou id"
+          />
+          <select
+            className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
+            defaultValue={status ?? ""}
+            form="runs-filter"
+            name="status"
+          >
+            <option value="">Todos os status</option>
+            <option value="completed">completed</option>
+            <option value="failed">failed</option>
+            <option value="running">running</option>
+          </select>
+          <form className="contents" id="runs-filter" method="GET">
+            <input name="token" type="hidden" value={token} />
+            <button
+              className={buttonVariants({ variant: "outline" })}
+              type="submit"
+            >
+              Filtrar
+            </button>
+          </form>
+        </Card>
+
+        {filteredRuns.length === 0 ? (
           <EmptyState
-            description="Nenhum run foi executado ainda. Rode a primeira fonte para iniciar o historico."
-            title="Sem runs"
+            description="Nenhum run corresponde aos filtros atuais."
+            title="Nenhum resultado"
           />
         ) : (
           <div className="grid gap-4">
-            {orderedRuns.map((run) => {
+            {visibleRuns.map((run) => {
               const source = sourceMap.get(run.jobSourceId);
 
               return (
