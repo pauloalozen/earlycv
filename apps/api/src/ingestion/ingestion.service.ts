@@ -184,6 +184,28 @@ export class IngestionService {
     );
   }
 
+  async listAllRuns() {
+    const runs = await this.database.ingestionRun.findMany({
+      orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+    });
+
+    return runs.map((run: IngestionRun) =>
+      toRunSummary(run as IngestionRunRecord),
+    );
+  }
+
+  async getRunById(runId: string) {
+    const run = await this.database.ingestionRun.findUnique({
+      where: { id: runId },
+    });
+
+    if (!run) {
+      throw new NotFoundException("ingestion run not found");
+    }
+
+    return toRunSummary(run as IngestionRunRecord);
+  }
+
   async getRun(jobSourceId: string, runId: string) {
     const run = await this.database.ingestionRun.findFirst({
       where: { id: runId, jobSourceId },

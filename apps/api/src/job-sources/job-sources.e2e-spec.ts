@@ -292,3 +292,56 @@ test("job-source ingestion endpoints run a manual ingestion and expose audited r
   await deleteUserByEmail(database, user.email);
   await app.close();
 });
+
+test("global ingestion run endpoints list and fetch run details across sources", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "global-runs");
+  const company = await database.company.create({
+    data: {
+      name: "Global Runs Co",
+      normalizedName: `global-runs-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      companyId: company.id,
+      sourceName: "Global Runs Source",
+      sourceType: "custom_html",
+      sourceUrl: `https://global-runs.example.com/${randomUUID()}`,
+      parserKey: "custom_html",
+      crawlStrategy: "html",
+      checkIntervalMinutes: 30,
+    },
+  });
+  const server = app.getHttpServer();
+
+  const runResponse = await request(server)
+    .post(`/api/job-sources/${jobSource.id}/run`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200);
+
+  await request(server)
+    .get("/api/runs")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(Array.isArray(body), true);
+      assert.equal(
+        body.some((run: { id: string }) => run.id === runResponse.body.id),
+        true,
+      );
+    });
+
+  await request(server)
+    .get(`/api/runs/${runResponse.body.id as string}`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(body.id, runResponse.body.id);
+      assert.equal(body.jobSourceId, jobSource.id);
+      assert.equal(Array.isArray(body.previewItems), true);
+    });
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
