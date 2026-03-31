@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
 process.env.DATABASE_URL ??=
@@ -15,7 +15,17 @@ const packageJson = JSON.parse(
       types: string;
     };
   };
+  scripts: {
+    generate: string;
+    migrate: string;
+    seed: string;
+  };
 };
+
+const sourceIndex = readFileSync(
+  new URL("./index.ts", import.meta.url),
+  "utf8",
+);
 
 const { createDatabaseClient, databaseScaffold, getDatabaseClient } =
   await import("./index.js");
@@ -59,6 +69,31 @@ test("database package exposes development source exports and compiled default r
   assert.equal(packageJson.exports["."].development, "./src/index.ts");
   assert.equal(packageJson.exports["."].default, "./dist/index.js");
   assert.equal(packageJson.exports["."].types, "./src/index.ts");
+});
+
+test("database workspace scripts load the root env file before Prisma commands", () => {
+  for (const scriptName of ["generate", "migrate", "seed"] as const) {
+    assert.equal(
+      packageJson.scripts[scriptName].includes("../../.env"),
+      true,
+      `${scriptName} should source ../../.env before running`,
+    );
+  }
+});
+
+test("database workspace scripts preserve an explicitly exported DATABASE_URL", () => {
+  for (const scriptName of ["generate", "migrate", "seed"] as const) {
+    assert.equal(
+      packageJson.scripts[scriptName].includes("DATABASE_URL:-"),
+      true,
+      `${scriptName} should not override an existing DATABASE_URL`,
+    );
+  }
+});
+
+test("database development entrypoint uses source-safe relative imports", () => {
+  assert.equal(sourceIndex.includes("./client.js"), true);
+  assert.equal(existsSync(new URL("./client.js", import.meta.url)), true);
 });
 
 test("database scaffolding is explicitly marked as bootstrap infrastructure", () => {

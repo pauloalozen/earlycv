@@ -236,3 +236,59 @@ test("job-source endpoints validate company linkage and reject crawler execution
   await deleteUserByEmail(database, user.email);
   await app.close();
 });
+
+test("job-source ingestion endpoints run a manual ingestion and expose audited runs", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "job-source-ingestion");
+  const company = await database.company.create({
+    data: {
+      name: "Ingestion Company",
+      normalizedName: `ingestion-company-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      companyId: company.id,
+      sourceName: "Manual Source",
+      sourceType: "custom_html",
+      sourceUrl: `https://ingestion.example.com/${randomUUID()}`,
+      parserKey: "custom_html",
+      crawlStrategy: "html",
+      checkIntervalMinutes: 20,
+    },
+  });
+  const server = app.getHttpServer();
+
+  const runResponse = await request(server)
+    .post(`/api/job-sources/${jobSource.id}/run`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200);
+
+  assert.equal(runResponse.body.jobSourceId, jobSource.id);
+  assert.equal(runResponse.body.status, "completed");
+  assert.equal(runResponse.body.newCount, 2);
+  assert.equal(Array.isArray(runResponse.body.previewItems), true);
+
+  await request(server)
+    .get(`/api/job-sources/${jobSource.id}/runs`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(Array.isArray(body), true);
+      assert.equal(body[0]?.id, runResponse.body.id);
+    });
+
+  await request(server)
+    .get(
+      `/api/job-sources/${jobSource.id}/runs/${runResponse.body.id as string}`,
+    )
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(body.id, runResponse.body.id);
+      assert.equal(body.previewItems.length, 2);
+    });
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});

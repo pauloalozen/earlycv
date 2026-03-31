@@ -1,0 +1,796 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-03-31T18:40:00.000Z",
+  "__export_source": "OpenCode",
+  "resources": [
+    {
+      "_id": "wrk_earlycv_api",
+      "_type": "workspace",
+      "name": "EarlyCV API",
+      "description": "Colecao para testar as rotas do backend-core-slice-1.",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "parentId": null,
+      "scope": "collection"
+    },
+    {
+      "_id": "env_earlycv_api_base",
+      "_type": "environment",
+      "name": "Base Environment",
+      "parentId": "wrk_earlycv_api",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "data": {
+        "base_url": "http://localhost:4000/api",
+        "access_token": "",
+        "refresh_token": "",
+        "user_email": "teste@earlycv.dev",
+        "user_password": "123456789012",
+        "user_name": "Usuario Teste",
+        "company_id": "",
+        "job_source_id": "",
+        "job_id": "",
+        "resume_id": ""
+      }
+    },
+    {
+      "_id": "fld_health",
+      "_type": "request_group",
+      "parentId": "wrk_earlycv_api",
+      "name": "Health",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "environment": {}
+    },
+    {
+      "_id": "fld_auth",
+      "_type": "request_group",
+      "parentId": "wrk_earlycv_api",
+      "name": "Auth",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "environment": {}
+    },
+    {
+      "_id": "fld_profiles",
+      "_type": "request_group",
+      "parentId": "wrk_earlycv_api",
+      "name": "Profiles",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "environment": {}
+    },
+    {
+      "_id": "fld_resumes",
+      "_type": "request_group",
+      "parentId": "wrk_earlycv_api",
+      "name": "Resumes",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "environment": {}
+    },
+    {
+      "_id": "fld_companies",
+      "_type": "request_group",
+      "parentId": "wrk_earlycv_api",
+      "name": "Companies",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "environment": {}
+    },
+    {
+      "_id": "fld_job_sources",
+      "_type": "request_group",
+      "parentId": "wrk_earlycv_api",
+      "name": "Job Sources",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "environment": {}
+    },
+    {
+      "_id": "fld_jobs",
+      "_type": "request_group",
+      "parentId": "wrk_earlycv_api",
+      "name": "Jobs",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "environment": {}
+    },
+    {
+      "_id": "req_health_get",
+      "_type": "request",
+      "parentId": "fld_health",
+      "name": "GET Health",
+      "method": "GET",
+      "url": "{{ _.base_url }}/health",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_auth_register",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "POST Register",
+      "method": "POST",
+      "url": "{{ _.base_url }}/auth/register",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"{{ _.user_email }}\",\n  \"password\": \"{{ _.user_password }}\",\n  \"name\": \"{{ _.user_name }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_auth_login",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "POST Login",
+      "method": "POST",
+      "url": "{{ _.base_url }}/auth/login",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"{{ _.user_email }}\",\n  \"password\": \"{{ _.user_password }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_auth_refresh",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "POST Refresh",
+      "method": "POST",
+      "url": "{{ _.base_url }}/auth/refresh",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"refreshToken\": \"{{ _.refresh_token }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_auth_logout",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "POST Logout",
+      "method": "POST",
+      "url": "{{ _.base_url }}/auth/logout",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"refreshToken\": \"{{ _.refresh_token }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_auth_me",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "GET Me",
+      "method": "GET",
+      "url": "{{ _.base_url }}/auth/me",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_auth_google_start",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "GET Google Start",
+      "method": "GET",
+      "url": "{{ _.base_url }}/auth/google/start",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_auth_google_callback",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "GET Google Callback",
+      "method": "GET",
+      "url": "{{ _.base_url }}/auth/google/callback",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [
+        {
+          "name": "code",
+          "value": "replace-with-google-code"
+        },
+        {
+          "name": "state",
+          "value": "optional-state"
+        }
+      ],
+      "headers": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_auth_linkedin_start",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "GET LinkedIn Start",
+      "method": "GET",
+      "url": "{{ _.base_url }}/auth/linkedin/start",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_auth_linkedin_callback",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "GET LinkedIn Callback",
+      "method": "GET",
+      "url": "{{ _.base_url }}/auth/linkedin/callback",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [
+        {
+          "name": "code",
+          "value": "replace-with-linkedin-code"
+        },
+        {
+          "name": "state",
+          "value": "optional-state"
+        }
+      ],
+      "headers": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_profiles_get",
+      "_type": "request",
+      "parentId": "fld_profiles",
+      "name": "GET Profile",
+      "method": "GET",
+      "url": "{{ _.base_url }}/users/profile",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_profiles_put",
+      "_type": "request",
+      "parentId": "fld_profiles",
+      "name": "PUT Profile",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/users/profile",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"headline\": \"Engenheiro de Software Backend\",\n  \"currentTitle\": \"Software Engineer\",\n  \"summary\": \"Experiencia com Node.js, TypeScript e APIs.\",\n  \"yearsExperience\": 5,\n  \"city\": \"Sao Paulo\",\n  \"state\": \"SP\",\n  \"country\": \"Brasil\",\n  \"remotePreference\": \"remote\",\n  \"relocationPreference\": false,\n  \"targetSalaryMin\": 12000,\n  \"targetSalaryMax\": 18000,\n  \"preferredLanguage\": \"pt-BR\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_resumes_post",
+      "_type": "request",
+      "parentId": "fld_resumes",
+      "name": "POST Resume",
+      "method": "POST",
+      "url": "{{ _.base_url }}/resumes",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"title\": \"Curriculo Principal\",\n  \"sourceFileName\": \"curriculo-paulo.pdf\",\n  \"status\": \"draft\",\n  \"isPrimary\": true\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_resumes_get",
+      "_type": "request",
+      "parentId": "fld_resumes",
+      "name": "GET Resumes",
+      "method": "GET",
+      "url": "{{ _.base_url }}/resumes",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_resumes_get_id",
+      "_type": "request",
+      "parentId": "fld_resumes",
+      "name": "GET Resume By ID",
+      "method": "GET",
+      "url": "{{ _.base_url }}/resumes/{{ _.resume_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_resumes_put_id",
+      "_type": "request",
+      "parentId": "fld_resumes",
+      "name": "PUT Resume By ID",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/resumes/{{ _.resume_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"title\": \"Curriculo Atualizado\",\n  \"sourceFileName\": \"curriculo-atualizado.pdf\",\n  \"status\": \"reviewed\",\n  \"isPrimary\": true\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_resumes_set_primary",
+      "_type": "request",
+      "parentId": "fld_resumes",
+      "name": "POST Resume Set Primary",
+      "method": "POST",
+      "url": "{{ _.base_url }}/resumes/{{ _.resume_id }}/set-primary",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_resumes_delete_id",
+      "_type": "request",
+      "parentId": "fld_resumes",
+      "name": "DELETE Resume By ID",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/resumes/{{ _.resume_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_companies_post",
+      "_type": "request",
+      "parentId": "fld_companies",
+      "name": "POST Company",
+      "method": "POST",
+      "url": "{{ _.base_url }}/companies",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Empresa Demo\",\n  \"websiteUrl\": \"https://empresa-demo.com\",\n  \"careersUrl\": \"https://empresa-demo.com/carreiras\",\n  \"linkedinUrl\": \"https://www.linkedin.com/company/empresa-demo\",\n  \"industry\": \"Tecnologia\",\n  \"country\": \"Brasil\",\n  \"isActive\": true\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_companies_get",
+      "_type": "request",
+      "parentId": "fld_companies",
+      "name": "GET Companies",
+      "method": "GET",
+      "url": "{{ _.base_url }}/companies",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_companies_get_id",
+      "_type": "request",
+      "parentId": "fld_companies",
+      "name": "GET Company By ID",
+      "method": "GET",
+      "url": "{{ _.base_url }}/companies/{{ _.company_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_companies_put_id",
+      "_type": "request",
+      "parentId": "fld_companies",
+      "name": "PUT Company By ID",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/companies/{{ _.company_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Empresa Demo Atualizada\",\n  \"websiteUrl\": \"https://empresa-demo.com\",\n  \"careersUrl\": \"https://empresa-demo.com/jobs\",\n  \"industry\": \"Software\",\n  \"country\": \"Brasil\",\n  \"isActive\": true\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_companies_delete_id",
+      "_type": "request",
+      "parentId": "fld_companies",
+      "name": "DELETE Company By ID",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/companies/{{ _.company_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_job_sources_post",
+      "_type": "request",
+      "parentId": "fld_job_sources",
+      "name": "POST Job Source",
+      "method": "POST",
+      "url": "{{ _.base_url }}/job-sources",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"companyId\": \"{{ _.company_id }}\",\n  \"sourceName\": \"Career Site\",\n  \"sourceType\": \"custom_html\",\n  \"sourceUrl\": \"https://empresa-demo.com/carreiras\",\n  \"parserKey\": \"custom-html\",\n  \"crawlStrategy\": \"html\",\n  \"checkIntervalMinutes\": 30,\n  \"isActive\": true\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_job_sources_get",
+      "_type": "request",
+      "parentId": "fld_job_sources",
+      "name": "GET Job Sources",
+      "method": "GET",
+      "url": "{{ _.base_url }}/job-sources",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_job_sources_get_id",
+      "_type": "request",
+      "parentId": "fld_job_sources",
+      "name": "GET Job Source By ID",
+      "method": "GET",
+      "url": "{{ _.base_url }}/job-sources/{{ _.job_source_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_job_sources_put_id",
+      "_type": "request",
+      "parentId": "fld_job_sources",
+      "name": "PUT Job Source By ID",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/job-sources/{{ _.job_source_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"sourceName\": \"Career Site Updated\",\n  \"sourceType\": \"custom_html\",\n  \"sourceUrl\": \"https://empresa-demo.com/jobs\",\n  \"parserKey\": \"custom-html-v2\",\n  \"crawlStrategy\": \"html\",\n  \"checkIntervalMinutes\": 45,\n  \"isActive\": true\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_job_sources_delete_id",
+      "_type": "request",
+      "parentId": "fld_job_sources",
+      "name": "DELETE Job Source By ID",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/job-sources/{{ _.job_source_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_jobs_post",
+      "_type": "request",
+      "parentId": "fld_jobs",
+      "name": "POST Job",
+      "method": "POST",
+      "url": "{{ _.base_url }}/jobs",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"companyId\": \"{{ _.company_id }}\",\n  \"jobSourceId\": \"{{ _.job_source_id }}\",\n  \"externalJobId\": \"ext-001\",\n  \"sourceJobUrl\": \"https://empresa-demo.com/carreiras/backend-engineer\",\n  \"canonicalKey\": \"empresa-demo:backend-engineer:sao-paulo\",\n  \"title\": \"Backend Engineer\",\n  \"normalizedTitle\": \"backend engineer\",\n  \"descriptionRaw\": \"Descricao original da vaga.\",\n  \"descriptionClean\": \"Descricao normalizada da vaga.\",\n  \"locationText\": \"Sao Paulo, Brasil\",\n  \"city\": \"Sao Paulo\",\n  \"state\": \"SP\",\n  \"country\": \"Brasil\",\n  \"workModel\": \"remote\",\n  \"seniorityLevel\": \"pleno\",\n  \"employmentType\": \"full_time\",\n  \"publishedAtSource\": \"2026-03-31T12:00:00.000Z\",\n  \"firstSeenAt\": \"2026-03-31T12:05:00.000Z\",\n  \"lastSeenAt\": \"2026-03-31T12:05:00.000Z\",\n  \"status\": \"active\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_jobs_get",
+      "_type": "request",
+      "parentId": "fld_jobs",
+      "name": "GET Jobs",
+      "method": "GET",
+      "url": "{{ _.base_url }}/jobs",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_jobs_get_id",
+      "_type": "request",
+      "parentId": "fld_jobs",
+      "name": "GET Job By ID",
+      "method": "GET",
+      "url": "{{ _.base_url }}/jobs/{{ _.job_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_jobs_put_id",
+      "_type": "request",
+      "parentId": "fld_jobs",
+      "name": "PUT Job By ID",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/jobs/{{ _.job_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"title\": \"Senior Backend Engineer\",\n  \"normalizedTitle\": \"senior backend engineer\",\n  \"descriptionRaw\": \"Descricao original atualizada.\",\n  \"descriptionClean\": \"Descricao normalizada atualizada.\",\n  \"locationText\": \"Remoto - Brasil\",\n  \"city\": \"Sao Paulo\",\n  \"state\": \"SP\",\n  \"country\": \"Brasil\",\n  \"workModel\": \"remote\",\n  \"seniorityLevel\": \"senior\",\n  \"employmentType\": \"full_time\",\n  \"publishedAtSource\": \"2026-03-31T12:00:00.000Z\",\n  \"lastSeenAt\": \"2026-03-31T13:00:00.000Z\",\n  \"status\": \"active\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_jobs_delete_id",
+      "_type": "request",
+      "parentId": "fld_jobs",
+      "name": "DELETE Job By ID",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/jobs/{{ _.job_id }}",
+      "created": 1774982400000,
+      "modified": 1774982400000,
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.access_token }}"
+        }
+      ],
+      "authentication": {}
+    }
+  ]
+}

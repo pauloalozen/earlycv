@@ -30,6 +30,7 @@ test("database schema defines the slice-1 domain models", () => {
     "Company",
     "JobSource",
     "Job",
+    "IngestionRun",
   ]) {
     assert.notEqual(
       schema.includes(`model ${model} `),
@@ -37,6 +38,35 @@ test("database schema defines the slice-1 domain models", () => {
       `model ${model} should exist`,
     );
   }
+});
+
+test("JobSource tracks ingestion audit runs", () => {
+  const jobSource = getBlock("model", "JobSource");
+
+  assertContains(
+    jobSource,
+    "ingestionRuns        IngestionRun[]",
+    "JobSource should expose ingestionRuns relation",
+  );
+});
+
+test("IngestionRun stores execution counters and preview payload", () => {
+  const ingestionRun = getBlock("model", "IngestionRun");
+
+  assert.match(ingestionRun, /^\s*jobSourceId\s+String$/m);
+  assert.match(
+    ingestionRun,
+    /^\s*status\s+IngestionRunStatus\s+@default\(running\)$/m,
+  );
+  assert.match(ingestionRun, /^\s*newCount\s+Int\s+@default\(0\)$/m);
+  assert.match(ingestionRun, /^\s*updatedCount\s+Int\s+@default\(0\)$/m);
+  assert.match(ingestionRun, /^\s*skippedCount\s+Int\s+@default\(0\)$/m);
+  assert.match(ingestionRun, /^\s*failedCount\s+Int\s+@default\(0\)$/m);
+  assert.match(ingestionRun, /^\s*previewJson\s+Json\?$/m);
+  assert.match(
+    ingestionRun,
+    /^\s*jobSource\s+JobSource\s+@relation\(fields: \[jobSourceId\], references: \[id\], onDelete: Cascade\)$/m,
+  );
 });
 
 test("User.email is unique", () => {
@@ -81,6 +111,7 @@ test("enum values use lowercase API-aligned identifiers", () => {
   const jobSourceType = getBlock("enum", "JobSourceType");
   const crawlStrategy = getBlock("enum", "CrawlStrategy");
   const jobStatus = getBlock("enum", "JobStatus");
+  const ingestionRunStatus = getBlock("enum", "IngestionRunStatus");
 
   for (const expectedValue of ["credentials", "google", "linkedin"]) {
     assertContains(
@@ -136,6 +167,14 @@ test("enum values use lowercase API-aligned identifiers", () => {
       jobStatus,
       expectedValue,
       `JobStatus should include ${expectedValue}`,
+    );
+  }
+
+  for (const expectedValue of ["running", "completed", "failed"]) {
+    assertContains(
+      ingestionRunStatus,
+      expectedValue,
+      `IngestionRunStatus should include ${expectedValue}`,
     );
   }
 });

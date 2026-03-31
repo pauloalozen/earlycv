@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { IngestionService } from "../ingestion/ingestion.service";
 import { CreateJobSourceDto } from "./dto/create-job-source.dto";
 import { UpdateJobSourceDto } from "./dto/update-job-source.dto";
 import { JobSourcesService } from "./job-sources.service";
@@ -29,6 +30,8 @@ export class JobSourcesController {
   constructor(
     @Inject(JobSourcesService)
     private readonly jobSourcesService: JobSourcesService,
+    @Inject(IngestionService)
+    private readonly ingestionService: IngestionService,
   ) {}
 
   @Post()
@@ -52,6 +55,22 @@ export class JobSourcesController {
   @Get(":id")
   getById(@Param("id") id: string) {
     return this.jobSourcesService.getById(id);
+  }
+
+  @Post(":id/run")
+  @HttpCode(200)
+  run(@Param("id") id: string) {
+    return this.ingestionService.runJobSource(id);
+  }
+
+  @Get(":id/runs")
+  listRuns(@Param("id") id: string) {
+    return this.ingestionService.listRuns(id);
+  }
+
+  @Get(":id/runs/:runId")
+  getRun(@Param("id") id: string, @Param("runId") runId: string) {
+    return this.ingestionService.getRun(id, runId);
   }
 
   @Put(":id")

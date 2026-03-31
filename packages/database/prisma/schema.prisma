@@ -61,6 +61,12 @@ enum JobStatus {
   removed
 }
 
+enum IngestionRunStatus {
+  running
+  completed
+  failed
+}
+
 model User {
   id              String         @id @default(cuid())
   email           String         @unique
@@ -187,9 +193,29 @@ model JobSource {
   updatedAt            DateTime       @updatedAt
   company              Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   jobs                 Job[]
+  ingestionRuns        IngestionRun[]
 
   @@unique([companyId, sourceUrl])
   @@index([companyId])
+}
+
+model IngestionRun {
+  id           String             @id @default(cuid())
+  jobSourceId  String
+  status       IngestionRunStatus @default(running)
+  startedAt    DateTime           @default(now())
+  finishedAt   DateTime?
+  newCount     Int                @default(0)
+  updatedCount Int                @default(0)
+  skippedCount Int                @default(0)
+  failedCount  Int                @default(0)
+  errorSummary String?
+  previewJson  Json?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  jobSource    JobSource          @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+
+  @@index([jobSourceId, createdAt])
 }
 
 model Job {

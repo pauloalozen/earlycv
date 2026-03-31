@@ -32,7 +32,13 @@ export class JobSourcesService {
 
   list() {
     return this.database.jobSource.findMany({
-      include: { company: true },
+      include: {
+        company: true,
+        ingestionRuns: {
+          orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+          take: 1,
+        },
+      },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     });
   }
@@ -40,7 +46,13 @@ export class JobSourcesService {
   async getById(jobSourceId: string) {
     const jobSource = await this.database.jobSource.findUnique({
       where: { id: jobSourceId },
-      include: { company: true },
+      include: {
+        company: true,
+        ingestionRuns: {
+          orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+          take: 10,
+        },
+      },
     });
 
     if (!jobSource) {
@@ -60,7 +72,13 @@ export class JobSourcesService {
           ...dto,
           sourceUrl: normalizedSourceUrl,
         },
-        include: { company: true },
+        include: {
+          company: true,
+          ingestionRuns: {
+            orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+            take: 1,
+          },
+        },
       });
     } catch (error) {
       this.rethrowKnownError(error);
@@ -80,7 +98,13 @@ export class JobSourcesService {
               ? undefined
               : normalizeSourceUrl(dto.sourceUrl),
         },
-        include: { company: true },
+        include: {
+          company: true,
+          ingestionRuns: {
+            orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+            take: 1,
+          },
+        },
       });
     } catch (error) {
       this.rethrowKnownError(error);
