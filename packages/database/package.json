@@ -26,9 +26,13 @@
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "generate": "prisma generate --schema prisma/schema.prisma",
     "migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "seed": "tsx prisma/seed.ts",
     "lint": "biome lint --config-path ../../biome.json .",
     "check": "biome check --config-path ../../biome.json . && tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/**/*.spec.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0"

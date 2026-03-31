@@ -18,3 +18,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - SEO e requisito de produto: toda rota publica deve sair com metadata completa, canonical, OG/Twitter, robots e structured data quando fizer sentido.
 - Vagas publicas devem ter URL dedicada, conteudo renderizado no servidor e `JobPosting` estruturado.
 - Rotas internas, utilitarias ou de showcase normalmente devem usar `noindex`.
+- Estado atual do backend-core: `packages/database` ja tem schema Prisma real + migration inicial + seed; `apps/api` ja integra auth, profiles, resumes, companies, job-sources e jobs em `AppModule`.
+- Surface atual obrigatorio de env da API: `DATABASE_URL`, `API_HOST`, `API_PORT`, `JWT_*`, `GOOGLE_*` e `LINKEDIN_*`; confira `.env.example` antes de rodar `apps/api`.
+- Amanhã, se o pedido for apenas "retomar projeto", leia primeiro `specs/backend-core-slice-1-handoff.md` e siga para a fase de ingestao em vez de reabrir a fundacao.
+- Proximo passo esperado: modulo de ingestao sobre `Company`, `JobSource` e `Job`, preservando `canonicalKey` e `firstSeenAt` como invariantes do produto.

@@ -10,7 +10,8 @@
     "start": "node dist/main.js",
     "lint": "biome lint --config-path ../../biome.json .",
     "check": "NODE_OPTIONS='--conditions=development' biome check --config-path ../../biome.json .",
-    "test": "NODE_OPTIONS='--conditions=development' tsx --test src/**/*.spec.ts src/**/*.e2e-spec.ts"
+    "test": "sh -c 'set -a && . ./.env.test && set +a && if [ \"$#\" -gt 0 ]; then NODE_OPTIONS=\"--conditions=development\" tsx --test \"$@\"; else NODE_OPTIONS=\"--conditions=development\" tsx --test src/**/*.spec.ts src/**/*.e2e-spec.ts; fi' --",
+    "test:database": "set -a && . ./.env.test && set +a && NODE_OPTIONS='--conditions=development' tsx --test src/database/database.service.spec.ts"
   },
   "dependencies": {
     "@earlycv/ai": "0.1.0",
@@ -20,7 +21,17 @@
     "@earlycv/storage": "0.1.0",
     "@nestjs/common": "^11.1.9",
     "@nestjs/core": "^11.1.9",
+    "@nestjs/jwt": "^11.0.1",
+    "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.9",
+    "argon2": "^0.43.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "passport-jwt": "^4.0.1",
+    "passport-linkedin-oauth2": "^2.0.0",
+    "passport-local": "^1.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
@@ -28,6 +39,10 @@
     "@nestjs/cli": "^11.0.10",
     "@nestjs/testing": "^11.1.9",
     "@types/node": "^20",
+    "@types/passport-google-oauth20": "^2.0.16",
+    "@types/passport-jwt": "^4.0.1",
+    "@types/passport-linkedin-oauth2": "^1.5.5",
+    "@types/passport-local": "^1.0.38",
     "@types/supertest": "^6.0.3",
     "supertest": "^7.1.4",
     "tsx": "^4.20.6",

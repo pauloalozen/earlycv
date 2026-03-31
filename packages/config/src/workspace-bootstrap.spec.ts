@@ -40,7 +40,7 @@ test("api workspace uses source-resolution for dev, build, check, and test", () 
   );
   assert.equal(
     apiPackageJson.scripts?.test,
-    "NODE_OPTIONS='--conditions=development' tsx --test src/**/*.spec.ts src/**/*.e2e-spec.ts",
+    `sh -c 'set -a && . ./.env.test && set +a && if [ "$#" -gt 0 ]; then NODE_OPTIONS="--conditions=development" tsx --test "$@"; else NODE_OPTIONS="--conditions=development" tsx --test src/**/*.spec.ts src/**/*.e2e-spec.ts; fi' --`,
   );
 });
 

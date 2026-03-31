@@ -1,0 +1,59 @@
+import {
+  Injectable,
+  type OnModuleDestroy,
+  type OnModuleInit,
+} from "@nestjs/common";
+import type { PrismaClient } from "@prisma/client";
+
+export const EARLYCV_DATABASE_CLIENT = Symbol("EARLYCV_DATABASE_CLIENT");
+
+type RuntimeDatabaseClient = PrismaClient;
+
+@Injectable()
+export class DatabaseService implements OnModuleInit, OnModuleDestroy {
+  constructor(private readonly prisma: RuntimeDatabaseClient) {}
+
+  get user() {
+    return this.prisma.user;
+  }
+
+  get userProfile() {
+    return this.prisma.userProfile;
+  }
+
+  get authAccount() {
+    return this.prisma.authAccount;
+  }
+
+  get refreshToken() {
+    return this.prisma.refreshToken;
+  }
+
+  get resume() {
+    return this.prisma.resume;
+  }
+
+  get company() {
+    return this.prisma.company;
+  }
+
+  get jobSource() {
+    return this.prisma.jobSource;
+  }
+
+  get job() {
+    return this.prisma.job;
+  }
+
+  get $transaction() {
+    return this.prisma.$transaction.bind(this.prisma);
+  }
+
+  async onModuleInit() {
+    await this.prisma.$connect();
+  }
+
+  async onModuleDestroy() {
+    await this.prisma.$disconnect();
+  }
+}

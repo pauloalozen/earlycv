@@ -1,4 +1,9 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.9/schema.json",
-  "extends": ["./packages/config/biome/base.json"]
+  "extends": ["./packages/config/biome/base.json"],
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    }
+  }
 }

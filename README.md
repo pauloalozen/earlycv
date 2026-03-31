@@ -32,7 +32,7 @@ Este repositorio ja roda como monorepo npm com workspaces em `apps/*` e `package
 \- package.json   # orquestrador de workspaces
 ```
 
-`apps/web` preserva a base Next.js e as rotas publicas/SEO. Nesta fundacao, a vaga publica ainda usa o seam atual de mock em `apps/web/src/lib/jobs.ts`, consumido por `apps/web/src/app/vagas/[slug]/page.tsx`; a troca por contratos lidos da API fica para a proxima fase `backend-core`. `apps/api` fornece o bootstrap NestJS inicial com modulos de ambiente, healthcheck e servicos internos de diagnostico de infraestrutura; a orquestracao de jobs, matching, tailoring, alerts, notifications e audits entra na fase `backend-core`. Os pacotes em `packages/*` expoem os contratos e scaffolds compartilhados usados pelos apps.
+`apps/web` preserva a base Next.js e as rotas publicas/SEO. A vaga publica ainda usa o seam atual de mock em `apps/web/src/lib/jobs.ts`, consumido por `apps/web/src/app/vagas/[slug]/page.tsx`; a troca por leituras reais da API fica para a proxima fase de ingestao. `apps/api` ja saiu do bootstrap inicial e agora expõe o primeiro slice real de backend-core: auth com JWT/refresh/social login, profile/resume ownership, catalogos de companies/job-sources e CRUD canonico de jobs com `firstSeenAt`. Os pacotes em `packages/*` seguem como base compartilhada, com `packages/database` agora sendo a fonte de verdade do schema Prisma, migrations, seed e client.
 
 ## Principios de arquitetura
 
@@ -66,11 +66,12 @@ Os pacotes compartilhados agora expõem `development` + `types` a partir de `src
 | `npm run compose:down` | derruba a infraestrutura local via Docker Compose |
 | `npm ls --workspaces --depth=0` | lista os workspaces atualmente detectados pelo npm |
 
-## Verificacao final da fundacao
+## Verificacao do backend-core slice 1
 
 Os comandos abaixo foram validados na raiz deste worktree e devem ser executados de forma sequencial:
 
 ```bash
+npm run generate --workspace @earlycv/database
 npm run lint
 npm run check
 npm run build
@@ -78,17 +79,18 @@ npm run test
 npm ls --workspaces --depth=0
 ```
 
-`build` e o caminho compilado de `start` ainda recompilam artifacts compartilhados em `packages/*`, e `test` recompila a API quando necessario; por isso, a verificacao final deve evitar rodar esses comandos em paralelo.
+`generate` precisa rodar antes da verificacao completa quando o schema Prisma mudar. `build` e o caminho compilado de `start` ainda recompilam artifacts compartilhados em `packages/*`, e `test` recompila a API quando necessario; por isso, a verificacao final deve evitar rodar esses comandos em paralelo.
 
 ## Variaveis de ambiente
 
-Use `.env.example` como referencia para os valores compartilhados entre web, API, banco, Redis e S3/MinIO. O arquivo tambem inclui exemplos especificos da camada web (`NEXT_PUBLIC_*`) e um bloco explicitamente marcado como exemplo de provider de IA com OpenAI.
+Use `.env.example` como referencia para os valores compartilhados entre web, API, banco, Redis e S3/MinIO. O arquivo tambem inclui o surface atual obrigatorio da API para auth (`JWT_*`) e OAuth (`GOOGLE_*`, `LINKEDIN_*`), alem de exemplos especificos da camada web (`NEXT_PUBLIC_*`) e um bloco explicitamente marcado como exemplo de provider de IA com OpenAI.
 
 ```bash
 cp .env.example .env
 ```
 
 - `APP_URL` e `API_URL` representam endpoints compartilhados do monorepo
+- `API_HOST`, `API_PORT`, `JWT_*`, `GOOGLE_*` e `LINKEDIN_*` sao necessarios para subir `apps/api` com o slice atual
 - `NEXT_PUBLIC_*` existe para o app web quando essas URLs precisarem ser expostas no bundle cliente
 - `OPENAI_*` e nomenclatura especifica do provider OpenAI; se o provider mudar no futuro, esse bloco deve mudar junto
 
@@ -100,7 +102,8 @@ Este repositorio usa `.worktrees/` como convencao para worktrees locais do Git. 
 
 - a raiz funciona como orquestradora de workspaces npm para web, API e pacotes compartilhados
 - `apps/web` abriga o app Next.js com rotas publicas indexaveis e pagina de vaga server-rendered, ainda alimentada pelo seam atual em `apps/web/src/lib/jobs.ts` e `apps/web/src/app/vagas/[slug]/page.tsx`
-- `apps/api` abriga o bootstrap NestJS inicial com healthcheck e diagnostico interno dos pacotes compartilhados; os modulos de dominio e a orquestracao principal ficam para `backend-core`
-- `packages/config`, `packages/database`, `packages/queue`, `packages/storage` e `packages/ai` existem, compilam e possuem verificacoes basicas
-- `first_seen_at` continua sendo um invariante esperado do produto, mas o campo/modelo real ainda nao existe nesta fundacao; isso entra na fase `backend-core`
-- scripts de root refletem o estado atual do monorepo e a fundacao pode ser usada como base para a proxima fase `backend-core`
+- `apps/api` agora integra `EnvModule`, `DatabaseModule`, `InfraModule`, `HealthModule`, `AuthModule`, `ProfilesModule`, `ResumesModule`, `CompaniesModule`, `JobSourcesModule` e `JobsModule`
+- `apps/api` ja cobre register/login/refresh/logout/me, Google + LinkedIn social login, profile/resume ownership e CRUD autenticado para companies, job-sources e jobs
+- `packages/database` contem schema Prisma real, migration inicial, seed local e invariantes para auth/profile/resume/company/job-source/job
+- `first_seen_at` ja existe como campo obrigatorio persistido em `Job` e deve continuar visivel nas proximas fases
+- o proximo passo do backend e a fase de ingestao: adapters de crawler, runs, snapshot diff, normalizacao e job upsert/deduplicacao sobre o schema atual
