@@ -1,0 +1,19 @@
+{
+  "extends": "@earlycv/config/typescript/nest",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "module": "Node16",
+    "moduleResolution": "node16",
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/**/*.spec.ts",
+    "src/**/*.e2e-spec.ts"
+  ]
+}

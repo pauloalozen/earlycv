@@ -1,29 +1,30 @@
 {
-  "name": "app",
+  "name": "@earlycv/root",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "biome lint .",
+    "build:packages": "npm run build --workspace @earlycv/config --workspace @earlycv/database --workspace @earlycv/queue --workspace @earlycv/storage --workspace @earlycv/ai",
+    "postinstall": "npm run build:packages",
+    "prebuild": "npm run build:packages",
+    "dev:web": "npm run dev --workspace @earlycv/web",
+    "dev:api": "if [ -f apps/api/package.json ]; then npm run dev --workspace @earlycv/api; else printf 'apps/api workspace not created yet; dev:web still runs the web workspace.\\n'; fi",
+    "dev": "if [ -f apps/api/package.json ]; then npm run dev:web & npm run dev:api & wait; else npm run dev:web; fi",
+    "build": "if [ -f apps/api/package.json ]; then npm run build --workspace @earlycv/api; fi && if [ -f apps/web/package.json ]; then npm run build --workspace @earlycv/web; fi",
+    "start": "npm run start --workspace @earlycv/web",
+    "lint": "biome lint . && if [ -f apps/web/package.json ] || [ -f apps/api/package.json ] || ls packages/*/package.json >/dev/null 2>&1; then npm run lint --workspaces --if-present; else printf 'No workspaces created yet; root Biome lint only.\\n'; fi",
     "format": "biome format --write .",
-    "check": "biome check --write ."
-  },
-  "dependencies": {
-    "next": "16.2.1",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "tailwind-merge": "^3.5.0",
-    "tailwind-variants": "^3.2.2"
+    "check": "biome check . && if [ -f apps/web/package.json ] || [ -f apps/api/package.json ] || ls packages/*/package.json >/dev/null 2>&1; then npm run check --workspaces --if-present; else printf 'No workspaces created yet; root check only.\\n'; fi",
+    "test": "if [ -f apps/web/package.json ] || [ -f apps/api/package.json ] || ls packages/*/package.json >/dev/null 2>&1; then npm run test --workspaces --if-present; else printf 'No workspace tests are defined yet.\\n'; fi",
+    "db:generate": "if [ -f packages/database/package.json ]; then npm run generate --workspace packages/database; else printf 'packages/database workspace not created yet; skipping db:generate.\\n'; fi",
+    "db:migrate": "if [ -f packages/database/package.json ]; then npm run migrate --workspace packages/database; else printf 'packages/database workspace not created yet; skipping db:migrate.\\n'; fi",
+    "compose:up": "if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yml ] || [ -f compose.yaml ]; then docker compose up -d; else printf 'Compose file not created yet; skipping compose:up.\\n'; fi",
+    "compose:down": "if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yml ] || [ -f compose.yaml ]; then docker compose down; else printf 'Compose file not created yet; skipping compose:down.\\n'; fi"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.9",
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "@biomejs/biome": "^2.4.9"
   }
 }

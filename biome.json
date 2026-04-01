@@ -1,19 +1,9 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.9/schema.json",
-  "formatter": {
-    "enabled": true,
-    "indentStyle": "space"
-  },
-  "linter": {
-    "enabled": true
-  },
-  "files": {
-    "includes": ["**", "!node_modules", "!.next", "!out", "!build"]
-  },
+  "extends": ["./packages/config/biome/base.json"],
   "javascript": {
-    "formatter": {
-      "quoteStyle": "double",
-      "semicolons": "always"
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
     }
   }
 }
