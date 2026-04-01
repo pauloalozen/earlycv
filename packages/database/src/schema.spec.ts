@@ -7,6 +7,14 @@ const schema = readFileSync(
   "utf8",
 );
 
+const adminResumeMigration = readFileSync(
+  new URL(
+    "../prisma/migrations/20260401123000_add_admin_superadmin_resume_templates/migration.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
 function getBlock(kind: "model" | "enum", name: string) {
   const match = schema.match(
     new RegExp(`${kind}\\s+${name}\\s+\\{([\\s\\S]*?)\\n\\}`, "m"),
@@ -92,15 +100,99 @@ test("Job requires firstSeenAt and enforces canonicalKey uniqueness", () => {
   assert.match(job, /^\s*canonicalKey\s+String\s+@unique$/m);
 });
 
-test("Resume models one primary resume per user with a dedicated unique slot", () => {
+test("admin schema adds internal user roles and staff markers", () => {
+  const internalRole = getBlock("enum", "InternalRole");
+  const user = getBlock("model", "User");
+
+  for (const expectedValue of ["none", "admin", "superadmin"]) {
+    assertContains(
+      internalRole,
+      expectedValue,
+      `InternalRole should include ${expectedValue}`,
+    );
+  }
+
+  assert.match(user, /^\s*internalRole\s+InternalRole\s+@default\(none\)$/m);
+  assert.match(user, /^\s*isStaff\s+Boolean\s+@default\(false\)$/m);
+});
+
+test("resume templates include task-1 metadata for reusable baselines", () => {
+  const resumeTemplate = getBlock("model", "ResumeTemplate");
+
+  assert.match(resumeTemplate, /^\s*name\s+String$/m);
+  assert.match(resumeTemplate, /^\s*slug\s+String\s+@unique$/m);
+  assert.match(resumeTemplate, /^\s*targetRole\s+String\?$/m);
+  assert.match(resumeTemplate, /^\s*fileUrl\s+String\?$/m);
+  assert.match(resumeTemplate, /^\s*structureJson\s+Json\?$/m);
+  assert.match(resumeTemplate, /^\s*isActive\s+Boolean\s+@default\(true\)$/m);
+  assert.match(resumeTemplate, /^\s*resumes\s+Resume\[]$/m);
+});
+
+test("resumes use explicit master and adapted fields without legacy primary slots", () => {
+  const resumeKind = getBlock("enum", "ResumeKind");
   const resume = getBlock("model", "Resume");
 
-  assert.match(resume, /^\s*isPrimary\s+Boolean\s+@default\(false\)$/m);
-  assert.match(resume, /^\s*primaryResumeSlot\s+Int\?$/m);
-  assertContains(
+  for (const expectedValue of ["master", "adapted"]) {
+    assertContains(
+      resumeKind,
+      expectedValue,
+      `ResumeKind should include ${expectedValue}`,
+    );
+  }
+
+  assert.match(resume, /^\s*kind\s+ResumeKind\s+@default\(master\)$/m);
+  assert.match(resume, /^\s*isMaster\s+Boolean\s+@default\(true\)$/m);
+  assert.match(resume, /^\s*basedOnResumeId\s+String\?$/m);
+  assert.match(resume, /^\s*templateId\s+String\?$/m);
+  assert.match(resume, /^\s*targetJobId\s+String\?$/m);
+  assert.match(resume, /^\s*targetJobTitle\s+String\?$/m);
+  assert.match(
     resume,
-    "@@unique([userId, primaryResumeSlot])",
-    "Resume should reserve a unique nullable slot for the primary resume invariant",
+    /^\s*basedOnResume\s+Resume\?\s+@relation\("ResumeDerivation", fields: \[basedOnResumeId\], references: \[id\], onDelete: SetNull\)$/m,
+  );
+  assert.match(
+    resume,
+    /^\s*derivedResumes\s+Resume\[]\s+@relation\("ResumeDerivation"\)$/m,
+  );
+  assert.match(
+    resume,
+    /^\s*template\s+ResumeTemplate\?\s+@relation\(fields: \[templateId\], references: \[id\], onDelete: SetNull\)$/m,
+  );
+  assert.match(
+    resume,
+    /^\s*targetJob\s+Job\?\s+@relation\(fields: \[targetJobId\], references: \[id\], onDelete: SetNull\)$/m,
+  );
+  assert.equal(
+    /\bisPrimary\b/.test(resume),
+    false,
+    "Resume should not include isPrimary",
+  );
+  assert.equal(
+    /\bprimaryResumeSlot\b/.test(resume),
+    false,
+    "Resume should not include primaryResumeSlot",
+  );
+  assert.equal(
+    resume.includes("@@unique([userId, primaryResumeSlot])"),
+    false,
+    "Resume should not keep the primary resume unique slot",
+  );
+  assert.equal(
+    resume.includes("@@index([userId, isPrimary])"),
+    false,
+    "Resume should not keep the primary resume index",
+  );
+});
+
+test("resume migration guards master and adapted invariants", () => {
+  assertContains(
+    adminResumeMigration,
+    'CHECK (NOT "isMaster" OR "kind" = \'master\')',
+    "Migration should only allow isMaster for master resumes",
+  );
+  assert.match(
+    adminResumeMigration,
+    /CHECK \(\s*"kind" <> 'adapted'\s*OR "basedOnResumeId" IS NOT NULL\s*OR "templateId" IS NOT NULL\s*OR "targetJobId" IS NOT NULL\s*OR "targetJobTitle" IS NOT NULL\s*\)/m,
   );
 });
 

@@ -10,6 +10,8 @@
   "files": {
     "includes": [
       "**",
+      "!**/.worktrees",
+      "!**/.worktrees/**",
       "!**/node_modules",
       "!**/.next",
       "!**/out",

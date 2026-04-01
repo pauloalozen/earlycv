@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { buttonVariants, Card } from "@/components/ui";
 import { getJobSource, listIngestionRuns } from "@/lib/admin-ingestion-api";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { runJobSourceAction } from "../actions";
 
@@ -24,7 +25,8 @@ export default async function JobSourceAdminPage({
   searchParams,
 }: JobSourcePageProps) {
   const { jobSourceId } = await params;
-  const { message, status, token } = await searchParams;
+  const { message, status } = await searchParams;
+  const token = await getBackofficeSessionToken();
 
   if (!token) {
     return (
@@ -40,10 +42,10 @@ export default async function JobSourceAdminPage({
   }
 
   const [source, runs] = await Promise.all([
-    getJobSource(token, jobSourceId),
-    listIngestionRuns(token, jobSourceId),
+    getJobSource(jobSourceId),
+    listIngestionRuns(jobSourceId),
   ]);
-  const redirectPath = `/admin/ingestion/${jobSourceId}?token=${encodeURIComponent(token)}`;
+  const redirectPath = `/admin/ingestion/${jobSourceId}`;
 
   return (
     <main className="min-h-screen bg-stone-50 px-6 py-10 text-stone-900 md:px-10">
@@ -63,7 +65,6 @@ export default async function JobSourceAdminPage({
             <form action={runJobSourceAction}>
               <input name="jobSourceId" type="hidden" value={source.id} />
               <input name="redirectPath" type="hidden" value={redirectPath} />
-              <input name="token" type="hidden" value={token} />
               <button className={buttonVariants()} type="submit">
                 Rodar agora
               </button>
@@ -71,7 +72,7 @@ export default async function JobSourceAdminPage({
 
             <Link
               className={buttonVariants({ variant: "outline" })}
-              href={`/admin/ingestion?token=${encodeURIComponent(token)}`}
+              href={`/admin/ingestion`}
             >
               Voltar
             </Link>
@@ -149,7 +150,7 @@ export default async function JobSourceAdminPage({
                       size: "sm",
                       variant: "outline",
                     })}
-                    href={`/admin/ingestion/${source.id}/runs/${run.id}?token=${encodeURIComponent(token)}`}
+                    href={`/admin/ingestion/${source.id}/runs/${run.id}`}
                   >
                     Ver detalhes
                   </Link>

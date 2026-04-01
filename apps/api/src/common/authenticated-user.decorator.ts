@@ -6,6 +6,8 @@ export type AuthenticatedRequestUser = {
   name: string;
   planType: string;
   status: string;
+  isStaff: boolean;
+  internalRole: "none" | "admin" | "superadmin";
   emailVerifiedAt: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;

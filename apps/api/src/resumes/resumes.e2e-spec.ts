@@ -109,8 +109,8 @@ test("resume endpoints stay scoped to the authenticated user", async () => {
       assert.equal(body.length, 1);
       assert.equal(body[0]?.id, ownResumeId);
       assert.equal(body[0]?.userId, firstUser.userId);
-      assert.equal(body[0]?.isPrimary, true);
-      assert.equal(body[0]?.primaryResumeSlot, 1);
+      assert.equal(body[0]?.isMaster, true);
+      assert.equal(body[0]?.kind, "master");
     });
 
   await request(app.getHttpServer())
@@ -139,6 +139,49 @@ test("resume endpoints stay scoped to the authenticated user", async () => {
   await app.close();
 });
 
+test("POST /api/resumes keeps non-primary uploads as generic master resumes", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "resume-secondary");
+
+  await request(app.getHttpServer())
+    .post("/api/resumes")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({
+      title: "Primary Resume",
+      sourceFileName: "resume-primary.pdf",
+      status: "uploaded",
+    })
+    .expect(201);
+
+  const secondResumeResponse = await request(app.getHttpServer())
+    .post("/api/resumes")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({
+      title: "Secondary Resume",
+      sourceFileName: "resume-secondary.pdf",
+      status: "reviewed",
+    })
+    .expect(201);
+
+  assert.equal(secondResumeResponse.body.isMaster, false);
+  assert.equal(secondResumeResponse.body.kind, "master");
+  assert.equal(secondResumeResponse.body.basedOnResumeId, null);
+
+  const resumes = await database.resume.findMany({
+    where: { userId: user.userId },
+    orderBy: { createdAt: "asc" },
+  });
+
+  assert.equal(resumes.length, 2);
+  assert.equal(resumes[0]?.isMaster, true);
+  assert.equal(resumes[0]?.kind, "master");
+  assert.equal(resumes[1]?.isMaster, false);
+  assert.equal(resumes[1]?.kind, "master");
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
 test("POST /api/resumes/:id/set-primary keeps one primary resume per user", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "resume-primary");
@@ -149,8 +192,8 @@ test("POST /api/resumes/:id/set-primary keeps one primary resume per user", asyn
       userId: user.userId,
       title: "Resume One",
       status: "uploaded",
-      isPrimary: true,
-      primaryResumeSlot: 1,
+      kind: "master",
+      isMaster: true,
     },
   });
   const secondResume = await database.resume.create({
@@ -158,6 +201,8 @@ test("POST /api/resumes/:id/set-primary keeps one primary resume per user", asyn
       userId: user.userId,
       title: "Resume Two",
       status: "reviewed",
+      kind: "master",
+      isMaster: false,
     },
   });
   const otherResume = await database.resume.create({
@@ -165,8 +210,8 @@ test("POST /api/resumes/:id/set-primary keeps one primary resume per user", asyn
       userId: otherUser.userId,
       title: "Other User Resume",
       status: "draft",
-      isPrimary: true,
-      primaryResumeSlot: 1,
+      kind: "master",
+      isMaster: true,
     },
   });
 
@@ -176,8 +221,8 @@ test("POST /api/resumes/:id/set-primary keeps one primary resume per user", asyn
     .expect(200)
     .expect(({ body }) => {
       assert.equal(body.id, secondResume.id);
-      assert.equal(body.isPrimary, true);
-      assert.equal(body.primaryResumeSlot, 1);
+      assert.equal(body.isMaster, true);
+      assert.equal(body.kind, "master");
     });
 
   const userResumes = await database.resume.findMany({
@@ -188,27 +233,25 @@ test("POST /api/resumes/:id/set-primary keeps one primary resume per user", asyn
     where: { id: otherResume.id },
   });
 
-  assert.equal(userResumes.filter((resume) => resume.isPrimary).length, 1);
+  assert.equal(userResumes.filter((resume) => resume.isMaster).length, 1);
   assert.equal(
-    userResumes.find((resume) => resume.id === firstResume.id)?.isPrimary,
+    userResumes.find((resume) => resume.id === firstResume.id)?.isMaster,
     false,
   );
   assert.equal(
-    userResumes.find((resume) => resume.id === firstResume.id)
-      ?.primaryResumeSlot,
-    null,
+    userResumes.find((resume) => resume.id === firstResume.id)?.kind,
+    "master",
   );
   assert.equal(
-    userResumes.find((resume) => resume.id === secondResume.id)?.isPrimary,
+    userResumes.find((resume) => resume.id === secondResume.id)?.isMaster,
     true,
   );
   assert.equal(
-    userResumes.find((resume) => resume.id === secondResume.id)
-      ?.primaryResumeSlot,
-    1,
+    userResumes.find((resume) => resume.id === secondResume.id)?.kind,
+    "master",
   );
-  assert.equal(refreshedOtherResume?.isPrimary, true);
-  assert.equal(refreshedOtherResume?.primaryResumeSlot, 1);
+  assert.equal(refreshedOtherResume?.isMaster, true);
+  assert.equal(refreshedOtherResume?.kind, "master");
 
   await request(app.getHttpServer())
     .post(`/api/resumes/${otherResume.id}/set-primary`)
@@ -229,8 +272,8 @@ test("updating the current primary resume cannot leave the user without a primar
       userId: user.userId,
       title: "Primary Resume",
       status: "uploaded",
-      isPrimary: true,
-      primaryResumeSlot: 1,
+      kind: "master",
+      isMaster: true,
     },
   });
 
@@ -240,8 +283,8 @@ test("updating the current primary resume cannot leave the user without a primar
     .send({ isPrimary: false, title: "Updated Primary Resume" })
     .expect(200)
     .expect(({ body }) => {
-      assert.equal(body.isPrimary, true);
-      assert.equal(body.primaryResumeSlot, 1);
+      assert.equal(body.isMaster, true);
+      assert.equal(body.kind, "master");
       assert.equal(body.title, "Updated Primary Resume");
     });
 
@@ -249,8 +292,8 @@ test("updating the current primary resume cannot leave the user without a primar
     where: { id: primaryResume.id },
   });
 
-  assert.equal(refreshedResume?.isPrimary, true);
-  assert.equal(refreshedResume?.primaryResumeSlot, 1);
+  assert.equal(refreshedResume?.isMaster, true);
+  assert.equal(refreshedResume?.kind, "master");
 
   await deleteUserByEmail(database, user.email);
   await app.close();
@@ -266,8 +309,8 @@ test("DELETE /api/resumes/:id removes only the authenticated user's resume and p
       userId: firstUser.userId,
       title: "Keep Primary",
       status: "draft",
-      isPrimary: true,
-      primaryResumeSlot: 1,
+      kind: "master",
+      isMaster: true,
     },
   });
   const secondaryResume = await database.resume.create({
@@ -275,6 +318,8 @@ test("DELETE /api/resumes/:id removes only the authenticated user's resume and p
       userId: firstUser.userId,
       title: "Delete Me",
       status: "reviewed",
+      kind: "adapted",
+      isMaster: false,
     },
   });
   const otherResume = await database.resume.create({
@@ -309,8 +354,8 @@ test("DELETE /api/resumes/:id removes only the authenticated user's resume and p
   });
 
   assert.equal(deletedPrimaryResume, null);
-  assert.equal(promotedResume?.isPrimary, true);
-  assert.equal(promotedResume?.primaryResumeSlot, 1);
+  assert.equal(promotedResume?.isMaster, true);
+  assert.equal(promotedResume?.kind, "master");
   assert.equal(untouchedOtherResume?.id, otherResume.id);
 
   await deleteUserByEmail(database, firstUser.email);

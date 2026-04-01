@@ -1,8 +1,12 @@
 import Link from "next/link";
 
 import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
-import { filterPendingItems } from "@/lib/admin-operations";
-import { getPhaseOneAdminData } from "@/lib/admin-phase-one-data";
+import {
+  buildPendingTypeLabel,
+  filterPendingItems,
+} from "@/lib/admin-operations";
+import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
@@ -14,7 +18,8 @@ type PendingPageProps = {
 export default async function AdminPendingPage({
   searchParams,
 }: PendingPageProps) {
-  const { query, token, type } = await searchParams;
+  const { query, type } = await searchParams;
+  const token = await getBackofficeSessionToken();
 
   if (!token) {
     return (
@@ -27,7 +32,20 @@ export default async function AdminPendingPage({
     );
   }
 
-  const { pendingItems } = await getPhaseOneAdminData(token);
+  const pendingDataResult = await getPhaseOneAdminDataSafely();
+
+  if (pendingDataResult.kind === "invalid-token") {
+    return (
+      <div className="px-6 py-10 md:px-10">
+        <AdminTokenState
+          description="O token informado e invalido ou expirou. Gere um novo access token para abrir a fila de pendencias."
+          title="Token invalido"
+        />
+      </div>
+    );
+  }
+
+  const { pendingItems } = pendingDataResult.data;
   const filteredPendingItems = filterPendingItems(pendingItems, {
     query,
     type,
@@ -67,9 +85,15 @@ export default async function AdminPendingPage({
             <option value="source-failed-recent-run">
               falha recente da fonte
             </option>
+            <option value="user-missing-master-resume">
+              usuario sem cv master
+            </option>
+            <option value="user-missing-profile">usuario sem perfil</option>
+            <option value="user-incomplete-profile">
+              usuario com perfil incompleto
+            </option>
           </select>
           <form className="contents" id="pending-filter" method="GET">
-            <input name="token" type="hidden" value={token} />
             <button
               className={buttonVariants({ variant: "outline" })}
               type="submit"
@@ -93,7 +117,8 @@ export default async function AdminPendingPage({
               >
                 <div className="space-y-2">
                   <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
-                    {item.type} - prioridade {item.priority}
+                    {buildPendingTypeLabel(item.type)} - prioridade{" "}
+                    {item.priority}
                   </p>
                   <h2 className="text-lg font-bold tracking-tight text-stone-950">
                     {item.title}

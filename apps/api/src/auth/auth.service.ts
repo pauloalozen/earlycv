@@ -7,11 +7,12 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { Prisma } from "@prisma/client";
+import { Prisma, type UserStatus } from "@prisma/client";
 import * as argon2 from "argon2";
 
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
+import type { CreateStaffUserDto } from "./dto/create-staff-user.dto";
 import type { LoginDto } from "./dto/login.dto";
 import type { RefreshDto } from "./dto/refresh.dto";
 import type { RegisterDto } from "./dto/register.dto";
@@ -19,12 +20,16 @@ import type { RegisterDto } from "./dto/register.dto";
 type PersistedUser = Awaited<ReturnType<DatabaseService["user"]["findUnique"]>>;
 type UserRecord = NonNullable<PersistedUser>;
 
+export type AuthInternalRole = "none" | "admin" | "superadmin";
+
 export type AuthUser = {
   id: string;
   email: string;
   name: string;
   planType: string;
   status: string;
+  isStaff: boolean;
+  internalRole: AuthInternalRole;
   emailVerifiedAt: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;
@@ -68,34 +73,26 @@ export class AuthService {
   ) {}
 
   async register(input: RegisterDto): Promise<AuthSession> {
-    const email = input.email.trim().toLowerCase();
-    const existingUser = await this.database.user.findUnique({
-      where: { email },
-    });
-
-    if (existingUser) {
-      throw new ConflictException("email is already registered");
-    }
-
-    const passwordHash = await argon2.hash(input.password);
-    const user = await this.database.user.create({
-      data: {
-        email,
-        passwordHash,
-        name: input.name.trim(),
-        status: "active",
-        profile: { create: {} },
-        authAccounts: {
-          create: {
-            provider: "credentials",
-            providerAccountId: email,
-            providerEmail: email,
-          },
-        },
-      },
+    const user = await this.createUser({
+      email: input.email,
+      password: input.password,
+      name: input.name,
     });
 
     return this.issueSession(user.id);
+  }
+
+  async createStaffUser(input: CreateStaffUserDto): Promise<AuthUser> {
+    const user = await this.createUser({
+      email: input.email,
+      password: input.password,
+      name: input.name,
+      isStaff: true,
+      internalRole: input.internalRole,
+      status: "active",
+    });
+
+    return this.sanitizeUser(user);
   }
 
   async validateCredentials(input: LoginDto) {
@@ -250,6 +247,44 @@ export class AuthService {
     return this.sanitizeUser(user);
   }
 
+  private async createUser(input: {
+    email: string;
+    password: string;
+    name: string;
+    status?: UserStatus;
+    isStaff?: boolean;
+    internalRole?: Exclude<AuthInternalRole, "none">;
+  }) {
+    const email = input.email.trim().toLowerCase();
+    const existingUser = await this.database.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException("email is already registered");
+    }
+
+    const passwordHash = await argon2.hash(input.password);
+    return this.database.user.create({
+      data: {
+        email,
+        passwordHash,
+        name: input.name.trim(),
+        status: input.status ?? "active",
+        isStaff: input.isStaff ?? false,
+        internalRole: input.internalRole ?? "none",
+        profile: { create: {} },
+        authAccounts: {
+          create: {
+            provider: "credentials",
+            providerAccountId: email,
+            providerEmail: email,
+          },
+        },
+      },
+    });
+  }
+
   private async issueSession(userId: string): Promise<AuthSession> {
     const user = await this.database.user.findUnique({
       where: { id: userId },
@@ -372,6 +407,8 @@ export class AuthService {
       name: user.name,
       planType: user.planType,
       status: user.status,
+      isStaff: user.isStaff,
+      internalRole: user.internalRole,
       emailVerifiedAt: user.emailVerifiedAt,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,

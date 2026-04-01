@@ -1,7 +1,9 @@
 import Link from "next/link";
 
 import { buttonVariants, Card, EmptyState, StatCard } from "@/components/ui";
-import { getPhaseOneAdminData } from "@/lib/admin-phase-one-data";
+import { buildPendingTypeLabel } from "@/lib/admin-operations";
+import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "./_components/admin-shell-header";
 import { AdminStatusBadge } from "./_components/admin-status-badge";
@@ -14,7 +16,8 @@ type AdminOverviewPageProps = {
 export default async function AdminOverviewPage({
   searchParams,
 }: AdminOverviewPageProps) {
-  const { token } = await searchParams;
+  await searchParams;
+  const token = await getBackofficeSessionToken();
 
   if (!token) {
     return (
@@ -27,6 +30,19 @@ export default async function AdminOverviewPage({
     );
   }
 
+  const overviewDataResult = await getPhaseOneAdminDataSafely();
+
+  if (overviewDataResult.kind === "invalid-token") {
+    return (
+      <div className="px-6 py-10 md:px-10">
+        <AdminTokenState
+          description="O token informado e invalido ou expirou. Gere um novo access token para abrir a visao geral administrativa."
+          title="Token invalido"
+        />
+      </div>
+    );
+  }
+
   const {
     companyViews,
     jobs,
@@ -34,7 +50,7 @@ export default async function AdminOverviewPage({
     overviewMetrics,
     pendingItems,
     sourceViews,
-  } = await getPhaseOneAdminData(token);
+  } = overviewDataResult.data;
 
   return (
     <div className="px-6 py-10 md:px-10">
@@ -42,15 +58,12 @@ export default async function AdminOverviewPage({
         <AdminShellHeader
           actions={
             <>
-              <Link
-                className={buttonVariants()}
-                href={`/admin/empresas/nova?token=${encodeURIComponent(token)}`}
-              >
+              <Link className={buttonVariants()} href={`/admin/empresas/nova`}>
                 Adicionar empresa e fonte
               </Link>
               <Link
                 className={buttonVariants({ variant: "outline" })}
-                href={`/admin/pendencias?token=${encodeURIComponent(token)}`}
+                href={`/admin/pendencias`}
               >
                 Ver pendencias
               </Link>
@@ -61,7 +74,7 @@ export default async function AdminOverviewPage({
           title="Central operacional"
         />
 
-        <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
           {overviewMetrics.map((metric) => (
             <StatCard
               key={metric.label}
@@ -79,7 +92,7 @@ export default async function AdminOverviewPage({
               </h2>
               <Link
                 className={buttonVariants({ size: "sm", variant: "outline" })}
-                href={`/admin/pendencias?token=${encodeURIComponent(token)}`}
+                href={`/admin/pendencias`}
               >
                 Abrir fila completa
               </Link>
@@ -101,6 +114,10 @@ export default async function AdminOverviewPage({
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="space-y-1">
+                        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+                          {buildPendingTypeLabel(item.type)} - prioridade{" "}
+                          {item.priority}
+                        </p>
                         <p className="text-sm font-semibold text-stone-950">
                           {item.title}
                         </p>
@@ -128,7 +145,7 @@ export default async function AdminOverviewPage({
               </h2>
               <Link
                 className={buttonVariants({ size: "sm", variant: "outline" })}
-                href={`/admin/runs?token=${encodeURIComponent(token)}`}
+                href={`/admin/runs`}
               >
                 Ver runs
               </Link>
@@ -189,7 +206,7 @@ export default async function AdminOverviewPage({
               </h2>
               <Link
                 className={buttonVariants({ size: "sm", variant: "outline" })}
-                href={`/admin/empresas?token=${encodeURIComponent(token)}`}
+                href={`/admin/empresas`}
               >
                 Ver empresas
               </Link>
@@ -217,7 +234,7 @@ export default async function AdminOverviewPage({
                         size: "sm",
                         variant: "outline",
                       })}
-                      href={`/admin/empresas/${company.id}?token=${encodeURIComponent(token)}`}
+                      href={`/admin/empresas/${company.id}`}
                     >
                       Detalhe
                     </Link>
@@ -234,7 +251,7 @@ export default async function AdminOverviewPage({
               </h2>
               <Link
                 className={buttonVariants({ size: "sm", variant: "outline" })}
-                href={`/admin/runs?token=${encodeURIComponent(token)}`}
+                href={`/admin/runs`}
               >
                 Abrir historico
               </Link>
@@ -270,7 +287,7 @@ export default async function AdminOverviewPage({
                         size: "sm",
                         variant: "outline",
                       })}
-                      href={`/admin/runs/${run.id}?token=${encodeURIComponent(token)}`}
+                      href={`/admin/runs/${run.id}`}
                     >
                       Detalhe
                     </Link>

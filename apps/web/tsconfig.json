@@ -1,6 +1,7 @@
 {
   "extends": "@earlycv/config/typescript/nextjs",
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]

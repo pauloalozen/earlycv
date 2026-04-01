@@ -3,6 +3,7 @@ import Link from "next/link";
 import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
 import { filterCompanies } from "@/lib/admin-operations";
 import { getPhaseOneAdminData } from "@/lib/admin-phase-one-data";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminStatusBadge } from "../_components/admin-status-badge";
@@ -15,7 +16,8 @@ type CompaniesPageProps = {
 export default async function AdminCompaniesPage({
   searchParams,
 }: CompaniesPageProps) {
-  const { query, status, token } = await searchParams;
+  const { query, status } = await searchParams;
+  const token = await getBackofficeSessionToken();
 
   if (!token) {
     return (
@@ -28,7 +30,7 @@ export default async function AdminCompaniesPage({
     );
   }
 
-  const { companyViews } = await getPhaseOneAdminData(token);
+  const { companyViews } = await getPhaseOneAdminData();
   const filteredCompanies = filterCompanies(companyViews, { query, status });
 
   return (
@@ -36,10 +38,7 @@ export default async function AdminCompaniesPage({
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
         <AdminShellHeader
           actions={
-            <Link
-              className={buttonVariants()}
-              href={`/admin/empresas/nova?token=${encodeURIComponent(token)}`}
-            >
+            <Link className={buttonVariants()} href={`/admin/empresas/nova`}>
               Nova empresa e fonte
             </Link>
           }
@@ -74,7 +73,6 @@ export default async function AdminCompaniesPage({
             <option value="completa">completa</option>
           </select>
           <form className="contents" id="companies-filter" method="GET">
-            <input name="token" type="hidden" value={token} />
             <button
               className={buttonVariants({ variant: "outline" })}
               type="submit"
@@ -114,14 +112,14 @@ export default async function AdminCompaniesPage({
                 <div className="flex flex-wrap gap-3">
                   <Link
                     className={buttonVariants()}
-                    href={`/admin/empresas/${company.id}?token=${encodeURIComponent(token)}`}
+                    href={`/admin/empresas/${company.id}`}
                   >
                     Abrir detalhe
                   </Link>
                   {company.relatedSources.length === 0 ? (
                     <Link
                       className={buttonVariants({ variant: "outline" })}
-                      href={`/admin/empresas/${company.id}?token=${encodeURIComponent(token)}`}
+                      href={`/admin/empresas/${company.id}`}
                     >
                       Criar primeira fonte
                     </Link>

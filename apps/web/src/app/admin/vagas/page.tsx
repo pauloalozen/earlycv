@@ -1,6 +1,7 @@
 import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
 import { filterJobs } from "@/lib/admin-operations";
 import { getPhaseOneAdminData } from "@/lib/admin-phase-one-data";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
@@ -15,7 +16,8 @@ type JobsPageProps = {
 };
 
 export default async function AdminJobsPage({ searchParams }: JobsPageProps) {
-  const { query, sourceName, status, token } = await searchParams;
+  const { query, sourceName, status } = await searchParams;
+  const token = await getBackofficeSessionToken();
 
   if (!token) {
     return (
@@ -28,7 +30,7 @@ export default async function AdminJobsPage({ searchParams }: JobsPageProps) {
     );
   }
 
-  const { jobs, sourceViews } = await getPhaseOneAdminData(token);
+  const { jobs, sourceViews } = await getPhaseOneAdminData();
   const sourceMap = new Map(sourceViews.map((source) => [source.id, source]));
   const availableSourceNames = [
     ...new Set(sourceViews.map((source) => source.sourceName)),
@@ -93,7 +95,6 @@ export default async function AdminJobsPage({ searchParams }: JobsPageProps) {
             <option value="removed">removed</option>
           </select>
           <form className="contents" id="jobs-filter" method="GET">
-            <input name="token" type="hidden" value={token} />
             <button
               className={buttonVariants({ variant: "outline" })}
               type="submit"

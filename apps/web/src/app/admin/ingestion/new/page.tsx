@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { buttonVariants, Card, Input } from "@/components/ui";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { cn } from "@/lib/cn";
 
 import { createCompanyAction, createJobSourceAction } from "../actions";
@@ -79,8 +80,8 @@ function StepBadge({
 export default async function NewAdminSourcePage({
   searchParams,
 }: NewAdminSourcePageProps) {
-  const { companyId, companyName, message, status, step, token } =
-    await searchParams;
+  const { companyId, companyName, message, status, step } = await searchParams;
+  const token = await getBackofficeSessionToken();
   const currentStep =
     step === "job-source" && companyId ? "job-source" : "company";
 
@@ -101,7 +102,7 @@ export default async function NewAdminSourcePage({
     );
   }
 
-  const redirectPath = `/admin/ingestion/new?token=${encodeURIComponent(token)}`;
+  const redirectPath = `/admin/ingestion/new`;
 
   return (
     <main className="min-h-screen bg-linear-to-b from-stone-50 via-orange-50/25 to-stone-100 px-6 py-10 text-stone-900 md:px-10">
@@ -122,7 +123,7 @@ export default async function NewAdminSourcePage({
 
           <Link
             className={buttonVariants({ variant: "outline" })}
-            href={`/admin/ingestion?token=${encodeURIComponent(token)}`}
+            href={`/admin/ingestion`}
           >
             Voltar para runs
           </Link>
@@ -160,7 +161,6 @@ export default async function NewAdminSourcePage({
                     type="hidden"
                     value={redirectPath}
                   />
-                  <input name="token" type="hidden" value={token} />
 
                   <label
                     className="space-y-2 md:col-span-2"
@@ -274,7 +274,6 @@ export default async function NewAdminSourcePage({
                     type="hidden"
                     value={redirectPath}
                   />
-                  <input name="token" type="hidden" value={token} />
 
                   <label
                     className="space-y-2 md:col-span-2"

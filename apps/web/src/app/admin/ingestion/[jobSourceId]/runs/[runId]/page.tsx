@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { buttonVariants, Card } from "@/components/ui";
 import { getIngestionRun, getJobSource } from "@/lib/admin-ingestion-api";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 type RunDetailPageProps = {
   params: Promise<{ jobSourceId: string; runId: string }>;
@@ -22,7 +23,8 @@ export default async function IngestionRunDetailPage({
   searchParams,
 }: RunDetailPageProps) {
   const { jobSourceId, runId } = await params;
-  const { token } = await searchParams;
+  await searchParams;
+  const token = await getBackofficeSessionToken();
 
   if (!token) {
     return (
@@ -38,8 +40,8 @@ export default async function IngestionRunDetailPage({
   }
 
   const [jobSource, run] = await Promise.all([
-    getJobSource(token, jobSourceId),
-    getIngestionRun(token, jobSourceId, runId),
+    getJobSource(jobSourceId),
+    getIngestionRun(jobSourceId, runId),
   ]);
 
   return (
@@ -58,7 +60,7 @@ export default async function IngestionRunDetailPage({
 
           <Link
             className={buttonVariants({ variant: "outline" })}
-            href={`/admin/ingestion/${jobSourceId}?token=${encodeURIComponent(token)}`}
+            href={`/admin/ingestion/${jobSourceId}`}
           >
             Voltar para auditoria
           </Link>

@@ -33,6 +33,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.resume;
   }
 
+  get resumeTemplate() {
+    return this.prisma.resumeTemplate;
+  }
+
   get company() {
     return this.prisma.company;
   }

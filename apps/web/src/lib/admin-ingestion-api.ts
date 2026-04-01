@@ -1,5 +1,7 @@
 import "server-only";
 
+import { getBackofficeSessionToken } from "./backoffice-session.server";
+
 export type IngestionPreviewItem = {
   action: "created" | "updated" | "skipped" | "failed";
   canonicalKey: string;
@@ -95,12 +97,24 @@ function getApiBaseUrl() {
     : `${configuredBaseUrl}/api`;
 }
 
-async function apiRequest<T>(path: string, token: string, init?: RequestInit) {
+async function resolveToken(token?: string) {
+  const sessionToken = token ?? (await getBackofficeSessionToken());
+
+  if (!sessionToken) {
+    throw new Error("Missing backoffice session token.");
+  }
+
+  return sessionToken;
+}
+
+async function apiRequest<T>(path: string, token?: string, init?: RequestInit) {
+  const bearerToken = await resolveToken(token);
+
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     cache: "no-store",
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${bearerToken}`,
       ...(init?.headers ?? {}),
     },
   });
@@ -112,25 +126,25 @@ async function apiRequest<T>(path: string, token: string, init?: RequestInit) {
   return (await response.json()) as T;
 }
 
-export async function listJobSources(token: string) {
+export async function listJobSources(token?: string) {
   return apiRequest<JobSourceRecord[]>("/job-sources", token);
 }
 
-export async function listCompanies(token: string) {
+export async function listCompanies(token?: string) {
   return apiRequest<CompanyRecord[]>("/companies", token);
 }
 
-export async function listJobs(token: string) {
+export async function listJobs(token?: string) {
   return apiRequest<JobRecord[]>("/jobs", token);
 }
 
-export async function listAllIngestionRuns(token: string) {
+export async function listAllIngestionRuns(token?: string) {
   return apiRequest<IngestionRunSummary[]>("/runs", token);
 }
 
 export async function createCompany(
-  token: string,
   payload: CreateCompanyPayload,
+  token?: string,
 ) {
   return apiRequest<CompanyRecord>("/companies", token, {
     body: JSON.stringify(payload),
@@ -142,8 +156,8 @@ export async function createCompany(
 }
 
 export async function createJobSource(
-  token: string,
   payload: CreateJobSourcePayload,
+  token?: string,
 ) {
   return apiRequest<JobSourceRecord>("/job-sources", token, {
     body: JSON.stringify(payload),
@@ -154,11 +168,11 @@ export async function createJobSource(
   });
 }
 
-export async function getJobSource(token: string, jobSourceId: string) {
+export async function getJobSource(jobSourceId: string, token?: string) {
   return apiRequest<JobSourceRecord>(`/job-sources/${jobSourceId}`, token);
 }
 
-export async function listIngestionRuns(token: string, jobSourceId: string) {
+export async function listIngestionRuns(jobSourceId: string, token?: string) {
   return apiRequest<IngestionRunSummary[]>(
     `/job-sources/${jobSourceId}/runs`,
     token,
@@ -166,9 +180,9 @@ export async function listIngestionRuns(token: string, jobSourceId: string) {
 }
 
 export async function getIngestionRun(
-  token: string,
   jobSourceId: string,
   runId: string,
+  token?: string,
 ) {
   return apiRequest<IngestionRunSummary>(
     `/job-sources/${jobSourceId}/runs/${runId}`,
@@ -176,11 +190,11 @@ export async function getIngestionRun(
   );
 }
 
-export async function getIngestionRunById(token: string, runId: string) {
+export async function getIngestionRunById(runId: string, token?: string) {
   return apiRequest<IngestionRunSummary>(`/runs/${runId}`, token);
 }
 
-export async function runJobSource(token: string, jobSourceId: string) {
+export async function runJobSource(jobSourceId: string, token?: string) {
   return apiRequest<IngestionRunSummary>(
     `/job-sources/${jobSourceId}/run`,
     token,
