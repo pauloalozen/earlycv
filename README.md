@@ -32,7 +32,7 @@ Este repositorio ja roda como monorepo npm com workspaces em `apps/*` e `package
 \- package.json   # orquestrador de workspaces
 ```
 
-`apps/web` preserva a base Next.js e as rotas publicas/SEO. A vaga publica ainda usa o seam atual de mock em `apps/web/src/lib/jobs.ts`, consumido por `apps/web/src/app/vagas/[slug]/page.tsx`; a troca por leituras reais da API fica para a proxima fase de ingestao. `apps/api` ja saiu do bootstrap inicial e agora expõe o primeiro slice real de backend-core: auth com JWT/refresh/social login, profile/resume ownership, catalogos de companies/job-sources e CRUD canonico de jobs com `firstSeenAt`. Os pacotes em `packages/*` seguem como base compartilhada, com `packages/database` agora sendo a fonte de verdade do schema Prisma, migrations, seed e client.
+`apps/web` preserva a base Next.js e as rotas publicas/SEO. A vaga publica ainda usa o seam atual de mock em `apps/web/src/lib/jobs.ts`, consumido por `apps/web/src/app/vagas/[slug]/page.tsx`; a troca por leituras reais da API fica para a proxima fase de ingestao. O backoffice autenticado agora separa duas superficies: `/admin` cobre operacao de usuarios, perfis, curriculos e pendencias de completude; `/superadmin` concentra equipe interna, configuracoes sensiveis, correcoes guiadas e suporte. `apps/api` ja saiu do bootstrap inicial e agora expõe o primeiro slice real de backend-core: auth com JWT/refresh/social login, profile/resume ownership, catalogos de companies/job-sources e CRUD canonico de jobs com `firstSeenAt`, alem dos endpoints internos que sustentam essas superficies administrativas. Os pacotes em `packages/*` seguem como base compartilhada, com `packages/database` agora sendo a fonte de verdade do schema Prisma, migrations, seed e client.
 
 ## Principios de arquitetura
 
@@ -71,15 +71,14 @@ Os pacotes compartilhados agora expõem `development` + `types` a partir de `src
 Os comandos abaixo foram validados na raiz deste worktree e devem ser executados de forma sequencial:
 
 ```bash
-npm run generate --workspace @earlycv/database
-npm run lint
 npm run check
+npm run generate --workspace @earlycv/database
 npm run build
 npm run test
 npm ls --workspaces --depth=0
 ```
 
-`generate` precisa rodar antes da verificacao completa quando o schema Prisma mudar. `build` e o caminho compilado de `start` ainda recompilam artifacts compartilhados em `packages/*`, e `test` recompila a API quando necessario; por isso, a verificacao final deve evitar rodar esses comandos em paralelo.
+`generate` precisa rodar antes do `build` quando o schema Prisma mudar. `build` e o caminho compilado de `start` ainda recompilam artifacts compartilhados em `packages/*`, e `test` recompila a API quando necessario; por isso, a verificacao final deve evitar rodar esses comandos em paralelo.
 
 ## Variaveis de ambiente
 
@@ -101,9 +100,10 @@ Este repositorio usa `.worktrees/` como convencao para worktrees locais do Git. 
 ## Estado atual da migracao
 
 - a raiz funciona como orquestradora de workspaces npm para web, API e pacotes compartilhados
-- `apps/web` abriga o app Next.js com rotas publicas indexaveis e pagina de vaga server-rendered, ainda alimentada pelo seam atual em `apps/web/src/lib/jobs.ts` e `apps/web/src/app/vagas/[slug]/page.tsx`
-- `apps/api` agora integra `EnvModule`, `DatabaseModule`, `InfraModule`, `HealthModule`, `AuthModule`, `ProfilesModule`, `ResumesModule`, `CompaniesModule`, `JobSourcesModule` e `JobsModule`
-- `apps/api` ja cobre register/login/refresh/logout/me, Google + LinkedIn social login, profile/resume ownership e CRUD autenticado para companies, job-sources e jobs
+- `apps/web` abriga o app Next.js com rotas publicas indexaveis, pagina de vaga server-rendered e dois shells internos: `/admin` para usuarios, perfis, curriculos e pendencias de completude; `/superadmin` para equipe interna, configuracoes/correcoes sensiveis e suporte
+- `apps/api` agora integra `EnvModule`, `DatabaseModule`, `InfraModule`, `HealthModule`, `AuthModule`, `ProfilesModule`, `ResumesModule`, `CompaniesModule`, `JobSourcesModule` e `JobsModule`, alem dos modulos administrativos e de superadmin desta fase
+- `apps/api` ja cobre register/login/refresh/logout/me, Google + LinkedIn social login, profile/resume ownership, CRUD autenticado para companies/job-sources/jobs e os endpoints internos para admin users, admin profiles, admin resumes, resume templates e superadmin staff
+- curriculos agora distinguem `CV master`, curriculos adaptados por vaga e templates otimizados mantidos pela operacao interna
 - `packages/database` contem schema Prisma real, migration inicial, seed local e invariantes para auth/profile/resume/company/job-source/job
 - `first_seen_at` ja existe como campo obrigatorio persistido em `Job` e deve continuar visivel nas proximas fases
 - o proximo passo do backend e a fase de ingestao: adapters de crawler, runs, snapshot diff, normalizacao e job upsert/deduplicacao sobre o schema atual

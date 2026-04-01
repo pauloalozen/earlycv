@@ -7,11 +7,11 @@ import {
   isRedirectControlFlowError,
   parseCompanyFormData,
   parseJobSourceFormData,
-} from "./admin-ingestion-flow";
+} from "./admin-ingestion-flow.ts";
 
-test("buildAdminRedirect preserves the token and appends wizard state", () => {
+test("buildAdminRedirect preserves unrelated query params and appends wizard state", () => {
   const location = buildAdminRedirect(
-    "/admin/ingestion/new?token=abc",
+    "/admin/ingestion/new?status=idle",
     "success",
     "Empresa criada.",
     {
@@ -22,7 +22,7 @@ test("buildAdminRedirect preserves the token and appends wizard state", () => {
 
   assert.equal(
     location,
-    "/admin/ingestion/new?token=abc&status=success&message=Empresa+criada.&companyId=cmp_123&step=job-source",
+    "/admin/ingestion/new?status=success&message=Empresa+criada.&companyId=cmp_123&step=job-source",
   );
 });
 

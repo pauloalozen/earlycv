@@ -12,7 +12,7 @@ import {
   filterPendingItems,
   filterRuns,
   filterSources,
-} from "./admin-operations";
+} from "./admin-operations.ts";
 
 const company = {
   id: "cmp_1",
@@ -29,7 +29,6 @@ test("buildCompanyStatus returns incomplete when company has no sources", () => 
 test("buildSourceStatus returns pending first run for a source without runs", () => {
   assert.deepEqual(
     buildSourceStatus({
-      id: "src_1",
       ingestionRuns: [],
       lastErrorMessage: null,
       sourceName: "Career Site",
@@ -43,10 +42,38 @@ test("buildSourceStatus returns pending first run for a source without runs", ()
 
 test("buildPendingItems derives continuity actions for companies and sources", () => {
   const pendingItems = buildPendingItems({
+    adminUsers: [
+      {
+        id: "usr_1",
+        name: "Ana Silva",
+        profile: null,
+        resumes: [],
+      },
+      {
+        id: "usr_2",
+        name: "Bruna Costa",
+        profile: {
+          city: null,
+          country: "Brazil",
+          headline: "Designer de Produto",
+        },
+        resumes: [],
+      },
+      {
+        id: "usr_3",
+        name: "Caio Lima",
+        profile: {
+          city: "Sao Paulo",
+          country: "Brazil",
+          headline: "Product Manager",
+        },
+        resumes: [],
+      },
+    ],
     companies: [company],
     jobSources: [
       {
-        company,
+        company: { ...company, normalizedName: "acme-labs" },
         companyId: company.id,
         id: "src_1",
         ingestionRuns: [],
@@ -54,34 +81,48 @@ test("buildPendingItems derives continuity actions for companies and sources", (
         sourceName: "Career Site",
       },
       {
-        company,
+        company: { ...company, normalizedName: "acme-labs" },
         companyId: company.id,
         id: "src_2",
         ingestionRuns: [
           {
             failedCount: 1,
+            finishedAt: "2026-03-31T20:10:00.000Z",
             id: "run_1",
+            jobSourceId: "src_2",
+            newCount: 0,
+            previewItems: [],
+            skippedCount: 0,
             startedAt: "2026-03-31T20:00:00.000Z",
             status: "failed",
+            updatedCount: 0,
           },
         ],
         lastErrorMessage: "falha recente",
         sourceName: "API Source",
       },
     ],
-    token: "abc",
   });
 
-  assert.equal(pendingItems.length, 2);
+  assert.equal(pendingItems.length, 5);
   assert.deepEqual(
     pendingItems.map((item) => item.type),
-    ["source-missing-first-run", "source-failed-recent-run"],
+    [
+      "source-missing-first-run",
+      "source-failed-recent-run",
+      "user-missing-profile",
+      "user-incomplete-profile",
+      "user-missing-master-resume",
+    ],
   );
-  assert.equal(pendingItems[0]?.href, "/admin/fontes/src_1?token=abc");
+  assert.equal(pendingItems[0]?.href, "/admin/fontes/src_1");
+  assert.equal(pendingItems[2]?.href, "/admin/usuarios/usr_1");
+  assert.equal(pendingItems[4]?.href, "/admin/usuarios/usr_3");
 });
 
 test("buildOverviewMetrics aggregates counts from companies, sources, jobs and pending items", () => {
   const metrics = buildOverviewMetrics({
+    missingMasterResumeCount: 1,
     companies: [company],
     jobsCount: 4,
     pendingCount: 2,
@@ -94,15 +135,13 @@ test("buildOverviewMetrics aggregates counts from companies, sources, jobs and p
     { label: "fontes", value: 3 },
     { label: "vagas", value: 4 },
     { label: "pendencias", value: 2 },
+    { label: "sem cv master", value: 1 },
     { label: "runs ok", value: 1 },
   ]);
 });
 
 test("buildSourceDetailHref points to the primary admin source route", () => {
-  assert.equal(
-    buildSourceDetailHref("src_1", "abc"),
-    "/admin/fontes/src_1?token=abc",
-  );
+  assert.equal(buildSourceDetailHref("src_1"), "/admin/fontes/src_1");
 });
 
 test("filterCompanies narrows by search and operational status", () => {
@@ -215,16 +254,20 @@ test("filterPendingItems narrows by type and query", () => {
   const filtered = filterPendingItems(
     [
       {
+        cta: "Criar primeira fonte",
         description: "Empresa criada sem nenhuma fonte de vagas conectada.",
         entityId: "cmp_1",
+        href: "/admin/empresas/cmp_1",
         priority: "alta",
         title: "ACME Labs",
         type: "company-missing-source",
       },
       {
+        cta: "Rodar agora",
         description:
           "A fonte foi cadastrada, mas ainda nao executou a primeira ingestao.",
         entityId: "src_1",
+        href: "/admin/fontes/src_1",
         priority: "alta",
         title: "Career Site",
         type: "source-missing-first-run",

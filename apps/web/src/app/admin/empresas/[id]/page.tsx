@@ -6,6 +6,7 @@ import {
   buildCompanyDetailData,
   getPhaseOneAdminData,
 } from "@/lib/admin-phase-one-data";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminStatusBadge } from "../../_components/admin-status-badge";
@@ -20,7 +21,8 @@ export default async function AdminCompanyDetailPage({
   params,
   searchParams,
 }: CompanyDetailPageProps) {
-  const [{ id }, { token }] = await Promise.all([params, searchParams]);
+  const [{ id }] = await Promise.all([params, searchParams]);
+  const token = await getBackofficeSessionToken();
 
   if (!token) {
     return (
@@ -33,7 +35,7 @@ export default async function AdminCompanyDetailPage({
     );
   }
 
-  const { companies, sourceViews } = await getPhaseOneAdminData(token);
+  const { companies, sourceViews } = await getPhaseOneAdminData();
   const company = buildCompanyDetailData(id, companies, sourceViews);
 
   if (!company) {
@@ -48,13 +50,13 @@ export default async function AdminCompanyDetailPage({
             <>
               <Link
                 className={buttonVariants({ variant: "outline" })}
-                href={`/admin/empresas?token=${encodeURIComponent(token)}`}
+                href={`/admin/empresas`}
               >
                 Voltar para empresas
               </Link>
               <Link
                 className={buttonVariants()}
-                href={`/admin/ingestion/new?token=${encodeURIComponent(token)}&step=job-source&companyId=${company.id}&companyName=${encodeURIComponent(company.name)}`}
+                href={`/admin/ingestion/new&step=job-source&companyId=${company.id}&companyName=${encodeURIComponent(company.name)}`}
               >
                 Criar primeira fonte
               </Link>
@@ -131,7 +133,7 @@ export default async function AdminCompanyDetailPage({
                         size: "sm",
                         variant: "outline",
                       })}
-                      href={`/admin/fontes/${source.id}?token=${encodeURIComponent(token)}`}
+                      href={`/admin/fontes/${source.id}`}
                     >
                       Abrir fonte
                     </Link>

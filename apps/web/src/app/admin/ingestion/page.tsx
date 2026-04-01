@@ -4,6 +4,7 @@ import Link from "next/link";
 import { buttonVariants, Card, Input } from "@/components/ui";
 import { listJobSources } from "@/lib/admin-ingestion-api";
 import { buildSourceStatus, filterSources } from "@/lib/admin-operations";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { cn } from "@/lib/cn";
 
 import { runJobSourceAction } from "./actions";
@@ -82,7 +83,8 @@ function TokenForm() {
 export default async function AdminIngestionPage({
   searchParams,
 }: AdminIngestionPageProps) {
-  const { message, query, status, token, type } = await searchParams;
+  const { message, query, status, type } = await searchParams;
+  const token = await getBackofficeSessionToken();
 
   if (!token) {
     return (
@@ -93,7 +95,7 @@ export default async function AdminIngestionPage({
   }
 
   try {
-    const sources = await listJobSources(token);
+    const sources = await listJobSources();
     const sourceViews = sources.map((source) => ({
       ...source,
       status: buildSourceStatus(source),
@@ -117,10 +119,7 @@ export default async function AdminIngestionPage({
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Link
-              className={buttonVariants()}
-              href={`/admin/ingestion/new?token=${encodeURIComponent(token)}`}
-            >
+            <Link className={buttonVariants()} href={`/admin/ingestion/new`}>
               Adicionar empresa e fonte
             </Link>
           </div>
@@ -162,7 +161,6 @@ export default async function AdminIngestionPage({
               <option value="custom_api">custom_api</option>
             </select>
             <form className="contents" id="sources-filter" method="GET">
-              <input name="token" type="hidden" value={token} />
               <button
                 className={buttonVariants({ variant: "outline" })}
                 type="submit"
@@ -175,7 +173,7 @@ export default async function AdminIngestionPage({
           <div className="grid gap-4 lg:grid-cols-2">
             {filteredSources.map((source) => {
               const latestRun = source.ingestionRuns?.[0] ?? null;
-              const redirectPath = `/admin/ingestion?token=${encodeURIComponent(token)}`;
+              const redirectPath = `/admin/ingestion`;
 
               return (
                 <Card className="space-y-5" key={source.id}>
@@ -246,7 +244,6 @@ export default async function AdminIngestionPage({
                         type="hidden"
                         value={redirectPath}
                       />
-                      <input name="token" type="hidden" value={token} />
                       <button className={buttonVariants()} type="submit">
                         Rodar agora
                       </button>
@@ -254,7 +251,7 @@ export default async function AdminIngestionPage({
 
                     <Link
                       className={buttonVariants({ variant: "outline" })}
-                      href={`/admin/ingestion/${source.id}?token=${encodeURIComponent(token)}`}
+                      href={`/admin/ingestion/${source.id}`}
                     >
                       Ver auditoria
                     </Link>
@@ -285,10 +282,7 @@ export default async function AdminIngestionPage({
           </p>
           <StatusBanner message={errorMessage} status="error" />
           <div className="flex flex-wrap gap-3">
-            <Link
-              className={buttonVariants()}
-              href={`/admin/ingestion/new?token=${encodeURIComponent(token)}`}
-            >
+            <Link className={buttonVariants()} href={`/admin/ingestion/new`}>
               Adicionar empresa e fonte
             </Link>
             <Link

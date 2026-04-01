@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { buttonVariants, Card } from "@/components/ui";
 import { getIngestionRunById, getJobSource } from "@/lib/admin-ingestion-api";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminStatusBadge } from "../../_components/admin-status-badge";
@@ -17,7 +18,8 @@ export default async function AdminRunDetailPage({
   params,
   searchParams,
 }: RunDetailPageProps) {
-  const [{ id }, { token }] = await Promise.all([params, searchParams]);
+  const [{ id }] = await Promise.all([params, searchParams]);
+  const token = await getBackofficeSessionToken();
 
   if (!token) {
     return (
@@ -31,8 +33,8 @@ export default async function AdminRunDetailPage({
   }
 
   try {
-    const run = await getIngestionRunById(token, id);
-    const source = await getJobSource(token, run.jobSourceId);
+    const run = await getIngestionRunById(id);
+    const source = await getJobSource(run.jobSourceId);
 
     return (
       <div className="px-6 py-10 md:px-10">
@@ -41,7 +43,7 @@ export default async function AdminRunDetailPage({
             actions={
               <Link
                 className={buttonVariants({ variant: "outline" })}
-                href={`/admin/runs?token=${encodeURIComponent(token)}`}
+                href={`/admin/runs`}
               >
                 Voltar para runs
               </Link>

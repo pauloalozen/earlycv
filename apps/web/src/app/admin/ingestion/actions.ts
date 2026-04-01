@@ -18,20 +18,17 @@ const ROOT_REDIRECT_PATH = "/admin/ingestion";
 const NEW_SOURCE_REDIRECT_PATH = "/admin/ingestion/new";
 
 export async function runJobSourceAction(formData: FormData) {
-  const token = String(formData.get("token") ?? "").trim();
   const jobSourceId = String(formData.get("jobSourceId") ?? "").trim();
   const redirectPath = String(
     formData.get("redirectPath") ?? ROOT_REDIRECT_PATH,
   );
 
-  if (!token || !jobSourceId) {
-    redirect(
-      buildAdminRedirect(redirectPath, "error", "Informe o token e a fonte."),
-    );
+  if (!jobSourceId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe a fonte."));
   }
 
   try {
-    await runJobSource(token, jobSourceId);
+    await runJobSource(jobSourceId);
   } catch (error) {
     if (isRedirectControlFlowError(error)) {
       throw error;
@@ -53,21 +50,14 @@ export async function runJobSourceAction(formData: FormData) {
 }
 
 export async function createCompanyAction(formData: FormData) {
-  const token = String(formData.get("token") ?? "").trim();
   const redirectPath = String(
     formData.get("redirectPath") ?? `${NEW_SOURCE_REDIRECT_PATH}`,
   );
 
-  if (!token) {
-    redirect(
-      buildAdminRedirect(redirectPath, "error", "Informe um token valido."),
-    );
-  }
-
   let company: Awaited<ReturnType<typeof createCompany>>;
 
   try {
-    company = await createCompany(token, parseCompanyFormData(formData));
+    company = await createCompany(parseCompanyFormData(formData));
   } catch (error) {
     if (isRedirectControlFlowError(error)) {
       throw error;
@@ -89,22 +79,15 @@ export async function createCompanyAction(formData: FormData) {
 }
 
 export async function createJobSourceAction(formData: FormData) {
-  const token = String(formData.get("token") ?? "").trim();
   const redirectPath = String(
     formData.get("redirectPath") ?? `${NEW_SOURCE_REDIRECT_PATH}`,
   );
-
-  if (!token) {
-    redirect(
-      buildAdminRedirect(redirectPath, "error", "Informe um token valido."),
-    );
-  }
 
   let source: Awaited<ReturnType<typeof createJobSource>>;
 
   try {
     const payload = parseJobSourceFormData(formData);
-    source = await createJobSource(token, payload);
+    source = await createJobSource(payload);
   } catch (error) {
     if (isRedirectControlFlowError(error)) {
       throw error;
@@ -126,7 +109,7 @@ export async function createJobSourceAction(formData: FormData) {
 
   redirect(
     buildAdminRedirect(
-      `${ROOT_REDIRECT_PATH}?token=${encodeURIComponent(token)}`,
+      ROOT_REDIRECT_PATH,
       "success",
       `Fonte ${source.sourceName} criada com sucesso.`,
     ),

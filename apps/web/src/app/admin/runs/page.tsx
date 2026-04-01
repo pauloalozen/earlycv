@@ -3,6 +3,7 @@ import Link from "next/link";
 import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
 import { filterRuns } from "@/lib/admin-operations";
 import { getPhaseOneAdminData } from "@/lib/admin-phase-one-data";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminStatusBadge } from "../_components/admin-status-badge";
@@ -13,7 +14,8 @@ type RunsPageProps = {
 };
 
 export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
-  const { query, status, token } = await searchParams;
+  const { query, status } = await searchParams;
+  const token = await getBackofficeSessionToken();
 
   if (!token) {
     return (
@@ -26,7 +28,7 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
     );
   }
 
-  const { orderedRuns, sourceViews } = await getPhaseOneAdminData(token);
+  const { orderedRuns, sourceViews } = await getPhaseOneAdminData();
   const sourceMap = new Map(sourceViews.map((source) => [source.id, source]));
   const filteredRuns = filterRuns(
     orderedRuns.map((run) => ({
@@ -72,7 +74,6 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
             <option value="running">running</option>
           </select>
           <form className="contents" id="runs-filter" method="GET">
-            <input name="token" type="hidden" value={token} />
             <button
               className={buttonVariants({ variant: "outline" })}
               type="submit"
@@ -127,7 +128,7 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
                         size: "sm",
                         variant: "outline",
                       })}
-                      href={`/admin/runs/${run.id}?token=${encodeURIComponent(token)}`}
+                      href={`/admin/runs/${run.id}`}
                     >
                       Ver detalhe
                     </Link>

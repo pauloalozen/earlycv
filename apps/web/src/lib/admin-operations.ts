@@ -4,6 +4,8 @@ import type {
   JobRecord,
   JobSourceRecord,
 } from "./admin-ingestion-api";
+import type { AdminUserRecord } from "./admin-users-api";
+import { buildUserPendingItems } from "./admin-users-operations.ts";
 
 export type AdminStatus = {
   label: string;
@@ -21,10 +23,16 @@ export type PendingItem = {
     | "company-missing-source"
     | "run-failed"
     | "source-failed-recent-run"
-    | "source-missing-first-run";
+    | "source-missing-first-run"
+    | "user-incomplete-profile"
+    | "user-missing-profile"
+    | "user-missing-master-resume";
 };
 
 type BuildPendingItemsInput = {
+  adminUsers?: Array<
+    Pick<AdminUserRecord, "id" | "name" | "profile" | "resumes">
+  >;
   companies: Array<Pick<CompanyRecord, "id" | "name">>;
   jobSources: Array<
     Pick<
@@ -37,12 +45,12 @@ type BuildPendingItemsInput = {
       | "sourceName"
     >
   >;
-  token: string;
 };
 
 type BuildOverviewMetricsInput = {
   companies: Array<Pick<CompanyRecord, "id">>;
   jobsCount: number;
+  missingMasterResumeCount: number;
   pendingCount: number;
   sourceCount: number;
   successfulRunsCount: number;
@@ -111,12 +119,12 @@ function matchesQuery(haystacks: Array<string | undefined>, query?: string) {
   );
 }
 
-export function buildSourceDetailHref(jobSourceId: string, token: string) {
-  return `/admin/fontes/${jobSourceId}?token=${encodeURIComponent(token)}`;
+export function buildSourceDetailHref(jobSourceId: string) {
+  return `/admin/fontes/${jobSourceId}`;
 }
 
-export function buildCompanyDetailHref(companyId: string, token: string) {
-  return `/admin/empresas/${companyId}?token=${encodeURIComponent(token)}`;
+export function buildCompanyDetailHref(companyId: string) {
+  return `/admin/empresas/${companyId}`;
 }
 
 export function buildCompanyStatus(
@@ -171,9 +179,9 @@ export function buildSourceStatus(
 }
 
 export function buildPendingItems({
+  adminUsers = [],
   companies,
   jobSources,
-  token,
 }: BuildPendingItemsInput): PendingItem[] {
   const items: PendingItem[] = [];
 
@@ -187,7 +195,7 @@ export function buildPendingItems({
         cta: "Criar primeira fonte",
         description: "Empresa criada sem nenhuma fonte de vagas conectada.",
         entityId: company.id,
-        href: buildCompanyDetailHref(company.id, token),
+        href: buildCompanyDetailHref(company.id),
         priority: "alta",
         title: company.name,
         type: "company-missing-source",
@@ -204,7 +212,7 @@ export function buildPendingItems({
         description:
           "A fonte foi cadastrada, mas ainda nao executou a primeira ingestao.",
         entityId: source.id,
-        href: buildSourceDetailHref(source.id, token),
+        href: buildSourceDetailHref(source.id),
         priority: "alta",
         title: source.sourceName,
         type: "source-missing-first-run",
@@ -219,7 +227,7 @@ export function buildPendingItems({
           source.lastErrorMessage ??
           "O ultimo run da fonte terminou com falha.",
         entityId: source.id,
-        href: buildSourceDetailHref(source.id, token),
+        href: buildSourceDetailHref(source.id),
         priority: "alta",
         title: source.sourceName,
         type: "source-failed-recent-run",
@@ -227,12 +235,34 @@ export function buildPendingItems({
     }
   }
 
+  items.push(...buildUserPendingItems({ users: adminUsers }));
+
   return items;
+}
+
+export function buildPendingTypeLabel(type: PendingItem["type"]): string {
+  switch (type) {
+    case "company-missing-source":
+      return "empresa sem fonte";
+    case "run-failed":
+      return "run com falha";
+    case "source-failed-recent-run":
+      return "falha recente da fonte";
+    case "source-missing-first-run":
+      return "fonte sem primeiro run";
+    case "user-incomplete-profile":
+      return "usuario com perfil incompleto";
+    case "user-missing-profile":
+      return "usuario sem perfil";
+    case "user-missing-master-resume":
+      return "usuario sem cv master";
+  }
 }
 
 export function buildOverviewMetrics({
   companies,
   jobsCount,
+  missingMasterResumeCount,
   pendingCount,
   sourceCount,
   successfulRunsCount,
@@ -242,6 +272,7 @@ export function buildOverviewMetrics({
     { label: "fontes", value: sourceCount },
     { label: "vagas", value: jobsCount },
     { label: "pendencias", value: pendingCount },
+    { label: "sem cv master", value: missingMasterResumeCount },
     { label: "runs ok", value: successfulRunsCount },
   ];
 }
