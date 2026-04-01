@@ -1,10 +1,9 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { type Prisma, ResumeKind } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import type { CreateResumeDto } from "./dto/create-resume.dto";
 import type { UpdateResumeDto } from "./dto/update-resume.dto";
-
-const PRIMARY_RESUME_SLOT = 1;
 
 @Injectable()
 export class ResumesService {
@@ -15,7 +14,7 @@ export class ResumesService {
   list(userId: string) {
     return this.database.resume.findMany({
       where: { userId },
-      orderBy: [{ isPrimary: "desc" }, { updatedAt: "desc" }],
+      orderBy: [{ isMaster: "desc" }, { updatedAt: "desc" }],
     });
   }
 
@@ -37,16 +36,10 @@ export class ResumesService {
   async create(userId: string, dto: CreateResumeDto) {
     return this.database.$transaction(async (tx) => {
       const existingResumeCount = await tx.resume.count({ where: { userId } });
-      const shouldBecomePrimary = dto.isPrimary ?? existingResumeCount === 0;
+      const shouldBecomeMaster = dto.isPrimary ?? existingResumeCount === 0;
 
-      if (shouldBecomePrimary) {
-        await tx.resume.updateMany({
-          where: { userId },
-          data: {
-            isPrimary: false,
-            primaryResumeSlot: null,
-          },
-        });
+      if (shouldBecomeMaster) {
+        await this.demoteOtherResumes(tx, userId);
       }
 
       return tx.resume.create({
@@ -56,8 +49,8 @@ export class ResumesService {
           sourceFileName: dto.sourceFileName,
           sourceFileType: null,
           status: dto.status,
-          isPrimary: shouldBecomePrimary,
-          primaryResumeSlot: shouldBecomePrimary ? PRIMARY_RESUME_SLOT : null,
+          kind: ResumeKind.master,
+          isMaster: shouldBecomeMaster,
         },
       });
     });
@@ -73,20 +66,14 @@ export class ResumesService {
           NOT: { id: resumeId },
         },
       });
-      const shouldRemainPrimary =
+      const shouldRemainMaster =
         dto.isPrimary === undefined
-          ? existingResume.isPrimary
+          ? existingResume.isMaster
           : dto.isPrimary ||
-            (existingResume.isPrimary && otherResumeCount === 0);
+            (existingResume.isMaster && otherResumeCount === 0);
 
-      if (shouldRemainPrimary) {
-        await tx.resume.updateMany({
-          where: { userId },
-          data: {
-            isPrimary: false,
-            primaryResumeSlot: null,
-          },
-        });
+      if (shouldRemainMaster) {
+        await this.demoteOtherResumes(tx, userId, resumeId);
       }
 
       return tx.resume.update({
@@ -95,8 +82,10 @@ export class ResumesService {
           title: dto.title,
           sourceFileName: dto.sourceFileName,
           status: dto.status,
-          isPrimary: shouldRemainPrimary,
-          primaryResumeSlot: shouldRemainPrimary ? PRIMARY_RESUME_SLOT : null,
+          kind: shouldRemainMaster
+            ? ResumeKind.master
+            : this.resolveNonMasterKind(existingResume.kind),
+          isMaster: shouldRemainMaster,
         },
       });
     });
@@ -115,19 +104,13 @@ export class ResumesService {
         throw new NotFoundException("resume not found");
       }
 
-      await tx.resume.updateMany({
-        where: { userId },
-        data: {
-          isPrimary: false,
-          primaryResumeSlot: null,
-        },
-      });
+      await this.demoteOtherResumes(tx, userId, resume.id);
 
       return tx.resume.update({
         where: { id: resume.id },
         data: {
-          isPrimary: true,
-          primaryResumeSlot: PRIMARY_RESUME_SLOT,
+          kind: ResumeKind.master,
+          isMaster: true,
         },
       });
     });
@@ -141,7 +124,7 @@ export class ResumesService {
         where: { id: resumeId },
       });
 
-      if (!resume.isPrimary) {
+      if (!resume.isMaster) {
         return;
       }
 
@@ -157,12 +140,32 @@ export class ResumesService {
       await tx.resume.update({
         where: { id: nextResume.id },
         data: {
-          isPrimary: true,
-          primaryResumeSlot: PRIMARY_RESUME_SLOT,
+          kind: ResumeKind.master,
+          isMaster: true,
         },
       });
     });
 
     return { ok: true } as const;
+  }
+
+  private demoteOtherResumes(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    resumeIdToKeep?: string,
+  ) {
+    return tx.resume.updateMany({
+      where: {
+        userId,
+        ...(resumeIdToKeep ? { NOT: { id: resumeIdToKeep } } : {}),
+      },
+      data: {
+        isMaster: false,
+      },
+    });
+  }
+
+  private resolveNonMasterKind(kind: ResumeKind) {
+    return kind;
   }
 }

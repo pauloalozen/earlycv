@@ -1,0 +1,51 @@
+import { Transform } from "class-transformer";
+import {
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Matches,
+  MaxLength,
+  MinLength,
+} from "class-validator";
+
+export class UpdateResumeTemplateDto {
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MinLength(1)
+  @MaxLength(160)
+  name?: string;
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim().toLowerCase() : value,
+  )
+  @IsString()
+  @MinLength(3)
+  @MaxLength(160)
+  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+  slug?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MaxLength(160)
+  targetRole?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsUrl({ require_protocol: true })
+  @MaxLength(2048)
+  fileUrl?: string;
+
+  @IsOptional()
+  @IsObject()
+  structureJson?: Record<string, unknown>;
+}
