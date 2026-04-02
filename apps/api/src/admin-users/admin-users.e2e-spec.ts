@@ -129,6 +129,7 @@ test("GET /api/admin/users lists product users and returns detail with ordered r
   });
   const newerResume = await database.resume.create({
     data: {
+      basedOnResumeId: olderResume.id,
       userId: productUser.userId,
       title: "Resume Two",
       status: "reviewed",

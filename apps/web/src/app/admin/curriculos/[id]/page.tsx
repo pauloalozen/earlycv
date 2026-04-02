@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { Badge, buttonVariants, Card, InfoField } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
+import { buildAdminStateModel } from "@/lib/admin-state";
 import {
   buildAdminUserState,
   getResumeDisplayKind,
@@ -25,25 +26,29 @@ export default async function AdminResumeDetailPage({
   const token = await getBackofficeSessionToken();
 
   if (!token) {
+    const state = buildAdminStateModel(
+      "missing-token",
+      `/admin/curriculos/${id}`,
+    );
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="Entre com um token valido para abrir o detalhe do curriculo."
-          title="Token ausente"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }
 
   const usersDataResult = await getAdminUsersDataSafely();
 
-  if (usersDataResult.kind === "invalid-token") {
+  if (usersDataResult.kind !== "ok") {
+    const state = buildAdminStateModel(
+      usersDataResult.kind,
+      `/admin/curriculos/${id}`,
+    );
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="O token informado e invalido ou expirou. Gere um novo access token para abrir o detalhe do curriculo."
-          title="Token invalido"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }

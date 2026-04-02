@@ -3,6 +3,7 @@ import Link from "next/link";
 import { buttonVariants, Card, EmptyState, StatCard } from "@/components/ui";
 import { buildPendingTypeLabel } from "@/lib/admin-operations";
 import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "./_components/admin-shell-header";
@@ -20,25 +21,23 @@ export default async function AdminOverviewPage({
   const token = await getBackofficeSessionToken();
 
   if (!token) {
+    const state = buildAdminStateModel("missing-token", "/admin");
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="Entre com um access token valido para abrir o backoffice operacional da EarlyCV."
-          title="Token ausente"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }
 
   const overviewDataResult = await getPhaseOneAdminDataSafely();
 
-  if (overviewDataResult.kind === "invalid-token") {
+  if (overviewDataResult.kind !== "ok") {
+    const state = buildAdminStateModel(overviewDataResult.kind, "/admin");
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="O token informado e invalido ou expirou. Gere um novo access token para abrir a visao geral administrativa."
-          title="Token invalido"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }

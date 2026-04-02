@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 
 import { buttonVariants, Card } from "@/components/ui";
 import { getIngestionRunById, getJobSource } from "@/lib/admin-ingestion-api";
+import { buildAdminStateModel } from "@/lib/admin-state";
+import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../../_components/admin-shell-header";
@@ -22,12 +23,11 @@ export default async function AdminRunDetailPage({
   const token = await getBackofficeSessionToken();
 
   if (!token) {
+    const state = buildAdminStateModel("missing-token", `/admin/runs/${id}`);
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="Entre com um token valido para abrir o detalhe do run."
-          title="Token ausente"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }
@@ -139,7 +139,16 @@ export default async function AdminRunDetailPage({
         </div>
       </div>
     );
-  } catch {
-    notFound();
+  } catch (error) {
+    const state = buildAdminStateModel(
+      getAdminDataErrorKind(error),
+      `/admin/runs/${id}`,
+    );
+
+    return (
+      <div className="px-6 py-10 md:px-10">
+        <AdminTokenState {...state} />
+      </div>
+    );
   }
 }

@@ -11,8 +11,9 @@ import {
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
-
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { InternalRoles } from "../common/roles.decorator";
+import { RolesGuard } from "../common/roles.guard";
 import { CreateJobDto } from "./dto/create-job.dto";
 import { UpdateJobDto } from "./dto/update-job.dto";
 import { JobsService } from "./jobs.service";
@@ -23,7 +24,8 @@ const jobsValidationOptions = {
   forbidNonWhitelisted: true,
 } as const;
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@InternalRoles("admin", "superadmin")
 @Controller("jobs")
 export class JobsController {
   constructor(@Inject(JobsService) private readonly jobsService: JobsService) {}

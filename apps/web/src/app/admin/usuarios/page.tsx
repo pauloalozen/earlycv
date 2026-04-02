@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
+import { buildAdminStateModel } from "@/lib/admin-state";
 import {
   buildAdminProfileDetailHref,
   buildAdminResumeDetailHref,
@@ -31,25 +32,23 @@ export default async function AdminUsersPage({
   const token = await getBackofficeSessionToken();
 
   if (!token) {
+    const state = buildAdminStateModel("missing-token", "/admin/usuarios");
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="Entre com um token valido para listar contas, perfil e curriculos dos usuarios."
-          title="Token ausente"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }
 
   const usersDataResult = await getAdminUsersDataSafely();
 
-  if (usersDataResult.kind === "invalid-token") {
+  if (usersDataResult.kind !== "ok") {
+    const state = buildAdminStateModel(usersDataResult.kind, "/admin/usuarios");
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="O token informado e invalido ou expirou. Gere um novo access token para voltar a consultar os usuarios do admin."
-          title="Token invalido"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }

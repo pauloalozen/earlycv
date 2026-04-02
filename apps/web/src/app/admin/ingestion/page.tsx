@@ -4,6 +4,8 @@ import Link from "next/link";
 import { buttonVariants, Card, Input } from "@/components/ui";
 import { listJobSources } from "@/lib/admin-ingestion-api";
 import { buildSourceStatus, filterSources } from "@/lib/admin-operations";
+import { buildAdminStateModel } from "@/lib/admin-state";
+import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { cn } from "@/lib/cn";
 
@@ -55,6 +57,8 @@ function StatusBanner({
 }
 
 function TokenForm() {
+  const state = buildAdminStateModel("missing-token", "/admin/ingestion");
+
   return (
     <Card className="mx-auto max-w-2xl space-y-4" padding="lg">
       <div className="space-y-2">
@@ -76,6 +80,8 @@ function TokenForm() {
           Entrar no painel
         </button>
       </form>
+
+      <p className="text-sm leading-7 text-stone-600">{state.description}</p>
     </Card>
   );
 }
@@ -264,8 +270,10 @@ export default async function AdminIngestionPage({
       </main>
     );
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Falha ao carregar o painel.";
+    const state = buildAdminStateModel(
+      getAdminDataErrorKind(error),
+      "/admin/ingestion",
+    );
 
     return (
       <main className="min-h-screen bg-stone-50 px-6 py-10 text-stone-900 md:px-10">
@@ -273,23 +281,16 @@ export default async function AdminIngestionPage({
           <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-orange-700">
             admin / ingestion
           </p>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Painel indisponivel
-          </h1>
+          <h1 className="text-3xl font-bold tracking-tight">{state.title}</h1>
           <p className="text-sm leading-7 text-stone-600">
-            Nao foi possivel carregar as fontes agora. Verifique se a API esta
-            rodando e se o token ainda esta valido.
+            {state.description}
           </p>
-          <StatusBanner message={errorMessage} status="error" />
           <div className="flex flex-wrap gap-3">
-            <Link className={buttonVariants()} href={`/admin/ingestion/new`}>
-              Adicionar empresa e fonte
-            </Link>
             <Link
               className={buttonVariants({ variant: "outline" })}
-              href="/admin/ingestion"
+              href={state.actionHref ?? "/admin/ingestion"}
             >
-              Voltar ao login do painel
+              {state.actionLabel ?? "Voltar ao login do painel"}
             </Link>
           </div>
         </Card>

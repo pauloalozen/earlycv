@@ -6,6 +6,7 @@ import {
   filterPendingItems,
 } from "@/lib/admin-operations";
 import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
@@ -22,25 +23,26 @@ export default async function AdminPendingPage({
   const token = await getBackofficeSessionToken();
 
   if (!token) {
+    const state = buildAdminStateModel("missing-token", "/admin/pendencias");
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="Entre com um token valido para abrir a fila de pendencias."
-          title="Token ausente"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }
 
   const pendingDataResult = await getPhaseOneAdminDataSafely();
 
-  if (pendingDataResult.kind === "invalid-token") {
+  if (pendingDataResult.kind !== "ok") {
+    const state = buildAdminStateModel(
+      pendingDataResult.kind,
+      "/admin/pendencias",
+    );
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="O token informado e invalido ou expirou. Gere um novo access token para abrir a fila de pendencias."
-          title="Token invalido"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }

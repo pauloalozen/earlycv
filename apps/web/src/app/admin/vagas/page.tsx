@@ -1,6 +1,7 @@
 import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
 import { filterJobs } from "@/lib/admin-operations";
-import { getPhaseOneAdminData } from "@/lib/admin-phase-one-data";
+import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
@@ -20,17 +21,28 @@ export default async function AdminJobsPage({ searchParams }: JobsPageProps) {
   const token = await getBackofficeSessionToken();
 
   if (!token) {
+    const state = buildAdminStateModel("missing-token", "/admin/vagas");
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="Entre com um token valido para revisar as vagas ingeridas."
-          title="Token ausente"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }
 
-  const { jobs, sourceViews } = await getPhaseOneAdminData();
+  const jobsDataResult = await getPhaseOneAdminDataSafely();
+
+  if (jobsDataResult.kind !== "ok") {
+    const state = buildAdminStateModel(jobsDataResult.kind, "/admin/vagas");
+
+    return (
+      <div className="px-6 py-10 md:px-10">
+        <AdminTokenState {...state} />
+      </div>
+    );
+  }
+
+  const { jobs, sourceViews } = jobsDataResult.data;
   const sourceMap = new Map(sourceViews.map((source) => [source.id, source]));
   const availableSourceNames = [
     ...new Set(sourceViews.map((source) => source.sourceName)),

@@ -74,9 +74,48 @@ async function registerUser(
   };
 }
 
+async function promoteToInternalAdmin(
+  database: DatabaseService,
+  email: string,
+  internalRole: "admin" | "superadmin" = "admin",
+) {
+  const user = await database.user.findUnique({
+    where: { email },
+  });
+
+  assert.ok(user);
+
+  await database.user.update({
+    where: { id: user.id },
+    data: {
+      isStaff: true,
+      internalRole,
+    },
+  });
+}
+
+test("job-source and global run endpoints reject authenticated product users without internal admin role", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "job-source-forbidden");
+
+  await request(app.getHttpServer())
+    .get("/api/job-sources")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(403);
+
+  await request(app.getHttpServer())
+    .get("/api/runs")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(403);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
 test("job-source endpoints create, update, list, and delete sources linked to an existing company", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "job-source-catalog");
+  await promoteToInternalAdmin(database, user.email);
   const company = await database.company.create({
     data: {
       name: "EarlyCV Demo",
@@ -153,6 +192,7 @@ test("job-source endpoints create, update, list, and delete sources linked to an
 test("job-source endpoints validate company linkage and reject crawler execution fields", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "job-source-validation");
+  await promoteToInternalAdmin(database, user.email);
 
   await request(app.getHttpServer())
     .post("/api/job-sources")
@@ -240,6 +280,7 @@ test("job-source endpoints validate company linkage and reject crawler execution
 test("job-source ingestion endpoints run a manual ingestion and expose audited runs", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "job-source-ingestion");
+  await promoteToInternalAdmin(database, user.email);
   const company = await database.company.create({
     data: {
       name: "Ingestion Company",
@@ -296,6 +337,7 @@ test("job-source ingestion endpoints run a manual ingestion and expose audited r
 test("global ingestion run endpoints list and fetch run details across sources", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "global-runs");
+  await promoteToInternalAdmin(database, user.email);
   const company = await database.company.create({
     data: {
       name: "Global Runs Co",

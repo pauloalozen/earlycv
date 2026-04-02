@@ -8,6 +8,7 @@ import {
   Input,
 } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
+import { buildAdminStateModel } from "@/lib/admin-state";
 import {
   buildAdminResumeDetailHref,
   filterAdminUsers,
@@ -38,25 +39,26 @@ export default async function AdminResumesPage({
   const token = await getBackofficeSessionToken();
 
   if (!token) {
+    const state = buildAdminStateModel("missing-token", "/admin/curriculos");
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="Entre com um token valido para revisar CV master e CVs adaptados."
-          title="Token ausente"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }
 
   const usersDataResult = await getAdminUsersDataSafely();
 
-  if (usersDataResult.kind === "invalid-token") {
+  if (usersDataResult.kind !== "ok") {
+    const state = buildAdminStateModel(
+      usersDataResult.kind,
+      "/admin/curriculos",
+    );
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="O token informado e invalido ou expirou. Gere um novo access token para revisar os curriculos dos usuarios."
-          title="Token invalido"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }

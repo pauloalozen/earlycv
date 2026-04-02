@@ -2,7 +2,8 @@ import Link from "next/link";
 
 import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
 import { filterRuns } from "@/lib/admin-operations";
-import { getPhaseOneAdminData } from "@/lib/admin-phase-one-data";
+import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
@@ -18,17 +19,28 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
   const token = await getBackofficeSessionToken();
 
   if (!token) {
+    const state = buildAdminStateModel("missing-token", "/admin/runs");
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="Entre com um token valido para revisar o historico global de runs."
-          title="Token ausente"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }
 
-  const { orderedRuns, sourceViews } = await getPhaseOneAdminData();
+  const runsDataResult = await getPhaseOneAdminDataSafely();
+
+  if (runsDataResult.kind !== "ok") {
+    const state = buildAdminStateModel(runsDataResult.kind, "/admin/runs");
+
+    return (
+      <div className="px-6 py-10 md:px-10">
+        <AdminTokenState {...state} />
+      </div>
+    );
+  }
+
+  const { orderedRuns, sourceViews } = runsDataResult.data;
   const sourceMap = new Map(sourceViews.map((source) => [source.id, source]));
   const filteredRuns = filterRuns(
     orderedRuns.map((run) => ({

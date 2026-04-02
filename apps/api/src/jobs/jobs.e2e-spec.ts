@@ -75,9 +75,43 @@ async function registerUser(
   };
 }
 
+async function promoteToInternalAdmin(
+  database: DatabaseService,
+  email: string,
+  internalRole: "admin" | "superadmin" = "admin",
+) {
+  const user = await database.user.findUnique({
+    where: { email },
+  });
+
+  assert.ok(user);
+
+  await database.user.update({
+    where: { id: user.id },
+    data: {
+      isStaff: true,
+      internalRole,
+    },
+  });
+}
+
+test("job endpoints reject authenticated product users without internal admin role", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "jobs-forbidden");
+
+  await request(app.getHttpServer())
+    .get("/api/jobs")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(403);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
 test("POST /api/jobs requires firstSeenAt and stores canonical job fields", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "jobs-create");
+  await promoteToInternalAdmin(database, user.email);
   const company = await database.company.create({
     data: {
       name: "EarlyCV Demo",
@@ -211,6 +245,7 @@ test("POST /api/jobs requires firstSeenAt and stores canonical job fields", asyn
 test("job endpoints list, fetch, update, and delete canonical jobs", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "jobs-crud");
+  await promoteToInternalAdmin(database, user.email);
   const company = await database.company.create({
     data: {
       name: "CRUD Company",
@@ -320,6 +355,7 @@ test("job endpoints list, fetch, update, and delete canonical jobs", async () =>
 test("POST /api/jobs rejects jobs whose source belongs to a different company", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "jobs-linkage");
+  await promoteToInternalAdmin(database, user.email);
   const company = await database.company.create({
     data: {
       name: "Primary Company",

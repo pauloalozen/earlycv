@@ -1,3 +1,5 @@
+import { buildBackofficeSessionResetHref } from "./backoffice-session";
+
 export type SuperadminStateKind =
   | "invalid-token"
   | "missing-token"
@@ -24,7 +26,7 @@ export function buildSuperadminStateModel(
 
   if (kind === "invalid-token") {
     return {
-      actionHref: "/superadmin",
+      actionHref: buildBackofficeSessionResetHref("/superadmin"),
       actionLabel: "Abrir ponto de entrada",
       description:
         "O token informado e invalido ou expirou. Gere um novo access token para voltar a acessar a camada institucional.",

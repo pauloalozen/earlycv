@@ -20,7 +20,7 @@ import {
   groupSourcesByCompany,
   sortRunsDescending,
 } from "./admin-operations";
-import { isInvalidAdminTokenError } from "./admin-token-errors";
+import { getAdminDataErrorKind } from "./admin-token-errors";
 import {
   type AdminUserRecord,
   type AssistedSessionRecord,
@@ -135,11 +135,7 @@ export async function getPhaseOneAdminDataSafely(token?: string) {
       kind: "ok",
     } as const;
   } catch (error) {
-    if (isInvalidAdminTokenError(error)) {
-      return { kind: "invalid-token" } as const;
-    }
-
-    throw error;
+    return { kind: getAdminDataErrorKind(error) } as const;
   }
 }
 
@@ -175,11 +171,7 @@ export async function getAdminUsersDataSafely(token?: string) {
       kind: "ok",
     } as const;
   } catch (error) {
-    if (isInvalidAdminTokenError(error)) {
-      return { kind: "invalid-token" } as const;
-    }
-
-    throw error;
+    return { kind: getAdminDataErrorKind(error) } as const;
   }
 }
 

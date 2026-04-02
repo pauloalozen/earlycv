@@ -11,8 +11,9 @@ import {
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
-
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { InternalRoles } from "../common/roles.decorator";
+import { RolesGuard } from "../common/roles.guard";
 import { CompaniesService } from "./companies.service";
 import { CreateCompanyDto } from "./dto/create-company.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
@@ -23,7 +24,8 @@ const companiesValidationOptions = {
   forbidNonWhitelisted: true,
 } as const;
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@InternalRoles("admin", "superadmin")
 @Controller("companies")
 export class CompaniesController {
   constructor(

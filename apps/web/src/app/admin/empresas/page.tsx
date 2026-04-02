@@ -2,7 +2,8 @@ import Link from "next/link";
 
 import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
 import { filterCompanies } from "@/lib/admin-operations";
-import { getPhaseOneAdminData } from "@/lib/admin-phase-one-data";
+import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
@@ -20,17 +21,31 @@ export default async function AdminCompaniesPage({
   const token = await getBackofficeSessionToken();
 
   if (!token) {
+    const state = buildAdminStateModel("missing-token", "/admin/empresas");
+
     return (
       <div className="px-6 py-10 md:px-10">
-        <AdminTokenState
-          description="Entre com um token valido para listar e continuar cadastros de empresas."
-          title="Token ausente"
-        />
+        <AdminTokenState {...state} />
       </div>
     );
   }
 
-  const { companyViews } = await getPhaseOneAdminData();
+  const companiesDataResult = await getPhaseOneAdminDataSafely();
+
+  if (companiesDataResult.kind !== "ok") {
+    const state = buildAdminStateModel(
+      companiesDataResult.kind,
+      "/admin/empresas",
+    );
+
+    return (
+      <div className="px-6 py-10 md:px-10">
+        <AdminTokenState {...state} />
+      </div>
+    );
+  }
+
+  const { companyViews } = companiesDataResult.data;
   const filteredCompanies = filterCompanies(companyViews, { query, status });
 
   return (

@@ -82,9 +82,43 @@ async function registerUser(
   };
 }
 
+async function promoteToInternalAdmin(
+  database: DatabaseService,
+  email: string,
+  internalRole: "admin" | "superadmin" = "admin",
+) {
+  const user = await database.user.findUnique({
+    where: { email },
+  });
+
+  assert.ok(user);
+
+  await database.user.update({
+    where: { id: user.id },
+    data: {
+      isStaff: true,
+      internalRole,
+    },
+  });
+}
+
+test("company endpoints reject authenticated product users without internal admin role", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "company-forbidden");
+
+  await request(app.getHttpServer())
+    .get("/api/companies")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(403);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
 test("company endpoints create, update, list, and delete catalog records with normalized names", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "company-catalog");
+  await promoteToInternalAdmin(database, user.email);
   const server = app.getHttpServer();
   const companyLabel = randomUUID().slice(0, 8);
   const createdName = `ACME Brasil Tecnologia ${companyLabel}`;
@@ -170,6 +204,7 @@ test("company endpoints create, update, list, and delete catalog records with no
 test("company endpoints validate payloads and reject client-supplied normalized names", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "company-validation");
+  await promoteToInternalAdmin(database, user.email);
 
   await request(app.getHttpServer())
     .post("/api/companies")
