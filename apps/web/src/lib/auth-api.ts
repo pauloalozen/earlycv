@@ -23,6 +23,14 @@ export function getAuthErrorMessage(status: number, message: string) {
     return "Email ou senha invalidos.";
   }
 
+  if (status === 400 && message.includes("email must be an email")) {
+    return "Informe um email valido.";
+  }
+
+  if (status === 409 && message.includes("email is already registered")) {
+    return "Ja existe uma conta com esse email.";
+  }
+
   if (
     status === 400 &&
     message.includes("verification code is invalid or expired")
@@ -48,7 +56,20 @@ async function authRequest<T>(path: string, init?: RequestInit) {
   });
 
   if (!response.ok) {
-    const message = await response.text();
+    const rawMessage = await response.text();
+    let message = rawMessage;
+
+    try {
+      const parsed = JSON.parse(rawMessage) as {
+        message?: string | string[];
+      };
+
+      if (Array.isArray(parsed.message)) {
+        message = parsed.message.join(" | ");
+      } else if (typeof parsed.message === "string") {
+        message = parsed.message;
+      }
+    } catch {}
 
     throw new Error(JSON.stringify({ message, status: response.status }));
   }

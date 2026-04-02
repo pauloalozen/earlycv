@@ -1,8 +1,6 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { buttonVariants } from "@/components/ui";
-import { buildBackofficeSessionResetHref } from "@/lib/backoffice-session";
 
 type AdminShellHeaderProps = {
   actions?: ReactNode;
@@ -37,12 +35,14 @@ export function AdminShellHeader({
 
       <div className="flex flex-wrap gap-3">
         {actions}
-        <Link
-          className={buttonVariants({ variant: "outline" })}
-          href={buildBackofficeSessionResetHref("/admin/ingestion")}
-        >
-          Encerrar sessao admin
-        </Link>
+        <form action="/auth/logout" method="post">
+          <button
+            className={buttonVariants({ variant: "outline" })}
+            type="submit"
+          >
+            Encerrar sessao admin
+          </button>
+        </form>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import {
   type AppSessionUser,
   getDefaultAppRedirectPath,
   getRouteAccessRedirectPath,
+  shouldMirrorBackofficeSession,
 } from "./app-session";
 
 function buildUser(overrides: Partial<AppSessionUser> = {}): AppSessionUser {
@@ -68,5 +69,31 @@ test("getRouteAccessRedirectPath protects admin and superadmin routes by verific
       buildUser({ internalRole: "superadmin", isStaff: true }),
     ),
     null,
+  );
+});
+
+test("shouldMirrorBackofficeSession only for verified staff roles", () => {
+  assert.equal(shouldMirrorBackofficeSession(buildUser()), false);
+  assert.equal(
+    shouldMirrorBackofficeSession(
+      buildUser({
+        emailVerifiedAt: null,
+        internalRole: "superadmin",
+        isStaff: true,
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    shouldMirrorBackofficeSession(
+      buildUser({ internalRole: "admin", isStaff: true }),
+    ),
+    true,
+  );
+  assert.equal(
+    shouldMirrorBackofficeSession(
+      buildUser({ internalRole: "superadmin", isStaff: true }),
+    ),
+    true,
   );
 });

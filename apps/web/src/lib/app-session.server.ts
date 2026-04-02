@@ -6,7 +6,9 @@ import {
   APP_ACCESS_TOKEN_COOKIE_NAME,
   APP_REFRESH_TOKEN_COOKIE_NAME,
   type AppSessionUser,
+  shouldMirrorBackofficeSession,
 } from "./app-session";
+import { BACKOFFICE_SESSION_COOKIE_NAME } from "./backoffice-session";
 
 type AuthSessionResponse = {
   accessToken: string;
@@ -49,6 +51,17 @@ export async function persistAppSession(session: AuthSessionResponse) {
 
   cookieStore.set(APP_ACCESS_TOKEN_COOKIE_NAME, session.accessToken, options);
   cookieStore.set(APP_REFRESH_TOKEN_COOKIE_NAME, session.refreshToken, options);
+
+  if (shouldMirrorBackofficeSession(session.user)) {
+    cookieStore.set(
+      BACKOFFICE_SESSION_COOKIE_NAME,
+      session.accessToken,
+      options,
+    );
+    return;
+  }
+
+  cookieStore.delete(BACKOFFICE_SESSION_COOKIE_NAME);
 }
 
 export async function clearAppSession() {
@@ -56,6 +69,7 @@ export async function clearAppSession() {
 
   cookieStore.delete(APP_ACCESS_TOKEN_COOKIE_NAME);
   cookieStore.delete(APP_REFRESH_TOKEN_COOKIE_NAME);
+  cookieStore.delete(BACKOFFICE_SESSION_COOKIE_NAME);
 }
 
 export async function fetchCurrentAppUser(accessToken: string) {

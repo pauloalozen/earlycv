@@ -1,28 +1,24 @@
-import { NextResponse } from "next/server";
 import { getCurrentAppSession } from "@/lib/app-session.server";
 import { parseAuthApiError, resendVerificationCode } from "@/lib/auth-api";
+import { createPostRedirectResponse } from "@/lib/route-response";
 
 export async function POST(request: Request) {
   const session = await getCurrentAppSession();
 
   if (!session) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return createPostRedirectResponse(request.url, "/login");
   }
 
   try {
     await resendVerificationCode(session.accessToken);
 
-    return NextResponse.redirect(
-      new URL("/verificar-email?resent=1", request.url),
-    );
+    return createPostRedirectResponse(request.url, "/verificar-email?resent=1");
   } catch (error) {
     const authError = parseAuthApiError(error);
 
-    return NextResponse.redirect(
-      new URL(
-        `/verificar-email?error=${encodeURIComponent(authError.message)}`,
-        request.url,
-      ),
+    return createPostRedirectResponse(
+      request.url,
+      `/verificar-email?error=${encodeURIComponent(authError.message)}`,
     );
   }
 }

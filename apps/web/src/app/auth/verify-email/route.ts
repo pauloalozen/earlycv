@@ -1,14 +1,13 @@
-import { NextResponse } from "next/server";
-
 import { getDefaultAppRedirectPath } from "@/lib/app-session";
 import { getCurrentAppSession } from "@/lib/app-session.server";
 import { parseAuthApiError, verifyEmailCode } from "@/lib/auth-api";
+import { createPostRedirectResponse } from "@/lib/route-response";
 
 export async function POST(request: Request) {
   const session = await getCurrentAppSession();
 
   if (!session) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return createPostRedirectResponse(request.url, "/login");
   }
 
   const formData = await request.formData();
@@ -17,17 +16,16 @@ export async function POST(request: Request) {
   try {
     const user = await verifyEmailCode(session.accessToken, code);
 
-    return NextResponse.redirect(
-      new URL(getDefaultAppRedirectPath(user), request.url),
+    return createPostRedirectResponse(
+      request.url,
+      getDefaultAppRedirectPath(user),
     );
   } catch (error) {
     const authError = parseAuthApiError(error);
 
-    return NextResponse.redirect(
-      new URL(
-        `/verificar-email?error=${encodeURIComponent(authError.message)}`,
-        request.url,
-      ),
+    return createPostRedirectResponse(
+      request.url,
+      `/verificar-email?error=${encodeURIComponent(authError.message)}`,
     );
   }
 }

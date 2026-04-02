@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { clearAppSession, getAppSessionTokens } from "@/lib/app-session.server";
 import { logoutWithRefreshToken } from "@/lib/auth-api";
+import { createSessionTerminationResponse } from "@/lib/route-response";
 
 export async function POST(request: Request) {
   const { refreshToken } = await getAppSessionTokens();
@@ -13,5 +13,5 @@ export async function POST(request: Request) {
 
   await clearAppSession();
 
-  return NextResponse.redirect(new URL("/login", request.url));
+  return createSessionTerminationResponse(request.url, "/");
 }

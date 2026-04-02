@@ -315,7 +315,6 @@ test("DELETE /api/resumes/:id removes only the authenticated user's resume and p
   });
   const secondaryResume = await database.resume.create({
     data: {
-      basedOnResumeId: ownResume.id,
       userId: firstUser.userId,
       title: "Delete Me",
       status: "reviewed",

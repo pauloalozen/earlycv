@@ -1,8 +1,6 @@
-import { NextResponse } from "next/server";
+import { createSessionTerminationResponse } from "@/lib/route-response";
 
-import { BACKOFFICE_SESSION_COOKIE_NAME } from "@/lib/backoffice-session";
-
-const DEFAULT_REDIRECT_PATH = "/admin/ingestion";
+const DEFAULT_REDIRECT_PATH = "/";
 
 function getSafeRedirectPath(next: string | null) {
   if (!next?.startsWith("/")) {
@@ -15,17 +13,6 @@ function getSafeRedirectPath(next: string | null) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const next = getSafeRedirectPath(url.searchParams.get("next"));
-  const response = NextResponse.redirect(new URL(next, url));
 
-  response.cookies.set({
-    httpOnly: true,
-    maxAge: 0,
-    name: BACKOFFICE_SESSION_COOKIE_NAME,
-    path: "/",
-    sameSite: "lax",
-    secure: url.protocol === "https:",
-    value: "",
-  });
-
-  return response;
+  return createSessionTerminationResponse(url.toString(), next);
 }

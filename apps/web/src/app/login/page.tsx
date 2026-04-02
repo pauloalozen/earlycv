@@ -83,9 +83,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
             <form action="/auth/login" className="space-y-3" method="post">
               <Input
+                autoComplete="email"
+                inputMode="email"
                 name="email"
+                pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
                 placeholder="voce@empresa.com"
                 required
+                title="Informe um email valido, como nome@empresa.com"
                 type="email"
               />
               <Input
@@ -123,9 +127,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             <form action="/auth/register" className="space-y-3" method="post">
               <Input name="name" placeholder="Seu nome" required />
               <Input
+                autoComplete="email"
+                inputMode="email"
                 name="email"
+                pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
                 placeholder="voce@empresa.com"
                 required
+                title="Informe um email valido, como nome@empresa.com"
                 type="email"
               />
               <Input

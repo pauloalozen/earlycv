@@ -12,6 +12,12 @@ export type AppSessionUser = {
   name: string;
 };
 
+export function shouldMirrorBackofficeSession(user: AppSessionUser) {
+  return Boolean(
+    user.emailVerifiedAt && user.isStaff && user.internalRole !== "none",
+  );
+}
+
 export function getDefaultAppRedirectPath(user: AppSessionUser | null) {
   if (!user) {
     return "/login";

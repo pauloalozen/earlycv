@@ -20,6 +20,14 @@ test("getAuthErrorMessage maps common auth responses to concise UI copy", () => 
     "Email ou senha invalidos.",
   );
   assert.equal(
+    getAuthErrorMessage(400, "email must be an email"),
+    "Informe um email valido.",
+  );
+  assert.equal(
+    getAuthErrorMessage(409, "email is already registered"),
+    "Ja existe uma conta com esse email.",
+  );
+  assert.equal(
     getAuthErrorMessage(400, "verification code is invalid or expired"),
     "Codigo invalido ou expirado.",
   );

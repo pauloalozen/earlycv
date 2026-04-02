@@ -1,8 +1,6 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Badge, buttonVariants, Card } from "@/components/ui";
-import { buildBackofficeSessionResetHref } from "@/lib/backoffice-session";
 
 type SuperadminShellHeaderProps = {
   actions?: ReactNode;
@@ -47,12 +45,14 @@ export function SuperadminShellHeader({
 
         <div className="flex flex-wrap gap-3">
           {actions}
-          <Link
-            className={buttonVariants({ variant: "dark" })}
-            href={buildBackofficeSessionResetHref("/superadmin")}
-          >
-            Encerrar sessao admin
-          </Link>
+          <form action="/auth/logout" method="post">
+            <button
+              className={buttonVariants({ variant: "dark" })}
+              type="submit"
+            >
+              Encerrar sessao admin
+            </button>
+          </form>
         </div>
       </div>
     </Card>

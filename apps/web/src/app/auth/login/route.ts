@@ -1,8 +1,7 @@
-import { NextResponse } from "next/server";
-
 import { getDefaultAppRedirectPath } from "@/lib/app-session";
 import { persistAppSession } from "@/lib/app-session.server";
 import { loginWithPassword, parseAuthApiError } from "@/lib/auth-api";
+import { createPostRedirectResponse } from "@/lib/route-response";
 
 export async function POST(request: Request) {
   const formData = await request.formData();
@@ -14,17 +13,16 @@ export async function POST(request: Request) {
 
     await persistAppSession(session);
 
-    return NextResponse.redirect(
-      new URL(getDefaultAppRedirectPath(session.user), request.url),
+    return createPostRedirectResponse(
+      request.url,
+      getDefaultAppRedirectPath(session.user),
     );
   } catch (error) {
     const authError = parseAuthApiError(error);
 
-    return NextResponse.redirect(
-      new URL(
-        `/login?error=${encodeURIComponent(authError.message)}`,
-        request.url,
-      ),
+    return createPostRedirectResponse(
+      request.url,
+      `/login?error=${encodeURIComponent(authError.message)}`,
     );
   }
 }
