@@ -9,6 +9,7 @@ import { Test } from "@nestjs/testing";
 
 import { DatabaseModule } from "../database/database.module";
 import { DatabaseService } from "../database/database.service";
+import { FakeEmailDeliveryService } from "./fake-email-delivery.service";
 
 type DeleteManyDelegate = {
   deleteMany: (args?: unknown) => Promise<unknown>;
@@ -31,8 +32,20 @@ type UserDelegate = DeleteManyDelegate & {
     passwordHash: string | null;
     profile: unknown;
     status: string;
+    emailVerifiedAt: Date | null;
     authAccounts: Array<{ provider: string }>;
   } | null>;
+};
+
+type EmailVerificationChallengeDelegate = DeleteManyDelegate & {
+  findMany: (args?: unknown) => Promise<
+    Array<{
+      codeHash: string;
+      consumedAt: Date | null;
+      expiresAt: Date;
+      userId: string;
+    }>
+  >;
 };
 
 async function importAuthModule() {
@@ -82,6 +95,7 @@ test("AuthService registers a user and stores a hashed refresh token", async () 
   const database = moduleRef.get(DatabaseService);
   const service = moduleRef.get(AuthService);
   const jwtService = moduleRef.get(JwtService);
+  const fakeEmailDelivery = moduleRef.get(FakeEmailDeliveryService);
   const email = `ana+${randomUUID()}@earlycv.dev`;
 
   await deleteUserByEmail(database, email);
@@ -95,6 +109,7 @@ test("AuthService registers a user and stores a hashed refresh token", async () 
   assert.equal(typeof result.accessToken, "string");
   assert.equal(typeof result.refreshToken, "string");
   assert.equal(result.user.email, email);
+  assert.equal(result.user.emailVerifiedAt, null);
   assert.equal("passwordHash" in result.user, false);
 
   const refreshPayload = await jwtService.verifyAsync<{
@@ -113,12 +128,29 @@ test("AuthService registers a user and stores a hashed refresh token", async () 
   assert.notEqual(refreshRows[0]?.tokenHash, result.refreshToken);
   assert.equal(refreshRows[0]?.sessionId, refreshPayload.sessionId);
 
+  const verificationRows = await (
+    database.emailVerificationChallenge as unknown as EmailVerificationChallengeDelegate
+  ).findMany({ where: { user: { email } } });
+
+  assert.equal(verificationRows.length, 1);
+  assert.equal(verificationRows[0]?.consumedAt ?? null, null);
+  assert.equal(typeof verificationRows[0]?.codeHash, "string");
+  assert.equal(verificationRows[0]?.codeHash.length > 0, true);
+  assert.equal(verificationRows[0]?.expiresAt instanceof Date, true);
+
+  const sentMessages = fakeEmailDelivery.listSentMessages();
+
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0]?.to, email);
+  assert.equal(sentMessages[0]?.subject.includes("codigo"), true);
+
   const storedUser = await (database.user as UserDelegate).findUnique({
     where: { email },
     include: { authAccounts: true, profile: true },
   });
 
   assert.equal(storedUser?.status, "active");
+  assert.equal(storedUser?.emailVerifiedAt ?? null, null);
   assert.equal(typeof storedUser?.passwordHash, "string");
   assert.equal(storedUser?.authAccounts.length, 1);
   assert.equal(storedUser?.authAccounts[0]?.provider, "credentials");

@@ -1,8 +1,17 @@
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import type { NextConfig } from "next";
 
-const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
+const workspaceRootCandidates = [
+  fileURLToPath(new URL("../..", import.meta.url)),
+  fileURLToPath(new URL("../../../../", import.meta.url)),
+];
+
+const workspaceRoot =
+  workspaceRootCandidates.find((candidate) =>
+    existsSync(`${candidate}/node_modules/next/package.json`),
+  ) ?? workspaceRootCandidates[0];
 
 const nextConfig: NextConfig = {
   turbopack: {

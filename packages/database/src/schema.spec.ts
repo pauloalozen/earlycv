@@ -34,6 +34,7 @@ test("database schema defines the slice-1 domain models", () => {
     "UserProfile",
     "AuthAccount",
     "RefreshToken",
+    "EmailVerificationChallenge",
     "Resume",
     "Company",
     "JobSource",
@@ -119,6 +120,25 @@ test("admin schema adds internal user roles and staff markers", () => {
 
   assert.match(user, /^\s*internalRole\s+InternalRole\s+@default\(none\)$/m);
   assert.match(user, /^\s*isStaff\s+Boolean\s+@default\(false\)$/m);
+});
+
+test("email verification challenges support hashed codes and lifecycle timestamps", () => {
+  const user = getBlock("model", "User");
+  const challenge = getBlock("model", "EmailVerificationChallenge");
+
+  assert.match(challenge, /^\s*userId\s+String$/m);
+  assert.match(challenge, /^\s*codeHash\s+String$/m);
+  assert.match(challenge, /^\s*expiresAt\s+DateTime$/m);
+  assert.match(challenge, /^\s*consumedAt\s+DateTime\?$/m);
+  assert.match(challenge, /^\s*createdAt\s+DateTime\s+@default\(now\(\)\)$/m);
+  assert.match(
+    challenge,
+    /^\s*user\s+User\s+@relation\(fields: \[userId\], references: \[id\], onDelete: Cascade\)$/m,
+  );
+  assert.match(
+    user,
+    /^\s*emailVerificationChallenges\s+EmailVerificationChallenge\[\]$/m,
+  );
 });
 
 test("resume templates include task-1 metadata for reusable baselines", () => {

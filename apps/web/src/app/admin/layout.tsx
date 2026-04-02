@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { type ReactNode, Suspense } from "react";
+
+import { getRouteAccessRedirectPath } from "@/lib/app-session";
+import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 
 import { AdminSidebar } from "./_components/admin-sidebar";
 
@@ -18,7 +22,14 @@ type AdminLayoutProps = {
   children: ReactNode;
 };
 
-export default function AdminLayout({ children }: AdminLayoutProps) {
+export default async function AdminLayout({ children }: AdminLayoutProps) {
+  const user = await getCurrentAppUserFromCookies();
+  const redirectPath = getRouteAccessRedirectPath("/admin", user);
+
+  if (redirectPath) {
+    redirect(redirectPath);
+  }
+
   return (
     <div className="min-h-screen bg-stone-100 text-stone-900">
       <Suspense

@@ -134,6 +134,7 @@ test("GET /api/admin/users lists product users and returns detail with ordered r
       status: "reviewed",
       kind: "adapted",
       isMaster: false,
+      basedOnResumeId: olderResume.id,
     },
   });
 
