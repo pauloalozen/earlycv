@@ -78,6 +78,36 @@ enum IngestionRunStatus {
   failed
 }
 
+enum AffiliatePartnerStatus {
+  draft
+  active
+  inactive
+}
+
+enum AffiliateCampaignStatus {
+  draft
+  active
+  inactive
+}
+
+enum AffiliateCodeStatus {
+  draft
+  active
+  inactive
+}
+
+enum AffiliateRewardType {
+  percentage
+  fixed_amount
+}
+
+enum AffiliateCommissionStatus {
+  pending
+  approved
+  paid
+  reversed
+}
+
 model User {
   id              String         @id @default(cuid())
   email           String         @unique
@@ -95,6 +125,8 @@ model User {
   authAccounts    AuthAccount[]
   refreshTokens   RefreshToken[]
   resumes         Resume[]
+  affiliateAttributions     AffiliateAttribution[]
+  affiliateCommissionEvents AffiliateCommissionEvent[]
 }
 
 model UserProfile {
@@ -252,6 +284,105 @@ model IngestionRun {
   jobSource    JobSource          @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
 
   @@index([jobSourceId, createdAt])
+}
+
+model AffiliatePartner {
+  id        String                 @id @default(cuid())
+  name      String
+  slug      String                 @unique
+  email     String?
+  status    AffiliatePartnerStatus @default(draft)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+  campaigns AffiliateCampaign[]
+}
+
+model AffiliateCampaign {
+  id                     String                  @id @default(cuid())
+  partnerId              String
+  name                   String
+  attributionWindowDays  Int                     @default(30)
+  defaultCurrency        String                  @default("BRL")
+  defaultDiscountType    AffiliateRewardType?
+  defaultDiscountValue   Int?
+  defaultCommissionType  AffiliateRewardType
+  defaultCommissionValue Int
+  status                 AffiliateCampaignStatus @default(draft)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  partner                AffiliatePartner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  codes                  AffiliateCode[]
+  attributions           AffiliateAttribution[]
+  commissionEvents       AffiliateCommissionEvent[]
+
+  @@index([partnerId])
+}
+
+model AffiliateCode {
+  id               String              @id @default(cuid())
+  campaignId       String
+  code             String              @unique
+  landingPageUrl   String?
+  status           AffiliateCodeStatus @default(draft)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  campaign         AffiliateCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  attributions     AffiliateAttribution[]
+  commissionEvents AffiliateCommissionEvent[]
+
+  @@index([campaignId])
+  @@unique([id, campaignId])
+}
+
+model AffiliateAttribution {
+  id               String                     @id @default(cuid())
+  userId           String
+  affiliateCampaignId String
+  affiliateCodeId  String
+  attributedAt     DateTime                   @default(now())
+  expiresAt        DateTime
+  metadataJson     Json?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  user             User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  affiliateCampaign AffiliateCampaign         @relation(fields: [affiliateCampaignId], references: [id], onDelete: Cascade)
+  affiliateCode    AffiliateCode              @relation(fields: [affiliateCodeId, affiliateCampaignId], references: [id, campaignId], onDelete: Cascade)
+  commissionEvents AffiliateCommissionEvent[]
+
+  @@index([userId])
+  @@index([affiliateCampaignId])
+  @@index([affiliateCodeId])
+  @@index([expiresAt])
+}
+
+model AffiliateCommissionEvent {
+  id                        String                    @id @default(cuid())
+  userId                    String
+  affiliateCampaignId       String
+  affiliateCodeId           String
+  affiliateAttributionId    String?
+  purchaseReference         String                    @unique
+  planKey                   String
+  grossAmountInCents        Int
+  discountAmountInCents     Int                       @default(0)
+  netAmountInCents          Int
+  commissionType            AffiliateRewardType
+  commissionValue           Int
+  commissionAmountInCents   Int
+  currency                  String                    @default("BRL")
+  status                    AffiliateCommissionStatus @default(pending)
+  paidAt                    DateTime?
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  user                      User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  affiliateCampaign         AffiliateCampaign         @relation(fields: [affiliateCampaignId], references: [id], onDelete: Cascade)
+  affiliateCode             AffiliateCode             @relation(fields: [affiliateCodeId, affiliateCampaignId], references: [id, campaignId], onDelete: Cascade)
+  affiliateAttribution      AffiliateAttribution?     @relation(fields: [affiliateAttributionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([affiliateCampaignId])
+  @@index([affiliateCodeId])
+  @@index([status])
 }
 
 model Job {

@@ -39,6 +39,11 @@ test("database schema defines the slice-1 domain models", () => {
     "JobSource",
     "Job",
     "IngestionRun",
+    "AffiliatePartner",
+    "AffiliateCampaign",
+    "AffiliateCode",
+    "AffiliateAttribution",
+    "AffiliateCommissionEvent",
   ]) {
     assert.notEqual(
       schema.includes(`model ${model} `),
@@ -196,6 +201,51 @@ test("resume migration guards master and adapted invariants", () => {
   );
 });
 
+test("affiliate foundation models partner campaigns, code attribution, and commission snapshots", () => {
+  const partner = getBlock("model", "AffiliatePartner");
+  const campaign = getBlock("model", "AffiliateCampaign");
+  const code = getBlock("model", "AffiliateCode");
+  const attribution = getBlock("model", "AffiliateAttribution");
+  const commissionEvent = getBlock("model", "AffiliateCommissionEvent");
+
+  assert.match(partner, /^\s*slug\s+String\s+@unique$/m);
+  assert.match(partner, /^\s*campaigns\s+AffiliateCampaign\[\]$/m);
+
+  assert.match(campaign, /^\s*partnerId\s+String$/m);
+  assert.match(campaign, /^\s*attributionWindowDays\s+Int\s+@default\(30\)$/m);
+  assert.match(campaign, /^\s*defaultCurrency\s+String\s+@default\("BRL"\)$/m);
+
+  assert.match(code, /^\s*code\s+String\s+@unique$/m);
+  assert.match(code, /^\s*campaignId\s+String$/m);
+  assertContains(
+    code,
+    "@@unique([id, campaignId])",
+    "AffiliateCode should support composite references tied to its campaign",
+  );
+
+  assert.match(attribution, /^\s*userId\s+String$/m);
+  assert.match(attribution, /^\s*expiresAt\s+DateTime$/m);
+  assert.match(
+    attribution,
+    /^\s*user\s+User\s+@relation\(fields: \[userId\], references: \[id\], onDelete: Cascade\)$/m,
+  );
+  assert.match(
+    attribution,
+    /^\s*affiliateCode\s+AffiliateCode\s+@relation\(fields: \[affiliateCodeId, affiliateCampaignId\], references: \[id, campaignId\], onDelete: Cascade\)$/m,
+  );
+
+  assert.match(commissionEvent, /^\s*userId\s+String$/m);
+  assert.match(commissionEvent, /^\s*affiliateAttributionId\s+String\?$/m);
+  assert.match(commissionEvent, /^\s*purchaseReference\s+String\s+@unique$/m);
+  assert.match(commissionEvent, /^\s*planKey\s+String$/m);
+  assert.match(commissionEvent, /^\s*grossAmountInCents\s+Int$/m);
+  assert.match(commissionEvent, /^\s*commissionAmountInCents\s+Int$/m);
+  assert.match(
+    commissionEvent,
+    /^\s*affiliateCode\s+AffiliateCode\s+@relation\(fields: \[affiliateCodeId, affiliateCampaignId\], references: \[id, campaignId\], onDelete: Cascade\)$/m,
+  );
+});
+
 test("enum values use lowercase API-aligned identifiers", () => {
   const authProvider = getBlock("enum", "AuthProvider");
   const userStatus = getBlock("enum", "UserStatus");
@@ -204,6 +254,14 @@ test("enum values use lowercase API-aligned identifiers", () => {
   const crawlStrategy = getBlock("enum", "CrawlStrategy");
   const jobStatus = getBlock("enum", "JobStatus");
   const ingestionRunStatus = getBlock("enum", "IngestionRunStatus");
+  const affiliatePartnerStatus = getBlock("enum", "AffiliatePartnerStatus");
+  const affiliateCampaignStatus = getBlock("enum", "AffiliateCampaignStatus");
+  const affiliateCodeStatus = getBlock("enum", "AffiliateCodeStatus");
+  const affiliateRewardType = getBlock("enum", "AffiliateRewardType");
+  const affiliateCommissionStatus = getBlock(
+    "enum",
+    "AffiliateCommissionStatus",
+  );
 
   for (const expectedValue of ["credentials", "google", "linkedin"]) {
     assertContains(
@@ -267,6 +325,40 @@ test("enum values use lowercase API-aligned identifiers", () => {
       ingestionRunStatus,
       expectedValue,
       `IngestionRunStatus should include ${expectedValue}`,
+    );
+  }
+
+  for (const expectedValue of ["draft", "active", "inactive"]) {
+    assertContains(
+      affiliatePartnerStatus,
+      expectedValue,
+      `AffiliatePartnerStatus should include ${expectedValue}`,
+    );
+    assertContains(
+      affiliateCampaignStatus,
+      expectedValue,
+      `AffiliateCampaignStatus should include ${expectedValue}`,
+    );
+    assertContains(
+      affiliateCodeStatus,
+      expectedValue,
+      `AffiliateCodeStatus should include ${expectedValue}`,
+    );
+  }
+
+  for (const expectedValue of ["percentage", "fixed_amount"]) {
+    assertContains(
+      affiliateRewardType,
+      expectedValue,
+      `AffiliateRewardType should include ${expectedValue}`,
+    );
+  }
+
+  for (const expectedValue of ["pending", "approved", "paid", "reversed"]) {
+    assertContains(
+      affiliateCommissionStatus,
+      expectedValue,
+      `AffiliateCommissionStatus should include ${expectedValue}`,
     );
   }
 });

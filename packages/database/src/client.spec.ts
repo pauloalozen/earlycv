@@ -16,6 +16,9 @@ const packageJson = JSON.parse(
     };
   };
   scripts: {
+    lint?: string;
+    check?: string;
+    pretest?: string;
     generate: string;
     migrate: string;
     seed: string;
@@ -81,6 +84,31 @@ test("database workspace scripts load the root env file before Prisma commands",
   }
 });
 
+test("database workspace scripts fall back to the root env example when local env is missing", () => {
+  assert.equal(
+    packageJson.scripts.generate.includes("../../.env.example"),
+    true,
+    "generate should fall back to ../../.env.example before running",
+  );
+  for (const scriptName of ["migrate", "seed"] as const) {
+    assert.equal(
+      packageJson.scripts[scriptName].includes("../../.env.example"),
+      false,
+      `${scriptName} should fail closed instead of sourcing ../../.env.example`,
+    );
+  }
+});
+
+test("database mutating scripts require an explicit DATABASE_URL when no root env exists", () => {
+  for (const scriptName of ["migrate", "seed"] as const) {
+    assert.equal(
+      packageJson.scripts[scriptName].includes("DATABASE_URL is required"),
+      true,
+      `${scriptName} should stop when DATABASE_URL is unavailable`,
+    );
+  }
+});
+
 test("database workspace scripts preserve an explicitly exported DATABASE_URL", () => {
   for (const scriptName of ["generate", "migrate", "seed"] as const) {
     assert.equal(
@@ -89,6 +117,18 @@ test("database workspace scripts preserve an explicitly exported DATABASE_URL", 
       `${scriptName} should not override an existing DATABASE_URL`,
     );
   }
+});
+
+test("database tests generate Prisma Client before running", () => {
+  assert.equal(
+    packageJson.scripts.pretest,
+    "npm run generate --workspace @earlycv/database",
+  );
+});
+
+test("database package check script validates Prisma sources as well as TypeScript", () => {
+  assert.equal(packageJson.scripts.check?.includes("prisma"), true);
+  assert.equal(packageJson.scripts.lint?.includes("prisma"), true);
 });
 
 test("database development entrypoint uses source-safe relative imports", () => {

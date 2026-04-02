@@ -40,6 +40,59 @@ async function main() {
       sourceUrl: "https://careers.earlycv.dev",
     },
   });
+
+  const affiliatePartner = await prisma.affiliatePartner.upsert({
+    where: { slug: "criador-demo" },
+    update: {
+      email: "parcerias@earlycv.dev",
+      name: "Criador Demo",
+      status: "active",
+    },
+    create: {
+      email: "parcerias@earlycv.dev",
+      name: "Criador Demo",
+      slug: "criador-demo",
+      status: "active",
+    },
+  });
+
+  const affiliateCampaign = await prisma.affiliateCampaign.upsert({
+    where: {
+      id: `${affiliatePartner.id}-campanha-inicial`,
+    },
+    update: {
+      attributionWindowDays: 30,
+      defaultCommissionType: "percentage",
+      defaultCommissionValue: 20,
+      name: "Campanha inicial",
+      partnerId: affiliatePartner.id,
+      status: "active",
+    },
+    create: {
+      id: `${affiliatePartner.id}-campanha-inicial`,
+      attributionWindowDays: 30,
+      defaultCommissionType: "percentage",
+      defaultCommissionValue: 20,
+      name: "Campanha inicial",
+      partnerId: affiliatePartner.id,
+      status: "active",
+    },
+  });
+
+  await prisma.affiliateCode.upsert({
+    where: { code: "CRIADORDEMO30" },
+    update: {
+      campaignId: affiliateCampaign.id,
+      landingPageUrl: "https://earlycv.app/parcerias/criador-demo",
+      status: "active",
+    },
+    create: {
+      campaignId: affiliateCampaign.id,
+      code: "CRIADORDEMO30",
+      landingPageUrl: "https://earlycv.app/parcerias/criador-demo",
+      status: "active",
+    },
+  });
 }
 
 main()
