@@ -120,6 +120,26 @@ export class ResumesService {
     const resume = await this.getById(userId, resumeId);
 
     await this.database.$transaction(async (tx) => {
+      const nextResume = resume.isMaster
+        ? await tx.resume.findFirst({
+            where: {
+              userId,
+              NOT: { id: resumeId },
+            },
+            orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+          })
+        : null;
+
+      if (nextResume) {
+        await tx.resume.update({
+          where: { id: nextResume.id },
+          data: {
+            kind: ResumeKind.master,
+            isMaster: true,
+          },
+        });
+      }
+
       await tx.resume.delete({
         where: { id: resumeId },
       });
@@ -128,22 +148,9 @@ export class ResumesService {
         return;
       }
 
-      const nextResume = await tx.resume.findFirst({
-        where: { userId },
-        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-      });
-
       if (!nextResume) {
         return;
       }
-
-      await tx.resume.update({
-        where: { id: nextResume.id },
-        data: {
-          kind: ResumeKind.master,
-          isMaster: true,
-        },
-      });
     });
 
     return { ok: true } as const;

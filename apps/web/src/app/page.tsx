@@ -195,7 +195,13 @@ export default function Home() {
             <nav className="flex flex-wrap items-center gap-4 text-sm font-medium text-stone-500 md:gap-6">
               <a href="#como-funciona">Como funciona</a>
               <a href="#planos">Planos</a>
-              <Link className={buttonVariants({ size: "sm" })} href="/ui">
+              <Link
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+                href="/login"
+              >
+                Entrar
+              </Link>
+              <Link className={buttonVariants({ size: "sm" })} href="/login">
                 Comecar agora
               </Link>
             </nav>
@@ -216,8 +222,14 @@ export default function Home() {
             </div>
 
             <div className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-center">
-              <Link className={buttonVariants({ size: "lg" })} href="/ui">
+              <Link className={buttonVariants({ size: "lg" })} href="/login">
                 Comecar agora
+              </Link>
+              <Link
+                className={buttonVariants({ size: "lg", variant: "outline" })}
+                href="/login"
+              >
+                Entrar
               </Link>
               <p className="text-[13px] font-medium text-stone-500">
                 Sem adivinhacao. Sem spam. So vagas relevantes primeiro.

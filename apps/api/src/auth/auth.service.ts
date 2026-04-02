@@ -1,9 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -16,6 +18,12 @@ import type { CreateStaffUserDto } from "./dto/create-staff-user.dto";
 import type { LoginDto } from "./dto/login.dto";
 import type { RefreshDto } from "./dto/refresh.dto";
 import type { RegisterDto } from "./dto/register.dto";
+import type { ResendVerificationCodeDto } from "./dto/resend-verification-code.dto";
+import type { VerifyEmailDto } from "./dto/verify-email.dto";
+import {
+  EMAIL_DELIVERY_PORT,
+  type EmailDeliveryPort,
+} from "./email-delivery.port";
 
 type PersistedUser = Awaited<ReturnType<DatabaseService["user"]["findUnique"]>>;
 type UserRecord = NonNullable<PersistedUser>;
@@ -70,6 +78,8 @@ export class AuthService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(JwtService) private readonly jwtService: JwtService,
     @Inject(APP_ENV) private readonly env: AppEnv,
+    @Inject(EMAIL_DELIVERY_PORT)
+    private readonly emailDelivery: EmailDeliveryPort,
   ) {}
 
   async register(input: RegisterDto): Promise<AuthSession> {
@@ -78,6 +88,8 @@ export class AuthService {
       password: input.password,
       name: input.name,
     });
+
+    await this.issueEmailVerificationChallenge(user.id, user.email);
 
     return this.issueSession(user.id);
   }
@@ -113,6 +125,56 @@ export class AuthService {
 
   async login(user: { id: string }): Promise<AuthSession> {
     return this.issueSession(user.id);
+  }
+
+  async verifyEmail(userId: string, input: VerifyEmailDto): Promise<AuthUser> {
+    const user = await this.requireUserById(userId);
+
+    if (user.emailVerifiedAt) {
+      return this.sanitizeUser(user);
+    }
+
+    const challenge = await this.loadLatestActiveVerificationChallenge(user.id);
+
+    if (!challenge || challenge.expiresAt <= new Date()) {
+      throw new BadRequestException("verification code is invalid or expired");
+    }
+
+    const matches = await argon2.verify(challenge.codeHash, input.code.trim());
+
+    if (!matches) {
+      throw new BadRequestException("verification code is invalid or expired");
+    }
+
+    const now = new Date();
+    const verifiedUser = await this.database.$transaction(async (tx) => {
+      await tx.emailVerificationChallenge.update({
+        where: { id: challenge.id },
+        data: { consumedAt: now },
+      });
+
+      return tx.user.update({
+        where: { id: user.id },
+        data: { emailVerifiedAt: now },
+      });
+    });
+
+    return this.sanitizeUser(verifiedUser);
+  }
+
+  async resendVerificationCode(
+    userId: string,
+    _input: ResendVerificationCodeDto,
+  ) {
+    const user = await this.requireUserById(userId);
+
+    if (user.emailVerifiedAt) {
+      throw new BadRequestException("email is already verified");
+    }
+
+    await this.issueEmailVerificationChallenge(user.id, user.email);
+
+    return { ok: true } as const;
   }
 
   async finishSocialLogin(input: SocialProfileInput): Promise<AuthSession> {
@@ -338,6 +400,63 @@ export class AuthService {
       refreshToken,
       user: this.sanitizeUser(updatedUser),
     };
+  }
+
+  private async issueEmailVerificationChallenge(userId: string, email: string) {
+    const now = new Date();
+    const code = this.generateVerificationCode();
+    const codeHash = await argon2.hash(code);
+    const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+
+    await this.database.$transaction(async (tx) => {
+      await tx.emailVerificationChallenge.updateMany({
+        where: {
+          userId,
+          consumedAt: null,
+        },
+        data: { consumedAt: now },
+      });
+
+      await tx.emailVerificationChallenge.create({
+        data: {
+          userId,
+          codeHash,
+          expiresAt,
+        },
+      });
+    });
+
+    await this.emailDelivery.send({
+      to: email,
+      subject: "Seu codigo de verificacao EarlyCV",
+      text: `Seu codigo de verificacao e ${code}. Ele expira em 15 minutos.`,
+    });
+  }
+
+  private generateVerificationCode() {
+    return randomInt(0, 1_000_000).toString().padStart(6, "0");
+  }
+
+  private async loadLatestActiveVerificationChallenge(userId: string) {
+    return this.database.emailVerificationChallenge.findFirst({
+      where: {
+        userId,
+        consumedAt: null,
+      },
+      orderBy: [{ createdAt: "desc" }],
+    });
+  }
+
+  private async requireUserById(userId: string) {
+    const user = await this.database.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException("user not found");
+    }
+
+    return user;
   }
 
   private async findValidRefreshToken(rawRefreshToken: string) {

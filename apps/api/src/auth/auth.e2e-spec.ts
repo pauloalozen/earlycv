@@ -10,6 +10,7 @@ import request from "supertest";
 
 import { AppModule } from "../app.module";
 import { DatabaseService } from "../database/database.service";
+import { FakeEmailDeliveryService } from "./fake-email-delivery.service";
 import { InternalTestModule } from "./internal-test.module";
 
 type DeleteManyDelegate = {
@@ -19,6 +20,18 @@ type DeleteManyDelegate = {
 type UserDelegate = DeleteManyDelegate & {
   updateMany: (args?: unknown) => Promise<unknown>;
 };
+
+function getVerificationCodeFromMessage(text: string) {
+  const match = text.match(/\b(\d{6})\b/);
+
+  assert.notEqual(match, null);
+
+  if (!match) {
+    throw new Error("expected verification code in fake email message");
+  }
+
+  return match[1];
+}
 
 async function deleteUserByEmail(database: DatabaseService, email: string) {
   await (database.user as UserDelegate).deleteMany({
@@ -149,6 +162,67 @@ test("auth endpoints validate payloads, rotate refresh tokens, logout, and retur
     .post("/api/auth/refresh")
     .send({ refreshToken: refreshResponse.body.refreshToken })
     .expect(401);
+
+  await deleteUserByEmail(database, email);
+  await app.close();
+});
+
+test("register sends a verification code and verification endpoints validate, resend, and unlock the user", async () => {
+  const { app, database } = await createApp();
+  const fakeEmailDelivery = app.get(FakeEmailDeliveryService);
+  const email = `bruna+${randomUUID()}@earlycv.dev`;
+
+  await deleteUserByEmail(database, email);
+  fakeEmailDelivery.clear();
+
+  const registerResponse = await request(app.getHttpServer())
+    .post("/api/auth/register")
+    .send({
+      email,
+      password: "super-secret-123",
+      name: "Bruna Alves",
+    })
+    .expect(201);
+
+  assert.equal(registerResponse.body.user.emailVerifiedAt, null);
+  assert.equal(fakeEmailDelivery.listSentMessages().length, 1);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/verify-email")
+    .set(
+      "Authorization",
+      `Bearer ${registerResponse.body.accessToken as string}`,
+    )
+    .send({ code: "000000" })
+    .expect(400);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/resend-verification-code")
+    .set(
+      "Authorization",
+      `Bearer ${registerResponse.body.accessToken as string}`,
+    )
+    .send({})
+    .expect(201);
+
+  assert.equal(fakeEmailDelivery.listSentMessages().length, 2);
+
+  const lastMessage = fakeEmailDelivery.listSentMessages().at(-1);
+  const verificationCode = getVerificationCodeFromMessage(
+    lastMessage?.text ?? "",
+  );
+
+  await request(app.getHttpServer())
+    .post("/api/auth/verify-email")
+    .set(
+      "Authorization",
+      `Bearer ${registerResponse.body.accessToken as string}`,
+    )
+    .send({ code: verificationCode })
+    .expect(201)
+    .expect(({ body }) => {
+      assert.equal(body.emailVerifiedAt === null, false);
+    });
 
   await deleteUserByEmail(database, email);
   await app.close();

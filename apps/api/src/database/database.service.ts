@@ -29,6 +29,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.refreshToken;
   }
 
+  get emailVerificationChallenge() {
+    return this.prisma.emailVerificationChallenge;
+  }
+
   get resume() {
     return this.prisma.resume;
   }

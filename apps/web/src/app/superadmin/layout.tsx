@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { type ReactNode, Suspense } from "react";
+
+import { getRouteAccessRedirectPath } from "@/lib/app-session";
+import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 
 import { SuperadminSidebar } from "./_components/superadmin-sidebar";
 
@@ -18,7 +22,16 @@ type SuperadminLayoutProps = {
   children: ReactNode;
 };
 
-export default function SuperadminLayout({ children }: SuperadminLayoutProps) {
+export default async function SuperadminLayout({
+  children,
+}: SuperadminLayoutProps) {
+  const user = await getCurrentAppUserFromCookies();
+  const redirectPath = getRouteAccessRedirectPath("/superadmin", user);
+
+  if (redirectPath) {
+    redirect(redirectPath);
+  }
+
   return (
     <div className="min-h-screen bg-linear-to-br from-stone-100 via-white to-slate-100 text-stone-900">
       <Suspense

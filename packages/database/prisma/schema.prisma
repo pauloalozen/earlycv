@@ -124,9 +124,23 @@ model User {
   profile         UserProfile?
   authAccounts    AuthAccount[]
   refreshTokens   RefreshToken[]
+  emailVerificationChallenges EmailVerificationChallenge[]
   resumes         Resume[]
   affiliateAttributions     AffiliateAttribution[]
   affiliateCommissionEvents AffiliateCommissionEvent[]
+}
+
+model EmailVerificationChallenge {
+  id         String   @id @default(cuid())
+  userId     String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, consumedAt, expiresAt])
 }
 
 model UserProfile {
