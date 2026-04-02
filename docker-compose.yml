@@ -3,11 +3,13 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-earlycv}
+      POSTGRES_TEST_DB: ${POSTGRES_TEST_DB:-earlycv_test}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-earlycv}
       POSTGRES_USER: ${POSTGRES_USER:-earlycv}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test:

@@ -3,6 +3,16 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 
+const envExample = readFileSync(
+  resolve(import.meta.dirname, "../../../.env.example"),
+  "utf8",
+);
+
+const dockerCompose = readFileSync(
+  resolve(import.meta.dirname, "../../../docker-compose.yml"),
+  "utf8",
+);
+
 const rootPackageJson = JSON.parse(
   readFileSync(resolve(import.meta.dirname, "../../../package.json"), "utf8"),
 ) as {
@@ -18,11 +28,31 @@ const apiPackageJson = JSON.parse(
   scripts?: Record<string, string | undefined>;
 };
 
+const webPackageJson = JSON.parse(
+  readFileSync(
+    resolve(import.meta.dirname, "../../../apps/web/package.json"),
+    "utf8",
+  ),
+) as {
+  scripts?: Record<string, string | undefined>;
+};
+
+const aiPackageJson = JSON.parse(
+  readFileSync(resolve(import.meta.dirname, "../../ai/package.json"), "utf8"),
+) as {
+  scripts?: Record<string, string | undefined>;
+};
+
 test("root workspace bootstraps shared package builds after install", () => {
   assert.equal(rootPackageJson.scripts?.postinstall, "npm run build:packages");
   assert.equal(rootPackageJson.scripts?.predev, undefined);
   assert.equal(rootPackageJson.scripts?.["predev:api"], undefined);
   assert.equal(rootPackageJson.scripts?.precheck, undefined);
+  assert.equal(
+    rootPackageJson.scripts?.check?.includes("$(pwd)/biome.json"),
+    true,
+  );
+  assert.equal(rootPackageJson.scripts?.check?.includes("apps packages"), true);
 });
 
 test("api workspace uses source-resolution for dev, build, check, and test", () => {
@@ -35,13 +65,47 @@ test("api workspace uses source-resolution for dev, build, check, and test", () 
     "NODE_OPTIONS='--conditions=development' nest build",
   );
   assert.equal(
-    apiPackageJson.scripts?.check,
-    "NODE_OPTIONS='--conditions=development' biome check --config-path ../../biome.json .",
+    apiPackageJson.scripts?.check?.includes("$(realpath ../../biome.json)"),
+    true,
+  );
+  assert.equal(apiPackageJson.scripts?.check?.includes("src"), true);
+  assert.equal(apiPackageJson.scripts?.test?.includes("./.env.test"), true);
+  assert.equal(apiPackageJson.scripts?.test?.includes("../../.env"), true);
+  assert.equal(
+    apiPackageJson.scripts?.test?.includes("../../.env.example"),
+    true,
   );
   assert.equal(
-    apiPackageJson.scripts?.test,
-    `sh -c 'set -a && . ./.env.test && set +a && if [ "$#" -gt 0 ]; then NODE_OPTIONS="--conditions=development" tsx --test "$@"; else NODE_OPTIONS="--conditions=development" tsx --test src/**/*.spec.ts src/**/*.e2e-spec.ts; fi' --`,
+    apiPackageJson.scripts?.test?.includes("DATABASE_TEST_URL"),
+    true,
   );
+  assert.equal(
+    apiPackageJson.scripts?.["test:database"]?.includes("DATABASE_TEST_URL"),
+    true,
+  );
+  assert.equal(
+    apiPackageJson.scripts?.test?.includes("DATABASE_TEST_URL is required"),
+    true,
+  );
+  assert.equal(
+    apiPackageJson.scripts?.["test:database"]?.includes(
+      "DATABASE_TEST_URL is required",
+    ),
+    true,
+  );
+});
+
+test("workspace check scripts target source files explicitly inside worktrees", () => {
+  assert.equal(
+    webPackageJson.scripts?.check?.includes("$(realpath ../../biome.json)"),
+    true,
+  );
+  assert.equal(webPackageJson.scripts?.check?.includes("src"), true);
+  assert.equal(
+    aiPackageJson.scripts?.check?.includes("$(realpath ../../biome.json)"),
+    true,
+  );
+  assert.equal(aiPackageJson.scripts?.check?.includes("src"), true);
 });
 
 test("api workspace only prebuilds shared packages for compiled runtime entrypoints", () => {
@@ -54,4 +118,14 @@ test("api workspace only prebuilds shared packages for compiled runtime entrypoi
   assert.equal(apiPackageJson.scripts?.prebuild, undefined);
   assert.equal(apiPackageJson.scripts?.precheck, undefined);
   assert.equal(apiPackageJson.scripts?.pretest, undefined);
+});
+
+test("env example documents a dedicated test database URL", () => {
+  assert.equal(envExample.includes("DATABASE_TEST_URL="), true);
+  assert.equal(envExample.includes("earlycv_test"), true);
+});
+
+test("docker compose bootstraps a dedicated test database on fresh Postgres volumes", () => {
+  assert.equal(dockerCompose.includes("POSTGRES_TEST_DB"), true);
+  assert.equal(dockerCompose.includes("docker/postgres/init"), true);
 });
