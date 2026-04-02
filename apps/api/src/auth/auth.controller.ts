@@ -19,6 +19,8 @@ import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { ResendVerificationCodeDto } from "./dto/resend-verification-code.dto";
+import { VerifyEmailDto } from "./dto/verify-email.dto";
 
 const authValidationPipe = new ValidationPipe({
   transform: true,
@@ -89,6 +91,36 @@ export class AuthController {
     dto: RefreshDto,
   ) {
     return this.authService.logout(dto);
+  }
+
+  @Post("verify-email")
+  @UseGuards(JwtAuthGuard)
+  verifyEmail(
+    @Body(
+      new ValidationPipe({
+        ...authValidationPipe,
+        expectedType: VerifyEmailDto,
+      }),
+    )
+    dto: VerifyEmailDto,
+    @AuthenticatedUser() user: AuthUser,
+  ) {
+    return this.authService.verifyEmail(user.id, dto);
+  }
+
+  @Post("resend-verification-code")
+  @UseGuards(JwtAuthGuard)
+  resendVerificationCode(
+    @Body(
+      new ValidationPipe({
+        ...authValidationPipe,
+        expectedType: ResendVerificationCodeDto,
+      }),
+    )
+    dto: ResendVerificationCodeDto,
+    @AuthenticatedUser() user: AuthUser,
+  ) {
+    return this.authService.resendVerificationCode(user.id, dto);
   }
 
   @Get("google/start")

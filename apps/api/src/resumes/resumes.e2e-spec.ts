@@ -321,6 +321,7 @@ test("DELETE /api/resumes/:id removes only the authenticated user's resume and p
       status: "reviewed",
       kind: "adapted",
       isMaster: false,
+      basedOnResumeId: ownResume.id,
     },
   });
   const otherResume = await database.resume.create({
