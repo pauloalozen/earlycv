@@ -7,12 +7,15 @@ import { CvAdaptationController } from "./cv-adaptation.controller";
 import { CvAdaptationService } from "./cv-adaptation.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 
+import { CvAdaptationPaymentService } from "./cv-adaptation-payment.service";
+
 @Module({
   imports: [DatabaseModule],
   controllers: [CvAdaptationController],
   providers: [
     CvAdaptationService,
     CvAdaptationAiService,
+    CvAdaptationPaymentService,
     {
       provide: "OPENAI_CLIENT",
       inject: [ConfigService],

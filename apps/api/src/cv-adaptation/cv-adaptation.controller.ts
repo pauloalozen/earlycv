@@ -87,4 +87,14 @@ export class CvAdaptationController {
   delete(@CurrentUser() user: { id: string }, @Param("id") id: string) {
     return this.cvAdaptationService.delete(user.id, id);
   }
+
+  @Post(":id/checkout")
+  checkout(@CurrentUser() user: { id: string }, @Param("id") id: string) {
+    return this.cvAdaptationService.createCheckout(user.id, id);
+  }
+
+  @Post("webhook/:provider")
+  webhook(@Param("provider") provider: string, @Body() body: unknown) {
+    return this.cvAdaptationService.handleWebhook(provider, body);
+  }
 }

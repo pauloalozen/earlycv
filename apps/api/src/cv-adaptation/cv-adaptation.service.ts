@@ -8,6 +8,7 @@ import {
 
 import { DatabaseService } from "../database/database.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
+import { CvAdaptationPaymentService } from "./cv-adaptation-payment.service";
 import type {
   CreateCvAdaptationDto,
   FileUpload,
@@ -20,6 +21,8 @@ export class CvAdaptationService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(CvAdaptationAiService)
     private readonly aiService: CvAdaptationAiService,
+    @Inject(CvAdaptationPaymentService)
+    private readonly paymentService: CvAdaptationPaymentService,
   ) {}
 
   async create(userId: string, dto: CreateCvAdaptationDto, file?: FileUpload) {
@@ -201,5 +204,78 @@ export class CvAdaptationService {
     await this.database.cvAdaptation.delete({
       where: { id },
     });
+  }
+
+  async createCheckout(userId: string, id: string) {
+    const adaptation = await this.database.cvAdaptation.findFirst({
+      where: { id, userId },
+    });
+
+    if (!adaptation) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    if (adaptation.status !== "awaiting_payment") {
+      throw new BadRequestException(
+        `Adaptation must be in awaiting_payment status. Current status: ${adaptation.status}`,
+      );
+    }
+
+    const intent = await this.paymentService.createIntent(
+      adaptation.id,
+      userId,
+    );
+
+    // Store payment reference and set status to pending
+    await this.database.cvAdaptation.update({
+      where: { id },
+      data: {
+        paymentStatus: "pending",
+        paymentReference: intent.paymentReference,
+        paymentAmountInCents: intent.amountInCents,
+        paymentCurrency: intent.currency,
+      },
+    });
+
+    return {
+      checkoutUrl: intent.checkoutUrl,
+      paymentReference: intent.paymentReference,
+      amountInCents: intent.amountInCents,
+      currency: intent.currency,
+    };
+  }
+
+  async handleWebhook(provider: string, body: unknown) {
+    const paymentReference = await this.paymentService.resolvePaymentReference(
+      provider,
+      body,
+    );
+
+    // Find adaptation by payment reference
+    const adaptation = await this.database.cvAdaptation.findFirst({
+      where: { paymentReference },
+    });
+
+    if (!adaptation) {
+      console.warn(
+        `Webhook received for unknown payment reference: ${paymentReference}`,
+      );
+      return { acknowledged: true };
+    }
+
+    // Update status to completed
+    await this.database.cvAdaptation.update({
+      where: { id: adaptation.id },
+      data: {
+        paymentStatus: "completed",
+        paidAt: new Date(),
+        status: "paid",
+      },
+    });
+
+    // TODO: Task 8 - Generate PDF and create adapted Resume
+    // For now, mark as delivered without PDF
+
+    return { acknowledged: true };
   }
 }
