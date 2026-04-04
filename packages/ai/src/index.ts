@@ -16,6 +16,14 @@ export function createOpenAIClient(config: OpenAIClientConfig) {
 }
 
 export type {
+  CvAdaptationInput,
+  CvAdaptationOutput,
+  CvSection,
+  CvSectionItem,
+} from "./cv-adaptation.js";
+export { adaptCv } from "./cv-adaptation.js";
+export { extractTextFromPdf } from "./pdf-parser.js";
+export type {
   AIAuditRecord,
   AIGenerationRequest,
   AIGenerationResult,
