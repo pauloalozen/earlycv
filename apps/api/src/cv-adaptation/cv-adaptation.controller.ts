@@ -8,13 +8,21 @@ import {
   Param,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
   ValidationPipe,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
+
 import { CurrentUser } from "../common/current-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { CvAdaptationService } from "./cv-adaptation.service";
-import { CreateCvAdaptationDto } from "./dto/create-cv-adaptation.dto";
+import {
+  CreateCvAdaptationDto,
+  type FileUpload,
+} from "./dto/create-cv-adaptation.dto";
 
 @Controller("cv-adaptation")
 @UseGuards(JwtAuthGuard)
@@ -25,8 +33,24 @@ export class CvAdaptationController {
   ) {}
 
   @Post()
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      fileFilter: (_req, file, cb) => {
+        if (file.mimetype === "application/pdf") {
+          cb(null, true);
+        } else {
+          cb(new Error("Only PDF files are allowed"), false);
+        }
+      },
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5 MB
+      },
+    }),
+  )
   create(
     @CurrentUser() user: { id: string },
+    @UploadedFile() file: FileUpload | undefined,
     @Body(
       new ValidationPipe({
         transform: true,
@@ -37,7 +61,7 @@ export class CvAdaptationController {
     )
     dto: CreateCvAdaptationDto,
   ) {
-    return this.cvAdaptationService.create(user.id, dto);
+    return this.cvAdaptationService.create(user.id, dto, file);
   }
 
   @Get()
