@@ -5,6 +5,7 @@ import { AdminResumesModule } from "./admin-resumes/admin-resumes.module";
 import { AdminUsersModule } from "./admin-users/admin-users.module";
 import { AuthModule } from "./auth/auth.module";
 import { CompaniesModule } from "./companies/companies.module";
+import { CvAdaptationModule } from "./cv-adaptation/cv-adaptation.module";
 import { EnvModule } from "./config/env.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
@@ -33,6 +34,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     CompaniesModule,
     JobSourcesModule,
     JobsModule,
+    CvAdaptationModule,
   ],
 })
 export class AppModule {}
