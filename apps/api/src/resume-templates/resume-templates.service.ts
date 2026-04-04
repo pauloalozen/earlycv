@@ -22,6 +22,22 @@ export class ResumeTemplatesService {
     });
   }
 
+  listActive() {
+    return this.database.resumeTemplate.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        targetRole: true,
+        previewImageUrl: true,
+        fileUrl: true,
+      },
+      orderBy: { name: "asc" },
+    });
+  }
+
   async create(dto: CreateResumeTemplateDto) {
     try {
       return await this.database.resumeTemplate.create({

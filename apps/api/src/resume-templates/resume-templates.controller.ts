@@ -24,10 +24,23 @@ const resumeTemplatesValidationOptions = {
   forbidNonWhitelisted: true,
 } as const;
 
+@Controller("resume-templates")
+export class ResumeTemplatesController {
+  constructor(
+    @Inject(ResumeTemplatesService)
+    private readonly resumeTemplatesService: ResumeTemplatesService,
+  ) {}
+
+  @Get()
+  listActive() {
+    return this.resumeTemplatesService.listActive();
+  }
+}
+
 @UseGuards(JwtAuthGuard, RolesGuard)
 @InternalRoles("admin", "superadmin")
 @Controller("admin/resume-templates")
-export class ResumeTemplatesController {
+export class AdminResumeTemplatesController {
   constructor(
     @Inject(ResumeTemplatesService)
     private readonly resumeTemplatesService: ResumeTemplatesService,

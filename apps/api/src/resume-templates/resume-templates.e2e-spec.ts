@@ -88,6 +88,82 @@ async function promoteToInternalAdmin(
   });
 }
 
+test("public GET /resume-templates returns active templates without auth", async () => {
+  const { app, database } = await createApp();
+
+  // Seed 2 active and 1 inactive template
+  const template1 = await database.resumeTemplate.create({
+    data: {
+      name: "Clássico",
+      slug: "classico-public-test",
+      description: "Clean and simple",
+      targetRole: "General",
+      isActive: true,
+    },
+  });
+
+  const template2 = await database.resumeTemplate.create({
+    data: {
+      name: "Moderno",
+      slug: "moderno-public-test",
+      description: "Modern layout",
+      targetRole: "Tech",
+      isActive: true,
+    },
+  });
+
+  const template3 = await database.resumeTemplate.create({
+    data: {
+      name: "Inactive",
+      slug: "inactive-public-test",
+      description: "Should not appear",
+      targetRole: "Hidden",
+      isActive: false,
+    },
+  });
+
+  // Public request without auth
+  await request(app.getHttpServer())
+    .get("/api/resume-templates")
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(Array.isArray(body), true);
+      // Should include active templates
+      assert.equal(
+        body.some((t: { id: string; slug: string }) => t.id === template1.id),
+        true,
+      );
+      assert.equal(
+        body.some((t: { id: string; slug: string }) => t.id === template2.id),
+        true,
+      );
+      // Should NOT include inactive
+      assert.equal(
+        body.some((t: { id: string; slug: string }) => t.id === template3.id),
+        false,
+      );
+      // Response should have expected fields
+      const template = body.find((t: { id: string }) => t.id === template1.id);
+      assert.ok(template.name);
+      assert.ok(template.slug);
+      assert.ok(template.description);
+    });
+
+  // Cleanup
+  await database.resumeTemplate.deleteMany({
+    where: {
+      slug: {
+        in: [
+          "classico-public-test",
+          "moderno-public-test",
+          "inactive-public-test",
+        ],
+      },
+    },
+  });
+  await app.close();
+});
+
 test("admin resume template endpoints create, list, update, and toggle template status", async () => {
   const { app, database } = await createApp();
   const admin = await registerUser(app, database, "resume-template-admin");

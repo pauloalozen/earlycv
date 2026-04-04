@@ -93,6 +93,58 @@ async function main() {
       status: "active",
     },
   });
+
+  // Seed resume templates
+  await prisma.resumeTemplate.upsert({
+    where: { slug: "classico" },
+    update: {
+      name: "Clássico",
+      description: "Layout limpo e direto, otimizado para ATS",
+      targetRole: "Geral",
+      isActive: true,
+    },
+    create: {
+      name: "Clássico",
+      slug: "classico",
+      description: "Layout limpo e direto, otimizado para ATS",
+      targetRole: "Geral",
+      isActive: true,
+    },
+  });
+
+  await prisma.resumeTemplate.upsert({
+    where: { slug: "moderno" },
+    update: {
+      name: "Moderno",
+      description: "Duas colunas com hierarquia visual",
+      targetRole: "Tech & Produto",
+      isActive: true,
+    },
+    create: {
+      name: "Moderno",
+      slug: "moderno",
+      description: "Duas colunas com hierarquia visual",
+      targetRole: "Tech & Produto",
+      isActive: true,
+    },
+  });
+
+  await prisma.resumeTemplate.upsert({
+    where: { slug: "executivo" },
+    update: {
+      name: "Executivo",
+      description: "Compacto e denso, ideal para cargos sêniores",
+      targetRole: "Liderança",
+      isActive: true,
+    },
+    create: {
+      name: "Executivo",
+      slug: "executivo",
+      description: "Compacto e denso, ideal para cargos sêniores",
+      targetRole: "Liderança",
+      isActive: true,
+    },
+  });
 }
 
 main()
