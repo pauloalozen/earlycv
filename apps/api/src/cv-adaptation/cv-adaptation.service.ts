@@ -9,6 +9,7 @@ import {
 import { DatabaseService } from "../database/database.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import { CvAdaptationPaymentService } from "./cv-adaptation-payment.service";
+import { CvAdaptationPdfService } from "./cv-adaptation-pdf.service";
 import type {
   CreateCvAdaptationDto,
   FileUpload,
@@ -23,6 +24,8 @@ export class CvAdaptationService {
     private readonly aiService: CvAdaptationAiService,
     @Inject(CvAdaptationPaymentService)
     private readonly paymentService: CvAdaptationPaymentService,
+    @Inject(CvAdaptationPdfService)
+    private readonly pdfService: CvAdaptationPdfService,
   ) {}
 
   async create(userId: string, dto: CreateCvAdaptationDto, file?: FileUpload) {
@@ -273,9 +276,110 @@ export class CvAdaptationService {
       },
     });
 
-    // TODO: Task 8 - Generate PDF and create adapted Resume
-    // For now, mark as delivered without PDF
+    // Trigger delivery pipeline (generate PDF, create adapted Resume)
+    this.deliverAdaptation(adaptation.id).catch((err) => {
+      console.error(
+        `Delivery failed for adaptation ${adaptation.id}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+    });
 
     return { acknowledged: true };
+  }
+
+  async downloadPdf(userId: string, id: string, res: any): Promise<void> {
+    const adaptation = await this.database.cvAdaptation.findFirst({
+      where: { id, userId },
+    });
+
+    if (!adaptation) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    if (adaptation.paymentStatus !== "completed") {
+      throw new BadRequestException(
+        `Adaptation must be paid to download. Status: ${adaptation.paymentStatus}`,
+      );
+    }
+
+    if (!adaptation.adaptedResumeId) {
+      throw new BadRequestException("Adapted resume not yet generated");
+    }
+
+    // Generate PDF again (in production, retrieve from storage)
+    const pdfBuffer = await this.pdfService.generateAdaptedPdf(
+      adaptation.adaptedContentJson as any,
+    );
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=cv-adaptado.pdf",
+    );
+    res.send(pdfBuffer);
+  }
+
+  async getContent(userId: string, id: string) {
+    const adaptation = await this.database.cvAdaptation.findFirst({
+      where: { id, userId },
+    });
+
+    if (!adaptation) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    if (adaptation.paymentStatus !== "completed") {
+      throw new BadRequestException(
+        "Adaptation must be paid to view full content",
+      );
+    }
+
+    return {
+      adaptedContentJson: adaptation.adaptedContentJson,
+    };
+  }
+
+  private async deliverAdaptation(adaptationId: string): Promise<void> {
+    // Load adaptation with content
+    const adaptation = await this.database.cvAdaptation.findUnique({
+      where: { id: adaptationId },
+      include: {
+        masterResume: true,
+        template: true,
+      },
+    });
+
+    if (!adaptation || !adaptation.adaptedContentJson) {
+      throw new Error("Adaptation not found or has no content");
+    }
+
+    const output = adaptation.adaptedContentJson as any; // TODO: proper typing
+
+    // Generate PDF
+    const pdfBuffer = await this.pdfService.generateAdaptedPdf(output);
+
+    // Create adapted Resume record
+    const adaptedResume = await this.database.resume.create({
+      data: {
+        userId: adaptation.userId,
+        title: `${adaptation.masterResume.title} - Adaptado`,
+        kind: "adapted",
+        status: "reviewed",
+        basedOnResumeId: adaptation.masterResumeId,
+        templateId: adaptation.templateId,
+        sourceFileName: `cv-adaptado.pdf`,
+        sourceFileType: "application/pdf",
+        rawText: `Adapted CV for: ${adaptation.jobTitle || "unknown job"}`,
+      },
+    });
+
+    // Update adaptation with adapted resume and delivered status
+    await this.database.cvAdaptation.update({
+      where: { id: adaptationId },
+      data: {
+        adaptedResumeId: adaptedResume.id,
+        status: "delivered",
+      },
+    });
   }
 }

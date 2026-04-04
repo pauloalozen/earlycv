@@ -8,6 +8,7 @@ import { CvAdaptationService } from "./cv-adaptation.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 
 import { CvAdaptationPaymentService } from "./cv-adaptation-payment.service";
+import { CvAdaptationPdfService } from "./cv-adaptation-pdf.service";
 
 @Module({
   imports: [DatabaseModule],
@@ -16,6 +17,7 @@ import { CvAdaptationPaymentService } from "./cv-adaptation-payment.service";
     CvAdaptationService,
     CvAdaptationAiService,
     CvAdaptationPaymentService,
+    CvAdaptationPdfService,
     {
       provide: "OPENAI_CLIENT",
       inject: [ConfigService],

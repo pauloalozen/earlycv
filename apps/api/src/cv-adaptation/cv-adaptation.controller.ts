@@ -8,12 +8,14 @@ import {
   Param,
   Post,
   Query,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
   ValidationPipe,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import type { Response } from "express";
 import { memoryStorage } from "multer";
 
 import { CurrentUser } from "../common/current-user.decorator";
@@ -91,6 +93,20 @@ export class CvAdaptationController {
   @Post(":id/checkout")
   checkout(@CurrentUser() user: { id: string }, @Param("id") id: string) {
     return this.cvAdaptationService.createCheckout(user.id, id);
+  }
+
+  @Get(":id/download")
+  async download(
+    @CurrentUser() user: { id: string },
+    @Param("id") id: string,
+    @Res() res: Response,
+  ) {
+    return this.cvAdaptationService.downloadPdf(user.id, id, res);
+  }
+
+  @Get(":id/content")
+  getContent(@CurrentUser() user: { id: string }, @Param("id") id: string) {
+    return this.cvAdaptationService.getContent(user.id, id);
   }
 
   @Post("webhook/:provider")
