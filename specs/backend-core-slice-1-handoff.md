@@ -29,3 +29,19 @@ npm run test
 npm ls --workspaces --depth=0
 npm run dev:api
 ```
+
+## Update 2026-04-02 - Ingestion crawler
+
+### What got done
+
+- Detailed design for the ingestion crawler was documented in `docs/superpowers/specs/2026-04-02-job-ingestion-crawler-design.md`.
+- A full TDD implementation plan was documented in `docs/superpowers/plans/2026-04-02-job-ingestion-crawler-implementation.md`.
+- Scope was locked for first real adapters (`gupy` and `greenhouse`) with capture-rule filtering and audited run metrics.
+- Product invariants were reaffirmed: `canonicalKey` as identity and `firstSeenAt` as immutable first acceptance timestamp.
+
+### Where to resume next
+
+- Start execution from `docs/superpowers/plans/2026-04-02-job-ingestion-crawler-implementation.md:13` (Task 1).
+- First concrete step: write failing schema tests for `captureRulesJson` on `JobSource` and new counters/summary fields on `IngestionRun`.
+- Then add Prisma schema + migration, regenerate client, and run targeted database tests before moving to API tasks.
+- Keep `apps/web` on mock jobs until ingestion tests pass and accepted jobs are stable in API.

@@ -266,6 +266,93 @@ test("affiliate foundation models partner campaigns, code attribution, and commi
   );
 });
 
+test("CvAdaptation model exists with CV adaptation enums and payment fields", () => {
+  const cvAdaptation = getBlock("model", "CvAdaptation");
+  const cvAdaptationStatus = getBlock("enum", "CvAdaptationStatus");
+  const paymentStatus = getBlock("enum", "PaymentStatus");
+  const paymentProvider = getBlock("enum", "PaymentProvider");
+
+  assert.match(cvAdaptationStatus, /awaiting_payment/);
+  assert.match(cvAdaptationStatus, /delivered/);
+  assert.match(paymentStatus, /completed/);
+  assert.match(paymentProvider, /mercadopago/);
+
+  assert.match(cvAdaptation, /^\s*userId\s+String$/m);
+  assert.match(cvAdaptation, /^\s*masterResumeId\s+String$/m);
+  assert.match(cvAdaptation, /^\s*templateId\s+String\?$/m);
+  assert.match(cvAdaptation, /^\s*jobDescriptionText\s+String$/m);
+  assert.match(cvAdaptation, /^\s*jobTitle\s+String\?$/m);
+  assert.match(cvAdaptation, /^\s*companyName\s+String\?$/m);
+  assert.match(
+    cvAdaptation,
+    /^\s*status\s+CvAdaptationStatus\s+@default\(pending\)$/m,
+  );
+  assert.match(cvAdaptation, /^\s*adaptedContentJson\s+Json\?$/m);
+  assert.match(cvAdaptation, /^\s*previewText\s+String\?$/m);
+  assert.match(cvAdaptation, /^\s*adaptedResumeId\s+String\?\s+@unique$/m);
+  assert.match(cvAdaptation, /^\s*aiAuditJson\s+Json\?$/m);
+  assert.match(
+    cvAdaptation,
+    /^\s*paymentStatus\s+PaymentStatus\s+@default\(none\)$/m,
+  );
+  assert.match(cvAdaptation, /^\s*paymentProvider\s+PaymentProvider\?$/m);
+  assert.match(cvAdaptation, /^\s*paymentReference\s+String\?\s+@unique$/m);
+  assert.match(cvAdaptation, /^\s*paymentAmountInCents\s+Int\?$/m);
+  assert.match(
+    cvAdaptation,
+    /^\s*paymentCurrency\s+String\?\s+@default\("BRL"\)$/m,
+  );
+  assert.match(cvAdaptation, /^\s*paidAt\s+DateTime\?$/m);
+  assert.match(cvAdaptation, /^\s*failureReason\s+String\?$/m);
+
+  const resume = getBlock("model", "Resume");
+  assertContains(
+    resume,
+    "cvAdaptationsAsMaster",
+    "Resume should have back-relation for master adaptations",
+  );
+  assert.match(
+    resume,
+    /cvAdaptationsAsMaster\s+CvAdaptation\[\]\s+@relation\("CvAdaptationMaster"\)/,
+    "Resume should have correct master adaptation relation",
+  );
+  assertContains(
+    resume,
+    "cvAdaptationAsResult",
+    "Resume should have back-relation for adapted result",
+  );
+  assert.match(
+    resume,
+    /cvAdaptationAsResult\s+CvAdaptation\?\s+@relation\("CvAdaptationResult"\)/,
+    "Resume should have correct adapted result relation",
+  );
+
+  const template = getBlock("model", "ResumeTemplate");
+  assertContains(
+    template,
+    "previewImageUrl",
+    "ResumeTemplate should have previewImageUrl",
+  );
+  assertContains(
+    template,
+    "cvAdaptations",
+    "ResumeTemplate should have back-relation",
+  );
+  assert.match(
+    template,
+    /cvAdaptations\s+CvAdaptation\[\]/,
+    "ResumeTemplate should have correct CvAdaptation relation",
+  );
+
+  const user = getBlock("model", "User");
+  assertContains(user, "cvAdaptations", "User should have back-relation");
+  assert.match(
+    user,
+    /cvAdaptations\s+CvAdaptation\[\]/,
+    "User should have correct CvAdaptation relation",
+  );
+});
+
 test("enum values use lowercase API-aligned identifiers", () => {
   const authProvider = getBlock("enum", "AuthProvider");
   const userStatus = getBlock("enum", "UserStatus");

@@ -108,6 +108,28 @@ enum AffiliateCommissionStatus {
   reversed
 }
 
+enum CvAdaptationStatus {
+  pending
+  analyzing
+  awaiting_payment
+  paid
+  delivered
+  failed
+}
+
+enum PaymentStatus {
+  none
+  pending
+  completed
+  failed
+  refunded
+}
+
+enum PaymentProvider {
+  mercadopago
+  stripe
+}
+
 model User {
   id              String         @id @default(cuid())
   email           String         @unique
@@ -126,6 +148,7 @@ model User {
   refreshTokens   RefreshToken[]
   emailVerificationChallenges EmailVerificationChallenge[]
   resumes         Resume[]
+  cvAdaptations   CvAdaptation[]
   affiliateAttributions     AffiliateAttribution[]
   affiliateCommissionEvents AffiliateCommissionEvent[]
 }
@@ -197,29 +220,31 @@ model RefreshToken {
 }
 
 model Resume {
-  id                  String          @id @default(cuid())
-  userId              String
-  title               String
-  sourceFileName      String?
-  sourceFileUrl       String?
-  sourceFileType      String?
-  rawText             String?
-  parsedJson          Json?
-  normalizedJson      Json?
-  status              ResumeStatus    @default(draft)
-  kind                ResumeKind      @default(master)
-  isMaster            Boolean         @default(true)
-  basedOnResumeId     String?
-  templateId          String?
-  targetJobId         String?
-  targetJobTitle      String?
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  basedOnResume       Resume?         @relation("ResumeDerivation", fields: [basedOnResumeId], references: [id], onDelete: SetNull)
-  derivedResumes      Resume[]        @relation("ResumeDerivation")
-  template            ResumeTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  targetJob           Job?            @relation(fields: [targetJobId], references: [id], onDelete: SetNull)
+  id                      String           @id @default(cuid())
+  userId                  String
+  title                   String
+  sourceFileName          String?
+  sourceFileUrl           String?
+  sourceFileType          String?
+  rawText                 String?
+  parsedJson              Json?
+  normalizedJson          Json?
+  status                  ResumeStatus     @default(draft)
+  kind                    ResumeKind       @default(master)
+  isMaster                Boolean          @default(true)
+  basedOnResumeId         String?
+  templateId              String?
+  targetJobId             String?
+  targetJobTitle          String?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  user                    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  basedOnResume           Resume?          @relation("ResumeDerivation", fields: [basedOnResumeId], references: [id], onDelete: SetNull)
+  derivedResumes          Resume[]         @relation("ResumeDerivation")
+  template                ResumeTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  targetJob               Job?             @relation(fields: [targetJobId], references: [id], onDelete: SetNull)
+  cvAdaptationsAsMaster   CvAdaptation[]   @relation("CvAdaptationMaster")
+  cvAdaptationAsResult    CvAdaptation?    @relation("CvAdaptationResult")
 
   @@index([userId])
   @@index([basedOnResumeId])
@@ -228,17 +253,19 @@ model Resume {
 }
 
 model ResumeTemplate {
-  id            String   @id @default(cuid())
-  name          String
-  slug          String   @unique
-  description   String?
-  targetRole    String?
-  fileUrl       String?
-  structureJson Json?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  resumes       Resume[]
+  id                String           @id @default(cuid())
+  name              String
+  slug              String           @unique
+  description       String?
+  targetRole        String?
+  fileUrl           String?
+  previewImageUrl   String?
+  structureJson     Json?
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  resumes           Resume[]
+  cvAdaptations     CvAdaptation[]
 }
 
 model Company {
@@ -255,6 +282,39 @@ model Company {
   updatedAt      DateTime    @updatedAt
   jobSources     JobSource[]
   jobs           Job[]
+}
+
+model CvAdaptation {
+  id                   String              @id @default(cuid())
+  userId               String
+  masterResumeId       String
+  templateId           String?
+  jobDescriptionText   String
+  jobTitle             String?
+  companyName          String?
+  status               CvAdaptationStatus  @default(pending)
+  adaptedContentJson   Json?
+  previewText          String?
+  adaptedResumeId      String?             @unique
+  aiAuditJson          Json?
+  paymentStatus        PaymentStatus       @default(none)
+  paymentProvider      PaymentProvider?
+  paymentReference     String?             @unique
+  paymentAmountInCents Int?
+  paymentCurrency      String?             @default("BRL")
+  paidAt               DateTime?
+  failureReason        String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  masterResume  Resume          @relation("CvAdaptationMaster", fields: [masterResumeId], references: [id], onDelete: Cascade)
+  template      ResumeTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  adaptedResume Resume?         @relation("CvAdaptationResult", fields: [adaptedResumeId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([masterResumeId])
+  @@index([paymentReference])
 }
 
 model JobSource {
