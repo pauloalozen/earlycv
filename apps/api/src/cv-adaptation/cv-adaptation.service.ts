@@ -1,6 +1,12 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
+import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import type { CreateCvAdaptationDto } from "./dto/create-cv-adaptation.dto";
 import { CvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
 
@@ -8,21 +14,34 @@ import { CvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
 export class CvAdaptationService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(CvAdaptationAiService)
+    private readonly aiService: CvAdaptationAiService,
   ) {}
 
   async create(userId: string, dto: CreateCvAdaptationDto) {
-    // Verify masterResumeId ownership if provided
-    if (dto.masterResumeId) {
-      const resume = await this.database.resume.findFirst({
-        where: {
-          id: dto.masterResumeId,
-          userId,
-        },
-      });
+    // Require masterResumeId
+    if (!dto.masterResumeId) {
+      throw new BadRequestException(
+        "masterResumeId is required. PDF upload support coming soon.",
+      );
+    }
 
-      if (!resume) {
-        throw new NotFoundException("master resume not found");
-      }
+    // Verify masterResumeId ownership
+    const resume = await this.database.resume.findFirst({
+      where: {
+        id: dto.masterResumeId,
+        userId,
+      },
+    });
+
+    if (!resume) {
+      throw new NotFoundException("master resume not found");
+    }
+
+    if (!resume.rawText) {
+      throw new BadRequestException(
+        "master resume has no extracted text. Please re-upload.",
+      );
     }
 
     // Verify template exists if provided
@@ -39,12 +58,12 @@ export class CvAdaptationService {
     const adaptation = await this.database.cvAdaptation.create({
       data: {
         userId,
-        masterResumeId: dto.masterResumeId || "",
+        masterResumeId: dto.masterResumeId,
         templateId: dto.templateId || null,
         jobDescriptionText: dto.jobDescriptionText,
         jobTitle: dto.jobTitle || null,
         companyName: dto.companyName || null,
-        status: "pending",
+        status: "analyzing",
       },
       include: {
         template: {
@@ -55,6 +74,14 @@ export class CvAdaptationService {
           },
         },
       },
+    });
+
+    // Call AI asynchronously (fire and forget for MVP)
+    this.aiService.analyzeAndAdapt(adaptation, resume.rawText).catch((err) => {
+      console.error(
+        `AI adaptation failed for ${adaptation.id}:`,
+        err instanceof Error ? err.message : String(err),
+      );
     });
 
     return CvAdaptationResponseDto.fromEntity(adaptation);
