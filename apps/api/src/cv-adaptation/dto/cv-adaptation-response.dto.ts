@@ -4,7 +4,7 @@ import type {
   PaymentStatus,
 } from "@prisma/client";
 
-export class CvAdaptationResponseDto {
+export type CvAdaptationResponseDto = {
   id: string;
   status: CvAdaptationStatus;
   jobTitle: string | null;
@@ -22,32 +22,30 @@ export class CvAdaptationResponseDto {
   adaptedResumeId: string | null;
   createdAt: string;
   updatedAt: string;
+};
 
-  static fromEntity(
-    adaptation: CvAdaptation & {
-      template?: { id: string; name: string; slug: string } | null;
-    },
-  ): CvAdaptationResponseDto {
-    return {
-      id: adaptation.id,
-      status: adaptation.status,
-      jobTitle: adaptation.jobTitle,
-      companyName: adaptation.companyName,
-      previewText: adaptation.previewText,
-      masterResumeId: adaptation.masterResumeId,
-      templateId: adaptation.templateId,
-      template: adaptation.template
-        ? {
-            id: adaptation.template.id,
-            name: adaptation.template.name,
-            slug: adaptation.template.slug,
-          }
-        : null,
-      paymentStatus: adaptation.paymentStatus,
-      paidAt: adaptation.paidAt ? adaptation.paidAt.toISOString() : null,
-      adaptedResumeId: adaptation.adaptedResumeId,
-      createdAt: adaptation.createdAt.toISOString(),
-      updatedAt: adaptation.updatedAt.toISOString(),
-    };
-  }
-}
+export const createCvAdaptationResponseDto = (
+  adaptation: CvAdaptation & {
+    template?: { id: string; name: string; slug: string } | null;
+  },
+): CvAdaptationResponseDto => ({
+  id: adaptation.id,
+  status: adaptation.status,
+  jobTitle: adaptation.jobTitle,
+  companyName: adaptation.companyName,
+  previewText: adaptation.previewText,
+  masterResumeId: adaptation.masterResumeId,
+  templateId: adaptation.templateId,
+  template: adaptation.template
+    ? {
+        id: adaptation.template.id,
+        name: adaptation.template.name,
+        slug: adaptation.template.slug,
+      }
+    : null,
+  paymentStatus: adaptation.paymentStatus,
+  paidAt: adaptation.paidAt ? adaptation.paidAt.toISOString() : null,
+  adaptedResumeId: adaptation.adaptedResumeId,
+  createdAt: adaptation.createdAt.toISOString(),
+  updatedAt: adaptation.updatedAt.toISOString(),
+});

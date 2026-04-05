@@ -1,5 +1,4 @@
 import { Module } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import OpenAI from "openai";
 
 import { DatabaseModule } from "../database/database.module";
@@ -20,14 +19,10 @@ import { CvAdaptationPdfService } from "./cv-adaptation-pdf.service";
     CvAdaptationPdfService,
     {
       provide: "OPENAI_CLIENT",
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        const apiKey = config.get<string>("OPENAI_API_KEY");
-        if (!apiKey) {
-          throw new Error("OPENAI_API_KEY is required for CV adaptation");
-        }
-        return new OpenAI({ apiKey });
-      },
+      useFactory: () =>
+        new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY,
+        }),
     },
   ],
 })

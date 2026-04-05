@@ -1,5 +1,5 @@
 // Simple script to create a valid PDF
-const fs = require('fs');
+const fs = require("node:fs");
 
 const pdf = `%PDF-1.4
 1 0 obj
@@ -62,5 +62,5 @@ startxref
 503
 %%EOF`;
 
-fs.writeFileSync(__dirname + '/sample.pdf', pdf);
-console.log('Created sample.pdf');
+fs.writeFileSync(`${__dirname}/sample.pdf`, pdf);
+console.log("Created sample.pdf");

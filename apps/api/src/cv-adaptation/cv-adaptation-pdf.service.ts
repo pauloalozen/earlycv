@@ -1,5 +1,5 @@
-import type { CvAdaptationOutput } from "@earlycv/ai";
 import { Injectable } from "@nestjs/common";
+import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 
 @Injectable()
 export class CvAdaptationPdfService {

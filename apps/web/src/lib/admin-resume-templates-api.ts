@@ -30,7 +30,6 @@ export async function adminCreateResumeTemplate(data: {
   slug: string;
   description?: string;
   targetRole?: string;
-  fileUrl?: string;
 }): Promise<AdminResumeTemplateDto> {
   const response = await apiRequest("POST", "/admin/resume-templates", data);
   if (!response.ok) {
@@ -47,7 +46,6 @@ export async function adminUpdateResumeTemplate(
     slug?: string;
     description?: string;
     targetRole?: string;
-    fileUrl?: string;
   },
 ): Promise<AdminResumeTemplateDto> {
   const response = await apiRequest(
@@ -72,6 +70,25 @@ export async function adminToggleResumeTemplateStatus(
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Failed to toggle template status: ${text}`);
+  }
+  return response.json() as Promise<AdminResumeTemplateDto>;
+}
+
+export async function adminUploadResumeTemplateFile(
+  id: string,
+  file: File,
+): Promise<AdminResumeTemplateDto> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await apiRequest(
+    "POST",
+    `/admin/resume-templates/${id}/upload-file`,
+    formData,
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to upload template file: ${text}`);
   }
   return response.json() as Promise<AdminResumeTemplateDto>;
 }

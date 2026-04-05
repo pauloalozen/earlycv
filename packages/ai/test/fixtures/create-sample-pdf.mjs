@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from "node:fs";
 
 const pdf = `%PDF-1.4
 1 0 obj
@@ -37,5 +37,5 @@ startxref
 451
 %%EOF`;
 
-fs.writeFileSync(new URL('sample.pdf', import.meta.url), pdf);
-console.log('Created sample.pdf');
+fs.writeFileSync(new URL("sample.pdf", import.meta.url), pdf);
+console.log("Created sample.pdf");

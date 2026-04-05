@@ -1,11 +1,10 @@
-import { extractTextFromPdf } from "@earlycv/ai";
 import {
   BadRequestException,
   Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-
+import type { Response } from "express";
 import { DatabaseService } from "../database/database.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import { CvAdaptationPaymentService } from "./cv-adaptation-payment.service";
@@ -14,7 +13,8 @@ import type {
   CreateCvAdaptationDto,
   FileUpload,
 } from "./dto/create-cv-adaptation.dto";
-import { CvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
+import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
+import { createCvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
 
 @Injectable()
 export class CvAdaptationService {
@@ -36,6 +36,7 @@ export class CvAdaptationService {
     if (file) {
       // Extract text from PDF
       try {
+        const { extractTextFromPdf } = await import("@earlycv/ai");
         masterCvText = await extractTextFromPdf(file.buffer);
       } catch (error) {
         throw new BadRequestException(
@@ -127,7 +128,7 @@ export class CvAdaptationService {
       );
     });
 
-    return CvAdaptationResponseDto.fromEntity(adaptation);
+    return createCvAdaptationResponseDto(adaptation);
   }
 
   async list(userId: string, page: number = 1, limit: number = 20) {
@@ -155,7 +156,7 @@ export class CvAdaptationService {
     ]);
 
     return {
-      items: items.map((a) => CvAdaptationResponseDto.fromEntity(a)),
+      items: items.map((a) => createCvAdaptationResponseDto(a)),
       total,
     };
   }
@@ -181,7 +182,7 @@ export class CvAdaptationService {
       throw new NotFoundException("adaptation not found");
     }
 
-    return CvAdaptationResponseDto.fromEntity(adaptation);
+    return createCvAdaptationResponseDto(adaptation);
   }
 
   async delete(userId: string, id: string) {
@@ -287,7 +288,7 @@ export class CvAdaptationService {
     return { acknowledged: true };
   }
 
-  async downloadPdf(userId: string, id: string, res: any): Promise<void> {
+  async downloadPdf(userId: string, id: string, res: Response): Promise<void> {
     const adaptation = await this.database.cvAdaptation.findFirst({
       where: { id, userId },
     });
@@ -308,7 +309,7 @@ export class CvAdaptationService {
 
     // Generate PDF again (in production, retrieve from storage)
     const pdfBuffer = await this.pdfService.generateAdaptedPdf(
-      adaptation.adaptedContentJson as any,
+      adaptation.adaptedContentJson as CvAdaptationOutput,
     );
 
     res.setHeader("Content-Type", "application/pdf");
@@ -349,14 +350,14 @@ export class CvAdaptationService {
       },
     });
 
-    if (!adaptation || !adaptation.adaptedContentJson) {
+    if (!adaptation?.adaptedContentJson) {
       throw new Error("Adaptation not found or has no content");
     }
 
-    const output = adaptation.adaptedContentJson as any; // TODO: proper typing
+    const output = adaptation.adaptedContentJson as CvAdaptationOutput;
 
     // Generate PDF
-    const pdfBuffer = await this.pdfService.generateAdaptedPdf(output);
+    await this.pdfService.generateAdaptedPdf(output);
 
     // Create adapted Resume record
     const adaptedResume = await this.database.resume.create({

@@ -16,9 +16,8 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
-import { memoryStorage } from "multer";
 
-import { CurrentUser } from "../common/current-user.decorator";
+import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { CvAdaptationService } from "./cv-adaptation.service";
 import {
@@ -37,7 +36,6 @@ export class CvAdaptationController {
   @Post()
   @UseInterceptors(
     FileInterceptor("file", {
-      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         if (file.mimetype === "application/pdf") {
           cb(null, true);
@@ -51,7 +49,7 @@ export class CvAdaptationController {
     }),
   )
   create(
-    @CurrentUser() user: { id: string },
+    @AuthenticatedUser() user: { id: string },
     @UploadedFile() file: FileUpload | undefined,
     @Body(
       new ValidationPipe({
@@ -68,7 +66,7 @@ export class CvAdaptationController {
 
   @Get()
   list(
-    @CurrentUser() user: { id: string },
+    @AuthenticatedUser() user: { id: string },
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
@@ -80,24 +78,24 @@ export class CvAdaptationController {
   }
 
   @Get(":id")
-  getById(@CurrentUser() user: { id: string }, @Param("id") id: string) {
+  getById(@AuthenticatedUser() user: { id: string }, @Param("id") id: string) {
     return this.cvAdaptationService.getById(user.id, id);
   }
 
   @Delete(":id")
   @HttpCode(204)
-  delete(@CurrentUser() user: { id: string }, @Param("id") id: string) {
+  delete(@AuthenticatedUser() user: { id: string }, @Param("id") id: string) {
     return this.cvAdaptationService.delete(user.id, id);
   }
 
   @Post(":id/checkout")
-  checkout(@CurrentUser() user: { id: string }, @Param("id") id: string) {
+  checkout(@AuthenticatedUser() user: { id: string }, @Param("id") id: string) {
     return this.cvAdaptationService.createCheckout(user.id, id);
   }
 
   @Get(":id/download")
   async download(
-    @CurrentUser() user: { id: string },
+    @AuthenticatedUser() user: { id: string },
     @Param("id") id: string,
     @Res() res: Response,
   ) {
@@ -105,7 +103,10 @@ export class CvAdaptationController {
   }
 
   @Get(":id/content")
-  getContent(@CurrentUser() user: { id: string }, @Param("id") id: string) {
+  getContent(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+  ) {
     return this.cvAdaptationService.getContent(user.id, id);
   }
 

@@ -37,14 +37,12 @@ export default async function AdminNewTemplatePage({
     const slug = formData.get("slug") as string;
     const description = formData.get("description") as string | undefined;
     const targetRole = formData.get("targetRole") as string | undefined;
-    const fileUrl = formData.get("fileUrl") as string | undefined;
 
     await adminCreateResumeTemplate({
       name,
       slug,
       description: description?.trim() || undefined,
       targetRole: targetRole?.trim() || undefined,
-      fileUrl: fileUrl?.trim() || undefined,
     });
 
     redirect("/admin/templates");
@@ -122,21 +120,6 @@ export default async function AdminNewTemplatePage({
                 name="targetRole"
                 placeholder="Ex: Senior Software Engineer"
                 type="text"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label
-                className="block text-sm font-semibold text-stone-900"
-                htmlFor="fileUrl"
-              >
-                URL do arquivo
-              </label>
-              <Input
-                id="fileUrl"
-                name="fileUrl"
-                placeholder="https://example.com/templates/classico.pdf"
-                type="url"
               />
             </div>
 

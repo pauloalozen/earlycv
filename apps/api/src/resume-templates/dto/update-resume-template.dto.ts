@@ -40,12 +40,6 @@ export class UpdateResumeTemplateDto {
   targetRole?: string;
 
   @IsOptional()
-  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
-  @IsUrl({ require_protocol: true })
-  @MaxLength(2048)
-  fileUrl?: string;
-
-  @IsOptional()
   @IsObject()
   structureJson?: Record<string, unknown>;
 }

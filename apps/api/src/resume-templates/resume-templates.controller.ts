@@ -7,9 +7,12 @@ import {
   Param,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
   ValidationPipe,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
@@ -82,5 +85,27 @@ export class AdminResumeTemplatesController {
   @HttpCode(200)
   toggleStatus(@Param("id") id: string) {
     return this.resumeTemplatesService.toggleStatus(id);
+  }
+
+  @Post(":id/upload-file")
+  @HttpCode(200)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      fileFilter: (_req, file, cb) => {
+        if (file.mimetype === "application/pdf") {
+          cb(null, true);
+        } else {
+          cb(new Error("Only PDF files are allowed"), false);
+        }
+      },
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadFile(
+    @Param("id") id: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    @UploadedFile() file: any,
+  ) {
+    return this.resumeTemplatesService.uploadFile(id, file);
   }
 }

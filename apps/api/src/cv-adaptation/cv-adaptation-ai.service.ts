@@ -1,6 +1,4 @@
-import { adaptCv } from "@earlycv/ai";
 import { Inject, Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 
@@ -11,26 +9,27 @@ export class CvAdaptationAiService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI,
-    @Inject(ConfigService) private readonly config: ConfigService,
   ) {}
 
   async analyzeAndAdapt(
     adaptation: {
       id: string;
       jobDescriptionText: string;
-      jobTitle?: string;
-      companyName?: string;
+      jobTitle?: string | null;
+      companyName?: string | null;
     },
     masterCvText: string,
   ): Promise<void> {
     try {
-      const model = this.config.get<string>("OPENAI_MODEL") || "gpt-4-mini";
+      const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+      const { adaptCv } = await import("@earlycv/ai");
 
-      const { output, audit } = await adaptCv(this.aiClient, model, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { output, audit } = await adaptCv(this.aiClient as any, model, {
         masterCvText,
         jobDescriptionText: adaptation.jobDescriptionText,
-        jobTitle: adaptation.jobTitle,
-        companyName: adaptation.companyName,
+        jobTitle: adaptation.jobTitle || undefined,
+        companyName: adaptation.companyName || undefined,
       });
 
       const previewText = output.summary.slice(0, 200);

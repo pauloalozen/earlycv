@@ -9,7 +9,7 @@ export class CreateCvAdaptationDto {
   @IsString()
   @MaxLength(8000)
   @Transform(({ value }) => value?.trim())
-  jobDescriptionText: string;
+  jobDescriptionText!: string;
 
   @IsOptional()
   @IsString()

@@ -12,6 +12,7 @@ import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminTokenState } from "../../_components/admin-token-state";
+import { TemplateFileUpload } from "./_components/template-file-upload";
 
 type AdminEditTemplatePageProps = {
   params: Promise<{ id: string }>;
@@ -67,14 +68,12 @@ export default async function AdminEditTemplatePage({
     const slug = formData.get("slug") as string;
     const description = formData.get("description") as string | undefined;
     const targetRole = formData.get("targetRole") as string | undefined;
-    const fileUrl = formData.get("fileUrl") as string | undefined;
 
     await adminUpdateResumeTemplate(id, {
       name,
       slug,
       description: description?.trim() || undefined,
       targetRole: targetRole?.trim() || undefined,
-      fileUrl: fileUrl?.trim() || undefined,
     });
 
     redirect("/admin/templates");
@@ -181,16 +180,16 @@ export default async function AdminEditTemplatePage({
             <div className="space-y-2">
               <label
                 className="block text-sm font-semibold text-stone-900"
-                htmlFor="fileUrl"
+                htmlFor={`template-file-${template.id}`}
               >
-                URL do arquivo
+                Arquivo do template
               </label>
-              <Input
-                defaultValue={template.fileUrl || ""}
-                id="fileUrl"
-                name="fileUrl"
-                type="url"
-              />
+              <div id={`template-file-${template.id}`}>
+                <TemplateFileUpload
+                  currentFileUrl={template.fileUrl}
+                  templateId={template.id}
+                />
+              </div>
             </div>
 
             <div className="flex gap-3">

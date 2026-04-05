@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 
 import { BadRequestException, Injectable } from "@nestjs/common";
-import type { ConfigService } from "@nestjs/config";
 
 export type PaymentIntent = {
   paymentReference: string;
@@ -16,13 +15,13 @@ export class CvAdaptationPaymentService {
   private readonly currency: string;
   private readonly provider: string;
 
-  constructor(private readonly config: ConfigService) {
-    this.priceInCents = this.config.get<number>(
-      "CV_ADAPTATION_PRICE_IN_CENTS",
-      2990,
+  constructor() {
+    this.priceInCents = parseInt(
+      process.env.CV_ADAPTATION_PRICE_IN_CENTS || "2990",
+      10,
     );
-    this.currency = this.config.get<string>("CV_ADAPTATION_CURRENCY", "BRL");
-    this.provider = this.config.get<string>("PAYMENT_PROVIDER", "mercadopago");
+    this.currency = process.env.CV_ADAPTATION_CURRENCY || "BRL";
+    this.provider = process.env.PAYMENT_PROVIDER || "mercadopago";
   }
 
   async createIntent(
@@ -45,7 +44,7 @@ export class CvAdaptationPaymentService {
   private async createMercadoPagoIntent(
     adaptationId: string,
   ): Promise<PaymentIntent> {
-    const token = this.config.get<string>("MERCADOPAGO_ACCESS_TOKEN");
+    const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
     if (!token) {
       throw new BadRequestException(
         "Mercado Pago is not configured. Set MERCADOPAGO_ACCESS_TOKEN.",
@@ -69,7 +68,7 @@ export class CvAdaptationPaymentService {
   private async createStripeIntent(
     adaptationId: string,
   ): Promise<PaymentIntent> {
-    const token = this.config.get<string>("STRIPE_SECRET_KEY");
+    const token = process.env.STRIPE_SECRET_KEY;
     if (!token) {
       throw new BadRequestException(
         "Stripe is not configured. Set STRIPE_SECRET_KEY.",

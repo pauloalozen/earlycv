@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import type { CvAdaptationOutput } from "@earlycv/ai";
-import type { ConfigService } from "@nestjs/config";
+import type { CvAdaptation } from "@prisma/client";
 import type OpenAI from "openai";
 import type { DatabaseService } from "../database/database.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
@@ -50,36 +50,44 @@ describe("CvAdaptationAiService", () => {
       },
     } as unknown as DatabaseService;
 
-    const mockConfig = {
-      get: mock.fn((key: string) => {
-        if (key === "OPENAI_MODEL") return "gpt-4-mini";
-        return undefined;
-      }),
-    } as unknown as ConfigService;
+    const service = new CvAdaptationAiService(mockDatabase, mockAiClient);
 
-    const service = new CvAdaptationAiService(
-      mockDatabase,
-      mockAiClient,
-      mockConfig,
-    );
-
-    const adaptation = {
+    const adaptation: CvAdaptation = {
       id: "test-id",
-      status: "analyzing" as const,
+      userId: "user-id",
+      masterResumeId: "resume-id",
+      templateId: null,
       jobDescriptionText: "Senior Engineer role",
       jobTitle: "Senior Engineer",
       companyName: "Tech Corp",
+      status: "analyzing",
+      adaptedContentJson: null,
+      previewText: null,
+      adaptedResumeId: null,
+      aiAuditJson: null,
+      paymentStatus: "none",
+      paymentProvider: null,
+      paymentReference: null,
+      paymentAmountInCents: null,
+      paymentCurrency: null,
+      paidAt: null,
+      failureReason: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
     await service.analyzeAndAdapt(
-      adaptation as any,
+      adaptation,
       "Engineer with 5 years experience",
     );
 
     // Verify update was called with correct status
-    const updateCall = (mockDatabase.cvAdaptation.update as any).mock.calls[0];
+    const updateFn = mockDatabase.cvAdaptation.update as ReturnType<
+      typeof mock.fn
+    >;
+    const updateCall = updateFn.mock.calls[0];
     assert.ok(updateCall);
-    const updateData = updateCall[0].data;
+    const updateData = updateCall.arguments[0].data;
     assert.equal(updateData.status, "awaiting_payment");
     assert.ok(updateData.adaptedContentJson);
     assert.equal(typeof updateData.previewText, "string");
@@ -103,30 +111,40 @@ describe("CvAdaptationAiService", () => {
       },
     } as unknown as DatabaseService;
 
-    const mockConfig = {
-      get: mock.fn((key: string) => {
-        if (key === "OPENAI_MODEL") return "gpt-4-mini";
-        return undefined;
-      }),
-    } as unknown as ConfigService;
+    const service = new CvAdaptationAiService(mockDatabase, mockAiClient);
 
-    const service = new CvAdaptationAiService(
-      mockDatabase,
-      mockAiClient,
-      mockConfig,
-    );
-
-    const adaptation = {
+    const adaptation: CvAdaptation = {
       id: "test-id",
-      status: "analyzing" as const,
+      userId: "user-id",
+      masterResumeId: "resume-id",
+      templateId: null,
       jobDescriptionText: "Job",
+      jobTitle: null,
+      companyName: null,
+      status: "analyzing",
+      adaptedContentJson: null,
+      previewText: null,
+      adaptedResumeId: null,
+      aiAuditJson: null,
+      paymentStatus: "none",
+      paymentProvider: null,
+      paymentReference: null,
+      paymentAmountInCents: null,
+      paymentCurrency: null,
+      paidAt: null,
+      failureReason: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
-    await service.analyzeAndAdapt(adaptation as any, "Resume text");
+    await service.analyzeAndAdapt(adaptation, "Resume text");
 
-    const updateCall = (mockDatabase.cvAdaptation.update as any).mock.calls[0];
+    const updateFn = mockDatabase.cvAdaptation.update as ReturnType<
+      typeof mock.fn
+    >;
+    const updateCall = updateFn.mock.calls[0];
     assert.ok(updateCall);
-    const updateData = updateCall[0].data;
+    const updateData = updateCall.arguments[0].data;
     assert.equal(updateData.status, "failed");
     assert.ok(updateData.failureReason);
   });
