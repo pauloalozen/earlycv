@@ -1,5 +1,7 @@
+import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+
 import { Badge, buttonVariants, Card, EmptyState } from "@/components/ui";
 import {
   type AdminResumeTemplateDto,
@@ -19,6 +21,7 @@ type AdminTemplatesPageProps = {
 async function toggleStatus(id: string) {
   "use server";
   await adminToggleResumeTemplateStatus(id);
+  revalidatePath("/admin/templates");
 }
 
 export default async function AdminTemplatesPage({

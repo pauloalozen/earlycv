@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -76,12 +77,15 @@ export default async function AdminEditTemplatePage({
       targetRole: targetRole?.trim() || undefined,
     });
 
+    revalidatePath(`/admin/templates/${id}`);
+    revalidatePath("/admin/templates");
     redirect("/admin/templates");
   }
 
   async function toggleStatus() {
     "use server";
     await adminToggleResumeTemplateStatus(id);
+    revalidatePath(`/admin/templates/${id}`);
   }
 
   return (
