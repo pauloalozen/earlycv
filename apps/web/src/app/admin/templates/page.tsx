@@ -18,7 +18,7 @@ type AdminTemplatesPageProps = {
   searchParams: Promise<{ token?: string }>;
 };
 
-async function toggleStatus(id: string) {
+async function toggleStatus(id: string, _formData: FormData) {
   "use server";
   await adminToggleResumeTemplateStatus(id);
   revalidatePath("/admin/templates");
@@ -84,12 +84,8 @@ export default async function AdminTemplatesPage({
                       {template.slug}
                     </p>
                   </div>
-                  <Badge
-                    variant={
-                      template.status === "active" ? "accent" : "neutral"
-                    }
-                  >
-                    {template.status === "active" ? "ativo" : "inativo"}
+                  <Badge variant={template.isActive ? "accent" : "neutral"}>
+                    {template.isActive ? "ativo" : "inativo"}
                   </Badge>
                 </div>
 
@@ -116,17 +112,12 @@ export default async function AdminTemplatesPage({
                   >
                     Editar
                   </Link>
-                  <form
-                    action={async () => {
-                      "use server";
-                      await toggleStatus(template.id);
-                    }}
-                  >
+                  <form action={toggleStatus.bind(null, template.id)}>
                     <button
                       className={buttonVariants({ variant: "outline" })}
                       type="submit"
                     >
-                      {template.status === "active" ? "Desativar" : "Ativar"}
+                      {template.isActive ? "Desativar" : "Ativar"}
                     </button>
                   </form>
                 </div>

@@ -99,7 +99,7 @@ export default async function AdminEditTemplatePage({
                   className={buttonVariants({ variant: "outline" })}
                   type="submit"
                 >
-                  {template.status === "active" ? "Desativar" : "Ativar"}
+                  {template.isActive ? "Desativar" : "Ativar"}
                 </button>
               </form>
               <Link
