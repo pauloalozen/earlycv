@@ -26,6 +26,7 @@ const adminNavItems: BackofficeNavItem[] = [
   { href: "/admin/usuarios", label: "Usuarios", phase: "fase 3" },
   { href: "/admin/perfis", label: "Perfis", phase: "fase 3" },
   { href: "/admin/curriculos", label: "Curriculos", phase: "fase 3" },
+  { href: "/admin/templates", label: "Templates de CV" },
   { href: "/admin/configuracoes", label: "Configuracoes", phase: "fase 4" },
 ];
 
