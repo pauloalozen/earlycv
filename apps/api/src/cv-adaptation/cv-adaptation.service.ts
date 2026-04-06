@@ -365,6 +365,7 @@ export class CvAdaptationService {
         userId: adaptation.userId,
         title: `${adaptation.masterResume.title} - Adaptado`,
         kind: "adapted",
+        isMaster: false,
         status: "reviewed",
         basedOnResumeId: adaptation.masterResumeId,
         templateId: adaptation.templateId,

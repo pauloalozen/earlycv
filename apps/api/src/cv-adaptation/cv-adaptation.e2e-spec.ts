@@ -101,7 +101,7 @@ test("POST /cv-adaptation with masterResumeId creates an adaptation", async () =
     .expect(201);
 
   assert.equal(res.body.masterResumeId, masterResume.id);
-  assert.equal(res.body.status, "pending");
+  assert.equal(res.body.status, "analyzing");
   assert.equal(res.body.jobTitle, "Senior Engineer");
   assert.equal(res.body.companyName, "Tech Corp");
   assert.ok(!("adaptedContentJson" in res.body));
@@ -262,11 +262,7 @@ test("DELETE /cv-adaptation/:id deletes the record", async () => {
 
 test("DELETE /cv-adaptation/:id also deletes the adaptedResume if present", async () => {
   const { app, database } = await createApp();
-  const user = await registerUser(
-    app,
-    database,
-    "cv-adaptation-delete-with-result",
-  );
+  const user = await registerUser(app, database, "cv-adapt-del-adapted");
 
   const masterResume = await database.resume.create({
     data: {
@@ -283,6 +279,7 @@ test("DELETE /cv-adaptation/:id also deletes the adaptedResume if present", asyn
       userId: user.userId,
       title: "Adapted CV",
       kind: "adapted",
+      isMaster: false,
       status: "reviewed",
       basedOnResumeId: masterResume.id,
     },

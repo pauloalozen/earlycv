@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { buttonVariants } from "@/components/ui";
-import { adminUploadResumeTemplateFile } from "@/lib/admin-resume-templates-api";
+import { uploadTemplateFileAction } from "../_actions/upload-template-file";
 
 type TemplateFileUploadProps = {
   currentFileUrl: string | null;
@@ -28,7 +28,9 @@ export function TemplateFileUpload({
     setError(null);
 
     try {
-      await adminUploadResumeTemplateFile(templateId, file);
+      const formData = new FormData();
+      formData.append("file", file);
+      await uploadTemplateFileAction(templateId, formData);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao enviar arquivo");

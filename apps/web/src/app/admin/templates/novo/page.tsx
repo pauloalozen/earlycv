@@ -8,13 +8,7 @@ import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminTokenState } from "../../_components/admin-token-state";
 
-type AdminNewTemplatePageProps = {
-  searchParams: Promise<{ token?: string }>;
-};
-
-export default async function AdminNewTemplatePage({
-  searchParams,
-}: AdminNewTemplatePageProps) {
+export default async function AdminNewTemplatePage() {
   const token = await getBackofficeSessionToken();
 
   if (!token) {

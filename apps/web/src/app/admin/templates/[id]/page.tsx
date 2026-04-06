@@ -17,12 +17,10 @@ import { TemplateFileUpload } from "./_components/template-file-upload";
 
 type AdminEditTemplatePageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ token?: string }>;
 };
 
 export default async function AdminEditTemplatePage({
   params,
-  searchParams,
 }: AdminEditTemplatePageProps) {
   const { id } = await params;
   const token = await getBackofficeSessionToken();

@@ -179,7 +179,6 @@ test("admin resume template endpoints create, list, update, and toggle template 
       slug: templateSlug,
       description: "Template for staff-managed platform applications",
       targetRole: "Platform Engineer",
-      fileUrl: "https://cdn.earlycv.dev/templates/platform-engineering.docx",
       structureJson: {
         sections: ["summary", "experience", "projects"],
       },

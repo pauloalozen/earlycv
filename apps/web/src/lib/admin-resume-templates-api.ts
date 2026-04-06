@@ -1,6 +1,6 @@
-"use server";
+import "server-only";
 
-import { apiRequest } from "./api-request";
+import { getBackofficeSessionToken } from "./backoffice-session.server";
 
 export type AdminResumeTemplateDto = {
   id: string;
@@ -15,10 +15,56 @@ export type AdminResumeTemplateDto = {
   updatedAt: string;
 };
 
+function getApiBaseUrl() {
+  const base =
+    process.env.API_URL ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    "http://localhost:4000";
+
+  return base.endsWith("/api") ? base : `${base}/api`;
+}
+
+async function getToken() {
+  const token = await getBackofficeSessionToken();
+  if (!token) {
+    throw new Error("Missing backoffice session token.");
+  }
+  return token;
+}
+
+async function adminApiRequest(
+  method: string,
+  path: string,
+  body?: FormData | Record<string, unknown>,
+): Promise<Response> {
+  const token = await getToken();
+  const url = `${getApiBaseUrl()}${path}`;
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  if (body && !(body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const options: RequestInit = {
+    method,
+    headers,
+    cache: "no-store",
+  };
+
+  if (body) {
+    options.body = body instanceof FormData ? body : JSON.stringify(body);
+  }
+
+  return fetch(url, options);
+}
+
 export async function adminListResumeTemplates(): Promise<
   AdminResumeTemplateDto[]
 > {
-  const response = await apiRequest("GET", "/admin/resume-templates");
+  const response = await adminApiRequest("GET", "/admin/resume-templates");
   if (!response.ok) {
     throw new Error("Failed to fetch templates");
   }
@@ -31,7 +77,11 @@ export async function adminCreateResumeTemplate(data: {
   description?: string;
   targetRole?: string;
 }): Promise<AdminResumeTemplateDto> {
-  const response = await apiRequest("POST", "/admin/resume-templates", data);
+  const response = await adminApiRequest(
+    "POST",
+    "/admin/resume-templates",
+    data,
+  );
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Failed to create template: ${text}`);
@@ -48,7 +98,7 @@ export async function adminUpdateResumeTemplate(
     targetRole?: string;
   },
 ): Promise<AdminResumeTemplateDto> {
-  const response = await apiRequest(
+  const response = await adminApiRequest(
     "PATCH",
     `/admin/resume-templates/${id}`,
     data,
@@ -63,7 +113,7 @@ export async function adminUpdateResumeTemplate(
 export async function adminToggleResumeTemplateStatus(
   id: string,
 ): Promise<AdminResumeTemplateDto> {
-  const response = await apiRequest(
+  const response = await adminApiRequest(
     "POST",
     `/admin/resume-templates/${id}/toggle-status`,
   );
@@ -81,7 +131,7 @@ export async function adminUploadResumeTemplateFile(
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await apiRequest(
+  const response = await adminApiRequest(
     "POST",
     `/admin/resume-templates/${id}/upload-file`,
     formData,

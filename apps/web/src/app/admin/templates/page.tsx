@@ -1,6 +1,5 @@
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { Badge, buttonVariants, Card, EmptyState } from "@/components/ui";
 import {
@@ -14,19 +13,13 @@ import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
 
-type AdminTemplatesPageProps = {
-  searchParams: Promise<{ token?: string }>;
-};
-
 async function toggleStatus(id: string, _formData: FormData) {
   "use server";
   await adminToggleResumeTemplateStatus(id);
   revalidatePath("/admin/templates");
 }
 
-export default async function AdminTemplatesPage({
-  searchParams,
-}: AdminTemplatesPageProps) {
+export default async function AdminTemplatesPage() {
   const token = await getBackofficeSessionToken();
 
   if (!token) {
