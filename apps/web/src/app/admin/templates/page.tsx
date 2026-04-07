@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import Image from "next/image";
 import Link from "next/link";
 
 import { Badge, buttonVariants, Card, EmptyState } from "@/components/ui";
@@ -68,18 +69,37 @@ export default async function AdminTemplatesPage() {
           <div className="grid gap-4 xl:grid-cols-2">
             {templates.map((template) => (
               <Card className="space-y-4" key={template.id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="text-xl font-bold tracking-tight text-stone-950">
-                      {template.name}
-                    </p>
-                    <p className="font-mono text-sm text-stone-500">
-                      {template.slug}
-                    </p>
+                <div className="flex gap-4">
+                  {/* Preview thumbnail */}
+                  <div className="relative h-52 w-40 shrink-0 overflow-hidden rounded border border-stone-200 bg-stone-100">
+                    {template.previewImageUrl ? (
+                      <Image
+                        src={template.previewImageUrl}
+                        alt={`Preview ${template.name}`}
+                        fill
+                        unoptimized
+                        className="object-cover object-top"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-stone-400 text-xs text-center px-1">
+                        Sem preview
+                      </div>
+                    )}
                   </div>
-                  <Badge variant={template.isActive ? "accent" : "neutral"}>
-                    {template.isActive ? "ativo" : "inativo"}
-                  </Badge>
+
+                  <div className="flex flex-1 items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-xl font-bold tracking-tight text-stone-950">
+                        {template.name}
+                      </p>
+                      <p className="font-mono text-sm text-stone-500">
+                        {template.slug}
+                      </p>
+                    </div>
+                    <Badge variant={template.isActive ? "accent" : "neutral"}>
+                      {template.isActive ? "ativo" : "inativo"}
+                    </Badge>
+                  </div>
                 </div>
 
                 {template.description && (

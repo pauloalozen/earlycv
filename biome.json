@@ -5,5 +5,17 @@
     "parser": {
       "unsafeParameterDecoratorsEnabled": true
     }
+  },
+  "files": {
+    "includes": [
+      "!**/.worktrees",
+      "!**/.worktrees",
+      "!**/node_modules",
+      "!**/.next",
+      "!**/out",
+      "!**/build",
+      "!**/dist",
+      "!**/cv-adaptation/templates"
+    ]
   }
 }

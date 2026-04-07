@@ -37,10 +37,15 @@ export class CvAdaptationController {
   @UseInterceptors(
     FileInterceptor("file", {
       fileFilter: (_req, file, cb) => {
-        if (file.mimetype === "application/pdf") {
+        const allowed = [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ];
+        if (allowed.includes(file.mimetype)) {
           cb(null, true);
         } else {
-          cb(new Error("Only PDF files are allowed"), false);
+          cb(new Error("Only PDF, DOC or DOCX files are allowed"), false);
         }
       },
       limits: {
@@ -93,12 +98,24 @@ export class CvAdaptationController {
     return this.cvAdaptationService.createCheckout(user.id, id);
   }
 
+  @Post(":id/confirm-payment")
+  confirmPayment(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+  ) {
+    return this.cvAdaptationService.confirmPayment(user.id, id);
+  }
+
   @Get(":id/download")
   async download(
     @AuthenticatedUser() user: { id: string },
     @Param("id") id: string,
+    @Query("format") format = "pdf",
     @Res() res: Response,
   ) {
+    if (format === "docx") {
+      return this.cvAdaptationService.downloadDocx(user.id, id, res);
+    }
     return this.cvAdaptationService.downloadPdf(user.id, id, res);
   }
 

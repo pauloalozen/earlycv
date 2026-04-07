@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createCvAdaptation } from "@/lib/cv-adaptation-api";
@@ -71,7 +72,7 @@ export default function AdaptarPage() {
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
               <input
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.doc,.docx"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
                 disabled={loading}
                 className="hidden"
@@ -129,13 +130,13 @@ export default function AdaptarPage() {
           {/* Step 3: Template */}
           <div>
             <h2 className="text-xl font-semibold mb-4">3. Template</h2>
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {templates.map((template) => (
                 <label
                   key={template.id}
-                  className={`p-4 border-2 rounded-lg cursor-pointer transition ${
+                  className={`cursor-pointer rounded-xl border-2 overflow-hidden transition ${
                     selectedTemplateId === template.id
-                      ? "border-orange-500 bg-orange-50"
+                      ? "border-orange-500"
                       : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
@@ -146,13 +147,33 @@ export default function AdaptarPage() {
                     checked={selectedTemplateId === template.id}
                     onChange={(e) => setSelectedTemplateId(e.target.value)}
                     disabled={loading}
-                    className="mr-3"
+                    className="sr-only"
                   />
-                  <div className="inline-block">
-                    <p className="font-semibold">{template.name}</p>
-                    <p className="text-sm text-gray-600">
-                      {template.description}
-                    </p>
+                  {/* Preview image */}
+                  <div className="bg-gray-100 h-64 flex items-center justify-center relative">
+                    {template.previewImageUrl ? (
+                      <Image
+                        src={template.previewImageUrl}
+                        alt={template.name}
+                        fill
+                        unoptimized
+                        className="object-cover object-top"
+                      />
+                    ) : (
+                      <div className="text-gray-400 text-center">
+                        <div className="text-4xl mb-2">📄</div>
+                        <div className="text-xs">Preview indisponível</div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Template info */}
+                  <div className="p-3">
+                    <p className="font-semibold text-sm">{template.name}</p>
+                    {template.description && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {template.description}
+                      </p>
+                    )}
                   </div>
                 </label>
               ))}

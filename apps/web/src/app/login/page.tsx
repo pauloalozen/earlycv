@@ -17,6 +17,7 @@ export const metadata: Metadata = {
 type LoginPageProps = {
   searchParams: Promise<{
     error?: string;
+    next?: string;
   }>;
 };
 
@@ -30,6 +31,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   const params = await searchParams;
   const error = params.error;
+  const next = params.next;
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(234,88,12,0.16),_transparent_32%),linear-gradient(180deg,_#fffaf5_0%,_#f5f5f4_100%)] px-6 py-10 text-stone-900 md:px-10 lg:px-12">
@@ -82,6 +84,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </div>
 
             <form action="/auth/login" className="space-y-3" method="post">
+              {next && <input type="hidden" name="next" value={next} />}
               <Input
                 autoComplete="email"
                 inputMode="email"

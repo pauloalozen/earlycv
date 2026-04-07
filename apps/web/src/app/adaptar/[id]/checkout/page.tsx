@@ -1,12 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CvAdaptationDto } from "@/lib/cv-adaptation-api";
 import { createCheckoutIntent, getCvAdaptation } from "@/lib/cv-adaptation-api";
 
-export default function CheckoutPage({ params }: { params: { id: string } }) {
+export default function CheckoutPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
   const [adaptation, setAdaptation] = useState<CvAdaptationDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -124,7 +125,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
               <p className="text-gray-600 mb-2">
                 <strong>Valor:</strong>
               </p>
-              <div className="text-5xl font-bold text-orange-500">R$ 29,90</div>
+              <div className="text-5xl font-bold text-orange-500">R$ 19,00</div>
               <p className="text-sm text-gray-500 mt-2">
                 Acesso ao CV adaptado + download em PDF
               </p>

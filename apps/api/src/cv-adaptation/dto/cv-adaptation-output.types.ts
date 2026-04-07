@@ -10,6 +10,7 @@ export type CvSectionItem = {
 
 export type CvSection = {
   sectionType:
+    | "header"
     | "experience"
     | "education"
     | "skills"
@@ -23,6 +24,7 @@ export type CvSection = {
 
 export type CvAdaptationOutput = {
   summary: string;
+  mainGoal?: string;
   sections: CvSection[];
   highlightedSkills: string[];
   removedSections: string[];

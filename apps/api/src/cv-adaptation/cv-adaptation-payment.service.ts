@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
+import type { PreferenceResponse } from "mercadopago/dist/clients/preference/commonTypes";
 
 export type PaymentIntent = {
   paymentReference: string;
@@ -11,13 +13,14 @@ export type PaymentIntent = {
 
 @Injectable()
 export class CvAdaptationPaymentService {
+  private readonly logger = new Logger(CvAdaptationPaymentService.name);
   private readonly priceInCents: number;
   private readonly currency: string;
   private readonly provider: string;
 
   constructor() {
     this.priceInCents = parseInt(
-      process.env.CV_ADAPTATION_PRICE_IN_CENTS || "2990",
+      process.env.CV_ADAPTATION_PRICE_IN_CENTS || "1900",
       10,
     );
     this.currency = process.env.CV_ADAPTATION_CURRENCY || "BRL";
@@ -32,141 +35,161 @@ export class CvAdaptationPaymentService {
       return this.createMercadoPagoIntent(adaptationId);
     }
 
-    if (this.provider === "stripe") {
-      return this.createStripeIntent(adaptationId);
-    }
-
     throw new BadRequestException(
       `Payment provider ${this.provider} not supported`,
     );
   }
 
+  private getMercadoPagoClient(): MercadoPagoConfig {
+    const isProduction = process.env.NODE_ENV === "production";
+    const token = isProduction
+      ? process.env.MERCADOPAGO_ACCESS_TOKEN
+      : (process.env.MERCADOPAGO_ACCESS_TOKEN_TEST ??
+        process.env.MERCADOPAGO_ACCESS_TOKEN);
+
+    if (!token) {
+      const varName = isProduction
+        ? "MERCADOPAGO_ACCESS_TOKEN"
+        : "MERCADOPAGO_ACCESS_TOKEN_TEST";
+      throw new BadRequestException(`${varName} not configured.`);
+    }
+
+    return new MercadoPagoConfig({ accessToken: token });
+  }
+
   private async createMercadoPagoIntent(
     adaptationId: string,
   ): Promise<PaymentIntent> {
-    const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
-    if (!token) {
+    const client = this.getMercadoPagoClient();
+    const preference = new Preference(client);
+
+    const paymentReference = randomUUID();
+    const priceInReais = this.priceInCents / 100;
+
+    const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3000";
+    const apiUrl =
+      process.env.API_URL ??
+      process.env.NEXT_PUBLIC_API_URL ??
+      "http://localhost:4000";
+    const notificationUrl = `${apiUrl}/api/cv-adaptation/webhook/mercadopago`;
+
+    const isProduction = process.env.NODE_ENV === "production";
+    const successUrl = `${frontendUrl}/adaptar/${adaptationId}/confirmacao`;
+
+    // auto_return only works with HTTPS back_urls
+    const useAutoReturn = successUrl.startsWith("https://");
+
+    let result: PreferenceResponse;
+    try {
+      result = await preference.create({
+        body: {
+          items: [
+            {
+              id: adaptationId,
+              title: "CV Adaptado — EarlyCV",
+              quantity: 1,
+              unit_price: priceInReais,
+              currency_id: this.currency,
+            },
+          ],
+          external_reference: paymentReference,
+          notification_url: notificationUrl,
+          back_urls: {
+            success: successUrl,
+            failure: `${frontendUrl}/adaptar/${adaptationId}/checkout`,
+            pending: `${frontendUrl}/adaptar/${adaptationId}/resultado`,
+          },
+          ...(useAutoReturn && { auto_return: "approved" }),
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Mercado Pago preference error: ${message}`);
+      throw new BadRequestException(`Mercado Pago error: ${message}`);
+    }
+
+    const checkoutUrl = isProduction
+      ? result.init_point
+      : (result.sandbox_init_point ?? result.init_point);
+    if (!checkoutUrl) {
       throw new BadRequestException(
-        "Mercado Pago is not configured. Set MERCADOPAGO_ACCESS_TOKEN.",
+        "Mercado Pago did not return a checkout URL.",
       );
     }
 
-    const paymentReference = randomUUID();
-
-    // For MVP: create a mock preference URL
-    // In production, this would call Mercado Pago API
-    const mockCheckoutUrl = `https://sandbox.mercadopago.com/checkout/v1/${adaptationId}`;
-
     return {
       paymentReference,
-      checkoutUrl: mockCheckoutUrl,
+      checkoutUrl,
       amountInCents: this.priceInCents,
       currency: this.currency,
     };
-  }
-
-  private async createStripeIntent(
-    adaptationId: string,
-  ): Promise<PaymentIntent> {
-    const token = process.env.STRIPE_SECRET_KEY;
-    if (!token) {
-      throw new BadRequestException(
-        "Stripe is not configured. Set STRIPE_SECRET_KEY.",
-      );
-    }
-
-    const paymentReference = randomUUID();
-
-    // For MVP: create a mock payment intent
-    // In production, this would call Stripe API
-    const mockCheckoutUrl = `https://checkout.stripe.com/${adaptationId}`;
-
-    return {
-      paymentReference,
-      checkoutUrl: mockCheckoutUrl,
-      amountInCents: this.priceInCents,
-      currency: this.currency,
-    };
-  }
-
-  verifyMercadoPagoWebhook(
-    _rawBody: Buffer,
-    _headers: Record<string, string>,
-  ): boolean {
-    // For MVP: accept all Mercado Pago webhooks
-    // In production, verify HMAC signature
-    return true;
-  }
-
-  verifyStripeWebhook(_rawBody: Buffer, _signature: string): boolean {
-    // For MVP: accept all Stripe webhooks
-    // In production, verify signature using webhook secret
-    return true;
-  }
-
-  resolveMercadoPagoPaymentReference(body: unknown): string {
-    // Extract payment reference from Mercado Pago webhook body
-    if (!body || typeof body !== "object") {
-      throw new BadRequestException("Invalid Mercado Pago webhook body");
-    }
-
-    const data = body as Record<string, unknown>;
-
-    // Mercado Pago sends payment reference in idempotency_key or external_reference
-    if (typeof data.data === "object" && data.data !== null) {
-      const innerData = data.data as Record<string, unknown>;
-      if (typeof innerData.external_reference === "string") {
-        return innerData.external_reference;
-      }
-      if (typeof innerData.id === "string") {
-        return String(innerData.id);
-      }
-    }
-
-    throw new BadRequestException(
-      "Could not find payment reference in Mercado Pago webhook",
-    );
-  }
-
-  resolveStripePaymentReference(body: unknown): string {
-    // Extract payment reference from Stripe webhook body
-    if (!body || typeof body !== "object") {
-      throw new BadRequestException("Invalid Stripe webhook body");
-    }
-
-    const data = body as Record<string, unknown>;
-
-    // Stripe sends payment intent ID in data.object.id
-    if (typeof data.data === "object" && data.data !== null) {
-      const innerData = data.data as Record<string, unknown>;
-      if (typeof innerData.object === "object" && innerData.object !== null) {
-        const obj = innerData.object as Record<string, unknown>;
-        if (typeof obj.id === "string") {
-          return obj.id;
-        }
-        if (typeof obj.client_secret === "string") {
-          return obj.client_secret;
-        }
-      }
-    }
-
-    throw new BadRequestException(
-      "Could not find payment reference in Stripe webhook",
-    );
   }
 
   async resolvePaymentReference(
     provider: string,
     body: unknown,
-  ): Promise<string> {
+  ): Promise<string | null> {
     if (provider === "mercadopago") {
-      return this.resolveMercadoPagoPaymentReference(body);
-    }
-
-    if (provider === "stripe") {
-      return this.resolveStripePaymentReference(body);
+      return this.resolveMercadoPagoPayment(body);
     }
 
     throw new BadRequestException(`Payment provider ${provider} not supported`);
+  }
+
+  async checkPaymentApprovedByReference(
+    paymentReference: string,
+  ): Promise<boolean> {
+    const client = this.getMercadoPagoClient();
+    const paymentClient = new Payment(client);
+
+    const results = await paymentClient.search({
+      options: { external_reference: paymentReference },
+    });
+
+    const approved = results.results?.some((p) => p.status === "approved");
+    return Boolean(approved);
+  }
+
+  private async resolveMercadoPagoPayment(
+    body: unknown,
+  ): Promise<string | null> {
+    if (!body || typeof body !== "object") return null;
+
+    const data = body as Record<string, unknown>;
+
+    // MP sends { type: "payment", data: { id: "<payment_id>" } }
+    if (data.type !== "payment") {
+      this.logger.log(`Ignoring MP webhook type: ${String(data.type)}`);
+      return null;
+    }
+
+    const paymentId =
+      typeof data.data === "object" && data.data !== null
+        ? String((data.data as Record<string, unknown>).id)
+        : null;
+
+    if (!paymentId) return null;
+
+    const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
+    if (!token) {
+      throw new BadRequestException("MERCADOPAGO_ACCESS_TOKEN not configured.");
+    }
+
+    const client = this.getMercadoPagoClient();
+    const paymentClient = new Payment(client);
+    const payment = await paymentClient.get({ id: paymentId });
+
+    if (payment.status !== "approved") {
+      this.logger.log(`Payment ${paymentId} not approved: ${payment.status}`);
+      return null;
+    }
+
+    const externalReference = payment.external_reference;
+    if (!externalReference) {
+      this.logger.warn(`Payment ${paymentId} has no external_reference`);
+      return null;
+    }
+
+    return externalReference;
   }
 }

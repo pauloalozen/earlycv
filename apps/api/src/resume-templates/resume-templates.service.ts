@@ -2,6 +2,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
@@ -10,12 +11,20 @@ import { DatabaseService } from "../database/database.service";
 import { StorageService } from "../storage/storage.service";
 import type { CreateResumeTemplateDto } from "./dto/create-resume-template.dto";
 import type { UpdateResumeTemplateDto } from "./dto/update-resume-template.dto";
+import { ResumeTemplateDocxService } from "./resume-template-docx.service";
+import { ResumeTemplateGeneratorService } from "./resume-template-generator.service";
 
 @Injectable()
 export class ResumeTemplatesService {
+  private readonly logger = new Logger(ResumeTemplatesService.name);
+
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(StorageService) private readonly storage: StorageService,
+    @Inject(ResumeTemplateGeneratorService)
+    private readonly generator: ResumeTemplateGeneratorService,
+    @Inject(ResumeTemplateDocxService)
+    private readonly docx: ResumeTemplateDocxService,
   ) {}
 
   list() {
@@ -63,27 +72,101 @@ export class ResumeTemplatesService {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async uploadFile(templateId: string, file: any) {
+  async uploadPreview(
+    templateId: string,
+    file: {
+      buffer: Buffer;
+      mimetype: string;
+      size: number;
+      originalname: string;
+    },
+  ) {
+    const template = await this.getById(templateId);
+
+    if (template.previewImageUrl) {
+      const oldKey = this.extractKeyFromUrl(template.previewImageUrl);
+      if (oldKey) {
+        await this.storage.deleteObject(oldKey).catch(() => {});
+      }
+    }
+
+    const ext = file.mimetype === "image/png" ? "png" : "jpg";
+    const key = `templates/${templateId}/preview.${ext}`;
+    const url = await this.storage.putObject(key, file.buffer, file.mimetype);
+
+    return this.database.resumeTemplate.update({
+      where: { id: templateId },
+      data: { previewImageUrl: url },
+    });
+  }
+
+  async uploadFile(
+    templateId: string,
+    file: {
+      buffer: Buffer;
+      mimetype: string;
+      size: number;
+      originalname: string;
+    },
+  ) {
     const template = await this.getById(templateId);
 
     // Remove arquivo anterior se existir
     if (template.fileUrl) {
       const oldKey = this.extractKeyFromUrl(template.fileUrl);
       if (oldKey) {
-        await this.storage.deleteObject(oldKey).catch(() => {
-          // Ignora erros ao deletar arquivo antigo
-        });
+        await this.storage.deleteObject(oldKey).catch(() => {});
       }
     }
 
-    // Salva novo arquivo
-    const key = `templates/${templateId}/template.pdf`;
+    const isDocx =
+      file.mimetype ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      file.originalname.endsWith(".docx");
+    const isPdf = file.mimetype === "application/pdf";
+    const ext = isDocx ? "docx" : isPdf ? "pdf" : "bin";
+
+    // Salva arquivo original no MinIO
+    const key = `templates/${templateId}/template.${ext}`;
     const url = await this.storage.putObject(key, file.buffer, file.mimetype);
+
+    const updateData: Prisma.ResumeTemplateUpdateInput = {
+      fileUrl: url,
+      // Clear previous structureJson when a new file is uploaded
+      structureJson: Prisma.JsonNull,
+    };
+
+    if (isDocx) {
+      // DOCX: gera preview preenchendo com dados mockados → LibreOffice → pdftoppm
+      try {
+        const previewImageUrl = await this.docx.generatePreview(
+          file.buffer,
+          templateId,
+        );
+        updateData.previewImageUrl = previewImageUrl;
+      } catch (err) {
+        this.logger.error(
+          `DOCX preview generation failed for ${templateId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    } else if (isPdf) {
+      // PDF legacy: pdftoppm screenshot direto
+      try {
+        const { previewImageUrl, ...structure } =
+          await this.generator.generateFromPdf(file.buffer, templateId);
+        updateData.previewImageUrl = previewImageUrl;
+        updateData.structureJson =
+          structure as unknown as Prisma.InputJsonObject;
+      } catch (err) {
+        this.logger.error(
+          `PDF template generation failed for ${templateId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
 
     return this.database.resumeTemplate.update({
       where: { id: templateId },
-      data: { fileUrl: url },
+      data: updateData,
     });
   }
 

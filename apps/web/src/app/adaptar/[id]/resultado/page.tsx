@@ -1,12 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CvAdaptationDto } from "@/lib/cv-adaptation-api";
 import { getCvAdaptation } from "@/lib/cv-adaptation-api";
 
-export default function ResultadoPage({ params }: { params: { id: string } }) {
+export default function ResultadoPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
   const [adaptation, setAdaptation] = useState<CvAdaptationDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -17,8 +18,8 @@ export default function ResultadoPage({ params }: { params: { id: string } }) {
         const data = await getCvAdaptation(params.id);
         setAdaptation(data);
 
-        // Continue polling if still analyzing
-        if (data.status === "analyzing") {
+        // Continue polling while processing
+        if (data.status === "analyzing" || data.status === "paid") {
           setTimeout(fetchAdaptation, 3000);
         }
       } catch (err) {
@@ -31,7 +32,7 @@ export default function ResultadoPage({ params }: { params: { id: string } }) {
     };
 
     fetchAdaptation();
-  }, [params.id]);
+  }, [params.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -69,7 +70,7 @@ export default function ResultadoPage({ params }: { params: { id: string } }) {
         {adaptation.status === "analyzing" && (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
-            <p className="text-lg">Estamos adaptando seu CV...</p>
+            <p className="text-lg">Estamos avaliando seu CV...</p>
             <p className="text-gray-600">Isso pode levar alguns segundos</p>
           </div>
         )}
@@ -98,7 +99,7 @@ export default function ResultadoPage({ params }: { params: { id: string } }) {
               onClick={() => router.push(`/adaptar/${adaptation.id}/checkout`)}
               className="w-full bg-orange-500 text-white font-semibold py-3 rounded-lg hover:bg-orange-600"
             >
-              Desbloquear resultado completo - R$ 29,90
+              Desbloquear resultado completo - R$ 19,00
             </button>
           </div>
         )}
@@ -116,14 +117,20 @@ export default function ResultadoPage({ params }: { params: { id: string } }) {
               ✓ Seu CV está pronto!
             </h2>
             <div className="space-y-3">
-              <a
-                href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/api/cv-adaptation/${adaptation.id}/download`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full bg-green-600 text-white font-semibold py-3 rounded-lg hover:bg-green-700 text-center"
-              >
-                Baixar PDF
-              </a>
+              <div className="flex gap-3">
+                <a
+                  href={`/api/cv-adaptation/${adaptation.id}/download?format=pdf`}
+                  className="flex-1 bg-green-600 text-white font-semibold py-3 rounded-lg hover:bg-green-700 text-center"
+                >
+                  Baixar PDF
+                </a>
+                <a
+                  href={`/api/cv-adaptation/${adaptation.id}/download?format=docx`}
+                  className="flex-1 bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 text-center"
+                >
+                  Baixar DOCX
+                </a>
+              </div>
               <button
                 type="button"
                 onClick={() => router.push("/meus-cvs")}

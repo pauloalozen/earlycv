@@ -17,6 +17,20 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: workspaceRoot,
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "http",
+        hostname: "localhost",
+        port: "9000",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

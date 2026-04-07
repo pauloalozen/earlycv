@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CV</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    color: #111111;
+    background: #ffffff;
+    width: 210mm;
+    min-height: 297mm;
+  }
+
+  .cv-header {
+    background-color: #1a1a2e;
+    padding: 20px 48px;
+    text-align: center;
+    margin-bottom: 0;
+  }
+
+  .cv-header .candidate-name {
+    font-size: 20pt;
+    font-weight: bold;
+    color: #ffffff;
+    margin-bottom: 6px;
+  }
+
+  .cv-header .contact-line {
+    font-size: 9pt;
+    color: #cccccc;
+  }
+
+  .cv-body {
+    padding: 24px 48px 40px;
+  }
+
+  .cv-summary {
+    font-size: 10pt;
+    color: #333333;
+    text-align: justify;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+
+  .cv-section {
+    margin-bottom: 20px;
+  }
+
+  .section-title {
+    font-size: 11pt;
+    font-weight: bold;
+    color: #E25C1A;
+    text-transform: uppercase;
+    border-bottom: 1px solid #E25C1A;
+    padding-bottom: 3px;
+    margin-bottom: 10px;
+  }
+
+  .section-item {
+    margin-bottom: 10px;
+  }
+
+  .item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .item-heading {
+    font-size: 10pt;
+    font-weight: bold;
+    color: #111111;
+  }
+
+  .item-date {
+    font-size: 9pt;
+    color: #777777;
+    white-space: nowrap;
+    margin-left: 8px;
+  }
+
+  .item-subheading {
+    font-size: 9pt;
+    font-style: italic;
+    color: #555555;
+    margin-top: 2px;
+  }
+
+  .item-bullets {
+    list-style: none;
+    margin-top: 4px;
+  }
+
+  .item-bullets li {
+    font-size: 9pt;
+    color: #333333;
+    padding-left: 12px;
+    position: relative;
+    margin-bottom: 2px;
+    line-height: 1.4;
+  }
+
+  .item-bullets li::before {
+    content: "\2022";
+    position: absolute;
+    left: 0;
+  }
+
+  .skills-paragraph {
+    font-size: 9pt;
+    color: #333333;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <div class="cv-header">
+    <div class="candidate-name">{{candidateName}}</div>
+    <div class="contact-line">{{contactLine}}</div>
+  </div>
+
+  <div class="cv-body">
+    <div class="cv-summary">{{summary}}</div>
+    {{sectionsHtml}}
+  </div>
+</body>
+</html>

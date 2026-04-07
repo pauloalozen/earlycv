@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -184,7 +185,7 @@ export default async function AdminEditTemplatePage({
                 className="block text-sm font-semibold text-stone-900"
                 htmlFor={`template-file-${template.id}`}
               >
-                Arquivo do template
+                Arquivo do template (PDF)
               </label>
               <div id={`template-file-${template.id}`}>
                 <TemplateFileUpload
@@ -192,6 +193,27 @@ export default async function AdminEditTemplatePage({
                   templateId={template.id}
                 />
               </div>
+              {template.previewImageUrl ? (
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs text-green-700 font-medium">
+                    Preview gerado automaticamente a partir do PDF.
+                  </p>
+                  <div className="relative h-96 w-72 overflow-hidden rounded border border-stone-200 shadow-sm">
+                    <Image
+                      src={template.previewImageUrl}
+                      alt={`Preview do template ${template.name}`}
+                      fill
+                      unoptimized
+                      className="object-cover object-top"
+                    />
+                  </div>
+                </div>
+              ) : template.fileUrl ? (
+                <p className="text-xs text-amber-600 mt-2">
+                  Arquivo salvo, mas a geração do preview falhou. Tente fazer o
+                  upload novamente.
+                </p>
+              ) : null}
             </div>
 
             <div className="flex gap-3">

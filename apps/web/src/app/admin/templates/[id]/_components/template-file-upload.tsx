@@ -62,7 +62,7 @@ export function TemplateFileUpload({
 
       <label className="block">
         <input
-          accept=".pdf"
+          accept=".docx,.doc"
           className="hidden"
           disabled={uploading}
           onChange={handleUpload}

@@ -87,15 +87,45 @@ export class AdminResumeTemplatesController {
     return this.resumeTemplatesService.toggleStatus(id);
   }
 
+  @Post(":id/upload-preview")
+  @HttpCode(200)
+  @UseInterceptors(
+    FileInterceptor("previewImage", {
+      fileFilter: (_req, file, cb) => {
+        if (["image/png", "image/jpeg", "image/webp"].includes(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new Error("Only PNG, JPEG or WebP images are allowed"), false);
+        }
+      },
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  uploadPreview(
+    @Param("id") id: string,
+    @UploadedFile() file: {
+      buffer: Buffer;
+      mimetype: string;
+      size: number;
+      originalname: string;
+    },
+  ) {
+    return this.resumeTemplatesService.uploadPreview(id, file);
+  }
+
   @Post(":id/upload-file")
   @HttpCode(200)
   @UseInterceptors(
     FileInterceptor("file", {
       fileFilter: (_req, file, cb) => {
-        if (file.mimetype === "application/pdf") {
+        const allowed = [
+          "application/pdf",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ];
+        if (allowed.includes(file.mimetype)) {
           cb(null, true);
         } else {
-          cb(new Error("Only PDF files are allowed"), false);
+          cb(new Error("Only PDF or DOCX files are allowed"), false);
         }
       },
       limits: { fileSize: 10 * 1024 * 1024 },
@@ -103,8 +133,12 @@ export class AdminResumeTemplatesController {
   )
   uploadFile(
     @Param("id") id: string,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    @UploadedFile() file: any,
+    @UploadedFile() file: {
+      buffer: Buffer;
+      mimetype: string;
+      size: number;
+      originalname: string;
+    },
   ) {
     return this.resumeTemplatesService.uploadFile(id, file);
   }

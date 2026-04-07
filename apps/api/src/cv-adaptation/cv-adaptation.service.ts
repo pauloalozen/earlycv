@@ -7,8 +7,12 @@ import {
 import type { Response } from "express";
 import { DatabaseService } from "../database/database.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
+import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
 import { CvAdaptationPaymentService } from "./cv-adaptation-payment.service";
-import { CvAdaptationPdfService } from "./cv-adaptation-pdf.service";
+import {
+  CvAdaptationPdfService,
+  type TemplateStructureJson,
+} from "./cv-adaptation-pdf.service";
 import type {
   CreateCvAdaptationDto,
   FileUpload,
@@ -26,6 +30,8 @@ export class CvAdaptationService {
     private readonly paymentService: CvAdaptationPaymentService,
     @Inject(CvAdaptationPdfService)
     private readonly pdfService: CvAdaptationPdfService,
+    @Inject(CvAdaptationDocxService)
+    private readonly docxService: CvAdaptationDocxService,
   ) {}
 
   async create(userId: string, dto: CreateCvAdaptationDto, file?: FileUpload) {
@@ -249,11 +255,79 @@ export class CvAdaptationService {
     };
   }
 
+  async confirmPayment(userId: string, id: string) {
+    const adaptation = await this.database.cvAdaptation.findFirst({
+      where: { id, userId },
+    });
+
+    if (!adaptation) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    if (adaptation.status === "delivered") {
+      return createCvAdaptationResponseDto(
+        await this.database.cvAdaptation.findUniqueOrThrow({
+          where: { id },
+          include: {
+            template: { select: { id: true, name: true, slug: true } },
+          },
+        }),
+      );
+    }
+
+    if (adaptation.status !== "awaiting_payment") {
+      throw new BadRequestException(
+        `Cannot confirm payment. Current status: ${adaptation.status}`,
+      );
+    }
+
+    if (!adaptation.paymentReference) {
+      throw new BadRequestException(
+        "No payment reference found for this adaptation.",
+      );
+    }
+
+    const approved = await this.paymentService.checkPaymentApprovedByReference(
+      adaptation.paymentReference,
+    );
+
+    if (!approved) {
+      throw new BadRequestException("Payment not approved yet.");
+    }
+
+    await this.database.cvAdaptation.update({
+      where: { id },
+      data: {
+        paymentStatus: "completed",
+        paidAt: new Date(),
+        status: "paid",
+      },
+    });
+
+    this.deliverAdaptation(id).catch((err) => {
+      console.error(
+        `Delivery failed for adaptation ${id}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+    });
+
+    const updated = await this.database.cvAdaptation.findUniqueOrThrow({
+      where: { id },
+      include: { template: { select: { id: true, name: true, slug: true } } },
+    });
+
+    return createCvAdaptationResponseDto(updated);
+  }
+
   async handleWebhook(provider: string, body: unknown) {
     const paymentReference = await this.paymentService.resolvePaymentReference(
       provider,
       body,
     );
+
+    if (!paymentReference) {
+      return { acknowledged: true };
+    }
 
     // Find adaptation by payment reference
     const adaptation = await this.database.cvAdaptation.findFirst({
@@ -291,6 +365,11 @@ export class CvAdaptationService {
   async downloadPdf(userId: string, id: string, res: Response): Promise<void> {
     const adaptation = await this.database.cvAdaptation.findFirst({
       where: { id, userId },
+      include: {
+        template: {
+          select: { slug: true, structureJson: true, fileUrl: true },
+        },
+      },
     });
 
     if (!adaptation) {
@@ -307,10 +386,38 @@ export class CvAdaptationService {
       throw new BadRequestException("Adapted resume not yet generated");
     }
 
-    // Generate PDF again (in production, retrieve from storage)
-    const pdfBuffer = await this.pdfService.generateAdaptedPdf(
-      adaptation.adaptedContentJson as CvAdaptationOutput,
-    );
+    const templateData = (
+      adaptation as {
+        template?: {
+          slug?: string;
+          structureJson?: unknown;
+          fileUrl?: string | null;
+        } | null;
+      }
+    ).template;
+
+    const templateFileUrl = templateData?.fileUrl ?? null;
+    const output = adaptation.adaptedContentJson as CvAdaptationOutput;
+
+    let pdfBuffer: Buffer;
+
+    if (templateFileUrl?.endsWith(".docx")) {
+      // DOCX template: fill with docxtemplater → convert via LibreOffice
+      const docxBuffer = await this.docxService.generateDocx(
+        output,
+        templateFileUrl,
+      );
+      pdfBuffer = await this.docxService.toPdf(docxBuffer);
+    } else {
+      // Legacy HTML template or no template
+      const structureJson = (templateData?.structureJson ??
+        null) as TemplateStructureJson | null;
+      const templateSlug = templateData?.slug ?? "classico-simples";
+      pdfBuffer = await this.pdfService.generatePdf(
+        output,
+        structureJson ?? templateSlug,
+      );
+    }
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
@@ -318,6 +425,48 @@ export class CvAdaptationService {
       "attachment; filename=cv-adaptado.pdf",
     );
     res.send(pdfBuffer);
+  }
+
+  async downloadDocx(userId: string, id: string, res: Response): Promise<void> {
+    const adaptation = await this.database.cvAdaptation.findFirst({
+      where: { id, userId },
+      include: { template: { select: { slug: true, fileUrl: true } } },
+    });
+
+    if (!adaptation) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    if (adaptation.paymentStatus !== "completed") {
+      throw new BadRequestException(
+        `Adaptation must be paid to download. Status: ${adaptation.paymentStatus}`,
+      );
+    }
+
+    if (!adaptation.adaptedResumeId) {
+      throw new BadRequestException("Adapted resume not yet generated");
+    }
+
+    const templateFileUrl = (
+      adaptation as {
+        template?: { slug?: string; fileUrl?: string | null } | null;
+      }
+    ).template?.fileUrl;
+
+    const docxBuffer = await this.docxService.generateDocx(
+      adaptation.adaptedContentJson as CvAdaptationOutput,
+      templateFileUrl ?? null,
+    );
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=cv-adaptado.docx",
+    );
+    res.send(docxBuffer);
   }
 
   async getContent(userId: string, id: string) {
@@ -341,13 +490,9 @@ export class CvAdaptationService {
   }
 
   private async deliverAdaptation(adaptationId: string): Promise<void> {
-    // Load adaptation with content
     const adaptation = await this.database.cvAdaptation.findUnique({
       where: { id: adaptationId },
-      include: {
-        masterResume: true,
-        template: true,
-      },
+      include: { masterResume: true, template: true },
     });
 
     if (!adaptation?.adaptedContentJson) {
@@ -355,9 +500,12 @@ export class CvAdaptationService {
     }
 
     const output = adaptation.adaptedContentJson as CvAdaptationOutput;
+    const templateSlug = adaptation.template?.slug ?? "classico-simples";
+    const structureJson = (adaptation.template?.structureJson ??
+      null) as TemplateStructureJson | null;
 
-    // Generate PDF
-    await this.pdfService.generateAdaptedPdf(output);
+    // Validate PDF generates correctly (do not save — generated on-demand at download)
+    await this.pdfService.generatePdf(output, structureJson ?? templateSlug);
 
     // Create adapted Resume record
     const adaptedResume = await this.database.resume.create({
@@ -369,13 +517,12 @@ export class CvAdaptationService {
         status: "reviewed",
         basedOnResumeId: adaptation.masterResumeId,
         templateId: adaptation.templateId,
-        sourceFileName: `cv-adaptado.pdf`,
+        sourceFileName: "cv-adaptado.pdf",
         sourceFileType: "application/pdf",
         rawText: `Adapted CV for: ${adaptation.jobTitle || "unknown job"}`,
       },
     });
 
-    // Update adaptation with adapted resume and delivered status
     await this.database.cvAdaptation.update({
       where: { id: adaptationId },
       data: {

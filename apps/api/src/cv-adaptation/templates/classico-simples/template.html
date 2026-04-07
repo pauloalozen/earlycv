@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CV</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    color: #111111;
+    background: #ffffff;
+    padding: 40px 48px;
+    width: 210mm;
+    min-height: 297mm;
+  }
+
+  .cv-header {
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .cv-header .candidate-name {
+    font-size: 22pt;
+    font-weight: bold;
+    color: #111111;
+    margin-bottom: 4px;
+  }
+
+  .cv-header .contact-line {
+    font-size: 9pt;
+    color: #666666;
+  }
+
+  .cv-summary {
+    font-style: italic;
+    font-size: 10pt;
+    color: #333333;
+    text-align: justify;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  .cv-section {
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-size: 11pt;
+    font-weight: bold;
+    color: #111111;
+    text-transform: uppercase;
+    border-bottom: 1px solid #cccccc;
+    padding-bottom: 3px;
+    margin-bottom: 8px;
+  }
+
+  .section-item {
+    margin-bottom: 10px;
+  }
+
+  .item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .item-heading {
+    font-size: 10pt;
+    font-weight: bold;
+    color: #111111;
+  }
+
+  .item-date {
+    font-size: 9pt;
+    color: #777777;
+    white-space: nowrap;
+    margin-left: 8px;
+  }
+
+  .item-subheading {
+    font-size: 9pt;
+    font-style: italic;
+    color: #555555;
+    margin-top: 2px;
+  }
+
+  .item-bullets {
+    list-style: none;
+    margin-top: 4px;
+  }
+
+  .item-bullets li {
+    font-size: 9pt;
+    color: #333333;
+    padding-left: 12px;
+    position: relative;
+    margin-bottom: 2px;
+    line-height: 1.4;
+  }
+
+  .item-bullets li::before {
+    content: "\2022";
+    position: absolute;
+    left: 0;
+  }
+
+  .skills-paragraph {
+    font-size: 9pt;
+    color: #333333;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <div class="cv-header">
+    <div class="candidate-name">{{candidateName}}</div>
+    <div class="contact-line">{{contactLine}}</div>
+  </div>
+
+  <div class="cv-summary">{{summary}}</div>
+
+  {{sectionsHtml}}
+</body>
+</html>

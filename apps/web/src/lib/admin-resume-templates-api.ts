@@ -9,6 +9,7 @@ export type AdminResumeTemplateDto = {
   description: string | null;
   targetRole: string | null;
   fileUrl: string | null;
+  previewImageUrl: string | null;
   structureJson: Record<string, unknown> | null;
   isActive: boolean;
   createdAt: string;

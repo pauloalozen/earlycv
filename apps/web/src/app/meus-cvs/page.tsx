@@ -5,8 +5,6 @@ import { useEffect, useState } from "react";
 import type { CvAdaptationDto } from "@/lib/cv-adaptation-api";
 import { deleteCvAdaptation, listCvAdaptations } from "@/lib/cv-adaptation-api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-
 type FilterStatus =
   | "all"
   | "analyzing"
@@ -64,8 +62,8 @@ export default function MeusCvsPage() {
     }
   };
 
-  const handleDownload = (id: string) => {
-    window.open(`${API_URL}/api/cv-adaptation/${id}/download`, "_blank");
+  const handleDownload = (id: string, format: "pdf" | "docx") => {
+    window.open(`/api/cv-adaptation/${id}/download?format=${format}`, "_blank");
   };
 
   const filtered =
@@ -215,13 +213,22 @@ export default function MeusCvsPage() {
                   </button>
 
                   {adaptation.status === "delivered" && (
-                    <button
-                      type="button"
-                      onClick={() => handleDownload(adaptation.id)}
-                      className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700"
-                    >
-                      Baixar PDF
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(adaptation.id, "pdf")}
+                        className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700"
+                      >
+                        Baixar PDF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(adaptation.id, "docx")}
+                        className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700"
+                      >
+                        Baixar DOCX
+                      </button>
+                    </>
                   )}
 
                   <button

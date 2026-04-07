@@ -38,7 +38,8 @@ export async function createCvAdaptation(
 export async function getCvAdaptation(id: string): Promise<CvAdaptationDto> {
   const response = await apiRequest("GET", `/cv-adaptation/${id}`);
   if (!response.ok) {
-    throw new Error("Failed to fetch adaptation");
+    const error = await response.text();
+    throw new Error(`Failed to fetch adaptation: ${error}`);
   }
   return response.json() as Promise<CvAdaptationDto>;
 }
@@ -62,12 +63,27 @@ export async function createCheckoutIntent(
 ): Promise<{ checkoutUrl: string; paymentReference: string }> {
   const response = await apiRequest("POST", `/cv-adaptation/${id}/checkout`);
   if (!response.ok) {
-    throw new Error("Failed to create checkout intent");
+    const error = await response.text();
+    throw new Error(`Failed to create checkout intent: ${error}`);
   }
   return response.json() as Promise<{
     checkoutUrl: string;
     paymentReference: string;
   }>;
+}
+
+export async function confirmCvAdaptationPayment(
+  id: string,
+): Promise<CvAdaptationDto> {
+  const response = await apiRequest(
+    "POST",
+    `/cv-adaptation/${id}/confirm-payment`,
+  );
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to confirm payment: ${error}`);
+  }
+  return response.json() as Promise<CvAdaptationDto>;
 }
 
 export async function deleteCvAdaptation(id: string): Promise<void> {

@@ -20,11 +20,46 @@ export class CvAdaptationAiService {
     },
     masterCvText: string,
   ): Promise<void> {
+    // TODO: reativar chamada real à OpenAI após testes de pagamento
+    if (process.env.SKIP_AI === "true") {
+      const stubOutput = {
+        summary: masterCvText.slice(0, 300),
+        sections: [
+          {
+            sectionType: "other",
+            title: "Conteúdo Original",
+            items: [
+              {
+                heading: "CV enviado",
+                bullets: masterCvText
+                  .split("\n")
+                  .map((l) => l.trim())
+                  .filter((l) => l.length > 0)
+                  .slice(0, 20),
+              },
+            ],
+          },
+        ],
+        highlightedSkills: [],
+        removedSections: [],
+      };
+
+      await this.database.cvAdaptation.update({
+        where: { id: adaptation.id },
+        data: {
+          status: "awaiting_payment",
+          adaptedContentJson: stubOutput as unknown as Prisma.InputJsonValue,
+          previewText: masterCvText.slice(0, 200),
+        },
+      });
+      return;
+    }
+
     try {
       const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
       const { adaptCv } = await import("@earlycv/ai");
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
       const { output, audit } = await adaptCv(this.aiClient as any, model, {
         masterCvText,
         jobDescriptionText: adaptation.jobDescriptionText,
