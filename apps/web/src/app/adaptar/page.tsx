@@ -1,53 +1,44 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { createCvAdaptation } from "@/lib/cv-adaptation-api";
-import type { ResumeTemplateDto } from "@/lib/resume-templates-api";
-import { listResumeTemplates } from "@/lib/resume-templates-api";
+import { useRef, useState } from "react";
+import { analyzeGuestCv } from "@/lib/cv-adaptation-api";
 
 export default function AdaptarPage() {
   const router = useRouter();
-  const [templates, setTemplates] = useState<ResumeTemplateDto[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [jobDescription, setJobDescription] = useState("");
-  const [jobTitle, setJobTitle] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
+  const [jobDescription, setJobDescription] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    listResumeTemplates()
-      .then(setTemplates)
-      .catch((err) => setError(`Failed to load templates: ${err.message}`));
-  }, []);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!file) {
+      setError("Selecione seu CV em PDF.");
+      return;
+    }
+    if (!jobDescription.trim()) {
+      setError("Cole a descrição da vaga.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
       const formData = new FormData();
-
-      if (file) {
-        formData.append("file", file);
-      }
-
+      formData.append("file", file);
       formData.append("jobDescriptionText", jobDescription);
-      if (jobTitle) formData.append("jobTitle", jobTitle);
-      if (companyName) formData.append("companyName", companyName);
-      if (selectedTemplateId) formData.append("templateId", selectedTemplateId);
 
-      const adaptation = await createCvAdaptation(formData);
-      router.push(`/adaptar/${adaptation.id}/resultado`);
+      const result = await analyzeGuestCv(formData);
+      sessionStorage.setItem("guestAnalysis", JSON.stringify(result));
+      router.push("/adaptar/resultado");
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "An error occurred. Please try again.",
+          : "Erro ao analisar CV. Tente novamente.",
       );
     } finally {
       setLoading(false);
@@ -55,140 +46,115 @@ export default function AdaptarPage() {
   };
 
   return (
-    <main className="min-h-screen bg-white p-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Adaptar CV para Vaga</h1>
+    <main className="flex min-h-screen flex-col bg-[#FAFAFA] text-[#111111]">
+      <header className="flex shrink-0 items-center justify-between px-10 py-6">
+        <a
+          href="/"
+          style={{ color: "#111111" }}
+          className="font-logo text-2xl tracking-tight"
+        >
+          earlyCV
+        </a>
+      </header>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg mb-6">
-            {error}
+      <section className="flex flex-1 items-start justify-center px-6 py-12 md:px-10">
+        <div className="w-full max-w-2xl space-y-8">
+          <div className="space-y-2 text-center">
+            <h1 className="text-3xl font-medium leading-tight tracking-tight text-[#111111]">
+              Vamos melhorar seu CV para essa vaga
+            </h1>
+            <p className="text-base text-[#666666]">
+              Envie seu CV e cole a vaga. Vamos identificar o que está te
+              eliminando e corrigir.
+            </p>
           </div>
-        )}
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Step 1: CV */}
-          <div>
-            <h2 className="text-xl font-semibold mb-4">1. Seu CV</h2>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* CV Upload */}
+            <div className="space-y-2">
+              <span className="text-sm font-medium text-[#111111]">Seu CV</span>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl bg-white px-6 py-10 shadow-sm transition-colors hover:bg-stone-50"
+              >
+                {file ? (
+                  <>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                    <span className="text-sm font-medium text-[#111111]">
+                      {file.name}
+                    </span>
+                    <span className="text-xs text-[#999999]">
+                      Clique para trocar
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    <span className="text-sm font-medium text-[#111111]">
+                      Clique para selecionar
+                    </span>
+                    <span className="text-xs text-[#999999]">
+                      PDF, DOC ou DOCX — até 5 MB
+                    </span>
+                  </>
+                )}
+              </button>
               <input
+                ref={fileInputRef}
                 type="file"
                 accept=".pdf,.doc,.docx"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                disabled={loading}
                 className="hidden"
-                id="file-input"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
-              <label htmlFor="file-input" className="cursor-pointer">
-                {file ? (
-                  <div className="text-gray-700">
-                    <p className="font-semibold">{file.name}</p>
-                    <p className="text-sm text-gray-500">
-                      ({(file.size / 1024).toFixed(0)} KB)
-                    </p>
-                  </div>
-                ) : (
-                  <div className="text-gray-600">
-                    <p className="font-semibold mb-2">
-                      Clique para selecionar seu CV em PDF
-                    </p>
-                    <p className="text-sm">Máximo 5 MB</p>
-                  </div>
-                )}
+            </div>
+
+            {/* Job Description */}
+            <div className="space-y-2">
+              <label
+                htmlFor="job-description"
+                className="text-sm font-medium text-[#111111]"
+              >
+                Descrição da vaga
               </label>
+              <textarea
+                id="job-description"
+                value={jobDescription}
+                onChange={(e) => setJobDescription(e.target.value)}
+                placeholder="Cole aqui o texto completo da vaga..."
+                rows={10}
+                maxLength={8000}
+                className="w-full resize-none rounded-2xl bg-white px-4 py-3 text-sm text-[#111111] placeholder-[#BBBBBB] outline-none shadow-sm"
+              />
+              <p className="text-right text-xs text-[#999999]">
+                {jobDescription.length}/8000
+              </p>
             </div>
-          </div>
 
-          {/* Step 2: Job Description */}
-          <div>
-            <h2 className="text-xl font-semibold mb-4">2. A Vaga</h2>
-            <textarea
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-              placeholder="Cole aqui a descrição completa da vaga..."
+            <button
+              type="submit"
               disabled={loading}
-              required
-              className="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            />
-            <input
-              type="text"
-              value={jobTitle}
-              onChange={(e) => setJobTitle(e.target.value)}
-              placeholder="Título da vaga (opcional)"
-              disabled={loading}
-              className="w-full mt-2 p-2 border border-gray-300 rounded-lg"
-            />
-            <input
-              type="text"
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="Nome da empresa (opcional)"
-              disabled={loading}
-              className="w-full mt-2 p-2 border border-gray-300 rounded-lg"
-            />
-          </div>
-
-          {/* Step 3: Template */}
-          <div>
-            <h2 className="text-xl font-semibold mb-4">3. Template</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {templates.map((template) => (
-                <label
-                  key={template.id}
-                  className={`cursor-pointer rounded-xl border-2 overflow-hidden transition ${
-                    selectedTemplateId === template.id
-                      ? "border-orange-500"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="template"
-                    value={template.id}
-                    checked={selectedTemplateId === template.id}
-                    onChange={(e) => setSelectedTemplateId(e.target.value)}
-                    disabled={loading}
-                    className="sr-only"
-                  />
-                  {/* Preview image */}
-                  <div className="bg-gray-100 h-64 flex items-center justify-center relative">
-                    {template.previewImageUrl ? (
-                      <Image
-                        src={template.previewImageUrl}
-                        alt={template.name}
-                        fill
-                        unoptimized
-                        className="object-cover object-top"
-                      />
-                    ) : (
-                      <div className="text-gray-400 text-center">
-                        <div className="text-4xl mb-2">📄</div>
-                        <div className="text-xs">Preview indisponível</div>
-                      </div>
-                    )}
-                  </div>
-                  {/* Template info */}
-                  <div className="p-3">
-                    <p className="font-semibold text-sm">{template.name}</p>
-                    {template.description && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {template.description}
-                      </p>
-                    )}
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading || !jobDescription}
-            className="w-full bg-orange-500 text-white font-semibold py-3 rounded-lg hover:bg-orange-600 disabled:bg-gray-400"
-          >
-            {loading ? "Analisando..." : "Analisar meu CV"}
-          </button>
-        </form>
-      </div>
+              style={{ color: "#ffffff" }}
+              className="w-full rounded-[14px] bg-[#111111] py-[18px] text-lg font-medium leading-none transition-colors hover:bg-[#222222] disabled:cursor-not-allowed disabled:bg-[#555555]"
+            >
+              {loading ? "Analisando..." : "Analisar meu CV"}
+            </button>
+          </form>
+        </div>
+      </section>
     </main>
   );
 }

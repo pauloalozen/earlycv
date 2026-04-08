@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, JetBrains_Mono } from "next/font/google";
+import { DM_Sans, Gugi, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
@@ -12,6 +12,13 @@ const dmSans = DM_Sans({
 const jetBrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
+});
+
+const gugi = Gugi({
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+  variable: "--font-logo",
 });
 
 export const viewport: Viewport = {
@@ -76,7 +83,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${dmSans.variable} ${jetBrainsMono.variable}`}
+      className={`${dmSans.variable} ${jetBrainsMono.variable} ${gugi.variable}`}
     >
       <body className="font-sans antialiased">{children}</body>
     </html>

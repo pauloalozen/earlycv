@@ -37,9 +37,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(234,88,12,0.16),_transparent_32%),linear-gradient(180deg,_#fffaf5_0%,_#f5f5f4_100%)] px-6 py-10 text-stone-900 md:px-10 lg:px-12">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl flex-col justify-center gap-8 lg:grid lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
         <section className="space-y-6">
-          <div className="inline-flex items-center gap-3 rounded-full border border-orange-200 bg-white/80 px-4 py-2 text-sm font-medium text-stone-600 backdrop-blur">
+          <div className="inline-flex items-center gap-3 rounded-full border border-orange-200 bg-white/80 px-4 py-2 text-stone-600 backdrop-blur">
             <BrandMark className="size-8 rounded-xl" />
-            EarlyCV
+            <span className="font-logo text-sm tracking-tight">earlyCV</span>
           </div>
           <div className="space-y-4">
             <p className="font-mono text-xs uppercase tracking-[0.24em] text-orange-700">

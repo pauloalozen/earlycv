@@ -113,6 +113,161 @@ OUTPUT — valid JSON only, no markdown
   "adaptationNotes": "One sentence describing the main repositioning choice"
 }`;
 
+export type CvAnalysisOutput = {
+  vaga: {
+    cargo: string;
+    empresa: string;
+  };
+  fit: {
+    score: number;
+    categoria: "baixo" | "medio" | "alto";
+    headline: string;
+    subheadline: string;
+  };
+  comparacao: {
+    antes: string;
+    depois: string;
+  };
+  pontos_fortes: string[];
+  lacunas: string[];
+  melhorias_aplicadas: string[];
+  ats_keywords: {
+    presentes: string[];
+    ausentes: string[];
+  };
+  preview: {
+    antes: string;
+    depois: string;
+  };
+  projecao_melhoria: {
+    score_atual: number;
+    score_pos_otimizacao: number;
+    explicacao_curta: string;
+  };
+  mensagem_venda: {
+    titulo: string;
+    subtexto: string;
+  };
+};
+
+const ANALYSIS_SYSTEM_PROMPT = `Você é um especialista em análise de currículo com foco em aumentar chances reais de entrevista.
+
+IMPORTANTE:
+Você NÃO está escrevendo um relatório.
+Você está gerando conteúdo para uma interface visual.
+
+REGRAS:
+- Frases curtas (máximo 1 linha)
+- Linguagem direta e impactante
+- Sem parágrafos longos
+- Sem explicações genéricas
+- Sem buzzwords
+- Foco em diagnóstico + ação
+
+FORMATAÇÃO DE LIST ITEMS (pontos_fortes, lacunas, melhorias_aplicadas):
+- Cada item: máximo 6–8 palavras
+- Remover conectivos desnecessários: "com", "de", "para", "através de", "sólida", "grande"
+- ERRADO: "Sólida experiência em liderança de times multidisciplinares"
+- CERTO: "Liderança de times multidisciplinares"
+- Se necessário passar de 8 palavras, quebrar em duas linhas curtas separadas por " / "
+
+OBJETIVO:
+Ajudar o usuário a entender rapidamente:
+- onde está perdendo vaga
+- o que está errado
+- o que foi corrigido
+- por que isso melhora suas chances
+
+SAÍDA — JSON válido, sem markdown:
+{
+  "vaga": {
+    "cargo": "cargo exato extraído da vaga",
+    "empresa": "nome da empresa extraído da vaga (ou 'Não informado' se ausente)"
+  },
+  "fit": {
+    "score": number (0-100),
+    "categoria": "baixo" | "medio" | "alto",
+    "headline": "frase direta e impactante mostrando o problema principal",
+    "subheadline": "frase curta explicando rapidamente a situação"
+  },
+  "comparacao": {
+    "antes": "frase curta evidenciando o problema principal do CV atual (ex: 'Pouca evidência de SQL e experiência global')",
+    "depois": "frase curta evidenciando a solução aplicada (ex: 'SQL e experiência global destacados claramente')"
+  },
+  "pontos_fortes": [
+    "máx 5 itens, cada um com até 1 linha, sem explicação longa"
+  ],
+  "lacunas": [
+    "máx 5 itens, cada um direto (ex: 'falta experiência com chargeback')"
+  ],
+  "melhorias_aplicadas": [
+    "máx 5 itens, cada um direto (ex: 'resumo ajustado para a vaga')"
+  ],
+  "ats_keywords": {
+    "presentes": ["lista curta"],
+    "ausentes": ["lista curta"]
+  },
+  "preview": {
+    "antes": "máx 2 linhas",
+    "depois": "máx 2 linhas, claramente melhorado"
+  },
+  "projecao_melhoria": {
+    "score_atual": number igual ao fit.score,
+    "score_pos_otimizacao": number estimado após otimização — deve ser realista, não exagerar, consistente com as lacunas corrigidas,
+    "explicacao_curta": "frase objetiva com ganho numérico quando possível (ex: '+13 pontos após ajustes focados na vaga')"
+  },
+  "mensagem_venda": {
+    "titulo": "frase curta focada em resultado prático para esta vaga específica (ex: 'Seu CV agora está pronto para competir nesta vaga')",
+    "subtexto": "frase direta sobre ganho concreto (ex: 'Mais chances de passar na triagem inicial')"
+  }
+}
+
+REGRAS CRÍTICAS:
+- O campo "headline" deve ser direto e gerar incômodo leve — use linguagem que indique perda ou penalização
+  - TOM CORRETO: "Você está sendo penalizado por lacunas críticas", "Seu CV está fraco nos pontos mais cobrados da vaga", "Você está perdendo força nesta vaga por falta de X"
+  - TOM PROIBIDO: "O candidato possui experiência...", "Seu perfil apresenta...", qualquer frase neutra ou descritiva
+  - Sempre falar diretamente com o usuário (você), nunca em terceira pessoa
+- O campo "lacunas" deve ser direto e específico
+- O campo "melhorias_aplicadas" deve justificar valor
+- O campo "comparacao.antes" deve evidenciar o problema; "comparacao.depois" deve evidenciar a solução — nunca descrições neutras
+- O campo "projecao_melhoria.score_pos_otimizacao" deve ser realista — não exagerar, a melhora deve ser consistente com as lacunas corrigidas
+- Evitar qualquer texto longo
+- Pensar sempre em leitura rápida`;
+
+export async function analyzeAndAdaptCv(
+  client: OpenAI,
+  model: string,
+  input: Pick<CvAdaptationInput, "masterCvText" | "jobDescriptionText">,
+): Promise<CvAnalysisOutput> {
+  const userMessage = `CURRÍCULO:\n${input.masterCvText}\n\nVAGA:\n${input.jobDescriptionText}`;
+
+  const response = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
+      { role: "user", content: userMessage },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.3,
+  });
+
+  const content = response.choices[0]?.message.content;
+  if (!content) {
+    throw new Error("No response content from AI model");
+  }
+
+  let output: CvAnalysisOutput;
+  try {
+    output = JSON.parse(content) as CvAnalysisOutput;
+  } catch {
+    throw new Error(
+      `Failed to parse AI response as JSON: ${content.slice(0, 200)}`,
+    );
+  }
+
+  return output;
+}
+
 export async function adaptCv(
   client: OpenAI,
   model: string,
