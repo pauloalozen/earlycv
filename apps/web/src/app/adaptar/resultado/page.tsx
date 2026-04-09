@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
+import { getAuthStatus } from "@/lib/session-actions";
 
 // ── ScoreBar ──────────────────────────────────────────────────────────────────
 function ScoreBar({
@@ -14,9 +15,7 @@ function ScoreBar({
 }) {
   return (
     <div className="w-full px-2">
-      {/* Track */}
       <div className="relative h-4 w-full overflow-hidden rounded-full bg-[#EEEEEE]">
-        {/* Gradient fill clipped by score */}
         <div
           className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
           style={{
@@ -27,7 +26,6 @@ function ScoreBar({
             backgroundPosition: "left center",
           }}
         />
-        {/* Projected target marker — lime dashed line inside track */}
         {scoreTarget !== undefined && scoreTarget > score && (
           <div
             className="absolute inset-y-0 w-[3px] bg-lime-400"
@@ -36,10 +34,8 @@ function ScoreBar({
         )}
       </div>
 
-      {/* Labels */}
       <div className="relative mt-2 h-5 w-full text-[10px] font-semibold">
         <span className="absolute left-0 text-[#AAAAAA]">0</span>
-        {/* Current score pin */}
         <span
           className="absolute -translate-x-1/2 whitespace-nowrap"
           style={{
@@ -50,7 +46,6 @@ function ScoreBar({
         >
           {score}
         </span>
-        {/* Target pin */}
         {scoreTarget !== undefined && scoreTarget > score && (
           <span
             className="group absolute -translate-x-1/2 cursor-help whitespace-nowrap"
@@ -71,15 +66,51 @@ function ScoreBar({
   );
 }
 
-// Texto fictício exibido borrado — nunca expõe dados reais no DOM
 const MOCK_BLURRED_ITEMS = [
   "Domínio comprovado em metodologias ágeis",
   "Liderança de squads multidisciplinares",
   "Resultados mensuráveis em projetos críticos",
 ];
 
-// ── Locked bullet list ────────────────────────────────────────────────────────
-function LockedList({ items, dot }: { items: string[]; dot: string }) {
+// ── LockedList ────────────────────────────────────────────────────────────────
+function LockedList({
+  items,
+  dot,
+  isAuthenticated,
+}: {
+  items: string[];
+  dot: string;
+  isAuthenticated: boolean | null;
+}) {
+  if (isAuthenticated === null) {
+    return (
+      <div className="space-y-3">
+        {[1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-4 w-3/4 animate-pulse rounded bg-[#EEEEEE]"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return (
+      <div className="space-y-3">
+        {items.map((item) => (
+          <div key={item} className="flex items-start gap-2">
+            <span
+              className="mt-[5px] h-[6px] w-[6px] shrink-0 rounded-full"
+              style={{ background: dot }}
+            />
+            <span className="text-sm leading-snug text-[#1a1a1a]">{item}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   const visible = items.slice(0, 1);
   const lockedCount = Math.max(0, items.length - 1);
 
@@ -112,7 +143,8 @@ function LockedList({ items, dot }: { items: string[]; dot: string }) {
           </div>
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="flex items-center gap-1.5 rounded-full border border-[#E0E0E0] bg-white px-3 py-1.5 text-[11px] font-bold text-[#333]">
-              🔒 +{lockedCount} melhorias adicionais bloqueadas
+              🔒 +{lockedCount}{" "}
+              {lockedCount === 1 ? "item bloqueado" : "itens bloqueados"}
             </span>
           </div>
         </div>
@@ -138,6 +170,7 @@ function Chip({ label, variant }: { label: string; variant: "green" | "red" }) {
 export default function ResultadoPage() {
   const router = useRouter();
   const [data, setData] = useState<CvAnalysisData | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("guestAnalysis");
@@ -147,6 +180,10 @@ export default function ResultadoPage() {
     }
     const parsed = JSON.parse(stored) as { adaptedContentJson: CvAnalysisData };
     setData(parsed.adaptedContentJson);
+
+    getAuthStatus().then(({ isAuthenticated: auth }) => {
+      setIsAuthenticated(auth);
+    });
   }, [router]);
 
   if (!data) {
@@ -164,13 +201,6 @@ export default function ResultadoPage() {
         ? "#f59e0b"
         : "#ef4444";
 
-  const categoriaLabel =
-    data.fit.categoria === "alto"
-      ? "Fit alto"
-      : data.fit.categoria === "medio"
-        ? "Fit médio"
-        : "Fit baixo";
-
   return (
     <main className="min-h-screen bg-[#F2F2F2] text-[#111]">
       {/* Header */}
@@ -185,6 +215,31 @@ export default function ResultadoPage() {
       </header>
 
       <div className="mx-auto max-w-[960px] space-y-3 px-4 pb-24 pt-1">
+        {/* ── Banner de status (autenticado / teaser) ── */}
+        {isAuthenticated === true && (
+          <div className="flex items-center gap-2 rounded-xl border border-lime-200 bg-lime-50 px-5 py-3">
+            <span className="text-lime-600">✔</span>
+            <p className="text-sm font-semibold text-lime-800">
+              Análise completa desbloqueada
+            </p>
+          </div>
+        )}
+
+        {isAuthenticated === false && (
+          <div className="flex items-center justify-between gap-4 rounded-xl bg-[#111111] px-5 py-4">
+            <p className="text-sm font-medium text-white">
+              Crie uma conta para ver a análise completa
+            </p>
+            <a
+              href="/entrar?next=/adaptar/resultado"
+              style={{ color: "#111111" }}
+              className="shrink-0 rounded-[10px] bg-white px-4 py-2 text-sm font-bold"
+            >
+              Criar conta grátis
+            </a>
+          </div>
+        )}
+
         {/* ── 0. Cargo + empresa ── */}
         <div className="px-1 pb-1">
           <h1 className="text-2xl font-bold tracking-tight text-[#111]">
@@ -254,7 +309,6 @@ export default function ResultadoPage() {
 
         {/* ── 3. Diagnóstico 3 cards ── */}
         <div className="grid gap-3 md:grid-cols-3">
-          {/* Pontos fortes */}
           <div className="rounded-xl bg-white p-5 shadow-sm">
             <div className="mb-3 flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-lime-100 text-xs">
@@ -264,10 +318,13 @@ export default function ResultadoPage() {
                 Pontos fortes
               </p>
             </div>
-            <LockedList items={data.pontos_fortes} dot="#84cc16" />
+            <LockedList
+              items={data.pontos_fortes}
+              dot="#84cc16"
+              isAuthenticated={isAuthenticated}
+            />
           </div>
 
-          {/* Lacunas */}
           <div className="rounded-xl bg-white p-5 shadow-sm">
             <div className="mb-3 flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-xs">
@@ -277,10 +334,13 @@ export default function ResultadoPage() {
                 Lacunas
               </p>
             </div>
-            <LockedList items={data.lacunas} dot="#ef4444" />
+            <LockedList
+              items={data.lacunas}
+              dot="#ef4444"
+              isAuthenticated={isAuthenticated}
+            />
           </div>
 
-          {/* Melhorias */}
           <div className="rounded-xl bg-white p-5 shadow-sm">
             <div className="mb-3 flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-xs">
@@ -290,11 +350,15 @@ export default function ResultadoPage() {
                 Melhorias
               </p>
             </div>
-            <LockedList items={data.melhorias_aplicadas} dot="#3b82f6" />
+            <LockedList
+              items={data.melhorias_aplicadas}
+              dot="#3b82f6"
+              isAuthenticated={isAuthenticated}
+            />
           </div>
         </div>
 
-        {/* ── 3. ATS Keywords ── */}
+        {/* ── 4. ATS Keywords ── */}
         <div className="rounded-xl bg-white p-5 shadow-sm">
           <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
             Palavras-chave ATS
@@ -305,9 +369,17 @@ export default function ResultadoPage() {
                 Presentes no CV
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {data.ats_keywords.presentes.map((kw) => (
+                {(isAuthenticated
+                  ? data.ats_keywords.presentes
+                  : data.ats_keywords.presentes.slice(0, 3)
+                ).map((kw) => (
                   <Chip key={kw} label={kw} variant="green" />
                 ))}
+                {!isAuthenticated && data.ats_keywords.presentes.length > 3 && (
+                  <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-2.5 py-0.5 text-xs text-[#AAAAAA]">
+                    🔒 +{data.ats_keywords.presentes.length - 3}
+                  </span>
+                )}
               </div>
             </div>
             <div>
@@ -315,15 +387,23 @@ export default function ResultadoPage() {
                 Faltando para essa vaga
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {data.ats_keywords.ausentes.map((kw) => (
+                {(isAuthenticated
+                  ? data.ats_keywords.ausentes
+                  : data.ats_keywords.ausentes.slice(0, 3)
+                ).map((kw) => (
                   <Chip key={kw} label={kw} variant="red" />
                 ))}
+                {!isAuthenticated && data.ats_keywords.ausentes.length > 3 && (
+                  <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-2.5 py-0.5 text-xs text-[#AAAAAA]">
+                    🔒 +{data.ats_keywords.ausentes.length - 3}
+                  </span>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── 4. Preview antes/depois ── */}
+        {/* ── 5. Preview antes/depois ── */}
         <div className="rounded-xl bg-white p-5 shadow-sm">
           <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
             Preview do CV ajustado
@@ -341,19 +421,27 @@ export default function ResultadoPage() {
               <p className="mb-2 text-xs font-bold uppercase tracking-widest text-lime-700">
                 Depois
               </p>
-              <p className="line-clamp-3 select-none text-sm leading-relaxed text-[#555] blur-[3px]">
-                {data.preview.depois}
-              </p>
-              <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-lime-50/60">
-                <span className="rounded-full border border-lime-200 bg-white px-3 py-1 text-[11px] font-bold text-[#333] shadow-sm">
-                  🔒 Bloqueado
-                </span>
-              </div>
+              {isAuthenticated ? (
+                <p className="text-sm leading-relaxed text-[#1a1a1a]">
+                  {data.preview.depois}
+                </p>
+              ) : (
+                <>
+                  <p className="line-clamp-3 select-none text-sm leading-relaxed text-[#555] blur-[3px]">
+                    {data.preview.depois}
+                  </p>
+                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-lime-50/60">
+                    <span className="rounded-full border border-lime-200 bg-white px-3 py-1 text-[11px] font-bold text-[#333] shadow-sm">
+                      🔒 Bloqueado
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* ── 5. CTA ── */}
+        {/* ── 6. CTA ── */}
         <div className="rounded-[20px] bg-[#0E0E0E] px-8 py-8">
           <p className="text-xl font-bold text-white">
             Seu CV atual não está competitivo — mas já existe uma versão melhor
@@ -362,6 +450,11 @@ export default function ResultadoPage() {
           <p className="mt-2 text-sm text-white/60">
             Mais alinhado com o que a empresa busca e com maior chance de passar
             na triagem
+          </p>
+
+          <p className="mt-5 rounded-lg bg-white/10 px-4 py-2 text-sm italic text-white/70">
+            "Candidatos que aplicam nas primeiras 48h têm até 3× mais chances de
+            resposta"
           </p>
 
           <p className="mt-6 text-[11px] font-bold uppercase tracking-widest text-white/40">
@@ -388,17 +481,28 @@ export default function ResultadoPage() {
             Este é o CV que você deveria estar enviando hoje
           </p>
 
-          <button
-            type="button"
-            style={{ color: "#0E0E0E" }}
-            className="mt-6 w-full rounded-xl bg-white py-4 text-base font-bold leading-none transition-colors hover:bg-stone-100"
-            onClick={() => alert("Checkout em breve!")}
-          >
-            Baixar agora meu CV otimizado — R$19
-          </button>
+          {isAuthenticated ? (
+            <a
+              href="/planos"
+              style={{ color: "#0E0E0E" }}
+              className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
+            >
+              Baixar meu CV otimizado — R$19,90
+            </a>
+          ) : (
+            <a
+              href="/entrar?next=/adaptar/resultado"
+              style={{ color: "#0E0E0E" }}
+              className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
+            >
+              Criar conta para ver análise completa
+            </a>
+          )}
 
           <p className="mt-2 text-center text-sm text-white/60">
-            Acesso imediato após pagamento
+            {isAuthenticated
+              ? "Acesso imediato após pagamento"
+              : "Grátis. Sem cartão de crédito."}
           </p>
 
           <button

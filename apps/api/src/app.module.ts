@@ -12,6 +12,7 @@ import { HealthModule } from "./health/health.module";
 import { InfraModule } from "./infra/infra.module";
 import { JobSourcesModule } from "./job-sources/job-sources.module";
 import { JobsModule } from "./jobs/jobs.module";
+import { PlansModule } from "./plans/plans.module";
 import { ProfilesModule } from "./profiles/profiles.module";
 import { ResumeTemplatesModule } from "./resume-templates/resume-templates.module";
 import { ResumesModule } from "./resumes/resumes.module";
@@ -37,6 +38,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     JobSourcesModule,
     JobsModule,
     CvAdaptationModule,
+    PlansModule,
   ],
 })
 export class AppModule {}

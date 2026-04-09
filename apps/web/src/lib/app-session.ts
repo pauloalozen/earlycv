@@ -40,7 +40,7 @@ export function getRouteAccessRedirectPath(
 ) {
   const normalizedPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
 
-  if (normalizedPath === "/login") {
+  if (normalizedPath === "/login" || normalizedPath === "/entrar") {
     return user ? getDefaultAppRedirectPath(user) : null;
   }
 

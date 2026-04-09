@@ -148,8 +148,13 @@ export default function AdaptarPage() {
               type="submit"
               disabled={loading}
               style={{ color: "#ffffff" }}
-              className="w-full rounded-[14px] bg-[#111111] py-[18px] text-lg font-medium leading-none transition-colors hover:bg-[#222222] disabled:cursor-not-allowed disabled:bg-[#555555]"
+              className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-[#111111] py-[18px] text-lg font-medium leading-none transition-colors hover:bg-[#222222] disabled:cursor-not-allowed disabled:bg-[#555555]"
             >
+              {!loading && (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M13 2L4.5 13.5H11L10 22L20.5 9.5H14L13 2Z" />
+                </svg>
+              )}
               {loading ? "Analisando..." : "Analisar meu CV"}
             </button>
           </form>

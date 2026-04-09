@@ -9,6 +9,9 @@ datasource db {
 
 enum UserPlanType {
   free
+  starter
+  pro
+  unlimited
 }
 
 enum UserStatus {
@@ -135,22 +138,46 @@ model User {
   email           String         @unique
   passwordHash    String?
   name            String
-  planType        UserPlanType   @default(free)
-  status          UserStatus     @default(pending)
-  internalRole    InternalRole   @default(none)
-  isStaff         Boolean        @default(false)
-  emailVerifiedAt DateTime?
-  lastLoginAt     DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  profile         UserProfile?
-  authAccounts    AuthAccount[]
-  refreshTokens   RefreshToken[]
+  planType         UserPlanType   @default(free)
+  creditsRemaining Int            @default(0)
+  planActivatedAt  DateTime?
+  planExpiresAt    DateTime?
+  status           UserStatus     @default(pending)
+  internalRole     InternalRole   @default(none)
+  isStaff          Boolean        @default(false)
+  emailVerifiedAt  DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  profile          UserProfile?
+  authAccounts     AuthAccount[]
+  refreshTokens    RefreshToken[]
   emailVerificationChallenges EmailVerificationChallenge[]
-  resumes         Resume[]
-  cvAdaptations   CvAdaptation[]
+  resumes          Resume[]
+  cvAdaptations    CvAdaptation[]
+  planPurchases    PlanPurchase[]
   affiliateAttributions     AffiliateAttribution[]
   affiliateCommissionEvents AffiliateCommissionEvent[]
+}
+
+model PlanPurchase {
+  id               String          @id @default(cuid())
+  userId           String
+  planType         UserPlanType
+  amountInCents    Int
+  currency         String          @default("BRL")
+  paymentProvider  PaymentProvider
+  paymentReference String          @unique
+  status           PaymentStatus   @default(none)
+  paidAt           DateTime?
+  creditsGranted   Int
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([paymentReference])
 }
 
 model EmailVerificationChallenge {

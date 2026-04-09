@@ -18,6 +18,7 @@ type VerifyEmailPageProps = {
   searchParams: Promise<{
     error?: string;
     resent?: string;
+    next?: string;
   }>;
 };
 
@@ -32,6 +33,7 @@ export default async function VerifyEmailPage({
   }
 
   const params = await searchParams;
+  const next = params.next ?? "";
 
   return (
     <main className="min-h-screen bg-stone-100 px-6 py-10 text-stone-900 md:px-10">
@@ -71,6 +73,7 @@ export default async function VerifyEmailPage({
           ) : null}
 
           <form action="/auth/verify-email" className="space-y-3" method="post">
+            {next && <input type="hidden" name="next" value={next} />}
             <Input
               inputMode="numeric"
               maxLength={6}

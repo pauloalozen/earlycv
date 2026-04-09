@@ -23,7 +23,7 @@ const gugi = Gugi({
 
 export const viewport: Viewport = {
   colorScheme: "light",
-  themeColor: "#ea580c",
+  themeColor: "#111111",
   width: "device-width",
 };
 
