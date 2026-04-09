@@ -8,6 +8,7 @@ import {
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { listCvAdaptations } from "@/lib/cv-adaptation-api";
 import { getMyPlan } from "@/lib/plans-api";
+import { AppHeader } from "@/components/app-header";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -56,23 +57,7 @@ export default async function DashboardPage({
 
   return (
     <main className="min-h-screen bg-[#FAFAFA] text-[#111111]">
-      <header className="flex items-center justify-between px-10 py-6">
-        <a
-          href="/"
-          style={{ color: "#111111" }}
-          className="font-logo text-2xl tracking-tight"
-        >
-          earlyCV
-        </a>
-        <form action="/auth/logout" method="post">
-          <button
-            type="submit"
-            className="text-sm text-[#666666] transition-colors hover:text-[#111111]"
-          >
-            Sair
-          </button>
-        </form>
-      </header>
+      <AppHeader userName={user.name} />
 
       <div className="mx-auto max-w-[860px] space-y-4 px-6 pb-20 pt-4">
         {showPlanActivated && (

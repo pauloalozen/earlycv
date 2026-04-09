@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { analyzeGuestCv } from "@/lib/cv-adaptation-api";
+import { getAuthStatus } from "@/lib/session-actions";
+import { AppHeader } from "@/components/app-header";
 
 const LOADING_STEPS = [
   "Lendo seu CV...",
@@ -43,10 +45,12 @@ export default function AdaptarPage() {
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     router.prefetch("/adaptar/resultado");
+    getAuthStatus().then(({ userName: name }) => setUserName(name ?? null));
   }, [router]);
 
   useEffect(() => {
@@ -101,15 +105,28 @@ export default function AdaptarPage() {
 
   return (
     <main className="flex min-h-screen flex-col bg-[#F2F2F2] text-[#111111]">
-      <header className="flex shrink-0 items-center justify-between px-10 py-6">
-        <a
-          href="/"
-          style={{ color: "#111111" }}
-          className="font-logo text-2xl tracking-tight"
-        >
-          earlyCV
-        </a>
-      </header>
+      {userName ? (
+        <AppHeader userName={userName} />
+      ) : (
+        <header className="flex shrink-0 items-center justify-between px-10 py-6">
+          <a href="/" style={{ color: "#111111" }} className="font-logo text-2xl tracking-tight">
+            earlyCV
+          </a>
+          {userName === null && (
+            <a
+              href="/entrar?tab=entrar"
+              style={{ color: "#666666" }}
+              className="flex items-center gap-2 rounded-xl border border-[#DDDDDD] px-[18px] py-[6px] text-base font-medium transition-colors hover:border-[#BBBBBB] hover:text-[#111111]"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              Entrar
+            </a>
+          )}
+        </header>
+      )}
 
       <section className="flex flex-1 items-start justify-center px-6 py-12 md:px-10">
         <div className="w-full max-w-2xl space-y-8">

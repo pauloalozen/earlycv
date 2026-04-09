@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { PageShell } from "@/components/page-shell";
 import { RegisterForm } from "./register-form";
 import { LoginForm } from "./login-form";
 
@@ -30,7 +31,8 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
   const next = params.next ?? "";
 
   return (
-    <main className="page-transition flex min-h-screen flex-col items-center justify-center bg-[#F2F2F2] px-4 text-[#111111]">
+    <PageShell>
+    <main className="flex min-h-screen flex-col items-center justify-center bg-[#F2F2F2] px-4 text-[#111111]">
       {/* Logo */}
       <a
         href="/"
@@ -132,5 +134,6 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
         </p>
       </div>
     </main>
+    </PageShell>
   );
 }

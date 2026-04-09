@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
+import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { AppHeader } from "@/components/app-header";
 
 export const metadata: Metadata = {
   title: "Seu CV ajustado para cada vaga",
@@ -32,33 +34,39 @@ export const metadata: Metadata = {
   },
 };
 
-export default function Home() {
+export default async function Home() {
+  const user = await getCurrentAppUserFromCookies();
+
   return (
     <>
       <main className="flex h-screen overflow-hidden flex-col bg-[#FAFAFA] text-[#111111]">
-        <header className="flex shrink-0 items-center justify-between px-10 py-6">
-          <span className="font-logo text-2xl tracking-tight">earlyCV</span>
-          <Link
-            href="/entrar?tab=entrar"
-            style={{ color: "#666666" }}
-            className="flex items-center gap-2 rounded-xl border border-[#DDDDDD] px-[18px] py-[6px] text-base font-medium transition-colors hover:border-[#BBBBBB] hover:text-[#111111]"
-          >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+        {user ? (
+          <AppHeader userName={user.name} />
+        ) : (
+          <header className="flex shrink-0 items-center justify-between px-10 py-6">
+            <span className="font-logo text-2xl tracking-tight">earlyCV</span>
+            <Link
+              href="/entrar?tab=entrar"
+              style={{ color: "#666666" }}
+              className="flex items-center gap-2 rounded-xl border border-[#DDDDDD] px-[18px] py-[6px] text-base font-medium transition-colors hover:border-[#BBBBBB] hover:text-[#111111]"
             >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-            Entrar
-          </Link>
-        </header>
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              Entrar
+            </Link>
+          </header>
+        )}
 
         <section className="flex flex-1 items-center justify-center px-10 md:px-40">
           <div className="-mt-6 flex w-full max-w-[848px] flex-col items-center gap-6">

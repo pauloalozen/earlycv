@@ -208,8 +208,8 @@ SAÍDA — JSON válido, sem markdown:
     "ausentes": ["lista curta"]
   },
   "preview": {
-    "antes": "máx 2 linhas",
-    "depois": "máx 2 linhas, claramente melhorado"
+    "antes": "Resumo profissional original do candidato, copiado literalmente do CV (2-3 frases). Se não houver resumo, pegar o primeiro bullet da experiência mais recente.",
+    "depois": "Somente o resumo profissional reescrito para esta vaga: 3-4 frases fortes e diretas. Abrir com o cargo exato da vaga. Segunda frase: experiência mais relevante do candidato com dado real (anos, tecnologia, resultado). Terceira frase: conectar diretamente o perfil do candidato com o que a empresa busca nesta vaga. Quarta frase (opcional): diferencial ou conquista concreta. Sem títulos, sem bullets, só o parágrafo de resumo."
   },
   "projecao_melhoria": {
     "score_atual": number igual ao fit.score,
@@ -231,7 +231,8 @@ REGRAS CRÍTICAS:
 - O campo "melhorias_aplicadas" deve justificar valor
 - O campo "comparacao.antes" deve evidenciar o problema; "comparacao.depois" deve evidenciar a solução — nunca descrições neutras
 - O campo "projecao_melhoria.score_pos_otimizacao" deve ser realista — não exagerar, a melhora deve ser consistente com as lacunas corrigidas
-- Evitar qualquer texto longo
+- O campo "preview.depois" é apenas o resumo profissional: 3-4 frases, sem títulos nem bullets. Deve amarrar o perfil real do candidato com o que a vaga exige — forte o suficiente para o recrutador querer continuar lendo.
+- Evitar qualquer texto longo nos demais campos
 - Pensar sempre em leitura rápida`;
 
 export async function analyzeAndAdaptCv(

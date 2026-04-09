@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 import { getAuthStatus } from "@/lib/session-actions";
+import { AppHeader } from "@/components/app-header";
 
 // ── ScoreBar ──────────────────────────────────────────────────────────────────
 function ScoreBar({
@@ -183,6 +184,7 @@ export default function ResultadoPage() {
   const router = useRouter();
   const [data, setData] = useState<CvAnalysisData | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -193,8 +195,9 @@ export default function ResultadoPage() {
     }
     const parsed = JSON.parse(stored) as { adaptedContentJson: CvAnalysisData };
     setData(parsed.adaptedContentJson);
-    getAuthStatus().then(({ isAuthenticated: auth }) => {
+    getAuthStatus().then(({ isAuthenticated: auth, userName: name }) => {
       setIsAuthenticated(auth);
+      setUserName(name);
     });
   }, [router]);
 
@@ -246,16 +249,7 @@ export default function ResultadoPage() {
           transform: ready ? "translateY(0)" : "translateY(-8px)",
         }}
       >
-        {/* Header */}
-        <header className="flex items-center px-8 py-5">
-          <a
-            href="/"
-            style={{ color: "#111" }}
-            className="font-logo text-xl tracking-tight"
-          >
-            earlyCV
-          </a>
-        </header>
+        <AppHeader userName={userName} logoSize="sm" />
 
         <div className="mx-auto max-w-[960px] space-y-3 px-4 pb-24 pt-1">
           {/* ── Banner de status (autenticado / teaser) ── */}
@@ -263,7 +257,7 @@ export default function ResultadoPage() {
             <div className="flex items-center gap-2 rounded-xl border border-lime-200 bg-lime-50 px-5 py-3">
               <span className="text-lime-600">✔</span>
               <p className="text-sm font-semibold text-lime-800">
-                Análise completa desbloqueada
+                Análise completa liberada
               </p>
             </div>
           )}
@@ -392,18 +386,18 @@ export default function ResultadoPage() {
               />
             </div>
 
-            <div className="rounded-xl bg-white p-5 shadow-sm">
+            <div className="rounded-xl border border-lime-200 bg-lime-50 p-5 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-xs">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-lime-200 text-xs font-bold text-lime-700">
                   ↑
                 </span>
-                <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-                  Melhorias
+                <p className="text-[11px] font-bold uppercase tracking-widest text-lime-700">
+                  Melhorias aplicadas
                 </p>
               </div>
               <LockedList
                 items={data.melhorias_aplicadas}
-                dot="#3b82f6"
+                dot="#84cc16"
                 isAuthenticated={isAuthenticated}
               />
             </div>
@@ -475,9 +469,14 @@ export default function ResultadoPage() {
                   Depois
                 </p>
                 {isAuthenticated ? (
-                  <p className="text-sm leading-relaxed text-[#1a1a1a]">
-                    {data.preview.depois}
-                  </p>
+                  <div className="relative">
+                    <p className="whitespace-pre-line text-sm leading-relaxed text-[#1a1a1a] [mask-image:linear-gradient(to_bottom,black_55%,transparent_100%)]">
+                      {data.preview.depois}
+                    </p>
+                    <p className="mt-2 text-[11px] font-semibold text-lime-600">
+                      ↓ Esse é o padrão aplicado em todo o seu CV otimizado
+                    </p>
+                  </div>
                 ) : (
                   <>
                     <p className="line-clamp-3 select-none text-sm leading-relaxed text-[#555] blur-[3px]">
@@ -492,6 +491,23 @@ export default function ResultadoPage() {
                 )}
               </div>
             </div>
+            <p className="mt-4 flex items-center gap-2 text-[12px] font-semibold text-[#1a1a1a]">
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="shrink-0"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Formato aplicado em um template validado para passar em sistemas
+              ATS
+            </p>
           </div>
 
           {/* ── 6. CTA RESULTADO BLOQUEADO — guest ou não autenticado ── */}
@@ -573,27 +589,26 @@ export default function ResultadoPage() {
           {isAuthenticated === true && (
             <div className="rounded-[20px] bg-[#0E0E0E] px-8 py-8">
               <p className="text-xl font-bold text-white">
-                Sua análise completa já está pronta
+                Agora transforme essa análise em um CV pronto para enviar
               </p>
               <p className="mt-2 text-sm text-white/60">
-                Mais alinhado com o que a empresa busca e com maior chance de
-                passar na triagem
+                Aumente suas chances de passar na triagem e chegar na entrevista
               </p>
 
               <p className="mt-5 rounded-lg bg-white/10 px-4 py-2 text-sm italic text-white/70">
-                "Candidatos que aplicam nas primeiras 48h têm até 3× mais
-                chances de resposta"
+                "Você já sabe o que precisa melhorar. Agora aplique com o CV
+                certo."
               </p>
 
               <p className="mt-6 text-[11px] font-bold uppercase tracking-widest text-white/40">
-                Ao liberar, você recebe:
+                Seu CV otimizado inclui:
               </p>
               <ul className="mt-3 space-y-2">
                 {[
                   "CV otimizado para esta vaga",
-                  "Análise completa com pontos fracos claros",
-                  "Melhorias aplicadas prontas para uso",
                   "Download imediato em PDF e DOCX",
+                  "Template profissional otimizado para ATS (use em outras vagas)",
+                  "Melhorias aplicadas prontas para uso",
                 ].map((item) => (
                   <li
                     key={item}
@@ -614,20 +629,15 @@ export default function ResultadoPage() {
                 style={{ color: "#0E0E0E" }}
                 className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
               >
-                Baixar meu CV otimizado — R$19,90
+                Quero meu CV otimizado por R$19,90
               </a>
 
               <p className="mt-2 text-center text-sm text-white/60">
                 Acesso imediato após pagamento
               </p>
-
-              <button
-                type="button"
-                onClick={() => router.push("/adaptar")}
-                className="mt-4 w-full text-sm text-white/50 transition-colors hover:text-white/80"
-              >
-                Analisar outro CV
-              </button>
+              <p className="mt-2 text-center text-sm text-white/60">
+                Arquivo editável e reutilizável para outras vagas
+              </p>
             </div>
           )}
         </div>
