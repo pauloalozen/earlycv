@@ -1,16 +1,12 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { buttonVariants, Card, Input } from "@/components/ui";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
-import { cn } from "@/lib/cn";
+import { CodeInput } from "./code-input";
 
 export const metadata: Metadata = {
-  robots: {
-    follow: false,
-    index: false,
-  },
+  robots: { follow: false, index: false },
   title: "Verificar Email | EarlyCV",
 };
 
@@ -22,103 +18,99 @@ type VerifyEmailPageProps = {
   }>;
 };
 
-export default async function VerifyEmailPage({
-  searchParams,
-}: VerifyEmailPageProps) {
+export default async function VerifyEmailPage({ searchParams }: VerifyEmailPageProps) {
   const user = await getCurrentAppUserFromCookies();
   const redirectPath = getRouteAccessRedirectPath("/verificar-email", user);
-
-  if (redirectPath) {
-    redirect(redirectPath);
-  }
+  if (redirectPath) redirect(redirectPath);
 
   const params = await searchParams;
   const next = params.next ?? "";
 
   return (
-    <main className="min-h-screen bg-stone-100 px-6 py-10 text-stone-900 md:px-10">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-3xl items-center justify-center">
-        <Card className="w-full space-y-6" padding="lg">
-          <div className="space-y-3">
-            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-orange-700">
-              verificar email
-            </p>
-            <h1 className="text-3xl font-bold tracking-tight text-stone-950">
-              Digite o codigo enviado para {user?.email}.
-            </h1>
-            <p className="text-sm leading-6 text-stone-600">
-              Enquanto o email nao estiver validado, o acesso ao produto fica
-              temporariamente bloqueado.
-            </p>
+    <main className="page-transition flex min-h-screen flex-col items-center justify-center bg-[#F2F2F2] px-4 text-[#111111]">
+      {/* Logo */}
+      <a
+        href="/"
+        style={{ color: "#111111" }}
+        className="mb-8 font-logo text-[2.1rem] tracking-tight"
+      >
+        earlyCV
+      </a>
+
+      {/* Card */}
+      <div className="w-full max-w-lg rounded-2xl bg-white px-10 py-9 shadow-sm">
+        <div className="mb-6 space-y-1 text-center">
+          <h1 className="text-xl font-bold tracking-tight text-[#111111]">
+            Verifique seu email
+          </h1>
+          <p className="text-sm text-[#888888]">
+            Enviamos um código de 6 dígitos para{" "}
+            <span className="font-semibold text-[#444444]">{user?.email}</span>
+          </p>
+        </div>
+
+        {params.error && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {params.error}
           </div>
+        )}
 
-          {params.error ? (
-            <Card
-              className="border-rose-200 bg-rose-50 text-rose-900"
-              padding="sm"
-            >
-              <p className="text-sm font-medium">{params.error}</p>
-            </Card>
-          ) : null}
+        {params.resent && (
+          <div className="mb-4 rounded-xl border border-lime-200 bg-lime-50 px-4 py-3 text-sm text-lime-800">
+            Novo código enviado para seu email.
+          </div>
+        )}
 
-          {params.resent ? (
-            <Card
-              className="border-teal-200 bg-teal-50 text-teal-900"
-              padding="sm"
-            >
-              <p className="text-sm font-medium">
-                Enviamos um novo codigo para seu email.
-              </p>
-            </Card>
-          ) : null}
+        <form action="/auth/verify-email" method="post" className="space-y-6">
+          {next && <input type="hidden" name="next" value={next} />}
 
-          <form action="/auth/verify-email" className="space-y-3" method="post">
-            {next && <input type="hidden" name="next" value={next} />}
-            <Input
-              inputMode="numeric"
-              maxLength={6}
-              name="code"
-              pattern="[0-9]{6}"
-              placeholder="000000"
-              required
-            />
+          <CodeInput name="code" />
+
+          <button
+            type="submit"
+            style={{ color: "#ffffff" }}
+            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[14px] bg-[#111111] py-[15px] text-sm font-semibold leading-none transition-colors hover:bg-[#222222]"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Confirmar código
+          </button>
+        </form>
+
+        <div className="mt-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-[#EEEEEE]" />
+          <span className="text-xs text-[#BBBBBB]">ou</span>
+          <div className="h-px flex-1 bg-[#EEEEEE]" />
+        </div>
+
+        <div className="mt-4 flex gap-3">
+          <form action="/auth/resend-verification" method="post" className="flex-1">
             <button
-              className={cn(buttonVariants({ size: "lg" }), "w-full")}
               type="submit"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#E8E8E8] bg-white py-3 text-sm font-medium text-[#444444] transition-colors hover:bg-[#F5F5F5]"
             >
-              Validar codigo
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 .49-4.5" />
+              </svg>
+              Reenviar código
             </button>
           </form>
-
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <form
-              action="/auth/resend-verification"
-              className="flex-1"
-              method="post"
+          <form action="/auth/logout" method="post" className="flex-1">
+            <button
+              type="submit"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#E8E8E8] bg-white py-3 text-sm font-medium text-[#444444] transition-colors hover:bg-[#F5F5F5]"
             >
-              <button
-                className={cn(
-                  buttonVariants({ size: "lg", variant: "outline" }),
-                  "w-full",
-                )}
-                type="submit"
-              >
-                Reenviar codigo
-              </button>
-            </form>
-            <form action="/auth/logout" className="flex-1" method="post">
-              <button
-                className={cn(
-                  buttonVariants({ size: "lg", variant: "ghost" }),
-                  "w-full",
-                )}
-                type="submit"
-              >
-                Sair
-              </button>
-            </form>
-          </div>
-        </Card>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              Sair
+            </button>
+          </form>
+        </div>
       </div>
     </main>
   );

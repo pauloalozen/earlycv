@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { RegisterForm } from "./register-form";
+import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -28,156 +30,107 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
   const next = params.next ?? "";
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#FAFAFA] text-[#111111]">
-      <header className="flex shrink-0 items-center px-10 py-6">
-        <a
-          href="/"
-          style={{ color: "#111111" }}
-          className="font-logo text-2xl tracking-tight"
-        >
-          earlyCV
-        </a>
-      </header>
+    <main className="page-transition flex min-h-screen flex-col items-center justify-center bg-[#F2F2F2] px-4 text-[#111111]">
+      {/* Logo */}
+      <a
+        href="/"
+        style={{ color: "#111111" }}
+        className="mb-8 font-logo text-[2.1rem] tracking-tight"
+      >
+        earlyCV
+      </a>
 
-      <section className="flex flex-1 items-start justify-center px-6 py-8 md:px-10">
-        <div className="w-full max-w-md space-y-6">
-          <div className="space-y-1 text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-[#111111]">
-              {tab === "cadastro"
-                ? "Crie sua conta para desbloquear sua análise"
-                : "Entre na sua conta"}
-            </h1>
-            {tab === "cadastro" && (
-              <p className="text-sm text-[#666666]">
-                Grátis. Sem cartão de crédito.
-              </p>
-            )}
-          </div>
+      <div className="mb-6 flex items-center gap-2 rounded-full border border-[#111111] bg-[#111111] px-4 py-1.5 text-sm font-medium text-white">
+        <span className="text-lime-400">●</span>
+        +3.500 CVs analisados
+      </div>
 
-          {/* Tab switcher */}
-          <div className="flex rounded-xl bg-white p-1 shadow-sm">
-            <a
-              href={`/entrar?tab=cadastro${next ? `&next=${encodeURIComponent(next)}` : ""}`}
-              className={`flex-1 rounded-[10px] py-2.5 text-center text-sm font-medium transition-colors ${
-                tab === "cadastro"
-                  ? "bg-[#111111] text-white"
-                  : "text-[#666666] hover:text-[#111111]"
-              }`}
-            >
-              Criar conta
-            </a>
-            <a
-              href={`/entrar?tab=entrar${next ? `&next=${encodeURIComponent(next)}` : ""}`}
-              className={`flex-1 rounded-[10px] py-2.5 text-center text-sm font-medium transition-colors ${
-                tab === "entrar"
-                  ? "bg-[#111111] text-white"
-                  : "text-[#666666] hover:text-[#111111]"
-              }`}
-            >
-              Entrar
-            </a>
-          </div>
-
-          {/* Error */}
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          {/* Form */}
-          {tab === "cadastro" ? (
-            <form
-              action="/auth/register-user"
-              method="post"
-              className="space-y-3"
-            >
-              {next && <input type="hidden" name="next" value={next} />}
-              <input
-                name="name"
-                placeholder="Seu nome"
-                required
-                autoComplete="name"
-                className="w-full rounded-xl bg-white px-4 py-3 text-sm text-[#111111] placeholder-[#BBBBBB] shadow-sm outline-none"
-              />
-              <input
-                name="email"
-                type="email"
-                placeholder="seu@email.com"
-                required
-                autoComplete="email"
-                className="w-full rounded-xl bg-white px-4 py-3 text-sm text-[#111111] placeholder-[#BBBBBB] shadow-sm outline-none"
-              />
-              <input
-                name="password"
-                type="password"
-                placeholder="Mínimo de 12 caracteres"
-                required
-                autoComplete="new-password"
-                className="w-full rounded-xl bg-white px-4 py-3 text-sm text-[#111111] placeholder-[#BBBBBB] shadow-sm outline-none"
-              />
-              <button
-                type="submit"
-                style={{ color: "#ffffff" }}
-                className="w-full rounded-[14px] bg-[#111111] py-[18px] text-base font-medium leading-none transition-colors hover:bg-[#222222]"
-              >
-                Criar conta grátis
-              </button>
-            </form>
-          ) : (
-            <form action="/auth/login-user" method="post" className="space-y-3">
-              {next && <input type="hidden" name="next" value={next} />}
-              <input
-                name="email"
-                type="email"
-                placeholder="seu@email.com"
-                required
-                autoComplete="email"
-                className="w-full rounded-xl bg-white px-4 py-3 text-sm text-[#111111] placeholder-[#BBBBBB] shadow-sm outline-none"
-              />
-              <input
-                name="password"
-                type="password"
-                placeholder="Sua senha"
-                required
-                autoComplete="current-password"
-                className="w-full rounded-xl bg-white px-4 py-3 text-sm text-[#111111] placeholder-[#BBBBBB] shadow-sm outline-none"
-              />
-              <button
-                type="submit"
-                style={{ color: "#ffffff" }}
-                className="w-full rounded-[14px] bg-[#111111] py-[18px] text-base font-medium leading-none transition-colors hover:bg-[#222222]"
-              >
-                Entrar
-              </button>
-            </form>
-          )}
-
-          <p className="text-center text-xs text-[#AAAAAA]">
-            {tab === "cadastro" ? (
-              <>
-                Já tem conta?{" "}
-                <a
-                  href={`/entrar?tab=entrar${next ? `&next=${encodeURIComponent(next)}` : ""}`}
-                  className="font-medium text-[#666666] underline"
-                >
-                  Entrar
-                </a>
-              </>
-            ) : (
-              <>
-                Não tem conta?{" "}
-                <a
-                  href={`/entrar?tab=cadastro${next ? `&next=${encodeURIComponent(next)}` : ""}`}
-                  className="font-medium text-[#666666] underline"
-                >
-                  Criar grátis
-                </a>
-              </>
-            )}
+      {/* Card */}
+      <div className="w-full max-w-lg rounded-2xl bg-white px-10 py-9 shadow-sm">
+        {/* Título */}
+        <div className="mb-6 space-y-1 text-center">
+          <h1 className="text-xl font-bold tracking-tight text-[#111111]">
+            {tab === "cadastro" ? "Crie sua conta" : "Bem-vindo de volta"}
+          </h1>
+          <p className="text-sm text-[#888888]">
+            {tab === "cadastro"
+              ? "Grátis. Sem cartão. Menos de 1 minuto."
+              : "Entre para acessar sua conta"}
           </p>
         </div>
-      </section>
+
+        {/* Error */}
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {/* Form */}
+        {tab === "cadastro" ? (
+          <RegisterForm next={next} />
+        ) : (
+          <LoginForm next={next} />
+        )}
+
+        {/* Divider */}
+        <div className="mt-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-[#EEEEEE]" />
+          <span className="text-xs text-[#BBBBBB]">ou continue com</span>
+          <div className="h-px flex-1 bg-[#EEEEEE]" />
+        </div>
+
+        {/* Social */}
+        <a
+          href={`${process.env.NEXT_PUBLIC_API_URL}/api/auth/google/start${next ? `?next=${encodeURIComponent(next)}` : ""}`}
+          className="mt-4 flex w-full items-center justify-center gap-3 rounded-xl border border-[#E8E8E8] bg-white py-3 text-sm font-medium text-[#333333] transition-colors hover:bg-[#F5F5F5]"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24">
+            <path
+              fill="#4285F4"
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+            />
+            <path
+              fill="#34A853"
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+            />
+            <path
+              fill="#FBBC05"
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+            />
+            <path
+              fill="#EA4335"
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+            />
+          </svg>
+          Continuar com Google
+        </a>
+
+        {/* Link de troca */}
+        <p className="mt-5 text-center text-sm text-[#888888]">
+          {tab === "cadastro" ? (
+            <>
+              Já tem conta?{" "}
+              <a
+                href={`/entrar?tab=entrar${next ? `&next=${encodeURIComponent(next)}` : ""}`}
+                className="font-bold text-[#111111] underline underline-offset-2 hover:text-[#333333]"
+              >
+                Entrar
+              </a>
+            </>
+          ) : (
+            <>
+              Não tem conta?{" "}
+              <a
+                href={`/entrar?tab=cadastro${next ? `&next=${encodeURIComponent(next)}` : ""}`}
+                className="font-bold text-[#111111] underline underline-offset-2 hover:text-[#333333]"
+              >
+                Criar grátis
+              </a>
+            </>
+          )}
+        </p>
+      </div>
     </main>
   );
 }

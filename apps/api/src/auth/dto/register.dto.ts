@@ -9,7 +9,7 @@ export class RegisterDto {
   email!: string;
 
   @IsString()
-  @MinLength(12)
+  @MinLength(8)
   password!: string;
 
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))

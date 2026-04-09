@@ -39,7 +39,7 @@ export default function Home() {
         <header className="flex shrink-0 items-center justify-between px-10 py-6">
           <span className="font-logo text-2xl tracking-tight">earlyCV</span>
           <Link
-            href="/entrar"
+            href="/entrar?tab=entrar"
             style={{ color: "#666666" }}
             className="flex items-center gap-2 rounded-xl border border-[#DDDDDD] px-[18px] py-[6px] text-base font-medium transition-colors hover:border-[#BBBBBB] hover:text-[#111111]"
           >
@@ -80,7 +80,7 @@ export default function Home() {
             <Link
               href="/adaptar"
               style={{ color: "#ffffff" }}
-              className="mt-2 flex items-center gap-2 rounded-[14px] bg-[#111111] px-7 py-[18px] text-lg font-medium leading-none transition-colors hover:bg-[#222222]"
+              className="mt-10 flex items-center gap-2 rounded-[14px] bg-[#111111] px-7 py-[18px] text-lg font-medium leading-none transition-colors hover:bg-[#222222]"
             >
               <svg
                 width="18"
@@ -93,17 +93,17 @@ export default function Home() {
               Ver análise do meu CV grátis
             </Link>
 
-            <div className="flex flex-wrap items-center justify-center gap-[18px] text-sm text-[#666666]">
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-[18px] text-sm text-[#666666]">
               <span>
-                <span className="mr-1.5 text-base text-lime-500">●</span>
+                <span className="mr-1.5 text-base text-lime-400">●</span>
                 Passa nos filtros automáticos (ATS)
               </span>
               <span>
-                <span className="mr-1.5 text-base text-lime-500">●</span>
+                <span className="mr-1.5 text-base text-lime-400">●</span>
                 Adaptado para cada vaga específica
               </span>
               <span>
-                <span className="mr-1.5 text-base text-lime-500">●</span>
+                <span className="mr-1.5 text-base text-lime-400">●</span>
                 Resultado em menos de 30 segundos
               </span>
             </div>

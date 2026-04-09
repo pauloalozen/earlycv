@@ -70,6 +70,13 @@ const MOCK_BLURRED_ITEMS = [
   "Domínio comprovado em metodologias ágeis",
   "Liderança de squads multidisciplinares",
   "Resultados mensuráveis em projetos críticos",
+  "Experiência com ferramentas de alto impacto",
+  "Histórico de entregas em ambientes complexos",
+  "Comunicação eficaz com stakeholders técnicos",
+  "Capacidade de priorização e gestão de escopo",
+  "Visão de produto orientada a dados",
+  "Adaptação rápida a novos contextos",
+  "Colaboração em times multidisciplinares",
 ];
 
 // ── LockedList ────────────────────────────────────────────────────────────────
@@ -142,9 +149,14 @@ function LockedList({
             ))}
           </div>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="flex items-center gap-1.5 rounded-full border border-[#E0E0E0] bg-white px-3 py-1.5 text-[11px] font-bold text-[#333]">
-              🔒 +{lockedCount}{" "}
-              {lockedCount === 1 ? "item bloqueado" : "itens bloqueados"}
+            <span className="flex items-center gap-2 rounded-full border border-[#E0E0E0] bg-white px-3 py-1.5">
+              <span className="text-base leading-none">🔒</span>
+              <span className="text-[11px] font-bold text-[#333]">
+                +{lockedCount}{" "}
+                {lockedCount === 1
+                  ? "melhoria que pode aumentar seu score"
+                  : "melhorias que podem aumentar seu score"}
+              </span>
             </span>
           </div>
         </div>
@@ -171,6 +183,7 @@ export default function ResultadoPage() {
   const router = useRouter();
   const [data, setData] = useState<CvAnalysisData | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("guestAnalysis");
@@ -180,17 +193,29 @@ export default function ResultadoPage() {
     }
     const parsed = JSON.parse(stored) as { adaptedContentJson: CvAnalysisData };
     setData(parsed.adaptedContentJson);
-
     getAuthStatus().then(({ isAuthenticated: auth }) => {
       setIsAuthenticated(auth);
     });
   }, [router]);
 
+  useEffect(() => {
+    if (!data) return;
+    // Aguarda React commitar + browser fazer layout/paint antes de revelar
+    const timer = setTimeout(() => setReady(true), 150);
+    return () => clearTimeout(timer);
+  }, [data]);
+
   if (!data) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#0E0E0E]">
-        <div className="h-7 w-7 animate-spin rounded-full border-2 border-white border-t-transparent" />
-      </main>
+      <>
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-0 -z-10 bg-[#F2F2F2]"
+        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#F2F2F2]">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111]" />
+        </div>
+      </>
     );
   }
 
@@ -202,318 +227,411 @@ export default function ResultadoPage() {
         : "#ef4444";
 
   return (
-    <main className="min-h-screen bg-[#F2F2F2] text-[#111]">
-      {/* Header */}
-      <header className="flex items-center px-8 py-5">
-        <a
-          href="/"
-          style={{ color: "#111" }}
-          className="font-logo text-xl tracking-tight"
-        >
-          earlyCV
-        </a>
-      </header>
+    <>
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-10 bg-[#F2F2F2]"
+      />
 
-      <div className="mx-auto max-w-[960px] space-y-3 px-4 pb-24 pt-1">
-        {/* ── Banner de status (autenticado / teaser) ── */}
-        {isAuthenticated === true && (
-          <div className="flex items-center gap-2 rounded-xl border border-lime-200 bg-lime-50 px-5 py-3">
-            <span className="text-lime-600">✔</span>
-            <p className="text-sm font-semibold text-lime-800">
-              Análise completa desbloqueada
-            </p>
-          </div>
-        )}
-
-        {isAuthenticated === false && (
-          <div className="flex items-center justify-between gap-4 rounded-xl bg-[#111111] px-5 py-4">
-            <p className="text-sm font-medium text-white">
-              Crie uma conta para ver a análise completa
-            </p>
-            <a
-              href="/entrar?next=/adaptar/resultado"
-              style={{ color: "#111111" }}
-              className="shrink-0 rounded-[10px] bg-white px-4 py-2 text-sm font-bold"
-            >
-              Criar conta grátis
-            </a>
-          </div>
-        )}
-
-        {/* ── 0. Cargo + empresa ── */}
-        <div className="px-1 pb-1">
-          <h1 className="text-2xl font-bold tracking-tight text-[#111]">
-            Análise para vaga: {data.vaga?.cargo}
-          </h1>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-widest text-[#AAAAAA]">
-            Empresa: {data.vaga?.empresa}
-          </p>
+      {!ready && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#F2F2F2]">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111]" />
         </div>
+      )}
 
-        {/* ── 1. Score hero ── */}
-        <div className="overflow-hidden rounded-[20px] bg-white shadow-sm">
-          <div className="flex flex-col items-center px-8 pb-8 pt-10 text-center">
-            <div className="flex items-end gap-2">
-              <span
-                className="text-[72px] font-bold leading-none tabular-nums"
-                style={{ color: scoreColor }}
+      <main
+        className="min-h-screen bg-[#F2F2F2] text-[#111] transition-all duration-500 ease-out"
+        style={{
+          opacity: ready ? 1 : 0,
+          transform: ready ? "translateY(0)" : "translateY(-8px)",
+        }}
+      >
+        {/* Header */}
+        <header className="flex items-center px-8 py-5">
+          <a
+            href="/"
+            style={{ color: "#111" }}
+            className="font-logo text-xl tracking-tight"
+          >
+            earlyCV
+          </a>
+        </header>
+
+        <div className="mx-auto max-w-[960px] space-y-3 px-4 pb-24 pt-1">
+          {/* ── Banner de status (autenticado / teaser) ── */}
+          {isAuthenticated === true && (
+            <div className="flex items-center gap-2 rounded-xl border border-lime-200 bg-lime-50 px-5 py-3">
+              <span className="text-lime-600">✔</span>
+              <p className="text-sm font-semibold text-lime-800">
+                Análise completa desbloqueada
+              </p>
+            </div>
+          )}
+
+          {isAuthenticated === false && (
+            <div className="flex items-center justify-between gap-4 rounded-xl bg-[#111111] px-5 py-4">
+              <p className="text-sm font-medium text-white">
+                Crie uma conta para ver a análise completa
+              </p>
+              <a
+                href="/entrar?next=/adaptar/resultado"
+                style={{ color: "#111111" }}
+                className="shrink-0 rounded-[10px] bg-white px-4 py-2 text-sm font-bold"
               >
-                {data.fit.score}
-              </span>
-              <span className="mb-3 text-2xl font-light text-[#CCCCCC]">
-                /100
-              </span>
+                Criar conta grátis
+              </a>
             </div>
+          )}
 
-            <p className="mt-4 text-xl font-bold leading-snug text-[#111]">
-              {data.fit.headline}
-            </p>
-            <p className="mt-2 max-w-sm text-sm text-[#888]">
-              {data.fit.subheadline}
-            </p>
-
-            <div className="mt-6 w-full">
-              <ScoreBar
-                score={data.fit.score}
-                scoreTarget={data.projecao_melhoria?.score_pos_otimizacao}
-              />
-            </div>
-
-            {data.projecao_melhoria && (
-              <p className="mt-3 rounded-lg bg-lime-50 px-4 py-2 text-sm font-semibold text-lime-700">
-                {data.projecao_melhoria.explicacao_curta}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* ── 2. Comparação antes/depois ── */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl bg-white p-4 shadow-sm">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-[#BBBBBB]">
-              CV atual
-            </p>
-            <p className="text-sm font-medium text-[#666]">
-              {data.comparacao.antes}
+          {/* ── 0. Cargo + empresa ── */}
+          <div className="px-1 pb-1">
+            <h1 className="text-2xl font-bold tracking-tight text-[#111]">
+              Análise para vaga: {data.vaga?.cargo}
+            </h1>
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-widest text-[#AAAAAA]">
+              Empresa: {data.vaga?.empresa}
             </p>
           </div>
-          <div className="rounded-xl border border-lime-200 bg-lime-50 p-4 shadow-sm">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-lime-600">
-              CV otimizado
-            </p>
-            <p className="text-sm font-medium text-[#1a1a1a]">
-              {data.comparacao.depois}
-            </p>
-          </div>
-        </div>
 
-        {/* ── 3. Diagnóstico 3 cards ── */}
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-lime-100 text-xs">
-                ✓
-              </span>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-                Pontos fortes
-              </p>
-            </div>
-            <LockedList
-              items={data.pontos_fortes}
-              dot="#84cc16"
-              isAuthenticated={isAuthenticated}
-            />
-          </div>
-
-          <div className="rounded-xl bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-xs">
-                ✗
-              </span>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-                Lacunas
-              </p>
-            </div>
-            <LockedList
-              items={data.lacunas}
-              dot="#ef4444"
-              isAuthenticated={isAuthenticated}
-            />
-          </div>
-
-          <div className="rounded-xl bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-xs">
-                ↑
-              </span>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-                Melhorias
-              </p>
-            </div>
-            <LockedList
-              items={data.melhorias_aplicadas}
-              dot="#3b82f6"
-              isAuthenticated={isAuthenticated}
-            />
-          </div>
-        </div>
-
-        {/* ── 4. ATS Keywords ── */}
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-            Palavras-chave ATS
-          </p>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <p className="mb-2 text-[11px] font-semibold text-lime-600">
-                Presentes no CV
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {(isAuthenticated
-                  ? data.ats_keywords.presentes
-                  : data.ats_keywords.presentes.slice(0, 3)
-                ).map((kw) => (
-                  <Chip key={kw} label={kw} variant="green" />
-                ))}
-                {!isAuthenticated && data.ats_keywords.presentes.length > 3 && (
-                  <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-2.5 py-0.5 text-xs text-[#AAAAAA]">
-                    🔒 +{data.ats_keywords.presentes.length - 3}
-                  </span>
-                )}
+          {/* ── 1. Score hero ── */}
+          <div className="overflow-hidden rounded-[20px] bg-white shadow-sm">
+            <div className="flex flex-col items-center px-8 pb-8 pt-10 text-center">
+              <div className="flex items-end gap-2">
+                <span
+                  className="text-[72px] font-bold leading-none tabular-nums"
+                  style={{ color: scoreColor }}
+                >
+                  {data.fit.score}
+                </span>
+                <span className="mb-3 text-2xl font-light text-[#CCCCCC]">
+                  /100
+                </span>
               </div>
-            </div>
-            <div>
-              <p className="mb-2 text-[11px] font-semibold text-red-600">
-                Faltando para essa vaga
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {(isAuthenticated
-                  ? data.ats_keywords.ausentes
-                  : data.ats_keywords.ausentes.slice(0, 3)
-                ).map((kw) => (
-                  <Chip key={kw} label={kw} variant="red" />
-                ))}
-                {!isAuthenticated && data.ats_keywords.ausentes.length > 3 && (
-                  <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-2.5 py-0.5 text-xs text-[#AAAAAA]">
-                    🔒 +{data.ats_keywords.ausentes.length - 3}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* ── 5. Preview antes/depois ── */}
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-            Preview do CV ajustado
-          </p>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-xl bg-[#F7F7F7] p-4">
-              <p className="mb-2 text-xs font-bold uppercase tracking-widest text-[#666]">
-                Antes
+              <p className="mt-4 text-xl font-bold leading-snug text-[#111]">
+                {data.fit.headline}
               </p>
-              <p className="line-clamp-3 text-sm leading-relaxed text-[#444]">
-                {data.preview.antes}
+              <p className="mt-2 max-w-sm text-sm text-[#888]">
+                {data.fit.subheadline}
               </p>
-            </div>
-            <div className="relative rounded-xl bg-lime-50 p-4">
-              <p className="mb-2 text-xs font-bold uppercase tracking-widest text-lime-700">
-                Depois
-              </p>
-              {isAuthenticated ? (
-                <p className="text-sm leading-relaxed text-[#1a1a1a]">
-                  {data.preview.depois}
+
+              <div className="mt-6 w-full">
+                <ScoreBar
+                  score={data.fit.score}
+                  scoreTarget={data.projecao_melhoria?.score_pos_otimizacao}
+                />
+              </div>
+
+              {data.projecao_melhoria && (
+                <p className="mt-4 bg-lime-50 px-5 py-3 text-base font-bold text-lime-800">
+                  Você pode sair de{" "}
+                  <span style={{ color: scoreColor }}>
+                    {data.projecao_melhoria.score_atual}
+                  </span>
+                  {" → "}
+                  <span className="text-lime-600">
+                    {data.projecao_melhoria.score_pos_otimizacao}
+                  </span>
+                  {" com ajustes simples"}
                 </p>
-              ) : (
-                <>
-                  <p className="line-clamp-3 select-none text-sm leading-relaxed text-[#555] blur-[3px]">
-                    {data.preview.depois}
-                  </p>
-                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-lime-50/60">
-                    <span className="rounded-full border border-lime-200 bg-white px-3 py-1 text-[11px] font-bold text-[#333] shadow-sm">
-                      🔒 Bloqueado
-                    </span>
-                  </div>
-                </>
               )}
             </div>
           </div>
-        </div>
 
-        {/* ── 6. CTA ── */}
-        <div className="rounded-[20px] bg-[#0E0E0E] px-8 py-8">
-          <p className="text-xl font-bold text-white">
-            Seu CV atual não está competitivo — mas já existe uma versão melhor
-            pronta
-          </p>
-          <p className="mt-2 text-sm text-white/60">
-            Mais alinhado com o que a empresa busca e com maior chance de passar
-            na triagem
-          </p>
+          {/* ── 2. Comparação antes/depois ── */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-red-400">
+                CV atual
+              </p>
+              <p className="text-sm font-medium text-[#1a1a1a]">
+                {data.comparacao.antes}
+              </p>
+            </div>
+            <div className="rounded-xl border border-lime-200 bg-lime-50 p-4 shadow-sm">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-lime-600">
+                CV otimizado
+              </p>
+              <p className="text-sm font-medium text-[#1a1a1a]">
+                {data.comparacao.depois}
+              </p>
+            </div>
+          </div>
 
-          <p className="mt-5 rounded-lg bg-white/10 px-4 py-2 text-sm italic text-white/70">
-            "Candidatos que aplicam nas primeiras 48h têm até 3× mais chances de
-            resposta"
-          </p>
+          {/* ── 3. Diagnóstico 3 cards ── */}
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-lime-100 text-xs">
+                  ✓
+                </span>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+                  Pontos fortes
+                </p>
+              </div>
+              <LockedList
+                items={data.pontos_fortes}
+                dot="#84cc16"
+                isAuthenticated={isAuthenticated}
+              />
+            </div>
 
-          <p className="mt-6 text-[11px] font-bold uppercase tracking-widest text-white/40">
-            Ao liberar, você recebe:
-          </p>
-          <ul className="mt-3 space-y-2">
-            {[
-              "CV otimizado para esta vaga",
-              "Análise completa com pontos fracos claros",
-              "Melhorias aplicadas prontas para uso",
-              "Download imediato em PDF e DOCX",
-            ].map((item) => (
-              <li
-                key={item}
-                className="flex items-center gap-2.5 text-sm text-white/80"
+            <div className="rounded-xl bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-xs">
+                  ✗
+                </span>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+                  Lacunas
+                </p>
+              </div>
+              <LockedList
+                items={data.lacunas}
+                dot="#ef4444"
+                isAuthenticated={isAuthenticated}
+              />
+            </div>
+
+            <div className="rounded-xl bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-xs">
+                  ↑
+                </span>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+                  Melhorias
+                </p>
+              </div>
+              <LockedList
+                items={data.melhorias_aplicadas}
+                dot="#3b82f6"
+                isAuthenticated={isAuthenticated}
+              />
+            </div>
+          </div>
+
+          {/* ── 4. ATS Keywords ── */}
+          <div className="rounded-xl bg-white p-5 shadow-sm">
+            <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+              Palavras-chave ATS
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="mb-2 text-[11px] font-semibold text-lime-600">
+                  Presentes no CV
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(isAuthenticated
+                    ? data.ats_keywords.presentes
+                    : data.ats_keywords.presentes.slice(0, 3)
+                  ).map((kw) => (
+                    <Chip key={kw} label={kw} variant="green" />
+                  ))}
+                  {!isAuthenticated &&
+                    data.ats_keywords.presentes.length > 3 && (
+                      <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-2.5 py-0.5 text-xs text-[#AAAAAA]">
+                        🔒 +{data.ats_keywords.presentes.length - 3}
+                      </span>
+                    )}
+                </div>
+              </div>
+              <div>
+                <p className="mb-2 text-[11px] font-semibold text-red-600">
+                  Faltando para essa vaga
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(isAuthenticated
+                    ? data.ats_keywords.ausentes
+                    : data.ats_keywords.ausentes.slice(0, 3)
+                  ).map((kw) => (
+                    <Chip key={kw} label={kw} variant="red" />
+                  ))}
+                  {!isAuthenticated &&
+                    data.ats_keywords.ausentes.length > 3 && (
+                      <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-2.5 py-0.5 text-xs text-[#AAAAAA]">
+                        🔒 +{data.ats_keywords.ausentes.length - 3}
+                      </span>
+                    )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── 5. Preview antes/depois ── */}
+          <div className="rounded-xl bg-white p-5 shadow-sm">
+            <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+              Preview do CV ajustado
+            </p>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl bg-[#F7F7F7] p-4">
+                <p className="mb-2 text-xs font-bold uppercase tracking-widest text-[#666]">
+                  Antes
+                </p>
+                <p className="line-clamp-3 text-sm leading-relaxed text-[#444]">
+                  {data.preview.antes}
+                </p>
+              </div>
+              <div className="relative rounded-xl bg-lime-50 p-4">
+                <p className="mb-2 text-xs font-bold uppercase tracking-widest text-lime-700">
+                  Depois
+                </p>
+                {isAuthenticated ? (
+                  <p className="text-sm leading-relaxed text-[#1a1a1a]">
+                    {data.preview.depois}
+                  </p>
+                ) : (
+                  <>
+                    <p className="line-clamp-3 select-none text-sm leading-relaxed text-[#555] blur-[3px]">
+                      {data.preview.depois}
+                    </p>
+                    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-lime-50/60">
+                      <span className="rounded-full border border-lime-200 bg-white px-3 py-1 text-[11px] font-bold text-[#333] shadow-sm">
+                        🔒 Bloqueado
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── 6. CTA RESULTADO BLOQUEADO — guest ou não autenticado ── */}
+          {isAuthenticated !== true && (
+            <div className="rounded-[20px] bg-[#0E0E0E] px-8 py-8">
+              <p className="text-xl font-bold text-white">
+                Sua análise completa já está pronta
+              </p>
+              <p className="mt-2 text-sm text-white/60">
+                Veja exatamente como corrigir os pontos que estão te eliminando
+              </p>
+
+              <p className="mt-6 text-[11px] font-bold uppercase tracking-widest text-white/40">
+                Ao continuar, você verá:
+              </p>
+              <ul className="mt-3 space-y-2">
+                {[
+                  "Veja todas as melhorias detalhadas",
+                  "Saiba como corrigir cada problema",
+                  "Acesse seu CV ajustado para a vaga",
+                ].map((item) => (
+                  <li
+                    key={item}
+                    className="flex items-center gap-2.5 text-sm text-white/80"
+                  >
+                    <span className="text-[#84cc16]">✓</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+
+              <p className="mt-5 flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm italic text-white/70">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#facc15"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="shrink-0 not-italic"
+                >
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                "Quanto antes ajustar, maiores suas chances nessa vaga."
+              </p>
+
+              <a
+                href="/entrar?next=/adaptar/resultado"
+                style={{ color: "#0E0E0E" }}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
               >
-                <span className="text-[#84cc16]">✓</span>
-                {item}
-              </li>
-            ))}
-          </ul>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                </svg>
+                Ver análise completa grátis
+              </a>
 
-          <p className="mt-7 text-center text-lg font-bold text-white">
-            Este é o CV que você deveria estar enviando hoje
-          </p>
-
-          {isAuthenticated ? (
-            <a
-              href="/planos"
-              style={{ color: "#0E0E0E" }}
-              className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
-            >
-              Baixar meu CV otimizado — R$19,90
-            </a>
-          ) : (
-            <a
-              href="/entrar?next=/adaptar/resultado"
-              style={{ color: "#0E0E0E" }}
-              className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
-            >
-              Criar conta para ver análise completa
-            </a>
+              <p className="mt-4 text-center text-sm text-white/60">
+                Leva menos de 1 minuto. Sem cartão.
+              </p>
+            </div>
           )}
 
-          <p className="mt-2 text-center text-sm text-white/60">
-            {isAuthenticated
-              ? "Acesso imediato após pagamento"
-              : "Grátis. Sem cartão de crédito."}
-          </p>
+          {/* ── 6. CTA RESULTADO LIBERADO — autenticado ── */}
+          {isAuthenticated === true && (
+            <div className="rounded-[20px] bg-[#0E0E0E] px-8 py-8">
+              <p className="text-xl font-bold text-white">
+                Sua análise completa já está pronta
+              </p>
+              <p className="mt-2 text-sm text-white/60">
+                Mais alinhado com o que a empresa busca e com maior chance de
+                passar na triagem
+              </p>
 
-          <button
-            type="button"
-            onClick={() => router.push("/adaptar")}
-            className="mt-4 w-full text-sm text-white/50 transition-colors hover:text-white/80"
-          >
-            Analisar outro CV
-          </button>
+              <p className="mt-5 rounded-lg bg-white/10 px-4 py-2 text-sm italic text-white/70">
+                "Candidatos que aplicam nas primeiras 48h têm até 3× mais
+                chances de resposta"
+              </p>
+
+              <p className="mt-6 text-[11px] font-bold uppercase tracking-widest text-white/40">
+                Ao liberar, você recebe:
+              </p>
+              <ul className="mt-3 space-y-2">
+                {[
+                  "CV otimizado para esta vaga",
+                  "Análise completa com pontos fracos claros",
+                  "Melhorias aplicadas prontas para uso",
+                  "Download imediato em PDF e DOCX",
+                ].map((item) => (
+                  <li
+                    key={item}
+                    className="flex items-center gap-2.5 text-sm text-white/80"
+                  >
+                    <span className="text-[#84cc16]">✓</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+
+              <p className="mt-7 text-center text-lg font-bold text-white">
+                Este é o CV que você deveria estar enviando hoje
+              </p>
+
+              <a
+                href="/planos"
+                style={{ color: "#0E0E0E" }}
+                className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
+              >
+                Baixar meu CV otimizado — R$19,90
+              </a>
+
+              <p className="mt-2 text-center text-sm text-white/60">
+                Acesso imediato após pagamento
+              </p>
+
+              <button
+                type="button"
+                onClick={() => router.push("/adaptar")}
+                className="mt-4 w-full text-sm text-white/50 transition-colors hover:text-white/80"
+              >
+                Analisar outro CV
+              </button>
+            </div>
+          )}
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }
