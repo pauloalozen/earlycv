@@ -2,9 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { analyzeGuestCv } from "@/lib/cv-adaptation-api";
-import { getAuthStatus } from "@/lib/session-actions";
 import { AppHeader } from "@/components/app-header";
+import { type AdaptarMode, buildAdaptarMode } from "@/lib/adaptar-flow";
+import {
+  analyzeGuestCv,
+  createCvAdaptationFromMaster,
+} from "@/lib/cv-adaptation-api";
+import { getAdaptarAuthStatus } from "@/lib/session-actions";
 
 const LOADING_STEPS = [
   "Lendo seu CV...",
@@ -45,12 +49,36 @@ export default function AdaptarPage() {
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [userName, setUserName] = useState<string | null | undefined>(undefined);
+  const [userName, setUserName] = useState<string | null | undefined>(
+    undefined,
+  );
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [mode, setMode] = useState<AdaptarMode>("upload");
+  const [masterResumeId, setMasterResumeId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     router.prefetch("/adaptar/resultado");
-    getAuthStatus().then(({ userName: name }) => setUserName(name ?? null));
+    getAdaptarAuthStatus()
+      .then(
+        ({
+          isAuthenticated: authenticated,
+          userName: name,
+          hasMasterResume,
+          masterResumeId: masterId,
+        }) => {
+          setIsAuthenticated(authenticated);
+          setUserName(name ?? null);
+          setMasterResumeId(masterId);
+          setMode(buildAdaptarMode({ hasMasterResume }));
+        },
+      )
+      .catch(() => {
+        setIsAuthenticated(false);
+        setUserName(null);
+        setMasterResumeId(null);
+        setMode("upload");
+      });
   }, [router]);
 
   useEffect(() => {
@@ -67,12 +95,19 @@ export default function AdaptarPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) {
+
+    if (!jobDescription.trim()) {
+      setError("Cole a descrição da vaga.");
+      return;
+    }
+
+    if (mode === "upload" && !file) {
       setError("Selecione seu CV em PDF.");
       return;
     }
-    if (!jobDescription.trim()) {
-      setError("Cole a descrição da vaga.");
+
+    if (mode === "master" && !masterResumeId) {
+      setError("Nao encontramos seu CV base. Envie outro CV.");
       return;
     }
 
@@ -80,8 +115,31 @@ export default function AdaptarPage() {
     setError(null);
 
     try {
+      if (mode === "master") {
+        const selectedMasterResumeId = masterResumeId;
+        if (!selectedMasterResumeId) {
+          setError("Nao encontramos seu CV base. Envie outro CV.");
+          setLoading(false);
+          return;
+        }
+
+        const adaptation = await createCvAdaptationFromMaster({
+          masterResumeId: selectedMasterResumeId,
+          jobDescriptionText: jobDescription,
+        });
+        router.push(`/adaptar/${adaptation.id}/resultado`);
+        return;
+      }
+
+      const selectedFile = file;
+      if (!selectedFile) {
+        setError("Selecione seu CV em PDF.");
+        setLoading(false);
+        return;
+      }
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", selectedFile);
       formData.append("jobDescriptionText", jobDescription);
 
       const [result] = await Promise.all([
@@ -109,7 +167,11 @@ export default function AdaptarPage() {
         <AppHeader userName={userName} />
       ) : (
         <header className="flex shrink-0 items-center justify-between px-10 py-6">
-          <a href="/" style={{ color: "#111111" }} className="font-logo text-2xl tracking-tight">
+          <a
+            href="/"
+            style={{ color: "#111111" }}
+            className="font-logo text-2xl tracking-tight"
+          >
             earlyCV
           </a>
           {userName === null && (
@@ -118,7 +180,18 @@ export default function AdaptarPage() {
               style={{ color: "#666666" }}
               className="flex items-center gap-2 rounded-xl border border-[#DDDDDD] px-[18px] py-[6px] text-base font-medium transition-colors hover:border-[#BBBBBB] hover:text-[#111111]"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                aria-hidden="true"
+                focusable="false"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
@@ -148,81 +221,127 @@ export default function AdaptarPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {isAuthenticated && masterResumeId ? (
+              <div className="space-y-2">
+                <span className="text-sm font-medium text-[#111111]">
+                  Origem do CV
+                </span>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setMode("master")}
+                    className={`rounded-2xl border px-4 py-3 text-left text-sm transition-colors ${
+                      mode === "master"
+                        ? "border-[#111111] bg-white text-[#111111]"
+                        : "border-[#DDDDDD] bg-white/70 text-[#666666] hover:border-[#BBBBBB]"
+                    }`}
+                  >
+                    Usar meu CV base
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode("upload")}
+                    className={`rounded-2xl border px-4 py-3 text-left text-sm transition-colors ${
+                      mode === "upload"
+                        ? "border-[#111111] bg-white text-[#111111]"
+                        : "border-[#DDDDDD] bg-white/70 text-[#666666] hover:border-[#BBBBBB]"
+                    }`}
+                  >
+                    Enviar outro CV
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             {/* CV Upload */}
-            <div className="space-y-2">
-              <span className="text-sm font-medium text-[#111111]">Seu CV</span>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl bg-white px-6 py-6 shadow-sm transition-colors hover:bg-stone-50"
-              >
-                {file ? (
-                  <>
-                    <svg
-                      width="28"
-                      height="28"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="#111111"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                    </svg>
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-[#111111]">
-                      {file.name}
+            {mode === "upload" ? (
+              <div className="space-y-2">
+                <span className="text-sm font-medium text-[#111111]">
+                  Seu CV
+                </span>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl bg-white px-6 py-6 shadow-sm transition-colors hover:bg-stone-50"
+                >
+                  {file ? (
+                    <>
                       <svg
-                        width="26"
-                        height="26"
+                        aria-hidden="true"
+                        focusable="false"
+                        width="28"
+                        height="28"
                         viewBox="0 0 24 24"
                         fill="none"
-                        stroke="#84cc16"
-                        strokeWidth="2.5"
+                        stroke="#111111"
+                        strokeWidth="1.5"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       >
-                        <polyline points="20 6 9 17 4 12" />
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
                       </svg>
-                    </span>
-                    <span className="text-xs text-[#999999]">
-                      Clique para trocar
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      width="28"
-                      height="28"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="#111111"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="17 8 12 3 7 8" />
-                      <line x1="12" y1="3" x2="12" y2="15" />
-                    </svg>
-                    <span className="text-sm font-medium text-[#111111]">
-                      Arraste seu CV ou clique para enviar
-                    </span>
-                    <span className="text-xs text-[#999999]">
-                      PDF, DOC ou DOCX — até 5 MB
-                    </span>
-                  </>
-                )}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx"
-                className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-            </div>
+                      <span className="flex items-center gap-1.5 text-sm font-medium text-[#111111]">
+                        {file.name}
+                        <svg
+                          aria-hidden="true"
+                          focusable="false"
+                          width="26"
+                          height="26"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#84cc16"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </span>
+                      <span className="text-xs text-[#999999]">
+                        Clique para trocar
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        aria-hidden="true"
+                        focusable="false"
+                        width="28"
+                        height="28"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#111111"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                      <span className="text-sm font-medium text-[#111111]">
+                        Arraste seu CV ou clique para enviar
+                      </span>
+                      <span className="text-xs text-[#999999]">
+                        PDF, DOC ou DOCX — até 5 MB
+                      </span>
+                    </>
+                  )}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  className="hidden"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-[#DDDDDD] bg-white px-4 py-3 text-sm text-[#666666]">
+                Vamos usar o seu CV base salvo para gerar esta adaptacao.
+              </div>
+            )}
 
             {/* Job Description */}
             <div className="space-y-2">
@@ -268,6 +387,8 @@ export default function AdaptarPage() {
 
             <p className="flex items-center gap-1.5 px-1 text-sm font-medium text-lime-700">
               <svg
+                aria-hidden="true"
+                focusable="false"
                 width="13"
                 height="13"
                 viewBox="0 0 24 24"
@@ -287,6 +408,8 @@ export default function AdaptarPage() {
               {loading ? (
                 <>
                   <svg
+                    aria-hidden="true"
+                    focusable="false"
                     className="animate-spin"
                     width="18"
                     height="18"
@@ -305,6 +428,8 @@ export default function AdaptarPage() {
               ) : (
                 <>
                   <svg
+                    aria-hidden="true"
+                    focusable="false"
                     width="18"
                     height="18"
                     viewBox="0 0 24 24"
@@ -319,7 +444,6 @@ export default function AdaptarPage() {
           </form>
         </div>
       </section>
-
     </main>
   );
 }

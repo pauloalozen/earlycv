@@ -35,6 +35,18 @@ export async function createCvAdaptation(
   return response.json() as Promise<CvAdaptationDto>;
 }
 
+export async function createCvAdaptationFromMaster(payload: {
+  masterResumeId: string;
+  jobDescriptionText: string;
+}): Promise<CvAdaptationDto> {
+  const response = await apiRequest("POST", "/cv-adaptation", payload);
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to create adaptation: ${error}`);
+  }
+  return response.json() as Promise<CvAdaptationDto>;
+}
+
 export async function getCvAdaptation(id: string): Promise<CvAdaptationDto> {
   const response = await apiRequest("GET", `/cv-adaptation/${id}`);
   if (!response.ok) {

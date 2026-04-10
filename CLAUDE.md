@@ -102,3 +102,13 @@ npm run generate --workspace @earlycv/database
 npm run build
 npm run test
 ```
+
+---
+
+## Memoria operacional (dashboard + CV Master)
+
+- O dashboard principal e `/dashboard` (a rota `dashboard-teste` foi descontinuada).
+- A hierarquia esperada do dashboard e: CTA principal -> card CV Master -> metricas -> historico.
+- Deve existir apenas um CTA principal de analise (`Analisar nova vaga`) sem duplicatas no historico.
+- O card de CV Master usa `/meus-cvs` para `Cadastrar CV`, `Atualizar CV` e `Ver CV`.
+- Em `/adaptar`, quando houver CV Master, o usuario escolhe entre `Usar meu CV base` e `Enviar outro CV`; sem master, fluxo de upload permanece obrigatorio.
