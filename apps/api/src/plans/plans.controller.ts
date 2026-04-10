@@ -1,0 +1,50 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  Post,
+  UseGuards,
+  ValidationPipe,
+} from "@nestjs/common";
+
+import { AuthenticatedUser } from "../common/authenticated-user.decorator";
+import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { CreatePlanCheckoutDto } from "./dto/create-plan-checkout.dto";
+import { PlansService } from "./plans.service";
+
+@Controller("plans")
+export class PlansController {
+  constructor(
+    @Inject(PlansService) private readonly plansService: PlansService,
+  ) {}
+
+  @Post("checkout")
+  @UseGuards(JwtAuthGuard)
+  createCheckout(
+    @AuthenticatedUser() user: { id: string },
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        expectedType: CreatePlanCheckoutDto,
+      }),
+    )
+    dto: CreatePlanCheckoutDto,
+  ) {
+    return this.plansService.createCheckout(user.id, dto.planId);
+  }
+
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  getMyPlan(@AuthenticatedUser() user: { id: string }) {
+    return this.plansService.getPlanInfo(user.id);
+  }
+
+  @Post("webhook/:provider")
+  webhook(@Param("provider") provider: string, @Body() body: unknown) {
+    return this.plansService.handleWebhook(provider, body);
+  }
+}

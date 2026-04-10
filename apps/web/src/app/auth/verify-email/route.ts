@@ -12,20 +12,25 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const code = String(formData.get("code") ?? "").trim();
+  const next = String(formData.get("next") ?? "").trim();
+
+  const sanitizedNext =
+    next?.startsWith("/") && !next.startsWith("//") ? next : "";
 
   try {
     const user = await verifyEmailCode(session.accessToken, code);
 
-    return createPostRedirectResponse(
-      request.url,
-      getDefaultAppRedirectPath(user),
-    );
+    const destination = sanitizedNext || getDefaultAppRedirectPath(user);
+    return createPostRedirectResponse(request.url, destination);
   } catch (error) {
     const authError = parseAuthApiError(error);
-
+    const params = new URLSearchParams({
+      error: authError.message,
+      ...(sanitizedNext && { next: sanitizedNext }),
+    });
     return createPostRedirectResponse(
       request.url,
-      `/verificar-email?error=${encodeURIComponent(authError.message)}`,
+      `/verificar-email?${params}`,
     );
   }
 }

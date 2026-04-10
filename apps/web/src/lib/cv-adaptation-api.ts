@@ -35,6 +35,18 @@ export async function createCvAdaptation(
   return response.json() as Promise<CvAdaptationDto>;
 }
 
+export async function createCvAdaptationFromMaster(payload: {
+  masterResumeId: string;
+  jobDescriptionText: string;
+}): Promise<CvAdaptationDto> {
+  const response = await apiRequest("POST", "/cv-adaptation", payload);
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to create adaptation: ${error}`);
+  }
+  return response.json() as Promise<CvAdaptationDto>;
+}
+
 export async function getCvAdaptation(id: string): Promise<CvAdaptationDto> {
   const response = await apiRequest("GET", `/cv-adaptation/${id}`);
   if (!response.ok) {
@@ -103,6 +115,63 @@ export async function getCvAdaptationContent(
   return response.json() as Promise<{
     adaptedContentJson: Record<string, unknown>;
   }>;
+}
+
+export type CvAnalysisData = {
+  vaga: {
+    cargo: string;
+    empresa: string;
+  };
+  fit: {
+    score: number;
+    categoria: "baixo" | "medio" | "alto";
+    headline: string;
+    subheadline: string;
+  };
+  comparacao: {
+    antes: string;
+    depois: string;
+  };
+  pontos_fortes: string[];
+  lacunas: string[];
+  melhorias_aplicadas: string[];
+  ats_keywords: {
+    presentes: string[];
+    ausentes: string[];
+  };
+  preview: {
+    antes: string;
+    depois: string;
+  };
+  projecao_melhoria: {
+    score_atual: number;
+    score_pos_otimizacao: number;
+    explicacao_curta: string;
+  };
+  mensagem_venda: {
+    titulo: string;
+    subtexto: string;
+  };
+};
+
+export type GuestAnalysisResult = {
+  adaptedContentJson: CvAnalysisData;
+  previewText: string;
+};
+
+export async function analyzeGuestCv(
+  formData: FormData,
+): Promise<GuestAnalysisResult> {
+  const response = await apiRequest(
+    "POST",
+    "/cv-adaptation/analyze-guest",
+    formData,
+  );
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Falha ao analisar CV: ${error}`);
+  }
+  return response.json() as Promise<GuestAnalysisResult>;
 }
 
 export async function downloadCvAdaptationPdf(id: string): Promise<Blob> {

@@ -11,6 +11,64 @@ export class CvAdaptationAiService {
     @Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI,
   ) {}
 
+  async analyzeAndAdaptDirect(
+    masterCvText: string,
+    jobDescriptionText: string,
+  ): Promise<{ adaptedContentJson: unknown; previewText: string }> {
+    if (process.env.SKIP_AI === "true") {
+      const stubOutput = {
+        vaga: {
+          cargo: "Cargo não identificado (stub)",
+          empresa: "Empresa não identificada (stub)",
+        },
+        fit: {
+          score: 72,
+          categoria: "medio",
+          headline: "CV não está posicionado para esta vaga (stub)",
+          subheadline: "Modo stub ativo — integração com IA desativada.",
+        },
+        comparacao: {
+          antes: "CV genérico sem foco na vaga",
+          depois: "CV adaptado com palavras-chave da vaga",
+        },
+        pontos_fortes: ["CV enviado com sucesso (stub)"],
+        lacunas: ["Integração real com IA desativada (SKIP_AI=true)"],
+        melhorias_aplicadas: ["Nenhuma melhoria aplicada no modo stub"],
+        ats_keywords: { presentes: [], ausentes: [] },
+        preview: {
+          antes: masterCvText.slice(0, 200),
+          depois: masterCvText.slice(0, 200),
+        },
+        projecao_melhoria: {
+          score_atual: 72,
+          score_pos_otimizacao: 85,
+          explicacao_curta: "Stub: melhoria simulada após otimização.",
+        },
+        mensagem_venda: {
+          titulo: "Seu CV já está otimizado para esta vaga",
+          subtexto: "Desbloqueie para aumentar suas chances de entrevista",
+        },
+      };
+      return {
+        adaptedContentJson: stubOutput,
+        previewText: stubOutput.fit.headline,
+      };
+    }
+
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const { analyzeAndAdaptCv } = await import("@earlycv/ai");
+    // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
+    const output = await analyzeAndAdaptCv(this.aiClient as any, model, {
+      masterCvText,
+      jobDescriptionText,
+    });
+
+    return {
+      adaptedContentJson: output,
+      previewText: output.fit.headline,
+    };
+  }
+
   async analyzeAndAdapt(
     adaptation: {
       id: string;

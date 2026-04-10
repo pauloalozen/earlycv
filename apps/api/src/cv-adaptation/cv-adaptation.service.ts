@@ -137,6 +137,27 @@ export class CvAdaptationService {
     return createCvAdaptationResponseDto(adaptation);
   }
 
+  async analyzeGuest(
+    jobDescriptionText: string,
+    file?: FileUpload,
+  ): Promise<{ adaptedContentJson: unknown; previewText: string }> {
+    if (!file) {
+      throw new BadRequestException("PDF file is required.");
+    }
+
+    let cvText: string;
+    try {
+      const { extractTextFromPdf } = await import("@earlycv/ai");
+      cvText = await extractTextFromPdf(file.buffer);
+    } catch (error) {
+      throw new BadRequestException(
+        `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+    }
+
+    return this.aiService.analyzeAndAdaptDirect(cvText, jobDescriptionText);
+  }
+
   async list(userId: string, page: number = 1, limit: number = 20) {
     const skip = (page - 1) * limit;
 

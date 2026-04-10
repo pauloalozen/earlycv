@@ -59,8 +59,62 @@ Este documento guia continuidade do projeto com o mesmo padrao de implementacao.
 
 ## 7) Frontend (Next.js App Router) patterns
 
-- Preservar linguagem visual existente (fundo claro, acento laranja/terracota, navegacao suave).
-- Em rotas publicas, garantir SEO completo (metadata, canonical, OG/Twitter, structured data quando fizer sentido).
+### Identidade visual
+
+A identidade das paginas voltadas ao usuario e **monocromatica escura-sobre-clara**, limpa e
+direta. Nao usar laranja/terracota em paginas de usuario — esse acento esta restrito ao admin interno.
+
+**Superficies**
+
+| Token CSS            | Valor     | Uso                                          |
+|----------------------|-----------|----------------------------------------------|
+| `--background`       | `#FAFAFA` | Fundo padrao das paginas                     |
+| `--background-alt`   | `#F2F2F2` | Fundo de secoes de resultado/analise         |
+| `--background-dark`  | `#0E0E0E` | Blocos de CTA escuros                        |
+| `--surface`          | `#FFFFFF` | Cards e areas de conteudo                    |
+| `--surface-muted`    | `#F7F7F7` | Paineis internos de card (ex.: preview antes)|
+| `--surface-border`   | `#E0E0E0` | Bordas gerais                                |
+
+**Texto**
+
+| Token CSS           | Valor     | Uso                                           |
+|---------------------|-----------|-----------------------------------------------|
+| `--foreground`      | `#111111` | Texto principal                               |
+| `--text-secondary`  | `#666666` | Subtitulos, descricoes                        |
+| `--text-muted`      | `#888888` | Texto de apoio                                |
+| `--text-label`      | `#AAAAAA` | Labels de secao (uppercase tracking)          |
+| `--text-placeholder`| `#BBBBBB` | Placeholders de inputs                        |
+
+**Semanticas de diagnostico de CV**
+
+| Token CSS      | Valor     | Uso                                      |
+|----------------|-----------|------------------------------------------|
+| `--score-high` | `#84cc16` | Pontos fortes, fit alto, keywords presentes |
+| `--score-mid`  | `#f59e0b` | Fit medio, alertas                       |
+| `--score-low`  | `#ef4444` | Lacunas, fit baixo, keywords ausentes    |
+
+**Tipografia**
+
+- Logo: `<span className="font-logo text-2xl tracking-tight">earlyCV</span>`
+- H1 hero: `text-4xl font-medium leading-[1.05] tracking-tight` / `md:text-[56px]`
+- H1 de pagina: `text-2xl/3xl font-bold tracking-tight` ou `font-medium`
+- Label de secao: `text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]`
+- Corpo: `text-sm` a `text-base`
+- Fonte: DM Sans (body, `font-sans`), Gugi (logo, `font-logo`)
+
+**Componentes recorrentes**
+
+- Header padrao: `<header className="flex items-center justify-between px-10 py-6">`
+- Card padrao: `bg-white shadow-sm rounded-xl p-5`
+- Card hero: `bg-white shadow-sm rounded-[20px]`
+- Botao primario: `bg-[#111111] text-white rounded-[14px] py-[18px] px-7 text-lg font-medium`
+- Botao outline: `border border-[#DDDDDD] bg-white rounded-xl px-[18px] py-[6px] text-base font-medium`
+- Chip positivo: `bg-lime-100 text-lime-800 rounded-full px-2.5 py-0.5 text-xs font-semibold`
+- Chip negativo: `bg-red-100 text-red-700 rounded-full px-2.5 py-0.5 text-xs font-semibold`
+
+**Regras gerais**
+
+- Em rotas publicas, garantir SEO completo (metadata, canonical, OG/Twitter).
 - Rotas internas/showcase: usar `noindex` por padrao.
 - Componentes genericos em `apps/web/src/components/ui` devem seguir regras locais de `apps/web/src/components/ui/AGENTS.md`.
 - Em `ui`, usar named exports (sem `default export`).

@@ -61,6 +61,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.cvAdaptation;
   }
 
+  get planPurchase() {
+    return this.prisma.planPurchase;
+  }
+
   get $transaction() {
     return this.prisma.$transaction.bind(this.prisma);
   }

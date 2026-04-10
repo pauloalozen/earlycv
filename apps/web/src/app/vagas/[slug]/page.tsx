@@ -119,8 +119,8 @@ export default async function JobPage({ params }: JobPageProps) {
         <header className="mb-12 flex flex-col gap-6 border-b border-stone-200 pb-8 md:flex-row md:items-center md:justify-between">
           <Link className="flex items-center gap-2.5" href="/">
             <BrandMark className="size-7 rounded-[9px]" />
-            <span className="text-2xl font-bold tracking-tight text-stone-800">
-              EarlyCV
+            <span className="font-logo text-2xl tracking-tight text-stone-800">
+              earlyCV
             </span>
           </Link>
 

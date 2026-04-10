@@ -1,11 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fafaf9;
-  --foreground: #292524;
+  /* ── Superfícies ── */
+  --background: #fafafa;
+  --background-alt: #f2f2f2;
+  --background-dark: #0e0e0e;
   --surface: #ffffff;
-  --surface-muted: #f5f5f4;
-  --surface-border: #e7e5e4;
+  --surface-muted: #f7f7f7;
+  --surface-border: #e0e0e0;
+  --surface-border-light: #dddddd;
+
+  /* ── Texto ── */
+  --foreground: #111111;
+  --text-secondary: #666666;
+  --text-muted: #888888;
+  --text-label: #aaaaaa;
+  --text-placeholder: #bbbbbb;
+
+  /* ── Semânticas (diagnóstico de CV) ── */
+  --score-high: #84cc16;   /* lime  — pontos fortes, fit alto */
+  --score-mid: #f59e0b;    /* amber — fit médio */
+  --score-low: #ef4444;    /* red   — lacunas, fit baixo */
+
+  /* ── Admin/interno (não usar em páginas de usuário) ── */
   --accent: #ea580c;
   --accent-strong: #c2410c;
   --success: #0d9488;
@@ -26,6 +43,10 @@ body {
   font-family: var(--font-sans), sans-serif;
 }
 
+@utility font-logo {
+  font-family: var(--font-logo), sans-serif;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -43,36 +64,17 @@ select {
 }
 
 .page-transition {
-  animation: page-fade-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: page-fade-in 480ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html {
-  scrollbar-color: var(--accent) #f1f1f1;
-  scrollbar-width: thin;
-}
-
-::-webkit-scrollbar {
-  width: 12px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
-  border: 2px solid #f1f1f1;
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #f97316, var(--accent));
+  scrollbar-width: auto;
 }
 
 @keyframes page-fade-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(-10px);
   }
 
   to {
@@ -83,7 +85,7 @@ html {
 
 @media (min-width: 768px) {
   .page-transition {
-    animation-duration: 320ms;
+    animation-duration: 560ms;
   }
 }
 

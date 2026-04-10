@@ -9,10 +9,11 @@ import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
 import { CvAdaptationPaymentService } from "./cv-adaptation-payment.service";
 import { CvAdaptationPdfService } from "./cv-adaptation-pdf.service";
+import { CvAdaptationPublicController } from "./cv-adaptation-public.controller";
 
 @Module({
   imports: [DatabaseModule, ResumeTemplatesModule],
-  controllers: [CvAdaptationController],
+  controllers: [CvAdaptationController, CvAdaptationPublicController],
   providers: [
     CvAdaptationService,
     CvAdaptationAiService,
