@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 
 import { DatabaseService } from "../database/database.service";
+import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 
 @Injectable()
 export class CvAdaptationAiService {
@@ -67,6 +68,49 @@ export class CvAdaptationAiService {
       adaptedContentJson: output,
       previewText: output.fit.headline,
     };
+  }
+
+  async buildPaidCvOutputFromGuest(input: {
+    masterCvText: string;
+    jobDescriptionText: string;
+    jobTitle?: string;
+    companyName?: string;
+  }): Promise<CvAdaptationOutput> {
+    if (process.env.SKIP_AI === "true") {
+      return {
+        summary: input.masterCvText.slice(0, 300),
+        sections: [
+          {
+            sectionType: "other",
+            title: "Conteúdo Original",
+            items: [
+              {
+                heading: "CV enviado",
+                bullets: input.masterCvText
+                  .split("\n")
+                  .map((line) => line.trim())
+                  .filter((line) => line.length > 0)
+                  .slice(0, 20),
+              },
+            ],
+          },
+        ],
+        highlightedSkills: [],
+        removedSections: [],
+      };
+    }
+
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const { adaptCv } = await import("@earlycv/ai");
+    // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
+    const { output } = await adaptCv(this.aiClient as any, model, {
+      masterCvText: input.masterCvText,
+      jobDescriptionText: input.jobDescriptionText,
+      jobTitle: input.jobTitle,
+      companyName: input.companyName,
+    });
+
+    return output as CvAdaptationOutput;
   }
 
   async analyzeAndAdapt(

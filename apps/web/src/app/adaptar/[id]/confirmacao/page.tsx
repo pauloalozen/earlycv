@@ -1,126 +1,179 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { confirmCvAdaptationPayment } from "@/lib/cv-adaptation-api";
 
-type State = "confirming" | "confirmed" | "error";
+type UIState = "confirming" | "approved" | "rejected" | "pending" | "error";
 
 export default function ConfirmacaoPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const [state, setState] = useState<State>("confirming");
-  const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const [state, setState] = useState<UIState>("confirming");
 
   useEffect(() => {
+    const collectionStatus = searchParams.get("collection_status");
+    const status = searchParams.get("status");
+    const mpStatus = collectionStatus ?? status;
+
+    if (mpStatus === "rejected") {
+      setState("rejected");
+      return;
+    }
+
+    if (mpStatus === "pending" || mpStatus === "in_process") {
+      setState("pending");
+      return;
+    }
+
+    // approved or no status yet — try to confirm on the backend
     confirmCvAdaptationPayment(params.id)
-      .then(() => {
-        setState("confirmed");
-        setTimeout(() => {
-          router.push(`/adaptar/${params.id}/resultado`);
-        }, 2000);
-      })
-      .catch((err) => {
-        setError(
-          err instanceof Error ? err.message : "Erro ao confirmar pagamento",
-        );
-        setState("error");
-      });
-  }, [params.id, router]);
+      .then(() => setState("approved"))
+      .catch(() => setState("error"));
+  }, [params.id, searchParams]);
 
   if (state === "confirming") {
     return (
-      <main className="min-h-screen bg-white p-8 flex items-center justify-center">
+      <main className="min-h-screen bg-[#F2F2F2] flex items-center justify-center p-6">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4" />
-          <p className="text-lg font-medium">Confirmando pagamento...</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (state === "error") {
-    return (
-      <main className="min-h-screen bg-white p-8">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg mb-4">
-            {error}
-          </div>
-          <p className="text-sm text-gray-500 mb-4">
-            Se você já pagou, aguarde alguns instantes e tente novamente.
-          </p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setState("confirming");
-                setError(null);
-                confirmCvAdaptationPayment(params.id)
-                  .then(() => {
-                    setState("confirmed");
-                    setTimeout(
-                      () => router.push(`/adaptar/${params.id}/resultado`),
-                      2000,
-                    );
-                  })
-                  .catch((err) => {
-                    setError(
-                      err instanceof Error
-                        ? err.message
-                        : "Erro ao confirmar pagamento",
-                    );
-                    setState("error");
-                  });
-              }}
-              className="bg-orange-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-orange-600"
-            >
-              Tentar novamente
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push(`/adaptar/${params.id}/resultado`)}
-              className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300"
-            >
-              Ver resultado
-            </button>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="min-h-screen bg-white p-8">
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-green-50 border border-green-200 p-8 rounded-lg text-center">
           <svg
-            aria-label="Pagamento confirmado"
-            className="w-16 h-16 text-green-600 mx-auto mb-6"
+            className="animate-spin mx-auto mb-4 text-gray-400"
+            width="36"
+            height="36"
+            viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            viewBox="0 0 24 24"
+            strokeWidth="2.5"
+            strokeLinecap="round"
           >
-            <path
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+          </svg>
+          <p className="text-gray-500 text-sm">Confirmando pagamento...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (state === "approved") {
+    return (
+      <main className="min-h-screen bg-[#F2F2F2] flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+          <div className="w-16 h-16 rounded-full bg-lime-100 flex items-center justify-center mx-auto mb-6">
+            <svg
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth={2}
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
-          <h1 className="text-3xl font-bold mb-2 text-green-800">
-            Pagamento Confirmado!
+              className="text-lime-600"
+            >
+              <path d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+
+          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+            Pagamento aprovado!
           </h1>
-          <p className="text-gray-600 mb-6">
-            Redirecionando para seu CV adaptado...
+          <p className="text-gray-500 text-sm mb-8">
+            Seu CV adaptado está pronto. Clique abaixo para ver e baixar.
           </p>
+
           <button
             type="button"
             onClick={() => router.push(`/adaptar/${params.id}/resultado`)}
-            className="bg-orange-500 text-white font-semibold py-2 px-6 rounded-lg hover:bg-orange-600"
+            style={{ color: "#ffffff" }}
+            className="w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none transition-colors hover:bg-[#222222]"
           >
-            Ir agora
+            Ver e baixar meu CV
           </button>
         </div>
+      </main>
+    );
+  }
+
+  if (state === "rejected" || state === "error") {
+    return (
+      <main className="min-h-screen bg-[#F2F2F2] flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+          <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-6">
+            <svg
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-red-500"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M15 9l-6 6M9 9l6 6" />
+            </svg>
+          </div>
+
+          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+            Não foi possível receber o pagamento
+          </h1>
+          <p className="text-gray-500 text-sm mb-8">
+            O pagamento foi recusado. Verifique os dados do cartão ou tente
+            outro método e tente novamente.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => router.push(`/adaptar/${params.id}/checkout`)}
+            style={{ color: "#ffffff" }}
+            className="w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none transition-colors hover:bg-[#222222]"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  // pending / in_process
+  return (
+    <main className="min-h-screen bg-[#F2F2F2] flex items-center justify-center p-6">
+      <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+        <div className="w-16 h-16 rounded-full bg-yellow-50 flex items-center justify-center mx-auto mb-6">
+          <svg
+            width="32"
+            height="32"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-yellow-500"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
+        </div>
+
+        <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+          Pagamento em processamento
+        </h1>
+        <p className="text-gray-500 text-sm mb-8">
+          Seu pagamento está sendo processado. Assim que confirmado, seu CV
+          adaptado ficará disponível.
+        </p>
+
+        <button
+          type="button"
+          onClick={() => router.push(`/adaptar/${params.id}/resultado`)}
+          style={{ color: "#ffffff" }}
+          className="w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none transition-colors hover:bg-[#222222]"
+        >
+          Acompanhar resultado
+        </button>
       </div>
     </main>
   );

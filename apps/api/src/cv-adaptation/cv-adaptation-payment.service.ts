@@ -15,15 +15,13 @@ export type PaymentIntent = {
 export class CvAdaptationPaymentService {
   private readonly logger = new Logger(CvAdaptationPaymentService.name);
   private readonly priceInCents: number;
-  private readonly currency: string;
   private readonly provider: string;
 
   constructor() {
     this.priceInCents = parseInt(
-      process.env.CV_ADAPTATION_PRICE_IN_CENTS || "1900",
+      process.env.PRICE_PLAN_STARTER || "1190",
       10,
     );
-    this.currency = process.env.CV_ADAPTATION_CURRENCY || "BRL";
     this.provider = process.env.PAYMENT_PROVIDER || "mercadopago";
   }
 
@@ -40,8 +38,15 @@ export class CvAdaptationPaymentService {
     );
   }
 
+  private isMpProduction(): boolean {
+    return (
+      process.env.MERCADOPAGO_MODE === "production" ||
+      process.env.NODE_ENV === "production"
+    );
+  }
+
   private getMercadoPagoClient(): MercadoPagoConfig {
-    const isProduction = process.env.NODE_ENV === "production";
+    const isProduction = this.isMpProduction();
     const token = isProduction
       ? process.env.MERCADOPAGO_ACCESS_TOKEN
       : (process.env.MERCADOPAGO_ACCESS_TOKEN_TEST ??
@@ -73,7 +78,7 @@ export class CvAdaptationPaymentService {
       "http://localhost:4000";
     const notificationUrl = `${apiUrl}/api/cv-adaptation/webhook/mercadopago`;
 
-    const isProduction = process.env.NODE_ENV === "production";
+    const isProduction = this.isMpProduction();
     const successUrl = `${frontendUrl}/adaptar/${adaptationId}/confirmacao`;
 
     // auto_return only works with HTTPS back_urls
@@ -89,15 +94,15 @@ export class CvAdaptationPaymentService {
               title: "CV Adaptado — EarlyCV",
               quantity: 1,
               unit_price: priceInReais,
-              currency_id: this.currency,
+              currency_id: "BRL",
             },
           ],
           external_reference: paymentReference,
           notification_url: notificationUrl,
           back_urls: {
             success: successUrl,
-            failure: `${frontendUrl}/adaptar/${adaptationId}/checkout`,
-            pending: `${frontendUrl}/adaptar/${adaptationId}/resultado`,
+            failure: `${frontendUrl}/adaptar/${adaptationId}/confirmacao`,
+            pending: `${frontendUrl}/adaptar/${adaptationId}/confirmacao`,
           },
           ...(useAutoReturn && { auto_return: "approved" }),
         },
@@ -109,7 +114,7 @@ export class CvAdaptationPaymentService {
     }
 
     const checkoutUrl = isProduction
-      ? result.init_point
+      ? (result.init_point ?? result.sandbox_init_point)
       : (result.sandbox_init_point ?? result.init_point);
     if (!checkoutUrl) {
       throw new BadRequestException(
@@ -121,7 +126,7 @@ export class CvAdaptationPaymentService {
       paymentReference,
       checkoutUrl,
       amountInCents: this.priceInCents,
-      currency: this.currency,
+      currency: "BRL",
     };
   }
 

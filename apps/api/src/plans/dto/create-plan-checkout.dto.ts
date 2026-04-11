@@ -1,6 +1,6 @@
 import { IsIn } from "class-validator";
 
 export class CreatePlanCheckoutDto {
-  @IsIn(["starter", "pro", "unlimited"])
-  planId!: "starter" | "pro" | "unlimited";
+  @IsIn(["starter", "pro", "turbo"])
+  planId!: "starter" | "pro" | "turbo";
 }

@@ -80,13 +80,13 @@ test("POST /api/auth/login returns access and refresh tokens for valid credentia
 
   await request(app.getHttpServer()).post("/api/auth/register").send({
     email,
-    password: "super-secret-123",
+    password: "Super-secret-123",
     name: "Ana Silva",
   });
 
   await request(app.getHttpServer())
     .post("/api/auth/login")
-    .send({ email, password: "super-secret-123" })
+    .send({ email, password: "Super-secret-123" })
     .expect(201)
     .expect(({ body }) => {
       assert.equal(typeof body.accessToken, "string");
@@ -95,6 +95,35 @@ test("POST /api/auth/login returns access and refresh tokens for valid credentia
       assert.equal(body.user.isStaff, false);
       assert.equal(body.user.internalRole, "none");
       assert.equal("passwordHash" in body.user, false);
+    });
+
+  await deleteUserByEmail(database, email);
+  await app.close();
+});
+
+test("POST /api/auth/login accepts a valid 8-char password", async () => {
+  const { app, database } = await createApp();
+  const email = `pc+${randomUUID()}@earlycv.dev`;
+  const password = "Pc123456";
+
+  await deleteUserByEmail(database, email);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/register")
+    .send({
+      email,
+      password,
+      name: "PC User",
+    })
+    .expect(201);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/login")
+    .send({ email, password })
+    .expect(201)
+    .expect(({ body }) => {
+      assert.equal(typeof body.accessToken, "string");
+      assert.equal(typeof body.refreshToken, "string");
     });
 
   await deleteUserByEmail(database, email);
@@ -113,6 +142,22 @@ test("auth endpoints validate payloads, rotate refresh tokens, logout, and retur
     .expect(400);
 
   await request(app.getHttpServer())
+    .post("/api/auth/register")
+    .send({ email, password: "lowercase123", name: "Leo" })
+    .expect(400)
+    .expect(({ body }) => {
+      assert.equal(Array.isArray(body.message), true);
+    });
+
+  await request(app.getHttpServer())
+    .post("/api/auth/register")
+    .send({ email, password: "SemNumero", name: "Leo" })
+    .expect(400)
+    .expect(({ body }) => {
+      assert.equal(Array.isArray(body.message), true);
+    });
+
+  await request(app.getHttpServer())
     .post("/api/auth/login")
     .send({ email: "not-an-email", password: "short" })
     .expect(400);
@@ -121,7 +166,7 @@ test("auth endpoints validate payloads, rotate refresh tokens, logout, and retur
     .post("/api/auth/register")
     .send({
       email,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: "Leo Costa",
     })
     .expect(201);
@@ -167,6 +212,28 @@ test("auth endpoints validate payloads, rotate refresh tokens, logout, and retur
   await app.close();
 });
 
+test("reset-password validates the same password policy as register", async () => {
+  const { app } = await createApp();
+
+  await request(app.getHttpServer())
+    .post("/api/auth/reset-password")
+    .send({ token: "fake-token", newPassword: "lowercase123" })
+    .expect(400)
+    .expect(({ body }) => {
+      assert.equal(Array.isArray(body.message), true);
+    });
+
+  await request(app.getHttpServer())
+    .post("/api/auth/reset-password")
+    .send({ token: "fake-token", newPassword: "SemNumero" })
+    .expect(400)
+    .expect(({ body }) => {
+      assert.equal(Array.isArray(body.message), true);
+    });
+
+  await app.close();
+});
+
 test("register sends a verification code and verification endpoints validate, resend, and unlock the user", async () => {
   const { app, database } = await createApp();
   const fakeEmailDelivery = app.get(FakeEmailDeliveryService);
@@ -179,7 +246,7 @@ test("register sends a verification code and verification endpoints validate, re
     .post("/api/auth/register")
     .send({
       email,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: "Bruna Alves",
     })
     .expect(201);
@@ -238,7 +305,7 @@ test("admin-only endpoint rejects users without an internal role", async () => {
     .post("/api/auth/register")
     .send({
       email,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: "Mila Rocha",
     })
     .expect(201);
@@ -275,7 +342,7 @@ test("admin-only endpoint rejects admin-role users without staff access", async 
     .post("/api/auth/register")
     .send({
       email,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: "Nina Costa",
     })
     .expect(201);
@@ -307,7 +374,7 @@ test("admin-only endpoint allows staff admins", async () => {
     .post("/api/auth/register")
     .send({
       email,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: "Caio Lima",
     })
     .expect(201);
@@ -342,7 +409,7 @@ test("admin-only endpoint allows staff superadmins", async () => {
     .post("/api/auth/register")
     .send({
       email,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: "Lia Martins",
     })
     .expect(201);

@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 
 import {
   BadRequestException,
@@ -15,10 +15,12 @@ import * as argon2 from "argon2";
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
 import type { CreateStaffUserDto } from "./dto/create-staff-user.dto";
+import type { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import type { LoginDto } from "./dto/login.dto";
 import type { RefreshDto } from "./dto/refresh.dto";
 import type { RegisterDto } from "./dto/register.dto";
 import type { ResendVerificationCodeDto } from "./dto/resend-verification-code.dto";
+import type { ResetPasswordDto } from "./dto/reset-password.dto";
 import type { VerifyEmailDto } from "./dto/verify-email.dto";
 import {
   EMAIL_DELIVERY_PORT,
@@ -307,6 +309,72 @@ export class AuthService {
     }
 
     return this.sanitizeUser(user);
+  }
+
+  async forgotPassword(input: ForgotPasswordDto): Promise<{ ok: true }> {
+    const user = await this.database.user.findUnique({
+      where: { email: input.email.trim().toLowerCase() },
+    });
+
+    // Always return ok to avoid leaking whether the email exists
+    if (!user || user.status !== "active") {
+      return { ok: true };
+    }
+
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await this.database.$transaction(async (tx) => {
+      await tx.passwordResetToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+
+      await tx.passwordResetToken.create({
+        data: { userId: user.id, tokenHash, expiresAt },
+      });
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3000";
+    const resetLink = `${frontendUrl}/redefinir-senha?token=${rawToken}`;
+
+    await this.emailDelivery.send({
+      to: user.email,
+      subject: "Redefinir sua senha — EarlyCV",
+      text: `Você solicitou a redefinição de senha.\n\nClique no link abaixo para criar uma nova senha (válido por 1 hora):\n\n${resetLink}\n\nSe não foi você, ignore este email.`,
+      html: `<p>Você solicitou a redefinição de senha.</p><p><a href="${resetLink}">Clique aqui para redefinir sua senha</a></p><p>O link expira em 1 hora.</p><p>Se não foi você, ignore este email.</p>`,
+    });
+
+    return { ok: true };
+  }
+
+  async resetPassword(input: ResetPasswordDto): Promise<{ ok: true }> {
+    const tokenHash = createHash("sha256").update(input.token).digest("hex");
+
+    const record = await this.database.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!record || record.usedAt !== null || record.expiresAt <= new Date()) {
+      throw new BadRequestException("Link de redefinição inválido ou expirado.");
+    }
+
+    const passwordHash = await argon2.hash(input.newPassword);
+
+    await this.database.$transaction(async (tx) => {
+      await tx.passwordResetToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      });
+
+      await tx.user.update({
+        where: { id: record.userId },
+        data: { passwordHash },
+      });
+    });
+
+    return { ok: true };
   }
 
   private async createUser(input: {

@@ -16,10 +16,12 @@ import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { LocalAuthGuard } from "../common/local-auth.guard";
 import type { AuthUser, SocialProfileInput } from "./auth.service";
 import { AuthService } from "./auth.service";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { ResendVerificationCodeDto } from "./dto/resend-verification-code.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
 
 const authValidationPipe = new ValidationPipe({
@@ -121,6 +123,22 @@ export class AuthController {
     @AuthenticatedUser() user: AuthUser,
   ) {
     return this.authService.resendVerificationCode(user.id, dto);
+  }
+
+  @Post("forgot-password")
+  forgotPassword(
+    @Body(new ValidationPipe({ ...authValidationPipe, expectedType: ForgotPasswordDto }))
+    dto: ForgotPasswordDto,
+  ) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post("reset-password")
+  resetPassword(
+    @Body(new ValidationPipe({ ...authValidationPipe, expectedType: ResetPasswordDto }))
+    dto: ResetPasswordDto,
+  ) {
+    return this.authService.resetPassword(dto);
   }
 
   @Get("google/start")

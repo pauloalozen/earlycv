@@ -11,10 +11,11 @@ import {
   getResumeDisplayKind,
 } from "@/lib/admin-users-operations";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminStatusBadge } from "../../_components/admin-status-badge";
 import { AdminTokenState } from "../../_components/admin-token-state";
+import { setUserCreditsAction } from "./actions";
+import { SetCreditsForm } from "./set-credits-form";
 
 type AdminUserDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -113,8 +114,25 @@ export default async function AdminUserDetailPage({
           </Card>
           <InfoField label="email" description={user.email} />
           <InfoField label="plano" description={user.planType} />
+          <InfoField
+            label="creditos"
+            description={String(user.creditsRemaining)}
+          />
           <InfoField label="status da conta" description={user.status} />
         </div>
+
+        <Card className="space-y-3" padding="lg">
+          <h2 className="text-xl font-bold tracking-tight text-stone-950">
+            Ajustar creditos
+          </h2>
+          <p className="text-sm text-stone-600">
+            Defina a quantidade exata de creditos disponiveis para este usuario.
+          </p>
+          <SetCreditsForm
+            currentCredits={user.creditsRemaining}
+            setCreditsAction={setUserCreditsAction.bind(null, user.id)}
+          />
+        </Card>
 
         {assistedSession?.mode === "assisted" ? (
           <Card className="border-orange-200 bg-orange-50/80" padding="lg">

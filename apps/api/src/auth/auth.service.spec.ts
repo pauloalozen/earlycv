@@ -102,7 +102,7 @@ test("AuthService registers a user and stores a hashed refresh token", async () 
 
   const result = await service.register({
     email,
-    password: "super-secret-123",
+    password: "Super-secret-123",
     name: "Ana Silva",
   });
 
@@ -182,7 +182,7 @@ test("AuthService rotates refresh tokens and logout revokes the active session",
 
   const registered = await service.register({
     email,
-    password: "super-secret-123",
+    password: "Super-secret-123",
     name: "Bia Souza",
   });
 

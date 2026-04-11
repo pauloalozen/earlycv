@@ -3,7 +3,7 @@
 import { apiRequest } from "./api-request";
 
 export type PlanInfo = {
-  planType: "free" | "starter" | "pro" | "unlimited";
+  planType: "free" | "starter" | "pro" | "turbo" | "unlimited";
   creditsRemaining: number | null;
   planExpiresAt: string | null;
   isActive: boolean;
@@ -16,7 +16,7 @@ export async function getMyPlan(): Promise<PlanInfo> {
 }
 
 export async function createPlanCheckout(
-  planId: "starter" | "pro" | "unlimited",
+  planId: "starter" | "pro" | "turbo",
 ): Promise<{ checkoutUrl: string; purchaseId: string }> {
   const response = await apiRequest("POST", "/plans/checkout", { planId });
   if (!response.ok) {

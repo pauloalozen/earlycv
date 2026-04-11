@@ -125,7 +125,7 @@ export default function CheckoutPage() {
               <p className="text-gray-600 mb-2">
                 <strong>Valor:</strong>
               </p>
-              <div className="text-5xl font-bold text-orange-500">R$ 19,00</div>
+              <div className="text-5xl font-bold text-orange-500">R$ 11,90</div>
               <p className="text-sm text-gray-500 mt-2">
                 Acesso ao CV adaptado + download em PDF
               </p>

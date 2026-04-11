@@ -1,15 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import {
+  SIGNUP_PASSWORD_RULES,
+  validateSignupPassword,
+} from "@/lib/password-rules";
 import { PasswordInput } from "./password-input";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const passwordRules = [
-  { label: "Mínimo 8 caracteres", test: (v: string) => v.length >= 8 },
-  { label: "Pelo menos uma letra maiúscula", test: (v: string) => /[A-Z]/.test(v) },
-  { label: "Pelo menos um número", test: (v: string) => /[0-9]/.test(v) },
-];
 
 export function RegisterForm({ next }: { next: string }) {
   const [email, setEmail] = useState("");
@@ -17,7 +15,7 @@ export function RegisterForm({ next }: { next: string }) {
   const [touched, setTouched] = useState({ email: false, password: false });
 
   const emailValid = EMAIL_REGEX.test(email);
-  const passwordAllValid = passwordRules.every((r) => r.test(password));
+  const passwordAllValid = validateSignupPassword(password);
   const showEmailError = touched.email && email.length > 0 && !emailValid;
   const showPasswordRules = touched.password && password.length > 0;
 
@@ -72,10 +70,13 @@ export function RegisterForm({ next }: { next: string }) {
         />
         {showPasswordRules && (
           <ul className="mt-2 space-y-1">
-            {passwordRules.map((rule) => {
+            {SIGNUP_PASSWORD_RULES.map((rule) => {
               const ok = rule.test(password);
               return (
-                <li key={rule.label} className="flex items-center gap-1.5 text-xs">
+                <li
+                  key={rule.label}
+                  className="flex items-center gap-1.5 text-xs"
+                >
                   <span className={ok ? "text-lime-600" : "text-red-400"}>
                     {ok ? "✓" : "✗"}
                   </span>

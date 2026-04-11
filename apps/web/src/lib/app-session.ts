@@ -20,7 +20,7 @@ export function shouldMirrorBackofficeSession(user: AppSessionUser) {
 
 export function getDefaultAppRedirectPath(user: AppSessionUser | null) {
   if (!user) {
-    return "/login";
+    return "/entrar";
   }
 
   if (!user.emailVerifiedAt) {
@@ -40,12 +40,12 @@ export function getRouteAccessRedirectPath(
 ) {
   const normalizedPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
 
-  if (normalizedPath === "/login" || normalizedPath === "/entrar") {
+  if (normalizedPath === "/entrar") {
     return user ? getDefaultAppRedirectPath(user) : null;
   }
 
   if (!user) {
-    return "/login";
+    return "/entrar";
   }
 
   if (!user.emailVerifiedAt) {

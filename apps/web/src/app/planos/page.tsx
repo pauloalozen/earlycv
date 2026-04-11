@@ -10,18 +10,36 @@ export const metadata: Metadata = {
   title: "Planos | EarlyCV",
 };
 
+function parseCents(
+  envVal: string | undefined,
+  fallback: number,
+): { whole: string; decimal: string } {
+  const cents = parseInt(envVal ?? String(fallback), 10);
+  const reais = Math.floor(cents / 100);
+  const centavos = (cents % 100).toString().padStart(2, "0");
+  return { whole: `R$${reais}`, decimal: `,${centavos}` };
+}
+
+const starterPrice = parseCents(process.env.PRICE_PLAN_STARTER, 1190);
+const proPrice = parseCents(process.env.PRICE_PLAN_PRO, 2990);
+const turboPrice = parseCents(process.env.PRICE_PLAN_TURBO, 5990);
+
+const qntStarter = parseInt(process.env.QNT_CV_PLAN_STARTER ?? "1", 10);
+const qntPro = parseInt(process.env.QNT_CV_PLAN_PRO ?? "3", 10);
+const qntTurbo = parseInt(process.env.QNT_CV_PLAN_TURBO ?? "10", 10);
+
 const PLANS = [
   {
     id: "starter" as const,
     label: "Starter",
-    price: "R$11",
-    cents: ",90",
+    price: starterPrice.whole,
+    cents: starterPrice.decimal,
     description: "Para uma vaga específica",
     featured: false,
     badge: null,
     cta: "Ajustar meu CV agora",
     features: [
-      "1 CV ajustado para passar no ATS",
+      `${qntStarter} CV ajustado para passar no ATS`,
       "Score de compatibilidade ATS",
       "Análise de keywords da vaga",
       "Download em PDF e DOCX",
@@ -31,14 +49,14 @@ const PLANS = [
   {
     id: "pro" as const,
     label: "Pro",
-    price: "R$29",
-    cents: ",90",
+    price: proPrice.whole,
+    cents: proPrice.decimal,
     description: "Para quem aplica para várias vagas",
     featured: true,
     badge: "Mais escolhido",
     cta: "Aumentar minhas chances",
     features: [
-      "3 CVs ajustados para passar no ATS",
+      `${qntPro} CVs ajustados para passar no ATS`,
       "Score de compatibilidade ATS",
       "Análise de keywords da vaga",
       "Download em PDF e DOCX",
@@ -49,14 +67,14 @@ const PLANS = [
   {
     id: "turbo" as const,
     label: "Turbo",
-    price: "R$59",
-    cents: ",90",
+    price: turboPrice.whole,
+    cents: turboPrice.decimal,
     description: "Para quem está aplicando todos os dias",
     featured: false,
     badge: null,
     cta: "Aplicar para mais vagas",
     features: [
-      "10 CVs ajustados para passar no ATS",
+      `${qntTurbo} CVs ajustados para passar no ATS`,
       "Score de compatibilidade ATS",
       "Análise de keywords da vaga",
       "Download em PDF e DOCX",

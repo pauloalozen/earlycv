@@ -8,10 +8,13 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { EMAIL_DELIVERY_PORT } from "./email-delivery.port";
 import { FakeEmailDeliveryService } from "./fake-email-delivery.service";
+import { ResendEmailDeliveryService } from "./resend-email-delivery.service";
 import { GoogleStrategy } from "./strategies/google.strategy";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { LinkedinStrategy } from "./strategies/linkedin.strategy";
 import { LocalStrategy } from "./strategies/local.strategy";
+
+const useResend = Boolean(process.env.RESEND_API_KEY);
 
 @Module({
   imports: [EnvModule, DatabaseModule, PassportModule, JwtModule.register({})],
@@ -19,9 +22,12 @@ import { LocalStrategy } from "./strategies/local.strategy";
   providers: [
     AuthService,
     FakeEmailDeliveryService,
+    ResendEmailDeliveryService,
     {
       provide: EMAIL_DELIVERY_PORT,
-      useExisting: FakeEmailDeliveryService,
+      useExisting: useResend
+        ? ResendEmailDeliveryService
+        : FakeEmailDeliveryService,
     },
     JwtStrategy,
     LocalStrategy,

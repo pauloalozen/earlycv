@@ -9,6 +9,6 @@ export class LoginDto {
   email!: string;
 
   @IsString()
-  @MinLength(12)
+  @MinLength(8)
   password!: string;
 }

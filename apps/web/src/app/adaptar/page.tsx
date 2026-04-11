@@ -91,7 +91,10 @@ export default function AdaptarPage() {
 
       setLoadingStep(3);
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      sessionStorage.setItem("guestAnalysis", JSON.stringify(result));
+      sessionStorage.setItem(
+        "guestAnalysis",
+        JSON.stringify({ ...result, jobDescriptionText: jobDescription }),
+      );
       router.push("/adaptar/resultado");
     } catch (err) {
       setLoading(false);
@@ -266,18 +269,6 @@ export default function AdaptarPage() {
               </p>
             </div>
 
-            <p className="flex items-center gap-1.5 px-1 text-sm font-medium text-lime-700">
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-              >
-                <path d="M12 2l2.9 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l7.1-1.01L12 2z" />
-              </svg>
-              Você verá exatamente o que está te eliminando e como corrigir.
-            </p>
-
             <button
               type="submit"
               disabled={loading}
@@ -316,6 +307,10 @@ export default function AdaptarPage() {
                 </>
               )}
             </button>
+
+            <p className="text-center text-sm text-gray-400">
+              Você verá exatamente o que está te eliminando e como corrigir.
+            </p>
           </form>
         </div>
       </section>

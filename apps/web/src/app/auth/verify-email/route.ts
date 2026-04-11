@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   const session = await getCurrentAppSession();
 
   if (!session) {
-    return createPostRedirectResponse(request.url, "/login");
+    return createPostRedirectResponse(request.url, "/entrar");
   }
 
   const formData = await request.formData();

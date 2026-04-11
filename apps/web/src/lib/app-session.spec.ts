@@ -44,7 +44,7 @@ test("getDefaultAppRedirectPath sends verified staff to admin and common users t
 });
 
 test("getRouteAccessRedirectPath protects admin and superadmin routes by verification and role", () => {
-  assert.equal(getRouteAccessRedirectPath("/admin", null), "/login");
+  assert.equal(getRouteAccessRedirectPath("/admin", null), "/entrar");
   assert.equal(
     getRouteAccessRedirectPath(
       "/dashboard",

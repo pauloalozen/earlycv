@@ -18,6 +18,7 @@ import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import { AdminUsersService } from "./admin-users.service";
+import { SetAdminUserCreditsDto } from "./dto/set-admin-user-credits.dto";
 import { StartAssistedSessionDto } from "./dto/start-assisted-session.dto";
 import { UpdateAdminUserDto } from "./dto/update-admin-user.dto";
 import { UpdateAdminUserPlanDto } from "./dto/update-admin-user-plan.dto";
@@ -88,6 +89,20 @@ export class AdminUsersController {
     dto: UpdateAdminUserStatusDto,
   ) {
     return this.adminUsersService.updateStatus(id, dto);
+  }
+
+  @Patch(":id/credits")
+  setCredits(
+    @Param("id") id: string,
+    @Body(
+      new ValidationPipe({
+        ...adminUsersValidationOptions,
+        expectedType: SetAdminUserCreditsDto,
+      }),
+    )
+    dto: SetAdminUserCreditsDto,
+  ) {
+    return this.adminUsersService.setCredits(id, dto);
   }
 
   @Post(":id/assisted-session")

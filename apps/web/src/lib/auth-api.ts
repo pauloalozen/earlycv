@@ -122,6 +122,20 @@ export async function logoutWithRefreshToken(refreshToken: string) {
   });
 }
 
+export async function forgotPassword(email: string) {
+  return authRequest<{ ok: true }>("/auth/forgot-password", {
+    body: JSON.stringify({ email }),
+    method: "POST",
+  });
+}
+
+export async function resetPassword(token: string, newPassword: string) {
+  return authRequest<{ ok: true }>("/auth/reset-password", {
+    body: JSON.stringify({ token, newPassword }),
+    method: "POST",
+  });
+}
+
 export function parseAuthApiError(error: unknown) {
   if (!(error instanceof Error)) {
     return {

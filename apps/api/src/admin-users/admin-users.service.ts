@@ -7,6 +7,7 @@ import {
 import { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import type { SetAdminUserCreditsDto } from "./dto/set-admin-user-credits.dto";
 import type { StartAssistedSessionDto } from "./dto/start-assisted-session.dto";
 import type { UpdateAdminUserDto } from "./dto/update-admin-user.dto";
 import type { UpdateAdminUserPlanDto } from "./dto/update-admin-user-plan.dto";
@@ -122,6 +123,18 @@ export class AdminUsersService {
     return this.serializeUser(user);
   }
 
+  async setCredits(userId: string, dto: SetAdminUserCreditsDto) {
+    await this.loadProductUserById(userId);
+
+    const user = await this.database.user.update({
+      where: { id: userId },
+      data: { creditsRemaining: dto.creditsRemaining },
+      ...adminUserArgs,
+    });
+
+    return this.serializeUser(user);
+  }
+
   async startAssistedSession(
     operatorUserId: string,
     targetUserId: string,
@@ -160,6 +173,7 @@ export class AdminUsersService {
       email: user.email,
       name: user.name,
       planType: user.planType,
+      creditsRemaining: user.creditsRemaining,
       status: user.status,
       isStaff: user.isStaff,
       internalRole: user.internalRole,
