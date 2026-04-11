@@ -9,3 +9,12 @@
 - Fluxo `/adaptar` com bifurcacao:
   - `master`: cria adaptacao com `masterResumeId` e redireciona para `/adaptar/[id]/resultado`.
   - `upload`: fluxo existente preservado (analyze guest).
+
+## Estado de sincronizacao (2026-04-11)
+
+- Local e remoto sincronizados em `main`.
+- Fluxo de trabalho definido: operar em `main` por padrao, sem worktrees/paralelismo sem solicitacao explicita.
+- Correcao de estabilidade de testes aplicada:
+  - senhas de fixtures e2e alinhadas com politica atual (maiuscula obrigatoria);
+  - expectativas de scripts do workspace config atualizadas;
+  - testes da API serializados (`--test-concurrency=1`) para evitar intermitencia de engine Prisma.

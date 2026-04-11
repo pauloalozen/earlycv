@@ -112,3 +112,10 @@ npm run test
 - Deve existir apenas um CTA principal de analise (`Analisar nova vaga`) sem duplicatas no historico.
 - O card de CV Master usa `/meus-cvs` para `Cadastrar CV`, `Atualizar CV` e `Ver CV`.
 - Em `/adaptar`, quando houver CV Master, o usuario escolhe entre `Usar meu CV base` e `Enviar outro CV`; sem master, fluxo de upload permanece obrigatorio.
+
+## Memoria operacional (processo de trabalho)
+
+- A partir de agora, trabalhar diretamente na branch local `main` por padrao.
+- Nao criar/usar worktrees ou fluxos paralelos sem pedido explicito do usuario.
+- Antes de qualquer merge/sync sensivel, criar snapshot local e validar `git status` para evitar perda de trabalho.
+- Estado de referencia atual: `main` local/remoto sincronizados e suite de testes verde apos ajustes de estabilidade em e2e da API.
