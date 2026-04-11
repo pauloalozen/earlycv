@@ -20,8 +20,14 @@ export function LoginForm({ next }: { next: string }) {
       {next && <input type="hidden" name="next" value={next} />}
 
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-[#444444]">Email</label>
+        <label
+          htmlFor="login-email"
+          className="text-xs font-semibold text-[#444444]"
+        >
+          Email
+        </label>
         <input
+          id="login-email"
           name="email"
           type="email"
           placeholder="seu@email.com"
@@ -43,7 +49,12 @@ export function LoginForm({ next }: { next: string }) {
 
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-semibold text-[#444444]">Senha</label>
+          <label
+            htmlFor="login-password"
+            className="text-xs font-semibold text-[#444444]"
+          >
+            Senha
+          </label>
           <a
             href="/esqueceu-senha"
             className="text-xs text-[#888888] hover:text-[#111111]"
@@ -52,6 +63,7 @@ export function LoginForm({ next }: { next: string }) {
           </a>
         </div>
         <PasswordInput
+          id="login-password"
           name="password"
           placeholder="Sua senha"
           autoComplete="current-password"

@@ -193,7 +193,30 @@ function Chip({ label, variant }: { label: string; variant: "green" | "red" }) {
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function ResultadoPage() {
   const router = useRouter();
-  const [data, setData] = useState<CvAnalysisData | null>(null);
+  const [data, setData] = useState<CvAnalysisData | null>(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const adaptationId = params.get("adaptationId");
+
+    if (adaptationId) {
+      return null;
+    }
+
+    const stored = sessionStorage.getItem("guestAnalysis");
+    if (!stored) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as GuestAnalysisStored;
+      return parsed?.adaptedContentJson ?? null;
+    } catch {
+      return null;
+    }
+  });
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [hasCredits, setHasCredits] = useState<boolean | null>(null);
   const [reviewAdaptationId, setReviewAdaptationId] = useState<string | null>(
@@ -206,7 +229,6 @@ export default function ResultadoPage() {
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -255,8 +277,17 @@ export default function ResultadoPage() {
       router.replace("/adaptar");
       return;
     }
-    const parsed = JSON.parse(stored) as GuestAnalysisStored;
-    setData(parsed.adaptedContentJson);
+
+    try {
+      const parsed = JSON.parse(stored) as GuestAnalysisStored;
+      if (!parsed?.adaptedContentJson) {
+        throw new Error("guestAnalysis sem adaptedContentJson");
+      }
+      setData(parsed.adaptedContentJson);
+    } catch {
+      sessionStorage.removeItem("guestAnalysis");
+      router.replace("/adaptar");
+    }
   }, [router]);
 
   const handleUseCredit = async () => {
@@ -287,7 +318,7 @@ export default function ResultadoPage() {
     setClaimError(null);
 
     try {
-      const adaptation = await claimGuestAnalysis({
+      await claimGuestAnalysis({
         adaptedContentJson: parsed.adaptedContentJson as Record<
           string,
           unknown
@@ -349,24 +380,16 @@ export default function ResultadoPage() {
     }
   };
 
-  useEffect(() => {
-    if (!data) return;
-    // Aguarda React commitar + browser fazer layout/paint antes de revelar
-    const timer = setTimeout(() => setReady(true), 150);
-    return () => clearTimeout(timer);
-  }, [data]);
-
   if (!data) {
     return (
-      <>
-        <div
-          aria-hidden
-          className="pointer-events-none fixed inset-0 -z-10 bg-[#F2F2F2]"
-        />
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#F2F2F2]">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111]" />
+      <main className="fixed inset-0 z-50 flex items-center justify-center bg-[#F2F2F2] px-4 text-[#111]">
+        <div className="flex items-center gap-3 rounded-xl bg-white px-5 py-4 shadow-sm">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111]" />
+          <p className="text-sm font-medium text-[#555]">
+            Carregando análise...
+          </p>
         </div>
-      </>
+      </main>
     );
   }
 
@@ -384,19 +407,7 @@ export default function ResultadoPage() {
         className="pointer-events-none fixed inset-0 -z-10 bg-[#F2F2F2]"
       />
 
-      {!ready && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#F2F2F2]">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111]" />
-        </div>
-      )}
-
-      <main
-        className="min-h-screen bg-[#F2F2F2] text-[#111] transition-all duration-500 ease-out"
-        style={{
-          opacity: ready ? 1 : 0,
-          transform: ready ? "translateY(0)" : "translateY(-8px)",
-        }}
-      >
+      <main className="min-h-screen bg-[#F2F2F2] text-[#111]">
         <AppHeader userName={userName} logoSize="sm" />
 
         <div className="mx-auto max-w-[960px] space-y-3 px-4 pb-24 pt-1">
@@ -641,6 +652,7 @@ export default function ResultadoPage() {
             </div>
             <p className="mt-4 flex items-center gap-2 text-[12px] font-semibold text-[#1a1a1a]">
               <svg
+                aria-hidden="true"
                 width="13"
                 height="13"
                 viewBox="0 0 24 24"
@@ -689,6 +701,7 @@ export default function ResultadoPage() {
 
               <p className="mt-5 flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm italic text-white/70">
                 <svg
+                  aria-hidden="true"
                   width="16"
                   height="16"
                   viewBox="0 0 24 24"
@@ -712,6 +725,7 @@ export default function ResultadoPage() {
                 className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
               >
                 <svg
+                  aria-hidden="true"
                   width="18"
                   height="18"
                   viewBox="0 0 24 24"

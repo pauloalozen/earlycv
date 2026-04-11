@@ -357,7 +357,9 @@ export class AuthService {
     });
 
     if (!record || record.usedAt !== null || record.expiresAt <= new Date()) {
-      throw new BadRequestException("Link de redefinição inválido ou expirado.");
+      throw new BadRequestException(
+        "Link de redefinição inválido ou expirado.",
+      );
     }
 
     const passwordHash = await argon2.hash(input.newPassword);

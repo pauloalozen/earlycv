@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-
-import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
+import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { ScoreIndicator } from "./score-indicator";
 
 export const metadata: Metadata = {
@@ -91,6 +90,7 @@ type PlanosPageProps = {
 function CheckIcon({ dark }: { dark: boolean }) {
   return (
     <svg
+      aria-hidden="true"
       width="16"
       height="16"
       viewBox="0 0 24 24"
@@ -259,6 +259,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
             <div className="flex flex-col items-center gap-2 text-center">
               <p className="flex items-center gap-2 text-sm font-semibold text-[#444444]">
                 <svg
+                  aria-hidden="true"
                   width="15"
                   height="15"
                   viewBox="0 0 24 24"
@@ -275,6 +276,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
               </p>
               <p className="flex items-center gap-2 text-sm font-semibold text-[#444444]">
                 <svg
+                  aria-hidden="true"
                   width="15"
                   height="15"
                   viewBox="0 0 24 24"
@@ -295,6 +297,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
           <div className="w-full max-w-4xl pt-4">
             <div className="flex items-center justify-center gap-2 rounded-xl border border-[#E8E8E8] bg-white px-5 py-3">
               <svg
+                aria-hidden="true"
                 width="15"
                 height="15"
                 viewBox="0 0 24 24"

@@ -146,7 +146,7 @@ export default function MeusCvsPage() {
         </div>
 
         {loading ? (
-          <div className="text-center py-12">
+          <div className="flex min-h-[calc(100dvh-220px)] flex-col items-center justify-center text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
             <p>Carregando...</p>
           </div>

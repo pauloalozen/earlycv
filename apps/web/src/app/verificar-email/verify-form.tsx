@@ -74,6 +74,7 @@ export function VerifyForm({
         ) : (
           <>
             <svg
+              aria-hidden="true"
               width="14"
               height="14"
               viewBox="0 0 24 24"
@@ -119,6 +120,7 @@ export function VerifyForm({
           {isResultFlow ? (
             <>
               <svg
+                aria-hidden="true"
                 width="16"
                 height="16"
                 viewBox="0 0 24 24"
@@ -136,6 +138,7 @@ export function VerifyForm({
           ) : (
             <>
               <svg
+                aria-hidden="true"
                 width="16"
                 height="16"
                 viewBox="0 0 24 24"
@@ -167,6 +170,7 @@ export function VerifyForm({
           style={{ color: resendReady ? "#444444" : "#AAAAAA" }}
         >
           <svg
+            aria-hidden="true"
             width="15"
             height="15"
             viewBox="0 0 24 24"

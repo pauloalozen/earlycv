@@ -21,7 +21,9 @@ export function PageShell({ children }: { children: React.ReactNode }) {
         style={{
           opacity: ready ? 1 : 0,
           transform: ready ? "translateY(0)" : "translateY(-8px)",
-          transition: ready ? "opacity 480ms cubic-bezier(0.22,1,0.36,1), transform 480ms cubic-bezier(0.22,1,0.36,1)" : "none",
+          transition: ready
+            ? "opacity 480ms cubic-bezier(0.22,1,0.36,1), transform 480ms cubic-bezier(0.22,1,0.36,1)"
+            : "none",
         }}
       >
         {children}

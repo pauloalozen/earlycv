@@ -127,7 +127,12 @@ export class AuthController {
 
   @Post("forgot-password")
   forgotPassword(
-    @Body(new ValidationPipe({ ...authValidationPipe, expectedType: ForgotPasswordDto }))
+    @Body(
+      new ValidationPipe({
+        ...authValidationPipe,
+        expectedType: ForgotPasswordDto,
+      }),
+    )
     dto: ForgotPasswordDto,
   ) {
     return this.authService.forgotPassword(dto);
@@ -135,7 +140,12 @@ export class AuthController {
 
   @Post("reset-password")
   resetPassword(
-    @Body(new ValidationPipe({ ...authValidationPipe, expectedType: ResetPasswordDto }))
+    @Body(
+      new ValidationPipe({
+        ...authValidationPipe,
+        expectedType: ResetPasswordDto,
+      }),
+    )
     dto: ResetPasswordDto,
   ) {
     return this.authService.resetPassword(dto);

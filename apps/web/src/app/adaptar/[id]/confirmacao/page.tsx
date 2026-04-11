@@ -38,6 +38,7 @@ export default function ConfirmacaoPage() {
       <main className="min-h-screen bg-[#F2F2F2] flex items-center justify-center p-6">
         <div className="text-center">
           <svg
+            aria-hidden="true"
             className="animate-spin mx-auto mb-4 text-gray-400"
             width="36"
             height="36"
@@ -61,6 +62,7 @@ export default function ConfirmacaoPage() {
         <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
           <div className="w-16 h-16 rounded-full bg-lime-100 flex items-center justify-center mx-auto mb-6">
             <svg
+              aria-hidden="true"
               width="32"
               height="32"
               viewBox="0 0 24 24"
@@ -101,6 +103,7 @@ export default function ConfirmacaoPage() {
         <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
           <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-6">
             <svg
+              aria-hidden="true"
               width="32"
               height="32"
               viewBox="0 0 24 24"
@@ -143,6 +146,7 @@ export default function ConfirmacaoPage() {
       <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
         <div className="w-16 h-16 rounded-full bg-yellow-50 flex items-center justify-center mx-auto mb-6">
           <svg
+            aria-hidden="true"
             width="32"
             height="32"
             viewBox="0 0 24 24"

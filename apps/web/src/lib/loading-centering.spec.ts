@@ -1,0 +1,21 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
+
+test("route loading blocks keep spinners vertically centered", () => {
+  const resultadoPagePath = resolve(
+    currentDir,
+    "../app/adaptar/resultado/page.tsx",
+  );
+  const meusCvsPagePath = resolve(currentDir, "../app/meus-cvs/page.tsx");
+
+  const resultadoPage = readFileSync(resultadoPagePath, "utf8");
+  const meusCvsPage = readFileSync(meusCvsPagePath, "utf8");
+
+  assert.match(resultadoPage, /if \(!data\)[\s\S]*className="fixed inset-0/);
+  assert.match(meusCvsPage, /min-h-\[calc\(100dvh-220px\)\]/);
+});

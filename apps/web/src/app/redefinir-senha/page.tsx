@@ -84,6 +84,7 @@ function RedefinirSenhaContent() {
           <div className="text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-lime-100">
               <svg
+                aria-hidden="true"
                 width="22"
                 height="22"
                 viewBox="0 0 24 24"
@@ -125,10 +126,14 @@ function RedefinirSenhaContent() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#444444]">
+                <label
+                  htmlFor="reset-password"
+                  className="text-xs font-semibold text-[#444444]"
+                >
                   Nova senha
                 </label>
                 <PasswordInput
+                  id="reset-password"
                   name="password"
                   placeholder="Crie uma senha"
                   autoComplete="new-password"
@@ -162,10 +167,14 @@ function RedefinirSenhaContent() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#444444]">
+                <label
+                  htmlFor="reset-password-confirm"
+                  className="text-xs font-semibold text-[#444444]"
+                >
                   Confirmar senha
                 </label>
                 <PasswordInput
+                  id="reset-password-confirm"
                   name="confirm"
                   placeholder="Repita a senha"
                   autoComplete="new-password"

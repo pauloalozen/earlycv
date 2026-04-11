@@ -24,10 +24,14 @@ export function RegisterForm({ next }: { next: string }) {
       {next && <input type="hidden" name="next" value={next} />}
 
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-[#444444]">
+        <label
+          htmlFor="register-name"
+          className="text-xs font-semibold text-[#444444]"
+        >
           Nome completo
         </label>
         <input
+          id="register-name"
           name="name"
           placeholder="Seu nome"
           required
@@ -37,8 +41,14 @@ export function RegisterForm({ next }: { next: string }) {
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-[#444444]">Email</label>
+        <label
+          htmlFor="register-email"
+          className="text-xs font-semibold text-[#444444]"
+        >
+          Email
+        </label>
         <input
+          id="register-email"
           name="email"
           type="email"
           placeholder="seu@email.com"
@@ -59,8 +69,14 @@ export function RegisterForm({ next }: { next: string }) {
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-[#444444]">Senha</label>
+        <label
+          htmlFor="register-password"
+          className="text-xs font-semibold text-[#444444]"
+        >
+          Senha
+        </label>
         <PasswordInput
+          id="register-password"
           name="password"
           placeholder="Crie uma senha"
           autoComplete="new-password"

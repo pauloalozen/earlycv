@@ -3,7 +3,9 @@
 import { useState } from "react";
 export default function EsqueceuSenhaPage() {
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">(
+    "idle",
+  );
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -23,7 +25,11 @@ export default function EsqueceuSenhaPage() {
       }
       setStatus("done");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível enviar o email. Tente novamente.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível enviar o email. Tente novamente.",
+      );
       setStatus("error");
     }
   };
@@ -43,6 +49,7 @@ export default function EsqueceuSenhaPage() {
           <div className="text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-lime-100">
               <svg
+                aria-hidden="true"
                 width="22"
                 height="22"
                 viewBox="0 0 24 24"
@@ -74,7 +81,8 @@ export default function EsqueceuSenhaPage() {
                 Esqueceu sua senha?
               </h1>
               <p className="text-sm text-[#888888]">
-                Informe seu email e enviaremos um link para criar uma nova senha.
+                Informe seu email e enviaremos um link para criar uma nova
+                senha.
               </p>
             </div>
 
@@ -86,13 +94,16 @@ export default function EsqueceuSenhaPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#444444]">
+                <label
+                  htmlFor="forgot-password-email"
+                  className="text-xs font-semibold text-[#444444]"
+                >
                   Email
                 </label>
                 <input
+                  id="forgot-password-email"
                   type="email"
                   required
-                  autoFocus
                   autoComplete="email"
                   placeholder="seu@email.com"
                   value={email}
@@ -107,7 +118,9 @@ export default function EsqueceuSenhaPage() {
                 style={{ color: "#ffffff" }}
                 className="w-full rounded-[14px] bg-[#111111] py-[15px] text-sm font-semibold leading-none transition-colors hover:bg-[#222222] disabled:cursor-not-allowed disabled:bg-[#999999]"
               >
-                {status === "loading" ? "Enviando..." : "Enviar link de redefinição"}
+                {status === "loading"
+                  ? "Enviando..."
+                  : "Enviar link de redefinição"}
               </button>
             </form>
 

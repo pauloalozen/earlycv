@@ -18,10 +18,7 @@ export class CvAdaptationPaymentService {
   private readonly provider: string;
 
   constructor() {
-    this.priceInCents = parseInt(
-      process.env.PRICE_PLAN_STARTER || "1190",
-      10,
-    );
+    this.priceInCents = parseInt(process.env.PRICE_PLAN_STARTER || "1190", 10);
     this.provider = process.env.PAYMENT_PROVIDER || "mercadopago";
   }
 

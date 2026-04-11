@@ -58,47 +58,43 @@ export function HistoryActionLinks({ actions, hasCredits }: Props) {
             Baixar DOCX
           </a>
         </>
+      ) : actions.isProcessing ? (
+        <span className="rounded-[10px] bg-[#F2F2F2] px-3 py-1.5 text-xs font-semibold text-[#666666]">
+          Analise em processamento...
+        </span>
+      ) : actions.canRedeem && hasCredits ? (
+        <button
+          type="button"
+          onClick={async () => {
+            if (redeeming) return;
+            setRedeeming(true);
+            try {
+              const response = await fetch(actions.redeemHref, {
+                method: "POST",
+                cache: "no-store",
+              });
+              if (!response.ok) {
+                throw new Error("Falha ao liberar CV");
+              }
+              router.push(actions.resultHref);
+            } catch {
+              setRedeeming(false);
+            }
+          }}
+          style={{ color: "#ffffff" }}
+          className="rounded-[10px] bg-[#111111] px-3 py-1.5 text-xs font-semibold disabled:opacity-75"
+          disabled={redeeming}
+        >
+          {redeeming ? "Liberando..." : "Liberar CV com 1 credito"}
+        </button>
       ) : (
-        <>
-          {actions.isProcessing ? (
-            <span className="rounded-[10px] bg-[#F2F2F2] px-3 py-1.5 text-xs font-semibold text-[#666666]">
-              Analise em processamento...
-            </span>
-          ) : actions.canRedeem && hasCredits ? (
-            <button
-              type="button"
-              onClick={async () => {
-                if (redeeming) return;
-                setRedeeming(true);
-                try {
-                  const response = await fetch(actions.redeemHref, {
-                    method: "POST",
-                    cache: "no-store",
-                  });
-                  if (!response.ok) {
-                    throw new Error("Falha ao liberar CV");
-                  }
-                  router.push(actions.resultHref);
-                } catch {
-                  setRedeeming(false);
-                }
-              }}
-              style={{ color: "#ffffff" }}
-              className="rounded-[10px] bg-[#111111] px-3 py-1.5 text-xs font-semibold disabled:opacity-75"
-              disabled={redeeming}
-            >
-              {redeeming ? "Liberando..." : "Liberar CV com 1 credito"}
-            </button>
-          ) : (
-            <a
-              href="/planos"
-              style={{ color: "#ffffff" }}
-              className="rounded-[10px] bg-[#111111] px-3 py-1.5 text-xs font-semibold"
-            >
-              Comprar creditos
-            </a>
-          )}
-        </>
+        <a
+          href="/planos"
+          style={{ color: "#ffffff" }}
+          className="rounded-[10px] bg-[#111111] px-3 py-1.5 text-xs font-semibold"
+        >
+          Comprar creditos
+        </a>
       )}
     </div>
   );

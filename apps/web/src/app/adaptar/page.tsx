@@ -2,9 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { AppHeader } from "@/components/app-header";
 import { analyzeGuestCv } from "@/lib/cv-adaptation-api";
 import { getAuthStatus } from "@/lib/session-actions";
-import { AppHeader } from "@/components/app-header";
 
 const LOADING_STEPS = [
   "Lendo seu CV...",
@@ -45,7 +45,9 @@ export default function AdaptarPage() {
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [userName, setUserName] = useState<string | null | undefined>(undefined);
+  const [userName, setUserName] = useState<string | null | undefined>(
+    undefined,
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -112,7 +114,11 @@ export default function AdaptarPage() {
         <AppHeader userName={userName} />
       ) : (
         <header className="flex shrink-0 items-center justify-between px-10 py-6">
-          <a href="/" style={{ color: "#111111" }} className="font-logo text-2xl tracking-tight">
+          <a
+            href="/"
+            style={{ color: "#111111" }}
+            className="font-logo text-2xl tracking-tight"
+          >
             earlyCV
           </a>
           {userName === null && (
@@ -121,7 +127,17 @@ export default function AdaptarPage() {
               style={{ color: "#666666" }}
               className="flex items-center gap-2 rounded-xl border border-[#DDDDDD] px-[18px] py-[6px] text-base font-medium transition-colors hover:border-[#BBBBBB] hover:text-[#111111]"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                aria-hidden="true"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
@@ -157,11 +173,12 @@ export default function AdaptarPage() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl bg-white px-6 py-6 shadow-sm transition-colors hover:bg-stone-50"
+                className="flex min-h-[154px] w-full cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl bg-white px-6 py-6 shadow-sm transition-colors hover:bg-stone-50"
               >
                 {file ? (
                   <>
                     <svg
+                      aria-hidden="true"
                       width="28"
                       height="28"
                       viewBox="0 0 24 24"
@@ -174,9 +191,12 @@ export default function AdaptarPage() {
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                       <polyline points="14 2 14 8 20 8" />
                     </svg>
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-[#111111]">
-                      {file.name}
+                    <span className="flex max-w-full items-center gap-1.5 text-sm font-medium text-[#111111]">
+                      <span className="max-w-[220px] truncate">
+                        {file.name}
+                      </span>
                       <svg
+                        aria-hidden="true"
                         width="26"
                         height="26"
                         viewBox="0 0 24 24"
@@ -196,6 +216,7 @@ export default function AdaptarPage() {
                 ) : (
                   <>
                     <svg
+                      aria-hidden="true"
                       width="28"
                       height="28"
                       viewBox="0 0 24 24"
@@ -278,6 +299,7 @@ export default function AdaptarPage() {
               {loading ? (
                 <>
                   <svg
+                    aria-hidden="true"
                     className="animate-spin"
                     width="18"
                     height="18"
@@ -296,6 +318,7 @@ export default function AdaptarPage() {
               ) : (
                 <>
                   <svg
+                    aria-hidden="true"
                     width="18"
                     height="18"
                     viewBox="0 0 24 24"
@@ -314,7 +337,6 @@ export default function AdaptarPage() {
           </form>
         </div>
       </section>
-
     </main>
   );
 }

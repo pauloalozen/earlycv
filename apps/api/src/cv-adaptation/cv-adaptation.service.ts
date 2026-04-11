@@ -908,7 +908,7 @@ export class CvAdaptationService {
     };
 
     const summary = [guest.fit?.headline, guest.fit?.subheadline]
-      .filter((value): value is string => Boolean(value && value.trim()))
+      .filter((value): value is string => Boolean(value?.trim()))
       .join(". ");
 
     const strengths = guest.pontos_fortes ?? [];

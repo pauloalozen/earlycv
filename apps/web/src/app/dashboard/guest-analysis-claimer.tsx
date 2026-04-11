@@ -69,6 +69,7 @@ export function GuestAnalysisClaimer({ hasCredits }: Props) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-[#E8E8E8] bg-white px-5 py-3">
         <svg
+          aria-hidden="true"
           className="animate-spin shrink-0 text-gray-400"
           width="16"
           height="16"
