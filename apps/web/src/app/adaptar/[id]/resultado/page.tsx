@@ -99,7 +99,7 @@ export default function ResultadoPage() {
               onClick={() => router.push(`/adaptar/${adaptation.id}/checkout`)}
               className="w-full bg-orange-500 text-white font-semibold py-3 rounded-lg hover:bg-orange-600"
             >
-              Desbloquear resultado completo - R$ 19,00
+              Desbloquear resultado completo - R$ 11,90
             </button>
           </div>
         )}

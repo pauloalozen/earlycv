@@ -20,6 +20,7 @@ import type { Response } from "express";
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { CvAdaptationService } from "./cv-adaptation.service";
+import type { ClaimGuestAdaptationDto } from "./dto/claim-guest-adaptation.dto";
 import {
   CreateCvAdaptationDto,
   type FileUpload,
@@ -69,6 +70,15 @@ export class CvAdaptationController {
     return this.cvAdaptationService.create(user.id, dto, file);
   }
 
+  @Post("claim-guest")
+  claimGuest(
+    @AuthenticatedUser() user: { id: string },
+    @Body(new ValidationPipe({ transform: true, whitelist: true }))
+    dto: ClaimGuestAdaptationDto,
+  ) {
+    return this.cvAdaptationService.claimGuest(user.id, dto);
+  }
+
   @Get()
   list(
     @AuthenticatedUser() user: { id: string },
@@ -104,6 +114,14 @@ export class CvAdaptationController {
     @Param("id") id: string,
   ) {
     return this.cvAdaptationService.confirmPayment(user.id, id);
+  }
+
+  @Post(":id/redeem-credit")
+  redeemWithCredit(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+  ) {
+    return this.cvAdaptationService.redeemWithCredit(user.id, id);
   }
 
   @Get(":id/download")

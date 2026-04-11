@@ -7,13 +7,19 @@ export type HistoryAdaptationItem = {
 };
 
 export function getHistoryActions(item: HistoryAdaptationItem) {
-  const resultHref = `/adaptar/${item.id}/resultado`;
+  const resultHref = `/adaptar/resultado?adaptationId=${item.id}`;
+  const redeemHref = `/api/cv-adaptation/${item.id}/redeem-credit`;
 
   return {
     resultHref,
+    redeemHref,
     pdfHref: `/api/cv-adaptation/${item.id}/download?format=pdf`,
     docxHref: `/api/cv-adaptation/${item.id}/download?format=docx`,
-    canDownload: item.status === "delivered",
-    isProcessing: item.status === "analyzing" || item.status === "paid",
+    canDownload: item.paymentStatus === "completed",
+    canRedeem:
+      item.paymentStatus !== "completed" &&
+      item.status !== "analyzing" &&
+      item.status !== "failed",
+    isProcessing: item.status === "analyzing",
   };
 }

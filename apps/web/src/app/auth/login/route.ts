@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
     return createPostRedirectResponse(
       request.url,
-      `/login?error=${encodeURIComponent(authError.message)}`,
+      `/entrar?error=${encodeURIComponent(authError.message)}`,
     );
   }
 }

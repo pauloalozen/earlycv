@@ -12,6 +12,7 @@ enum UserPlanType {
   starter
   pro
   unlimited
+  turbo
 }
 
 enum UserStatus {
@@ -153,6 +154,7 @@ model User {
   authAccounts     AuthAccount[]
   refreshTokens    RefreshToken[]
   emailVerificationChallenges EmailVerificationChallenge[]
+  passwordResetTokens         PasswordResetToken[]
   resumes          Resume[]
   cvAdaptations    CvAdaptation[]
   planPurchases    PlanPurchase[]
@@ -178,6 +180,19 @@ model PlanPurchase {
 
   @@index([userId, createdAt])
   @@index([paymentReference])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model EmailVerificationChallenge {

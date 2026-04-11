@@ -157,6 +157,7 @@ export type CvAnalysisData = {
 export type GuestAnalysisResult = {
   adaptedContentJson: CvAnalysisData;
   previewText: string;
+  masterCvText: string;
 };
 
 export async function analyzeGuestCv(
@@ -172,6 +173,26 @@ export async function analyzeGuestCv(
     throw new Error(`Falha ao analisar CV: ${error}`);
   }
   return response.json() as Promise<GuestAnalysisResult>;
+}
+
+export async function claimGuestAnalysis(payload: {
+  adaptedContentJson: Record<string, unknown>;
+  previewText?: string;
+  jobDescriptionText: string;
+  masterCvText: string;
+  jobTitle?: string;
+  companyName?: string;
+}): Promise<CvAdaptationDto> {
+  const response = await apiRequest(
+    "POST",
+    "/cv-adaptation/claim-guest",
+    payload,
+  );
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to claim guest analysis: ${error}`);
+  }
+  return response.json() as Promise<CvAdaptationDto>;
 }
 
 export async function downloadCvAdaptationPdf(id: string): Promise<Blob> {

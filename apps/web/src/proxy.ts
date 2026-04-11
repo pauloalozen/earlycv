@@ -38,7 +38,7 @@ export function proxy(request: NextRequest) {
       APP_ACCESS_TOKEN_COOKIE_NAME,
     )?.value;
     if (!accessToken) {
-      const loginUrl = new URL("/login", request.url);
+      const loginUrl = new URL("/entrar", request.url);
       loginUrl.searchParams.set("next", pathname);
       return NextResponse.redirect(loginUrl);
     }

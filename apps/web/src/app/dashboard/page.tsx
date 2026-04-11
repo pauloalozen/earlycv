@@ -22,8 +22,10 @@ import {
   extractDashboardAnalysisSignal,
   getDashboardScoreColor,
 } from "@/lib/dashboard-test-metrics";
+import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
+import { GuestAnalysisClaimer } from "./guest-analysis-claimer";
 import { HistoryActionLinks } from "./history-action-links";
 
 export const metadata: Metadata = {
@@ -69,6 +71,8 @@ export default async function DashboardPage({
   ]);
 
   const planInfo = plan.status === "fulfilled" ? plan.value : null;
+  const hasCredits =
+    plan.status === "fulfilled" ? hasAvailableCredits(plan.value) : null;
   const adaptationList =
     adaptations.status === "fulfilled" ? adaptations.value.items : [];
   const masterResume =
@@ -124,6 +128,8 @@ export default async function DashboardPage({
       <AppHeader userName={user.name} />
 
       <div className="mx-auto max-w-[860px] space-y-8 px-6 pb-20 pt-4">
+        <GuestAnalysisClaimer hasCredits={hasCredits} />
+
         {showPlanActivated && (
           <div className="flex items-center gap-2 rounded-xl border border-lime-200 bg-lime-50 px-5 py-3">
             <span className="text-lime-600">✔</span>
@@ -395,7 +401,10 @@ export default async function DashboardPage({
                       </div>
                     </div>
 
-                    <HistoryActionLinks actions={actions} />
+                    <HistoryActionLinks
+                      actions={actions}
+                      hasCredits={hasCredits}
+                    />
                   </article>
                 );
               })}

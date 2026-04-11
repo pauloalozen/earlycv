@@ -62,7 +62,7 @@ async function registerUser(
     .post("/api/auth/register")
     .send({
       email,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: `${prefix} User`,
     })
     .expect(201);
@@ -276,7 +276,7 @@ test("PATCH /api/admin/users routes update base fields, plan, and status for pro
     .post("/api/auth/register")
     .send({
       email: productUser.email,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: "Replacement Product User",
     })
     .expect(201);
@@ -317,6 +317,16 @@ test("PATCH /api/admin/users routes update base fields, plan, and status for pro
     });
 
   await request(app.getHttpServer())
+    .patch(`/api/admin/users/${productUser.userId}/credits`)
+    .set("Authorization", `Bearer ${admin.accessToken}`)
+    .send({ creditsRemaining: 7 })
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(body.creditsRemaining, 7);
+      assert.equal(body.id, productUser.userId);
+    });
+
+  await request(app.getHttpServer())
     .patch(`/api/admin/users/${staffUser.userId}/status`)
     .set("Authorization", `Bearer ${admin.accessToken}`)
     .send({ status: "deleted" })
@@ -329,6 +339,7 @@ test("PATCH /api/admin/users routes update base fields, plan, and status for pro
   assert.equal(refreshedUser?.name, "Updated Product User");
   assert.equal(refreshedUser?.planType, "free");
   assert.equal(refreshedUser?.status, "active");
+  assert.equal(refreshedUser?.creditsRemaining, 7);
   assert.equal(refreshedUser?.emailVerifiedAt, null);
 
   await deleteUserByEmail(database, admin.email);

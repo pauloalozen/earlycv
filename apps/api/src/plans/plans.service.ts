@@ -12,26 +12,26 @@ import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
 
 import { DatabaseService } from "../database/database.service";
 
-type PlanId = "starter" | "pro" | "unlimited";
+type PlanId = "starter" | "pro" | "turbo";
 
 const PLAN_CONFIG: Record<
   PlanId,
   { label: string; amountInCents: number; creditsGranted: number }
 > = {
   starter: {
-    label: "1 CV Otimizado — EarlyCV",
-    amountInCents: 1990,
-    creditsGranted: 1,
+    label: `${process.env.QNT_CV_PLAN_STARTER ?? "1"} CV Otimizado — EarlyCV`,
+    amountInCents: parseInt(process.env.PRICE_PLAN_STARTER ?? "1190", 10),
+    creditsGranted: parseInt(process.env.QNT_CV_PLAN_STARTER ?? "1", 10),
   },
   pro: {
-    label: "5 CVs Otimizados — EarlyCV",
-    amountInCents: 3990,
-    creditsGranted: 5,
+    label: `${process.env.QNT_CV_PLAN_PRO ?? "3"} CVs Otimizados — EarlyCV`,
+    amountInCents: parseInt(process.env.PRICE_PLAN_PRO ?? "2990", 10),
+    creditsGranted: parseInt(process.env.QNT_CV_PLAN_PRO ?? "3", 10),
   },
-  unlimited: {
-    label: "Uso Ilimitado 30 dias — EarlyCV",
-    amountInCents: 9990,
-    creditsGranted: -1,
+  turbo: {
+    label: `${process.env.QNT_CV_PLAN_TURBO ?? "10"} CVs Otimizados — EarlyCV`,
+    amountInCents: parseInt(process.env.PRICE_PLAN_TURBO ?? "5990", 10),
+    creditsGranted: parseInt(process.env.QNT_CV_PLAN_TURBO ?? "10", 10),
   },
 };
 
@@ -75,6 +75,7 @@ export class PlansService {
     const user = await this.database.user.findUnique({
       where: { id: userId },
       select: {
+        internalRole: true,
         planType: true,
         creditsRemaining: true,
         planExpiresAt: true,
@@ -82,6 +83,15 @@ export class PlansService {
     });
 
     if (!user) throw new NotFoundException("user not found");
+
+    if (user.internalRole === "superadmin") {
+      return {
+        planType: "unlimited",
+        creditsRemaining: null,
+        planExpiresAt: null,
+        isActive: true,
+      };
+    }
 
     const isUnlimited = user.planType === "unlimited";
     const isExpired =
@@ -145,8 +155,15 @@ export class PlansService {
     });
   }
 
+  private isMpProduction(): boolean {
+    return (
+      process.env.MERCADOPAGO_MODE === "production" ||
+      process.env.NODE_ENV === "production"
+    );
+  }
+
   private getMercadoPagoClient(): MercadoPagoConfig {
-    const isProduction = process.env.NODE_ENV === "production";
+    const isProduction = this.isMpProduction();
     const token = isProduction
       ? process.env.MERCADOPAGO_ACCESS_TOKEN
       : (process.env.MERCADOPAGO_ACCESS_TOKEN_TEST ??
@@ -174,7 +191,7 @@ export class PlansService {
       "http://localhost:4000";
     const notificationUrl = `${apiUrl}/api/plans/webhook/mercadopago`;
     const successUrl = `${frontendUrl}/dashboard?plan=activated`;
-    const isProduction = process.env.NODE_ENV === "production";
+    const isProduction = this.isMpProduction();
 
     try {
       const result = await preference.create({
@@ -200,7 +217,7 @@ export class PlansService {
       });
 
       const checkoutUrl = isProduction
-        ? result.init_point
+        ? (result.init_point ?? result.sandbox_init_point)
         : (result.sandbox_init_point ?? result.init_point);
 
       if (!checkoutUrl) {

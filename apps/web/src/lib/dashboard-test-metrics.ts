@@ -95,8 +95,8 @@ export function getDashboardScoreColor(score: number): string {
 
   const capped = Math.max(70, Math.min(100, score));
   const ratio = (capped - 70) / 30;
-  const start = { r: 132, g: 204, b: 22 };
-  const end = { r: 22, g: 163, b: 74 };
+  const start = { r: 132, g: 204, b: 22 }; // lime-500
+  const end = { r: 22, g: 163, b: 74 }; // green-600
 
   const r = Math.round(start.r + (end.r - start.r) * ratio);
   const g = Math.round(start.g + (end.g - start.g) * ratio);
