@@ -63,7 +63,7 @@ async function registerUser(
     .post("/api/auth/register")
     .send({
       email,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: `${prefix} User`,
     })
     .expect(201);

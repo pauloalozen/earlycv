@@ -56,10 +56,7 @@ test("root workspace bootstraps shared package builds after install", () => {
 });
 
 test("api workspace uses source-resolution for dev, build, check, and test", () => {
-  assert.equal(
-    apiPackageJson.scripts?.dev,
-    "NODE_OPTIONS='--conditions=development' nest start --watch",
-  );
+  assert.equal(apiPackageJson.scripts?.dev, "nest start --watch");
   assert.equal(
     apiPackageJson.scripts?.build,
     "NODE_OPTIONS='--conditions=development' nest build",
@@ -114,7 +111,7 @@ test("api workspace only prebuilds shared packages for compiled runtime entrypoi
     "npm run build --workspace @earlycv/config --workspace @earlycv/database --workspace @earlycv/queue --workspace @earlycv/storage --workspace @earlycv/ai",
   );
   assert.equal(apiPackageJson.scripts?.prestart, "npm run build:shared");
-  assert.equal(apiPackageJson.scripts?.predev, undefined);
+  assert.equal(apiPackageJson.scripts?.predev, "npm run build:shared");
   assert.equal(apiPackageJson.scripts?.prebuild, undefined);
   assert.equal(apiPackageJson.scripts?.precheck, undefined);
   assert.equal(apiPackageJson.scripts?.pretest, undefined);

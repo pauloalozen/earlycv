@@ -62,7 +62,7 @@ async function registerUser(
     .post("/api/auth/register")
     .send({
       email,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: `${prefix} User`,
     })
     .expect(201);
@@ -104,7 +104,7 @@ test("only superadmin can create, list, update, and change roles for staff accou
     .set("Authorization", `Bearer ${admin.accessToken}`)
     .send({
       email: staffEmail,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: "Blocked Admin Attempt",
       internalRole: "admin",
     })
@@ -115,7 +115,7 @@ test("only superadmin can create, list, update, and change roles for staff accou
     .set("Authorization", `Bearer ${superadmin.accessToken}`)
     .send({
       email: `invalid-role+${randomUUID()}@earlycv.dev`,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: "Invalid Staff Role",
       internalRole: "none",
     })
@@ -126,7 +126,7 @@ test("only superadmin can create, list, update, and change roles for staff accou
     .set("Authorization", `Bearer ${superadmin.accessToken}`)
     .send({
       email: staffEmail,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: "Hiring Operator",
       internalRole: "admin",
     })
@@ -193,7 +193,7 @@ test("only superadmin can create, list, update, and change roles for staff accou
     .set("Authorization", `Bearer ${superadmin.accessToken}`)
     .send({
       email: replacementStaffEmail,
-      password: "super-secret-123",
+      password: "Super-secret-123",
       name: "Replacement Staff",
       internalRole: "admin",
     })
