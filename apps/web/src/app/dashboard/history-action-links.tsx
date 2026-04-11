@@ -93,7 +93,7 @@ export function HistoryActionLinks({ actions, hasCredits }: Props) {
           style={{ color: "#ffffff" }}
           className="rounded-[10px] bg-[#111111] px-3 py-1.5 text-xs font-semibold"
         >
-          Comprar creditos
+          para liberar · 1 Crédito
         </a>
       )}
     </div>

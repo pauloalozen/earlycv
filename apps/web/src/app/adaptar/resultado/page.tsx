@@ -738,7 +738,7 @@ export default function ResultadoPage() {
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                   <path d="M7 11V7a5 5 0 0 1 9.9-1" />
                 </svg>
-                Ver análise completa grátis
+                Crie sua conta e veja análise completa grátis
               </a>
 
               <p className="mt-4 text-center text-sm text-white/60">
@@ -809,7 +809,7 @@ export default function ResultadoPage() {
                   : reviewAdaptationId
                     ? "Liberar CV com 1 credito"
                     : hasCredits === false
-                      ? "Voce esta sem creditos no momento"
+                      ? "Voce esta sem créditos no momento"
                       : "Libere agora o CV que voce pode enviar hoje"}
               </p>
 
@@ -860,7 +860,7 @@ export default function ResultadoPage() {
                   style={{ color: "#0E0E0E" }}
                   className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
                 >
-                  Ver planos para continuar
+                  Ver pacotes para liberar seu CV adaptado
                 </a>
               ) : (
                 <button

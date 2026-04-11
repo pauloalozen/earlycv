@@ -46,8 +46,8 @@ export function VerifyForm({
     <>
       {/* Último passo */}
       {isResultFlow && (
-        <p className="mb-6 text-center text-sm font-semibold text-lime-800">
-          <span className="bg-lime-300 px-1.5 py-0.5">
+        <p className="mb-6 text-center text-sm font-semibold text-[#444444]">
+          <span className="px-1.5 py-0.5">
             Último passo para ver sua análise completa
           </span>
         </p>

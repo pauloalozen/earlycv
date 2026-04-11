@@ -125,8 +125,8 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
           <div className="w-full max-w-4xl space-y-5">
             {/* Badge */}
             <div className="flex justify-center">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#DDDDDD] bg-white px-4 py-1.5 text-[11px] font-bold uppercase tracking-widest text-[#666666]">
-                <span className="h-1.5 w-1.5 rounded-full bg-lime-500" />
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#111111] bg-[#111111] px-4 py-1.5 text-sm font-medium text-white">
+                <span className="text-lime-400">●</span>
                 Nossos planos
               </span>
             </div>

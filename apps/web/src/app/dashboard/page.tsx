@@ -128,7 +128,7 @@ export default async function DashboardPage({
       <AppHeader userName={user.name} />
 
       <div className="mx-auto max-w-[860px] space-y-8 px-6 pb-20 pt-4">
-        <GuestAnalysisClaimer hasCredits={hasCredits} />
+        <GuestAnalysisClaimer />
 
         {showPlanActivated && (
           <div className="flex items-center gap-2 rounded-xl border border-lime-200 bg-lime-50 px-5 py-3">
@@ -183,26 +183,26 @@ export default async function DashboardPage({
           </div>
         </div>
 
-        <section className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+        <section className="rounded-xl border border-[#E5E7EB] bg-white px-5 py-4 shadow-sm">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#BBBBBB]">
             Visão geral
           </p>
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
-            <div>
-              <p className="text-sm text-[#666666]">CVs analisados</p>
-              <p className="mt-1 text-2xl font-bold text-[#111111]">
+          <div className="flex divide-x divide-[#F0F0F0]">
+            <div className="min-w-0 pr-6">
+              <p className="text-xs text-[#999999]">Analisados</p>
+              <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
                 {overview.analyzed}
               </p>
             </div>
-            <div>
-              <p className="text-sm text-[#666666]">Versões geradas</p>
-              <p className="mt-1 text-2xl font-bold text-[#111111]">
+            <div className="min-w-0 px-6">
+              <p className="text-xs text-[#999999]">Gerados</p>
+              <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
                 {overview.generated}
               </p>
             </div>
-            <div>
-              <p className="text-sm text-[#666666]">Créditos</p>
-              <p className="mt-1 text-2xl font-bold text-[#111111]">
+            <div className="min-w-0 pl-6">
+              <p className="text-xs text-[#999999]">Créditos</p>
+              <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
                 {overview.availableCredits}
               </p>
             </div>
@@ -257,14 +257,16 @@ export default async function DashboardPage({
 
               <div className="flex flex-wrap gap-3">
                 <a
-                  href="/meus-cvs"
+                  href="/cv-base"
                   style={{ color: "#ffffff" }}
                   className="inline-flex h-11 items-center rounded-[10px] bg-[#111111] px-5 text-sm font-medium"
                 >
                   Atualizar CV
                 </a>
                 <a
-                  href="/meus-cvs"
+                  href={`/api/resumes/${masterResume.id}/download`}
+                  target="_blank"
+                  rel="noreferrer"
                   style={{ color: "#111111" }}
                   className="inline-flex h-11 items-center rounded-[10px] border border-[#E5E5E5] bg-white px-5 text-sm font-medium"
                 >
@@ -288,7 +290,7 @@ export default async function DashboardPage({
               </div>
 
               <a
-                href="/meus-cvs"
+                href="/cv-base"
                 style={{ color: "#ffffff" }}
                 className="inline-flex h-11 items-center rounded-[10px] bg-[#111111] px-5 text-sm font-medium"
               >

@@ -195,6 +195,37 @@ export async function claimGuestAnalysis(payload: {
   return response.json() as Promise<CvAdaptationDto>;
 }
 
+export async function saveGuestPreview(payload: {
+  adaptedContentJson: Record<string, unknown>;
+  previewText?: string;
+  jobDescriptionText: string;
+  masterCvText: string;
+  jobTitle?: string;
+  companyName?: string;
+}): Promise<CvAdaptationDto> {
+  const response = await apiRequest(
+    "POST",
+    "/cv-adaptation/save-guest-preview",
+    payload,
+  );
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to save guest preview: ${error}`);
+  }
+  return response.json() as Promise<CvAdaptationDto>;
+}
+
+export async function analyzeAuthenticatedCv(
+  formData: FormData,
+): Promise<GuestAnalysisResult> {
+  const response = await apiRequest("POST", "/cv-adaptation/analyze", formData);
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Falha ao analisar CV: ${error}`);
+  }
+  return response.json() as Promise<GuestAnalysisResult>;
+}
+
 export async function downloadCvAdaptationPdf(id: string): Promise<Blob> {
   const response = await apiRequest("GET", `/cv-adaptation/${id}/download`);
   if (!response.ok) {

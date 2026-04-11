@@ -14,6 +14,7 @@ import {
   CvAdaptationPdfService,
   type TemplateStructureJson,
 } from "./cv-adaptation-pdf.service";
+import type { AnalyzeCvDto } from "./dto/analyze-cv.dto";
 import type { ClaimGuestAdaptationDto } from "./dto/claim-guest-adaptation.dto";
 import type {
   CreateCvAdaptationDto,
@@ -21,6 +22,7 @@ import type {
 } from "./dto/create-cv-adaptation.dto";
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 import { createCvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
+import type { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
 
 @Injectable()
 export class CvAdaptationService {
@@ -260,6 +262,88 @@ export class CvAdaptationService {
       ...result,
       masterCvText: cvText,
     };
+  }
+
+  async analyzeAuthenticated(
+    userId: string,
+    dto: AnalyzeCvDto,
+    file?: FileUpload,
+  ): Promise<{
+    adaptedContentJson: unknown;
+    previewText: string;
+    masterCvText: string;
+  }> {
+    let masterCvText: string;
+
+    if (file) {
+      try {
+        const { extractTextFromPdf } = await import("@earlycv/ai");
+        masterCvText = await extractTextFromPdf(file.buffer);
+      } catch (error) {
+        throw new BadRequestException(
+          `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
+        );
+      }
+    } else if (dto.masterResumeId) {
+      const resume = await this.database.resume.findFirst({
+        where: { id: dto.masterResumeId, userId },
+        select: { rawText: true },
+      });
+
+      if (!resume) {
+        throw new BadRequestException("Resume not found.");
+      }
+
+      if (!resume.rawText?.trim()) {
+        throw new BadRequestException("Resume has no text content.");
+      }
+
+      masterCvText = resume.rawText;
+    } else {
+      throw new BadRequestException("masterResumeId or PDF file is required.");
+    }
+
+    const result = await this.aiService.analyzeAndAdaptDirect(
+      masterCvText,
+      dto.jobDescriptionText,
+    );
+
+    return { ...result, masterCvText };
+  }
+
+  async saveGuestPreview(userId: string, dto: SaveGuestPreviewDto) {
+    const defaultTemplate = await this.getDefaultTemplate();
+
+    const masterResume = await this.database.resume.create({
+      data: {
+        userId,
+        title: dto.jobTitle ? `CV para ${dto.jobTitle}` : "CV Importado",
+        kind: "master",
+        status: "uploaded",
+        sourceFileType: "application/pdf",
+        rawText: dto.masterCvText,
+      },
+    });
+
+    const adaptation = await this.database.cvAdaptation.create({
+      data: {
+        userId,
+        masterResumeId: masterResume.id,
+        jobDescriptionText: dto.jobDescriptionText,
+        templateId: defaultTemplate?.id ?? null,
+        jobTitle: dto.jobTitle ?? null,
+        companyName: dto.companyName ?? null,
+        adaptedContentJson: dto.adaptedContentJson as Prisma.InputJsonValue,
+        previewText: dto.previewText ?? null,
+        status: "awaiting_payment",
+        paymentStatus: "none",
+      },
+      include: {
+        template: { select: { id: true, name: true, slug: true } },
+      },
+    });
+
+    return createCvAdaptationResponseDto(adaptation);
   }
 
   async list(userId: string, page: number = 1, limit: number = 20) {

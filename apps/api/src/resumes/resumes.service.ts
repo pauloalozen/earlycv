@@ -1,6 +1,12 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { type Prisma, ResumeKind } from "@prisma/client";
-
+import type { Response } from "express";
+import type { FileUpload } from "../cv-adaptation/dto/create-cv-adaptation.dto";
 import { DatabaseService } from "../database/database.service";
 import type { CreateResumeDto } from "./dto/create-resume.dto";
 import type { UpdateResumeDto } from "./dto/update-resume.dto";
@@ -33,7 +39,20 @@ export class ResumesService {
     return resume;
   }
 
-  async create(userId: string, dto: CreateResumeDto) {
+  async create(userId: string, dto: CreateResumeDto, file?: FileUpload) {
+    let rawText: string | null = null;
+
+    if (file) {
+      try {
+        const { extractTextFromPdf } = await import("@earlycv/ai");
+        rawText = await extractTextFromPdf(file.buffer);
+      } catch (error) {
+        throw new BadRequestException(
+          `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
+        );
+      }
+    }
+
     return this.database.$transaction(async (tx) => {
       const existingResumeCount = await tx.resume.count({ where: { userId } });
       const shouldBecomeMaster = dto.isPrimary ?? existingResumeCount === 0;
@@ -46,9 +65,10 @@ export class ResumesService {
         data: {
           userId,
           title: dto.title,
-          sourceFileName: dto.sourceFileName,
-          sourceFileType: null,
-          status: dto.status,
+          sourceFileName: dto.sourceFileName ?? file?.originalname ?? null,
+          sourceFileType: file?.mimetype ?? null,
+          rawText,
+          status: dto.status ?? (rawText ? "uploaded" : "draft"),
           kind: ResumeKind.master,
           isMaster: shouldBecomeMaster,
         },
@@ -114,6 +134,19 @@ export class ResumesService {
         },
       });
     });
+  }
+
+  async download(userId: string, resumeId: string, res: Response) {
+    const resume = await this.getById(userId, resumeId);
+
+    const text = resume.rawText ?? "";
+    const filename = resume.sourceFileName
+      ? `${resume.sourceFileName.replace(/\.[^.]+$/, "")}.txt`
+      : "cv.txt";
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(text);
   }
 
   async remove(userId: string, resumeId: string) {

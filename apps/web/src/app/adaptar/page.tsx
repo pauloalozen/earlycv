@@ -3,7 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
-import { analyzeGuestCv } from "@/lib/cv-adaptation-api";
+import {
+  analyzeAuthenticatedCv,
+  analyzeGuestCv,
+} from "@/lib/cv-adaptation-api";
+import type { ResumeDto } from "@/lib/resumes-api";
+import { getMyMasterResume, uploadMasterResume } from "@/lib/resumes-api";
 import { getAuthStatus } from "@/lib/session-actions";
 
 const LOADING_STEPS = [
@@ -38,6 +43,8 @@ Diferenciais:
 
 Local: Remoto (Brasil) | Regime: CLT | Área: Dados & Analytics`;
 
+type CvMode = "master" | "upload";
+
 export default function AdaptarPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
@@ -48,11 +55,26 @@ export default function AdaptarPage() {
   const [userName, setUserName] = useState<string | null | undefined>(
     undefined,
   );
+  const [masterResume, setMasterResume] = useState<
+    ResumeDto | null | undefined
+  >(undefined);
+  const [cvMode, setCvMode] = useState<CvMode>("master");
+  const [saveMasterCv, setSaveMasterCv] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     router.prefetch("/adaptar/resultado");
-    getAuthStatus().then(({ userName: name }) => setUserName(name ?? null));
+    getAuthStatus().then(({ userName: name }) => {
+      setUserName(name ?? null);
+      if (name) {
+        getMyMasterResume().then((r) => {
+          setMasterResume(r ?? null);
+          if (!r) setCvMode("upload");
+        });
+      } else {
+        setMasterResume(null);
+      }
+    });
   }, [router]);
 
   useEffect(() => {
@@ -67,9 +89,13 @@ export default function AdaptarPage() {
     return () => timers.forEach(clearTimeout);
   }, [loading]);
 
+  const isAuthenticated = !!userName;
+  const hasMaster = !!masterResume;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) {
+
+    if (cvMode === "upload" && !file) {
       setError("Selecione seu CV em PDF.");
       return;
     }
@@ -83,19 +109,55 @@ export default function AdaptarPage() {
 
     try {
       const formData = new FormData();
-      formData.append("file", file);
       formData.append("jobDescriptionText", jobDescription);
 
-      const [result] = await Promise.all([
-        analyzeGuestCv(formData),
-        new Promise((resolve) => setTimeout(resolve, 10000)),
-      ]);
+      let analyzeResult: Awaited<ReturnType<typeof analyzeGuestCv>>;
+
+      if (isAuthenticated && cvMode === "master" && masterResume) {
+        formData.append("masterResumeId", masterResume.id);
+        const [result] = await Promise.all([
+          analyzeAuthenticatedCv(formData),
+          new Promise((resolve) => setTimeout(resolve, 10000)),
+        ]);
+        analyzeResult = result;
+      } else if (isAuthenticated && file) {
+        formData.append("file", file);
+        const [result] = await Promise.all([
+          analyzeAuthenticatedCv(formData),
+          new Promise((resolve) => setTimeout(resolve, 10000)),
+        ]);
+        analyzeResult = result;
+        if (saveMasterCv) {
+          const masterFormData = new FormData();
+          masterFormData.append("file", file);
+          masterFormData.append("title", file.name.replace(/\.[^.]+$/, ""));
+          masterFormData.append("isPrimary", "true");
+          uploadMasterResume(masterFormData).catch(() => {
+            // silent: saving as master is best-effort
+          });
+        }
+      } else {
+        if (!file) {
+          setError("Selecione seu CV em PDF.");
+          setLoading(false);
+          return;
+        }
+        formData.append("file", file);
+        const [result] = await Promise.all([
+          analyzeGuestCv(formData),
+          new Promise((resolve) => setTimeout(resolve, 10000)),
+        ]);
+        analyzeResult = result;
+      }
 
       setLoadingStep(3);
       await new Promise((resolve) => setTimeout(resolve, 2000));
       sessionStorage.setItem(
         "guestAnalysis",
-        JSON.stringify({ ...result, jobDescriptionText: jobDescription }),
+        JSON.stringify({
+          ...analyzeResult,
+          jobDescriptionText: jobDescription,
+        }),
       );
       router.push("/adaptar/resultado");
     } catch (err) {
@@ -167,62 +229,64 @@ export default function AdaptarPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* CV Upload */}
+            {/* CV section */}
             <div className="space-y-2">
               <span className="text-sm font-medium text-[#111111]">Seu CV</span>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex min-h-[154px] w-full cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl bg-white px-6 py-6 shadow-sm transition-colors hover:bg-stone-50"
-              >
-                {file ? (
-                  <>
+
+              {/* Authenticated with master CV: show mode toggle */}
+              {isAuthenticated && hasMaster && (
+                <div className="flex gap-2 rounded-2xl bg-white p-1.5 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCvMode("master");
+                      setFile(null);
+                      setError(null);
+                    }}
+                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                      cvMode === "master"
+                        ? "bg-[#111111] text-white"
+                        : "text-[#666666] hover:text-[#111111]"
+                    }`}
+                    style={cvMode === "master" ? { color: "#ffffff" } : {}}
+                  >
                     <svg
                       aria-hidden="true"
-                      width="28"
-                      height="28"
+                      width="15"
+                      height="15"
                       viewBox="0 0 24 24"
                       fill="none"
-                      stroke="#111111"
-                      strokeWidth="1.5"
+                      stroke="currentColor"
+                      strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     >
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                       <polyline points="14 2 14 8 20 8" />
                     </svg>
-                    <span className="flex max-w-full items-center gap-1.5 text-sm font-medium text-[#111111]">
-                      <span className="max-w-[220px] truncate">
-                        {file.name}
-                      </span>
-                      <svg
-                        aria-hidden="true"
-                        width="26"
-                        height="26"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="#84cc16"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    </span>
-                    <span className="text-xs text-[#999999]">
-                      Clique para trocar
-                    </span>
-                  </>
-                ) : (
-                  <>
+                    Usar meu CV base
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCvMode("upload");
+                      setError(null);
+                    }}
+                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                      cvMode === "upload"
+                        ? "bg-[#111111] text-white"
+                        : "text-[#666666] hover:text-[#111111]"
+                    }`}
+                    style={cvMode === "upload" ? { color: "#ffffff" } : {}}
+                  >
                     <svg
                       aria-hidden="true"
-                      width="28"
-                      height="28"
+                      width="15"
+                      height="15"
                       viewBox="0 0 24 24"
                       fill="none"
-                      stroke="#111111"
-                      strokeWidth="1.5"
+                      stroke="currentColor"
+                      strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     >
@@ -230,15 +294,144 @@ export default function AdaptarPage() {
                       <polyline points="17 8 12 3 7 8" />
                       <line x1="12" y1="3" x2="12" y2="15" />
                     </svg>
-                    <span className="text-sm font-medium text-[#111111]">
-                      Arraste seu CV ou clique para enviar
+                    Enviar outro CV
+                  </button>
+                </div>
+              )}
+
+              {/* Master CV selected: show info card */}
+              {isAuthenticated && hasMaster && cvMode === "master" && (
+                <div className="flex min-h-[154px] w-full flex-col items-center justify-center gap-2 rounded-2xl bg-white px-6 py-6 shadow-sm">
+                  <svg
+                    aria-hidden="true"
+                    width="28"
+                    height="28"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#111111"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span className="flex max-w-full items-center gap-1.5 text-sm font-medium text-[#111111]">
+                    <span className="max-w-[220px] truncate">
+                      {masterResume.sourceFileName ?? masterResume.title}
                     </span>
-                    <span className="text-xs text-[#999999]">
-                      PDF, DOC ou DOCX — até 5 MB
-                    </span>
-                  </>
-                )}
-              </button>
+                    <svg
+                      aria-hidden="true"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#84cc16"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </span>
+                  <span className="text-xs text-[#999999]">
+                    CV base carregado
+                  </span>
+                </div>
+              )}
+
+              {/* Upload box: show when guest, no master, or upload mode selected */}
+              {(!isAuthenticated || !hasMaster || cvMode === "upload") && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex min-h-[154px] w-full cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl bg-white px-6 py-6 shadow-sm transition-colors hover:bg-stone-50"
+                  >
+                    {file ? (
+                      <>
+                        <svg
+                          aria-hidden="true"
+                          width="28"
+                          height="28"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#111111"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <span className="flex max-w-full items-center gap-1.5 text-sm font-medium text-[#111111]">
+                          <span className="max-w-[220px] truncate">
+                            {file.name}
+                          </span>
+                          <svg
+                            aria-hidden="true"
+                            width="26"
+                            height="26"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#84cc16"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </span>
+                        <span className="text-xs text-[#999999]">
+                          Clique para trocar
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          aria-hidden="true"
+                          width="28"
+                          height="28"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#111111"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="17 8 12 3 7 8" />
+                          <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                        <span className="text-sm font-medium text-[#111111]">
+                          Arraste seu CV ou clique para enviar
+                        </span>
+                        <span className="text-xs text-[#999999]">
+                          PDF, DOC ou DOCX — até 5 MB
+                        </span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Option to save as master CV */}
+                  {isAuthenticated && file && (
+                    <label className="flex cursor-pointer items-center gap-2.5 px-1">
+                      <input
+                        type="checkbox"
+                        checked={saveMasterCv}
+                        onChange={(e) => setSaveMasterCv(e.target.checked)}
+                        className="h-4 w-4 rounded accent-[#111111]"
+                      />
+                      <span className="text-sm text-[#666666]">
+                        {hasMaster
+                          ? "Salvar como meu novo CV base (substitui o atual)"
+                          : "Salvar como meu CV base para próximas análises"}
+                      </span>
+                    </label>
+                  )}
+                </>
+              )}
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -326,7 +519,7 @@ export default function AdaptarPage() {
                   >
                     <path d="M13 2L4.5 13.5H11L10 22L20.5 9.5H14L13 2Z" />
                   </svg>
-                  Analisar agora
+                  Analisar meu CV para essa vaga
                 </>
               )}
             </button>

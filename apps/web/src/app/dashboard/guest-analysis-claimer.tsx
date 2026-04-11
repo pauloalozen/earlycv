@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
-import { claimGuestAnalysis } from "@/lib/cv-adaptation-api";
+import { saveGuestPreview } from "@/lib/cv-adaptation-api";
 
 type GuestAnalysisStored = {
   adaptedContentJson: CvAnalysisData;
@@ -12,11 +12,7 @@ type GuestAnalysisStored = {
   masterCvText: string;
 };
 
-type Props = {
-  hasCredits: boolean | null;
-};
-
-export function GuestAnalysisClaimer({ hasCredits }: Props) {
+export function GuestAnalysisClaimer() {
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "claiming" | "done" | "error">(
     "idle",
@@ -25,10 +21,6 @@ export function GuestAnalysisClaimer({ hasCredits }: Props) {
   useEffect(() => {
     const raw = sessionStorage.getItem("guestAnalysis");
     if (!raw) return;
-
-    if (hasCredits !== true) {
-      return;
-    }
 
     let parsed: GuestAnalysisStored;
     try {
@@ -45,7 +37,7 @@ export function GuestAnalysisClaimer({ hasCredits }: Props) {
 
     setStatus("claiming");
 
-    claimGuestAnalysis({
+    saveGuestPreview({
       adaptedContentJson: parsed.adaptedContentJson as Record<string, unknown>,
       previewText: parsed.previewText,
       jobDescriptionText: parsed.jobDescriptionText,
@@ -58,10 +50,11 @@ export function GuestAnalysisClaimer({ hasCredits }: Props) {
         setStatus("done");
         router.refresh();
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        console.error("[GuestAnalysisClaimer] saveGuestPreview failed:", err);
         setStatus("error");
       });
-  }, [hasCredits, router]);
+  }, [router]);
 
   if (status === "idle" || status === "done") return null;
 

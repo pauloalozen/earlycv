@@ -11,7 +11,7 @@ test("route loading blocks keep spinners vertically centered", () => {
     currentDir,
     "../app/adaptar/resultado/page.tsx",
   );
-  const meusCvsPagePath = resolve(currentDir, "../app/meus-cvs/page.tsx");
+  const meusCvsPagePath = resolve(currentDir, "../app/cv-base/page.tsx");
 
   const resultadoPage = readFileSync(resultadoPagePath, "utf8");
   const meusCvsPage = readFileSync(meusCvsPagePath, "utf8");

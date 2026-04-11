@@ -43,7 +43,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
 
         <div className="mb-6 flex items-center gap-2 rounded-full border border-[#111111] bg-[#111111] px-4 py-1.5 text-sm font-medium text-white">
           <span className="text-lime-400">●</span>
-          +3.500 CVs analisados
+          +Identifica gaps que passam batido por recrutadores
         </div>
 
         {/* Card */}

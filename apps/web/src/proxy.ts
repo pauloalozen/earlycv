@@ -7,7 +7,7 @@ import {
   buildBackofficeBootstrapRedirectUrl,
 } from "./lib/backoffice-session";
 
-const PROTECTED_PREFIXES = ["/meus-cvs", "/dashboard"];
+const PROTECTED_PREFIXES = ["/cv-base", "/dashboard"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -51,7 +51,7 @@ export const config = {
   matcher: [
     "/admin/:path*",
     "/superadmin/:path*",
-    "/meus-cvs/:path*",
+    "/cv-base/:path*",
     "/dashboard/:path*",
   ],
 };
