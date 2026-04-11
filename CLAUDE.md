@@ -110,7 +110,7 @@ npm run test
 - O dashboard principal e `/dashboard` (a rota `dashboard-teste` foi descontinuada).
 - A hierarquia esperada do dashboard e: CTA principal -> card CV Master -> metricas -> historico.
 - Deve existir apenas um CTA principal de analise (`Analisar nova vaga`) sem duplicatas no historico.
-- O card de CV Master usa `/meus-cvs` para `Cadastrar CV`, `Atualizar CV` e `Ver CV`.
+- O card de CV Master usa `/cv-base` para `Cadastrar CV`, `Atualizar CV` e `Ver CV` (download do rawText como .txt).
 - Em `/adaptar`, quando houver CV Master, o usuario escolhe entre `Usar meu CV base` e `Enviar outro CV`; sem master, fluxo de upload permanece obrigatorio.
 
 ## Memoria operacional (processo de trabalho)
