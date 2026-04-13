@@ -56,6 +56,18 @@ a {
   text-decoration: none;
 }
 
+a[href],
+button,
+[role="button"],
+summary {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 button,
 input,
 textarea,
@@ -137,7 +149,7 @@ html {
 
 .route-transition-content--done {
   opacity: 1;
-  transform: translateY(0);
+  transform: none;
 }
 
 @keyframes route-spinner {

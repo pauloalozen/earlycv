@@ -1,3 +1,3 @@
 export function getReviewActionCopy(isNavigating: boolean): string {
-  return isNavigating ? "Abrindo analise..." : "Rever analise";
+  return isNavigating ? "Abrindo analise..." : "Rever análise";
 }

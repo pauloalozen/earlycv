@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
+import { FlipWord } from "@/components/flip-word";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Seu CV ajustado para cada vaga",
   description:
-    "Descubra o que esta te eliminando nas vagas e receba um CV ajustado para aumentar suas chances de entrevista.",
+    "Descubra o que está te eliminando nas vagas e receba um CV ajustado para aumentar suas chances de entrevista.",
   alternates: {
     canonical: getAbsoluteUrl("/"),
   },
@@ -16,19 +17,19 @@ export const metadata: Metadata = {
     "adaptar curriculo para vaga",
     "cv ajustado",
     "curriculo ats",
-    "analise de curriculo",
+    "análise de currículo",
   ],
   openGraph: {
     url: getAbsoluteUrl("/"),
     title: "EarlyCV - Seu CV ajustado para cada vaga",
     description:
-      "Descubra o que esta te eliminando nas vagas e receba um CV ajustado para aumentar suas chances de entrevista.",
+      "Descubra o que está te eliminando nas vagas e receba um CV ajustado para aumentar suas chances de entrevista.",
     images: [getAbsoluteUrl(siteConfig.ogImage)],
   },
   twitter: {
     title: "EarlyCV - Seu CV ajustado para cada vaga",
     description:
-      "Descubra o que esta te eliminando nas vagas e receba um CV ajustado para aumentar suas chances de entrevista.",
+      "Descubra o que está te eliminando nas vagas e receba um CV ajustado para aumentar suas chances de entrevista.",
     images: [getAbsoluteUrl(siteConfig.ogImage)],
   },
 };
@@ -75,7 +76,8 @@ export default async function Home() {
           </div>
 
           <h1 className="w-full text-center text-4xl font-medium leading-[1.05] tracking-tight text-[#111111] md:text-[56px]">
-            Um CV diferente para cada vaga. Automático.
+            Um CV <FlipWord word="ajustado" /> para cada vaga. <br></br>
+            Automático.
           </h1>
 
           <p className="max-w-[720px] text-center text-lg leading-[1.35] text-[#666666] md:text-[22px]">

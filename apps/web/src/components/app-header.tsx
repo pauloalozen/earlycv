@@ -27,121 +27,126 @@ export function AppHeader({ userName, logoSize = "md" }: Props) {
       : "font-logo text-2xl tracking-tight";
 
   return (
-    <header className="flex shrink-0 items-center justify-between px-8 py-4">
-      <a href="/" style={{ color: "#111111" }} className={logoClass}>
-        earlyCV
-      </a>
+    <>
+      <header className="fixed top-0 right-0 left-0 z-40 bg-[rgba(242,242,242,0.95)]">
+        <div className="flex shrink-0 items-center justify-between px-8 py-4">
+          <a href="/" style={{ color: "#111111" }} className={logoClass}>
+            earlyCV
+          </a>
 
-      {userName ? (
-        <div className="relative" ref={ref}>
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            className="flex items-center gap-2 rounded-xl border border-[#E8E8E8] bg-white px-3 py-2 text-sm font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5]"
-          >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#111111] text-[10px] font-bold text-white">
-              {userName.charAt(0).toUpperCase()}
-            </span>
-            <span className="max-w-[120px] truncate">
-              {userName.split(" ")[0]}
-            </span>
-            <svg
-              aria-hidden="true"
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-
-          {open && (
-            <div className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-[#E8E8E8] bg-white shadow-lg">
-              <a
-                href="/adaptar"
-                className="flex items-center gap-2.5 px-4 py-3 text-sm text-[#111111] transition-colors hover:bg-[#F5F5F5]"
-                onClick={() => setOpen(false)}
+          {userName ? (
+            <div className="relative" ref={ref}>
+              <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                className="flex items-center gap-2 rounded-xl border border-[#E8E8E8] bg-white px-3 py-2 text-sm font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5]"
               >
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#111111] text-[10px] font-bold text-white">
+                  {userName.charAt(0).toUpperCase()}
+                </span>
+                <span className="max-w-[120px] truncate">
+                  {userName.split(" ")[0]}
+                </span>
                 <svg
                   aria-hidden="true"
-                  width="14"
-                  height="14"
+                  width="12"
+                  height="12"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
                 >
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  <polyline points="6 9 12 15 18 9" />
                 </svg>
-                Adaptar CV
-              </a>
-              <a
-                href="/dashboard"
-                className="flex items-center gap-2.5 px-4 py-3 text-sm text-[#111111] transition-colors hover:bg-[#F5F5F5]"
-                onClick={() => setOpen(false)}
-              >
-                <svg
-                  aria-hidden="true"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="3" width="7" height="7" />
-                  <rect x="14" y="3" width="7" height="7" />
-                  <rect x="3" y="14" width="7" height="7" />
-                  <rect x="14" y="14" width="7" height="7" />
-                </svg>
-                Dashboard
-              </a>
-              <div className="mx-3 h-px bg-[#F0F0F0]" />
-              <form action="/auth/logout" method="post">
-                <button
-                  type="submit"
-                  className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-[#888888] transition-colors hover:bg-[#F5F5F5] hover:text-[#111111]"
-                >
-                  <svg
-                    aria-hidden="true"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+              </button>
+
+              {open && (
+                <div className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-[#E8E8E8] bg-white shadow-lg">
+                  <a
+                    href="/adaptar"
+                    className="flex items-center gap-2.5 px-4 py-3 text-sm text-[#111111] transition-colors hover:bg-[#F5F5F5]"
+                    onClick={() => setOpen(false)}
                   >
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                  Sair
-                </button>
-              </form>
+                    <svg
+                      aria-hidden="true"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg>
+                    Adaptar CV
+                  </a>
+                  <a
+                    href="/dashboard"
+                    className="flex items-center gap-2.5 px-4 py-3 text-sm text-[#111111] transition-colors hover:bg-[#F5F5F5]"
+                    onClick={() => setOpen(false)}
+                  >
+                    <svg
+                      aria-hidden="true"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="3" y="3" width="7" height="7" />
+                      <rect x="14" y="3" width="7" height="7" />
+                      <rect x="3" y="14" width="7" height="7" />
+                      <rect x="14" y="14" width="7" height="7" />
+                    </svg>
+                    Dashboard
+                  </a>
+                  <div className="mx-3 h-px bg-[#F0F0F0]" />
+                  <form action="/auth/logout" method="post">
+                    <button
+                      type="submit"
+                      className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-[#888888] transition-colors hover:bg-[#F5F5F5] hover:text-[#111111]"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                      </svg>
+                      Sair
+                    </button>
+                  </form>
+                </div>
+              )}
             </div>
+          ) : (
+            <a
+              href="/entrar"
+              className="text-sm text-[#888888] transition-colors hover:text-[#111111]"
+            >
+              Entrar
+            </a>
           )}
         </div>
-      ) : (
-        <a
-          href="/entrar"
-          className="text-sm text-[#888888] transition-colors hover:text-[#111111]"
-        >
-          Entrar
-        </a>
-      )}
-    </header>
+      </header>
+      <div aria-hidden="true" className="h-[72px] shrink-0" />
+    </>
   );
 }

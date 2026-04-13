@@ -42,3 +42,14 @@ test("resultado page hydrates guest data in initial state", () => {
   );
   assert.match(content, /sessionStorage\.getItem\("guestAnalysis"\)/);
 });
+
+test("resultado page claims guest analysis via local API route", () => {
+  const resultadoPagePath = resolve(
+    currentDir,
+    "../app/adaptar/resultado/page.tsx",
+  );
+  const content = readFileSync(resultadoPagePath, "utf8");
+
+  assert.match(content, /\/api\/cv-adaptation\/claim-guest/);
+  assert.doesNotMatch(content, /claimGuestAnalysis\(/);
+});

@@ -2,11 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AppHeader } from "@/components/app-header";
+import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import {
-  type CvAnalysisData,
-  claimGuestAnalysis,
-} from "@/lib/cv-adaptation-api";
+  type DownloadProgressStage,
+  downloadFromApi,
+} from "@/lib/client-download";
+import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
 import { getAuthStatus } from "@/lib/session-actions";
 
@@ -83,6 +86,8 @@ const MOCK_BLURRED_ITEMS = [
   "Adaptação rápida a novos contextos",
   "Colaboração em times multidisciplinares",
 ];
+
+const RELEASE_POPUP_FADE_MS = 260;
 
 type GuestAnalysisStored = {
   adaptedContentJson: CvAnalysisData;
@@ -229,6 +234,28 @@ export default function ResultadoPage() {
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
+  const [downloadStage, setDownloadStage] =
+    useState<DownloadProgressStage | null>(null);
+  const [showReleasePopup, setShowReleasePopup] = useState(false);
+  const [releasePopupVisible, setReleasePopupVisible] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+
+    if (showReleasePopup) {
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+
+      return () => {
+        document.body.style.overflow = previousOverflow;
+      };
+    }
+  }, [isClient, showReleasePopup]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -247,7 +274,7 @@ export default function ResultadoPage() {
       fetch(`/api/cv-adaptation/${adaptationId}/content`, { cache: "no-store" })
         .then(async (response) => {
           if (!response.ok) {
-            throw new Error("Nao foi possivel carregar esta analise.");
+            throw new Error("Não foi possível carregar esta análise.");
           }
           return response.json() as Promise<{
             adaptedContentJson: CvAnalysisData;
@@ -265,7 +292,7 @@ export default function ResultadoPage() {
         })
         .catch(() => {
           setClaimError(
-            "Nao foi possivel carregar essa analise agora. Tente novamente.",
+            "Não foi possível carregar essa análise agora. Tente novamente.",
           );
           router.replace("/dashboard");
         });
@@ -295,7 +322,7 @@ export default function ResultadoPage() {
 
     const raw = sessionStorage.getItem("guestAnalysis");
     if (!raw) {
-      setClaimError("Nao encontramos a analise desta vaga. Reanalise seu CV.");
+      setClaimError("Não encontramos a análise desta vaga. Reanalise seu CV.");
       return;
     }
 
@@ -303,13 +330,13 @@ export default function ResultadoPage() {
     try {
       parsed = JSON.parse(raw) as GuestAnalysisStored;
     } catch {
-      setClaimError("Nao foi possivel carregar sua analise. Reanalise seu CV.");
+      setClaimError("Não foi possível carregar sua análise. Reanalise seu CV.");
       return;
     }
 
     if (!parsed.masterCvText?.trim()) {
       setClaimError(
-        "Sua analise esta em formato antigo. Reanalise seu CV para liberar o download.",
+        "Sua análise está em formato antigo. Reanalise seu CV para liberar o download.",
       );
       return;
     }
@@ -318,39 +345,99 @@ export default function ResultadoPage() {
     setClaimError(null);
 
     try {
-      await claimGuestAnalysis({
-        adaptedContentJson: parsed.adaptedContentJson as Record<
-          string,
-          unknown
-        >,
-        previewText: parsed.previewText,
-        jobDescriptionText: parsed.jobDescriptionText ?? "",
-        masterCvText: parsed.masterCvText ?? "",
-        jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
-        companyName: parsed.adaptedContentJson?.vaga?.empresa,
+      const response = await fetch("/api/cv-adaptation/claim-guest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          adaptedContentJson: parsed.adaptedContentJson as Record<
+            string,
+            unknown
+          >,
+          previewText: parsed.previewText,
+          jobDescriptionText: parsed.jobDescriptionText ?? "",
+          masterCvText: parsed.masterCvText ?? "",
+          jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
+          companyName: parsed.adaptedContentJson?.vaga?.empresa,
+        }),
+      });
+
+      if (!response.ok) {
+        let message =
+          "Não foi possível usar seu crédito agora. Tente novamente em instantes.";
+
+        try {
+          const payload = (await response.json()) as { message?: string };
+          if (typeof payload.message === "string" && payload.message.trim()) {
+            message = payload.message;
+          }
+        } catch {
+          // no-op: fallback to default message
+        }
+
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as {
+        id?: string;
+        paymentStatus?:
+          | "none"
+          | "pending"
+          | "completed"
+          | "failed"
+          | "refunded";
+      };
+
+      if (payload.id) {
+        setReviewAdaptationId(payload.id);
+      }
+
+      setReviewPaymentStatus(payload.paymentStatus ?? "completed");
+      setHasCredits(false);
+      setClaiming(false);
+      setShowReleasePopup(true);
+      requestAnimationFrame(() => {
+        setReleasePopupVisible(true);
       });
 
       sessionStorage.removeItem("guestAnalysis");
-      router.push("/dashboard");
-    } catch {
+    } catch (error) {
       setClaimError(
-        "Nao foi possivel usar seu credito agora. Tente novamente em instantes.",
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : "Não foi possível usar seu crédito agora. Tente novamente em instantes.",
       );
       setClaiming(false);
     }
   };
 
-  const handleDownload = (format: "pdf" | "docx") => {
+  const handleDownload = async (format: "pdf" | "docx") => {
     if (!reviewAdaptationId || downloading) return;
 
     setDownloading(format);
-    window.location.assign(
-      `/api/cv-adaptation/${reviewAdaptationId}/download?format=${format}`,
-    );
+    setClaimError(null);
 
-    setTimeout(() => {
+    try {
+      await downloadFromApi({
+        url: `/api/cv-adaptation/${reviewAdaptationId}/download?format=${format}`,
+        fallbackFilename: `cv-adaptado.${format}`,
+        onStageChange: setDownloadStage,
+      });
+    } catch {
+      setClaimError(
+        "Não foi possível baixar o arquivo agora. Tente novamente.",
+      );
+    } finally {
       setDownloading(null);
-    }, 5000);
+      setDownloadStage(null);
+    }
+  };
+
+  const handleCloseReleasePopup = () => {
+    setReleasePopupVisible(false);
+    window.setTimeout(() => {
+      setShowReleasePopup(false);
+    }, RELEASE_POPUP_FADE_MS);
   };
 
   const handleRedeemReview = async () => {
@@ -375,7 +462,7 @@ export default function ResultadoPage() {
       setReviewPaymentStatus("completed");
       setClaiming(false);
     } catch {
-      setClaimError("Nao foi possivel liberar o CV agora. Tente novamente.");
+      setClaimError("Não foi possível liberar o CV agora. Tente novamente.");
       setClaiming(false);
     }
   };
@@ -752,31 +839,31 @@ export default function ResultadoPage() {
             <div className="rounded-[20px] bg-[#0E0E0E] px-8 py-8">
               <p className="text-xl font-bold text-white">
                 {reviewAdaptationId && reviewPaymentStatus === "completed"
-                  ? "Sua analise completa esta liberada"
+                  ? "Sua análise completa está liberada"
                   : reviewAdaptationId
-                    ? "Sua analise esta pronta para liberar o CV"
-                    : "Seu CV otimizado ja esta pronto para ser liberado"}
+                    ? "Sua análise está pronta para liberar o CV"
+                    : "Seu CV otimizado já está pronto para ser liberado"}
               </p>
               <p className="mt-2 text-sm text-white/60">
                 {reviewAdaptationId && reviewPaymentStatus === "completed"
                   ? "Baixe agora seu CV nos formatos PDF ou DOCX."
                   : reviewAdaptationId
-                    ? "Use 1 credito para liberar o CV final e os downloads."
-                    : "Use seu credito agora e siga para a versao final com download."}
+                    ? "Use 1 crédito para liberar o CV final e os downloads."
+                    : "Use seu crédito agora e siga para a versão final com download."}
               </p>
 
               <p className="mt-5 rounded-lg bg-white/10 px-4 py-2 text-sm italic text-white/70">
                 {reviewAdaptationId
-                  ? '"Com a analise pronta, escolha o formato e envie seu CV hoje."'
-                  : '"Voce ja viu os ajustes. Agora libere o CV final e envie com confianca."'}
+                  ? '"Com a análise pronta, escolha o formato e envie seu CV hoje."'
+                  : '"Você já viu os ajustes. Agora libere o CV final e envie com confiança."'}
               </p>
 
               <p className="mt-6 text-[11px] font-bold uppercase tracking-widest text-white/40">
                 {reviewAdaptationId && reviewPaymentStatus === "completed"
                   ? "Opcoes de download"
                   : reviewAdaptationId
-                    ? "Ao liberar com credito, voce recebe:"
-                    : "Ao usar seu credito, voce recebe:"}
+                    ? "Ao liberar com crédito, você recebe:"
+                    : "Ao usar seu crédito, você recebe:"}
               </p>
               <ul className="mt-3 space-y-2">
                 {[
@@ -791,7 +878,7 @@ export default function ResultadoPage() {
                     : "Resumo pronto para aplicar sem retrabalho",
                   reviewAdaptationId && reviewPaymentStatus === "completed"
                     ? "Arquivo reutilizavel para outras vagas"
-                    : "Modelo reutilizavel para proximas candidaturas",
+                    : "Modelo reutilizável para próximas candidaturas",
                 ].map((item) => (
                   <li
                     key={item}
@@ -807,10 +894,10 @@ export default function ResultadoPage() {
                 {reviewAdaptationId && reviewPaymentStatus === "completed"
                   ? "Escolha o formato e baixe agora"
                   : reviewAdaptationId
-                    ? "Liberar CV com 1 credito"
+                    ? "Liberar CV com 1 crédito"
                     : hasCredits === false
-                      ? "Voce esta sem créditos no momento"
-                      : "Libere agora o CV que voce pode enviar hoje"}
+                      ? "Você está sem créditos no momento"
+                      : "Libere agora o CV que você pode enviar hoje"}
               </p>
 
               {reviewAdaptationId && reviewPaymentStatus === "completed" ? (
@@ -843,7 +930,7 @@ export default function ResultadoPage() {
                     style={{ color: "#0E0E0E" }}
                     className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {claiming ? "Liberando CV..." : "Liberar CV com 1 credito"}
+                    {claiming ? "Liberando CV..." : "Liberar CV com 1 crédito"}
                   </button>
                 ) : (
                   <a
@@ -851,7 +938,7 @@ export default function ResultadoPage() {
                     style={{ color: "#0E0E0E" }}
                     className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
                   >
-                    Comprar creditos
+                    Comprar créditos
                   </a>
                 )
               ) : hasCredits === false ? (
@@ -871,19 +958,19 @@ export default function ResultadoPage() {
                   className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {claiming
-                    ? "Usando seu credito..."
-                    : "Usar meu credito e liberar CV"}
+                    ? "Usando seu crédito..."
+                    : "Usar meu crédito e liberar CV"}
                 </button>
               )}
 
               <p className="mt-2 text-center text-sm text-white/60">
                 {reviewAdaptationId && reviewPaymentStatus === "completed"
-                  ? "Se preferir, voce pode voltar ao dashboard para rever outras analises."
+                  ? "Se preferir, você pode voltar ao dashboard para rever outras análises."
                   : reviewAdaptationId
                     ? "Depois de liberar, os downloads em PDF e DOCX ficam disponiveis imediatamente."
                     : hasCredits === false
                       ? "Compre um plano para gerar o download final."
-                      : "Depois disso, voce vai direto para ver e baixar seu CV."}
+                      : "Depois disso, você vai direto para ver e baixar seu CV."}
               </p>
               {claimError && (
                 <p className="mt-2 text-center text-sm text-red-300">
@@ -894,6 +981,91 @@ export default function ResultadoPage() {
           )}
         </div>
       </main>
+
+      {showReleasePopup &&
+        isClient &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex h-dvh w-screen items-center justify-center bg-black/35 px-4 transition-opacity duration-[260ms] ease-out"
+            style={{ opacity: releasePopupVisible ? 1 : 0 }}
+          >
+            <button
+              type="button"
+              aria-label="Fechar aviso"
+              onClick={handleCloseReleasePopup}
+              className="absolute inset-0"
+            />
+            <div
+              className="relative w-full max-w-[520px] rounded-2xl bg-white p-6 shadow-2xl transition-all duration-[260ms] ease-out"
+              style={{
+                opacity: releasePopupVisible ? 1 : 0,
+                transform: releasePopupVisible
+                  ? "translateY(0) scale(1)"
+                  : "translateY(8px) scale(0.98)",
+              }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-lg font-bold text-[#111111]">
+                    CV liberado para download
+                  </p>
+                  <p className="mt-1 text-sm text-[#555555]">
+                    Seu CV final já está pronto. Escolha o formato para baixar.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseReleasePopup}
+                  className="rounded-md p-1.5 text-[#777777] transition-colors hover:bg-[#F2F2F2] hover:text-[#111111]"
+                  aria-label="Fechar aviso"
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => handleDownload("pdf")}
+                  disabled={downloading !== null || !reviewAdaptationId}
+                  style={{ color: "#0E0E0E" }}
+                  className="w-full rounded-xl bg-[#F7F7F7] py-3.5 text-sm font-bold leading-none transition-colors hover:bg-[#ECECEC] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {getDownloadCtaCopy("pdf", downloading)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownload("docx")}
+                  disabled={downloading !== null || !reviewAdaptationId}
+                  style={{ color: "#0E0E0E" }}
+                  className="w-full rounded-xl bg-[#F7F7F7] py-3.5 text-sm font-bold leading-none transition-colors hover:bg-[#ECECEC] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {getDownloadCtaCopy("docx", downloading)}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      <DownloadProgressOverlay
+        open={downloadStage !== null}
+        stage={downloadStage}
+        format={downloading}
+      />
     </>
   );
 }

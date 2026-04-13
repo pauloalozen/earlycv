@@ -371,19 +371,7 @@ test("claimed guest analysis can be downloaded as PDF and DOCX", async () => {
 
   const adaptationId = claimResponse.body.id as string;
 
-  const savedAdaptation = await database.cvAdaptation.findUnique({
-    where: { id: adaptationId },
-    select: { aiAuditJson: true },
-  });
-
-  const generatedOutput = savedAdaptation?.aiAuditJson as {
-    summary?: string;
-    sections?: unknown[];
-  } | null;
-
-  assert.equal(typeof generatedOutput?.summary, "string");
-  assert.equal(Array.isArray(generatedOutput?.sections), true);
-
+  // aiAuditJson is now generated lazily on first download (not eagerly on claim)
   await database.cvAdaptation.update({
     where: { id: adaptationId },
     data: { aiAuditJson: Prisma.JsonNull },

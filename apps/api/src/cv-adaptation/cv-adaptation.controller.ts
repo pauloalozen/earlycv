@@ -21,12 +21,18 @@ import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { CvAdaptationService } from "./cv-adaptation.service";
 import { AnalyzeCvDto } from "./dto/analyze-cv.dto";
-import type { ClaimGuestAdaptationDto } from "./dto/claim-guest-adaptation.dto";
+import { ClaimGuestAdaptationDto } from "./dto/claim-guest-adaptation.dto";
 import {
   CreateCvAdaptationDto,
   type FileUpload,
 } from "./dto/create-cv-adaptation.dto";
 import { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
+
+const claimGuestValidationPipe = new ValidationPipe({
+  transform: true,
+  whitelist: true,
+  expectedType: ClaimGuestAdaptationDto,
+});
 
 @Controller("cv-adaptation")
 @UseGuards(JwtAuthGuard)
@@ -75,7 +81,7 @@ export class CvAdaptationController {
   @Post("claim-guest")
   claimGuest(
     @AuthenticatedUser() user: { id: string },
-    @Body(new ValidationPipe({ transform: true, whitelist: true }))
+    @Body(claimGuestValidationPipe)
     dto: ClaimGuestAdaptationDto,
   ) {
     return this.cvAdaptationService.claimGuest(user.id, dto);

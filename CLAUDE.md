@@ -112,6 +112,9 @@ npm run test
 - Deve existir apenas um CTA principal de analise (`Analisar nova vaga`) sem duplicatas no historico.
 - O card de CV Master usa `/cv-base` para `Cadastrar CV`, `Atualizar CV` e `Ver CV` (download do rawText como .txt).
 - Em `/adaptar`, quando houver CV Master, o usuario escolhe entre `Usar meu CV base` e `Enviar outro CV`; sem master, fluxo de upload permanece obrigatorio.
+- O historico em `/dashboard` deve usar paginacao por querystring (`page`, `limit`) com opcoes 10/20/50.
+- Acoes de download (PDF/DOCX) usam overlay bloqueante com feedback de etapa (`montando` -> `concluindo`) ate disparar o arquivo.
+- O header da aplicacao e globalmente fixo no topo com 5% de transparencia e sem borda inferior.
 
 ## Memoria operacional (processo de trabalho)
 
@@ -119,3 +122,4 @@ npm run test
 - Nao criar/usar worktrees ou fluxos paralelos sem pedido explicito do usuario.
 - Antes de qualquer merge/sync sensivel, criar snapshot local e validar `git status` para evitar perda de trabalho.
 - Estado de referencia atual: `main` local/remoto sincronizados e suite de testes verde apos ajustes de estabilidade em e2e da API.
+- Estado mais recente: freemium consolidado com claim por credito sem redirect forcado, popup de liberacao com fade, padronizacao de CTAs e correcoes de PT-BR nas telas principais.

@@ -24,7 +24,7 @@ export async function generateMetadata({
 
   if (!job) {
     return {
-      title: "Vaga nao encontrada",
+      title: "Vaga não encontrada",
       robots: {
         index: false,
         follow: false,
@@ -33,7 +33,7 @@ export async function generateMetadata({
   }
 
   const title = `${job.title} na ${job.company}`;
-  const description = `${job.title} na ${job.company} em ${job.location}. ${job.summary} Veja requisitos, contexto, salario estimado e detalhes da candidatura.`;
+  const description = `${job.title} na ${job.company} em ${job.location}. ${job.summary} Veja requisitos, contexto, salário estimado e detalhes da candidatura.`;
   const url = getAbsoluteUrl(`/vagas/${job.slug}`);
 
   return {

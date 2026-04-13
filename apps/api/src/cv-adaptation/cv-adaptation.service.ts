@@ -155,13 +155,6 @@ export class CvAdaptationService {
       );
     }
 
-    const generatedCvOutput = await this.aiService.buildPaidCvOutputFromGuest({
-      masterCvText: dto.masterCvText,
-      jobDescriptionText: dto.jobDescriptionText,
-      jobTitle: dto.jobTitle,
-      companyName: dto.companyName,
-    });
-
     const defaultTemplate = await this.getDefaultTemplate();
 
     const adaptation = await this.database.$transaction(async (tx) => {
@@ -185,7 +178,7 @@ export class CvAdaptationService {
           jobTitle: dto.jobTitle ?? null,
           companyName: dto.companyName ?? null,
           adaptedContentJson: dto.adaptedContentJson as Prisma.InputJsonValue,
-          aiAuditJson: generatedCvOutput as unknown as Prisma.InputJsonValue,
+          // aiAuditJson is generated lazily via ensureLegacyStructuredOutput on download
           previewText: dto.previewText ?? null,
           status: "delivered",
           paymentStatus: "completed",

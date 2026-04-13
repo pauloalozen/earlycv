@@ -33,13 +33,6 @@ export const metadata: Metadata = {
   title: "Dashboard | EarlyCV",
 };
 
-const PLAN_LABELS: Record<string, string> = {
-  free: "Plano gratuito",
-  starter: "1 CV otimizado",
-  pro: "5 CVs otimizados",
-  unlimited: "Uso ilimitado",
-};
-
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -49,8 +42,36 @@ function formatDate(iso: string) {
 }
 
 type DashboardPageProps = {
-  searchParams: Promise<{ plan?: string }>;
+  searchParams: Promise<{ plan?: string; page?: string; limit?: string }>;
 };
+
+const DASHBOARD_PAGE_SIZES = [10, 20, 50] as const;
+
+function parsePage(value: string | undefined) {
+  const parsed = Number.parseInt(value ?? "1", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function parseLimit(value: string | undefined) {
+  const parsed = Number.parseInt(value ?? "10", 10);
+  return DASHBOARD_PAGE_SIZES.includes(
+    parsed as (typeof DASHBOARD_PAGE_SIZES)[number],
+  )
+    ? parsed
+    : 10;
+}
+
+function buildDashboardQuery(params: {
+  plan?: string;
+  page: number;
+  limit: number;
+}) {
+  const query = new URLSearchParams();
+  if (params.plan) query.set("plan", params.plan);
+  query.set("page", String(params.page));
+  query.set("limit", String(params.limit));
+  return `/dashboard?${query.toString()}`;
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -63,10 +84,12 @@ export default async function DashboardPage({
 
   const params = await searchParams;
   const showPlanActivated = params.plan === "activated";
+  const currentPage = parsePage(params.page);
+  const currentLimit = parseLimit(params.limit);
 
   const [plan, adaptations, masterResumeResponse] = await Promise.allSettled([
     getMyPlan(),
-    listCvAdaptations(1, 20),
+    listCvAdaptations(currentPage, currentLimit),
     getMyMasterResume(),
   ]);
 
@@ -75,6 +98,13 @@ export default async function DashboardPage({
     plan.status === "fulfilled" ? hasAvailableCredits(plan.value) : null;
   const adaptationList =
     adaptations.status === "fulfilled" ? adaptations.value.items : [];
+  const adaptationTotal =
+    adaptations.status === "fulfilled" ? adaptations.value.total : 0;
+  const totalPages = Math.max(1, Math.ceil(adaptationTotal / currentLimit));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startItem =
+    adaptationTotal === 0 ? 0 : (safeCurrentPage - 1) * currentLimit + 1;
+  const endItem = Math.min(adaptationTotal, safeCurrentPage * currentLimit);
   const masterResume =
     masterResumeResponse.status === "fulfilled"
       ? masterResumeResponse.value
@@ -145,160 +175,135 @@ export default async function DashboardPage({
           </h1>
         </div>
 
-        <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-            Plano atual
+        <section className="rounded-xl border border-[#E5E7EB] bg-white px-5 py-4 shadow-sm">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#BBBBBB]">
+            Visão geral
           </p>
-          <div className="mt-3 flex items-end justify-between gap-4">
-            <div>
-              <p className="text-xl font-bold text-[#111111]">
-                {planInfo
-                  ? (PLAN_LABELS[planInfo.planType] ?? planInfo.planType)
-                  : "—"}
-              </p>
-              {planInfo?.creditsRemaining !== null &&
-                planInfo?.creditsRemaining !== undefined && (
-                  <p className="mt-1 text-sm text-[#666666]">
-                    {planInfo.creditsRemaining}{" "}
-                    {planInfo.creditsRemaining === 1
-                      ? "crédito restante"
-                      : "créditos restantes"}
-                  </p>
-                )}
-              {planInfo?.creditsRemaining === null && (
-                <p className="mt-1 text-sm text-[#666666]">
-                  Ilimitado
-                  {planInfo.planExpiresAt &&
-                    ` até ${formatDate(planInfo.planExpiresAt)}`}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex divide-x divide-[#F0F0F0]">
+              <div className="min-w-0 pr-6">
+                <p className="text-xs text-[#999999]">Analisados</p>
+                <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
+                  {overview.analyzed}
                 </p>
-              )}
+              </div>
+              <div className="min-w-0 px-6">
+                <p className="text-xs text-[#999999]">Gerados</p>
+                <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
+                  {overview.generated}
+                </p>
+              </div>
+              <div className="min-w-0 pl-6">
+                <p className="text-xs text-[#999999]">Créditos</p>
+                <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
+                  {overview.availableCredits}
+                </p>
+              </div>
             </div>
             <a
               href="/planos"
               style={{ color: "#ffffff" }}
               className="shrink-0 rounded-[10px] bg-[#111111] px-4 py-2 text-sm font-medium"
             >
-              {planInfo?.isActive ? "Upgrade" : "Ver planos"}
+              Comprar créditos
             </a>
           </div>
-        </div>
-
-        <section className="rounded-xl border border-[#E5E7EB] bg-white px-5 py-4 shadow-sm">
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#BBBBBB]">
-            Visão geral
-          </p>
-          <div className="flex divide-x divide-[#F0F0F0]">
-            <div className="min-w-0 pr-6">
-              <p className="text-xs text-[#999999]">Analisados</p>
-              <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
-                {overview.analyzed}
-              </p>
-            </div>
-            <div className="min-w-0 px-6">
-              <p className="text-xs text-[#999999]">Gerados</p>
-              <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
-                {overview.generated}
-              </p>
-            </div>
-            <div className="min-w-0 pl-6">
-              <p className="text-xs text-[#999999]">Créditos</p>
-              <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
-                {overview.availableCredits}
-              </p>
-            </div>
-          </div>
         </section>
 
-        <section className="rounded-xl border border-[#E5E7EB] bg-white p-8 text-center shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-            Próximo passo
-          </p>
-          <h2 className="mt-2 text-2xl font-bold text-[#111111]">
-            Analisar nova vaga
-          </h2>
-          <p className="mt-1 text-sm text-[#666666]">Leva menos de 2 minutos</p>
-          <a
-            href="/adaptar"
-            style={{ color: "#ffffff" }}
-            className="mx-auto mt-6 inline-flex h-14 items-center justify-center rounded-[14px] bg-[#111111] px-10 text-sm font-semibold"
-          >
-            Analisar nova vaga
-          </a>
-        </section>
-
-        <section className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
-          {masterResume ? (
-            <div className="space-y-4">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-                  CV Master
-                </p>
-                <h2 className="mt-2 text-xl font-bold text-[#111111]">
-                  Seu CV base está pronto
-                </h2>
-                <p className="mt-1 text-sm text-[#666666]">
-                  Você pode usá-lo em novas análises
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-[#F2F2F2] bg-[#FAFAFA] p-4">
-                <p className="truncate text-sm font-semibold text-[#111111]">
-                  {masterResume.title}
-                </p>
-                {masterResume.sourceFileName && (
-                  <p className="mt-1 truncate text-sm text-[#666666]">
-                    Arquivo: {masterResume.sourceFileName}
+        <div className="grid gap-4 md:grid-cols-2">
+          <section className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
+            {masterResume ? (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+                    CV Master
                   </p>
-                )}
-                <p className="mt-1 text-sm text-[#666666]">
-                  Atualizado em {formatDate(masterResume.updatedAt)}
-                </p>
-              </div>
+                  <h2 className="mt-2 text-xl font-bold text-[#111111]">
+                    Seu CV base está pronto
+                  </h2>
+                  <p className="mt-1 text-sm text-[#666666]">
+                    Você pode usá-lo em novas análises
+                  </p>
+                </div>
 
-              <div className="flex flex-wrap gap-3">
+                <div className="rounded-xl border border-[#F2F2F2] bg-[#FAFAFA] p-4">
+                  <p className="truncate text-sm font-semibold text-[#111111]">
+                    {masterResume.title}
+                  </p>
+                  {masterResume.sourceFileName && (
+                    <p className="mt-1 truncate text-sm text-[#666666]">
+                      Arquivo: {masterResume.sourceFileName}
+                    </p>
+                  )}
+                  <p className="mt-1 text-sm text-[#666666]">
+                    Atualizado em {formatDate(masterResume.updatedAt)}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <a
+                    href="/cv-base"
+                    style={{ color: "#ffffff" }}
+                    className="inline-flex h-11 items-center rounded-[10px] bg-[#111111] px-5 text-sm font-medium"
+                  >
+                    Atualizar CV
+                  </a>
+                  <a
+                    href={`/api/resumes/${masterResume.id}/download`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: "#111111" }}
+                    className="inline-flex h-11 items-center rounded-[10px] border border-[#E5E5E5] bg-white px-5 text-sm font-medium"
+                  >
+                    Ver CV
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+                    CV Master
+                  </p>
+                  <h2 className="mt-2 text-xl font-bold text-[#111111]">
+                    Cadastre seu CV base
+                  </h2>
+                  <p className="mt-1 text-sm text-[#666666]">
+                    Evite subir seu currículo toda vez. Use um CV base para
+                    todas as análises.
+                  </p>
+                </div>
+
                 <a
                   href="/cv-base"
                   style={{ color: "#ffffff" }}
                   className="inline-flex h-11 items-center rounded-[10px] bg-[#111111] px-5 text-sm font-medium"
                 >
-                  Atualizar CV
-                </a>
-                <a
-                  href={`/api/resumes/${masterResume.id}/download`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: "#111111" }}
-                  className="inline-flex h-11 items-center rounded-[10px] border border-[#E5E5E5] bg-white px-5 text-sm font-medium"
-                >
-                  Ver CV
+                  Cadastrar CV
                 </a>
               </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-                  CV Master
-                </p>
-                <h2 className="mt-2 text-xl font-bold text-[#111111]">
-                  Cadastre seu CV base
-                </h2>
-                <p className="mt-1 text-sm text-[#666666]">
-                  Evite subir seu currículo toda vez. Use um CV base para todas
-                  as análises.
-                </p>
-              </div>
+            )}
+          </section>
 
-              <a
-                href="/cv-base"
-                style={{ color: "#ffffff" }}
-                className="inline-flex h-11 items-center rounded-[10px] bg-[#111111] px-5 text-sm font-medium"
-              >
-                Cadastrar CV
-              </a>
-            </div>
-          )}
-        </section>
+          <section className="rounded-xl border border-[#E5E7EB] bg-white p-8 shadow-sm flex flex-col items-center justify-center text-center">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+              Próximo passo
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-[#111111]">
+              Analisar nova vaga
+            </h2>
+            <p className="mt-1 text-sm text-[#666666]">
+              Leva menos de 2 minutos
+            </p>
+            <a
+              href="/adaptar"
+              style={{ color: "#ffffff" }}
+              className="mt-6 inline-flex h-14 items-center justify-center rounded-[14px] bg-[#111111] px-10 text-sm font-semibold"
+            >
+              Analisar nova vaga
+            </a>
+          </section>
+        </div>
 
         <section className="grid gap-4 md:grid-cols-3">
           <article className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
@@ -333,10 +338,39 @@ export default async function DashboardPage({
         </section>
 
         <div className="rounded-xl bg-white shadow-sm">
-          <div className="border-b border-[#F2F2F2] px-6 py-4">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-              Histórico de análises
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F2F2F2] px-6 py-4">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+                Histórico de análises
+              </p>
+              <p className="mt-1 text-xs text-[#888888]">
+                {adaptationTotal === 0
+                  ? "Nenhuma análise registrada"
+                  : `Mostrando ${startItem}-${endItem} de ${adaptationTotal}`}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1.5 rounded-lg border border-[#EDEDED] bg-[#FAFAFA] p-1">
+              {DASHBOARD_PAGE_SIZES.map((size) => {
+                const isActive = currentLimit === size;
+                return (
+                  <a
+                    key={size}
+                    href={buildDashboardQuery({
+                      plan: params.plan,
+                      page: 1,
+                      limit: size,
+                    })}
+                    style={{ color: isActive ? "#FFFFFF" : "#666666" }}
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      isActive ? "bg-[#111111]" : "hover:bg-white"
+                    }`}
+                  >
+                    {size}
+                  </a>
+                );
+              })}
+            </div>
           </div>
 
           {adaptationList.length === 0 ? (
@@ -410,6 +444,48 @@ export default async function DashboardPage({
                   </article>
                 );
               })}
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-end gap-2 px-2 pt-2">
+                  {safeCurrentPage > 1 ? (
+                    <a
+                      href={buildDashboardQuery({
+                        plan: params.plan,
+                        page: safeCurrentPage - 1,
+                        limit: currentLimit,
+                      })}
+                      className="rounded-lg border border-[#E5E5E5] bg-white px-3 py-1.5 text-xs font-semibold text-[#111111]"
+                    >
+                      Anterior
+                    </a>
+                  ) : (
+                    <span className="rounded-lg border border-[#EFEFEF] bg-[#F9F9F9] px-3 py-1.5 text-xs font-semibold text-[#BBBBBB]">
+                      Anterior
+                    </span>
+                  )}
+
+                  <span className="px-2 text-xs font-semibold text-[#666666]">
+                    Página {safeCurrentPage} de {totalPages}
+                  </span>
+
+                  {safeCurrentPage < totalPages ? (
+                    <a
+                      href={buildDashboardQuery({
+                        plan: params.plan,
+                        page: safeCurrentPage + 1,
+                        limit: currentLimit,
+                      })}
+                      className="rounded-lg border border-[#E5E5E5] bg-white px-3 py-1.5 text-xs font-semibold text-[#111111]"
+                    >
+                      Próxima
+                    </a>
+                  ) : (
+                    <span className="rounded-lg border border-[#EFEFEF] bg-[#F9F9F9] px-3 py-1.5 text-xs font-semibold text-[#BBBBBB]">
+                      Próxima
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

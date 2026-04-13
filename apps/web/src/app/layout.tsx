@@ -1,5 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, Gugi, JetBrains_Mono } from "next/font/google";
+import {
+  Dancing_Script,
+  DM_Sans,
+  Gugi,
+  JetBrains_Mono,
+  Playfair_Display,
+  Syne,
+} from "next/font/google";
 import "./globals.css";
 
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
@@ -19,6 +26,24 @@ const gugi = Gugi({
   weight: "400",
   display: "swap",
   variable: "--font-logo",
+});
+
+const playfairDisplay = Playfair_Display({
+  subsets: ["latin"],
+  display: "block",
+  variable: "--font-serif",
+});
+
+const dancingScript = Dancing_Script({
+  subsets: ["latin"],
+  display: "block",
+  variable: "--font-script",
+});
+
+const syne = Syne({
+  subsets: ["latin"],
+  display: "block",
+  variable: "--font-display",
 });
 
 export const viewport: Viewport = {
@@ -83,7 +108,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${dmSans.variable} ${jetBrainsMono.variable} ${gugi.variable}`}
+      className={`${dmSans.variable} ${jetBrainsMono.variable} ${gugi.variable} ${playfairDisplay.variable} ${dancingScript.variable} ${syne.variable}`}
     >
       <body className="font-sans antialiased">{children}</body>
     </html>
