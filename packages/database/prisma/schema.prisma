@@ -141,6 +141,7 @@ model User {
   name            String
   planType         UserPlanType   @default(free)
   creditsRemaining Int            @default(0)
+  analysisCreditsRemaining Int    @default(0)
   planActivatedAt  DateTime?
   planExpiresAt    DateTime?
   status           UserStatus     @default(pending)
@@ -158,8 +159,22 @@ model User {
   resumes          Resume[]
   cvAdaptations    CvAdaptation[]
   planPurchases    PlanPurchase[]
+  dailyAnalysisUsages         UserDailyAnalysisUsage[]
   affiliateAttributions     AffiliateAttribution[]
   affiliateCommissionEvents AffiliateCommissionEvent[]
+}
+
+model UserDailyAnalysisUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  usageDate DateTime
+  usedCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, usageDate])
+  @@index([usageDate])
 }
 
 model PlanPurchase {
@@ -173,6 +188,7 @@ model PlanPurchase {
   status           PaymentStatus   @default(none)
   paidAt           DateTime?
   creditsGranted   Int
+  analysisCreditsGranted Int       @default(0)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 

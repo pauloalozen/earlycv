@@ -19,6 +19,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.2,
     },
+    {
+      url: getAbsoluteUrl("/privacidade"),
+      lastModified,
+      changeFrequency: "yearly",
+      priority: 0.4,
+    },
+    {
+      url: getAbsoluteUrl("/termos-de-uso"),
+      lastModified,
+      changeFrequency: "yearly",
+      priority: 0.4,
+    },
     ...jobs.map((job) => ({
       url: getAbsoluteUrl(`/vagas/${job.slug}`),
       lastModified,

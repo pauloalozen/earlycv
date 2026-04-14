@@ -495,7 +495,11 @@ export default function ResultadoPage() {
       />
 
       <main className="min-h-screen bg-[#F2F2F2] text-[#111]">
-        <AppHeader userName={userName} logoSize="sm" />
+        <AppHeader
+          userName={userName}
+          logoSize="sm"
+          backgroundColor="#F2F2F2"
+        />
 
         <div className="mx-auto max-w-[960px] space-y-3 px-4 pb-24 pt-1">
           {/* ── Banner de status (autenticado / teaser) ── */}

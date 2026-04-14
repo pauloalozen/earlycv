@@ -40,7 +40,7 @@ export default async function Home() {
   return (
     <main className="flex h-screen overflow-hidden flex-col bg-[#FAFAFA] text-[#111111]">
       {user ? (
-        <AppHeader userName={user.name} />
+        <AppHeader userName={user.name} backgroundColor="#FAFAFA" />
       ) : (
         <header className="flex shrink-0 items-center justify-between px-10 py-6">
           <span className="font-logo text-2xl tracking-tight">earlyCV</span>
@@ -137,21 +137,39 @@ export default async function Home() {
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-[18px] text-sm text-[#666666]">
-            <span>
-              <span className="mr-1.5 text-base text-lime-400">●</span>
+            <span className="inline-flex items-center">
+              <span className="mr-1.5 text-sm leading-none text-lime-400">
+                ●
+              </span>
               Ajustado para cada vaga específica
             </span>
-            <span>
-              <span className="mr-1.5 text-base text-lime-400">●</span>
+            <span className="inline-flex items-center">
+              <span className="mr-1.5 text-sm leading-none text-lime-400">
+                ●
+              </span>
               Análise grátis. Sem cartão.
             </span>
-            <span>
-              <span className="mr-1.5 text-base text-lime-400">●</span>
+            <span className="inline-flex items-center">
+              <span className="mr-1.5 text-sm leading-none text-lime-400">
+                ●
+              </span>
               Resultado em segundos
             </span>
           </div>
         </div>
       </section>
+
+      <footer className="shrink-0 px-6 pb-5">
+        <div className="mx-auto flex w-full max-w-[848px] items-center justify-center gap-4 text-sm text-[#A8A29E]">
+          <Link href="/termos-de-uso" className="hover:text-[#78716C]">
+            Termos de uso
+          </Link>
+          <span aria-hidden="true">•</span>
+          <Link href="/privacidade" className="hover:text-[#78716C]">
+            Privacidade
+          </Link>
+        </div>
+      </footer>
     </main>
   );
 }

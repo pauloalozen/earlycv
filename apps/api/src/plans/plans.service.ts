@@ -11,27 +11,55 @@ import type { UserPlanType } from "@prisma/client";
 import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
 
 import { DatabaseService } from "../database/database.service";
+import {
+  buildSaoPauloUsageDate,
+  resolveDailyAnalysisLimit,
+} from "./analysis-limit";
 
 type PlanId = "starter" | "pro" | "turbo";
 
 const PLAN_CONFIG: Record<
   PlanId,
-  { label: string; amountInCents: number; creditsGranted: number }
+  {
+    label: string;
+    amountInCents: number;
+    downloadCreditsGranted: number;
+    analysisCreditsGranted: number;
+  }
 > = {
   starter: {
     label: `${process.env.QNT_CV_PLAN_STARTER ?? "1"} CV Otimizado — EarlyCV`,
     amountInCents: parseInt(process.env.PRICE_PLAN_STARTER ?? "1190", 10),
-    creditsGranted: parseInt(process.env.QNT_CV_PLAN_STARTER ?? "1", 10),
+    downloadCreditsGranted: parseInt(
+      process.env.QNT_CV_PLAN_STARTER ?? "1",
+      10,
+    ),
+    analysisCreditsGranted: parseInt(
+      process.env.QNT_AN_CREDIT_PLAN_STARTER ??
+        process.env.QNT_AN_PLAN_STARTER ??
+        "6",
+      10,
+    ),
   },
   pro: {
     label: `${process.env.QNT_CV_PLAN_PRO ?? "3"} CVs Otimizados — EarlyCV`,
     amountInCents: parseInt(process.env.PRICE_PLAN_PRO ?? "2990", 10),
-    creditsGranted: parseInt(process.env.QNT_CV_PLAN_PRO ?? "3", 10),
+    downloadCreditsGranted: parseInt(process.env.QNT_CV_PLAN_PRO ?? "3", 10),
+    analysisCreditsGranted: parseInt(
+      process.env.QNT_AN_CREDIT_PLAN_PRO ?? process.env.QNT_AN_PLAN_PRO ?? "9",
+      10,
+    ),
   },
   turbo: {
     label: `${process.env.QNT_CV_PLAN_TURBO ?? "10"} CVs Otimizados — EarlyCV`,
     amountInCents: parseInt(process.env.PRICE_PLAN_TURBO ?? "5990", 10),
-    creditsGranted: parseInt(process.env.QNT_CV_PLAN_TURBO ?? "10", 10),
+    downloadCreditsGranted: parseInt(process.env.QNT_CV_PLAN_TURBO ?? "10", 10),
+    analysisCreditsGranted: parseInt(
+      process.env.QNT_AN_CREDIT_PLAN_TURBO ??
+        process.env.QNT_AN_PLAN_TURBO ??
+        "30",
+      10,
+    ),
   },
 };
 
@@ -58,7 +86,8 @@ export class PlansService {
         currency: "BRL",
         paymentProvider: "mercadopago",
         paymentReference,
-        creditsGranted: plan.creditsGranted,
+        creditsGranted: plan.downloadCreditsGranted,
+        analysisCreditsGranted: plan.analysisCreditsGranted,
       },
     });
 
@@ -78,6 +107,7 @@ export class PlansService {
         internalRole: true,
         planType: true,
         creditsRemaining: true,
+        analysisCreditsRemaining: true,
         planExpiresAt: true,
       },
     });
@@ -88,6 +118,10 @@ export class PlansService {
       return {
         planType: "unlimited",
         creditsRemaining: null,
+        analysisCreditsRemaining: null,
+        dailyAnalysisLimit: null,
+        dailyAnalysisUsed: 0,
+        dailyAnalysisRemaining: null,
         planExpiresAt: null,
         isActive: true,
       };
@@ -98,11 +132,33 @@ export class PlansService {
       isUnlimited &&
       user.planExpiresAt !== null &&
       user.planExpiresAt < new Date();
+    const effectivePlanType = isExpired ? "free" : user.planType;
+
+    const dailyAnalysisLimit = resolveDailyAnalysisLimit(effectivePlanType);
+    const usageDate = buildSaoPauloUsageDate(new Date());
+    const dailyUsage = await this.database.userDailyAnalysisUsage.findUnique({
+      where: {
+        userId_usageDate: {
+          userId,
+          usageDate,
+        },
+      },
+      select: { usedCount: true },
+    });
+    const dailyAnalysisUsed = dailyUsage?.usedCount ?? 0;
 
     return {
-      planType: isExpired ? "free" : user.planType,
+      planType: effectivePlanType,
       creditsRemaining:
         isUnlimited && !isExpired ? null : user.creditsRemaining,
+      analysisCreditsRemaining:
+        isUnlimited && !isExpired ? null : user.analysisCreditsRemaining,
+      dailyAnalysisLimit,
+      dailyAnalysisUsed,
+      dailyAnalysisRemaining:
+        dailyAnalysisLimit === null
+          ? null
+          : Math.max(dailyAnalysisLimit - dailyAnalysisUsed, 0),
       planExpiresAt: user.planExpiresAt?.toISOString() ?? null,
       isActive: user.planType !== "free" && !isExpired,
     };
@@ -131,13 +187,18 @@ export class PlansService {
       purchase.userId,
       purchase.planType,
       purchase.creditsGranted,
+      this.resolveAnalysisCreditsForActivation(
+        purchase.planType,
+        purchase.analysisCreditsGranted,
+      ),
     );
   }
 
   private async activatePlan(
     userId: string,
     planType: UserPlanType,
-    creditsGranted: number,
+    downloadCreditsGranted: number,
+    analysisCreditsGranted: number,
   ): Promise<void> {
     const isUnlimited = planType === "unlimited";
     const planExpiresAt = isUnlimited
@@ -150,9 +211,29 @@ export class PlansService {
         planType,
         planActivatedAt: new Date(),
         planExpiresAt,
-        creditsRemaining: isUnlimited ? 0 : { increment: creditsGranted },
+        creditsRemaining: isUnlimited
+          ? 0
+          : { increment: downloadCreditsGranted },
+        analysisCreditsRemaining: isUnlimited
+          ? 0
+          : { increment: analysisCreditsGranted },
       },
     });
+  }
+
+  private resolveAnalysisCreditsForActivation(
+    planType: UserPlanType,
+    analysisCreditsGranted: number,
+  ): number {
+    if (analysisCreditsGranted > 0) {
+      return analysisCreditsGranted;
+    }
+
+    if (planType === "starter" || planType === "pro" || planType === "turbo") {
+      return PLAN_CONFIG[planType].analysisCreditsGranted;
+    }
+
+    return 0;
   }
 
   private isMpProduction(): boolean {

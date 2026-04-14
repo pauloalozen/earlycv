@@ -157,6 +157,7 @@ test("GET /api/admin/users lists product users and returns detail with ordered r
       assert.equal(listedUser.name, "Product User");
       assert.equal(listedUser.isStaff, false);
       assert.equal(listedUser.status, "suspended");
+      assert.equal(listedUser.analysisCreditsRemaining, 0);
       assert.deepEqual(listedUser.profile, {
         headline: "Senior Backend Engineer",
         city: "Sao Paulo",
@@ -190,6 +191,7 @@ test("GET /api/admin/users lists product users and returns detail with ordered r
       assert.equal(body.email, productUser.email);
       assert.equal(body.name, "Product User");
       assert.equal(body.isStaff, false);
+      assert.equal(body.analysisCreditsRemaining, 0);
       assert.equal(body.profile.headline, "Senior Backend Engineer");
       assert.deepEqual(body.resumes, [
         {
@@ -323,6 +325,16 @@ test("PATCH /api/admin/users routes update base fields, plan, and status for pro
     .expect(200)
     .expect(({ body }) => {
       assert.equal(body.creditsRemaining, 7);
+      assert.equal(body.id, productUser.userId);
+    });
+
+  await request(app.getHttpServer())
+    .patch(`/api/admin/users/${productUser.userId}/analysis-credits`)
+    .set("Authorization", `Bearer ${admin.accessToken}`)
+    .send({ analysisCreditsRemaining: 11 })
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(body.analysisCreditsRemaining, 11);
       assert.equal(body.id, productUser.userId);
     });
 

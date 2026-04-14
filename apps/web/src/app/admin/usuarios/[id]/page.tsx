@@ -14,7 +14,8 @@ import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminStatusBadge } from "../../_components/admin-status-badge";
 import { AdminTokenState } from "../../_components/admin-token-state";
-import { setUserCreditsAction } from "./actions";
+import { setUserAnalysisCreditsAction, setUserCreditsAction } from "./actions";
+import { SetAnalysisCreditsForm } from "./set-analysis-credits-form";
 import { SetCreditsForm } from "./set-credits-form";
 
 type AdminUserDetailPageProps = {
@@ -118,6 +119,10 @@ export default async function AdminUserDetailPage({
             label="creditos"
             description={String(user.creditsRemaining)}
           />
+          <InfoField
+            label="creditos de analise"
+            description={String(user.analysisCreditsRemaining)}
+          />
           <InfoField label="status da conta" description={user.status} />
         </div>
 
@@ -131,6 +136,23 @@ export default async function AdminUserDetailPage({
           <SetCreditsForm
             currentCredits={user.creditsRemaining}
             setCreditsAction={setUserCreditsAction.bind(null, user.id)}
+          />
+        </Card>
+
+        <Card className="space-y-3" padding="lg">
+          <h2 className="text-xl font-bold tracking-tight text-stone-950">
+            Ajustar creditos de analise
+          </h2>
+          <p className="text-sm text-stone-600">
+            Defina a quantidade exata de creditos de analise disponiveis para
+            este usuario.
+          </p>
+          <SetAnalysisCreditsForm
+            currentCredits={user.analysisCreditsRemaining}
+            setAnalysisCreditsAction={setUserAnalysisCreditsAction.bind(
+              null,
+              user.id,
+            )}
           />
         </Card>
 

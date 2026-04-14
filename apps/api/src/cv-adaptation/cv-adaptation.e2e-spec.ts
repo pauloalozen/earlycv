@@ -11,6 +11,9 @@ import request from "supertest";
 
 import { AppModule } from "../app.module";
 import { DatabaseService } from "../database/database.service";
+import { buildSaoPauloUsageDate } from "../plans/analysis-limit";
+import { PlansService } from "../plans/plans.service";
+import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 
 type DeleteManyDelegate = {
   deleteMany: (args?: unknown) => Promise<unknown>;
@@ -465,6 +468,633 @@ test("superadmin can claim guest analysis even with zero credits", async () => {
   });
 
   assert.equal(refreshed?.creditsRemaining, 0);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("GET /plans/me returns analysis credits and daily usage counters", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-plan-counters");
+
+  await request(app.getHttpServer())
+    .get("/api/plans/me")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(body.analysisCreditsRemaining, 0);
+      assert.equal(body.dailyAnalysisLimit, 3);
+      assert.equal(body.dailyAnalysisUsed, 0);
+      assert.equal(body.dailyAnalysisRemaining, 3);
+    });
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("GET /plans/me applies free daily limits for expired unlimited plans", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-expired-unlimited");
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: {
+      planType: "unlimited",
+      planExpiresAt: new Date("2026-01-01T00:00:00.000Z"),
+    },
+  });
+
+  await request(app.getHttpServer())
+    .get("/api/plans/me")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(body.planType, "free");
+      assert.equal(body.dailyAnalysisLimit, 3);
+      assert.equal(body.dailyAnalysisUsed, 0);
+      assert.equal(body.dailyAnalysisRemaining, 3);
+    });
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("GET /plans/me returns non-zero daily usage counters", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-daily-usage");
+
+  const usageDate = buildSaoPauloUsageDate(new Date());
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: {
+      planType: "starter",
+      analysisCreditsRemaining: 5,
+    },
+  });
+
+  await database.userDailyAnalysisUsage.upsert({
+    where: {
+      userId_usageDate: {
+        userId: user.userId,
+        usageDate,
+      },
+    },
+    update: { usedCount: 2 },
+    create: {
+      userId: user.userId,
+      usageDate,
+      usedCount: 2,
+    },
+  });
+
+  await request(app.getHttpServer())
+    .get("/api/plans/me")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(body.dailyAnalysisUsed, 2);
+      assert.equal(body.dailyAnalysisLimit, 6);
+      assert.equal(body.dailyAnalysisRemaining, 4);
+      assert.equal(body.analysisCreditsRemaining, 5);
+    });
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("plan activation accumulates purchased balances on top of existing user balances", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "plans-accumulate-balances");
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: {
+      creditsRemaining: 1,
+      analysisCreditsRemaining: 2,
+    },
+  });
+
+  const plansService = app.get(PlansService) as unknown as {
+    activatePlan: (
+      userId: string,
+      planType: "starter" | "pro" | "turbo" | "unlimited" | "free",
+      downloadCreditsGranted: number,
+      analysisCreditsGranted: number,
+    ) => Promise<void>;
+  };
+
+  await plansService.activatePlan(user.userId, "starter", 3, 6);
+
+  const refreshed = await database.user.findUnique({
+    where: { id: user.userId },
+    select: {
+      creditsRemaining: true,
+      analysisCreditsRemaining: true,
+    },
+  });
+
+  assert.equal(refreshed?.creditsRemaining, 4);
+  assert.equal(refreshed?.analysisCreditsRemaining, 8);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("webhook activation uses persisted purchase grants even when env values change", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "plans-webhook-frozen-grants");
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: {
+      creditsRemaining: 1,
+      analysisCreditsRemaining: 2,
+    },
+  });
+
+  const paymentReference = randomUUID();
+
+  await database.planPurchase.create({
+    data: {
+      userId: user.userId,
+      planType: "starter",
+      amountInCents: 1190,
+      currency: "BRL",
+      paymentProvider: "mercadopago",
+      paymentReference,
+      status: "none",
+      creditsGranted: 3,
+      analysisCreditsGranted: 5,
+    },
+  });
+
+  const originalStarterAnalysis = process.env.QNT_AN_CREDIT_PLAN_STARTER;
+  process.env.QNT_AN_CREDIT_PLAN_STARTER = "999";
+
+  const plansService = app.get(PlansService) as unknown as {
+    handleWebhook: (provider: string, body: unknown) => Promise<void>;
+    resolveMercadoPagoPayment: (body: unknown) => Promise<string | null>;
+  };
+
+  const originalResolve = plansService.resolveMercadoPagoPayment;
+  plansService.resolveMercadoPagoPayment = async () => paymentReference;
+
+  try {
+    await plansService.handleWebhook("mercadopago", {
+      type: "payment",
+      data: { id: "fake" },
+    });
+  } finally {
+    plansService.resolveMercadoPagoPayment = originalResolve;
+    if (originalStarterAnalysis === undefined) {
+      delete process.env.QNT_AN_CREDIT_PLAN_STARTER;
+    } else {
+      process.env.QNT_AN_CREDIT_PLAN_STARTER = originalStarterAnalysis;
+    }
+  }
+
+  const refreshed = await database.user.findUnique({
+    where: { id: user.userId },
+    select: {
+      creditsRemaining: true,
+      analysisCreditsRemaining: true,
+    },
+  });
+
+  assert.equal(refreshed?.creditsRemaining, 4);
+  assert.equal(refreshed?.analysisCreditsRemaining, 7);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("webhook activation falls back for legacy purchases with zero analysis grant", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "plans-legacy-fallback");
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: {
+      creditsRemaining: 1,
+      analysisCreditsRemaining: 2,
+    },
+  });
+
+  const paymentReference = randomUUID();
+
+  await database.planPurchase.create({
+    data: {
+      userId: user.userId,
+      planType: "starter",
+      amountInCents: 1190,
+      currency: "BRL",
+      paymentProvider: "mercadopago",
+      paymentReference,
+      status: "none",
+      creditsGranted: 3,
+      analysisCreditsGranted: 0,
+    },
+  });
+
+  const plansService = app.get(PlansService) as unknown as {
+    handleWebhook: (provider: string, body: unknown) => Promise<void>;
+    resolveMercadoPagoPayment: (body: unknown) => Promise<string | null>;
+  };
+
+  const originalResolve = plansService.resolveMercadoPagoPayment;
+  plansService.resolveMercadoPagoPayment = async () => paymentReference;
+
+  try {
+    await plansService.handleWebhook("mercadopago", {
+      type: "payment",
+      data: { id: "fake" },
+    });
+  } finally {
+    plansService.resolveMercadoPagoPayment = originalResolve;
+  }
+
+  const refreshed = await database.user.findUnique({
+    where: { id: user.userId },
+    select: {
+      creditsRemaining: true,
+      analysisCreditsRemaining: true,
+    },
+  });
+
+  assert.equal(refreshed?.creditsRemaining, 4);
+  assert.equal(refreshed?.analysisCreditsRemaining, 8);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("POST /cv-adaptation/analyze consumes one analysis credit and daily usage", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-analyze-consume");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Experiencia em produto e analytics",
+    },
+  });
+
+  const usageDate = buildSaoPauloUsageDate(new Date());
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: {
+      planType: "starter",
+      analysisCreditsRemaining: 2,
+    },
+  });
+
+  await request(app.getHttpServer())
+    .post("/api/cv-adaptation/analyze")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Vaga para atuar com analytics de produto",
+    })
+    .expect(201)
+    .expect(({ body }) => {
+      assert.equal(typeof body.previewText, "string");
+      assert.equal(typeof body.masterCvText, "string");
+      assert.ok(body.adaptedContentJson);
+    });
+
+  const refreshedUser = await database.user.findUnique({
+    where: { id: user.userId },
+    select: { analysisCreditsRemaining: true },
+  });
+
+  const usage = await database.userDailyAnalysisUsage.findUnique({
+    where: {
+      userId_usageDate: {
+        userId: user.userId,
+        usageDate,
+      },
+    },
+    select: { usedCount: true },
+  });
+
+  assert.equal(refreshedUser?.analysisCreditsRemaining, 1);
+  assert.equal(usage?.usedCount, 1);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("POST /cv-adaptation/analyze blocks when daily limit is reached", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-an-dlimit");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Experiencia em dados",
+    },
+  });
+
+  const usageDate = buildSaoPauloUsageDate(new Date());
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: {
+      planType: "starter",
+      analysisCreditsRemaining: 5,
+    },
+  });
+
+  await database.userDailyAnalysisUsage.upsert({
+    where: {
+      userId_usageDate: {
+        userId: user.userId,
+        usageDate,
+      },
+    },
+    update: { usedCount: 6 },
+    create: {
+      userId: user.userId,
+      usageDate,
+      usedCount: 6,
+    },
+  });
+
+  await request(app.getHttpServer())
+    .post("/api/cv-adaptation/analyze")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Vaga para analista de BI",
+    })
+    .expect(400)
+    .expect(({ body }) => {
+      assert.equal(
+        body.message,
+        "Você atingiu o limite diário de análises do seu plano.",
+      );
+    });
+
+  const refreshedUser = await database.user.findUnique({
+    where: { id: user.userId },
+    select: { analysisCreditsRemaining: true },
+  });
+
+  const usage = await database.userDailyAnalysisUsage.findUnique({
+    where: {
+      userId_usageDate: {
+        userId: user.userId,
+        usageDate,
+      },
+    },
+    select: { usedCount: true },
+  });
+
+  assert.equal(refreshedUser?.analysisCreditsRemaining, 5);
+  assert.equal(usage?.usedCount, 6);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("POST /cv-adaptation/analyze blocks when no analysis credits are available", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-an-no-credits");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Experiencia em dados",
+    },
+  });
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: {
+      planType: "starter",
+      analysisCreditsRemaining: 0,
+    },
+  });
+
+  await request(app.getHttpServer())
+    .post("/api/cv-adaptation/analyze")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Vaga para analista de BI",
+    })
+    .expect(400)
+    .expect(({ body }) => {
+      assert.equal(
+        body.message,
+        "Você não tem créditos de análise disponíveis.",
+      );
+    });
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("POST /cv-adaptation/analyze rolls back consumed quota when AI fails", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-an-ai-fail");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Experiencia em produto",
+    },
+  });
+
+  const usageDate = buildSaoPauloUsageDate(new Date());
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: {
+      planType: "starter",
+      analysisCreditsRemaining: 2,
+    },
+  });
+
+  await database.userDailyAnalysisUsage.upsert({
+    where: {
+      userId_usageDate: {
+        userId: user.userId,
+        usageDate,
+      },
+    },
+    update: { usedCount: 2 },
+    create: {
+      userId: user.userId,
+      usageDate,
+      usedCount: 2,
+    },
+  });
+
+  const aiService = app.get(CvAdaptationAiService);
+  const originalAnalyze = aiService.analyzeAndAdaptDirect.bind(aiService);
+  aiService.analyzeAndAdaptDirect = async () => {
+    throw new Error("AI unavailable");
+  };
+
+  try {
+    await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send({
+        masterResumeId: masterResume.id,
+        jobDescriptionText: "Vaga para lider de produto",
+      })
+      .expect(500);
+  } finally {
+    aiService.analyzeAndAdaptDirect = originalAnalyze;
+  }
+
+  const refreshedUser = await database.user.findUnique({
+    where: { id: user.userId },
+    select: { analysisCreditsRemaining: true },
+  });
+
+  const usage = await database.userDailyAnalysisUsage.findUnique({
+    where: {
+      userId_usageDate: {
+        userId: user.userId,
+        usageDate,
+      },
+    },
+    select: { usedCount: true },
+  });
+
+  assert.equal(refreshedUser?.analysisCreditsRemaining, 2);
+  assert.equal(usage?.usedCount, 2);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("POST /cv-adaptation/analyze keeps superadmin unlimited flow", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-analyze-superadmin");
+
+  await promoteToInternalAdmin(database, user.userId, "superadmin");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Experiencia em engenharia de software",
+    },
+  });
+
+  const usageDate = buildSaoPauloUsageDate(new Date());
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: {
+      analysisCreditsRemaining: 0,
+    },
+  });
+
+  await database.userDailyAnalysisUsage.upsert({
+    where: {
+      userId_usageDate: {
+        userId: user.userId,
+        usageDate,
+      },
+    },
+    update: { usedCount: 99 },
+    create: {
+      userId: user.userId,
+      usageDate,
+      usedCount: 99,
+    },
+  });
+
+  await request(app.getHttpServer())
+    .post("/api/cv-adaptation/analyze")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Vaga para backend senior",
+    })
+    .expect(201);
+
+  const refreshedUser = await database.user.findUnique({
+    where: { id: user.userId },
+    select: { analysisCreditsRemaining: true },
+  });
+
+  const usage = await database.userDailyAnalysisUsage.findUnique({
+    where: {
+      userId_usageDate: {
+        userId: user.userId,
+        usageDate,
+      },
+    },
+    select: { usedCount: true },
+  });
+
+  assert.equal(refreshedUser?.analysisCreditsRemaining, 0);
+  assert.equal(usage?.usedCount, 99);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("POST /cv-adaptation/analyze keeps active unlimited plan flow for regular user", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-an-unlimited");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Experiencia em produto",
+    },
+  });
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: {
+      planType: "unlimited",
+      planExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+      analysisCreditsRemaining: 0,
+    },
+  });
+
+  await request(app.getHttpServer())
+    .post("/api/cv-adaptation/analyze")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Vaga para lider de produto",
+    })
+    .expect(201);
+
+  const refreshedUser = await database.user.findUnique({
+    where: { id: user.userId },
+    select: { analysisCreditsRemaining: true },
+  });
+
+  assert.equal(refreshedUser?.analysisCreditsRemaining, 0);
 
   await deleteUserByEmail(database, user.email);
   await app.close();

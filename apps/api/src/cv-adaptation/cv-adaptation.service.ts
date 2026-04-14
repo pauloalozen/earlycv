@@ -7,6 +7,10 @@ import {
 import type { Prisma } from "@prisma/client";
 import type { Response } from "express";
 import { DatabaseService } from "../database/database.service";
+import {
+  buildSaoPauloUsageDate,
+  resolveDailyAnalysisLimit,
+} from "../plans/analysis-limit";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
 import { CvAdaptationPaymentService } from "./cv-adaptation-payment.service";
@@ -296,12 +300,20 @@ export class CvAdaptationService {
       throw new BadRequestException("masterResumeId or PDF file is required.");
     }
 
-    const result = await this.aiService.analyzeAndAdaptDirect(
-      masterCvText,
-      dto.jobDescriptionText,
-    );
+    const quotaConsumption =
+      await this.consumeAuthenticatedAnalysisQuota(userId);
 
-    return { ...result, masterCvText };
+    try {
+      const result = await this.aiService.analyzeAndAdaptDirect(
+        masterCvText,
+        dto.jobDescriptionText,
+      );
+
+      return { ...result, masterCvText };
+    } catch (error) {
+      await this.rollbackAuthenticatedAnalysisQuota(userId, quotaConsumption);
+      throw error;
+    }
   }
 
   async saveGuestPreview(userId: string, dto: SaveGuestPreviewDto) {
@@ -935,6 +947,131 @@ export class CvAdaptationService {
     }
 
     return lines.join("\n").trim();
+  }
+
+  private async consumeAuthenticatedAnalysisQuota(
+    userId: string,
+  ): Promise<{ consumed: boolean; usageDate: Date | null }> {
+    const usageDate = buildSaoPauloUsageDate(new Date());
+
+    return this.database.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: {
+          internalRole: true,
+          planType: true,
+          planExpiresAt: true,
+        },
+      });
+
+      if (!user) {
+        throw new NotFoundException("user not found");
+      }
+
+      if (user.internalRole === "superadmin") {
+        return { consumed: false, usageDate: null };
+      }
+
+      const isUnlimited = user.planType === "unlimited";
+      const isExpired =
+        isUnlimited &&
+        user.planExpiresAt !== null &&
+        user.planExpiresAt < new Date();
+
+      if (isUnlimited && !isExpired) {
+        return { consumed: false, usageDate: null };
+      }
+
+      const effectivePlanType = isExpired ? "free" : user.planType;
+      const dailyLimit = resolveDailyAnalysisLimit(effectivePlanType);
+
+      const creditConsumption = await tx.user.updateMany({
+        where: {
+          id: userId,
+          analysisCreditsRemaining: { gt: 0 },
+        },
+        data: {
+          analysisCreditsRemaining: { decrement: 1 },
+        },
+      });
+
+      if (creditConsumption.count !== 1) {
+        throw new BadRequestException(
+          "Você não tem créditos de análise disponíveis.",
+        );
+      }
+
+      if (dailyLimit === null) {
+        return { consumed: true, usageDate: null };
+      }
+
+      await tx.userDailyAnalysisUsage.upsert({
+        where: {
+          userId_usageDate: {
+            userId,
+            usageDate,
+          },
+        },
+        create: {
+          userId,
+          usageDate,
+          usedCount: 0,
+        },
+        update: {},
+      });
+
+      const usageConsumption = await tx.userDailyAnalysisUsage.updateMany({
+        where: {
+          userId,
+          usageDate,
+          usedCount: { lt: dailyLimit },
+        },
+        data: {
+          usedCount: { increment: 1 },
+        },
+      });
+
+      if (usageConsumption.count !== 1) {
+        throw new BadRequestException(
+          "Você atingiu o limite diário de análises do seu plano.",
+        );
+      }
+
+      return { consumed: true, usageDate };
+    });
+  }
+
+  private async rollbackAuthenticatedAnalysisQuota(
+    userId: string,
+    consumption: { consumed: boolean; usageDate: Date | null },
+  ): Promise<void> {
+    if (!consumption.consumed) {
+      return;
+    }
+
+    await this.database.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          analysisCreditsRemaining: { increment: 1 },
+        },
+      });
+
+      if (!consumption.usageDate) {
+        return;
+      }
+
+      await tx.userDailyAnalysisUsage.updateMany({
+        where: {
+          userId,
+          usageDate: consumption.usageDate,
+          usedCount: { gt: 0 },
+        },
+        data: {
+          usedCount: { decrement: 1 },
+        },
+      });
+    });
   }
 
   private async getDefaultTemplate(): Promise<{

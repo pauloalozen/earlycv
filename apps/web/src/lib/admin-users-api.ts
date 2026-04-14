@@ -27,6 +27,7 @@ export type AdminUserResumeRecord = {
 };
 
 export type AdminUserRecord = {
+  analysisCreditsRemaining: number;
   createdAt: string;
   creditsRemaining: number;
   email: string;
@@ -71,6 +72,10 @@ export type UpdateAdminUserStatusPayload = {
 
 export type SetAdminUserCreditsPayload = {
   creditsRemaining: number;
+};
+
+export type SetAdminUserAnalysisCreditsPayload = {
+  analysisCreditsRemaining: number;
 };
 
 export type StartAssistedSessionPayload = {
@@ -198,6 +203,24 @@ export async function setAdminUserCredits(
     },
     method: "PATCH",
   });
+}
+
+export async function setAdminUserAnalysisCredits(
+  userId: string,
+  payload: SetAdminUserAnalysisCreditsPayload,
+  token?: string,
+) {
+  return apiRequest<AdminUserRecord>(
+    `/admin/users/${userId}/analysis-credits`,
+    token,
+    {
+      body: JSON.stringify(payload),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "PATCH",
+    },
+  );
 }
 
 export async function startAssistedSession(

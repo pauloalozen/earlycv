@@ -12,10 +12,7 @@ import {
   getCvAdaptationContent,
   listCvAdaptations,
 } from "@/lib/cv-adaptation-api";
-import {
-  DASHBOARD_METRIC_LABELS,
-  formatDashboardOverview,
-} from "@/lib/dashboard-copy";
+import { DASHBOARD_METRIC_LABELS } from "@/lib/dashboard-copy";
 import {
   buildDashboardTestHistoryView,
   buildDashboardTestMetrics,
@@ -110,20 +107,30 @@ export default async function DashboardPage({
       ? masterResumeResponse.value
       : null;
 
-  const analyzedCount = adaptationList.length;
-  const generatedCount = adaptationList.filter(
-    (item) => item.paymentStatus === "completed",
-  ).length;
-  const availableCredits =
-    planInfo?.creditsRemaining === null
+  const isPlanInfoUnavailable = !planInfo;
+  const availableDownloadCredits = isPlanInfoUnavailable
+    ? "—"
+    : planInfo.creditsRemaining === null
       ? "Ilimitado"
-      : (planInfo?.creditsRemaining ?? 0);
-  const overview = formatDashboardOverview({
-    analyzed: analyzedCount,
-    generated: generatedCount,
-    availableCredits,
-  });
-
+      : planInfo.creditsRemaining;
+  const availableAnalysisCredits = isPlanInfoUnavailable
+    ? "—"
+    : planInfo.analysisCreditsRemaining === null
+      ? "Ilimitado"
+      : planInfo.analysisCreditsRemaining;
+  const dailyAnalysisLimit = isPlanInfoUnavailable
+    ? "—"
+    : planInfo.dailyAnalysisLimit === null
+      ? "Ilimitado"
+      : planInfo.dailyAnalysisLimit;
+  const dailyAnalysisRemaining = isPlanInfoUnavailable
+    ? "—"
+    : planInfo.dailyAnalysisRemaining === null
+      ? "Ilimitado"
+      : planInfo.dailyAnalysisRemaining;
+  const dailyAnalysisToday = isPlanInfoUnavailable
+    ? "—"
+    : `${planInfo.dailyAnalysisUsed}/${dailyAnalysisLimit}`;
   const analysisSignalsById = new Map<
     string,
     { score: number | null; improvement: number | null }
@@ -155,7 +162,7 @@ export default async function DashboardPage({
 
   return (
     <main className="min-h-screen bg-[#FAFAFA] text-[#111111]">
-      <AppHeader userName={user.name} />
+      <AppHeader userName={user.name} backgroundColor="#FAFAFA" />
 
       <div className="mx-auto max-w-[860px] space-y-8 px-6 pb-20 pt-4">
         <GuestAnalysisClaimer />
@@ -179,34 +186,45 @@ export default async function DashboardPage({
           <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#BBBBBB]">
             Visão geral
           </p>
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex divide-x divide-[#F0F0F0]">
-              <div className="min-w-0 pr-6">
-                <p className="text-xs text-[#999999]">Analisados</p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="grid min-w-[260px] flex-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="min-w-0">
+                <p className="text-xs text-[#999999]">Créditos de análise</p>
                 <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
-                  {overview.analyzed}
+                  {availableAnalysisCredits}
                 </p>
               </div>
-              <div className="min-w-0 px-6">
-                <p className="text-xs text-[#999999]">Gerados</p>
+              <div className="min-w-0">
+                <p className="text-xs text-[#999999]">Análises hoje</p>
                 <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
-                  {overview.generated}
+                  {dailyAnalysisToday}
                 </p>
               </div>
-              <div className="min-w-0 pl-6">
-                <p className="text-xs text-[#999999]">Créditos</p>
+              <div className="min-w-0">
+                <p className="text-xs text-[#999999]">Restante hoje</p>
                 <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
-                  {overview.availableCredits}
+                  {dailyAnalysisRemaining}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-[#999999]">Créditos de download</p>
+                <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
+                  {availableDownloadCredits}
                 </p>
               </div>
             </div>
-            <a
-              href="/planos"
-              style={{ color: "#ffffff" }}
-              className="shrink-0 rounded-[10px] bg-[#111111] px-4 py-2 text-sm font-medium"
-            >
-              Comprar créditos
-            </a>
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              <a
+                href="/planos"
+                style={{ color: "#ffffff" }}
+                className="rounded-[10px] bg-[#111111] px-4 py-2 text-sm font-medium"
+              >
+                Comprar créditos
+              </a>
+              <p className="text-right text-[11px] text-[#888888]">
+                Limite diário reinicia às 00:00 (America/Sao_Paulo).
+              </p>
+            </div>
           </div>
         </section>
 

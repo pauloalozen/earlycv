@@ -5,9 +5,14 @@ import { useEffect, useRef, useState } from "react";
 type Props = {
   userName?: string | null;
   logoSize?: "sm" | "md";
+  backgroundColor?: string;
 };
 
-export function AppHeader({ userName, logoSize = "md" }: Props) {
+export function AppHeader({
+  userName,
+  logoSize = "md",
+  backgroundColor = "#FAFAFA",
+}: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -28,7 +33,10 @@ export function AppHeader({ userName, logoSize = "md" }: Props) {
 
   return (
     <>
-      <header className="fixed top-0 right-0 left-0 z-40 bg-[rgba(242,242,242,0.95)]">
+      <header
+        className="fixed top-0 right-0 left-0 z-40"
+        style={{ backgroundColor }}
+      >
         <div className="flex shrink-0 items-center justify-between px-8 py-4">
           <a href="/" style={{ color: "#111111" }} className={logoClass}>
             earlyCV

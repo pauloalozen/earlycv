@@ -123,3 +123,4 @@ npm run test
 - Antes de qualquer merge/sync sensivel, criar snapshot local e validar `git status` para evitar perda de trabalho.
 - Estado de referencia atual: `main` local/remoto sincronizados e suite de testes verde apos ajustes de estabilidade em e2e da API.
 - Estado mais recente: freemium consolidado com claim por credito sem redirect forcado, popup de liberacao com fade, padronizacao de CTAs e correcoes de PT-BR nas telas principais.
+- Memoria mais nova: paginas publicas de `Privacidade` e `Termos de Uso` criadas com metadata completa + links discretos no rodape da landing; painel de planos atualizado com plano free e contadores de analise; bug de travamento no back/forward com spinner de transicao permanece pendente e em investigacao.

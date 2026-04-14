@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { AppHeader } from "@/components/app-header";
-import { PageShell } from "@/components/page-shell";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { buildPlanCatalog } from "./plan-catalog";
+import { PlanosFocusRemount } from "./planos-focus-remount";
 import { ScoreIndicator } from "./score-indicator";
 
 export const metadata: Metadata = {
@@ -9,79 +10,7 @@ export const metadata: Metadata = {
   title: "Planos | EarlyCV",
 };
 
-function parseCents(
-  envVal: string | undefined,
-  fallback: number,
-): { whole: string; decimal: string } {
-  const cents = parseInt(envVal ?? String(fallback), 10);
-  const reais = Math.floor(cents / 100);
-  const centavos = (cents % 100).toString().padStart(2, "0");
-  return { whole: `R$${reais}`, decimal: `,${centavos}` };
-}
-
-const starterPrice = parseCents(process.env.PRICE_PLAN_STARTER, 1190);
-const proPrice = parseCents(process.env.PRICE_PLAN_PRO, 2990);
-const turboPrice = parseCents(process.env.PRICE_PLAN_TURBO, 5990);
-
-const qntStarter = parseInt(process.env.QNT_CV_PLAN_STARTER ?? "1", 10);
-const qntPro = parseInt(process.env.QNT_CV_PLAN_PRO ?? "3", 10);
-const qntTurbo = parseInt(process.env.QNT_CV_PLAN_TURBO ?? "10", 10);
-
-const PLANS = [
-  {
-    id: "starter" as const,
-    label: "Starter",
-    price: starterPrice.whole,
-    cents: starterPrice.decimal,
-    description: "Para uma vaga específica",
-    featured: false,
-    badge: null,
-    cta: "Ajustar meu CV agora",
-    features: [
-      `${qntStarter} CV ajustado para passar no ATS`,
-      "Score de compatibilidade ATS",
-      "Análise de keywords da vaga",
-      "Download em PDF e DOCX",
-      "Pontos fortes e melhorias",
-    ],
-  },
-  {
-    id: "pro" as const,
-    label: "Pro",
-    price: proPrice.whole,
-    cents: proPrice.decimal,
-    description: "Para quem aplica para várias vagas",
-    featured: true,
-    badge: "Mais escolhido",
-    cta: "Aumentar minhas chances",
-    features: [
-      `${qntPro} CVs ajustados para passar no ATS`,
-      "Score de compatibilidade ATS",
-      "Análise de keywords da vaga",
-      "Download em PDF e DOCX",
-      "Pontos fortes e melhorias",
-      "Processamento prioritário",
-    ],
-  },
-  {
-    id: "turbo" as const,
-    label: "Turbo",
-    price: turboPrice.whole,
-    cents: turboPrice.decimal,
-    description: "Para quem está aplicando todos os dias",
-    featured: false,
-    badge: null,
-    cta: "Aplicar para mais vagas",
-    features: [
-      `${qntTurbo} CVs ajustados para passar no ATS`,
-      "Score de compatibilidade ATS",
-      "Análise de keywords da vaga",
-      "Download em PDF e DOCX",
-      "Pontos fortes e melhorias",
-      "Processamento prioritário",
-    ],
-  },
-];
+const PLANS = buildPlanCatalog(process.env);
 
 type PlanosPageProps = {
   searchParams: Promise<{ error?: string }>;
@@ -117,12 +46,12 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   const error = params.error;
 
   return (
-    <PageShell>
+    <PlanosFocusRemount>
       <main className="flex min-h-screen flex-col bg-[#F2F2F2] text-[#111111]">
-        <AppHeader userName={user?.name} />
+        <AppHeader userName={user?.name} backgroundColor="#F2F2F2" />
 
         <section className="flex flex-1 flex-col items-center justify-between px-6 py-6 md:px-10">
-          <div className="w-full max-w-4xl space-y-5">
+          <div className="w-full max-w-5xl space-y-5">
             {/* Badge */}
             <div className="flex justify-center">
               <span className="inline-flex items-center gap-2 rounded-full border border-[#111111] bg-[#111111] px-4 py-1.5 text-sm font-medium text-white">
@@ -132,10 +61,9 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
             </div>
 
             {/* Hero */}
-            <div className="space-y-2 text-center">
+            <div className="space-y-2 text-center mb-8">
               <h1 className="text-3xl font-bold tracking-tight text-[#111111]">
-                Seu CV não está passando
-                <br className="hidden sm:block" /> no filtro automático
+                Seu CV não está passando no filtro automático
               </h1>
               <p className="mx-auto max-w-md text-sm text-[#666666]">
                 Um único CV bem ajustado pode ser a diferença entre ser ignorado
@@ -155,7 +83,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
             )}
 
             {/* Cards */}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {PLANS.map((plan) => (
                 <div
                   key={plan.id}
@@ -194,11 +122,25 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                   {/* CTA */}
                   <div className="mt-4">
                     {isAuthenticated ? (
-                      <form action="/plans/checkout" method="post">
-                        <input type="hidden" name="planId" value={plan.id} />
+                      <form
+                        action={
+                          plan.checkoutPlanId ? "/plans/checkout" : "/adaptar"
+                        }
+                        method={plan.checkoutPlanId ? "post" : "get"}
+                      >
+                        {plan.checkoutPlanId ? (
+                          <input
+                            type="hidden"
+                            name="planId"
+                            value={plan.checkoutPlanId}
+                          />
+                        ) : null}
                         <button
                           type="submit"
-                          className={`w-full rounded-[12px] py-2.5 text-xs font-bold leading-none transition-colors ${
+                          style={
+                            plan.featured ? { color: "#111111" } : undefined
+                          }
+                          className={`w-full rounded-[12px] py-2.5 text-[11px] font-medium leading-none transition-colors ${
                             plan.featured
                               ? "bg-white text-[#111111] hover:bg-stone-100"
                               : "bg-[#F2F2F2] text-[#111111] hover:bg-[#E8E8E8]"
@@ -209,8 +151,15 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                       </form>
                     ) : (
                       <a
-                        href="/entrar?next=/planos"
-                        className={`block w-full rounded-[14px] py-3.5 text-center text-sm font-bold leading-none transition-colors ${
+                        href={
+                          plan.id === "free"
+                            ? isAuthenticated
+                              ? "/adaptar"
+                              : "/entrar?next=/adaptar"
+                            : "/entrar?next=/planos"
+                        }
+                        style={plan.featured ? { color: "#111111" } : undefined}
+                        className={`block w-full rounded-[14px] py-3 text-center text-[11px] font-medium leading-none transition-colors ${
                           plan.featured
                             ? "bg-white text-[#111111] hover:bg-stone-100"
                             : "bg-[#F2F2F2] text-[#111111] hover:bg-[#E8E8E8]"
@@ -294,7 +243,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
             </div>
           </div>
 
-          <div className="w-full max-w-4xl pt-4">
+          <div className="w-full max-w-5xl pt-4">
             <div className="flex items-center justify-center gap-2 rounded-xl border border-[#E8E8E8] bg-white px-5 py-3">
               <svg
                 aria-hidden="true"
@@ -320,6 +269,6 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
           </div>
         </section>
       </main>
-    </PageShell>
+    </PlanosFocusRemount>
   );
 }

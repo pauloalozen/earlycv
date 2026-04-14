@@ -173,7 +173,7 @@ export default function AdaptarPage() {
   return (
     <main className="flex min-h-screen flex-col bg-[#F2F2F2] text-[#111111]">
       {userName ? (
-        <AppHeader userName={userName} />
+        <AppHeader userName={userName} backgroundColor="#F2F2F2" />
       ) : (
         <header className="flex shrink-0 items-center justify-between px-10 py-6">
           <a

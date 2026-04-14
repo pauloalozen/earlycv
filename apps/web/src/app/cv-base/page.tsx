@@ -97,7 +97,7 @@ export default function MeusCvsPage() {
   return (
     <main className="min-h-screen bg-[#FAFAFA] text-[#111111]">
       {userName ? (
-        <AppHeader userName={userName} />
+        <AppHeader userName={userName} backgroundColor="#FAFAFA" />
       ) : (
         <header className="flex shrink-0 items-center px-10 py-6">
           <a

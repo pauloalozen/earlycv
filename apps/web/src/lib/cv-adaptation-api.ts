@@ -2,6 +2,7 @@
 
 import type { CvAdaptationStatus, PaymentStatus } from "@prisma/client";
 import { apiRequest } from "./api-request";
+import { extractApiErrorMessage } from "./cv-adaptation-api-errors";
 
 export type CvAdaptationDto = {
   id: string;
@@ -170,7 +171,9 @@ export async function analyzeGuestCv(
   );
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Falha ao analisar CV: ${error}`);
+    throw new Error(
+      extractApiErrorMessage(error, "Falha ao analisar CV. Tente novamente."),
+    );
   }
   return response.json() as Promise<GuestAnalysisResult>;
 }
@@ -221,7 +224,9 @@ export async function analyzeAuthenticatedCv(
   const response = await apiRequest("POST", "/cv-adaptation/analyze", formData);
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Falha ao analisar CV: ${error}`);
+    throw new Error(
+      extractApiErrorMessage(error, "Falha ao analisar CV. Tente novamente."),
+    );
   }
   return response.json() as Promise<GuestAnalysisResult>;
 }
