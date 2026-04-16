@@ -7,6 +7,11 @@ export { EmptyState, type EmptyStateProps } from "./empty-state";
 export { InfoField, type InfoFieldProps } from "./info-field";
 export { Input, type InputProps } from "./input";
 export { JobCard, type JobCardProps } from "./job-card";
+export {
+  type Keyword,
+  KeywordTable,
+  type KeywordTableProps,
+} from "./keyword-table";
 export { PricingCard, type PricingCardProps } from "./pricing-card";
 export { SearchInput, type SearchInputProps } from "./search-input";
 export { SectionHeading, type SectionHeadingProps } from "./section-heading";
