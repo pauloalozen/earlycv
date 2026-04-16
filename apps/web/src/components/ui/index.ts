@@ -2,6 +2,7 @@ export { Badge, type BadgeProps, badgeVariants } from "./badge";
 export { BrandMark, type BrandMarkProps } from "./brand-mark";
 export { Button, type ButtonProps, buttonVariants } from "./button";
 export { Card, type CardProps, cardVariants } from "./card";
+export { DeltaBadge, type DeltaBadgeProps } from "./delta-badge";
 export { EmptyState, type EmptyStateProps } from "./empty-state";
 export { InfoField, type InfoFieldProps } from "./info-field";
 export { Input, type InputProps } from "./input";

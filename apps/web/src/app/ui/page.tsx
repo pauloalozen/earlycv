@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { DeltaBadge } from "@/components/ui";
 import { MetricBar } from "@/components/ui/metric-bar";
 
 export const metadata: Metadata = {
@@ -27,6 +28,16 @@ export default function UIShowcase() {
               Metric Bar
             </h2>
             <MetricBar score={72} segments={segments} />
+          </div>
+          <div className="p-8 bg-white rounded-2xl shadow-sm border border-stone-200">
+            <h2 className="text-2xl font-semibold mb-4 text-stone-900">
+              Delta Badge
+            </h2>
+            <div className="space-y-2">
+              <DeltaBadge delta={5} />
+              <DeltaBadge delta={-3} />
+              <DeltaBadge delta={0} label="points" />
+            </div>
           </div>
         </div>
       </div>
