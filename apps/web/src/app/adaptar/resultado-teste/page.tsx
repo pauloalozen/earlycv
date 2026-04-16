@@ -17,16 +17,20 @@ import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
 import { getAuthStatus } from "@/lib/session-actions";
 
 // ── ScoreBar ──────────────────────────────────────────────────────────────────
-function ScoreBar({\n  score,\n  scoreTarget,\n  blurred = false,\n}: {\n  score: number;
-\n  scoreTarget?: number
-\n  blurred?: boolean
-\n})
-{
+function ScoreBar({
+  score,
+  scoreTarget,
+  blurred = false,
+}: {
+  score: number;
+  scoreTarget?: number;
+  blurred?: boolean;
+}) {
   return (
     <div className="w-full px-2">
       <div className="relative h-4 w-full overflow-hidden rounded-full bg-[#EEEEEE]">
         <div
-          className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${blurred ? 'blur-md' : ''}`}
+          className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${blurred ? "blur-md" : ""}`}
           style={{
             width: `${score}%`,
             background:
@@ -37,13 +41,15 @@ function ScoreBar({\n  score,\n  scoreTarget,\n  blurred = false,\n}: {\n  score
         />
         {scoreTarget !== undefined && scoreTarget > score && (
           <div
-            className={`absolute inset-y-0 w-[3px] bg-lime-400 ${blurred ? 'blur-md' : ''}`}
+            className={`absolute inset-y-0 w-[3px] bg-lime-400 ${blurred ? "blur-md" : ""}`}
             style={{ left: `calc(${scoreTarget}% - 1.5px)` }}
           />
         )}
       </div>
 
-      <div className={`relative mt-2 h-5 w-full text-[10px] font-semibold ${blurred ? 'blur-md' : ''}`}>
+      <div
+        className={`relative mt-2 h-5 w-full text-[10px] font-semibold ${blurred ? "blur-md" : ""}`}
+      >
         <span className="absolute left-0 text-[#AAAAAA]">0</span>
         <span
           className="absolute -translate-x-1/2 whitespace-nowrap"
@@ -614,7 +620,7 @@ export default function ResultadoPage() {
                   Pontos fortes
                 </p>
               </div>
-              <LockedList\n                items={data.pontos_fortes}\n                dot="#84cc16"\n                isAuthenticated={isAuthenticated}\n              />\n              <div className={`mt-4 p-3 bg-lime-50 rounded-lg ${isAuthenticated !== true ? 'blur-md select-none' : ''}`}>\n                <DeltaBadge delta={(data as any).deltas.exp || '+0'} />\n              </div>\n            </div>
+              <LockedList items={data.pontos_fortes} dot="#84cc16" isAuthenticated={isAuthenticated} />\n              <div className={`mt-4 p-3 bg-lime-50 rounded-lg ${isAuthenticated !== true ? 'blur-md select-none' : ''}`}>\n                <DeltaBadge delta={(data as any).deltas.exp || '+0'} />\n              </div>\n            </div>
 
             <div className="rounded-xl bg-white p-5 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
@@ -625,7 +631,7 @@ export default function ResultadoPage() {
                   Lacunas
                 </p>
               </div>
-              <LockedList\n                items={data.lacunas}\n                dot="#ef4444"\n                isAuthenticated={isAuthenticated}\n              />\n              <div className={`mt-4 ${isAuthenticated !== true ? 'blur-md select-none' : ''}`}>\n                <KeywordTable keywords={(data as any).keywords.filter((k: any) => !k.presente) || []} />\n              </div>\n            </div>
+              <LockedList items={data.lacunas} dot="#ef4444" isAuthenticated={isAuthenticated} />\n              <div className={`mt-4 ${isAuthenticated !== true ? 'blur-md select-none' : ''}`}>\n                <KeywordTable keywords={(data as any).keywords.filter((k: any) => !k.presente) || []} />\n              </div>\n            </div>
 
             <div className="rounded-xl border border-lime-200 bg-lime-50 p-5 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
@@ -636,12 +642,12 @@ export default function ResultadoPage() {
                   Melhorias aplicadas
                 </p>
               </div>
-              <LockedList\n                items={data.melhorias_aplicadas}\n                dot="#84cc16"\n                isAuthenticated={isAuthenticated}\n              />\n              <div className={`mt-4 flex flex-wrap gap-2 ${isAuthenticated !== true ? 'blur-md select-none' : ''}`}>\n                {Object.entries((data as any).deltas || {}).map(([key, val]) => (\n                  <DeltaBadge key={key} delta={val} />\n                ))}\n              </div>\n            </div>
+              <LockedList items={data.melhorias_aplicadas} dot="#84cc16" isAuthenticated={isAuthenticated} />\n              <div className={`mt-4 flex flex-wrap gap-2 ${isAuthenticated !== true ? 'blur-md select-none' : ''}`}>\n                {Object.entries((data as any).deltas || {}).map(([key, val]) => (<DeltaBadge key={key} delta={val} /> ))}\n              </div>\n            </div>
           </div>
 
           {/* ── 4. ATS Keywords ── */}
           <div className="rounded-xl bg-white p-5 shadow-sm">
-            <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">\n              Palavras-chave ATS\n            </p>\n            <KeywordTable keywords={(data as any).keywords || []} />
+            <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">Palavras-chave ATS
           </div>
 
           {/* ── 5. Preview antes/depois ── */}

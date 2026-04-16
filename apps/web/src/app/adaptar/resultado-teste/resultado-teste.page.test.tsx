@@ -11,55 +11,35 @@ vi.mock("next/navigation", () => ({
   })),
 }));
 
-vi.mock('@/components/app-header', () => ({
-  AppHeader: (props: any) => &lt;
-div;
-data-testid = "app-header";
-{
-  ...props
-}
-/&,;gt;
-}))
+vi.mock("@/components/app-header", () => ({
+  AppHeader: (props: any) => <div data-testid="app-header" {...props} />,
+}));
 
-vi.mock('@/components/download-progress-overlay', () => (
-{
+vi.mock("@/components/download-progress-overlay", () => ({
   DownloadProgressOverlay: () => null,
-}
-))
+}));
 
-vi.mock('@/lib/client-download', () => (
-{
+vi.mock("@/lib/client-download", () => ({
   downloadFromApi: vi.fn(),
-}
-))
+}));
 
-vi.mock('@/lib/session-actions', () => (
-{
-  getAuthStatus: vi.fn(() =&gt;
-  Promise.resolve({ isAuthenticated: false, userName: null, hasCredits: null });
+vi.mock("@/lib/session-actions", () => ({
+  getAuthStatus: vi.fn(() =>
+    Promise.resolve({
+      isAuthenticated: false,
+      userName: null,
+      hasCredits: null,
+    }),
   ),
-}
-))
+}));
 
-vi.mock('@/lib/download-cta-copy', () => (
-{
-  getDownloadCtaCopy: vi.fn(() =&gt;
-  ("Baixar");
-  ),
-}
-))
+vi.mock("@/lib/download-cta-copy", () => ({
+  getDownloadCtaCopy: vi.fn(() => "Baixar"),
+}));
 
-vi.mock('react-dom', () => (
-{
-  createPortal: (children: React.ReactNode)
-  =&gt
-  &lt
-  &gt
-  children;
-  &lt
-  /&,;gt;
-}
-))
+vi.mock("react-dom", () => ({
+  createPortal: (children: React.ReactNode) => children,
+}));
 
 const mockData = {
   vaga: {
@@ -112,56 +92,45 @@ const mockData = {
   ],
 } as any;
 
-describe('ResultadoTestePage', () =&gt;
-{
-  beforeEach(() =&gt;
-  vi.stubGlobal('sessionStorage', {
-      getItem: vi.fn(() =&gt;
-  JSON.stringify({ adaptedContentJson: mockData });
-  ),
+describe("ResultadoTestePage", () => {
+  beforeEach(() => {
+    vi.stubGlobal("sessionStorage", {
+      getItem: vi.fn(() => JSON.stringify({ adaptedContentJson: mockData })),
       setItem: vi.fn(),
       removeItem: vi.fn(),
-  )
-    vi.stubGlobal('fetch', vi.fn())
-    Object.defineProperty(window, 'location',
-  search: "";
-  ,
+    });
+    vi.stubGlobal("fetch", vi.fn());
+    Object.defineProperty(window, "location", {
+      search: "",
       writable: true,
-  as;
-  any;
-  )
-}
-)
+    });
+  });
 
-  afterEach(() =&gt
-{
-  vi.restoreAllMocks();
-}
-)
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-  it('renders gamified layout with metrics bars, deltas badges, keywords table, and paywall blur', () =&gt
-{
-  const { container } = render(&lt;
-  ResultadoPage /&gt;
-  )
+  it("renders gamified layout with metrics bars, deltas badges, keywords table, and paywall blur", () => {
+    const { container } = render(<ResultadoPage />);
 
     // Existing elements
-    expect(screen.getByText('Análise para vaga: Desenvolvedor Fullstack')).toBeInTheDocument()
-    expect(screen.getByText('72')).toBeInTheDocument()
+    expect(
+      screen.getByText("Análise para vaga: Desenvolvedor Fullstack"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("72")).toBeInTheDocument();
 
-    // New gamify expects - FAIL RED now
-    expect(screen.getByTestId('metric-bar-keywords')).toBeInTheDocument()
-    expect(screen.getByText('60')).toBeInTheDocument() // keywords match %
-    expect(screen.getByText('+25')).toBeInTheDocument() // deltas.exp
-    expect(screen.getByTestId('keyword-table')).toBeInTheDocument()
-    expect(screen.getByText('Angular')).toBeInTheDocument() // keyword name
-    expect(screen.getByText('-5')).toBeInTheDocument() // delta in table
+    // New gamify expects
+    expect(screen.getByTestId("metric-bar-keywords")).toBeInTheDocument();
+    expect(screen.getByText("60")).toBeInTheDocument(); // keywords match %
+    expect(screen.getByText("+25")).toBeInTheDocument(); // deltas.exp
+    expect(screen.getByTestId("keyword-table")).toBeInTheDocument();
+    expect(screen.getByText("Angular")).toBeInTheDocument(); // keyword name
+    expect(screen.getByText("-5")).toBeInTheDocument(); // delta in table
 
     // Paywall blur on numbers/bars
-    expect(screen.getByTestId('paywall-blur-section')).toHaveClass('blur-md')
+    expect(screen.getByTestId("paywall-blur-section")).toHaveClass("blur-md");
 
     // Snapshot for old vs new
-    expect(container.firstChild).toMatchSnapshot()
-}
-)
-})
+    expect(container.firstChild).toMatchSnapshot();
+  });
+});

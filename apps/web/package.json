@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "sh -c 'biome lint --config-path \"$(realpath ../../biome.json)\" src'",
-    "check": "sh -c 'biome check --config-path \"$(realpath ../../biome.json)\" src'"
+    "check": "sh -c 'biome check --config-path \"$(realpath ../../biome.json)\" src'",
+    "test": "vitest"
   },
   "dependencies": {
     "@earlycv/config": "0.1.0",
@@ -19,10 +20,17 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.1",
+    "clsx": "^2.1.1",
+    "jsdom": "^29.0.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^8.0.8",
+    "vitest": "^4.1.4"
   }
 }
