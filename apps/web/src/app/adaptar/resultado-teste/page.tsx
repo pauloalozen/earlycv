@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AppHeader } from "@/components/app-header";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
+import { DeltaBadge } from "@/components/ui/delta-badge";
+import { KeywordTable } from "@/components/ui/keyword-table";
+import { MetricBar } from "@/components/ui/metric-bar";
 import {
   type DownloadProgressStage,
   downloadFromApi,
@@ -14,18 +17,16 @@ import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
 import { getAuthStatus } from "@/lib/session-actions";
 
 // ── ScoreBar ──────────────────────────────────────────────────────────────────
-function ScoreBar({
-  score,
-  scoreTarget,
-}: {
-  score: number;
-  scoreTarget?: number;
-}) {
+function ScoreBar({\n  score,\n  scoreTarget,\n  blurred = false,\n}: {\n  score: number;
+\n  scoreTarget?: number
+\n  blurred?: boolean
+\n})
+{
   return (
     <div className="w-full px-2">
       <div className="relative h-4 w-full overflow-hidden rounded-full bg-[#EEEEEE]">
         <div
-          className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+          className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${blurred ? 'blur-md' : ''}`}
           style={{
             width: `${score}%`,
             background:
@@ -36,13 +37,13 @@ function ScoreBar({
         />
         {scoreTarget !== undefined && scoreTarget > score && (
           <div
-            className="absolute inset-y-0 w-[3px] bg-lime-400"
+            className={`absolute inset-y-0 w-[3px] bg-lime-400 ${blurred ? 'blur-md' : ''}`}
             style={{ left: `calc(${scoreTarget}% - 1.5px)` }}
           />
         )}
       </div>
 
-      <div className="relative mt-2 h-5 w-full text-[10px] font-semibold">
+      <div className={`relative mt-2 h-5 w-full text-[10px] font-semibold ${blurred ? 'blur-md' : ''}`}>
         <span className="absolute left-0 text-[#AAAAAA]">0</span>
         <span
           className="absolute -translate-x-1/2 whitespace-nowrap"
@@ -152,7 +153,7 @@ function LockedList({
 
       {lockedCount > 0 && (
         <div className="relative mt-1 overflow-hidden rounded-lg">
-          <div className="space-y-3 select-none blur-[5px]">
+          <div className="space-y-3 select-none blur-md">
             {MOCK_BLURRED_ITEMS.slice(0, lockedCount).map((mock) => (
               <div key={mock} className="flex items-start gap-2">
                 <span
@@ -613,12 +614,7 @@ export default function ResultadoPage() {
                   Pontos fortes
                 </p>
               </div>
-              <LockedList
-                items={data.pontos_fortes}
-                dot="#84cc16"
-                isAuthenticated={isAuthenticated}
-              />
-            </div>
+              <LockedList\n                items={data.pontos_fortes}\n                dot="#84cc16"\n                isAuthenticated={isAuthenticated}\n              />\n              <div className={`mt-4 p-3 bg-lime-50 rounded-lg ${isAuthenticated !== true ? 'blur-md select-none' : ''}`}>\n                <DeltaBadge delta={(data as any).deltas.exp || '+0'} />\n              </div>\n            </div>
 
             <div className="rounded-xl bg-white p-5 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
@@ -629,12 +625,7 @@ export default function ResultadoPage() {
                   Lacunas
                 </p>
               </div>
-              <LockedList
-                items={data.lacunas}
-                dot="#ef4444"
-                isAuthenticated={isAuthenticated}
-              />
-            </div>
+              <LockedList\n                items={data.lacunas}\n                dot="#ef4444"\n                isAuthenticated={isAuthenticated}\n              />\n              <div className={`mt-4 ${isAuthenticated !== true ? 'blur-md select-none' : ''}`}>\n                <KeywordTable keywords={(data as any).keywords.filter((k: any) => !k.presente) || []} />\n              </div>\n            </div>
 
             <div className="rounded-xl border border-lime-200 bg-lime-50 p-5 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
@@ -645,59 +636,12 @@ export default function ResultadoPage() {
                   Melhorias aplicadas
                 </p>
               </div>
-              <LockedList
-                items={data.melhorias_aplicadas}
-                dot="#84cc16"
-                isAuthenticated={isAuthenticated}
-              />
-            </div>
+              <LockedList\n                items={data.melhorias_aplicadas}\n                dot="#84cc16"\n                isAuthenticated={isAuthenticated}\n              />\n              <div className={`mt-4 flex flex-wrap gap-2 ${isAuthenticated !== true ? 'blur-md select-none' : ''}`}>\n                {Object.entries((data as any).deltas || {}).map(([key, val]) => (\n                  <DeltaBadge key={key} delta={val} />\n                ))}\n              </div>\n            </div>
           </div>
 
           {/* ── 4. ATS Keywords ── */}
           <div className="rounded-xl bg-white p-5 shadow-sm">
-            <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-              Palavras-chave ATS
-            </p>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="mb-2 text-[11px] font-semibold text-lime-600">
-                  Presentes no CV
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {(isAuthenticated
-                    ? data.ats_keywords.presentes
-                    : data.ats_keywords.presentes.slice(0, 3)
-                  ).map((kw) => (
-                    <Chip key={kw} label={kw} variant="green" />
-                  ))}
-                  {!isAuthenticated &&
-                    data.ats_keywords.presentes.length > 3 && (
-                      <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-2.5 py-0.5 text-xs text-[#AAAAAA]">
-                        🔒 +{data.ats_keywords.presentes.length - 3}
-                      </span>
-                    )}
-                </div>
-              </div>
-              <div>
-                <p className="mb-2 text-[11px] font-semibold text-red-600">
-                  Faltando para essa vaga
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {(isAuthenticated
-                    ? data.ats_keywords.ausentes
-                    : data.ats_keywords.ausentes.slice(0, 3)
-                  ).map((kw) => (
-                    <Chip key={kw} label={kw} variant="red" />
-                  ))}
-                  {!isAuthenticated &&
-                    data.ats_keywords.ausentes.length > 3 && (
-                      <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-2.5 py-0.5 text-xs text-[#AAAAAA]">
-                        🔒 +{data.ats_keywords.ausentes.length - 3}
-                      </span>
-                    )}
-                </div>
-              </div>
-            </div>
+            <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">\n              Palavras-chave ATS\n            </p>\n            <KeywordTable keywords={(data as any).keywords || []} />
           </div>
 
           {/* ── 5. Preview antes/depois ── */}
