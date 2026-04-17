@@ -125,14 +125,44 @@ export type CvAnalysisData = {
   };
   fit: {
     score: number;
+    /** Presente em análises novas */
+    score_pos_ajustes?: number;
     categoria: "baixo" | "medio" | "alto";
     headline: string;
     subheadline: string;
+  };
+  /** Presente em análises novas — pontos fortes com peso relativo */
+  positivos?: Array<{ texto: string; pontos: number }>;
+  /** Presente em análises novas — ajustes de conteúdo com ganho estimado */
+  ajustes_conteudo?: Array<{
+    id?: string;
+    titulo: string;
+    descricao: string;
+    pontos: number;
+    dica: string;
+  }>;
+  /** Presente em análises novas — keywords com impacto por item */
+  keywords?: {
+    presentes: Array<{ kw: string; pontos: number }>;
+    ausentes: Array<{ kw: string; pontos: number }>;
+  };
+  /** Presente em análises novas — análise de formato ATS */
+  formato_cv?: {
+    ats_score: number;
+    resumo: string;
+    problemas: Array<{
+      tipo: "critico" | "atencao" | "ok";
+      titulo: string;
+      descricao: string;
+      impacto: number;
+    }>;
+    campos: Array<{ nome: string; presente: boolean }>;
   };
   comparacao: {
     antes: string;
     depois: string;
   };
+  // Campos legados — presentes em todas as análises
   pontos_fortes: string[];
   lacunas: string[];
   melhorias_aplicadas: string[];

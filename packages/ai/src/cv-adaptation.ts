@@ -120,24 +120,53 @@ export type CvAnalysisOutput = {
   };
   fit: {
     score: number;
+    /** Score estimado após os ajustes identificados */
+    score_pos_ajustes: number;
     categoria: "baixo" | "medio" | "alto";
     headline: string;
     subheadline: string;
+  };
+  /** Pontos fortes do candidato para esta vaga, com peso relativo */
+  positivos: Array<{ texto: string; pontos: number }>;
+  /** Ajustes de conteúdo identificados, com ganho estimado de pontos */
+  ajustes_conteudo: Array<{
+    titulo: string;
+    descricao: string;
+    pontos: number;
+    dica: string;
+  }>;
+  /** Palavras-chave da vaga com impacto por keyword */
+  keywords: {
+    presentes: Array<{ kw: string; pontos: number }>;
+    ausentes: Array<{ kw: string; pontos: number }>;
+  };
+  /** Análise do formato do CV para sistemas ATS */
+  formato_cv: {
+    ats_score: number;
+    resumo: string;
+    problemas: Array<{
+      tipo: "critico" | "atencao" | "ok";
+      titulo: string;
+      descricao: string;
+      impacto: number;
+    }>;
+    campos: Array<{ nome: string; presente: boolean }>;
   };
   comparacao: {
     antes: string;
     depois: string;
   };
+  preview: {
+    antes: string;
+    depois: string;
+  };
+  // Campos legados mantidos para compatibilidade com análises anteriores
   pontos_fortes: string[];
   lacunas: string[];
   melhorias_aplicadas: string[];
   ats_keywords: {
     presentes: string[];
     ausentes: string[];
-  };
-  preview: {
-    antes: string;
-    depois: string;
   };
   projecao_melhoria: {
     score_atual: number;
@@ -186,41 +215,96 @@ SAÍDA — JSON válido, sem markdown:
   },
   "fit": {
     "score": number (0-100),
+    "score_pos_ajustes": number (0-100, estimado após aplicar todos os ajustes — realista, não exagerar),
     "categoria": "baixo" | "medio" | "alto",
     "headline": "frase direta e impactante mostrando o problema principal",
     "subheadline": "frase curta explicando rapidamente a situação"
   },
-  "comparacao": {
-    "antes": "frase curta evidenciando o problema principal do CV atual (ex: 'Pouca evidência de SQL e experiência global')",
-    "depois": "frase curta evidenciando a solução aplicada (ex: 'SQL e experiência global destacados claramente')"
+  "positivos": [
+    { "texto": "ponto forte em até 8 palavras", "pontos": number (4-15, peso relativo da contribuição) }
+    // máx 5 itens
+  ],
+  "ajustes_conteudo": [
+    {
+      "titulo": "título curto do ajuste (ex: 'Quantificar resultados com dados reais')",
+      "descricao": "frase curta explicando o que está faltando",
+      "pontos": number (4-12, ganho estimado de score ao aplicar este ajuste),
+      "dica": "exemplo concreto de como aplicar (ex: 'Ex.: Aumentei retenção em 22% em 6 meses')"
+    }
+    // máx 5 itens — foco nos ajustes mais impactantes
+  ],
+  "keywords": {
+    "presentes": [
+      { "kw": "palavra-chave", "pontos": number (1-5, contribuição desta keyword ao score) }
+      // máx 8 keywords presentes no CV
+    ],
+    "ausentes": [
+      { "kw": "palavra-chave", "pontos": number (2-6, ganho ao adicionar esta keyword) }
+      // máx 8 keywords ausentes relevantes para a vaga
+    ]
   },
-  "pontos_fortes": [
-    "máx 5 itens, cada um com até 1 linha, sem explicação longa"
-  ],
-  "lacunas": [
-    "máx 5 itens, cada um direto (ex: 'falta experiência com chargeback')"
-  ],
-  "melhorias_aplicadas": [
-    "máx 5 itens, cada um direto (ex: 'resumo ajustado para a vaga')"
-  ],
-  "ats_keywords": {
-    "presentes": ["lista curta"],
-    "ausentes": ["lista curta"]
+  "formato_cv": {
+    "ats_score": number (0-100, baseado nos problemas abaixo — começar em 100, subtrair impacto de cada problema),
+    "resumo": "1 frase descrevendo o problema de formato mais crítico",
+    "problemas": [
+      // Analisar o texto do CV para detectar 3-5 problemas de formato:
+      // - Layout com múltiplas colunas: tipo "critico", impacto -10 a -15
+      // - Dados de contato incompletos (ex: sem LinkedIn): tipo "critico", impacto -6 a -10
+      // - Uso de tabelas: tipo "atencao", impacto -4 a -8
+      // - Resumo profissional ausente: tipo "atencao", impacto -4 a -7
+      // - Formato de arquivo compatível: tipo "ok", impacto 0
+      {
+        "tipo": "critico" | "atencao" | "ok",
+        "titulo": "título curto do problema",
+        "descricao": "1-2 frases explicando o impacto prático",
+        "impacto": number (0 para ok, negativo para problemas)
+      }
+    ],
+    "campos": [
+      // Verificar presença de cada campo no texto do CV:
+      { "nome": "Nome completo", "presente": boolean },
+      { "nome": "E-mail", "presente": boolean },
+      { "nome": "Telefone", "presente": boolean },
+      { "nome": "LinkedIn", "presente": boolean },
+      { "nome": "Localização", "presente": boolean },
+      { "nome": "Resumo profissional", "presente": boolean },
+      { "nome": "Formação acadêmica", "presente": boolean },
+      { "nome": "Experiências com datas", "presente": boolean },
+      { "nome": "Habilidades e Competências", "presente": boolean }
+    ]
+  },
+  "comparacao": {
+    "antes": "frase curta evidenciando o problema principal do CV atual",
+    "depois": "frase curta evidenciando a solução aplicada"
   },
   "preview": {
     "antes": "Resumo profissional original do candidato, copiado literalmente do CV (2-3 frases). Se não houver resumo, pegar o primeiro bullet da experiência mais recente.",
     "depois": "Somente o resumo profissional reescrito para esta vaga: 3-4 frases fortes e diretas. Abrir com o cargo exato da vaga. Segunda frase: experiência mais relevante do candidato com dado real (anos, tecnologia, resultado). Terceira frase: conectar diretamente o perfil do candidato com o que a empresa busca nesta vaga. Quarta frase (opcional): diferencial ou conquista concreta. Sem títulos, sem bullets, só o parágrafo de resumo."
   },
+  "pontos_fortes": ["mesmo conteúdo de positivos[].texto — repetir para compatibilidade"],
+  "lacunas": ["mesmo conteúdo de ajustes_conteudo[].titulo — repetir para compatibilidade"],
+  "melhorias_aplicadas": ["máx 5 itens, cada um direto (ex: 'resumo ajustado para a vaga')"],
+  "ats_keywords": {
+    "presentes": ["mesmo conteúdo de keywords.presentes[].kw"],
+    "ausentes": ["mesmo conteúdo de keywords.ausentes[].kw"]
+  },
   "projecao_melhoria": {
-    "score_atual": number igual ao fit.score,
-    "score_pos_otimizacao": number estimado após otimização — deve ser realista, não exagerar, consistente com as lacunas corrigidas,
-    "explicacao_curta": "frase objetiva com ganho numérico quando possível (ex: '+13 pontos após ajustes focados na vaga')"
+    "score_atual": number (igual ao fit.score),
+    "score_pos_otimizacao": number (igual ao fit.score_pos_ajustes),
+    "explicacao_curta": "frase objetiva com ganho numérico (ex: '+22 pontos após ajustes focados na vaga')"
   },
   "mensagem_venda": {
-    "titulo": "frase curta focada em resultado prático para esta vaga específica (ex: 'Seu CV agora está pronto para competir nesta vaga')",
-    "subtexto": "frase direta sobre ganho concreto (ex: 'Mais chances de passar na triagem inicial')"
+    "titulo": "frase curta focada em resultado prático para esta vaga específica",
+    "subtexto": "frase direta sobre ganho concreto"
   }
 }
+
+REGRA DE CALIBRAÇÃO DE PONTOS:
+- fit.score + sum(ajustes_conteudo[].pontos) + sum(keywords.ausentes[].pontos) deve estar entre 90 e 100
+- Isso garante que o usuário veja o impacto de cada ajuste no score final
+- Se o candidato for forte, reduza os pontos individuais de ajustes/keywords — não aumente fit.score além do necessário
+- Regra prática: quando há 5+ ajustes identificados, fit.score raramente deve ultrapassar 65
+- fit.score_pos_ajustes deve refletir apenas os ajustes de conteúdo (SEM incluir keywords) — o frontend soma keywords separadamente
 
 REGRAS CRÍTICAS:
 - O campo "headline" deve ser direto e gerar incômodo leve — use linguagem que indique perda ou penalização

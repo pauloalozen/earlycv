@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AppHeader } from "@/components/app-header";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
+import { PageShell } from "@/components/page-shell";
 import {
   type DownloadProgressStage,
   downloadFromApi,
@@ -13,79 +14,261 @@ import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
 import { getAuthStatus } from "@/lib/session-actions";
 
-// ── ScoreBar ──────────────────────────────────────────────────────────────────
-function ScoreBar({
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
+
+/** Deterministic int from a string seed — usado para mockar media_candidatos e candidatos_semana */
+function seededInt(seed: string, min: number, max: number): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
+  }
+  return min + (Math.abs(h) % (max - min + 1));
+}
+
+/** Normaliza dados de análise (novo formato ou legado) para o shape que a página usa */
+function normalizeData(raw: CvAnalysisData) {
+  const positivos: Array<{ texto: string; pontos: number }> = raw.positivos
+    ?.length
+    ? raw.positivos
+    : (raw.pontos_fortes ?? []).map((t, i) => ({
+        texto: t,
+        pontos: [12, 9, 8, 7, 5][i] ?? 5,
+      }));
+
+  const ajustesConteudo: Array<{
+    id: string;
+    titulo: string;
+    descricao: string;
+    pontos: number;
+    dica: string;
+  }> = raw.ajustes_conteudo?.length
+    ? raw.ajustes_conteudo.map((a, i) => ({ ...a, id: a.id ?? `a${i}` }))
+    : (raw.lacunas ?? []).map((l, i) => ({
+        id: `a${i}`,
+        titulo: l,
+        descricao: "",
+        pontos: [11, 9, 7, 6, 5][i] ?? 5,
+        dica: "",
+      }));
+
+  const kwPresentes: Array<{ kw: string; pontos: number }> = raw.keywords
+    ?.presentes?.length
+    ? raw.keywords.presentes
+    : (raw.ats_keywords?.presentes ?? []).map((kw) => ({ kw, pontos: 3 }));
+
+  const kwAusentes: Array<{ kw: string; pontos: number }> = raw.keywords
+    ?.ausentes?.length
+    ? raw.keywords.ausentes
+    : (raw.ats_keywords?.ausentes ?? []).map((kw) => ({ kw, pontos: 4 }));
+
+  const scorePosAjustes =
+    raw.fit.score_pos_ajustes ??
+    raw.projecao_melhoria?.score_pos_otimizacao ??
+    Math.min(raw.fit.score + 20, 95);
+
+  return {
+    vaga: raw.vaga,
+    fit: { ...raw.fit, score_pos_ajustes: scorePosAjustes },
+    positivos,
+    ajustes_conteudo: ajustesConteudo,
+    keywords: { presentes: kwPresentes, ausentes: kwAusentes },
+    formato_cv: raw.formato_cv ?? null,
+    comparacao: raw.comparacao,
+    preview: raw.preview ?? null,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────
+
+function ScoreRing({
   score,
-  scoreTarget,
+  size = 140,
+  label,
+  dimmed = false,
 }: {
   score: number;
-  scoreTarget?: number;
+  size?: number;
+  label?: string;
+  dimmed?: boolean;
 }) {
+  const radius = 44;
+  const circ = 2 * Math.PI * radius;
+  const fill = (score / 100) * circ;
+  const color = dimmed
+    ? "rgba(255,255,255,0.35)"
+    : score >= 70
+      ? "#84cc16"
+      : score >= 40
+        ? "#f59e0b"
+        : "#ef4444";
+
   return (
-    <div className="w-full px-2">
-      <div className="relative h-4 w-full overflow-hidden rounded-full bg-[#EEEEEE]">
-        <div
-          className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+    <div className="flex flex-col items-center gap-1.5">
+      {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          stroke="#ffffff12"
+          strokeWidth="7"
+        />
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={`${fill} ${circ - fill}`}
+          strokeDashoffset={circ * 0.25}
           style={{
-            width: `${score}%`,
-            background:
-              "linear-gradient(to right, #ef4444 0%, #f59e0b 50%, #84cc16 100%)",
-            backgroundSize: "100vw 100%",
-            backgroundPosition: "left center",
+            transition: "stroke-dasharray 0.8s cubic-bezier(0.4,0,0.2,1)",
           }}
         />
-        {scoreTarget !== undefined && scoreTarget > score && (
-          <div
-            className="absolute inset-y-0 w-[3px] bg-lime-400"
-            style={{ left: `calc(${scoreTarget}% - 1.5px)` }}
-          />
-        )}
-      </div>
-
-      <div className="relative mt-2 h-5 w-full text-[10px] font-semibold">
-        <span className="absolute left-0 text-[#AAAAAA]">0</span>
-        <span
-          className="absolute -translate-x-1/2 whitespace-nowrap"
-          style={{
-            left: `${score}%`,
-            color:
-              score >= 70 ? "#84cc16" : score >= 40 ? "#f59e0b" : "#ef4444",
-          }}
+        <text
+          x="50"
+          y="50"
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={dimmed ? "26" : "30"}
+          fontWeight="800"
+          fill={dimmed ? "rgba(255,255,255,0.35)" : color}
+          fontFamily="inherit"
         >
           {score}
-        </span>
-        {scoreTarget !== undefined && scoreTarget > score && (
-          <span
-            className="group absolute -translate-x-1/2 cursor-help whitespace-nowrap"
-            style={{ left: `${scoreTarget}%` }}
-          >
-            <span className="rounded bg-lime-100 px-2 py-0.5 text-base font-bold text-lime-700 ring-1 ring-lime-300">
-              {scoreTarget}
+        </text>
+      </svg>
+      {label && (
+        <p
+          className={`text-center text-[11px] font-semibold ${dimmed ? "text-white/30" : "text-white/50"}`}
+        >
+          {label}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AjusteRow({
+  numero,
+  titulo,
+  descricao,
+  dica,
+  pontos,
+  concluido = false,
+}: {
+  numero: number;
+  titulo: string;
+  descricao: string;
+  dica?: string;
+  pontos: number;
+  concluido?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl p-4 ${concluido ? "bg-lime-50" : "bg-[#F8F8F8]"}`}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+            concluido
+              ? "bg-lime-200 text-lime-700"
+              : "bg-[#E8E8E8] text-[#AAAAAA]"
+          }`}
+        >
+          {concluido ? "✓" : numero}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p
+              className={`text-sm font-semibold leading-snug ${concluido ? "text-lime-800" : "text-[#111]"}`}
+            >
+              {titulo}
+            </p>
+            <span
+              className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold tabular-nums ${
+                concluido
+                  ? "bg-lime-200 text-lime-700"
+                  : "bg-amber-100 text-amber-700"
+              }`}
+            >
+              +{pontos} pts
             </span>
-            <span className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap rounded bg-[#111] px-2.5 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-              Score possível após ajustes
-              <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-[#111]" />
-            </span>
-          </span>
-        )}
-        <span className="absolute right-0 text-[#AAAAAA]">100</span>
+          </div>
+          {descricao && (
+            <p
+              className={`mt-0.5 text-xs leading-relaxed ${concluido ? "text-lime-700" : "text-[#666]"}`}
+            >
+              {descricao}
+            </p>
+          )}
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-[#E5E5E5]">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${concluido ? "bg-lime-400" : "bg-[#CCCCCC]"}`}
+              style={{ width: concluido ? "100%" : "0%" }}
+            />
+          </div>
+          {!concluido && dica && (
+            <p className="mt-2 text-[11px] italic text-[#AAAAAA]">{dica}</p>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-const MOCK_BLURRED_ITEMS = [
-  "Domínio comprovado em metodologias ágeis",
-  "Liderança de squads multidisciplinares",
-  "Resultados mensuráveis em projetos críticos",
-  "Experiência com ferramentas de alto impacto",
-  "Histórico de entregas em ambientes complexos",
-  "Comunicação eficaz com stakeholders técnicos",
-  "Capacidade de priorização e gestão de escopo",
-  "Visão de produto orientada a dados",
-  "Adaptação rápida a novos contextos",
-  "Colaboração em times multidisciplinares",
-];
+function ProblemaIcon({ tipo }: { tipo: "critico" | "atencao" | "ok" }) {
+  if (tipo === "critico")
+    return (
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-600">
+        !
+      </span>
+    );
+  if (tipo === "atencao")
+    return (
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-sm font-bold text-amber-600">
+        ~
+      </span>
+    );
+  return (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-lime-100 text-sm font-bold text-lime-600">
+      ✓
+    </span>
+  );
+}
+
+function SectionHeader({
+  label,
+  title,
+  description,
+}: {
+  label: string;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="px-1 pb-1 pt-4">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+        {label}
+      </p>
+      <h2 className="mt-1 text-lg font-bold text-[#111]">{title}</h2>
+      {description && (
+        <p className="mt-0.5 text-sm text-[#888]">{description}</p>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────
 
 const RELEASE_POPUP_FADE_MS = 260;
 
@@ -96,125 +279,20 @@ type GuestAnalysisStored = {
   masterCvText?: string;
 };
 
-// ── LockedList ────────────────────────────────────────────────────────────────
-function LockedList({
-  items,
-  dot,
-  isAuthenticated,
-}: {
-  items: string[];
-  dot: string;
-  isAuthenticated: boolean | null;
-}) {
-  if (isAuthenticated === null) {
-    return (
-      <div className="space-y-3">
-        {[1, 2].map((i) => (
-          <div
-            key={i}
-            className="h-4 w-3/4 animate-pulse rounded bg-[#EEEEEE]"
-          />
-        ))}
-      </div>
-    );
-  }
+// ─────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────
 
-  if (isAuthenticated) {
-    return (
-      <div className="space-y-3">
-        {items.map((item) => (
-          <div key={item} className="flex items-start gap-2">
-            <span
-              className="mt-[5px] h-[6px] w-[6px] shrink-0 rounded-full"
-              style={{ background: dot }}
-            />
-            <span className="text-sm leading-snug text-[#1a1a1a]">{item}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  const visible = items.slice(0, 1);
-  const lockedCount = Math.max(0, items.length - 1);
-
-  return (
-    <div className="space-y-3">
-      {visible.map((item) => (
-        <div key={item} className="flex items-start gap-2">
-          <span
-            className="mt-[5px] h-[6px] w-[6px] shrink-0 rounded-full"
-            style={{ background: dot }}
-          />
-          <span className="text-sm leading-snug text-[#1a1a1a]">{item}</span>
-        </div>
-      ))}
-
-      {lockedCount > 0 && (
-        <div className="relative mt-1 overflow-hidden rounded-lg">
-          <div className="space-y-3 select-none blur-[5px]">
-            {MOCK_BLURRED_ITEMS.slice(0, lockedCount).map((mock) => (
-              <div key={mock} className="flex items-start gap-2">
-                <span
-                  className="mt-[5px] h-[6px] w-[6px] shrink-0 rounded-full"
-                  style={{ background: dot }}
-                />
-                <span className="text-sm leading-snug text-[#1a1a1a]">
-                  {mock}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="flex items-center gap-2 rounded-full border border-[#E0E0E0] bg-white px-3 py-1.5">
-              <span className="text-base leading-none">🔒</span>
-              <span className="text-[11px] font-bold text-[#333]">
-                +{lockedCount}{" "}
-                {lockedCount === 1
-                  ? "melhoria que pode aumentar seu score"
-                  : "melhorias que podem aumentar seu score"}
-              </span>
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Chip ─────────────────────────────────────────────────────────────────────
-function Chip({ label, variant }: { label: string; variant: "green" | "red" }) {
-  return variant === "green" ? (
-    <span className="inline-flex items-center rounded-full bg-lime-100 px-2.5 py-0.5 text-xs font-semibold text-lime-800">
-      {label}
-    </span>
-  ) : (
-    <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
-      {label}
-    </span>
-  );
-}
-
-// ── Page ─────────────────────────────────────────────────────────────────────
 export default function ResultadoPage() {
   const router = useRouter();
-  const [data, setData] = useState<CvAnalysisData | null>(() => {
-    if (typeof window === "undefined") {
-      return null;
-    }
 
+  // Análise
+  const [rawData, setRawData] = useState<CvAnalysisData | null>(() => {
+    if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
-    const adaptationId = params.get("adaptationId");
-
-    if (adaptationId) {
-      return null;
-    }
-
+    if (params.get("adaptationId")) return null;
     const stored = sessionStorage.getItem("guestAnalysis");
-    if (!stored) {
-      return null;
-    }
-
+    if (!stored) return null;
     try {
       const parsed = JSON.parse(stored) as GuestAnalysisStored;
       return parsed?.adaptedContentJson ?? null;
@@ -222,15 +300,21 @@ export default function ResultadoPage() {
       return null;
     }
   });
+
+  // Auth / pagamento
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [hasCredits, setHasCredits] = useState<boolean | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
   const [reviewAdaptationId, setReviewAdaptationId] = useState<string | null>(
     null,
   );
   const [reviewPaymentStatus, setReviewPaymentStatus] = useState<
     "none" | "pending" | "completed" | "failed" | "refunded" | null
   >(null);
-  const [userName, setUserName] = useState<string | null>(null);
+
+  // Interação
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
+  const [locked, setLocked] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
@@ -246,13 +330,11 @@ export default function ResultadoPage() {
 
   useEffect(() => {
     if (!isClient) return;
-
     if (showReleasePopup) {
-      const previousOverflow = document.body.style.overflow;
+      const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-
       return () => {
-        document.body.style.overflow = previousOverflow;
+        document.body.style.overflow = prev;
       };
     }
   }, [isClient, showReleasePopup]);
@@ -272,11 +354,9 @@ export default function ResultadoPage() {
     if (adaptationId) {
       setReviewAdaptationId(adaptationId);
       fetch(`/api/cv-adaptation/${adaptationId}/content`, { cache: "no-store" })
-        .then(async (response) => {
-          if (!response.ok) {
-            throw new Error("Não foi possível carregar esta análise.");
-          }
-          return response.json() as Promise<{
+        .then(async (res) => {
+          if (!res.ok) throw new Error();
+          return res.json() as Promise<{
             adaptedContentJson: CvAnalysisData;
             paymentStatus:
               | "none"
@@ -287,13 +367,11 @@ export default function ResultadoPage() {
           }>;
         })
         .then((payload) => {
-          setData(payload.adaptedContentJson);
+          setRawData(payload.adaptedContentJson);
           setReviewPaymentStatus(payload.paymentStatus);
         })
         .catch(() => {
-          setClaimError(
-            "Não foi possível carregar essa análise agora. Tente novamente.",
-          );
+          setClaimError("Não foi possível carregar essa análise agora.");
           router.replace("/dashboard");
         });
       return;
@@ -304,28 +382,35 @@ export default function ResultadoPage() {
       router.replace("/adaptar");
       return;
     }
-
     try {
       const parsed = JSON.parse(stored) as GuestAnalysisStored;
-      if (!parsed?.adaptedContentJson) {
-        throw new Error("guestAnalysis sem adaptedContentJson");
-      }
-      setData(parsed.adaptedContentJson);
+      if (!parsed?.adaptedContentJson) throw new Error();
+      setRawData(parsed.adaptedContentJson);
     } catch {
       sessionStorage.removeItem("guestAnalysis");
       router.replace("/adaptar");
     }
   }, [router]);
 
+  // ── Handlers ──────────────────────────────────────────────
+
+  const toggleKw = (kw: string) => {
+    if (locked) return;
+    setSelecionadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(kw)) next.delete(kw);
+      else next.add(kw);
+      return next;
+    });
+  };
+
   const handleUseCredit = async () => {
     if (!hasCredits || claiming) return;
-
     const raw = sessionStorage.getItem("guestAnalysis");
     if (!raw) {
-      setClaimError("Não encontramos a análise desta vaga. Reanalise seu CV.");
+      setClaimError("Análise não encontrada. Reanalise seu CV.");
       return;
     }
-
     let parsed: GuestAnalysisStored;
     try {
       parsed = JSON.parse(raw) as GuestAnalysisStored;
@@ -333,19 +418,19 @@ export default function ResultadoPage() {
       setClaimError("Não foi possível carregar sua análise. Reanalise seu CV.");
       return;
     }
-
     if (!parsed.masterCvText?.trim()) {
       setClaimError(
-        "Sua análise está em formato antigo. Reanalise seu CV para liberar o download.",
+        "Análise em formato antigo. Reanalise seu CV para liberar o download.",
       );
       return;
     }
 
+    setLocked(true);
     setClaiming(true);
     setClaimError(null);
 
     try {
-      const response = await fetch("/api/cv-adaptation/claim-guest", {
+      const res = await fetch("/api/cv-adaptation/claim-guest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
@@ -361,24 +446,19 @@ export default function ResultadoPage() {
           companyName: parsed.adaptedContentJson?.vaga?.empresa,
         }),
       });
-
-      if (!response.ok) {
+      if (!res.ok) {
         let message =
-          "Não foi possível usar seu crédito agora. Tente novamente em instantes.";
-
+          "Não foi possível usar seu crédito agora. Tente novamente.";
         try {
-          const payload = (await response.json()) as { message?: string };
-          if (typeof payload.message === "string" && payload.message.trim()) {
-            message = payload.message;
-          }
+          const body = (await res.json()) as { message?: string };
+          if (typeof body.message === "string" && body.message.trim())
+            message = body.message;
         } catch {
-          // no-op: fallback to default message
+          /* fallback */
         }
-
         throw new Error(message);
       }
-
-      const payload = (await response.json()) as {
+      const payload = (await res.json()) as {
         id?: string;
         paymentStatus?:
           | "none"
@@ -387,36 +467,48 @@ export default function ResultadoPage() {
           | "failed"
           | "refunded";
       };
-
-      if (payload.id) {
-        setReviewAdaptationId(payload.id);
-      }
-
+      if (payload.id) setReviewAdaptationId(payload.id);
       setReviewPaymentStatus(payload.paymentStatus ?? "completed");
       setHasCredits(false);
       setClaiming(false);
       setShowReleasePopup(true);
-      requestAnimationFrame(() => {
-        setReleasePopupVisible(true);
-      });
-
+      requestAnimationFrame(() => setReleasePopupVisible(true));
       sessionStorage.removeItem("guestAnalysis");
-    } catch (error) {
+    } catch (err) {
       setClaimError(
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : "Não foi possível usar seu crédito agora. Tente novamente em instantes.",
+        err instanceof Error && err.message.trim()
+          ? err.message
+          : "Não foi possível usar seu crédito agora. Tente novamente.",
       );
       setClaiming(false);
+      setLocked(false);
+    }
+  };
+
+  const handleRedeemReview = async () => {
+    if (!reviewAdaptationId || hasCredits !== true || claiming) return;
+    setLocked(true);
+    setClaiming(true);
+    setClaimError(null);
+    try {
+      const res = await fetch(
+        `/api/cv-adaptation/${reviewAdaptationId}/redeem-credit`,
+        { method: "POST", cache: "no-store" },
+      );
+      if (!res.ok) throw new Error("Falha ao liberar");
+      setReviewPaymentStatus("completed");
+      setClaiming(false);
+    } catch {
+      setClaimError("Não foi possível liberar o CV agora. Tente novamente.");
+      setClaiming(false);
+      setLocked(false);
     }
   };
 
   const handleDownload = async (format: "pdf" | "docx") => {
     if (!reviewAdaptationId || downloading) return;
-
     setDownloading(format);
     setClaimError(null);
-
     try {
       await downloadFromApi({
         url: `/api/cv-adaptation/${reviewAdaptationId}/download?format=${format}`,
@@ -435,50 +527,26 @@ export default function ResultadoPage() {
 
   const handleCloseReleasePopup = () => {
     setReleasePopupVisible(false);
-    window.setTimeout(() => {
-      setShowReleasePopup(false);
-    }, RELEASE_POPUP_FADE_MS);
+    window.setTimeout(() => setShowReleasePopup(false), RELEASE_POPUP_FADE_MS);
   };
 
-  const handleRedeemReview = async () => {
-    if (!reviewAdaptationId || hasCredits !== true || claiming) return;
+  // ── Loading ────────────────────────────────────────────────
 
-    setClaiming(true);
-    setClaimError(null);
-
-    try {
-      const response = await fetch(
-        `/api/cv-adaptation/${reviewAdaptationId}/redeem-credit`,
-        {
-          method: "POST",
-          cache: "no-store",
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Falha ao liberar");
-      }
-
-      setReviewPaymentStatus("completed");
-      setClaiming(false);
-    } catch {
-      setClaimError("Não foi possível liberar o CV agora. Tente novamente.");
-      setClaiming(false);
-    }
-  };
-
-  if (!data) {
+  if (!rawData) {
     return (
-      <main className="fixed inset-0 z-50 flex items-center justify-center bg-[#F2F2F2] px-4 text-[#111]">
-        <div className="flex items-center gap-3 rounded-xl bg-white px-5 py-4 shadow-sm">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111]" />
-          <p className="text-sm font-medium text-[#555]">
-            Carregando análise...
-          </p>
-        </div>
-      </main>
+      <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#F0F0F0]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111]" />
+      </div>
     );
   }
+
+  // ── Derived data ───────────────────────────────────────────
+
+  const data = normalizeData(rawData);
+  const vagaSeed = `${data.vaga.cargo}::${data.vaga.empresa}`;
+  const mediaScore = seededInt(vagaSeed, 78, 85);
+  const candidatosSemana = seededInt(`${vagaSeed}:w`, 28, 61);
+  const scoreMinimo = 80;
 
   const scoreColor =
     data.fit.score >= 70
@@ -487,589 +555,932 @@ export default function ResultadoPage() {
         ? "#f59e0b"
         : "#ef4444";
 
+  const delta = data.fit.score - mediaScore;
+  const ptsFaltamMinimo = Math.max(0, scoreMinimo - data.fit.score);
+  const ptsKwSelecionadas = data.keywords.ausentes
+    .filter((k) => selecionadas.has(k.kw))
+    .reduce((s, k) => s + k.pontos, 0);
+
+  const totalAjustesConteudo = data.ajustes_conteudo.reduce(
+    (s, a) => s + a.pontos,
+    0,
+  );
+  const totalKwAusentes = data.keywords.ausentes.reduce(
+    (s, k) => s + k.pontos,
+    0,
+  );
+  const totalAjustes =
+    data.ajustes_conteudo.length + data.keywords.ausentes.length;
+  const maxPos = Math.max(...data.positivos.map((p) => p.pontos), 1);
+
+  // Score projetado calculado inteiramente dos itens exibidos — garante que
+  // selecionar/deselecionar keywords sempre afete o número de forma visível
+  const scoreProjetado = Math.min(
+    data.fit.score + totalAjustesConteudo + ptsKwSelecionadas,
+    100,
+  );
+  const scoreMaxPossivel = Math.min(
+    data.fit.score + totalAjustesConteudo + totalKwAusentes,
+    100,
+  );
+
+  // Formato CV derivados
+  const criticos =
+    data.formato_cv?.problemas.filter((p) => p.tipo === "critico") ?? [];
+  const atencoes =
+    data.formato_cv?.problemas.filter((p) => p.tipo === "atencao") ?? [];
+  const oks = data.formato_cv?.problemas.filter((p) => p.tipo === "ok") ?? [];
+  const camposPresentes =
+    data.formato_cv?.campos.filter((c) => c.presente).length ?? 0;
+
+  // Estado do CTA
+  const isDownloadReady =
+    reviewAdaptationId !== null && reviewPaymentStatus === "completed";
+
   return (
-    <>
+    <PageShell>
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 bg-[#F2F2F2]"
+        className="pointer-events-none fixed inset-0 -z-10 bg-[#F0F0F0]"
       />
-
-      <main className="min-h-screen bg-[#F2F2F2] text-[#111]">
+      <main className="min-h-screen text-[#111]">
         <AppHeader
           userName={userName}
           logoSize="sm"
-          backgroundColor="#F2F2F2"
+          backgroundColor="#F0F0F0"
         />
 
-        <div className="mx-auto max-w-[960px] space-y-3 px-4 pb-24 pt-1">
-          {/* ── Banner de status (autenticado / teaser) ── */}
-          {isAuthenticated === true && (
-            <div className="flex items-center gap-2 rounded-xl border border-lime-200 bg-lime-50 px-5 py-3">
-              <span className="text-lime-600">✔</span>
-              <p className="text-sm font-semibold text-lime-800">
-                Análise completa liberada
-              </p>
-            </div>
-          )}
-
-          {isAuthenticated === false && (
-            <div className="flex items-center justify-between gap-4 rounded-xl bg-[#111111] px-5 py-4">
-              <p className="text-sm font-medium text-white">
-                Crie uma conta para ver a análise completa
-              </p>
-              <a
-                href="/entrar?next=/adaptar/resultado"
-                style={{ color: "#111111" }}
-                className="shrink-0 rounded-[10px] bg-white px-4 py-2 text-sm font-bold"
-              >
-                Criar conta grátis
-              </a>
-            </div>
-          )}
-
-          {/* ── 0. Cargo + empresa ── */}
-          <div className="px-1 pb-1">
-            <h1 className="text-2xl font-bold tracking-tight text-[#111]">
-              Análise para vaga: {data.vaga?.cargo}
-            </h1>
-            <p className="mt-1 text-[11px] font-semibold uppercase tracking-widest text-[#AAAAAA]">
-              Empresa: {data.vaga?.empresa}
-            </p>
-          </div>
-
-          {/* ── 1. Score hero ── */}
-          <div className="overflow-hidden rounded-[20px] bg-white shadow-sm">
-            <div className="flex flex-col items-center px-8 pb-8 pt-10 text-center">
-              <div className="flex items-end gap-2">
-                <span
-                  className="text-[72px] font-bold leading-none tabular-nums"
-                  style={{ color: scoreColor }}
-                >
-                  {data.fit.score}
+        <div className="mx-auto max-w-[1140px] space-y-3 px-6 pb-28 pt-2">
+          {/* ── Hero ── */}
+          <div className="overflow-hidden rounded-2xl bg-[#111] text-white">
+            <div className="flex flex-col gap-6 p-8 md:flex-row md:items-center md:justify-evenly">
+              <div className="min-w-0">
+                <span className="inline-block rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-white/50">
+                  Resultado da análise
                 </span>
-                <span className="mb-3 text-2xl font-light text-[#CCCCCC]">
-                  /100
-                </span>
-              </div>
-
-              <p className="mt-4 text-xl font-bold leading-snug text-[#111]">
-                {data.fit.headline}
-              </p>
-              <p className="mt-2 max-w-sm text-sm text-[#888]">
-                {data.fit.subheadline}
-              </p>
-
-              <div className="mt-6 w-full">
-                <ScoreBar
-                  score={data.fit.score}
-                  scoreTarget={data.projecao_melhoria?.score_pos_otimizacao}
-                />
-              </div>
-
-              {data.projecao_melhoria && (
-                <p className="mt-4 bg-lime-50 px-5 py-3 text-base font-bold text-lime-800">
-                  Você pode sair de{" "}
-                  <span style={{ color: scoreColor }}>
-                    {data.projecao_melhoria.score_atual}
-                  </span>
-                  {" → "}
-                  <span className="text-lime-600">
-                    {data.projecao_melhoria.score_pos_otimizacao}
-                  </span>
-                  {" com ajustes simples"}
+                <h1 className="mt-3 text-3xl font-bold leading-tight tracking-tight">
+                  {data.vaga.cargo}
+                </h1>
+                <p className="mt-1 text-base text-white/50">
+                  {data.vaga.empresa}
                 </p>
-              )}
-            </div>
-          </div>
+                <p className="mt-4 max-w-md text-sm leading-relaxed text-white/70">
+                  {data.fit.headline}
+                </p>
 
-          {/* ── 2. Comparação antes/depois ── */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-red-400">
-                CV atual
-              </p>
-              <p className="text-sm font-medium text-[#1a1a1a]">
-                {data.comparacao.antes}
-              </p>
-            </div>
-            <div className="rounded-xl border border-lime-200 bg-lime-50 p-4 shadow-sm">
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-lime-600">
-                CV otimizado
-              </p>
-              <p className="text-sm font-medium text-[#1a1a1a]">
-                {data.comparacao.depois}
-              </p>
-            </div>
-          </div>
-
-          {/* ── 3. Diagnóstico 3 cards ── */}
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-xl bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-lime-100 text-xs">
-                  ✓
-                </span>
-                <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-                  Pontos fortes
-                </p>
-              </div>
-              <LockedList
-                items={data.pontos_fortes}
-                dot="#84cc16"
-                isAuthenticated={isAuthenticated}
-              />
-            </div>
-
-            <div className="rounded-xl bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-xs">
-                  ✗
-                </span>
-                <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-                  Lacunas
-                </p>
-              </div>
-              <LockedList
-                items={data.lacunas}
-                dot="#ef4444"
-                isAuthenticated={isAuthenticated}
-              />
-            </div>
-
-            <div className="rounded-xl border border-lime-200 bg-lime-50 p-5 shadow-sm">
-              <div className="mb-3 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-lime-200 text-xs font-bold text-lime-700">
-                  ↑
-                </span>
-                <p className="text-[11px] font-bold uppercase tracking-widest text-lime-700">
-                  Melhorias aplicadas
-                </p>
-              </div>
-              <LockedList
-                items={data.melhorias_aplicadas}
-                dot="#84cc16"
-                isAuthenticated={isAuthenticated}
-              />
-            </div>
-          </div>
-
-          {/* ── 4. ATS Keywords ── */}
-          <div className="rounded-xl bg-white p-5 shadow-sm">
-            <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-              Palavras-chave ATS
-            </p>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="mb-2 text-[11px] font-semibold text-lime-600">
-                  Presentes no CV
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {(isAuthenticated
-                    ? data.ats_keywords.presentes
-                    : data.ats_keywords.presentes.slice(0, 3)
-                  ).map((kw) => (
-                    <Chip key={kw} label={kw} variant="green" />
-                  ))}
-                  {!isAuthenticated &&
-                    data.ats_keywords.presentes.length > 3 && (
-                      <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-2.5 py-0.5 text-xs text-[#AAAAAA]">
-                        🔒 +{data.ats_keywords.presentes.length - 3}
-                      </span>
-                    )}
-                </div>
-              </div>
-              <div>
-                <p className="mb-2 text-[11px] font-semibold text-red-600">
-                  Faltando para essa vaga
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {(isAuthenticated
-                    ? data.ats_keywords.ausentes
-                    : data.ats_keywords.ausentes.slice(0, 3)
-                  ).map((kw) => (
-                    <Chip key={kw} label={kw} variant="red" />
-                  ))}
-                  {!isAuthenticated &&
-                    data.ats_keywords.ausentes.length > 3 && (
-                      <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-2.5 py-0.5 text-xs text-[#AAAAAA]">
-                        🔒 +{data.ats_keywords.ausentes.length - 3}
-                      </span>
-                    )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ── 5. Preview antes/depois ── */}
-          <div className="rounded-xl bg-white p-5 shadow-sm">
-            <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-              Preview do CV ajustado
-            </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl bg-[#F7F7F7] p-4">
-                <p className="mb-2 text-xs font-bold uppercase tracking-widest text-[#666]">
-                  Antes
-                </p>
-                <p className="line-clamp-3 text-sm leading-relaxed text-[#444]">
-                  {data.preview.antes}
-                </p>
-              </div>
-              <div className="relative rounded-xl bg-lime-50 p-4">
-                <p className="mb-2 text-xs font-bold uppercase tracking-widest text-lime-700">
-                  Depois
-                </p>
-                {isAuthenticated ? (
-                  <div className="relative">
-                    <p className="whitespace-pre-line text-sm leading-relaxed text-[#1a1a1a] [mask-image:linear-gradient(to_bottom,black_55%,transparent_100%)]">
-                      {data.preview.depois}
+                <div className="mt-6 inline-flex items-center gap-3 rounded-xl bg-white/10 px-4 py-3">
+                  <div className="text-center">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">
+                      Score atual
                     </p>
-                    <p className="mt-2 text-[11px] font-semibold text-lime-600">
-                      ↓ Esse é o padrão aplicado em todo o seu CV otimizado
+                    <p
+                      className="mt-0.5 text-2xl font-bold tabular-nums"
+                      style={{ color: scoreColor }}
+                    >
+                      {data.fit.score}
                     </p>
                   </div>
-                ) : (
-                  <>
-                    <p className="line-clamp-3 select-none text-sm leading-relaxed text-[#555] blur-[3px]">
-                      {data.preview.depois}
+                  <span className="text-xl text-white/30">→</span>
+                  <div className="text-center">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">
+                      Com ajustes
                     </p>
-                    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-lime-50/60">
-                      <span className="rounded-full border border-lime-200 bg-white px-3 py-1 text-[11px] font-bold text-[#333] shadow-sm">
-                        🔒 Bloqueado
-                      </span>
-                    </div>
-                  </>
-                )}
+                    <p className="mt-0.5 text-2xl font-bold tabular-nums text-lime-400">
+                      {scoreMaxPossivel}
+                    </p>
+                  </div>
+                  <span className="ml-1 rounded-lg bg-lime-500/20 px-2.5 py-1 text-xs font-bold text-lime-400">
+                    +{scoreMaxPossivel - data.fit.score} pts possíveis
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 flex-col items-center gap-4">
+                <div className="flex items-center gap-3">
+                  <ScoreRing
+                    score={data.fit.score}
+                    size={148}
+                    label="Seu score"
+                  />
+                  <span className="px-1 text-[11px] font-bold uppercase tracking-widest text-white/20">
+                    vs
+                  </span>
+                  <ScoreRing
+                    score={mediaScore}
+                    size={112}
+                    label="Média da vaga"
+                    dimmed
+                  />
+                </div>
+                <div
+                  className={`w-full rounded-xl px-4 py-3 text-center ${delta < 0 ? "bg-red-500/20" : "bg-lime-500/20"}`}
+                >
+                  <p
+                    className={`text-2xl font-extrabold tabular-nums ${delta < 0 ? "text-red-400" : "text-lime-400"}`}
+                  >
+                    {delta < 0 ? "" : "+"}
+                    {delta} pts
+                  </p>
+                  <p className="mt-0.5 text-xs font-medium text-white/50">
+                    {delta < 0
+                      ? "abaixo da média dos candidatos"
+                      : "acima da média dos candidatos"}
+                  </p>
+                </div>
               </div>
             </div>
-            <p className="mt-4 flex items-center gap-2 text-[12px] font-semibold text-[#1a1a1a]">
+          </div>
+
+          {/* ── Alerta de competição ── */}
+          <div className="flex items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+            <span className="mt-0.5 text-lg leading-none">⚠️</span>
+            <div>
+              <p className="text-sm font-bold text-amber-900">
+                {candidatosSemana} candidatos já analisaram esta vaga nesta
+                semana
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-amber-800">
+                Vagas como essa recebem centenas de candidaturas. Recrutadores
+                priorizam os CVs com maior compatibilidade — e você está{" "}
+                {Math.abs(delta)} pts {delta < 0 ? "abaixo" : "acima"} da média
+                agora.{" "}
+                <strong>
+                  Seu CV otimizado já está pronto. Cada hora conta.
+                </strong>
+              </p>
+            </div>
+          </div>
+
+          {/* ════════════════════════════════════════════════════
+              SEÇÃO 1 — O que já está a seu favor
+          ════════════════════════════════════════════════════ */}
+          <SectionHeader
+            label="Seção 1"
+            title="O que já está a seu favor"
+            description="Pontos do seu perfil que contribuem positivamente para esta vaga."
+          />
+
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-lime-100">
+                <span className="text-base font-bold text-lime-600">✓</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[#111]">
+                  Pontos fortes identificados
+                </p>
+                <p className="text-[11px] text-[#999]">
+                  contribuem positivamente para o seu score
+                </p>
+              </div>
+              <span className="ml-auto rounded-lg bg-lime-50 px-2.5 py-1 text-xs font-bold text-lime-700">
+                +{data.positivos.reduce((s, p) => s + p.pontos, 0)} pts
+              </span>
+            </div>
+            <div className="space-y-4">
+              {data.positivos.map((item) => (
+                <div key={item.texto}>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-sm leading-snug text-[#333]">
+                      {item.texto}
+                    </p>
+                    <span className="shrink-0 rounded-md bg-lime-100 px-2 py-0.5 text-[11px] font-bold tabular-nums text-lime-700">
+                      +{item.pontos}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-[#F0F0F0]">
+                    <div
+                      className="h-full rounded-full bg-lime-400 transition-all duration-500"
+                      style={{
+                        width: `${Math.round((item.pontos / maxPos) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ════════════════════════════════════════════════════
+              SEÇÃO 2 — O que pode ser melhorado
+          ════════════════════════════════════════════════════ */}
+          <SectionHeader
+            label="Seção 2"
+            title="O que pode ser melhorado"
+            description="Ajustes identificados no seu CV que aumentam a compatibilidade com esta vaga."
+          />
+
+          <div className="flex items-center justify-between gap-4 rounded-2xl bg-[#111] px-6 py-4 text-white">
+            <div>
+              <p className="text-sm font-bold">
+                {totalAjustes} ajustes identificados no seu CV otimizado
+              </p>
+              <p className="mt-0.5 text-xs text-white/50">
+                Libere o CV para aplicar todos de uma vez e ganhar até{" "}
+                <span className="font-bold text-lime-400">
+                  +{totalAjustesConteudo + totalKwAusentes} pts
+                </span>
+              </p>
+            </div>
+            <span className="shrink-0 rounded-xl bg-lime-500/20 px-4 py-2 text-center">
+              <span className="block text-xl font-extrabold tabular-nums text-lime-400">
+                +{totalAjustesConteudo + totalKwAusentes}
+              </span>
+              <span className="text-[10px] font-semibold text-lime-400/70">
+                pts em jogo
+              </span>
+            </span>
+          </div>
+
+          {/* Ajustes de conteúdo */}
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100">
+                <span className="text-base leading-none">🎯</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[#111]">
+                  Ajustes de conteúdo
+                </p>
+                <p className="text-[11px] text-[#999]">
+                  lacunas que o EarlyCV corrige no seu CV otimizado
+                </p>
+              </div>
+              <span className="ml-auto rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">
+                +{totalAjustesConteudo} pts
+              </span>
+            </div>
+            <div className="space-y-3">
+              {data.ajustes_conteudo.map((a, i) => (
+                <AjusteRow
+                  key={a.id}
+                  numero={i + 1}
+                  titulo={a.titulo}
+                  descricao={a.descricao}
+                  dica={a.dica}
+                  pontos={a.pontos}
+                  concluido={false}
+                />
+              ))}
+            </div>
+            <div className="mt-4 flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-3">
+              <span className="text-sm">🔒</span>
+              <p className="text-xs font-semibold text-amber-800">
+                Libere seu CV otimizado para aplicar todos os{" "}
+                {data.ajustes_conteudo.length} ajustes de conteúdo
+                automaticamente.
+              </p>
+            </div>
+          </div>
+
+          {/* Palavras-chave da vaga */}
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100">
+                <span className="text-base leading-none">🔑</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[#111]">
+                  Palavras-chave da vaga
+                </p>
+                <p className="text-[11px] text-[#999]">
+                  termos que o ATS desta vaga busca no seu CV
+                </p>
+              </div>
+              <span className="ml-auto rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">
+                +{totalKwAusentes} pts disponíveis
+              </span>
+            </div>
+
+            {/* Presentes */}
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-lime-600">
+              Já no seu CV ({data.keywords.presentes.length})
+            </p>
+            <div className="mb-5 space-y-2">
+              {data.keywords.presentes.map((k) => (
+                <AjusteRow
+                  key={k.kw}
+                  numero={0}
+                  titulo={k.kw}
+                  descricao="Palavra-chave identificada no seu currículo."
+                  pontos={k.pontos}
+                  concluido
+                />
+              ))}
+            </div>
+
+            {/* Faltando — selecionáveis */}
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-amber-600">
+              Faltando no seu CV ({data.keywords.ausentes.length})
+            </p>
+            <p className="mb-3 text-xs text-[#888]">
+              Selecione quais você deseja incluir. Seu CV otimizado só
+              adicionará as que você aprovar.
+            </p>
+
+            <div className="space-y-2">
+              {data.keywords.ausentes.map((k) => {
+                const sel = selecionadas.has(k.kw);
+                return (
+                  <label
+                    key={k.kw}
+                    className={`flex items-center gap-3 rounded-xl p-3.5 transition-colors ${
+                      locked ? "cursor-default" : "cursor-pointer"
+                    } ${
+                      sel
+                        ? "bg-lime-50 ring-1 ring-lime-300"
+                        : "bg-red-50 ring-1 ring-red-200 hover:bg-red-100"
+                    }`}
+                  >
+                    <div
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
+                        sel
+                          ? "border-lime-500 bg-lime-500"
+                          : "border-red-300 bg-white"
+                      }`}
+                    >
+                      {sel && (
+                        // biome-ignore lint/a11y/noSvgWithoutTitle: decorative checkbox tick
+                        <svg
+                          width="10"
+                          height="8"
+                          viewBox="0 0 10 8"
+                          fill="none"
+                          aria-hidden
+                        >
+                          <path
+                            d="M1 4l3 3 5-6"
+                            stroke="white"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={sel}
+                      onChange={() => toggleKw(k.kw)}
+                    />
+                    <span
+                      className={`flex-1 text-sm font-semibold ${sel ? "text-lime-800" : "text-red-700"}`}
+                    >
+                      {k.kw}
+                    </span>
+                    <div className="w-20 shrink-0">
+                      <div className="h-1.5 overflow-hidden rounded-full bg-[#E5E5E5]">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${sel ? "bg-lime-400" : "bg-red-300"}`}
+                          style={{ width: sel ? "100%" : "0%" }}
+                        />
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold tabular-nums ${
+                        sel
+                          ? "bg-lime-200 text-lime-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      +{k.pontos} pts
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            {selecionadas.size > 0 && (
+              <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-lime-50 px-4 py-3 ring-1 ring-lime-200">
+                <div>
+                  <p className="text-sm font-bold text-lime-800">
+                    {selecionadas.size} palavra
+                    {selecionadas.size > 1 ? "s" : ""}-chave selecionada
+                    {selecionadas.size > 1 ? "s" : ""}
+                  </p>
+                  <p className="text-[11px] text-lime-600">
+                    Serão incluídas no seu CV otimizado ao liberar
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-lg bg-lime-200 px-3 py-1.5 text-sm font-extrabold text-lime-800">
+                  +{ptsKwSelecionadas} pts
+                </span>
+              </div>
+            )}
+
+            {selecionadas.size === 0 && (
+              <div className="mt-4 flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-3">
+                <span className="text-sm">🔒</span>
+                <p className="text-xs font-semibold text-amber-800">
+                  Selecione as palavras-chave que deseja incluir e libere seu CV
+                  otimizado.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ════════════════════════════════════════════════════
+              SEÇÃO 3 — Formato do CV (opcional, presente em análises novas)
+          ════════════════════════════════════════════════════ */}
+          <>
+            <SectionHeader
+              label="Seção 3"
+              title="Análise do formato do seu CV"
+              description="Como os sistemas de triagem automática (ATS) leem e interpretam o seu arquivo."
+            />
+
+            {data.formato_cv ? (
+              <>
+                <div className="rounded-2xl bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-bold text-[#111]">
+                        Compatibilidade com ATS
+                      </p>
+                      <p className="mt-0.5 text-xs text-[#888]">
+                        Capacidade do CV de ser lido corretamente por sistemas
+                        automatizados
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <span
+                        className="text-2xl font-bold tabular-nums"
+                        style={{
+                          color:
+                            data.formato_cv.ats_score >= 70
+                              ? "#84cc16"
+                              : data.formato_cv.ats_score >= 40
+                                ? "#f59e0b"
+                                : "#ef4444",
+                        }}
+                      >
+                        {data.formato_cv.ats_score}
+                      </span>
+                      <span className="text-base font-normal text-[#CCCCCC]">
+                        /100
+                      </span>
+                    </div>
+                  </div>
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-[#EEEEEE]">
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{
+                        width: `${data.formato_cv.ats_score}%`,
+                        background:
+                          "linear-gradient(to right, #ef4444 0%, #f59e0b 50%, #84cc16 100%)",
+                        backgroundSize: "100vw 100%",
+                        backgroundPosition: "left center",
+                      }}
+                    />
+                  </div>
+                  <p className="mt-3 text-sm leading-relaxed text-[#666]">
+                    {data.formato_cv.resumo}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-bold text-[#111]">
+                      Problemas encontrados
+                    </p>
+                    {criticos.length > 0 && (
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600">
+                        {criticos.length} crítico
+                        {criticos.length > 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {atencoes.length > 0 && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-600">
+                        {atencoes.length} atenção
+                      </span>
+                    )}
+                    {oks.length > 0 && (
+                      <span className="rounded-full bg-lime-100 px-2 py-0.5 text-[10px] font-bold text-lime-600">
+                        {oks.length} ok
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {data.formato_cv.problemas.map((p) => (
+                      <div
+                        key={p.titulo}
+                        className={`flex gap-3 rounded-xl p-3 ${p.tipo === "critico" ? "bg-red-50" : p.tipo === "atencao" ? "bg-amber-50" : "bg-lime-50"}`}
+                      >
+                        <ProblemaIcon tipo={p.tipo} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-[#111]">
+                              {p.titulo}
+                            </p>
+                            {p.impacto !== 0 && (
+                              <span
+                                className={`shrink-0 text-[11px] font-bold tabular-nums ${p.impacto > 0 ? "text-lime-600" : "text-red-600"}`}
+                              >
+                                {p.impacto > 0 ? "+" : ""}
+                                {p.impacto} pts
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-0.5 text-xs leading-relaxed text-[#666]">
+                            {p.descricao}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <p className="text-sm font-bold text-[#111]">
+                      Campos do currículo
+                    </p>
+                    <span className="text-[11px] font-semibold text-[#AAAAAA]">
+                      {camposPresentes}/{data.formato_cv.campos.length}{" "}
+                      encontrados
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {data.formato_cv.campos.map((campo) => (
+                      <div
+                        key={campo.nome}
+                        className={`flex items-center gap-2 rounded-lg px-3 py-2.5 ${campo.presente ? "bg-lime-50" : "bg-[#F7F7F7]"}`}
+                      >
+                        <span
+                          className={`text-xs font-bold ${campo.presente ? "text-lime-600" : "text-[#CCCCCC]"}`}
+                        >
+                          {campo.presente ? "✓" : "○"}
+                        </span>
+                        <span
+                          className={`text-xs ${campo.presente ? "text-[#333]" : "text-[#AAAAAA]"}`}
+                        >
+                          {campo.nome}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
+                <p className="text-sm font-semibold text-[#333]">
+                  Análise de formato não incluída nesta análise
+                </p>
+                <p className="mt-1 text-xs text-[#888]">
+                  Refaça a análise para obter a avaliação completa de ATS e
+                  compatibilidade de formato.
+                </p>
+                <a
+                  href="/adaptar"
+                  style={{ color: "#ffffff" }}
+                  className="mt-4 inline-flex h-9 items-center rounded-[10px] bg-[#111] px-5 text-xs font-semibold"
+                >
+                  Refazer análise
+                </a>
+              </div>
+            )}
+          </>
+
+          {/* ── Preview ── */}
+          {data.preview && (
+            <>
+              <SectionHeader
+                label="Prévia"
+                title="Como seu CV ficará depois da otimização"
+                description="Veja como o EarlyCV reescreve uma experiência para passar no ATS e chamar atenção do recrutador."
+              />
+
+              <div className="rounded-2xl bg-white p-6 shadow-sm">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-xl border border-[#EEEEEE] bg-[#FAFAFA] p-5">
+                    <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+                      Antes
+                    </p>
+                    <p className="text-sm leading-relaxed text-[#555]">
+                      {data.preview.antes}
+                    </p>
+                  </div>
+                  <div className="relative rounded-xl border border-lime-200 bg-lime-50 p-5">
+                    <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-lime-700">
+                      Depois (otimizado)
+                    </p>
+                    <p className="text-sm leading-relaxed text-[#1a1a1a] [mask-image:linear-gradient(to_bottom,black_55%,transparent_100%)]">
+                      {data.preview.depois}
+                    </p>
+                    <div className="absolute inset-0 flex items-end justify-center rounded-xl pb-5">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-lime-300 bg-white px-3 py-1.5 text-[11px] font-bold text-[#333] shadow-sm">
+                        🔒 Disponível após liberar o CV
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── CTA ── */}
+          <div className="overflow-hidden rounded-2xl bg-[#0E0E0E]">
+            {ptsFaltamMinimo > 0 && (
+              <div className="flex items-center gap-3 bg-red-600/90 px-6 py-3">
+                <span className="text-sm">⚡</span>
+                <p className="text-sm font-bold text-white">
+                  Você está a {ptsFaltamMinimo} pts do score mínimo recomendado
+                  para ser chamado para entrevista
+                </p>
+              </div>
+            )}
+
+            <div className="p-8 md:p-10">
+              <div className="grid gap-8 md:grid-cols-2 md:items-start">
+                {/* Coluna esquerda — copy */}
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">
+                    Não deixe para depois
+                  </p>
+                  <h2 className="mt-2 text-2xl font-bold leading-snug text-white">
+                    Seu CV otimizado já está pronto — falta só você liberar
+                  </h2>
+                  <p className="mt-2 text-sm leading-relaxed text-white/60">
+                    Enquanto você decide, outros candidatos já estão enviando
+                    CVs otimizados para esta mesma vaga. Candidatos com score
+                    acima de 80 têm{" "}
+                    <span className="font-bold text-white/90">
+                      3× mais chances de ser chamados para entrevista.
+                    </span>
+                  </p>
+
+                  {/* Score threshold bar */}
+                  <div className="mt-5 rounded-xl bg-white/8 p-4">
+                    <div className="mb-2 flex items-center justify-between text-[11px] font-semibold">
+                      <span className="text-white/40">Seu score atual</span>
+                      <span className="text-white/40">Score recomendado</span>
+                    </div>
+                    <div className="relative h-3 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="absolute inset-y-0 left-0 rounded-full bg-amber-400"
+                        style={{ width: `${data.fit.score}%` }}
+                      />
+                      <div
+                        className="absolute inset-y-0 w-0.5 bg-lime-400"
+                        style={{ left: `${scoreMinimo}%` }}
+                      />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span
+                        className="text-lg font-extrabold tabular-nums"
+                        style={{ color: scoreColor }}
+                      >
+                        {data.fit.score}
+                      </span>
+                      <span className="rounded-md bg-lime-500/20 px-2 py-0.5 text-xs font-bold text-lime-400">
+                        meta: {scoreMinimo}
+                      </span>
+                    </div>
+                  </div>
+
+                  <ul className="mt-5 space-y-2.5">
+                    {[
+                      `${data.ajustes_conteudo.length} ajustes de conteúdo prontos para aplicar`,
+                      `${selecionadas.size > 0 ? selecionadas.size : data.keywords.ausentes.length} palavras-chave da vaga inseridas no contexto certo`,
+                      "Formato validado para sistemas ATS — sem colunas, sem tabelas",
+                      "Download em PDF e DOCX prontos para enviar hoje",
+                    ].map((item) => (
+                      <li
+                        key={item}
+                        className="flex items-center gap-2.5 text-sm text-white/80"
+                      >
+                        <span className="text-lime-400">✓</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Coluna direita — score projetado + CTA */}
+                <div className="flex flex-col gap-3 md:pt-2">
+                  {/* Score projetado */}
+                  <div className="rounded-xl bg-lime-500/15 px-5 py-4 text-center">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-lime-400/70">
+                      Seu score após liberar
+                    </p>
+                    <p className="mt-1 text-4xl font-extrabold tabular-nums text-lime-400">
+                      {scoreProjetado}
+                    </p>
+                    {/* Breakdown da conta */}
+                    <div className="mt-2 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[11px] text-white/35">
+                      <span className="tabular-nums">{data.fit.score}</span>
+                      <span>+{totalAjustesConteudo} ajustes</span>
+                      {ptsKwSelecionadas > 0 && (
+                        <span>+{ptsKwSelecionadas} palavras</span>
+                      )}
+                      <span className="font-bold text-white/50">
+                        = {scoreProjetado}/100
+                      </span>
+                    </div>
+                    {scoreProjetado >= 100 && (
+                      <p className="mt-1 text-[10px] text-lime-400/60">
+                        score máximo atingido
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Botões — variam por estado de auth/pagamento */}
+                  {isDownloadReady ? (
+                    /* Downloads disponíveis */
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleDownload("pdf")}
+                        disabled={downloading !== null}
+                        style={{ color: "#0E0E0E" }}
+                        className="w-full rounded-xl bg-white py-4 text-base font-bold leading-none transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-75"
+                      >
+                        {getDownloadCtaCopy("pdf", downloading)}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownload("docx")}
+                        disabled={downloading !== null}
+                        style={{ color: "#0E0E0E" }}
+                        className="w-full rounded-xl bg-white/10 py-3.5 text-sm font-bold leading-none text-white/70 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-75"
+                      >
+                        {getDownloadCtaCopy("docx", downloading)}
+                      </button>
+                    </>
+                  ) : isAuthenticated === false ? (
+                    /* Não autenticado */
+                    <>
+                      <a
+                        href="/entrar?next=/adaptar/resultado"
+                        style={{ color: "#0E0E0E" }}
+                        className="w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
+                      >
+                        Criar conta e liberar meu CV grátis
+                      </a>
+                      <p className="text-center text-xs text-white/30">
+                        Leva menos de 1 minuto. Sem cartão.
+                      </p>
+                    </>
+                  ) : isAuthenticated === null ? (
+                    /* Carregando auth */
+                    <div className="h-14 animate-pulse rounded-xl bg-white/10" />
+                  ) : reviewAdaptationId &&
+                    reviewPaymentStatus !== "completed" ? (
+                    /* Modo revisão — ainda não pago */
+                    hasCredits === true ? (
+                      <button
+                        type="button"
+                        onClick={handleRedeemReview}
+                        disabled={claiming}
+                        style={{ color: "#0E0E0E" }}
+                        className="w-full rounded-xl bg-white py-4 text-base font-bold leading-none transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {claiming
+                          ? "Liberando CV..."
+                          : "Liberar CV com 1 crédito"}
+                      </button>
+                    ) : (
+                      <a
+                        href="/planos"
+                        style={{ color: "#0E0E0E" }}
+                        className="w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
+                      >
+                        Comprar créditos
+                      </a>
+                    )
+                  ) : hasCredits === false ? (
+                    /* Autenticado sem créditos */
+                    <a
+                      href="/planos"
+                      style={{ color: "#0E0E0E" }}
+                      className="w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
+                    >
+                      Ver pacotes para liberar seu CV adaptado
+                    </a>
+                  ) : (
+                    /* Autenticado com crédito — ação principal */
+                    <button
+                      type="button"
+                      onClick={handleUseCredit}
+                      disabled={hasCredits !== true || claiming}
+                      style={{ color: "#0E0E0E" }}
+                      className="w-full rounded-xl bg-white py-4 text-base font-bold leading-none transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {claiming
+                        ? "Liberando CV..."
+                        : "Liberar meu CV otimizado agora"}
+                    </button>
+                  )}
+
+                  {!isDownloadReady && (
+                    <button
+                      type="button"
+                      onClick={() => window.location.assign("/planos")}
+                      className="w-full rounded-xl bg-white/10 py-3.5 text-sm font-bold leading-none text-white/70 transition-colors hover:bg-white/15"
+                    >
+                      Ver pacotes de créditos
+                    </button>
+                  )}
+
+                  <p className="text-center text-xs text-white/30">
+                    Após liberar, os {totalAjustes} ajustes são aplicados
+                    automaticamente.
+                  </p>
+
+                  {claimError && (
+                    <p className="text-center text-sm text-red-300">
+                      {claimError}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+      {/* ── Release popup ── */}
+      showReleasePopup && isClient && createPortal(
+      <div
+        className="fixed inset-0 z-[100] flex h-dvh w-screen items-center justify-center bg-black/35 px-4 transition-opacity duration-[260ms] ease-out"
+        style={{ opacity: releasePopupVisible ? 1 : 0 }}
+      >
+        <button
+          type="button"
+          aria-label="Fechar aviso"
+          onClick={handleCloseReleasePopup}
+          className="absolute inset-0"
+        />
+        <div
+          className="relative w-full max-w-[520px] rounded-2xl bg-white p-6 shadow-2xl transition-all duration-[260ms] ease-out"
+          style={{
+            opacity: releasePopupVisible ? 1 : 0,
+            transform: releasePopupVisible
+              ? "translateY(0) scale(1)"
+              : "translateY(8px) scale(0.98)",
+          }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-lg font-bold text-[#111111]">
+                CV liberado para download
+              </p>
+              <p className="mt-1 text-sm text-[#555555]">
+                Seu CV final já está pronto. Escolha o formato para baixar.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCloseReleasePopup}
+              className="rounded-md p-1.5 text-[#777777] transition-colors hover:bg-[#F2F2F2] hover:text-[#111111]"
+              aria-label="Fechar aviso"
+            >
               <svg
                 aria-hidden="true"
-                width="13"
-                height="13"
+                width="16"
+                height="16"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2.5"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="shrink-0"
               >
-                <polyline points="20 6 9 17 4 12" />
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
               </svg>
-              Formato aplicado em um template validado para passar em sistemas
-              ATS
-            </p>
+            </button>
           </div>
 
-          {/* ── 6. CTA RESULTADO BLOQUEADO — guest ou não autenticado ── */}
-          {isAuthenticated !== true && (
-            <div className="rounded-[20px] bg-[#0E0E0E] px-8 py-8">
-              <p className="text-xl font-bold text-white">
-                Sua análise completa já está pronta
-              </p>
-              <p className="mt-2 text-sm text-white/60">
-                Veja exatamente como corrigir os pontos que estão te eliminando
-              </p>
-
-              <p className="mt-6 text-[11px] font-bold uppercase tracking-widest text-white/40">
-                Ao continuar, você verá:
-              </p>
-              <ul className="mt-3 space-y-2">
-                {[
-                  "Veja todas as melhorias detalhadas",
-                  "Saiba como corrigir cada problema",
-                  "Acesse seu CV ajustado para a vaga",
-                ].map((item) => (
-                  <li
-                    key={item}
-                    className="flex items-center gap-2.5 text-sm text-white/80"
-                  >
-                    <span className="text-[#84cc16]">✓</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-
-              <p className="mt-5 flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm italic text-white/70">
-                <svg
-                  aria-hidden="true"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#facc15"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="shrink-0 not-italic"
-                >
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                  <line x1="12" y1="9" x2="12" y2="13" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-                "Quanto antes ajustar, maiores suas chances nessa vaga."
-              </p>
-
-              <a
-                href="/entrar?next=/adaptar/resultado"
-                style={{ color: "#0E0E0E" }}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
-              >
-                <svg
-                  aria-hidden="true"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 9.9-1" />
-                </svg>
-                Crie sua conta e veja análise completa grátis
-              </a>
-
-              <p className="mt-4 text-center text-sm text-white/60">
-                Leva menos de 1 minuto. Sem cartão.
-              </p>
-            </div>
-          )}
-
-          {/* ── 6. CTA RESULTADO LIBERADO — autenticado ── */}
-          {isAuthenticated === true && (
-            <div className="rounded-[20px] bg-[#0E0E0E] px-8 py-8">
-              <p className="text-xl font-bold text-white">
-                {reviewAdaptationId && reviewPaymentStatus === "completed"
-                  ? "Sua análise completa está liberada"
-                  : reviewAdaptationId
-                    ? "Sua análise está pronta para liberar o CV"
-                    : "Seu CV otimizado já está pronto para ser liberado"}
-              </p>
-              <p className="mt-2 text-sm text-white/60">
-                {reviewAdaptationId && reviewPaymentStatus === "completed"
-                  ? "Baixe agora seu CV nos formatos PDF ou DOCX."
-                  : reviewAdaptationId
-                    ? "Use 1 crédito para liberar o CV final e os downloads."
-                    : "Use seu crédito agora e siga para a versão final com download."}
-              </p>
-
-              <p className="mt-5 rounded-lg bg-white/10 px-4 py-2 text-sm italic text-white/70">
-                {reviewAdaptationId
-                  ? '"Com a análise pronta, escolha o formato e envie seu CV hoje."'
-                  : '"Você já viu os ajustes. Agora libere o CV final e envie com confiança."'}
-              </p>
-
-              <p className="mt-6 text-[11px] font-bold uppercase tracking-widest text-white/40">
-                {reviewAdaptationId && reviewPaymentStatus === "completed"
-                  ? "Opcoes de download"
-                  : reviewAdaptationId
-                    ? "Ao liberar com crédito, você recebe:"
-                    : "Ao usar seu crédito, você recebe:"}
-              </p>
-              <ul className="mt-3 space-y-2">
-                {[
-                  reviewAdaptationId && reviewPaymentStatus === "completed"
-                    ? "Download em PDF para envio rapido"
-                    : "CV final adaptado para esta vaga",
-                  reviewAdaptationId && reviewPaymentStatus === "completed"
-                    ? "Download em DOCX para editar"
-                    : "Download imediato em PDF e DOCX",
-                  reviewAdaptationId && reviewPaymentStatus === "completed"
-                    ? "Versao pronta para candidatura"
-                    : "Resumo pronto para aplicar sem retrabalho",
-                  reviewAdaptationId && reviewPaymentStatus === "completed"
-                    ? "Arquivo reutilizavel para outras vagas"
-                    : "Modelo reutilizável para próximas candidaturas",
-                ].map((item) => (
-                  <li
-                    key={item}
-                    className="flex items-center gap-2.5 text-sm text-white/80"
-                  >
-                    <span className="text-[#84cc16]">✓</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-
-              <p className="mt-7 text-center text-lg font-bold text-white">
-                {reviewAdaptationId && reviewPaymentStatus === "completed"
-                  ? "Escolha o formato e baixe agora"
-                  : reviewAdaptationId
-                    ? "Liberar CV com 1 crédito"
-                    : hasCredits === false
-                      ? "Você está sem créditos no momento"
-                      : "Libere agora o CV que você pode enviar hoje"}
-              </p>
-
-              {reviewAdaptationId && reviewPaymentStatus === "completed" ? (
-                <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDownload("pdf")}
-                    disabled={downloading !== null}
-                    style={{ color: "#0E0E0E" }}
-                    className="block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-75"
-                  >
-                    {getDownloadCtaCopy("pdf", downloading)}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDownload("docx")}
-                    disabled={downloading !== null}
-                    style={{ color: "#0E0E0E" }}
-                    className="block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-75"
-                  >
-                    {getDownloadCtaCopy("docx", downloading)}
-                  </button>
-                </div>
-              ) : reviewAdaptationId ? (
-                hasCredits === true ? (
-                  <button
-                    type="button"
-                    onClick={handleRedeemReview}
-                    disabled={claiming}
-                    style={{ color: "#0E0E0E" }}
-                    className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {claiming ? "Liberando CV..." : "Liberar CV com 1 crédito"}
-                  </button>
-                ) : (
-                  <a
-                    href="/planos"
-                    style={{ color: "#0E0E0E" }}
-                    className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
-                  >
-                    Comprar créditos
-                  </a>
-                )
-              ) : hasCredits === false ? (
-                <a
-                  href="/planos"
-                  style={{ color: "#0E0E0E" }}
-                  className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100"
-                >
-                  Ver pacotes para liberar seu CV adaptado
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleUseCredit}
-                  disabled={hasCredits !== true || claiming}
-                  style={{ color: "#0E0E0E" }}
-                  className="mt-6 block w-full rounded-xl bg-white py-4 text-center text-base font-bold leading-none transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {claiming
-                    ? "Usando seu crédito..."
-                    : "Usar meu crédito e liberar CV"}
-                </button>
-              )}
-
-              <p className="mt-2 text-center text-sm text-white/60">
-                {reviewAdaptationId && reviewPaymentStatus === "completed"
-                  ? "Se preferir, você pode voltar ao dashboard para rever outras análises."
-                  : reviewAdaptationId
-                    ? "Depois de liberar, os downloads em PDF e DOCX ficam disponiveis imediatamente."
-                    : hasCredits === false
-                      ? "Compre um plano para gerar o download final."
-                      : "Depois disso, você vai direto para ver e baixar seu CV."}
-              </p>
-              {claimError && (
-                <p className="mt-2 text-center text-sm text-red-300">
-                  {claimError}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </main>
-
-      {showReleasePopup &&
-        isClient &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[100] flex h-dvh w-screen items-center justify-center bg-black/35 px-4 transition-opacity duration-[260ms] ease-out"
-            style={{ opacity: releasePopupVisible ? 1 : 0 }}
-          >
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
               type="button"
-              aria-label="Fechar aviso"
-              onClick={handleCloseReleasePopup}
-              className="absolute inset-0"
-            />
-            <div
-              className="relative w-full max-w-[520px] rounded-2xl bg-white p-6 shadow-2xl transition-all duration-[260ms] ease-out"
-              style={{
-                opacity: releasePopupVisible ? 1 : 0,
-                transform: releasePopupVisible
-                  ? "translateY(0) scale(1)"
-                  : "translateY(8px) scale(0.98)",
-              }}
+              onClick={() => handleDownload("pdf")}
+              disabled={downloading !== null || !reviewAdaptationId}
+              style={{ color: "#0E0E0E" }}
+              className="w-full rounded-xl bg-[#F7F7F7] py-3.5 text-sm font-bold leading-none transition-colors hover:bg-[#ECECEC] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-lg font-bold text-[#111111]">
-                    CV liberado para download
-                  </p>
-                  <p className="mt-1 text-sm text-[#555555]">
-                    Seu CV final já está pronto. Escolha o formato para baixar.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCloseReleasePopup}
-                  className="rounded-md p-1.5 text-[#777777] transition-colors hover:bg-[#F2F2F2] hover:text-[#111111]"
-                  aria-label="Fechar aviso"
-                >
-                  <svg
-                    aria-hidden="true"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M18 6 6 18" />
-                    <path d="m6 6 12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => handleDownload("pdf")}
-                  disabled={downloading !== null || !reviewAdaptationId}
-                  style={{ color: "#0E0E0E" }}
-                  className="w-full rounded-xl bg-[#F7F7F7] py-3.5 text-sm font-bold leading-none transition-colors hover:bg-[#ECECEC] disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {getDownloadCtaCopy("pdf", downloading)}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownload("docx")}
-                  disabled={downloading !== null || !reviewAdaptationId}
-                  style={{ color: "#0E0E0E" }}
-                  className="w-full rounded-xl bg-[#F7F7F7] py-3.5 text-sm font-bold leading-none transition-colors hover:bg-[#ECECEC] disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {getDownloadCtaCopy("docx", downloading)}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
-
+              {getDownloadCtaCopy("pdf", downloading)}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDownload("docx")}
+              disabled={downloading !== null || !reviewAdaptationId}
+              style={{ color: "#0E0E0E" }}
+              className="w-full rounded-xl bg-[#F7F7F7] py-3.5 text-sm font-bold leading-none transition-colors hover:bg-[#ECECEC] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {getDownloadCtaCopy("docx", downloading)}
+            </button>
+          </div>
+        </div>
+      </div>
+      , document.body, );
       <DownloadProgressOverlay
         open={downloadStage !== null}
         stage={downloadStage}
         format={downloading}
       />
-    </>
+      ;
+    </PageShell>
   );
 }
