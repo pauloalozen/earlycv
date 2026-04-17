@@ -126,6 +126,12 @@ export type CvAnalysisOutput = {
     headline: string;
     subheadline: string;
   };
+  /** Scores por seção: experiência (0-40) + competências (0-40) + formatação (0-20) = fit.score */
+  secoes: {
+    experiencia: { score: number; max: 40 };
+    competencias: { score: number; max: 40 };
+    formatacao: { score: number; max: 20 };
+  };
   /** Pontos fortes do candidato para esta vaga, com peso relativo */
   positivos: Array<{ texto: string; pontos: number }>;
   /** Ajustes de conteúdo identificados, com ganho estimado de pontos */
@@ -214,32 +220,37 @@ SAÍDA — JSON válido, sem markdown:
     "empresa": "nome da empresa extraído da vaga (ou 'Não informado' se ausente)"
   },
   "fit": {
-    "score": number (0-100),
-    "score_pos_ajustes": number (0-100, estimado após aplicar todos os ajustes — realista, não exagerar),
+    "score": number (0-100, DEVE ser igual a secoes.experiencia.score + secoes.competencias.score + secoes.formatacao.score),
+    "score_pos_ajustes": number (0-100, estimado após aplicar todos os ajustes de conteúdo — realista, não exagerar),
     "categoria": "baixo" | "medio" | "alto",
     "headline": "frase direta e impactante mostrando o problema principal",
     "subheadline": "frase curta explicando rapidamente a situação"
   },
+  "secoes": {
+    "experiencia": { "score": number (0-40, pontuação atual da seção experiência profissional), "max": 40 },
+    "competencias": { "score": number (0-40, pontuação atual da seção competências técnicas), "max": 40 },
+    "formatacao": { "score": number (0-20, arredondar formato_cv.ats_score * 20 / 100), "max": 20 }
+  },
   "positivos": [
-    { "texto": "ponto forte em até 8 palavras", "pontos": number (4-15, peso relativo da contribuição) }
+    { "texto": "ponto forte em até 8 palavras", "pontos": number (2-10, contribuição ao score — ATENÇÃO: sum(positivos[].pontos) + sum(ajustes_conteudo[].pontos) = 40) }
     // máx 5 itens
   ],
   "ajustes_conteudo": [
     {
       "titulo": "título curto do ajuste (ex: 'Quantificar resultados com dados reais')",
       "descricao": "frase curta explicando o que está faltando",
-      "pontos": number (4-12, ganho estimado de score ao aplicar este ajuste),
+      "pontos": number (2-12, ganho estimado — ATENÇÃO: sum(positivos[].pontos) + sum(ajustes_conteudo[].pontos) = 40),
       "dica": "exemplo concreto de como aplicar (ex: 'Ex.: Aumentei retenção em 22% em 6 meses')"
     }
     // máx 5 itens — foco nos ajustes mais impactantes
   ],
   "keywords": {
     "presentes": [
-      { "kw": "palavra-chave", "pontos": number (1-5, contribuição desta keyword ao score) }
+      { "kw": "palavra-chave", "pontos": number (1-8, contribuição — ATENÇÃO: sum(presentes[].pontos) + sum(ausentes[].pontos) = 40) }
       // máx 8 keywords presentes no CV
     ],
     "ausentes": [
-      { "kw": "palavra-chave", "pontos": number (2-6, ganho ao adicionar esta keyword) }
+      { "kw": "palavra-chave", "pontos": number (1-8, ganho ao adicionar — ATENÇÃO: sum(presentes[].pontos) + sum(ausentes[].pontos) = 40) }
       // máx 8 keywords ausentes relevantes para a vaga
     ]
   },
@@ -299,12 +310,34 @@ SAÍDA — JSON válido, sem markdown:
   }
 }
 
-REGRA DE CALIBRAÇÃO DE PONTOS:
-- fit.score + sum(ajustes_conteudo[].pontos) + sum(keywords.ausentes[].pontos) deve estar entre 90 e 100
-- Isso garante que o usuário veja o impacto de cada ajuste no score final
-- Se o candidato for forte, reduza os pontos individuais de ajustes/keywords — não aumente fit.score além do necessário
-- Regra prática: quando há 5+ ajustes identificados, fit.score raramente deve ultrapassar 65
-- fit.score_pos_ajustes deve refletir apenas os ajustes de conteúdo (SEM incluir keywords) — o frontend soma keywords separadamente
+REGRA DE CALIBRAÇÃO DE PONTOS — OBRIGATÓRIA (violá-la quebra a interface):
+
+PRINCÍPIO: cada seção tem um ORÇAMENTO FIXO. Os pontos de todos os itens dessa seção
+(tanto os "conquistados" quanto os "a ganhar") devem somar EXATAMENTE o orçamento.
+Pense nisso como distribuir uma fatia de bolo: o total não muda, só muda quem recebe mais.
+
+Seção 1 — Experiência Profissional — ORÇAMENTO: 40 pts EXATOS
+  PASSO 1: Decida quantos itens haverá em positivos (P itens) e em ajustes_conteudo (A itens).
+  PASSO 2: Distribua os 40 pts entre todos os P+A itens de acordo com a relevância relativa.
+  PASSO 3: Verifique: sum(positivos[].pontos) + sum(ajustes_conteudo[].pontos) = 40. Corrija se ≠ 40.
+  secoes.experiencia.score = sum(positivos[].pontos)
+  Exemplo candidato forte (30 pts conquistados): positivos=[10,8,7,5] + ajustes=[4,3,3] → 10+8+7+5+4+3+3=40 ✓
+  Exemplo candidato fraco (12 pts conquistados): positivos=[7,5] + ajustes=[10,8,6,4] → 7+5+10+8+6+4=40 ✓
+
+Seção 2 — Competências Técnicas — ORÇAMENTO: 40 pts EXATOS
+  PASSO 1: Decida quantos itens haverá em keywords.presentes (P itens) e keywords.ausentes (A itens).
+  PASSO 2: Distribua os 40 pts entre todos os P+A itens de acordo com a relevância relativa.
+  PASSO 3: Verifique: sum(presentes[].pontos) + sum(ausentes[].pontos) = 40. Corrija se ≠ 40.
+  secoes.competencias.score = sum(keywords.presentes[].pontos)
+  Exemplo: presentes=[7,6,5,3,2,2] (25 pts) + ausentes=[6,5,4] (15 pts) → 25+15=40 ✓
+
+Seção 3 — Formatação e Campos — máx 20 pts:
+  secoes.formatacao.score = round(formato_cv.ats_score * 20 / 100)
+
+fit.score = secoes.experiencia.score + secoes.competencias.score + secoes.formatacao.score
+
+fit.score_pos_ajustes = 40 + secoes.competencias.score + secoes.formatacao.score
+  (equivale a aplicar todos os ajustes de conteúdo, SEM incluir keywords.ausentes)
 
 REGRAS CRÍTICAS:
 - O campo "headline" deve ser direto e gerar incômodo leve — use linguagem que indique perda ou penalização

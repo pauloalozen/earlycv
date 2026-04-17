@@ -5,10 +5,6 @@ import { apiRequest } from "./api-request";
 export type PlanInfo = {
   planType: "free" | "starter" | "pro" | "turbo" | "unlimited";
   creditsRemaining: number | null;
-  analysisCreditsRemaining: number | null;
-  dailyAnalysisLimit: number | null;
-  dailyAnalysisUsed: number;
-  dailyAnalysisRemaining: number | null;
   planExpiresAt: string | null;
   isActive: boolean;
 };

@@ -38,11 +38,6 @@ export function buildPlanCatalog(env: NodeJS.ProcessEnv): PlanCatalogItem[] {
   const qntProDownloads = parseQuantity(env.QNT_CV_PLAN_PRO, 3);
   const qntTurboDownloads = parseQuantity(env.QNT_CV_PLAN_TURBO, 10);
 
-  const qntFreeAnalyses = parseQuantity(env.QNT_AN_PLAN_FREE, 3);
-  const qntStarterAnalyses = parseQuantity(env.QNT_AN_PLAN_STARTER, 6);
-  const qntProAnalyses = parseQuantity(env.QNT_AN_PLAN_PRO, 9);
-  const qntTurboAnalyses = parseQuantity(env.QNT_AN_PLAN_TURBO, 30);
-
   return [
     {
       id: "free",
@@ -55,7 +50,7 @@ export function buildPlanCatalog(env: NodeJS.ProcessEnv): PlanCatalogItem[] {
       cta: "Começar grátis",
       checkoutPlanId: null,
       features: [
-        `${qntFreeAnalyses} análises de vaga por dia`,
+        "Análises de vaga ilimitadas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
         "Sem cartão de crédito",
@@ -72,8 +67,8 @@ export function buildPlanCatalog(env: NodeJS.ProcessEnv): PlanCatalogItem[] {
       cta: "Ajustar meu CV agora",
       checkoutPlanId: "starter",
       features: [
-        `${qntStarterAnalyses} análises de vaga`,
         `${qntStarterDownloads} crédito de download de CV`,
+        "Análises de vaga ilimitadas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
         "Download em PDF e DOCX",
@@ -91,8 +86,8 @@ export function buildPlanCatalog(env: NodeJS.ProcessEnv): PlanCatalogItem[] {
       cta: "Aumentar as chances",
       checkoutPlanId: "pro",
       features: [
-        `${qntProAnalyses} análises de vaga`,
         `${qntProDownloads} créditos de download de CV`,
+        "Análises de vaga ilimitadas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
         "Download em PDF e DOCX",
@@ -111,8 +106,8 @@ export function buildPlanCatalog(env: NodeJS.ProcessEnv): PlanCatalogItem[] {
       cta: "Aplicar para mais vagas",
       checkoutPlanId: "turbo",
       features: [
-        `${qntTurboAnalyses} análises de vaga`,
         `${qntTurboDownloads} créditos de download de CV`,
+        "Análises de vaga ilimitadas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
         "Download em PDF e DOCX",

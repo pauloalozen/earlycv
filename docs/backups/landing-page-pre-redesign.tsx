@@ -6,14 +6,11 @@ import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Landingpage Teste - noindex",
+  title: "Seu CV ajustado para cada vaga",
   description:
     "Descubra o que está te eliminando nas vagas e receba um CV ajustado para aumentar suas chances de entrevista.",
   alternates: {
-    canonical: getAbsoluteUrl("/landingpage-teste"),
-  },
-  robots: {
-    index: false,
+    canonical: getAbsoluteUrl("/"),
   },
   keywords: [
     ...siteConfig.keywords,
@@ -23,14 +20,14 @@ export const metadata: Metadata = {
     "análise de currículo",
   ],
   openGraph: {
-    url: getAbsoluteUrl("/landingpage-teste"),
-    title: "EarlyCV - Landingpage Teste",
+    url: getAbsoluteUrl("/"),
+    title: "EarlyCV - Seu CV ajustado para cada vaga",
     description:
       "Descubra o que está te eliminando nas vagas e receba um CV ajustado para aumentar suas chances de entrevista.",
     images: [getAbsoluteUrl(siteConfig.ogImage)],
   },
   twitter: {
-    title: "EarlyCV - Landingpage Teste",
+    title: "EarlyCV - Seu CV ajustado para cada vaga",
     description:
       "Descubra o que está te eliminando nas vagas e receba um CV ajustado para aumentar suas chances de entrevista.",
     images: [getAbsoluteUrl(siteConfig.ogImage)],

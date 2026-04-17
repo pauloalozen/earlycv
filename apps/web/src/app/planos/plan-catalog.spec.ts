@@ -3,12 +3,8 @@ import { test } from "node:test";
 
 import { buildPlanCatalog } from "./plan-catalog.ts";
 
-test("buildPlanCatalog includes free plan and analysis quantities for all plans", () => {
+test("buildPlanCatalog includes free plan and download quantities for paid plans", () => {
   const plans = buildPlanCatalog({
-    QNT_AN_PLAN_FREE: "3",
-    QNT_AN_PLAN_STARTER: "6",
-    QNT_AN_PLAN_PRO: "9",
-    QNT_AN_PLAN_TURBO: "30",
     QNT_CV_PLAN_STARTER: "1",
     QNT_CV_PLAN_PRO: "3",
     QNT_CV_PLAN_TURBO: "10",
@@ -20,7 +16,9 @@ test("buildPlanCatalog includes free plan and analysis quantities for all plans"
   assert.equal(plans.length, 4);
   assert.equal(plans[0]?.id, "free");
   assert.equal(
-    plans[0]?.features.some((feature) => feature.includes("3 análises")),
+    plans[0]?.features.some((feature) =>
+      feature.includes("Análises de vaga ilimitadas"),
+    ),
     true,
   );
 
@@ -29,15 +27,15 @@ test("buildPlanCatalog includes free plan and analysis quantities for all plans"
   const turbo = plans.find((plan) => plan.id === "turbo");
 
   assert.equal(
-    starter?.features.some((feature) => feature.includes("6 análises")),
+    starter?.features.some((feature) => feature.includes("1 crédito")),
     true,
   );
   assert.equal(
-    pro?.features.some((feature) => feature.includes("9 análises")),
+    pro?.features.some((feature) => feature.includes("3 créditos")),
     true,
   );
   assert.equal(
-    turbo?.features.some((feature) => feature.includes("30 análises")),
+    turbo?.features.some((feature) => feature.includes("10 créditos")),
     true,
   );
 });

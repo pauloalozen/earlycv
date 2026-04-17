@@ -27,7 +27,6 @@ export async function getAuthStatus(): Promise<{
       userName: user.name ?? null,
       hasCredits: hasAvailableCredits({
         creditsRemaining: plan.creditsRemaining,
-        analysisCreditsRemaining: plan.analysisCreditsRemaining,
       }),
     };
   } catch {

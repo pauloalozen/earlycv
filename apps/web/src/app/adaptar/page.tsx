@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AppHeader } from "@/components/app-header";
+import { PageShell } from "@/components/page-shell";
 import {
   analyzeAuthenticatedCv,
   analyzeGuestCv,
@@ -10,6 +10,10 @@ import {
 import type { ResumeDto } from "@/lib/resumes-api";
 import { getMyMasterResume, uploadMasterResume } from "@/lib/resumes-api";
 import { getAuthStatus } from "@/lib/session-actions";
+
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
+const SERIF_ITALIC = "var(--font-instrument-serif), serif";
 
 const LOADING_STEPS = [
   "Lendo seu CV...",
@@ -60,20 +64,20 @@ export default function AdaptarPage() {
   >(undefined);
   const [cvMode, setCvMode] = useState<CvMode>("master");
   const [saveMasterCv, setSaveMasterCv] = useState(false);
+  const [fileHover, setFileHover] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     router.prefetch("/adaptar/resultado");
-    getAuthStatus().then(({ userName: name }) => {
-      setUserName(name ?? null);
-      if (name) {
-        getMyMasterResume().then((r) => {
-          setMasterResume(r ?? null);
-          if (!r) setCvMode("upload");
-        });
-      } else {
-        setMasterResume(null);
-      }
+    Promise.all([
+      getAuthStatus(),
+      getMyMasterResume().catch(() => null as ResumeDto | null),
+    ]).then(([status, resume]) => {
+      setUserName(status.userName ?? null);
+      setMasterResume(resume ?? null);
+      if (status.userName && !resume) setCvMode("upload");
+      setAuthReady(true);
     });
   }, [router]);
 
@@ -94,7 +98,6 @@ export default function AdaptarPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (cvMode === "upload" && !file) {
       setError("Selecione seu CV em PDF.");
       return;
@@ -103,38 +106,32 @@ export default function AdaptarPage() {
       setError("Cole a descrição da vaga.");
       return;
     }
-
     setLoading(true);
     setError(null);
-
     try {
       const formData = new FormData();
       formData.append("jobDescriptionText", jobDescription);
-
       let analyzeResult: Awaited<ReturnType<typeof analyzeGuestCv>>;
-
       if (isAuthenticated && cvMode === "master" && masterResume) {
         formData.append("masterResumeId", masterResume.id);
         const [result] = await Promise.all([
           analyzeAuthenticatedCv(formData),
-          new Promise((resolve) => setTimeout(resolve, 10000)),
+          new Promise((r) => setTimeout(r, 10000)),
         ]);
         analyzeResult = result;
       } else if (isAuthenticated && file) {
         formData.append("file", file);
         const [result] = await Promise.all([
           analyzeAuthenticatedCv(formData),
-          new Promise((resolve) => setTimeout(resolve, 10000)),
+          new Promise((r) => setTimeout(r, 10000)),
         ]);
         analyzeResult = result;
         if (saveMasterCv) {
-          const masterFormData = new FormData();
-          masterFormData.append("file", file);
-          masterFormData.append("title", file.name.replace(/\.[^.]+$/, ""));
-          masterFormData.append("isPrimary", "true");
-          uploadMasterResume(masterFormData).catch(() => {
-            // silent: saving as master is best-effort
-          });
+          const mf = new FormData();
+          mf.append("file", file);
+          mf.append("title", file.name.replace(/\.[^.]+$/, ""));
+          mf.append("isPrimary", "true");
+          uploadMasterResume(mf).catch(() => {});
         }
       } else {
         if (!file) {
@@ -145,13 +142,12 @@ export default function AdaptarPage() {
         formData.append("file", file);
         const [result] = await Promise.all([
           analyzeGuestCv(formData),
-          new Promise((resolve) => setTimeout(resolve, 10000)),
+          new Promise((r) => setTimeout(r, 10000)),
         ]);
         analyzeResult = result;
       }
-
       setLoadingStep(3);
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((r) => setTimeout(r, 2000));
       sessionStorage.setItem(
         "guestAnalysis",
         JSON.stringify({
@@ -170,366 +166,919 @@ export default function AdaptarPage() {
     }
   };
 
-  return (
-    <main className="flex min-h-screen flex-col bg-[#F2F2F2] text-[#111111]">
-      {userName ? (
-        <AppHeader userName={userName} backgroundColor="#F2F2F2" />
-      ) : (
-        <header className="flex shrink-0 items-center justify-between px-10 py-6">
-          <a
-            href="/"
-            style={{ color: "#111111" }}
-            className="font-logo text-2xl tracking-tight"
-          >
-            earlyCV
-          </a>
-          {userName === null && (
-            <a
-              href="/entrar?tab=entrar"
-              style={{ color: "#666666" }}
-              className="flex items-center gap-2 rounded-xl border border-[#DDDDDD] px-[18px] py-[6px] text-base font-medium transition-colors hover:border-[#BBBBBB] hover:text-[#111111]"
-            >
-              <svg
-                aria-hidden="true"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-              Entrar
-            </a>
-          )}
-        </header>
-      )}
+  if (!authReady) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+        }}
+      >
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#d0ceC6] border-t-[#0a0a0a]" />
+      </div>
+    );
+  }
 
-      <section className="flex flex-1 items-start justify-center px-6 py-12 md:px-10">
-        <div className="w-full max-w-2xl space-y-8">
-          <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-medium leading-tight tracking-tight text-[#111111]">
-              Cole a vaga e envie seu CV. A gente mostra por que você está sendo
-              eliminado.
+  return (
+    <PageShell>
+      <main
+        style={{
+          fontFamily: GEIST,
+          color: "#0a0a0a",
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+          minHeight: "100dvh",
+          position: "relative",
+          overflowX: "hidden",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* Grain */}
+        <div
+          aria-hidden
+          style={{
+            position: "fixed",
+            inset: 0,
+            pointerEvents: "none",
+            opacity: 0.5,
+            mixBlendMode: "multiply",
+            zIndex: 0,
+            backgroundImage: `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`,
+          }}
+        />
+
+        {/* Nav */}
+        <nav
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "20px 32px",
+            position: "relative",
+            zIndex: 2,
+            borderBottom: "1px solid rgba(0,0,0,0.04)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <a
+              href="/"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                textDecoration: "none",
+                color: "inherit",
+              }}
+            >
+              <div
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: 5,
+                  background: "#0a0a0a",
+                  boxShadow: "inset -2px -2px 0 rgba(198,255,58,0.85)",
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.4 }}
+              >
+                earlyCV
+              </span>
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  color: "#8a8a85",
+                  border: "1px solid #d8d6ce",
+                  borderRadius: 3,
+                  padding: "1px 5px",
+                  fontWeight: 500,
+                }}
+              >
+                v1.2
+              </span>
+            </a>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 11,
+                letterSpacing: 0.4,
+                display: "flex",
+                gap: 7,
+                alignItems: "center",
+              }}
+            >
+              <a href="/" style={{ color: "#8a8a85", textDecoration: "none" }}>
+                Início
+              </a>
+              <span style={{ color: "#c0beb4" }}>/</span>
+              <span style={{ color: "#0a0a0a" }}>Adaptar</span>
+            </div>
+            {userName === null ? (
+              <a
+                href="/entrar"
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "#0a0a0a",
+                  textDecoration: "none",
+                }}
+              >
+                Entrar
+              </a>
+            ) : userName ? (
+              <a
+                href="/dashboard"
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "#0a0a0a",
+                  textDecoration: "none",
+                }}
+              >
+                Painel →
+              </a>
+            ) : null}
+          </div>
+        </nav>
+
+        {/* Main */}
+        <div
+          style={{
+            flex: 1,
+            padding: "32px 32px 28px",
+            position: "relative",
+            zIndex: 2,
+            maxWidth: 1200,
+            margin: "0 auto",
+            width: "100%",
+          }}
+        >
+          {/* Header */}
+          <div style={{ maxWidth: 780, marginBottom: 28 }}>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontFamily: MONO,
+                fontSize: 10.5,
+                letterSpacing: 1.2,
+                fontWeight: 500,
+                color: "#555",
+                background: "rgba(10,10,10,0.04)",
+                border: "1px solid rgba(10,10,10,0.06)",
+                padding: "6px 10px",
+                borderRadius: 999,
+                marginBottom: 14,
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "#c6ff3a",
+                  boxShadow: "0 0 6px #c6ff3a",
+                  display: "inline-block",
+                }}
+              />
+              ANÁLISE · 60 SEGUNDOS
+            </div>
+            <h1
+              style={{
+                fontSize: "clamp(32px, 3.5vw, 46px)",
+                fontWeight: 500,
+                letterSpacing: -1.8,
+                lineHeight: 1.04,
+                margin: 0,
+                color: "#0a0a0a",
+              }}
+            >
+              Cole a vaga, envie seu CV.
+              <br />
+              Descubra{" "}
+              <em
+                style={{
+                  fontFamily: SERIF_ITALIC,
+                  fontStyle: "italic",
+                  fontWeight: 400,
+                }}
+              >
+                exatamente{" "}
+              </em>
+              por que você
+              <br />
+              está sendo eliminado.
             </h1>
-            <p className="text-base text-[#666666]">
-              Leva menos de 30 segundos. Você verá os erros e um score do seu
-              CV.
-            </p>
           </div>
 
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* CV section */}
-            <div className="space-y-2">
-              <span className="text-sm font-medium text-[#111111]">Seu CV</span>
-
-              {/* Authenticated with master CV: show mode toggle */}
-              {isAuthenticated && hasMaster && (
-                <div className="flex gap-2 rounded-2xl bg-white p-1.5 shadow-sm">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCvMode("master");
-                      setFile(null);
-                      setError(null);
+          {/* 2-col grid */}
+          <form onSubmit={handleSubmit}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.2fr 0.8fr",
+                gap: 40,
+                alignItems: "start",
+              }}
+              className="adaptar-grid"
+            >
+              {/* Left column */}
+              <div>
+                {/* Error */}
+                {error && (
+                  <div
+                    style={{
+                      marginBottom: 16,
+                      padding: "10px 14px",
+                      background: "#fee2e2",
+                      border: "1px solid #fecaca",
+                      borderRadius: 10,
+                      fontSize: 13,
+                      color: "#991b1b",
+                      fontFamily: MONO,
                     }}
-                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
-                      cvMode === "master"
-                        ? "bg-[#111111] text-white"
-                        : "text-[#666666] hover:text-[#111111]"
-                    }`}
-                    style={cvMode === "master" ? { color: "#ffffff" } : {}}
                   >
-                    <svg
-                      aria-hidden="true"
-                      width="15"
-                      height="15"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                    </svg>
-                    Usar meu CV base
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCvMode("upload");
-                      setError(null);
+                    {error}
+                  </div>
+                )}
+
+                {/* Step 01 — CV */}
+                <div style={{ marginBottom: 14 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      marginBottom: 10,
                     }}
-                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
-                      cvMode === "upload"
-                        ? "bg-[#111111] text-white"
-                        : "text-[#666666] hover:text-[#111111]"
-                    }`}
-                    style={cvMode === "upload" ? { color: "#ffffff" } : {}}
                   >
-                    <svg
-                      aria-hidden="true"
-                      width="15"
-                      height="15"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 13,
+                        fontWeight: 500,
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        background: "#0a0a0a",
+                        color: "#fafaf6",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
                     >
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="17 8 12 3 7 8" />
-                      <line x1="12" y1="3" x2="12" y2="15" />
-                    </svg>
-                    Enviar outro CV
-                  </button>
-                </div>
-              )}
+                      01
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 500,
+                          letterSpacing: -0.2,
+                        }}
+                      >
+                        Seu CV
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#7a7a74",
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        PDF, DOC ou DOCX · até 5 MB
+                      </div>
+                    </div>
+                    {/* Mode toggle when has master */}
+                    {isAuthenticated && hasMaster && (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 4,
+                          background: "rgba(10,10,10,0.05)",
+                          borderRadius: 8,
+                          padding: 3,
+                        }}
+                      >
+                        {(["master", "upload"] as CvMode[]).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => {
+                              setCvMode(mode);
+                              if (mode === "master") setFile(null);
+                              setError(null);
+                            }}
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10,
+                              fontWeight: 500,
+                              letterSpacing: 0.3,
+                              padding: "4px 10px",
+                              borderRadius: 6,
+                              border: "none",
+                              cursor: "pointer",
+                              background:
+                                cvMode === mode ? "#0a0a0a" : "transparent",
+                              color: cvMode === mode ? "#fafaf6" : "#7a7a74",
+                              transition: "all 120ms",
+                            }}
+                          >
+                            {mode === "master" ? "CV base" : "Outro CV"}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-              {/* Master CV selected: show info card */}
-              {isAuthenticated && hasMaster && cvMode === "master" && (
-                <div className="flex min-h-[154px] w-full flex-col items-center justify-center gap-2 rounded-2xl bg-white px-6 py-6 shadow-sm">
-                  <svg
-                    aria-hidden="true"
-                    width="28"
-                    height="28"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#111111"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                  </svg>
-                  <span className="flex max-w-full items-center gap-1.5 text-sm font-medium text-[#111111]">
-                    <span className="max-w-[220px] truncate">
-                      {masterResume.sourceFileName ?? masterResume.title}
-                    </span>
-                    <svg
-                      aria-hidden="true"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="#84cc16"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                  {/* Master selected */}
+                  {isAuthenticated && hasMaster && cvMode === "master" ? (
+                    <div
+                      style={{
+                        background: "#fafaf6",
+                        border: "1px solid rgba(10,10,10,0.08)",
+                        borderRadius: 14,
+                        padding: "28px 20px",
+                        textAlign: "center",
+                      }}
                     >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  </span>
-                  <span className="text-xs text-[#999999]">
-                    CV base carregado
-                  </span>
-                </div>
-              )}
-
-              {/* Upload box: show when guest, no master, or upload mode selected */}
-              {(!isAuthenticated || !hasMaster || cvMode === "upload") && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex min-h-[154px] w-full cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl bg-white px-6 py-6 shadow-sm transition-colors hover:bg-stone-50"
-                  >
-                    {file ? (
-                      <>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "center",
+                          marginBottom: 10,
+                        }}
+                      >
+                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
                         <svg
-                          aria-hidden="true"
-                          width="28"
-                          height="28"
+                          width="22"
+                          height="22"
                           viewBox="0 0 24 24"
                           fill="none"
-                          stroke="#111111"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                          aria-hidden
                         >
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                        <span className="flex max-w-full items-center gap-1.5 text-sm font-medium text-[#111111]">
-                          <span className="max-w-[220px] truncate">
-                            {file.name}
-                          </span>
-                          <svg
-                            aria-hidden="true"
-                            width="26"
-                            height="26"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="#84cc16"
-                            strokeWidth="2.5"
+                          <path
+                            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                            stroke="#0a0a0a"
+                            strokeWidth="1.5"
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        </span>
-                        <span className="text-xs text-[#999999]">
-                          Clique para trocar
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <svg
-                          aria-hidden="true"
-                          width="28"
-                          height="28"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="#111111"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="17 8 12 3 7 8" />
-                          <line x1="12" y1="3" x2="12" y2="15" />
+                          />
+                          <polyline
+                            points="14 2 14 8 20 8"
+                            stroke="#0a0a0a"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
                         </svg>
-                        <span className="text-sm font-medium text-[#111111]">
-                          Arraste seu CV ou clique para enviar
-                        </span>
-                        <span className="text-xs text-[#999999]">
-                          PDF, DOC ou DOCX — até 5 MB
-                        </span>
-                      </>
-                    )}
-                  </button>
-
-                  {/* Option to save as master CV */}
-                  {isAuthenticated && file && (
-                    <label className="flex cursor-pointer items-center gap-2.5 px-1">
-                      <input
-                        type="checkbox"
-                        checked={saveMasterCv}
-                        onChange={(e) => setSaveMasterCv(e.target.checked)}
-                        className="h-4 w-4 rounded accent-[#111111]"
-                      />
-                      <span className="text-sm text-[#666666]">
-                        {hasMaster
-                          ? "Salvar como meu novo CV base (substitui o atual)"
-                          : "Salvar como meu CV base para próximas análises"}
-                      </span>
-                    </label>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 500,
+                          marginBottom: 4,
+                        }}
+                      >
+                        {masterResume.sourceFileName ?? masterResume.title}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#8a8a85",
+                        }}
+                      >
+                        CV base carregado ·{" "}
+                        <span style={{ color: "#405410" }}>✓ pronto</span>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Upload area */
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        onMouseEnter={() => setFileHover(true)}
+                        onMouseLeave={() => setFileHover(false)}
+                        style={{
+                          width: "100%",
+                          border: `1.5px dashed ${fileHover || file ? "#0a0a0a" : "#d0ceC6"}`,
+                          borderRadius: 14,
+                          padding: "35px 20px",
+                          textAlign: "center",
+                          background: fileHover ? "#f5f4ee" : "#fafaf6",
+                          cursor: "pointer",
+                          transition: "border-color 120ms, background 120ms",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        {file ? (
+                          <>
+                            {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                            <svg
+                              width="22"
+                              height="22"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              aria-hidden
+                            >
+                              <path
+                                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                                stroke="#0a0a0a"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <polyline
+                                points="14 2 14 8 20 8"
+                                stroke="#0a0a0a"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                            <span style={{ fontSize: 14, fontWeight: 500 }}>
+                              {file.name}
+                            </span>
+                            <span
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: 11,
+                                color: "#8a8a85",
+                              }}
+                            >
+                              clique para trocar
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                            <svg
+                              width="22"
+                              height="22"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              aria-hidden
+                            >
+                              <path
+                                d="M12 4v12m0-12l-4 4m4-4l4 4M4 20h16"
+                                stroke="#0a0a0a"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                            <span style={{ fontSize: 14, fontWeight: 500 }}>
+                              Arraste ou clique para enviar
+                            </span>
+                            <span
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: 11,
+                                color: "#8a8a85",
+                              }}
+                            >
+                              seu-cv.pdf · ou solte aqui
+                            </span>
+                          </>
+                        )}
+                      </button>
+                      {isAuthenticated && file && (
+                        <label
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            marginTop: 10,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={saveMasterCv}
+                            onChange={(e) => setSaveMasterCv(e.target.checked)}
+                            style={{
+                              accentColor: "#0a0a0a",
+                              width: 14,
+                              height: 14,
+                            }}
+                          />
+                          <span
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#7a7a74",
+                              letterSpacing: 0.2,
+                            }}
+                          >
+                            {hasMaster
+                              ? "Salvar como novo CV base (substitui o atual)"
+                              : "Salvar como CV base para próximas análises"}
+                          </span>
+                        </label>
+                      )}
+                    </>
                   )}
-                </>
-              )}
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx"
-                className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-            </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    className="hidden"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  />
+                </div>
 
-            {/* Job Description */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="job-description"
-                  className="text-sm font-medium text-[#111111]"
-                >
-                  Cole aqui a descrição da vaga (LinkedIn, Gupy, etc.)
-                </label>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setJobDescription(EXAMPLE_JOB)}
-                    className="cursor-pointer text-xs text-[#999999] transition-colors hover:text-[#111111]"
+                {/* Step 02 — Vaga */}
+                <div style={{ marginBottom: 14 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      marginBottom: 10,
+                    }}
                   >
-                    Colar exemplo
-                  </button>
-                  {jobDescription && (
-                    <button
-                      type="button"
-                      onClick={() => setJobDescription("")}
-                      className="text-xs text-[#999999] transition-colors hover:text-[#111111]"
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 13,
+                        fontWeight: 500,
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        background: "#0a0a0a",
+                        color: "#fafaf6",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
                     >
-                      Limpar
-                    </button>
+                      02
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 500,
+                          letterSpacing: -0.2,
+                        }}
+                      >
+                        Descrição da vaga
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#7a7a74",
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        LinkedIn, Gupy, Infojobs, etc.
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12 }}>
+                      <button
+                        type="button"
+                        onClick={() => setJobDescription(EXAMPLE_JOB)}
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#0a0a0a",
+                          background: "none",
+                          border: "none",
+                          textDecoration: "underline",
+                          textUnderlineOffset: 2,
+                          cursor: "pointer",
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        colar exemplo
+                      </button>
+                      {jobDescription && (
+                        <button
+                          type="button"
+                          onClick={() => setJobDescription("")}
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 10.5,
+                            color: "#8a8a85",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                          }}
+                        >
+                          limpar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      background: "#fafaf6",
+                      border: "1px solid #d8d6ce",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                    }}
+                  >
+                    <textarea
+                      value={jobDescription}
+                      onChange={(e) =>
+                        setJobDescription(e.target.value.slice(0, 8000))
+                      }
+                      placeholder="Cole a vaga completa (isso melhora sua análise)..."
+                      style={{
+                        width: "100%",
+                        border: "none",
+                        outline: "none",
+                        fontFamily: GEIST,
+                        fontSize: 13.5,
+                        background: "transparent",
+                        color: "#0a0a0a",
+                        minHeight: 128,
+                        resize: "none",
+                        lineHeight: 1.55,
+                      }}
+                    />
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        borderTop: "1px solid rgba(10,10,10,0.06)",
+                        paddingTop: 8,
+                        marginTop: 6,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#8a8a85",
+                        }}
+                      >
+                        {jobDescription.length} / 8000
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#8a8a85",
+                        }}
+                      >
+                        ⌘+V para colar
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* CTA */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    width: "100%",
+                    background: "#0a0a0a",
+                    color: "#fafaf6",
+                    border: "none",
+                    borderRadius: 12,
+                    padding: "15px",
+                    fontSize: 15,
+                    fontWeight: 500,
+                    cursor: loading ? "wait" : "pointer",
+                    fontFamily: GEIST,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
+                    boxShadow:
+                      "0 4px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
+                    letterSpacing: -0.1,
+                    transition: "opacity 150ms",
+                    opacity: loading ? 0.75 : 1,
+                  }}
+                >
+                  {loading ? (
+                    <>
+                      <svg
+                        aria-hidden
+                        className="animate-spin"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      >
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                      </svg>
+                      <span>{LOADING_STEPS[loadingStep]}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Descobrir meus erros no CV</span>
+                      <span>→</span>
+                    </>
                   )}
+                </button>
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#8a8a85",
+                    textAlign: "center",
+                    marginTop: 10,
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  Grátis • sem cartão • resultado em segundos
                 </div>
               </div>
-              <textarea
-                id="job-description"
-                value={jobDescription}
-                onChange={(e) => setJobDescription(e.target.value)}
-                placeholder="Cole aqui o texto completo da vaga..."
-                rows={6}
-                maxLength={8000}
-                className="w-full resize-none rounded-2xl bg-white px-4 py-3 text-sm text-[#111111] placeholder-[#BBBBBB] outline-none shadow-sm"
-              />
-              <p className="text-right text-xs text-[#999999]">
-                {jobDescription.length}/8000
-              </p>
+
+              {/* Right column */}
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 14 }}
+              >
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    letterSpacing: 1.2,
+                    color: "#8a8a85",
+                    fontWeight: 500,
+                  }}
+                >
+                  O QUE VOCÊ VAI RECEBER
+                </div>
+
+                {/* Preview card */}
+                <div
+                  style={{
+                    background: "#0a0a0a",
+                    color: "#f0efe9",
+                    borderRadius: 14,
+                    padding: "20px 22px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                      color: "#a0a098",
+                      marginBottom: 14,
+                      fontWeight: 500,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: "#c6ff3a",
+                        display: "inline-block",
+                      }}
+                    />
+                    RELATÓRIO PRÉVIA
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 500,
+                      letterSpacing: -0.4,
+                      color: "#fafaf6",
+                      marginBottom: 16,
+                    }}
+                  >
+                    Relatório de alinhamento
+                  </div>
+                  {[
+                    { k: "ATS SCORE", v: "0–100" },
+                    { k: "KEYWORDS", v: "presentes · ausentes" },
+                    { k: "VERBOS DE AÇÃO", v: "mapeados da vaga" },
+                    { k: "FORMATAÇÃO", v: "problemas estruturais" },
+                    { k: "SUGESTÕES", v: "por seção" },
+                  ].map((row) => (
+                    <div
+                      key={row.k}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "baseline",
+                        padding: "9px 0",
+                        borderTop: "1px solid rgba(250,250,246,0.08)",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#a0a098",
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {row.k}
+                      </span>
+                      <span style={{ fontSize: 13, color: "#e8e7df" }}>
+                        {row.v}
+                      </span>
+                    </div>
+                  ))}
+                  <div
+                    style={{
+                      marginTop: 14,
+                      paddingTop: 12,
+                      borderTop: "1px solid rgba(250,250,246,0.08)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10.5,
+                        color: "#7a7a74",
+                        letterSpacing: 0.2,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Priv: seus dados não são usados para treinar modelos.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Trust badges */}
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[
+                    { label: "TEMPO MÉDIO", v: "60s" },
+                    { label: "CRIPTOGRAFIA", v: "e2e" },
+                    { label: "MELHORIAS", v: "20" },
+                  ].map((b) => (
+                    <div
+                      key={b.label}
+                      style={{
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                        padding: "10px 12px",
+                        background: "rgba(10,10,10,0.03)",
+                        border: "1px solid rgba(10,10,10,0.06)",
+                        borderRadius: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          color: "#8a8a85",
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {b.label}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 18,
+                          fontWeight: 500,
+                          letterSpacing: -0.5,
+                        }}
+                      >
+                        {b.v}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{ color: "#ffffff" }}
-              className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-[#111111] py-[18px] text-lg font-medium leading-none transition-colors hover:bg-[#222222] disabled:cursor-wait disabled:bg-[#333333]"
-            >
-              {loading ? (
-                <>
-                  <svg
-                    aria-hidden="true"
-                    className="animate-spin"
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                  >
-                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                  </svg>
-                  <span className="transition-all duration-500">
-                    {LOADING_STEPS[loadingStep]}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <svg
-                    aria-hidden="true"
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M13 2L4.5 13.5H11L10 22L20.5 9.5H14L13 2Z" />
-                  </svg>
-                  Analisar meu CV para essa vaga
-                </>
-              )}
-            </button>
-
-            <p className="text-center text-sm text-gray-400">
-              Você verá exatamente o que está te eliminando e como corrigir.
-            </p>
           </form>
         </div>
-      </section>
-    </main>
+
+        <style>{`
+          @media (max-width: 860px) {
+            .adaptar-grid { grid-template-columns: 1fr !important; }
+          }
+        `}</style>
+      </main>
+    </PageShell>
   );
 }

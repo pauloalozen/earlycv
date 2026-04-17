@@ -6,7 +6,8 @@ export function PageShell({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const rafId = window.requestAnimationFrame(() => setReady(true));
+    setReady(false);
+    const timeoutId = setTimeout(() => setReady(true), 100);
 
     const handlePageShow = () => {
       setReady(true);
@@ -15,7 +16,7 @@ export function PageShell({ children }: { children: React.ReactNode }) {
     window.addEventListener("pageshow", handlePageShow);
 
     return () => {
-      window.cancelAnimationFrame(rafId);
+      clearTimeout(timeoutId);
       window.removeEventListener("pageshow", handlePageShow);
     };
   }, []);

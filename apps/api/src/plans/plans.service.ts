@@ -11,10 +11,6 @@ import type { UserPlanType } from "@prisma/client";
 import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
 
 import { DatabaseService } from "../database/database.service";
-import {
-  buildSaoPauloUsageDate,
-  resolveDailyAnalysisLimit,
-} from "./analysis-limit";
 
 type PlanId = "starter" | "pro" | "turbo";
 
@@ -107,7 +103,6 @@ export class PlansService {
         internalRole: true,
         planType: true,
         creditsRemaining: true,
-        analysisCreditsRemaining: true,
         planExpiresAt: true,
       },
     });
@@ -118,10 +113,6 @@ export class PlansService {
       return {
         planType: "unlimited",
         creditsRemaining: null,
-        analysisCreditsRemaining: null,
-        dailyAnalysisLimit: null,
-        dailyAnalysisUsed: 0,
-        dailyAnalysisRemaining: null,
         planExpiresAt: null,
         isActive: true,
       };
@@ -134,31 +125,10 @@ export class PlansService {
       user.planExpiresAt < new Date();
     const effectivePlanType = isExpired ? "free" : user.planType;
 
-    const dailyAnalysisLimit = resolveDailyAnalysisLimit(effectivePlanType);
-    const usageDate = buildSaoPauloUsageDate(new Date());
-    const dailyUsage = await this.database.userDailyAnalysisUsage.findUnique({
-      where: {
-        userId_usageDate: {
-          userId,
-          usageDate,
-        },
-      },
-      select: { usedCount: true },
-    });
-    const dailyAnalysisUsed = dailyUsage?.usedCount ?? 0;
-
     return {
       planType: effectivePlanType,
       creditsRemaining:
         isUnlimited && !isExpired ? null : user.creditsRemaining,
-      analysisCreditsRemaining:
-        isUnlimited && !isExpired ? null : user.analysisCreditsRemaining,
-      dailyAnalysisLimit,
-      dailyAnalysisUsed,
-      dailyAnalysisRemaining:
-        dailyAnalysisLimit === null
-          ? null
-          : Math.max(dailyAnalysisLimit - dailyAnalysisUsed, 0),
       planExpiresAt: user.planExpiresAt?.toISOString() ?? null,
       isActive: user.planType !== "free" && !isExpired,
     };

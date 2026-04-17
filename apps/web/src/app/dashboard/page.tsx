@@ -30,6 +30,16 @@ export const metadata: Metadata = {
   title: "Dashboard | EarlyCV",
 };
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
+const SERIF_ITALIC = "var(--font-instrument-serif), serif";
+
+const CARD: React.CSSProperties = {
+  background: "#fafaf6",
+  border: "1px solid rgba(10,10,10,0.08)",
+  borderRadius: 14,
+};
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -76,7 +86,6 @@ export default async function DashboardPage({
   const user = await getCurrentAppUserFromCookies();
   const redirectPath = getRouteAccessRedirectPath("/dashboard", user);
   if (redirectPath) redirect(redirectPath);
-
   if (!user) redirect(getDefaultAppRedirectPath(null));
 
   const params = await searchParams;
@@ -111,26 +120,9 @@ export default async function DashboardPage({
   const availableDownloadCredits = isPlanInfoUnavailable
     ? "—"
     : planInfo.creditsRemaining === null
-      ? "Ilimitado"
+      ? "∞"
       : planInfo.creditsRemaining;
-  const availableAnalysisCredits = isPlanInfoUnavailable
-    ? "—"
-    : planInfo.analysisCreditsRemaining === null
-      ? "Ilimitado"
-      : planInfo.analysisCreditsRemaining;
-  const dailyAnalysisLimit = isPlanInfoUnavailable
-    ? "—"
-    : planInfo.dailyAnalysisLimit === null
-      ? "Ilimitado"
-      : planInfo.dailyAnalysisLimit;
-  const dailyAnalysisRemaining = isPlanInfoUnavailable
-    ? "—"
-    : planInfo.dailyAnalysisRemaining === null
-      ? "Ilimitado"
-      : planInfo.dailyAnalysisRemaining;
-  const dailyAnalysisToday = isPlanInfoUnavailable
-    ? "—"
-    : `${planInfo.dailyAnalysisUsed}/${dailyAnalysisLimit}`;
+
   const analysisSignalsById = new Map<
     string,
     { score: number | null; improvement: number | null }
@@ -160,354 +152,841 @@ export default async function DashboardPage({
     })),
   );
 
+  const firstName = user.name.split(" ")[0];
+
   return (
-    <main className="min-h-screen bg-[#FAFAFA] text-[#111111]">
-      <AppHeader userName={user.name} backgroundColor="#FAFAFA" />
+    <>
+      {/* Grain */}
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: 0.4,
+          mixBlendMode: "multiply",
+          zIndex: 0,
+          backgroundImage: `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.03 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`,
+        }}
+      />
 
-      <div className="mx-auto max-w-[860px] space-y-8 px-6 pb-20 pt-4">
-        <GuestAnalysisClaimer />
+      <main
+        style={{
+          fontFamily: GEIST,
+          minHeight: "100dvh",
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+          color: "#0a0a0a",
+          position: "relative",
+        }}
+      >
+        <AppHeader
+          userName={user.name}
+          backgroundColor="rgba(249,248,244,0.85)"
+        />
 
-        {showPlanActivated && (
-          <div className="flex items-center gap-2 rounded-xl border border-lime-200 bg-lime-50 px-5 py-3">
-            <span className="text-lime-600">✔</span>
-            <p className="text-sm font-semibold text-lime-800">
-              Plano ativado com sucesso!
-            </p>
-          </div>
-        )}
+        <div
+          style={{
+            maxWidth: 900,
+            margin: "0 auto",
+            padding: "16px 28px 72px",
+            position: "relative",
+            zIndex: 2,
+          }}
+        >
+          <GuestAnalysisClaimer />
 
-        <div className="px-1 pt-2">
-          <h1 className="text-2xl font-bold tracking-tight text-[#111111]">
-            Olá, {user.name.split(" ")[0]}
-          </h1>
-        </div>
-
-        <section className="rounded-xl border border-[#E5E7EB] bg-white px-5 py-4 shadow-sm">
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#BBBBBB]">
-            Visão geral
-          </p>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="grid min-w-[260px] flex-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="min-w-0">
-                <p className="text-xs text-[#999999]">Créditos de análise</p>
-                <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
-                  {availableAnalysisCredits}
-                </p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-[#999999]">Análises hoje</p>
-                <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
-                  {dailyAnalysisToday}
-                </p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-[#999999]">Restante hoje</p>
-                <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
-                  {dailyAnalysisRemaining}
-                </p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-[#999999]">Créditos de download</p>
-                <p className="mt-0.5 text-lg font-bold leading-none text-[#111111]">
-                  {availableDownloadCredits}
-                </p>
-              </div>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-2">
-              <a
-                href="/planos"
-                style={{ color: "#ffffff" }}
-                className="rounded-[10px] bg-[#111111] px-4 py-2 text-sm font-medium"
+          {/* Plan activated banner */}
+          {showPlanActivated && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background: "rgba(198,255,58,0.12)",
+                border: "1px solid rgba(110,150,20,0.2)",
+                borderRadius: 12,
+                padding: "12px 16px",
+                marginBottom: 16,
+              }}
+            >
+              <span style={{ color: "#405410", fontSize: 14 }}>✔</span>
+              <p
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: 500,
+                  color: "#2a3a08",
+                  margin: 0,
+                }}
               >
-                Comprar créditos
-              </a>
-              <p className="text-right text-[11px] text-[#888888]">
-                Limite diário reinicia às 00:00 (America/Sao_Paulo).
+                Plano ativado com sucesso!
               </p>
             </div>
-          </div>
-        </section>
+          )}
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <section className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
-            {masterResume ? (
-              <div className="space-y-4">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-                    CV Master
-                  </p>
-                  <h2 className="mt-2 text-xl font-bold text-[#111111]">
+          {/* Welcome */}
+          <div style={{ padding: "8px 0 20px" }}>
+            <h1
+              style={{
+                fontSize: "clamp(28px, 3.5vw, 40px)",
+                fontWeight: 500,
+                letterSpacing: -1.5,
+                margin: 0,
+                color: "#0a0a0a",
+              }}
+            >
+              Olá, {firstName}{" "}
+              <em
+                style={{
+                  fontFamily: SERIF_ITALIC,
+                  fontStyle: "italic",
+                  fontWeight: 400,
+                }}
+              >
+                bem-vindo.
+              </em>
+            </h1>
+          </div>
+
+          {/* Credits bar */}
+          <div
+            style={{
+              ...CARD,
+              padding: "14px 20px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
+              marginBottom: 16,
+            }}
+          >
+            <div>
+              <p
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                  color: "#8a8a85",
+                  fontWeight: 500,
+                  margin: "0 0 4px",
+                }}
+              >
+                VISÃO GERAL
+              </p>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                <span
+                  style={{
+                    fontSize: 13.5,
+                    color: "#6a6560",
+                  }}
+                >
+                  Créditos de download:
+                </span>
+                <span
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 500,
+                    letterSpacing: -0.5,
+                    color: "#0a0a0a",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {availableDownloadCredits}
+                </span>
+              </div>
+            </div>
+            <a
+              href="/planos"
+              style={{
+                background: "#0a0a0a",
+                color: "#fafaf6",
+                borderRadius: 10,
+                padding: "10px 16px",
+                fontSize: 13,
+                fontWeight: 500,
+                textDecoration: "none",
+                flexShrink: 0,
+                letterSpacing: -0.1,
+              }}
+              className="dash-btn-dark"
+            >
+              Comprar créditos
+            </a>
+          </div>
+
+          {/* CV Master + CTA grid */}
+          <div
+            className="dash-top-grid"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 14,
+              marginBottom: 16,
+            }}
+          >
+            {/* CV Master */}
+            <section style={{ ...CARD, padding: "24px" }}>
+              <p
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                  color: "#8a8a85",
+                  fontWeight: 500,
+                  margin: "0 0 10px",
+                }}
+              >
+                CV MASTER
+              </p>
+
+              {masterResume ? (
+                <>
+                  <h2
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 500,
+                      letterSpacing: -0.6,
+                      color: "#0a0a0a",
+                      margin: "0 0 4px",
+                    }}
+                  >
                     Seu CV base está pronto
                   </h2>
-                  <p className="mt-1 text-sm text-[#666666]">
-                    Você pode usá-lo em novas análises
+                  <p
+                    style={{
+                      fontSize: 13.5,
+                      color: "#6a6560",
+                      margin: "0 0 16px",
+                    }}
+                  >
+                    Disponível para todas as análises
                   </p>
-                </div>
 
-                <div className="rounded-xl border border-[#F2F2F2] bg-[#FAFAFA] p-4">
-                  <p className="truncate text-sm font-semibold text-[#111111]">
-                    {masterResume.title}
-                  </p>
-                  {masterResume.sourceFileName && (
-                    <p className="mt-1 truncate text-sm text-[#666666]">
-                      Arquivo: {masterResume.sourceFileName}
+                  <div
+                    style={{
+                      background: "rgba(10,10,10,0.03)",
+                      border: "1px solid rgba(10,10,10,0.06)",
+                      borderRadius: 10,
+                      padding: "12px 14px",
+                      marginBottom: 16,
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontSize: 13.5,
+                        fontWeight: 500,
+                        color: "#0a0a0a",
+                        margin: "0 0 2px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {masterResume.title}
                     </p>
-                  )}
-                  <p className="mt-1 text-sm text-[#666666]">
-                    Atualizado em {formatDate(masterResume.updatedAt)}
-                  </p>
-                </div>
+                    {masterResume.sourceFileName && (
+                      <p
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#8a8a85",
+                          margin: "2px 0 0",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {masterResume.sourceFileName}
+                      </p>
+                    )}
+                    <p
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10.5,
+                        color: "#8a8a85",
+                        margin: "2px 0 0",
+                      }}
+                    >
+                      Atualizado em {formatDate(masterResume.updatedAt)}
+                    </p>
+                  </div>
 
-                <div className="flex flex-wrap gap-3">
-                  <a
-                    href="/cv-base"
-                    style={{ color: "#ffffff" }}
-                    className="inline-flex h-11 items-center rounded-[10px] bg-[#111111] px-5 text-sm font-medium"
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <a
+                      href="/cv-base"
+                      style={{
+                        background: "#0a0a0a",
+                        color: "#fafaf6",
+                        borderRadius: 10,
+                        padding: "10px 16px",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        textDecoration: "none",
+                        letterSpacing: -0.1,
+                      }}
+                      className="dash-btn-dark"
+                    >
+                      Atualizar CV
+                    </a>
+                    <a
+                      href={`/api/resumes/${masterResume.id}/download`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        background: "transparent",
+                        color: "#0a0a0a",
+                        border: "1px solid rgba(10,10,10,0.14)",
+                        borderRadius: 10,
+                        padding: "10px 16px",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        textDecoration: "none",
+                        letterSpacing: -0.1,
+                      }}
+                      className="dash-btn-outline"
+                    >
+                      Ver CV
+                    </a>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 500,
+                      letterSpacing: -0.6,
+                      color: "#0a0a0a",
+                      margin: "0 0 4px",
+                    }}
                   >
-                    Atualizar CV
-                  </a>
-                  <a
-                    href={`/api/resumes/${masterResume.id}/download`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: "#111111" }}
-                    className="inline-flex h-11 items-center rounded-[10px] border border-[#E5E5E5] bg-white px-5 text-sm font-medium"
-                  >
-                    Ver CV
-                  </a>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-                    CV Master
-                  </p>
-                  <h2 className="mt-2 text-xl font-bold text-[#111111]">
                     Cadastre seu CV base
                   </h2>
-                  <p className="mt-1 text-sm text-[#666666]">
+                  <p
+                    style={{
+                      fontSize: 13.5,
+                      color: "#6a6560",
+                      margin: "0 0 20px",
+                      lineHeight: 1.5,
+                    }}
+                  >
                     Evite subir seu currículo toda vez. Use um CV base para
                     todas as análises.
                   </p>
-                </div>
-
-                <a
-                  href="/cv-base"
-                  style={{ color: "#ffffff" }}
-                  className="inline-flex h-11 items-center rounded-[10px] bg-[#111111] px-5 text-sm font-medium"
-                >
-                  Cadastrar CV
-                </a>
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-xl border border-[#E5E7EB] bg-white p-8 shadow-sm flex flex-col items-center justify-center text-center">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-              Próximo passo
-            </p>
-            <h2 className="mt-2 text-2xl font-bold text-[#111111]">
-              Analisar nova vaga
-            </h2>
-            <p className="mt-1 text-sm text-[#666666]">
-              Leva menos de 2 minutos
-            </p>
-            <a
-              href="/adaptar"
-              style={{ color: "#ffffff" }}
-              className="mt-6 inline-flex h-14 items-center justify-center rounded-[14px] bg-[#111111] px-10 text-sm font-semibold"
-            >
-              Analisar nova vaga
-            </a>
-          </section>
-        </div>
-
-        <section className="grid gap-4 md:grid-cols-3">
-          <article className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
-            <p className="text-sm text-[#666666]">
-              {DASHBOARD_METRIC_LABELS.averageScore}
-            </p>
-            <p
-              className="mt-2 text-3xl font-bold"
-              style={{ color: getDashboardScoreColor(metrics.averageScore) }}
-            >
-              {metrics.averageScore}%
-            </p>
-          </article>
-
-          <article className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
-            <p className="text-sm text-[#666666]">
-              {DASHBOARD_METRIC_LABELS.matchCount}
-            </p>
-            <p className="mt-2 text-3xl font-bold text-[#111111]">
-              {metrics.highCompatibilityCount}
-            </p>
-          </article>
-
-          <article className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
-            <p className="text-sm text-[#666666]">
-              {DASHBOARD_METRIC_LABELS.recentImprovement}
-            </p>
-            <p className="mt-2 text-3xl font-bold text-lime-600">
-              +{metrics.evolutionPercentage}%
-            </p>
-          </article>
-        </section>
-
-        <div className="rounded-xl bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F2F2F2] px-6 py-4">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-                Histórico de análises
-              </p>
-              <p className="mt-1 text-xs text-[#888888]">
-                {adaptationTotal === 0
-                  ? "Nenhuma análise registrada"
-                  : `Mostrando ${startItem}-${endItem} de ${adaptationTotal}`}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-1.5 rounded-lg border border-[#EDEDED] bg-[#FAFAFA] p-1">
-              {DASHBOARD_PAGE_SIZES.map((size) => {
-                const isActive = currentLimit === size;
-                return (
                   <a
-                    key={size}
-                    href={buildDashboardQuery({
-                      plan: params.plan,
-                      page: 1,
-                      limit: size,
-                    })}
-                    style={{ color: isActive ? "#FFFFFF" : "#666666" }}
-                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-                      isActive ? "bg-[#111111]" : "hover:bg-white"
-                    }`}
+                    href="/cv-base"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      background: "#0a0a0a",
+                      color: "#fafaf6",
+                      borderRadius: 10,
+                      padding: "10px 16px",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      textDecoration: "none",
+                      letterSpacing: -0.1,
+                    }}
+                    className="dash-btn-dark"
                   >
-                    {size}
+                    Cadastrar CV
                   </a>
-                );
-              })}
-            </div>
-          </div>
+                </>
+              )}
+            </section>
 
-          {adaptationList.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-              <p className="text-base font-medium text-[#111111]">
-                Nenhuma análise ainda
+            {/* Analisar nova vaga — dark CTA card */}
+            <section
+              style={{
+                background: "#0a0a0a",
+                borderRadius: 14,
+                padding: "24px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
+                color: "#fafaf6",
+                boxShadow: "0 16px 48px -16px rgba(10,10,10,0.35)",
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                  color: "rgba(255,255,255,0.35)",
+                  marginBottom: 10,
+                }}
+              >
+                PRÓXIMO PASSO
               </p>
-              <p className="text-sm text-[#666666]">
-                Envie seu CV e a descrição de uma vaga para começar.
+              <h2
+                style={{
+                  fontSize: 22,
+                  fontWeight: 500,
+                  letterSpacing: -0.8,
+                  color: "#fafaf6",
+                  margin: "0 0 6px",
+                  lineHeight: 1.2,
+                }}
+              >
+                Analisar nova vaga
+              </h2>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.45)",
+                  margin: "0 0 24px",
+                }}
+              >
+                Leva menos de 2 minutos
               </p>
               <a
                 href="/adaptar"
-                style={{ color: "#ffffff" }}
-                className="mt-2 rounded-[14px] bg-[#111111] px-6 py-3 text-sm font-medium"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  background: "#fafaf6",
+                  color: "#0a0a0a",
+                  borderRadius: 12,
+                  padding: "13px 22px",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  textDecoration: "none",
+                  letterSpacing: -0.2,
+                  boxShadow:
+                    "0 4px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
+                }}
+                className="dash-cta-btn"
               >
-                Analisar meu CV
+                Adaptar meu CV
+                <span className="dash-cta-arrow">→</span>
               </a>
+            </section>
+          </div>
+
+          {/* Metrics */}
+          <div
+            className="dash-metrics-grid"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 14,
+              marginBottom: 16,
+            }}
+          >
+            {[
+              {
+                label: DASHBOARD_METRIC_LABELS.averageScore,
+                value: `${metrics.averageScore}%`,
+                color: getDashboardScoreColor(metrics.averageScore),
+              },
+              {
+                label: DASHBOARD_METRIC_LABELS.matchCount,
+                value: String(metrics.highCompatibilityCount),
+                color: "#0a0a0a",
+              },
+              {
+                label: DASHBOARD_METRIC_LABELS.recentImprovement,
+                value: `+${metrics.evolutionPercentage}%`,
+                color: "#405410",
+              },
+            ].map((metric) => (
+              <article key={metric.label} style={{ ...CARD, padding: "20px" }}>
+                <p
+                  style={{
+                    fontSize: 12.5,
+                    color: "#6a6560",
+                    margin: "0 0 6px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {metric.label}
+                </p>
+                <p
+                  style={{
+                    fontSize: 32,
+                    fontWeight: 500,
+                    letterSpacing: -1.2,
+                    color: metric.color,
+                    margin: 0,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {metric.value}
+                </p>
+              </article>
+            ))}
+          </div>
+
+          {/* History */}
+          <div style={{ ...CARD, overflow: "hidden" }}>
+            {/* Header */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "16px 20px",
+                borderBottom: "1px solid rgba(10,10,10,0.06)",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    letterSpacing: 1.2,
+                    color: "#8a8a85",
+                    fontWeight: 500,
+                    margin: "0 0 3px",
+                  }}
+                >
+                  HISTÓRICO DE ANÁLISES
+                </p>
+                <p
+                  style={{ fontSize: 12.5, color: "#8a8a85", margin: 0 }}
+                >
+                  {adaptationTotal === 0
+                    ? "Nenhuma análise registrada"
+                    : `Mostrando ${startItem}–${endItem} de ${adaptationTotal}`}
+                </p>
+              </div>
+
+              {/* Page size selector */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  background: "rgba(10,10,10,0.04)",
+                  border: "1px solid rgba(10,10,10,0.08)",
+                  borderRadius: 8,
+                  padding: "3px",
+                }}
+              >
+                {DASHBOARD_PAGE_SIZES.map((size) => {
+                  const isActive = currentLimit === size;
+                  return (
+                    <a
+                      key={size}
+                      href={buildDashboardQuery({
+                        plan: params.plan,
+                        page: 1,
+                        limit: size,
+                      })}
+                      style={{
+                        display: "block",
+                        padding: "4px 10px",
+                        borderRadius: 6,
+                        fontFamily: MONO,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        textDecoration: "none",
+                        background: isActive ? "#0a0a0a" : "transparent",
+                        color: isActive ? "#fafaf6" : "#6a6560",
+                        transition: "all 150ms",
+                      }}
+                    >
+                      {size}
+                    </a>
+                  );
+                })}
+              </div>
             </div>
-          ) : (
-            <div className="space-y-3 p-3">
-              {adaptationList.map((item) => {
-                const actions = getHistoryActions(item);
-                const history = buildDashboardTestHistoryView({
-                  id: item.id,
-                  score: analysisSignalsById.get(item.id)?.score ?? null,
-                  improvement:
-                    analysisSignalsById.get(item.id)?.improvement ?? null,
-                });
 
-                return (
-                  <article
-                    key={item.id}
-                    className="rounded-xl border border-[#F2F2F2] bg-white p-5"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-[#111111]">
-                          {item.jobTitle ?? "Vaga sem título"}
-                          {item.companyName ? ` · ${item.companyName}` : ""}
-                        </p>
-                        <p className="mt-1 text-xs text-[#6B7280]">
-                          {formatDate(item.createdAt)}
-                        </p>
-                      </div>
+            {/* Items */}
+            {adaptationList.length === 0 ? (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "48px 24px",
+                  textAlign: "center",
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 500,
+                    color: "#0a0a0a",
+                    margin: 0,
+                  }}
+                >
+                  Nenhuma análise ainda
+                </p>
+                <p
+                  style={{ fontSize: 13.5, color: "#6a6560", margin: 0 }}
+                >
+                  Envie seu CV e a descrição de uma vaga para começar.
+                </p>
+                <a
+                  href="/adaptar"
+                  style={{
+                    marginTop: 8,
+                    background: "#0a0a0a",
+                    color: "#fafaf6",
+                    borderRadius: 10,
+                    padding: "11px 20px",
+                    fontSize: 13.5,
+                    fontWeight: 500,
+                    textDecoration: "none",
+                    letterSpacing: -0.1,
+                  }}
+                  className="dash-btn-dark"
+                >
+                  Analisar meu CV
+                </a>
+              </div>
+            ) : (
+              <div style={{ padding: "10px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
+                >
+                  {adaptationList.map((item) => {
+                    const actions = getHistoryActions(item);
+                    const history = buildDashboardTestHistoryView({
+                      id: item.id,
+                      score: analysisSignalsById.get(item.id)?.score ?? null,
+                      improvement:
+                        analysisSignalsById.get(item.id)?.improvement ?? null,
+                    });
 
-                      <div className="text-right">
-                        <p className="text-xs text-[#6B7280]">Score</p>
-                        <p
-                          className="text-lg font-bold"
+                    return (
+                      <article
+                        key={item.id}
+                        style={{
+                          background: "#fff",
+                          border: "1px solid rgba(10,10,10,0.06)",
+                          borderRadius: 12,
+                          padding: "16px 18px",
+                        }}
+                      >
+                        <div
                           style={{
-                            color:
-                              history.score !== null
-                                ? getDashboardScoreColor(history.score)
-                                : "#111111",
+                            display: "flex",
+                            alignItems: "flex-start",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            flexWrap: "wrap",
                           }}
                         >
-                          {history.score !== null ? `${history.score}%` : "—"}
-                        </p>
-                        <p className="text-xs font-semibold text-lime-600">
-                          {history.improvement !== null
-                            ? `+${history.improvement}% após otimização`
-                            : "Evolução indisponível"}
-                        </p>
-                      </div>
-                    </div>
+                          <div style={{ minWidth: 0 }}>
+                            <p
+                              style={{
+                                fontSize: 13.5,
+                                fontWeight: 500,
+                                color: "#0a0a0a",
+                                margin: "0 0 3px",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {item.jobTitle ?? "Vaga sem título"}
+                              {item.companyName
+                                ? ` · ${item.companyName}`
+                                : ""}
+                            </p>
+                            <p
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: 10.5,
+                                color: "#8a8a85",
+                                margin: 0,
+                              }}
+                            >
+                              {formatDate(item.createdAt)}
+                            </p>
+                          </div>
 
-                    <HistoryActionLinks
-                      actions={actions}
-                      hasCredits={hasCredits}
-                    />
-                  </article>
-                );
-              })}
+                          <div
+                            style={{ textAlign: "right", flexShrink: 0 }}
+                          >
+                            <p
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: 10,
+                                color: "#8a8a85",
+                                margin: "0 0 2px",
+                              }}
+                            >
+                              SCORE
+                            </p>
+                            <p
+                              style={{
+                                fontSize: 22,
+                                fontWeight: 500,
+                                letterSpacing: -0.8,
+                                margin: "0 0 2px",
+                                fontVariantNumeric: "tabular-nums",
+                                color:
+                                  history.score !== null
+                                    ? getDashboardScoreColor(history.score)
+                                    : "#0a0a0a",
+                              }}
+                            >
+                              {history.score !== null
+                                ? `${history.score}%`
+                                : "—"}
+                            </p>
+                            {history.improvement !== null && (
+                              <p
+                                style={{
+                                  fontFamily: MONO,
+                                  fontSize: 10.5,
+                                  fontWeight: 600,
+                                  color: "#405410",
+                                  margin: 0,
+                                }}
+                              >
+                                +{history.improvement}% após ajustes
+                              </p>
+                            )}
+                          </div>
+                        </div>
 
-              {totalPages > 1 && (
-                <div className="flex items-center justify-end gap-2 px-2 pt-2">
-                  {safeCurrentPage > 1 ? (
-                    <a
-                      href={buildDashboardQuery({
-                        plan: params.plan,
-                        page: safeCurrentPage - 1,
-                        limit: currentLimit,
-                      })}
-                      className="rounded-lg border border-[#E5E5E5] bg-white px-3 py-1.5 text-xs font-semibold text-[#111111]"
-                    >
-                      Anterior
-                    </a>
-                  ) : (
-                    <span className="rounded-lg border border-[#EFEFEF] bg-[#F9F9F9] px-3 py-1.5 text-xs font-semibold text-[#BBBBBB]">
-                      Anterior
-                    </span>
-                  )}
-
-                  <span className="px-2 text-xs font-semibold text-[#666666]">
-                    Página {safeCurrentPage} de {totalPages}
-                  </span>
-
-                  {safeCurrentPage < totalPages ? (
-                    <a
-                      href={buildDashboardQuery({
-                        plan: params.plan,
-                        page: safeCurrentPage + 1,
-                        limit: currentLimit,
-                      })}
-                      className="rounded-lg border border-[#E5E5E5] bg-white px-3 py-1.5 text-xs font-semibold text-[#111111]"
-                    >
-                      Próxima
-                    </a>
-                  ) : (
-                    <span className="rounded-lg border border-[#EFEFEF] bg-[#F9F9F9] px-3 py-1.5 text-xs font-semibold text-[#BBBBBB]">
-                      Próxima
-                    </span>
-                  )}
+                        <HistoryActionLinks
+                          actions={actions}
+                          hasCredits={hasCredits}
+                        />
+                      </article>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
-          )}
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "flex-end",
+                      gap: 8,
+                      padding: "12px 4px 4px",
+                    }}
+                  >
+                    {safeCurrentPage > 1 ? (
+                      <a
+                        href={buildDashboardQuery({
+                          plan: params.plan,
+                          page: safeCurrentPage - 1,
+                          limit: currentLimit,
+                        })}
+                        style={{
+                          background: "#fafaf6",
+                          border: "1px solid rgba(10,10,10,0.1)",
+                          borderRadius: 8,
+                          padding: "6px 14px",
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: "#0a0a0a",
+                          textDecoration: "none",
+                        }}
+                        className="dash-page-btn"
+                      >
+                        ← Anterior
+                      </a>
+                    ) : (
+                      <span
+                        style={{
+                          background: "rgba(10,10,10,0.03)",
+                          border: "1px solid rgba(10,10,10,0.06)",
+                          borderRadius: 8,
+                          padding: "6px 14px",
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: "#c0beb4",
+                        }}
+                      >
+                        ← Anterior
+                      </span>
+                    )}
+
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 11,
+                        color: "#8a8a85",
+                        padding: "0 4px",
+                      }}
+                    >
+                      {safeCurrentPage} / {totalPages}
+                    </span>
+
+                    {safeCurrentPage < totalPages ? (
+                      <a
+                        href={buildDashboardQuery({
+                          plan: params.plan,
+                          page: safeCurrentPage + 1,
+                          limit: currentLimit,
+                        })}
+                        style={{
+                          background: "#fafaf6",
+                          border: "1px solid rgba(10,10,10,0.1)",
+                          borderRadius: 8,
+                          padding: "6px 14px",
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: "#0a0a0a",
+                          textDecoration: "none",
+                        }}
+                        className="dash-page-btn"
+                      >
+                        Próxima →
+                      </a>
+                    ) : (
+                      <span
+                        style={{
+                          background: "rgba(10,10,10,0.03)",
+                          border: "1px solid rgba(10,10,10,0.06)",
+                          borderRadius: 8,
+                          padding: "6px 14px",
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: "#c0beb4",
+                        }}
+                      >
+                        Próxima →
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+
+      <style>{`
+        .dash-btn-dark:hover { opacity: 0.82; }
+        .dash-btn-outline:hover { background: rgba(10,10,10,0.04) !important; }
+        .dash-cta-btn:hover { opacity: 0.88; }
+        .dash-cta-arrow { display: inline-block; transition: transform 220ms cubic-bezier(.3,.9,.4,1); }
+        .dash-cta-btn:hover .dash-cta-arrow { transform: translateX(4px); }
+        .dash-page-btn:hover { background: rgba(10,10,10,0.05) !important; }
+        @media (max-width: 680px) {
+          .dash-top-grid { grid-template-columns: 1fr !important; }
+          .dash-metrics-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+        @media (max-width: 420px) {
+          .dash-metrics-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+    </>
   );
 }

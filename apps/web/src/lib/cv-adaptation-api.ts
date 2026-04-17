@@ -131,6 +131,12 @@ export type CvAnalysisData = {
     headline: string;
     subheadline: string;
   };
+  /** Presente em análises novas — scores por seção (experiência 0-40 + competências 0-40 + formatação 0-20 = fit.score) */
+  secoes?: {
+    experiencia: { score: number; max: number };
+    competencias: { score: number; max: number };
+    formatacao: { score: number; max: number };
+  };
   /** Presente em análises novas — pontos fortes com peso relativo */
   positivos?: Array<{ texto: string; pontos: number }>;
   /** Presente em análises novas — ajustes de conteúdo com ganho estimado */

@@ -2,7 +2,10 @@ import type { Metadata, Viewport } from "next";
 import {
   Dancing_Script,
   DM_Sans,
+  Geist,
+  Geist_Mono,
   Gugi,
+  Instrument_Serif,
   JetBrains_Mono,
   Playfair_Display,
   Syne,
@@ -44,6 +47,23 @@ const syne = Syne({
   subsets: ["latin"],
   display: "block",
   variable: "--font-display",
+});
+
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+});
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  style: ["italic"],
+  weight: "400",
+  variable: "--font-instrument-serif",
 });
 
 export const viewport: Viewport = {
@@ -108,7 +128,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${dmSans.variable} ${jetBrainsMono.variable} ${gugi.variable} ${playfairDisplay.variable} ${dancingScript.variable} ${syne.variable}`}
+      className={`${dmSans.variable} ${jetBrainsMono.variable} ${gugi.variable} ${playfairDisplay.variable} ${dancingScript.variable} ${syne.variable} ${geist.variable} ${geistMono.variable} ${instrumentSerif.variable}`}
     >
       <body className="font-sans antialiased">{children}</body>
     </html>

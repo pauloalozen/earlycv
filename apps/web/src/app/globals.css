@@ -83,6 +83,11 @@ html {
   scrollbar-width: auto;
 }
 
+@keyframes lp-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.9); }
+}
+
 @keyframes page-fade-in {
   from {
     opacity: 0;
@@ -112,6 +117,10 @@ html {
   }
 }
 
+.route-transition-wrapper {
+  display: contents;
+}
+
 .route-transition-overlay {
   position: fixed;
   inset: 0;
@@ -120,10 +129,7 @@ html {
   align-items: center;
   justify-content: center;
   background: var(--background-alt);
-}
-
-.route-transition-overlay--exit {
-  animation: route-overlay-exit 180ms ease-out forwards;
+  animation: route-overlay-exit 200ms 200ms ease-out forwards;
 }
 
 .route-transition-spinner {
@@ -141,13 +147,13 @@ html {
 
 .route-transition-content--loading {
   opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.route-transition-content--revealing {
-  animation: route-content-reveal 340ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-.route-transition-content--done {
+.route-transition-content--ready {
   opacity: 1;
   transform: none;
 }
@@ -161,6 +167,7 @@ html {
 @keyframes route-overlay-exit {
   from {
     opacity: 1;
+    visibility: visible;
   }
 
   to {
@@ -183,22 +190,13 @@ html {
 
 @media (prefers-reduced-motion: reduce) {
   .route-transition-overlay {
-    display: none;
-  }
-
-  .route-transition-overlay--exit,
-  .route-transition-content--revealing {
     animation: none;
-  }
-
-  .route-transition-overlay--exit {
     opacity: 0;
     visibility: hidden;
   }
 
-  .route-transition-content--loading,
-  .route-transition-content--done,
-  .route-transition-content--revealing {
+  .route-transition-content {
+    animation: none;
     opacity: 1;
     transform: none;
   }
