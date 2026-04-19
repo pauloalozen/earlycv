@@ -4,12 +4,12 @@ import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { buildPlanCatalog } from "./plan-catalog";
 import { ScoreIndicator } from "./score-indicator";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
   title: "Planos | EarlyCV",
 };
-
-const PLANS = buildPlanCatalog(process.env);
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -24,6 +24,8 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
     getCurrentAppUserFromCookies(),
     searchParams,
   ]);
+
+  const PLANS = buildPlanCatalog(process.env);
 
   const isAuthenticated = Boolean(user);
   const error = params.error;
@@ -56,7 +58,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
       >
         <AppHeader
           userName={user?.name}
-          backgroundColor="rgba(249,248,244,0.85)"
+          
         />
 
         <div

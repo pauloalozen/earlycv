@@ -1,20 +1,18 @@
-import Link from "next/link";
-
 import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import {
-  buildAdminProfileDetailHref,
   buildAdminResumeDetailHref,
   buildAdminUserDetailHref,
-  buildAdminUserState,
   filterAdminUsers,
 } from "@/lib/admin-users-operations";
+
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 import { AdminShellHeader } from "../_components/admin-shell-header";
-import { AdminStatusBadge } from "../_components/admin-status-badge";
 import { AdminTokenState } from "../_components/admin-token-state";
+import { UsersList } from "./_components/users-list";
+import { deleteUserAction } from "./[id]/actions";
 
 type AdminUsersPageProps = {
   searchParams: Promise<{
@@ -60,6 +58,18 @@ export default async function AdminUsersPage({
     query,
     status,
   });
+
+  const userRows = filteredUsers.map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    planType: user.planType,
+    completenessStatus: user.completenessStatus,
+    detailHref: buildAdminUserDetailHref(user.id),
+    masterResumeHref: user.masterResume
+      ? buildAdminResumeDetailHref(user.masterResume.id)
+      : null,
+  }));
 
   return (
     <div className="px-6 py-10 md:px-10">
@@ -118,68 +128,7 @@ export default async function AdminUsersPage({
             title="Nenhum resultado"
           />
         ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {filteredUsers.map((user) => {
-              const profileState = buildAdminUserState(user);
-
-              return (
-                <Card className="space-y-4" key={user.id}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <p className="text-xl font-bold tracking-tight text-stone-950">
-                        {user.name}
-                      </p>
-                      <p className="text-sm text-stone-600">{user.email}</p>
-                      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
-                        {user.id}
-                      </p>
-                    </div>
-                    <AdminStatusBadge status={user.completenessStatus} />
-                  </div>
-
-                  <div className="grid gap-2 rounded-[18px] border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600 md:grid-cols-2">
-                    <p>Plano: {user.planType}</p>
-                    <p>Status da conta: {user.status}</p>
-                    <p>
-                      Perfil:{" "}
-                      {profileState.hasProfile
-                        ? "completo"
-                        : user.profile
-                          ? "incompleto"
-                          : "ausente"}
-                    </p>
-                    <p>CV adaptados: {user.adaptedResumeCount}</p>
-                    <p className="md:col-span-2">
-                      CV master: {user.masterResume?.title ?? "nao enviado"}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <Link
-                      className={buttonVariants()}
-                      href={buildAdminUserDetailHref(user.id)}
-                    >
-                      Abrir usuario
-                    </Link>
-                    <Link
-                      className={buttonVariants({ variant: "outline" })}
-                      href={buildAdminProfileDetailHref(user.id)}
-                    >
-                      Ver perfil
-                    </Link>
-                    {user.masterResume ? (
-                      <Link
-                        className={buttonVariants({ variant: "outline" })}
-                        href={buildAdminResumeDetailHref(user.masterResume.id)}
-                      >
-                        Ver CV master
-                      </Link>
-                    ) : null}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+          <UsersList deleteAction={deleteUserAction} users={userRows} />
         )}
       </div>
     </div>

@@ -167,6 +167,12 @@ export class AdminUsersService {
     };
   }
 
+  async deleteById(userId: string) {
+    await this.loadProductUserById(userId);
+    await this.database.user.delete({ where: { id: userId } });
+    return { ok: true };
+  }
+
   private async loadProductUserById(userId: string) {
     const user = await this.database.user.findFirst({
       where: {

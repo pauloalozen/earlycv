@@ -770,6 +770,7 @@ export class CvAdaptationService {
       status: adaptation.status,
       jobTitle: adaptation.jobTitle,
       companyName: adaptation.companyName,
+      jobAnalysisCount: await this.countByJob(adaptation.jobTitle, adaptation.companyName),
     };
   }
 
@@ -1034,5 +1035,16 @@ export class CvAdaptationService {
       highlightedSkills: guest.ats_keywords?.presentes ?? [],
       removedSections: guest.ats_keywords?.ausentes ?? [],
     };
+  }
+
+  async countByJob(jobTitle: string | null, companyName: string | null): Promise<number> {
+    if (!jobTitle && !companyName) return 0;
+    return this.database.cvAdaptation.count({
+      where: {
+        ...(jobTitle && { jobTitle: { equals: jobTitle, mode: "insensitive" } }),
+        ...(companyName && { companyName: { equals: companyName, mode: "insensitive" } }),
+        status: { not: "failed" },
+      },
+    });
   }
 }

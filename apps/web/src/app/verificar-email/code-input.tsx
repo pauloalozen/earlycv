@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 
+const MONO = "var(--font-geist-mono), monospace";
+
 const CODE_SLOT_KEYS = [
   "slot-0",
   "slot-1",
@@ -47,7 +49,7 @@ export function CodeInput({ name }: { name: string }) {
   return (
     <>
       <input type="hidden" name={name} value={digits.join("")} />
-      <div className="flex justify-center gap-3">
+      <div style={{ display: "flex", justifyContent: "center", gap: 10 }}>
         {digits.map((digit, i) => (
           <input
             key={CODE_SLOT_KEYS[i]}
@@ -61,7 +63,39 @@ export function CodeInput({ name }: { name: string }) {
             onChange={(e) => handleChange(i, e.target.value)}
             onKeyDown={(e) => handleKeyDown(i, e)}
             onPaste={handlePaste}
-            className="h-14 w-12 rounded-xl bg-[#F5F5F5] text-center text-xl font-bold text-[#111111] outline-none transition-colors focus:bg-[#EFEFEF] focus:ring-2 focus:ring-[#111111]"
+            style={{
+              width: 48,
+              height: 58,
+              borderRadius: 12,
+              border: digit
+                ? "1.5px solid rgba(10,10,10,0.25)"
+                : "1.5px solid rgba(10,10,10,0.1)",
+              background: digit ? "#fff" : "rgba(10,10,10,0.03)",
+              fontFamily: MONO,
+              fontSize: 22,
+              fontWeight: 600,
+              textAlign: "center",
+              color: "#0a0a0a",
+              outline: "none",
+              transition: "border-color 150ms, background 150ms, box-shadow 150ms",
+              boxShadow: digit ? "0 2px 8px rgba(10,10,10,0.06)" : "none",
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = "#0a0a0a";
+              e.target.style.boxShadow = "0 0 0 3px rgba(10,10,10,0.08)";
+              e.target.style.background = "#fff";
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = digits[i]
+                ? "rgba(10,10,10,0.25)"
+                : "rgba(10,10,10,0.1)";
+              e.target.style.boxShadow = digits[i]
+                ? "0 2px 8px rgba(10,10,10,0.06)"
+                : "none";
+              e.target.style.background = digits[i]
+                ? "#fff"
+                : "rgba(10,10,10,0.03)";
+            }}
           />
         ))}
       </div>

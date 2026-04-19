@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { CodeInput } from "./code-input";
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
+
 const TOTAL_SECONDS = 5 * 60;
 const RESEND_DELAY = 30;
 
@@ -39,47 +42,127 @@ export function VerifyForm({
   }, []);
 
   const resendReady = resendCountdown === 0;
-
   const expired = secondsLeft === 0;
 
   return (
     <>
-      {/* Último passo */}
+      {/* Kicker */}
       {isResultFlow && (
-        <p className="mb-6 text-center text-sm font-semibold text-[#444444]">
-          <span className="px-1.5 py-0.5">
-            Último passo para ver sua análise completa
-          </span>
-        </p>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            marginBottom: 20,
+          }}
+        >
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+              fontFamily: MONO,
+              fontSize: 10.5,
+              letterSpacing: 1.2,
+              fontWeight: 500,
+              color: "#555",
+              background: "rgba(10,10,10,0.04)",
+              border: "1px solid rgba(10,10,10,0.06)",
+              padding: "6px 12px",
+              borderRadius: 999,
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#c6ff3a",
+                boxShadow: "0 0 6px #c6ff3a",
+                display: "inline-block",
+                animation: "ve-pulse 1.4s infinite",
+              }}
+            />
+            ÚLTIMO PASSO PARA VER SUA ANÁLISE
+          </div>
+        </div>
       )}
 
-      <div className="mb-6 space-y-1 text-center">
-        <h1 className="text-xl font-bold tracking-tight text-[#111111]">
+      {/* Heading */}
+      <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <h1
+          style={{
+            fontFamily: GEIST,
+            fontSize: 24,
+            fontWeight: 500,
+            letterSpacing: -0.9,
+            color: "#0a0a0a",
+            margin: "0 0 8px",
+            lineHeight: 1.1,
+          }}
+        >
           {isResultFlow
             ? "Confirme seu email para liberar sua análise"
             : "Verifique seu email"}
         </h1>
-        <p className="text-sm text-[#888888]">
+        <p
+          style={{
+            fontFamily: GEIST,
+            fontSize: 14,
+            color: "#6a6560",
+            lineHeight: 1.55,
+            margin: 0,
+          }}
+        >
           Enviamos um código de 6 dígitos para{" "}
-          <span className="font-semibold text-[#444444]">{userEmail}</span>
+          <span style={{ color: "#0a0a0a", fontWeight: 500 }}>{userEmail}</span>
         </p>
       </div>
 
-      {/* Contador */}
-      <div className="mb-5 flex items-center justify-center gap-2">
+      {/* Timer */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 7,
+          marginBottom: 24,
+        }}
+      >
         {expired ? (
-          <span className="text-sm font-semibold text-red-500">
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 12,
+              fontWeight: 600,
+              color: "#ef4444",
+              background: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.15)",
+              borderRadius: 8,
+              padding: "5px 12px",
+            }}
+          >
             Código expirado
           </span>
         ) : (
-          <>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+              background: "rgba(198,255,58,0.12)",
+              border: "1px solid rgba(110,150,20,0.2)",
+              borderRadius: 8,
+              padding: "5px 12px",
+            }}
+          >
+            {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
             <svg
               aria-hidden="true"
-              width="14"
-              height="14"
+              width="13"
+              height="13"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#84cc16"
+              stroke="#405410"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -87,42 +170,99 @@ export function VerifyForm({
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
             </svg>
-            <span className="text-sm font-semibold text-lime-600">
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#405410",
+              }}
+            >
               Válido por{" "}
-              <span className="tabular-nums">{fmt(secondsLeft)}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                {fmt(secondsLeft)}
+              </span>
             </span>
-          </>
+          </div>
         )}
       </div>
 
+      {/* Error */}
       {error && (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div
+          style={{
+            marginBottom: 16,
+            background: "rgba(239,68,68,0.06)",
+            border: "1px solid rgba(239,68,68,0.2)",
+            borderRadius: 10,
+            padding: "12px 16px",
+            fontFamily: GEIST,
+            fontSize: 13.5,
+            color: "#991b1b",
+            lineHeight: 1.5,
+          }}
+        >
           {error}
         </div>
       )}
 
+      {/* Resent confirmation */}
       {resent && (
-        <div className="mb-4 rounded-xl border border-lime-200 bg-lime-50 px-4 py-3 text-sm text-lime-800">
+        <div
+          style={{
+            marginBottom: 16,
+            background: "rgba(198,255,58,0.1)",
+            border: "1px solid rgba(110,150,20,0.2)",
+            borderRadius: 10,
+            padding: "12px 16px",
+            fontFamily: GEIST,
+            fontSize: 13.5,
+            color: "#2a3a08",
+            lineHeight: 1.5,
+          }}
+        >
           Novo código enviado para seu email.
         </div>
       )}
 
-      <form action="/auth/verify-email" method="post" className="space-y-6">
+      {/* Code input + submit */}
+      <form
+        action="/auth/verify-email"
+        method="post"
+        style={{ display: "flex", flexDirection: "column", gap: 20 }}
+      >
         {next && <input type="hidden" name="next" value={next} />}
 
         <CodeInput name="code" />
 
         <button
           type="submit"
-          style={{ color: "#ffffff" }}
-          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[14px] bg-[#111111] py-[15px] text-sm font-semibold leading-none transition-colors hover:bg-[#222222]"
+          style={{
+            fontFamily: GEIST,
+            display: "flex",
+            width: "100%",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            borderRadius: 12,
+            background: "#0a0a0a",
+            color: "#fff",
+            border: "none",
+            padding: "15px 20px",
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: "pointer",
+            letterSpacing: -0.2,
+            transition: "background 150ms",
+          }}
         >
           {isResultFlow ? (
             <>
+              {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
               <svg
                 aria-hidden="true"
-                width="16"
-                height="16"
+                width="15"
+                height="15"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -137,10 +277,11 @@ export function VerifyForm({
             </>
           ) : (
             <>
+              {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
               <svg
                 aria-hidden="true"
-                width="16"
-                height="16"
+                width="15"
+                height="15"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -156,23 +297,66 @@ export function VerifyForm({
         </button>
       </form>
 
-      <div className="mt-6 flex items-center gap-3">
-        <div className="h-px flex-1 bg-[#EEEEEE]" />
-        <span className="text-xs text-[#BBBBBB]">ou</span>
-        <div className="h-px flex-1 bg-[#EEEEEE]" />
+      {/* Divider */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          margin: "24px 0 0",
+        }}
+      >
+        <div
+          style={{ flex: 1, height: 1, background: "rgba(10,10,10,0.07)" }}
+        />
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            color: "rgba(10,10,10,0.3)",
+            letterSpacing: 0.5,
+          }}
+        >
+          ou
+        </span>
+        <div
+          style={{ flex: 1, height: 1, background: "rgba(10,10,10,0.07)" }}
+        />
       </div>
 
-      <form action="/auth/resend-verification" method="post" className="mt-4">
+      {/* Resend */}
+      <form
+        action="/auth/resend-verification"
+        method="post"
+        style={{ marginTop: 14 }}
+      >
         <button
           type="submit"
           disabled={!resendReady}
-          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#E8E8E8] bg-white py-3 text-sm font-medium transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-40"
-          style={{ color: resendReady ? "#444444" : "#AAAAAA" }}
+          style={{
+            fontFamily: GEIST,
+            display: "flex",
+            width: "100%",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            borderRadius: 12,
+            background: "transparent",
+            color: resendReady ? "#45443e" : "rgba(10,10,10,0.3)",
+            border: "1px solid rgba(10,10,10,0.1)",
+            padding: "13px 20px",
+            fontSize: 13.5,
+            fontWeight: 500,
+            cursor: resendReady ? "pointer" : "not-allowed",
+            transition: "all 150ms",
+            opacity: resendReady ? 1 : 0.55,
+          }}
         >
+          {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
           <svg
             aria-hidden="true"
-            width="15"
-            height="15"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -188,6 +372,13 @@ export function VerifyForm({
             : `Não recebeu? Reenviar em ${resendCountdown}s`}
         </button>
       </form>
+
+      <style>{`
+        @keyframes ve-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
     </>
   );
 }

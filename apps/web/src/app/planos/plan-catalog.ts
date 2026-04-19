@@ -34,9 +34,9 @@ export function buildPlanCatalog(env: NodeJS.ProcessEnv): PlanCatalogItem[] {
   const proPrice = parseCents(env.PRICE_PLAN_PRO, 2990);
   const turboPrice = parseCents(env.PRICE_PLAN_TURBO, 5990);
 
-  const qntStarterDownloads = parseQuantity(env.QNT_CV_PLAN_STARTER, 1);
-  const qntProDownloads = parseQuantity(env.QNT_CV_PLAN_PRO, 3);
-  const qntTurboDownloads = parseQuantity(env.QNT_CV_PLAN_TURBO, 10);
+  const qntStarterDownloads = parseQuantity(env.QNT_CV_PLAN_STARTER, 3);
+  const qntProDownloads = parseQuantity(env.QNT_CV_PLAN_PRO, 9);
+  const qntTurboDownloads = parseQuantity(env.QNT_CV_PLAN_TURBO, 20);
 
   return [
     {

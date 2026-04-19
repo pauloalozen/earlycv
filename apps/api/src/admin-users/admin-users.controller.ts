@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
   Param,
@@ -118,6 +119,11 @@ export class AdminUsersController {
     dto: SetAdminUserAnalysisCreditsDto,
   ) {
     return this.adminUsersService.setAnalysisCredits(id, dto);
+  }
+
+  @Delete(":id")
+  deleteById(@Param("id") id: string) {
+    return this.adminUsersService.deleteById(id);
   }
 
   @Post(":id/assisted-session")

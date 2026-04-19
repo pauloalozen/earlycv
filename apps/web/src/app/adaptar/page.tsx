@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
 import {
   analyzeAuthenticatedCv,
@@ -213,103 +214,7 @@ export default function AdaptarPage() {
           }}
         />
 
-        {/* Nav */}
-        <nav
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "20px 32px",
-            position: "relative",
-            zIndex: 2,
-            borderBottom: "1px solid rgba(0,0,0,0.04)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <a
-              href="/"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                textDecoration: "none",
-                color: "inherit",
-              }}
-            >
-              <div
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 5,
-                  background: "#0a0a0a",
-                  boxShadow: "inset -2px -2px 0 rgba(198,255,58,0.85)",
-                  flexShrink: 0,
-                }}
-              />
-              <span
-                style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.4 }}
-              >
-                earlyCV
-              </span>
-              <span
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  color: "#8a8a85",
-                  border: "1px solid #d8d6ce",
-                  borderRadius: 3,
-                  padding: "1px 5px",
-                  fontWeight: 500,
-                }}
-              >
-                v1.2
-              </span>
-            </a>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            <div
-              style={{
-                fontFamily: MONO,
-                fontSize: 11,
-                letterSpacing: 0.4,
-                display: "flex",
-                gap: 7,
-                alignItems: "center",
-              }}
-            >
-              <a href="/" style={{ color: "#8a8a85", textDecoration: "none" }}>
-                Início
-              </a>
-              <span style={{ color: "#c0beb4" }}>/</span>
-              <span style={{ color: "#0a0a0a" }}>Adaptar</span>
-            </div>
-            {userName === null ? (
-              <a
-                href="/entrar"
-                style={{
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: "#0a0a0a",
-                  textDecoration: "none",
-                }}
-              >
-                Entrar
-              </a>
-            ) : userName ? (
-              <a
-                href="/dashboard"
-                style={{
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: "#0a0a0a",
-                  textDecoration: "none",
-                }}
-              >
-                Painel →
-              </a>
-            ) : null}
-          </div>
-        </nav>
+        <AppHeader userName={userName} />
 
         {/* Main */}
         <div

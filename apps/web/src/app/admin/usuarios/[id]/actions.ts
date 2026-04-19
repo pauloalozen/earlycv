@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import {
+  deleteAdminUser,
   setAdminUserAnalysisCredits,
   setAdminUserCredits,
 } from "@/lib/admin-users-api";
@@ -47,4 +49,10 @@ export async function setUserAnalysisCreditsAction(
   revalidatePath("/admin/usuarios");
 
   return { message: "Creditos de analise atualizados com sucesso." };
+}
+
+export async function deleteUserAction(userId: string) {
+  await deleteAdminUser(userId);
+  revalidatePath("/admin/usuarios");
+  redirect("/admin/usuarios");
 }

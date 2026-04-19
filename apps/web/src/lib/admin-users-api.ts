@@ -223,6 +223,12 @@ export async function setAdminUserAnalysisCredits(
   );
 }
 
+export async function deleteAdminUser(userId: string, token?: string) {
+  return apiRequest<{ ok: true }>(`/admin/users/${userId}`, token, {
+    method: "DELETE",
+  });
+}
+
 export async function startAssistedSession(
   userId: string,
   payload: StartAssistedSessionPayload,

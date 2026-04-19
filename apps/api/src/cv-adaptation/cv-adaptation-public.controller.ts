@@ -2,8 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   Inject,
   Post,
+  Query,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
@@ -45,5 +47,17 @@ export class CvAdaptationPublicController {
       throw new BadRequestException("jobDescriptionText is required");
     }
     return this.cvAdaptationService.analyzeGuest(jobDescriptionText, file);
+  }
+
+  @Get("job-count")
+  async jobCount(
+    @Query("jobTitle") jobTitle?: string,
+    @Query("companyName") companyName?: string,
+  ) {
+    const count = await this.cvAdaptationService.countByJob(
+      jobTitle ?? null,
+      companyName ?? null,
+    );
+    return { count };
   }
 }

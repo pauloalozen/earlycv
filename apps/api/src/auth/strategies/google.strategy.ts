@@ -16,7 +16,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
       clientID: env.GOOGLE_CLIENT_ID,
       clientSecret: env.GOOGLE_CLIENT_SECRET,
       scope: ["email", "profile"],
-      state: true,
+      state: false,
     });
   }
 

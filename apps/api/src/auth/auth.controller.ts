@@ -5,6 +5,7 @@ import {
   HttpCode,
   Inject,
   Post,
+  Redirect,
   Req,
   UseGuards,
   ValidationPipe,
@@ -157,8 +158,11 @@ export class AuthController {
 
   @Get("google/callback")
   @UseGuards(AuthGuard("google"))
-  googleCallback(@Req() request: SocialAuthRequest) {
-    return this.authService.finishSocialLogin(this.getSocialProfile(request));
+  @Redirect()
+  async googleCallback(@Req() request: SocialAuthRequest) {
+    return this.buildSocialRedirect(
+      await this.authService.finishSocialLogin(this.getSocialProfile(request)),
+    );
   }
 
   @Get("linkedin/start")
@@ -167,8 +171,11 @@ export class AuthController {
 
   @Get("linkedin/callback")
   @UseGuards(AuthGuard("linkedin"))
-  linkedinCallback(@Req() request: SocialAuthRequest) {
-    return this.authService.finishSocialLogin(this.getSocialProfile(request));
+  @Redirect()
+  async linkedinCallback(@Req() request: SocialAuthRequest) {
+    return this.buildSocialRedirect(
+      await this.authService.finishSocialLogin(this.getSocialProfile(request)),
+    );
   }
 
   @Get("me")
@@ -176,6 +183,19 @@ export class AuthController {
   @HttpCode(200)
   me(@AuthenticatedUser() user: AuthUser) {
     return user;
+  }
+
+  private buildSocialRedirect(tokens: {
+    accessToken: string;
+    refreshToken: string;
+  }) {
+    const base =
+      process.env.FRONTEND_URL ?? "http://localhost:3000";
+    const params = new URLSearchParams({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    });
+    return { url: `${base}/auth/social-callback?${params.toString()}` };
   }
 
   private getSocialProfile(request: SocialAuthRequest): SocialProfileInput {

@@ -127,19 +127,26 @@ export function HistoryActionLinks({ actions, hasCredits }: Props) {
               setRedeeming(false);
             }
           }}
-          style={{ color: "#ffffff", ...sharedChipTextStyle }}
+          style={{
+            color: "#ffffff",
+            textAlign: "center",
+            ...sharedChipTextStyle,
+          }}
           className={primaryChipClassName}
           disabled={redeeming}
         >
-          {redeeming ? "Liberando..." : "Liberar CV com 1 crédito"}
+          {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
         </button>
       ) : (
         <a
           href="/planos"
-          style={{ color: "#ffffff", ...sharedChipTextStyle }}
-          className="rounded-[10px] bg-[#111111] px-3 py-1.5 text-xs font-semibold"
+          style={{
+            color: "#ffffff",
+            ...sharedChipTextStyle,
+          }}
+          className="rounded-[10px] bg-[#111111] px-3 py-2.5 text-xs font-semibold"
         >
-          para liberar · 1 Crédito
+          Liberar CV · 1 Crédito
         </a>
       )}
       <DownloadProgressOverlay

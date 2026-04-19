@@ -22,7 +22,6 @@ import {
 import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
-import { GuestAnalysisClaimer } from "./guest-analysis-claimer";
 import { HistoryActionLinks } from "./history-action-links";
 
 export const metadata: Metadata = {
@@ -182,7 +181,7 @@ export default async function DashboardPage({
       >
         <AppHeader
           userName={user.name}
-          backgroundColor="rgba(249,248,244,0.85)"
+          
         />
 
         <div
@@ -194,8 +193,6 @@ export default async function DashboardPage({
             zIndex: 2,
           }}
         >
-          <GuestAnalysisClaimer />
-
           {/* Plan activated banner */}
           {showPlanActivated && (
             <div

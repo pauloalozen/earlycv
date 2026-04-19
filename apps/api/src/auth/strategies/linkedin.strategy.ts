@@ -17,8 +17,8 @@ export class LinkedinStrategy extends PassportStrategy(Strategy, "linkedin") {
       clientID: env.LINKEDIN_CLIENT_ID,
       clientSecret: env.LINKEDIN_CLIENT_SECRET,
       scope: ["r_liteprofile", "r_emailaddress"],
-      state: true,
-    } as StrategyOption & { state: true });
+      state: false,
+    } as StrategyOption & { state: boolean });
   }
 
   async validate(

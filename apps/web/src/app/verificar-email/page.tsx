@@ -31,18 +31,63 @@ export default async function VerifyEmailPage({
 
   return (
     <PageShell>
-      <main className="flex min-h-screen flex-col items-center justify-center bg-[#F2F2F2] px-4 text-[#111111]">
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: 0.45,
+          mixBlendMode: "multiply",
+          zIndex: 0,
+          backgroundImage: `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`,
+        }}
+        aria-hidden
+      />
+      <main
+        style={{
+          fontFamily: "var(--font-geist), -apple-system, system-ui, sans-serif",
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+          minHeight: "100dvh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "40px 20px",
+          color: "#0a0a0a",
+          position: "relative",
+        }}
+      >
         {/* Logo */}
         <a
           href="/"
-          style={{ color: "#111111" }}
-          className="mb-8 font-logo text-[2.1rem] tracking-tight"
+          style={{
+            fontFamily: "var(--font-instrument-serif), serif",
+            fontSize: "2rem",
+            letterSpacing: "-0.05em",
+            color: "#0a0a0a",
+            textDecoration: "none",
+            marginBottom: 40,
+            display: "block",
+          }}
         >
           earlyCV
         </a>
 
         {/* Card */}
-        <div className="w-full max-w-lg rounded-2xl bg-white px-10 py-9 shadow-sm">
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 460,
+            background: "#fafaf6",
+            border: "1px solid rgba(10,10,10,0.08)",
+            borderRadius: 18,
+            padding: "36px 32px",
+            boxShadow: "0 8px 40px -12px rgba(10,10,10,0.12)",
+            position: "relative",
+            zIndex: 1,
+          }}
+        >
           <VerifyForm
             next={next}
             isResultFlow={isResultFlow}

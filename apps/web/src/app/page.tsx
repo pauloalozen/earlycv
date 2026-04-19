@@ -1,9 +1,12 @@
+import React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 import { AtsWidget } from "./_ats-widget";
 import { buildPlanCatalog } from "./planos/plan-catalog";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Seu CV ajustado para cada vaga",
@@ -80,25 +83,16 @@ export default async function Home() {
           left: 0,
           right: 0,
           zIndex: 10,
-          borderBottom: "1px solid rgba(0,0,0,0.06)",
           background: "rgba(243,242,237,0.95)",
         }}
       >
         {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 18,
-              height: 18,
-              borderRadius: 5,
-              background: "#0a0a0a",
-              boxShadow: "inset -2px -2px 0 rgba(198,255,58,0.85)",
-              flexShrink: 0,
-            }}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <img
+            src="/logo.svg"
+            alt="earlyCV"
+            style={{ height: 26, width: "auto", display: "block" }}
           />
-          <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.4 }}>
-            earlyCV
-          </span>
           <span
             style={{
               fontFamily: MONO,
@@ -161,7 +155,7 @@ export default async function Home() {
           ) : (
             <>
               <Link
-                href="/entrar"
+                href="/entrar?tab=entrar"
                 style={{
                   fontSize: 13,
                   fontWeight: 500,
@@ -327,7 +321,7 @@ export default async function Home() {
                 <span className="lp-cta-arrow">→</span>
               </Link>
               <Link
-                href="/adaptar"
+                href="/demo-resultado"
                 style={{
                   background: "transparent",
                   color: "#0a0a0a",
@@ -358,10 +352,9 @@ export default async function Home() {
                 { num: "32%", label: "aumento médio\nno ATS" },
                 { num: "20+", label: "melhorias\nem média por CV" },
               ].map((item, i) => (
-                <>
+                <React.Fragment key={item.num}>
                   {i > 0 && (
                     <div
-                      key={`div-${item.num}`}
                       style={{
                         width: 1,
                         height: 36,
@@ -370,10 +363,7 @@ export default async function Home() {
                       }}
                     />
                   )}
-                  <div
-                    key={item.num}
-                    style={{ display: "flex", flexDirection: "column", gap: 2 }}
-                  >
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     <span
                       style={{
                         fontSize: 26,
@@ -398,7 +388,7 @@ export default async function Home() {
                       {item.label}
                     </span>
                   </div>
-                </>
+                </React.Fragment>
               ))}
             </div>
           </div>
@@ -585,16 +575,14 @@ export default async function Home() {
                   >
                     {item.step}
                   </span>
-                  {i < 2 && (
-                    <div
-                      style={{
-                        flex: 1,
-                        height: 1,
-                        background:
-                          "linear-gradient(90deg, rgba(10,10,10,0.12) 0%, transparent 100%)",
-                      }}
-                    />
-                  )}
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background:
+                        "linear-gradient(90deg, rgba(10,10,10,0.12) 0%, transparent 100%)",
+                    }}
+                  />
                 </div>
                 <h3
                   style={{
@@ -708,7 +696,8 @@ export default async function Home() {
                 maxWidth: 460,
               }}
             >
-              Análise grátis sempre. Pague só quando quiser baixar o CV ajustado.
+              Análise grátis sempre. Pague só quando quiser baixar o CV
+              ajustado.
             </p>
           </div>
 
@@ -717,7 +706,7 @@ export default async function Home() {
               display: "grid",
               gridTemplateColumns: "repeat(4, 1fr)",
               gap: 16,
-              alignItems: "start",
+              alignItems: "stretch",
             }}
             className="pricing-grid"
           >
@@ -735,6 +724,8 @@ export default async function Home() {
                   padding: "28px 24px",
                   position: "relative",
                   backdropFilter: "blur(6px)",
+                  display: "flex",
+                  flexDirection: "column",
                 }}
               >
                 {plan.badge && (
@@ -764,7 +755,9 @@ export default async function Home() {
                     style={{
                       fontSize: 13,
                       fontWeight: 600,
-                      color: plan.featured ? "rgba(255,255,255,0.6)" : "#6a6a66",
+                      color: plan.featured
+                        ? "rgba(255,255,255,0.6)"
+                        : "#6a6a66",
                       marginBottom: 8,
                       letterSpacing: 0.3,
                     }}
@@ -822,6 +815,7 @@ export default async function Home() {
                     display: "flex",
                     flexDirection: "column",
                     gap: 7,
+                    flex: 1,
                   }}
                 >
                   {plan.features.map((f) => (
@@ -854,7 +848,9 @@ export default async function Home() {
                 </ul>
 
                 <Link
-                  href={plan.checkoutPlanId ? "/adaptar" : "/entrar?tab=cadastrar"}
+                  href={
+                    plan.checkoutPlanId ? "/adaptar" : "/entrar?tab=cadastrar"
+                  }
                   style={{
                     display: "block",
                     textAlign: "center",
@@ -874,7 +870,7 @@ export default async function Home() {
             ))}
           </div>
 
-          <div style={{ textAlign: "center", marginTop: 28 }}>
+          {/* <div style={{ textAlign: "center", marginTop: 28 }}>
             <Link
               href="/planos"
               style={{
@@ -887,7 +883,7 @@ export default async function Home() {
             >
               Ver comparativo completo de planos →
             </Link>
-          </div>
+          </div> */}
         </div>
       </section>
 

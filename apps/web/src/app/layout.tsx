@@ -78,6 +78,19 @@ export const metadata: Metadata = {
     default: siteConfig.defaultTitle,
     template: siteConfig.titleTemplate,
   },
+  icons: {
+    icon: [
+      { url: "/favicon.svg",       type: "image/svg+xml", media: "(prefers-color-scheme: light)" },
+      { url: "/favicon-white.svg", type: "image/svg+xml", media: "(prefers-color-scheme: dark)" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180" },
+    other: [
+      { rel: "manifest-icon", url: "/favicon-192x192.png", sizes: "192x192" },
+      { rel: "manifest-icon", url: "/favicon-512x512.png", sizes: "512x512" },
+    ],
+  },
   description: siteConfig.description,
   applicationName: siteConfig.name,
   alternates: {
