@@ -189,8 +189,7 @@ export class AuthController {
     accessToken: string;
     refreshToken: string;
   }) {
-    const base =
-      process.env.FRONTEND_URL ?? "http://localhost:3000";
+    const base = process.env.FRONTEND_URL ?? "http://localhost:3000";
     const params = new URLSearchParams({
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,

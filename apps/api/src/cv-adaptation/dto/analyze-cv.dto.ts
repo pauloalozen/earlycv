@@ -1,5 +1,5 @@
 import { Transform } from "class-transformer";
-import { IsOptional, IsString, MaxLength } from "class-validator";
+import { IsBoolean, IsOptional, IsString, MaxLength } from "class-validator";
 
 export class AnalyzeCvDto {
   @IsOptional()
@@ -7,7 +7,12 @@ export class AnalyzeCvDto {
   masterResumeId?: string;
 
   @IsString()
-  @MaxLength(8000)
+  @MaxLength(12000)
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   jobDescriptionText!: string;
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
+  @IsBoolean()
+  saveAsMaster?: boolean;
 }

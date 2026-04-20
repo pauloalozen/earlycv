@@ -189,6 +189,7 @@ export type CvAnalysisData = {
     titulo: string;
     subtexto: string;
   };
+  adaptation_notes?: string;
 };
 
 export type GuestAnalysisResult = {

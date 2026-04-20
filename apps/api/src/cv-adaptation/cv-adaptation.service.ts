@@ -56,16 +56,25 @@ export class CvAdaptationService {
       }
 
       // Create master Resume record
-      const masterResume = await this.database.resume.create({
-        data: {
-          userId,
-          title: file.originalname.replace(".pdf", ""),
-          kind: "master",
-          status: "uploaded",
-          sourceFileName: file.originalname,
-          sourceFileType: "application/pdf",
-          rawText: masterCvText,
-        },
+      const masterResume = await this.database.$transaction(async (tx) => {
+        if (dto.saveAsMaster) {
+          await tx.resume.updateMany({
+            where: { userId, isMaster: true },
+            data: { isMaster: false },
+          });
+        }
+        return tx.resume.create({
+          data: {
+            userId,
+            title: file.originalname.replace(".pdf", ""),
+            kind: "master",
+            status: "uploaded",
+            sourceFileName: file.originalname,
+            sourceFileType: "application/pdf",
+            rawText: masterCvText,
+            isMaster: dto.saveAsMaster === true,
+          },
+        });
       });
 
       masterResumeId = masterResume.id;
@@ -159,21 +168,33 @@ export class CvAdaptationService {
     const defaultTemplate = await this.getDefaultTemplate();
 
     const adaptation = await this.database.$transaction(async (tx) => {
-      const masterResume = await tx.resume.create({
-        data: {
-          userId,
-          title: dto.jobTitle ? `CV para ${dto.jobTitle}` : "CV Importado",
-          kind: "master",
-          status: "uploaded",
-          sourceFileType: "application/pdf",
-          rawText: dto.masterCvText,
-        },
+      const existingMaster = await tx.resume.findFirst({
+        where: { userId, isMaster: true },
+        select: { id: true },
       });
+
+      let masterResumeId: string;
+      if (existingMaster) {
+        masterResumeId = existingMaster.id;
+      } else {
+        const created = await tx.resume.create({
+          data: {
+            userId,
+            title: dto.jobTitle ? `CV para ${dto.jobTitle}` : "CV Importado",
+            kind: "master",
+            status: "uploaded",
+            sourceFileType: "application/pdf",
+            rawText: dto.masterCvText,
+            isMaster: true,
+          },
+        });
+        masterResumeId = created.id;
+      }
 
       const created = await tx.cvAdaptation.create({
         data: {
           userId,
-          masterResumeId: masterResume.id,
+          masterResumeId,
           jobDescriptionText: dto.jobDescriptionText,
           templateId: defaultTemplate?.id ?? null,
           jobTitle: dto.jobTitle ?? null,
@@ -197,7 +218,7 @@ export class CvAdaptationService {
           kind: "adapted",
           isMaster: false,
           status: "reviewed",
-          basedOnResumeId: masterResume.id,
+          basedOnResumeId: masterResumeId,
           sourceFileName: "cv-adaptado.pdf",
           sourceFileType: "application/pdf",
           rawText: dto.previewText ?? "CV adaptado",
@@ -278,6 +299,27 @@ export class CvAdaptationService {
           `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
         );
       }
+
+      if (dto.saveAsMaster) {
+        await this.database.$transaction(async (tx) => {
+          await tx.resume.updateMany({
+            where: { userId, isMaster: true },
+            data: { isMaster: false },
+          });
+          await tx.resume.create({
+            data: {
+              userId,
+              title: file.originalname.replace(/\.[^.]+$/, ""),
+              kind: "master",
+              status: "uploaded",
+              sourceFileName: file.originalname,
+              sourceFileType: file.mimetype,
+              rawText: masterCvText,
+              isMaster: true,
+            },
+          });
+        });
+      }
     } else if (dto.masterResumeId) {
       const resume = await this.database.resume.findFirst({
         where: { id: dto.masterResumeId, userId },
@@ -308,21 +350,33 @@ export class CvAdaptationService {
   async saveGuestPreview(userId: string, dto: SaveGuestPreviewDto) {
     const defaultTemplate = await this.getDefaultTemplate();
 
-    const masterResume = await this.database.resume.create({
-      data: {
-        userId,
-        title: dto.jobTitle ? `CV para ${dto.jobTitle}` : "CV Importado",
-        kind: "master",
-        status: "uploaded",
-        sourceFileType: "application/pdf",
-        rawText: dto.masterCvText,
-      },
+    const existingMaster = await this.database.resume.findFirst({
+      where: { userId, isMaster: true },
+      select: { id: true },
     });
+
+    let masterResumeId: string;
+    if (existingMaster) {
+      masterResumeId = existingMaster.id;
+    } else {
+      const created = await this.database.resume.create({
+        data: {
+          userId,
+          title: dto.jobTitle ? `CV para ${dto.jobTitle}` : "CV Importado",
+          kind: "master",
+          status: "uploaded",
+          sourceFileType: "application/pdf",
+          rawText: dto.masterCvText,
+          isMaster: true,
+        },
+      });
+      masterResumeId = created.id;
+    }
 
     const adaptation = await this.database.cvAdaptation.create({
       data: {
         userId,
-        masterResumeId: masterResume.id,
+        masterResumeId,
         jobDescriptionText: dto.jobDescriptionText,
         templateId: defaultTemplate?.id ?? null,
         jobTitle: dto.jobTitle ?? null,
@@ -764,13 +818,23 @@ export class CvAdaptationService {
       throw new BadRequestException("Adaptation analysis is not ready yet.");
     }
 
+    const aiAudit = adaptation.aiAuditJson as Record<string, unknown> | null;
+    const adaptationNotes =
+      typeof aiAudit?.adaptationNotes === "string"
+        ? aiAudit.adaptationNotes
+        : null;
+
     return {
       adaptedContentJson: adaptation.adaptedContentJson,
       paymentStatus: adaptation.paymentStatus,
       status: adaptation.status,
       jobTitle: adaptation.jobTitle,
       companyName: adaptation.companyName,
-      jobAnalysisCount: await this.countByJob(adaptation.jobTitle, adaptation.companyName),
+      adaptationNotes,
+      jobAnalysisCount: await this.countByJob(
+        adaptation.jobTitle,
+        adaptation.companyName,
+      ),
     };
   }
 
@@ -815,6 +879,17 @@ export class CvAdaptationService {
         status: "delivered",
       },
     });
+
+    // Pre-generate aiAuditJson (structured CV output) in background so
+    // adaptationNotes is available immediately when the user views results
+    if (!adaptation.aiAuditJson) {
+      this.ensureLegacyStructuredOutput(adaptation).catch((err) => {
+        console.error(
+          `Background CV generation failed for ${adaptationId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      });
+    }
   }
 
   private async ensureAdaptedResumeRecord(adaptation: {
@@ -956,6 +1031,30 @@ export class CvAdaptationService {
     });
   }
 
+  private filterEmptySections(output: CvAdaptationOutput): CvAdaptationOutput {
+    const itemHasContent = (
+      item: { heading?: string; subheading?: string; dateRange?: string; bullets?: string[] },
+      sectionTitle: string,
+    ) =>
+      (Array.isArray(item.bullets) &&
+        item.bullets.some((b) => typeof b === "string" && b.trim().length > 0)) ||
+      (typeof item.subheading === "string" && item.subheading.trim().length > 0) ||
+      (typeof item.dateRange === "string" && item.dateRange.trim().length > 0) ||
+      (typeof item.heading === "string" &&
+        item.heading.trim().length > 0 &&
+        item.heading.trim().toLowerCase() !== sectionTitle.trim().toLowerCase());
+
+    return {
+      ...output,
+      sections: (output.sections ?? []).filter(
+        (s) =>
+          Array.isArray(s.items) &&
+          s.items.length > 0 &&
+          s.items.some((item) => itemHasContent(item, s.title)),
+      ),
+    };
+  }
+
   private toCvAdaptationOutput(
     adaptedContentJson: unknown,
     aiAuditJson?: unknown,
@@ -966,7 +1065,7 @@ export class CvAdaptationService {
       "summary" in aiAuditJson &&
       "sections" in aiAuditJson
     ) {
-      return aiAuditJson as CvAdaptationOutput;
+      return this.filterEmptySections(aiAuditJson as CvAdaptationOutput);
     }
 
     if (
@@ -975,7 +1074,7 @@ export class CvAdaptationService {
       "summary" in adaptedContentJson &&
       "sections" in adaptedContentJson
     ) {
-      return adaptedContentJson as CvAdaptationOutput;
+      return this.filterEmptySections(adaptedContentJson as CvAdaptationOutput);
     }
 
     const guest = adaptedContentJson as {
@@ -1037,12 +1136,19 @@ export class CvAdaptationService {
     };
   }
 
-  async countByJob(jobTitle: string | null, companyName: string | null): Promise<number> {
+  async countByJob(
+    jobTitle: string | null,
+    companyName: string | null,
+  ): Promise<number> {
     if (!jobTitle && !companyName) return 0;
     return this.database.cvAdaptation.count({
       where: {
-        ...(jobTitle && { jobTitle: { equals: jobTitle, mode: "insensitive" } }),
-        ...(companyName && { companyName: { equals: companyName, mode: "insensitive" } }),
+        ...(jobTitle && {
+          jobTitle: { equals: jobTitle, mode: "insensitive" },
+        }),
+        ...(companyName && {
+          companyName: { equals: companyName, mode: "insensitive" },
+        }),
         status: { not: "failed" },
       },
     });

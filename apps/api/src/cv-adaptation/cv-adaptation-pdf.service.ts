@@ -88,6 +88,7 @@ export class CvAdaptationPdfService {
     const summary = this.escapeHtml(output.summary ?? "");
 
     const sectionsHtml = contentSections
+      .filter((section) => this.sectionHasContent(section))
       .map((section) => {
         const itemsHtml = (section.items ?? [])
           .map((item) => {
@@ -202,8 +203,23 @@ export class CvAdaptationPdfService {
     return fallbackPath;
   }
 
+  private sectionHasContent(section: CvSection): boolean {
+    const items = section.items ?? [];
+    if (items.length === 0) return false;
+    return items.some(
+      (item) =>
+        (Array.isArray(item.bullets) && item.bullets.some((b) => b?.trim())) ||
+        item.subheading?.trim() ||
+        item.dateRange?.trim() ||
+        (item.heading?.trim() &&
+          item.heading.trim().toLowerCase() !==
+            section.title.trim().toLowerCase()),
+    );
+  }
+
   private buildSectionsHtml(sections: CvSection[]): string {
     return sections
+      .filter((section) => this.sectionHasContent(section))
       .map((section) => {
         const itemsHtml = (section.items ?? [])
           .map((item) => {

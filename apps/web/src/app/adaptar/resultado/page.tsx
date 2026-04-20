@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import React, { type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AppHeader } from "@/components/app-header";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
@@ -619,6 +619,7 @@ export default function ResultadoPage() {
               | "failed"
               | "refunded";
             jobAnalysisCount?: number;
+            adaptationNotes?: string | null;
           }>;
         })
         .then((payload) => {
@@ -914,6 +915,8 @@ export default function ResultadoPage() {
   const isDownloadReady =
     reviewAdaptationId !== null && reviewPaymentStatus === "completed";
 
+  const adaptationNotes = rawData?.adaptation_notes ?? null;
+
   // Gauge constants
   const R_GAUGE = 78;
   const C_GAUGE = 2 * Math.PI * R_GAUGE;
@@ -1061,10 +1064,9 @@ export default function ResultadoPage() {
                     label: "ajustes\nidentificados",
                   },
                 ].map((item, i) => (
-                  <>
+                  <React.Fragment key={`${item.num}-${item.label}`}>
                     {i > 0 && (
                       <div
-                        key={`div-${item.num}-${item.label}`}
                         style={{
                           width: 1,
                           height: 38,
@@ -1074,7 +1076,6 @@ export default function ResultadoPage() {
                       />
                     )}
                     <div
-                      key={`${item.num}-${item.label}`}
                       style={{
                         display: "flex",
                         flexDirection: "column",
@@ -1105,7 +1106,7 @@ export default function ResultadoPage() {
                         {item.label}
                       </span>
                     </div>
-                  </>
+                  </React.Fragment>
                 ))}
               </div>
             </div>
@@ -3039,6 +3040,21 @@ export default function ResultadoPage() {
                         </em>{" "}
                         CV precisa ajustar.
                       </>
+                    ) : isDownloadReady ? (
+                      <>
+                        Seu CV otimizado está
+                        <br />
+                        <em
+                          style={{
+                            fontFamily: SERIF_ITALIC,
+                            fontStyle: "italic",
+                            fontWeight: 400,
+                          }}
+                        >
+                          liberado.
+                        </em>{" "}
+                        Candidate-se o mais rápido possível.
+                      </>
                     ) : (
                       <>
                         Seu CV otimizado já está
@@ -3055,26 +3071,62 @@ export default function ResultadoPage() {
                       </>
                     )}
                   </h2>
-                  <p
-                    style={{
-                      fontSize: 13.5,
-                      color: "rgba(255,255,255,0.55)",
-                      lineHeight: 1.6,
-                      margin: "0 0 20px",
-                    }}
-                  >
-                    Enquanto você decide, outros candidatos já estão enviando
-                    CVs otimizados para esta mesma vaga. Candidatos com score
-                    acima de 80 têm{" "}
-                    <span
+                  {isDownloadReady && adaptationNotes ? (
+                    <div
                       style={{
-                        color: "rgba(255,255,255,0.9)",
-                        fontWeight: 500,
+                        borderLeft: "3px solid #c6ff3a",
+                        paddingLeft: 14,
+                        marginBottom: 20,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
                       }}
                     >
-                      3× mais chances de ser chamados para entrevista.
-                    </span>
-                  </p>
+                      <p
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 9.5,
+                          letterSpacing: 1,
+                          color: "#c6ff3a",
+                          margin: 0,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        O que foi feito no seu CV
+                      </p>
+                      <p
+                        style={{
+                          fontSize: 13,
+                          color: "rgba(255,255,255,0.7)",
+                          lineHeight: 1.65,
+                          margin: 0,
+                        }}
+                      >
+                        {adaptationNotes}
+                      </p>
+                    </div>
+                  ) : (
+                    <p
+                      style={{
+                        fontSize: 13.5,
+                        color: "rgba(255,255,255,0.55)",
+                        lineHeight: 1.6,
+                        margin: "0 0 20px",
+                      }}
+                    >
+                      Enquanto você decide, outros candidatos já estão enviando
+                      CVs otimizados para esta mesma vaga. Candidatos com score
+                      acima de 80 têm{" "}
+                      <span
+                        style={{
+                          color: "rgba(255,255,255,0.9)",
+                          fontWeight: 500,
+                        }}
+                      >
+                        3× mais chances de ser chamados para entrevista.
+                      </span>
+                    </p>
+                  )}
 
                   {/* Score bar */}
                   <div

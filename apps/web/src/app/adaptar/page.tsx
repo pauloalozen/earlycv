@@ -9,7 +9,7 @@ import {
   analyzeGuestCv,
 } from "@/lib/cv-adaptation-api";
 import type { ResumeDto } from "@/lib/resumes-api";
-import { getMyMasterResume, uploadMasterResume } from "@/lib/resumes-api";
+import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAuthStatus } from "@/lib/session-actions";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -122,18 +122,12 @@ export default function AdaptarPage() {
         analyzeResult = result;
       } else if (isAuthenticated && file) {
         formData.append("file", file);
+        if (saveMasterCv) formData.append("saveAsMaster", "true");
         const [result] = await Promise.all([
           analyzeAuthenticatedCv(formData),
           new Promise((r) => setTimeout(r, 10000)),
         ]);
         analyzeResult = result;
-        if (saveMasterCv) {
-          const mf = new FormData();
-          mf.append("file", file);
-          mf.append("title", file.name.replace(/\.[^.]+$/, ""));
-          mf.append("isPrimary", "true");
-          uploadMasterResume(mf).catch(() => {});
-        }
       } else {
         if (!file) {
           setError("Selecione seu CV em PDF.");
@@ -707,7 +701,7 @@ export default function AdaptarPage() {
                     <textarea
                       value={jobDescription}
                       onChange={(e) =>
-                        setJobDescription(e.target.value.slice(0, 8000))
+                        setJobDescription(e.target.value.slice(0, 12000))
                       }
                       placeholder="Cole a vaga completa (isso melhora sua análise)..."
                       style={{
@@ -739,7 +733,7 @@ export default function AdaptarPage() {
                           color: "#8a8a85",
                         }}
                       >
-                        {jobDescription.length} / 8000
+                        {jobDescription.length} / 12000
                       </span>
                       <span
                         style={{
