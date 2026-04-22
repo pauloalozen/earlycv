@@ -13,6 +13,7 @@ import { ProtectedAiProviderGateway } from "./protected-ai-provider.gateway";
 import { InMemoryOperationalStoreAdapter } from "./store/in-memory-operational-store.adapter";
 import { ANALYSIS_OPERATIONAL_STORE } from "./store/operational-store.port";
 import { TurnstileVerificationService } from "./turnstile-verification.service";
+import { ANALYSIS_FETCH, ANALYSIS_NOW } from "./types";
 
 @Module({
   imports: [DatabaseModule],
@@ -20,6 +21,14 @@ import { TurnstileVerificationService } from "./turnstile-verification.service";
     {
       provide: ANALYSIS_OPERATIONAL_STORE,
       useFactory: () => new InMemoryOperationalStoreAdapter(),
+    },
+    {
+      provide: ANALYSIS_NOW,
+      useValue: Date.now,
+    },
+    {
+      provide: ANALYSIS_FETCH,
+      useValue: fetch,
     },
     {
       provide: ANALYSIS_CONFIG_SERVICE_OPTIONS,

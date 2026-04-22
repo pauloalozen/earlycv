@@ -1,5 +1,9 @@
-import { Injectable } from "@nestjs/common";
-import type { AnalysisRequestContext } from "./types";
+import { Inject, Injectable, Optional } from "@nestjs/common";
+import {
+  ANALYSIS_FETCH,
+  ANALYSIS_NOW,
+  type AnalysisRequestContext,
+} from "./types";
 
 type TurnstileSiteVerifyResponse = {
   action?: string;
@@ -27,7 +31,11 @@ type TurnstileVerificationOptions = {
 @Injectable()
 export class TurnstileVerificationService {
   constructor(
+    @Optional()
+    @Inject(ANALYSIS_FETCH)
     private readonly fetcher: typeof fetch = fetch,
+    @Optional()
+    @Inject(ANALYSIS_NOW)
     private readonly now: () => number = Date.now,
   ) {}
 

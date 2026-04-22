@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
+import { ANALYSIS_NOW } from "./types";
 
 export type ProtectedProviderExecutionOptions = {
   maxExecutionMs: number;
@@ -17,7 +18,11 @@ export class ProtectedAiProviderGatewayError extends Error {
 
 @Injectable()
 export class ProtectedAiProviderGateway {
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(
+    @Optional()
+    @Inject(ANALYSIS_NOW)
+    private readonly now: () => number = Date.now,
+  ) {}
 
   async execute<TResult>(
     runProvider: () => Promise<TResult>,

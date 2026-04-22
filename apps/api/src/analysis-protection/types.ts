@@ -9,6 +9,9 @@ export type AnalysisRequestContext = {
   ip: string | null;
 };
 
+export const ANALYSIS_NOW = "ANALYSIS_NOW";
+export const ANALYSIS_FETCH = "ANALYSIS_FETCH";
+
 declare module "express-serve-static-core" {
   interface Request {
     analysisContext: AnalysisRequestContext;

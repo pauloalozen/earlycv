@@ -1,9 +1,9 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import {
   ANALYSIS_OPERATIONAL_STORE,
   type OperationalStorePort,
 } from "./store/operational-store.port";
-import type { AnalysisRequestContext } from "./types";
+import { ANALYSIS_NOW, type AnalysisRequestContext } from "./types";
 
 export type RawRateLimitOptions = {
   rawLimitPerMinute: number;
@@ -24,6 +24,8 @@ export class AnalysisRateLimitService {
   constructor(
     @Inject(ANALYSIS_OPERATIONAL_STORE)
     private readonly store: OperationalStorePort,
+    @Optional()
+    @Inject(ANALYSIS_NOW)
     private readonly now: () => number = Date.now,
   ) {}
 
