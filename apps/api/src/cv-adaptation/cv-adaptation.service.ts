@@ -461,8 +461,10 @@ export class CvAdaptationService {
       ip: context?.ip ?? null,
       requestId: context?.requestId ?? randomUUID(),
       routeKey,
+      routePath: context?.routePath ?? null,
       sessionInternalId: context?.sessionInternalId ?? null,
       sessionPublicToken: context?.sessionPublicToken ?? null,
+      userAgentHash: context?.userAgentHash ?? null,
       userId: userId ?? context?.userId ?? null,
     };
   }

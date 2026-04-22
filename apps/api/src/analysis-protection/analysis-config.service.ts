@@ -103,6 +103,14 @@ export class AnalysisConfigService {
     return resolved.values;
   }
 
+  async getEntry<K extends AnalysisConfigKey>(
+    key: K,
+  ): Promise<ResolvedConfigEntry<K>> {
+    const resolved = await this.resolveAll();
+
+    return resolved.entries[key] as ResolvedConfigEntry<K>;
+  }
+
   async getBoolean<K extends AnalysisConfigKeysByType<"boolean">>(
     key: K,
   ): Promise<ResolvedConfigEntry<K>> {

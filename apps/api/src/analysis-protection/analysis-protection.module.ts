@@ -1,9 +1,11 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../database/database.module";
+import { AnalysisConfigController } from "./analysis-config.controller";
 import {
   ANALYSIS_CONFIG_SERVICE_OPTIONS,
   AnalysisConfigService,
 } from "./analysis-config.service";
+import { AnalysisConfigBackofficeService } from "./analysis-config-backoffice.service";
 import { AnalysisDedupeCacheService } from "./analysis-dedupe-cache.service";
 import { AnalysisProtectionFacade } from "./analysis-protection.facade";
 import { AnalysisRateLimitService } from "./analysis-rate-limit.service";
@@ -17,6 +19,7 @@ import { ANALYSIS_FETCH, ANALYSIS_NOW } from "./types";
 
 @Module({
   imports: [DatabaseModule],
+  controllers: [AnalysisConfigController],
   providers: [
     {
       provide: ANALYSIS_OPERATIONAL_STORE,
@@ -35,6 +38,7 @@ import { ANALYSIS_FETCH, ANALYSIS_NOW } from "./types";
       useValue: {},
     },
     AnalysisConfigService,
+    AnalysisConfigBackofficeService,
     AnalysisRateLimitService,
     AnalysisDedupeCacheService,
     AnalysisUsagePolicyService,

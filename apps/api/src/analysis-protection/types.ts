@@ -7,6 +7,8 @@ export type AnalysisRequestContext = {
   sessionInternalId: string | null;
   userId: string | null;
   ip: string | null;
+  routePath: string | null;
+  userAgentHash: string | null;
 };
 
 export const ANALYSIS_NOW = "ANALYSIS_NOW";

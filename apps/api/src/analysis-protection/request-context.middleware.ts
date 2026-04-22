@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import type { NextFunction, Request, Response } from "express";
 
@@ -181,6 +181,36 @@ function sanitizeCorrelationId(
   return candidate;
 }
 
+function resolveRoutePath(req: Request): string | null {
+  const source =
+    (typeof req.originalUrl === "string" && req.originalUrl) ||
+    (typeof req.url === "string" && req.url) ||
+    "";
+  const trimmed = source.trim();
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const [path] = trimmed.split("?");
+
+  if (!path) {
+    return null;
+  }
+
+  return path;
+}
+
+function resolveUserAgentHash(req: Request): string | null {
+  const userAgent = pickFirstHeaderValue(req.headers["user-agent"]);
+
+  if (!userAgent) {
+    return null;
+  }
+
+  return createHash("sha256").update(userAgent).digest("hex");
+}
+
 export function requestContextMiddleware(
   req: Request,
   _res: Response,
@@ -195,6 +225,8 @@ export function requestContextMiddleware(
     sessionInternalId: null,
     userId: null,
     ip: resolveIp(req),
+    routePath: resolveRoutePath(req),
+    userAgentHash: resolveUserAgentHash(req),
   };
 
   req.analysisContext = context;

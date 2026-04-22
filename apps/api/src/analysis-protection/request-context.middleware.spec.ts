@@ -125,3 +125,24 @@ test("request context middleware reads public session token from cookie header w
   );
   assert.equal(req.analysisContext.sessionInternalId, null);
 });
+
+test("request context middleware stores route path and user-agent hash", () => {
+  const req = {
+    app: { get: () => false },
+    cookies: {},
+    headers: {
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64)",
+    },
+    originalUrl: "/api/cv-adaptation/analyze-guest?foo=bar",
+    socket: { remoteAddress: "127.0.0.1" },
+  } as any;
+
+  requestContextMiddleware(req, {} as any, () => {});
+
+  assert.equal(
+    req.analysisContext.routePath,
+    "/api/cv-adaptation/analyze-guest",
+  );
+  assert.equal(typeof req.analysisContext.userAgentHash, "string");
+  assert.equal(req.analysisContext.userAgentHash.length > 0, true);
+});

@@ -13,6 +13,7 @@
     "check": "sh -c 'NODE_OPTIONS=\"--conditions=development\" biome check --config-path \"$(realpath ../../biome.json)\" src'",
     "test": "sh -c 'env_file=../../.env.example; if [ -f ./.env.test ]; then env_file=./.env.test; elif [ -f ../../.env ]; then env_file=../../.env; fi; set -a && . \"$env_file\" && set +a && : \"${DATABASE_TEST_URL:?DATABASE_TEST_URL is required for API tests}\" && export DATABASE_URL=\"$DATABASE_TEST_URL\" && if [ \"$#\" -gt 0 ]; then NODE_OPTIONS=\"--conditions=development\" tsx --test --test-concurrency=1 \"$@\"; else NODE_OPTIONS=\"--conditions=development\" tsx --test --test-concurrency=1 src/**/*.spec.ts src/**/*.e2e-spec.ts; fi' --",
     "test:database": "sh -c 'env_file=../../.env.example; if [ -f ./.env.test ]; then env_file=./.env.test; elif [ -f ../../.env ]; then env_file=../../.env; fi; set -a && . \"$env_file\" && set +a && : \"${DATABASE_TEST_URL:?DATABASE_TEST_URL is required for API tests}\" && export DATABASE_URL=\"$DATABASE_TEST_URL\" && NODE_OPTIONS=\"--conditions=development\" tsx --test src/database/database.service.spec.ts'",
+    "analysis:purge-retention": "NODE_OPTIONS='--conditions=development' tsx src/scripts/purge-analysis-retention.ts",
     "templates:patch-docx-conditionals": "NODE_OPTIONS='--conditions=development' tsx src/scripts/patch-docx-template-conditionals.ts"
   },
   "dependencies": {
