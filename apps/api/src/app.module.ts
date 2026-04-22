@@ -3,6 +3,8 @@ import { Module } from "@nestjs/common";
 import { AdminProfilesModule } from "./admin-profiles/admin-profiles.module";
 import { AdminResumesModule } from "./admin-resumes/admin-resumes.module";
 import { AdminUsersModule } from "./admin-users/admin-users.module";
+import { AnalysisObservabilityModule } from "./analysis-observability/analysis-observability.module";
+import { AnalysisProtectionModule } from "./analysis-protection/analysis-protection.module";
 import { AuthModule } from "./auth/auth.module";
 import { CompaniesModule } from "./companies/companies.module";
 import { EnvModule } from "./config/env.module";
@@ -37,6 +39,8 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     CompaniesModule,
     JobSourcesModule,
     JobsModule,
+    AnalysisProtectionModule,
+    AnalysisObservabilityModule,
     CvAdaptationModule,
     PlansModule,
   ],

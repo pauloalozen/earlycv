@@ -5,9 +5,18 @@ export type DashboardMetricInput = {
 };
 
 type AnalysisSignal = {
+  adjustments: {
+    notes: string | null;
+    scoreBefore: number | null;
+    scoreFinal: number | null;
+  };
   improvement: number | null;
   score: number | null;
 };
+
+function parseText(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
 
 function parseNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -19,22 +28,30 @@ export function extractDashboardAnalysisSignal(
   const parsed =
     adaptedContentJson && typeof adaptedContentJson === "object"
       ? (adaptedContentJson as {
-          fit?: { score?: unknown };
+          fit?: { score?: unknown; score_pos_ajustes?: unknown };
           projecao_melhoria?: {
             score_atual?: unknown;
             score_pos_otimizacao?: unknown;
           };
+          adaptation_notes?: unknown;
         })
       : {};
 
   const fitScore = parseNumber(parsed.fit?.score);
+  const fitScorePosAjustes = parseNumber(parsed.fit?.score_pos_ajustes);
   const scoreAtual = parseNumber(parsed.projecao_melhoria?.score_atual);
   const scorePosOtimizacao = parseNumber(
     parsed.projecao_melhoria?.score_pos_otimizacao,
   );
+  const finalScore = fitScorePosAjustes ?? scorePosOtimizacao ?? fitScore;
 
   return {
-    score: fitScore ?? scorePosOtimizacao,
+    adjustments: {
+      notes: parseText(parsed.adaptation_notes),
+      scoreBefore: scoreAtual,
+      scoreFinal: finalScore,
+    },
+    score: finalScore,
     improvement:
       scoreAtual !== null && scorePosOtimizacao !== null
         ? scorePosOtimizacao - scoreAtual

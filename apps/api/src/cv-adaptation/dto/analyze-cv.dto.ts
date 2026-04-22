@@ -12,6 +12,12 @@ export class AnalyzeCvDto {
   jobDescriptionText!: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  turnstileToken?: string;
+
+  @IsOptional()
   @Transform(({ value }) => value === true || value === "true")
   @IsBoolean()
   saveAsMaster?: boolean;

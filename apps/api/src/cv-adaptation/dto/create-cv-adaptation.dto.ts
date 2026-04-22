@@ -31,6 +31,11 @@ export class CreateCvAdaptationDto {
   @IsOptional()
   @IsString()
   templateId?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value?.trim())
+  turnstileToken?: string;
 }
 
 export type FileUpload = {

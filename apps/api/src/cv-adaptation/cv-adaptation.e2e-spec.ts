@@ -684,6 +684,10 @@ test("webhook activation falls back for legacy purchases with zero analysis gran
 test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemaining", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "cv-adapt-analyze-no-quota");
+  const previousSkipTurnstile = process.env.SKIP_TURNSTILE_VERIFICATION;
+  const previousRolloutMode = process.env.ANALYSIS_ROLLOUT_MODE;
+  process.env.ANALYSIS_ROLLOUT_MODE = "hard-block";
+  process.env.SKIP_TURNSTILE_VERIFICATION = "false";
 
   const masterResume = await database.resume.create({
     data: {
@@ -703,21 +707,87 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
     },
   });
 
-  await request(app.getHttpServer())
-    .post("/api/cv-adaptation/analyze")
-    .set("Authorization", `Bearer ${user.accessToken}`)
-    .send({
-      masterResumeId: masterResume.id,
-      jobDescriptionText: "Vaga para atuar com analytics de produto",
-    })
-    .expect(201)
-    .expect(({ body }) => {
-      assert.equal(typeof body.previewText, "string");
-      assert.equal(typeof body.masterCvText, "string");
-      assert.ok(body.adaptedContentJson);
-    });
+  try {
+    await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .attach("file", Buffer.from("not-a-real-pdf"), {
+        contentType: "application/pdf",
+        filename: "resume.pdf",
+      })
+      .field("jobDescriptionText", "Vaga para atuar com analytics de produto")
+      .expect(400)
+      .expect(({ body }) => {
+        assert.match(String(body.message), /turnstile/i);
+      });
+
+    process.env.SKIP_TURNSTILE_VERIFICATION = "true";
+
+    await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send({
+        masterResumeId: masterResume.id,
+        jobDescriptionText: "Vaga para atuar com analytics de produto",
+        turnstileToken: "token-test",
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        assert.equal(typeof body.previewText, "string");
+        assert.equal(typeof body.masterCvText, "string");
+        assert.ok(body.adaptedContentJson);
+      });
+  } finally {
+    if (previousRolloutMode === undefined) {
+      delete process.env.ANALYSIS_ROLLOUT_MODE;
+    } else {
+      process.env.ANALYSIS_ROLLOUT_MODE = previousRolloutMode;
+    }
+
+    if (previousSkipTurnstile === undefined) {
+      delete process.env.SKIP_TURNSTILE_VERIFICATION;
+    } else {
+      process.env.SKIP_TURNSTILE_VERIFICATION = previousSkipTurnstile;
+    }
+  }
 
   await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("POST /cv-adaptation/analyze-guest blocks missing turnstile token", async () => {
+  const { app } = await createApp();
+  const previousRolloutMode = process.env.ANALYSIS_ROLLOUT_MODE;
+  const previousSkipTurnstile = process.env.SKIP_TURNSTILE_VERIFICATION;
+  process.env.ANALYSIS_ROLLOUT_MODE = "hard-block";
+  process.env.SKIP_TURNSTILE_VERIFICATION = "false";
+
+  try {
+    await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze-guest")
+      .attach("file", Buffer.from("not-a-real-pdf"), {
+        contentType: "application/pdf",
+        filename: "resume.pdf",
+      })
+      .field("jobDescriptionText", "Data Analyst role")
+      .expect(400)
+      .expect(({ body }) => {
+        assert.match(String(body.message), /turnstile/i);
+      });
+  } finally {
+    if (previousRolloutMode === undefined) {
+      delete process.env.ANALYSIS_ROLLOUT_MODE;
+    } else {
+      process.env.ANALYSIS_ROLLOUT_MODE = previousRolloutMode;
+    }
+
+    if (previousSkipTurnstile === undefined) {
+      delete process.env.SKIP_TURNSTILE_VERIFICATION;
+    } else {
+      process.env.SKIP_TURNSTILE_VERIFICATION = previousSkipTurnstile;
+    }
+  }
+
   await app.close();
 });
 

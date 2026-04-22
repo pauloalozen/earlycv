@@ -128,6 +128,9 @@ export class CvAdaptationDocxService {
           : summaryText.slice(0, 180);
     }
 
+    const certItems = this.mapCourseItems(certSection);
+    const langItems = this.mapLanguages(langSection);
+
     return {
       candidateName,
       phone,
@@ -138,8 +141,10 @@ export class CvAdaptationDocxService {
       items: this.mapExperience(experienceSection),
       competencias: this.mapSkills(skillsSection),
       educacao: this.mapCourseItems(educationSection),
-      certificacoes: this.mapCourseItems(certSection),
-      idiomas: this.mapLanguages(langSection),
+      hasCertificacoes: certItems.length > 0,
+      hasIdiomas: langItems.length > 0,
+      certificacoes: certItems,
+      idiomas: langItems,
     };
   }
 

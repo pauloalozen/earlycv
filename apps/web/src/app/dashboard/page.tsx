@@ -12,6 +12,7 @@ import {
   getCvAdaptationContent,
   listCvAdaptations,
 } from "@/lib/cv-adaptation-api";
+import type { DashboardAdjustmentsData } from "@/lib/dashboard-adjustments";
 import { DASHBOARD_METRIC_LABELS } from "@/lib/dashboard-copy";
 import {
   buildDashboardTestHistoryView,
@@ -21,7 +22,7 @@ import {
 } from "@/lib/dashboard-test-metrics";
 import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getMyPlan } from "@/lib/plans-api";
-import { getMyMasterResume } from "@/lib/resumes-api";
+import { getMasterResumeFromList, listMyResumes } from "@/lib/resumes-api";
 import { CvMasterCard } from "./cv-master-card";
 import { HistoryActionLinks } from "./history-action-links";
 
@@ -93,10 +94,10 @@ export default async function DashboardPage({
   const currentPage = parsePage(params.page);
   const currentLimit = parseLimit(params.limit);
 
-  const [plan, adaptations, masterResumeResponse] = await Promise.allSettled([
+  const [plan, adaptations, resumesResponse] = await Promise.allSettled([
     getMyPlan(),
     listCvAdaptations(currentPage, currentLimit),
-    getMyMasterResume(),
+    listMyResumes(),
   ]);
 
   const planInfo = plan.status === "fulfilled" ? plan.value : null;
@@ -111,10 +112,12 @@ export default async function DashboardPage({
   const startItem =
     adaptationTotal === 0 ? 0 : (safeCurrentPage - 1) * currentLimit + 1;
   const endItem = Math.min(adaptationTotal, safeCurrentPage * currentLimit);
-  const masterResume =
-    masterResumeResponse.status === "fulfilled"
-      ? masterResumeResponse.value
-      : null;
+  const resumeList =
+    resumesResponse.status === "fulfilled" ? resumesResponse.value : [];
+  const masterResume = await getMasterResumeFromList(resumeList);
+  const resumeTitleById = new Map(
+    resumeList.map((resume) => [resume.id, resume.title]),
+  );
 
   const isPlanInfoUnavailable = !planInfo;
   const availableDownloadCredits = isPlanInfoUnavailable
@@ -125,7 +128,11 @@ export default async function DashboardPage({
 
   const analysisSignalsById = new Map<
     string,
-    { score: number | null; improvement: number | null }
+    {
+      adjustments: DashboardAdjustmentsData;
+      score: number | null;
+      improvement: number | null;
+    }
   >();
 
   const contentResponses = await Promise.allSettled(
@@ -180,10 +187,7 @@ export default async function DashboardPage({
           position: "relative",
         }}
       >
-        <AppHeader
-          userName={user.name}
-          
-        />
+        <AppHeader userName={user.name} />
 
         <div
           style={{
@@ -478,9 +482,7 @@ export default async function DashboardPage({
                 >
                   HISTÓRICO DE ANÁLISES
                 </p>
-                <p
-                  style={{ fontSize: 12.5, color: "#8a8a85", margin: 0 }}
-                >
+                <p style={{ fontSize: 12.5, color: "#8a8a85", margin: 0 }}>
                   {adaptationTotal === 0
                     ? "Nenhuma análise registrada"
                     : `Mostrando ${startItem}–${endItem} de ${adaptationTotal}`}
@@ -551,9 +553,7 @@ export default async function DashboardPage({
                 >
                   Nenhuma análise ainda
                 </p>
-                <p
-                  style={{ fontSize: 13.5, color: "#6a6560", margin: 0 }}
-                >
+                <p style={{ fontSize: 13.5, color: "#6a6560", margin: 0 }}>
                   Envie seu CV e a descrição de uma vaga para começar.
                 </p>
                 <a
@@ -591,6 +591,12 @@ export default async function DashboardPage({
                       improvement:
                         analysisSignalsById.get(item.id)?.improvement ?? null,
                     });
+                    const adjustments = analysisSignalsById.get(item.id)
+                      ?.adjustments ?? {
+                      notes: null,
+                      scoreBefore: null,
+                      scoreFinal: null,
+                    };
 
                     return (
                       <article
@@ -624,9 +630,7 @@ export default async function DashboardPage({
                               }}
                             >
                               {item.jobTitle ?? "Vaga sem título"}
-                              {item.companyName
-                                ? ` · ${item.companyName}`
-                                : ""}
+                              {item.companyName ? ` · ${item.companyName}` : ""}
                             </p>
                             <p
                               style={{
@@ -640,9 +644,7 @@ export default async function DashboardPage({
                             </p>
                           </div>
 
-                          <div
-                            style={{ textAlign: "right", flexShrink: 0 }}
-                          >
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
                             <p
                               style={{
                                 fontFamily: MONO,
@@ -689,6 +691,12 @@ export default async function DashboardPage({
                         <HistoryActionLinks
                           actions={actions}
                           hasCredits={hasCredits}
+                          adjustments={adjustments}
+                          analysisContext={{
+                            jobTitle: item.jobTitle,
+                            masterResumeTitle:
+                              resumeTitleById.get(item.masterResumeId) ?? null,
+                          }}
                         />
                       </article>
                     );

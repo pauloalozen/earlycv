@@ -124,3 +124,4 @@ npm run test
 - Estado de referencia atual: `main` local/remoto sincronizados e suite de testes verde apos ajustes de estabilidade em e2e da API.
 - Estado mais recente: freemium consolidado com claim por credito sem redirect forcado, popup de liberacao com fade, padronizacao de CTAs e correcoes de PT-BR nas telas principais.
 - Memoria mais nova: paginas publicas de `Privacidade` e `Termos de Uso` criadas com metadata completa + links discretos no rodape da landing; painel de planos atualizado com plano free e contadores de analise; bug de travamento no back/forward com spinner de transicao permanece pendente e em investigacao.
+- Memoria mais nova: slice `analysis-protection + analysis-observability` implementado (facade protegida, turnstile, rate-limit/dedupe/usage policy, telemetry e funnel idempotente) e integrado no `cv-adaptation` sem mudar UX visivel.

@@ -22,3 +22,5 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Surface atual obrigatorio de env da API: `DATABASE_URL`, `API_HOST`, `API_PORT`, `JWT_*`, `GOOGLE_*` e `LINKEDIN_*`; confira `.env.example` antes de rodar `apps/api`.
 - Amanhã, se o pedido for apenas "retomar projeto", leia primeiro `specs/backend-core-slice-1-handoff.md` e siga para a fase de ingestao em vez de reabrir a fundacao.
 - Proximo passo esperado: modulo de ingestao sobre `Company`, `JobSource` e `Job`, preservando `canonicalKey` e `firstSeenAt` como invariantes do produto.
+- Slice de protecao e observabilidade da analise de CV foi implementado em `apps/api/src/analysis-protection` e `apps/api/src/analysis-observability`, com boundary obrigatorio no `cv-adaptation`.
+- O fluxo `/cv-adaptation/analyze-guest` agora exige token turnstile encaminhado pelo web app, com cobertura dedicada em testes de API e web submit-flow.

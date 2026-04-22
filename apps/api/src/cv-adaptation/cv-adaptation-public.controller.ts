@@ -6,10 +6,12 @@ import {
   Inject,
   Post,
   Query,
+  Req,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import type { Request } from "express";
 
 import { CvAdaptationService } from "./cv-adaptation.service";
 import type { FileUpload } from "./dto/create-cv-adaptation.dto";
@@ -40,13 +42,20 @@ export class CvAdaptationPublicController {
     }),
   )
   analyzeGuest(
+    @Req() req: Request,
     @UploadedFile() file: FileUpload | undefined,
     @Body("jobDescriptionText") jobDescriptionText: string,
+    @Body("turnstileToken") turnstileToken?: string,
   ) {
     if (!jobDescriptionText?.trim()) {
       throw new BadRequestException("jobDescriptionText is required");
     }
-    return this.cvAdaptationService.analyzeGuest(jobDescriptionText, file);
+    return this.cvAdaptationService.analyzeGuest(
+      jobDescriptionText,
+      file,
+      turnstileToken,
+      req.analysisContext,
+    );
   }
 
   @Get("job-count")

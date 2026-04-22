@@ -198,6 +198,32 @@ export type GuestAnalysisResult = {
   masterCvText: string;
 };
 
+export type BusinessFunnelEventPayload = {
+  eventName: string;
+  eventVersion?: number;
+  idempotencyKey?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export async function emitBusinessFunnelEvent(
+  payload: BusinessFunnelEventPayload,
+): Promise<void> {
+  const response = await apiRequest(
+    "POST",
+    "/analysis-observability/business-funnel-events",
+    {
+      eventName: payload.eventName,
+      eventVersion: payload.eventVersion ?? 1,
+      idempotencyKey: payload.idempotencyKey,
+      metadata: payload.metadata,
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to emit business funnel event.");
+  }
+}
+
 export async function analyzeGuestCv(
   formData: FormData,
 ): Promise<GuestAnalysisResult> {

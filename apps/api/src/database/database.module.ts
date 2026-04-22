@@ -7,9 +7,9 @@ import { DatabaseService, EARLYCV_DATABASE_CLIENT } from "./database.service";
     {
       provide: EARLYCV_DATABASE_CLIENT,
       useFactory: async () => {
-        const { getDatabaseClient } = await import("@earlycv/database");
+        const { createDatabaseClient } = await import("@earlycv/database");
 
-        return getDatabaseClient();
+        return createDatabaseClient();
       },
     },
     {
