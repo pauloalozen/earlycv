@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import {
   BadRequestException,
   Inject,
@@ -6,6 +7,8 @@ import {
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { Response } from "express";
+import type { ProtectedAnalysisBlockedResult } from "../analysis-protection/analysis-protection.facade";
+import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { DatabaseService } from "../database/database.service";
 
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
@@ -15,6 +18,7 @@ import {
   CvAdaptationPdfService,
   type TemplateStructureJson,
 } from "./cv-adaptation-pdf.service";
+import { CvAdaptationProtectedAnalyzeService } from "./cv-adaptation-protected-analyze.service";
 import type { AnalyzeCvDto } from "./dto/analyze-cv.dto";
 import type { ClaimGuestAdaptationDto } from "./dto/claim-guest-adaptation.dto";
 import type {
@@ -37,6 +41,8 @@ export class CvAdaptationService {
     private readonly pdfService: CvAdaptationPdfService,
     @Inject(CvAdaptationDocxService)
     private readonly docxService: CvAdaptationDocxService,
+    @Inject(CvAdaptationProtectedAnalyzeService)
+    private readonly protectedAnalyzeService: CvAdaptationProtectedAnalyzeService,
   ) {}
 
   async create(userId: string, dto: CreateCvAdaptationDto, file?: FileUpload) {
@@ -140,13 +146,65 @@ export class CvAdaptationService {
       },
     });
 
-    // Call AI asynchronously (fire and forget for MVP)
-    this.aiService.analyzeAndAdapt(adaptation, masterCvText).catch((err) => {
-      console.error(
-        `AI adaptation failed for ${adaptation.id}:`,
-        err instanceof Error ? err.message : String(err),
-      );
-    });
+    this.protectedAnalyzeService
+      .executeProtectedAnalyzeAndPersist({
+        adaptation,
+        context: this.buildProtectionContext(
+          undefined,
+          userId,
+          "cv-adaptation/create",
+        ),
+        masterCvText,
+        payload: {
+          adaptationId: adaptation.id,
+          companyName: adaptation.companyName,
+          hasFile: Boolean(file),
+          jobDescriptionText: adaptation.jobDescriptionText,
+          jobTitle: adaptation.jobTitle,
+          masterResumeId,
+          route: "cv-adaptation/create",
+          templateId: adaptation.templateId,
+          userId,
+        },
+        turnstileToken: dto.turnstileToken,
+      })
+      .then(async (result) => {
+        if (result.ok) {
+          return;
+        }
+
+        await this.database.cvAdaptation.update({
+          where: { id: adaptation.id },
+          data: {
+            status: "failed",
+            failureReason: this.toProtectedBoundaryMessage(result),
+          },
+        });
+      })
+      .catch((err) => {
+        console.error(
+          `AI adaptation failed for ${adaptation.id}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+
+        this.database.cvAdaptation
+          .update({
+            where: { id: adaptation.id },
+            data: {
+              status: "failed",
+              failureReason:
+                err instanceof Error ? err.message : "Unknown AI error",
+            },
+          })
+          .catch((updateError) => {
+            console.error(
+              `Failed to persist adaptation failure for ${adaptation.id}:`,
+              updateError instanceof Error
+                ? updateError.message
+                : String(updateError),
+            );
+          });
+      });
 
     return createCvAdaptationResponseDto(adaptation);
   }
@@ -249,6 +307,8 @@ export class CvAdaptationService {
   async analyzeGuest(
     jobDescriptionText: string,
     file?: FileUpload,
+    turnstileToken?: string,
+    analysisContext?: AnalysisRequestContext,
   ): Promise<{
     adaptedContentJson: unknown;
     previewText: string;
@@ -258,93 +318,165 @@ export class CvAdaptationService {
       throw new BadRequestException("PDF file is required.");
     }
 
-    let cvText: string;
-    try {
-      const { extractTextFromPdf } = await import("@earlycv/ai");
-      cvText = await extractTextFromPdf(file.buffer);
-    } catch (error) {
+    const protectionResult =
+      await this.protectedAnalyzeService.executeProtectedAnalyze({
+        context: this.buildProtectionContext(
+          analysisContext,
+          null,
+          "cv-adaptation/analyze-guest",
+        ),
+        jobDescriptionText,
+        loadMasterCvText: async () => {
+          try {
+            const { extractTextFromPdf } = await import("@earlycv/ai");
+            return await extractTextFromPdf(file.buffer);
+          } catch (error) {
+            throw new BadRequestException(
+              `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
+            );
+          }
+        },
+        payload: {
+          cvFingerprint: this.buildFileFingerprint(file.buffer),
+          hasFile: true,
+          jobDescriptionText,
+          route: "cv-adaptation/analyze-guest",
+        },
+        turnstileToken,
+      });
+
+    if (!protectionResult.ok) {
       throw new BadRequestException(
-        `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
+        this.toProtectedBoundaryMessage(protectionResult),
       );
     }
 
-    const result = await this.aiService.analyzeAndAdaptDirect(
-      cvText,
-      jobDescriptionText,
-    );
-
-    return {
-      ...result,
-      masterCvText: cvText,
-    };
+    return protectionResult.result;
   }
 
   async analyzeAuthenticated(
     userId: string,
     dto: AnalyzeCvDto,
     file?: FileUpload,
+    analysisContext?: AnalysisRequestContext,
   ): Promise<{
     adaptedContentJson: unknown;
     previewText: string;
     masterCvText: string;
   }> {
-    let masterCvText: string;
+    const protectionResult =
+      await this.protectedAnalyzeService.executeProtectedAnalyze({
+        context: this.buildProtectionContext(
+          analysisContext,
+          userId,
+          "cv-adaptation/analyze",
+        ),
+        jobDescriptionText: dto.jobDescriptionText,
+        loadMasterCvText: async () => {
+          if (file) {
+            let masterCvText: string;
 
-    if (file) {
-      try {
-        const { extractTextFromPdf } = await import("@earlycv/ai");
-        masterCvText = await extractTextFromPdf(file.buffer);
-      } catch (error) {
-        throw new BadRequestException(
-          `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
-        );
-      }
+            try {
+              const { extractTextFromPdf } = await import("@earlycv/ai");
+              masterCvText = await extractTextFromPdf(file.buffer);
+            } catch (error) {
+              throw new BadRequestException(
+                `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
+              );
+            }
 
-      if (dto.saveAsMaster) {
-        await this.database.$transaction(async (tx) => {
-          await tx.resume.updateMany({
-            where: { userId, isMaster: true },
-            data: { isMaster: false },
-          });
-          await tx.resume.create({
-            data: {
-              userId,
-              title: file.originalname.replace(/\.[^.]+$/, ""),
-              kind: "master",
-              status: "uploaded",
-              sourceFileName: file.originalname,
-              sourceFileType: file.mimetype,
-              rawText: masterCvText,
-              isMaster: true,
-            },
-          });
-        });
-      }
-    } else if (dto.masterResumeId) {
-      const resume = await this.database.resume.findFirst({
-        where: { id: dto.masterResumeId, userId },
-        select: { rawText: true },
+            if (dto.saveAsMaster) {
+              await this.database.$transaction(async (tx) => {
+                await tx.resume.updateMany({
+                  where: { userId, isMaster: true },
+                  data: { isMaster: false },
+                });
+                await tx.resume.create({
+                  data: {
+                    userId,
+                    title: file.originalname.replace(/\.[^.]+$/, ""),
+                    kind: "master",
+                    status: "uploaded",
+                    sourceFileName: file.originalname,
+                    sourceFileType: file.mimetype,
+                    rawText: masterCvText,
+                    isMaster: true,
+                  },
+                });
+              });
+            }
+
+            return masterCvText;
+          }
+
+          if (dto.masterResumeId) {
+            const resume = await this.database.resume.findFirst({
+              where: { id: dto.masterResumeId, userId },
+              select: { rawText: true },
+            });
+
+            if (!resume) {
+              throw new BadRequestException("Resume not found.");
+            }
+
+            if (!resume.rawText?.trim()) {
+              throw new BadRequestException("Resume has no text content.");
+            }
+
+            return resume.rawText;
+          }
+
+          throw new BadRequestException(
+            "masterResumeId or PDF file is required.",
+          );
+        },
+        payload: {
+          cvFingerprint: file ? this.buildFileFingerprint(file.buffer) : null,
+          hasFile: Boolean(file),
+          jobDescriptionText: dto.jobDescriptionText,
+          masterResumeId: dto.masterResumeId ?? null,
+          route: "cv-adaptation/analyze",
+          saveAsMaster: dto.saveAsMaster === true,
+          userId,
+        },
+        turnstileToken: dto.turnstileToken,
       });
 
-      if (!resume) {
-        throw new BadRequestException("Resume not found.");
-      }
-
-      if (!resume.rawText?.trim()) {
-        throw new BadRequestException("Resume has no text content.");
-      }
-
-      masterCvText = resume.rawText;
-    } else {
-      throw new BadRequestException("masterResumeId or PDF file is required.");
+    if (!protectionResult.ok) {
+      throw new BadRequestException(
+        this.toProtectedBoundaryMessage(protectionResult),
+      );
     }
 
-    const result = await this.aiService.analyzeAndAdaptDirect(
-      masterCvText,
-      dto.jobDescriptionText,
-    );
+    return protectionResult.result;
+  }
 
-    return { ...result, masterCvText };
+  private buildProtectionContext(
+    context: AnalysisRequestContext | undefined,
+    userId: string | null,
+    routeKey: string,
+  ): AnalysisRequestContext & { routeKey: string } {
+    return {
+      correlationId: context?.correlationId ?? randomUUID(),
+      ip: context?.ip ?? null,
+      requestId: context?.requestId ?? randomUUID(),
+      routeKey,
+      sessionInternalId: context?.sessionInternalId ?? null,
+      sessionPublicToken: context?.sessionPublicToken ?? null,
+      userId: userId ?? context?.userId ?? null,
+    };
+  }
+
+  private toProtectedBoundaryMessage(result: ProtectedAnalysisBlockedResult) {
+    if (result.reason.startsWith("turnstile_")) {
+      return "Turnstile verification failed";
+    }
+
+    return result.message;
+  }
+
+  private buildFileFingerprint(fileBuffer: Buffer): string {
+    return createHash("sha256").update(fileBuffer).digest("hex");
   }
 
   async saveGuestPreview(userId: string, dto: SaveGuestPreviewDto) {
@@ -933,6 +1065,7 @@ export class CvAdaptationService {
     jobDescriptionText: string;
     jobTitle: string | null;
     companyName: string | null;
+    userId: string;
     masterResume: { rawText: string | null };
   }): Promise<CvAdaptationOutput | null> {
     if (
@@ -953,12 +1086,34 @@ export class CvAdaptationService {
     if (!masterCvText) return null;
 
     try {
-      const output = await this.aiService.buildPaidCvOutputFromGuest({
-        masterCvText,
-        jobDescriptionText: adaptation.jobDescriptionText,
-        jobTitle: adaptation.jobTitle ?? undefined,
-        companyName: adaptation.companyName ?? undefined,
-      });
+      const protectionResult =
+        await this.protectedAnalyzeService.executeProtectedBuildPaidCvOutputFromGuest(
+          {
+            companyName: adaptation.companyName ?? undefined,
+            context: this.buildProtectionContext(
+              undefined,
+              adaptation.userId,
+              "cv-adaptation/internal-paid-output",
+            ),
+            jobDescriptionText: adaptation.jobDescriptionText,
+            jobTitle: adaptation.jobTitle ?? undefined,
+            masterCvText,
+            payload: {
+              adaptationId: adaptation.id,
+              companyName: adaptation.companyName,
+              jobDescriptionText: adaptation.jobDescriptionText,
+              jobTitle: adaptation.jobTitle,
+              route: "cv-adaptation/internal-paid-output",
+              userId: adaptation.userId,
+            },
+          },
+        );
+
+      if (!protectionResult.ok) {
+        return null;
+      }
+
+      const output = protectionResult.result;
 
       await this.database.cvAdaptation.update({
         where: { id: adaptation.id },
@@ -1033,16 +1188,26 @@ export class CvAdaptationService {
 
   private filterEmptySections(output: CvAdaptationOutput): CvAdaptationOutput {
     const itemHasContent = (
-      item: { heading?: string; subheading?: string; dateRange?: string; bullets?: string[] },
+      item: {
+        heading?: string;
+        subheading?: string;
+        dateRange?: string;
+        bullets?: string[];
+      },
       sectionTitle: string,
     ) =>
       (Array.isArray(item.bullets) &&
-        item.bullets.some((b) => typeof b === "string" && b.trim().length > 0)) ||
-      (typeof item.subheading === "string" && item.subheading.trim().length > 0) ||
-      (typeof item.dateRange === "string" && item.dateRange.trim().length > 0) ||
+        item.bullets.some(
+          (b) => typeof b === "string" && b.trim().length > 0,
+        )) ||
+      (typeof item.subheading === "string" &&
+        item.subheading.trim().length > 0) ||
+      (typeof item.dateRange === "string" &&
+        item.dateRange.trim().length > 0) ||
       (typeof item.heading === "string" &&
         item.heading.trim().length > 0 &&
-        item.heading.trim().toLowerCase() !== sectionTitle.trim().toLowerCase());
+        item.heading.trim().toLowerCase() !==
+          sectionTitle.trim().toLowerCase());
 
     return {
       ...output,

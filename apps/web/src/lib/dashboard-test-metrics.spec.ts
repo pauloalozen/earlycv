@@ -38,6 +38,27 @@ test("extractDashboardAnalysisSignal returns real values from analysis payload",
   assert.equal(signal.improvement, 13);
 });
 
+test("extractDashboardAnalysisSignal uses post-adjust score as dashboard score", () => {
+  const signal = extractDashboardAnalysisSignal({
+    fit: { score: 53, score_pos_ajustes: 65 },
+    projecao_melhoria: { score_atual: 53, score_pos_otimizacao: 65 },
+  });
+
+  assert.equal(signal.score, 65);
+});
+
+test("extractDashboardAnalysisSignal exposes adjustments popup payload", () => {
+  const signal = extractDashboardAnalysisSignal({
+    fit: { score: 53, score_pos_ajustes: 65 },
+    projecao_melhoria: { score_atual: 69 },
+    adaptation_notes: "Ajustes aplicados no CV",
+  });
+
+  assert.equal(signal.adjustments.scoreBefore, 69);
+  assert.equal(signal.adjustments.scoreFinal, 65);
+  assert.equal(signal.adjustments.notes, "Ajustes aplicados no CV");
+});
+
 test("getDashboardScoreColor follows score thresholds", () => {
   assert.equal(getDashboardScoreColor(49), "#dc2626");
   assert.equal(getDashboardScoreColor(60), "#ca8a04");

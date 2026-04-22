@@ -1,13 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import Script from "next/script";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
 import {
   analyzeAuthenticatedCv,
   analyzeGuestCv,
+  emitBusinessFunnelEvent,
 } from "@/lib/cv-adaptation-api";
+import {
+  appendTurnstileTokenToAnalyzeFormData,
+  buildFunnelEventIdempotencyKey,
+} from "@/lib/cv-adaptation-flow-helpers";
 import type { ResumeDto } from "@/lib/resumes-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAuthStatus } from "@/lib/session-actions";
@@ -50,7 +56,58 @@ Local: Remoto (Brasil) | Regime: CLT | Área: Dados & Analytics`;
 
 type CvMode = "master" | "upload";
 
+const ADAPT_FLOW_SESSION_ID_KEY = "adaptFlowSessionId";
+
+function getTurnstileSiteKey() {
+  return process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? "";
+}
+
+type TurnstileApi = {
+  render: (
+    container: HTMLElement,
+    options: {
+      sitekey: string;
+      size: "invisible";
+      callback: (token: string) => void;
+      "error-callback": () => void;
+      "expired-callback": () => void;
+    },
+  ) => string;
+  execute: (widgetId: string) => void;
+};
+
+declare global {
+  interface Window {
+    turnstile?: TurnstileApi;
+  }
+}
+
+function buildClientAttemptId() {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function readTurnstileTokenFromDom() {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const hiddenInput = document.querySelector<HTMLInputElement>(
+    'input[name="cf-turnstile-response"]',
+  );
+  const token = hiddenInput?.value?.trim();
+
+  return token ? token : null;
+}
+
 export default function AdaptarPage() {
+  const turnstileSiteKey = getTurnstileSiteKey();
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [jobDescription, setJobDescription] = useState("");
@@ -68,6 +125,142 @@ export default function AdaptarPage() {
   const [fileHover, setFileHover] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [authReady, setAuthReady] = useState(false);
+  const adaptPageViewTrackedRef = useRef(false);
+  const jobDescriptionFilledTrackedRef = useRef(false);
+  const flowSessionIdRef = useRef<string | null>(null);
+  const turnstileContainerRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
+  const turnstilePendingTokenResolverRef = useRef<
+    ((token: string | null) => void) | null
+  >(null);
+  const [turnstileScriptReady, setTurnstileScriptReady] = useState(false);
+
+  const resolvePendingTurnstileToken = useCallback((token: string | null) => {
+    const resolve = turnstilePendingTokenResolverRef.current;
+    if (!resolve) {
+      return;
+    }
+
+    turnstilePendingTokenResolverRef.current = null;
+    resolve(token);
+  }, []);
+
+  const renderInvisibleTurnstileWidget = useCallback(() => {
+    if (!turnstileSiteKey || turnstileWidgetIdRef.current) {
+      return;
+    }
+
+    const turnstile = window.turnstile;
+    const container = turnstileContainerRef.current;
+    if (!turnstile?.render || !container) {
+      return;
+    }
+
+    turnstileWidgetIdRef.current = turnstile.render(container, {
+      sitekey: turnstileSiteKey,
+      size: "invisible",
+      callback: (token) => {
+        resolvePendingTurnstileToken(token.trim() || null);
+      },
+      "error-callback": () => {
+        resolvePendingTurnstileToken(null);
+      },
+      "expired-callback": () => {
+        resolvePendingTurnstileToken(null);
+      },
+    });
+  }, [resolvePendingTurnstileToken, turnstileSiteKey]);
+
+  const requestTurnstileToken = useCallback(async () => {
+    const fallbackToken = readTurnstileTokenFromDom();
+
+    if (!turnstileSiteKey) {
+      return fallbackToken;
+    }
+
+    const turnstile = window.turnstile;
+    if (!turnstile?.execute) {
+      return fallbackToken;
+    }
+
+    renderInvisibleTurnstileWidget();
+
+    const widgetId = turnstileWidgetIdRef.current;
+    if (!widgetId) {
+      return fallbackToken;
+    }
+
+    return new Promise<string | null>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        turnstilePendingTokenResolverRef.current = null;
+        resolve(readTurnstileTokenFromDom() ?? null);
+      }, 2000);
+
+      turnstilePendingTokenResolverRef.current = (token) => {
+        clearTimeout(timeoutId);
+        resolve(token ?? readTurnstileTokenFromDom() ?? null);
+      };
+
+      try {
+        turnstile.execute(widgetId);
+      } catch {
+        clearTimeout(timeoutId);
+        turnstilePendingTokenResolverRef.current = null;
+        resolve(fallbackToken);
+      }
+    });
+  }, [renderInvisibleTurnstileWidget, turnstileSiteKey]);
+
+  const getFlowSessionId = useCallback(() => {
+    if (flowSessionIdRef.current) {
+      return flowSessionIdRef.current;
+    }
+
+    if (typeof sessionStorage === "undefined") {
+      return null;
+    }
+
+    const existingSessionId = sessionStorage.getItem(ADAPT_FLOW_SESSION_ID_KEY);
+    if (existingSessionId) {
+      flowSessionIdRef.current = existingSessionId;
+      return existingSessionId;
+    }
+
+    const nextSessionId = buildClientAttemptId();
+    sessionStorage.setItem(ADAPT_FLOW_SESSION_ID_KEY, nextSessionId);
+    flowSessionIdRef.current = nextSessionId;
+    return nextSessionId;
+  }, []);
+
+  const emitUiFunnelEvent = useCallback(
+    (
+      eventName: string,
+      payload?: {
+        attemptId?: string;
+        metadata?: Record<string, unknown>;
+      },
+    ) => {
+      const flowSessionId = getFlowSessionId();
+      if (!flowSessionId) {
+        return;
+      }
+
+      const attemptId = payload?.attemptId ?? "ui";
+      const idempotencyKey = buildFunnelEventIdempotencyKey({
+        flowSessionId,
+        attemptId,
+        eventName,
+      });
+
+      void emitBusinessFunnelEvent({
+        eventName,
+        eventVersion: 1,
+        idempotencyKey,
+        metadata: payload?.metadata,
+      }).catch(() => undefined);
+    },
+    [getFlowSessionId],
+  );
 
   useEffect(() => {
     router.prefetch("/adaptar/resultado");
@@ -83,6 +276,15 @@ export default function AdaptarPage() {
   }, [router]);
 
   useEffect(() => {
+    if (!authReady || adaptPageViewTrackedRef.current) {
+      return;
+    }
+
+    adaptPageViewTrackedRef.current = true;
+    emitUiFunnelEvent("adapt_page_view");
+  }, [authReady, emitUiFunnelEvent]);
+
+  useEffect(() => {
     if (!loading) {
       setLoadingStep(0);
       return;
@@ -94,12 +296,37 @@ export default function AdaptarPage() {
     return () => timers.forEach(clearTimeout);
   }, [loading]);
 
+  useEffect(() => {
+    if (window.turnstile) {
+      setTurnstileScriptReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!turnstileScriptReady) {
+      return;
+    }
+
+    renderInvisibleTurnstileWidget();
+  }, [renderInvisibleTurnstileWidget, turnstileScriptReady]);
+
   const isAuthenticated = !!userName;
   const hasMaster = !!masterResume;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (cvMode === "upload" && !file) {
+    const submitAttemptId = buildClientAttemptId();
+    emitUiFunnelEvent("analyze_submit_clicked", {
+      attemptId: submitAttemptId,
+      metadata: {
+        cvMode,
+        isAuthenticated,
+      },
+    });
+
+    const requiresUploadedFile = !isAuthenticated || cvMode === "upload";
+
+    if (requiresUploadedFile && !file) {
       setError("Selecione seu CV em PDF.");
       return;
     }
@@ -112,9 +339,18 @@ export default function AdaptarPage() {
     try {
       const formData = new FormData();
       formData.append("jobDescriptionText", jobDescription);
+      const turnstileToken = await requestTurnstileToken();
+      appendTurnstileTokenToAnalyzeFormData(formData, turnstileToken);
       let analyzeResult: Awaited<ReturnType<typeof analyzeGuestCv>>;
       if (isAuthenticated && cvMode === "master" && masterResume) {
         formData.append("masterResumeId", masterResume.id);
+        emitUiFunnelEvent("analysis_started", {
+          attemptId: submitAttemptId,
+          metadata: {
+            cvMode,
+            isAuthenticated,
+          },
+        });
         const [result] = await Promise.all([
           analyzeAuthenticatedCv(formData),
           new Promise((r) => setTimeout(r, 10000)),
@@ -123,18 +359,33 @@ export default function AdaptarPage() {
       } else if (isAuthenticated && file) {
         formData.append("file", file);
         if (saveMasterCv) formData.append("saveAsMaster", "true");
+        emitUiFunnelEvent("analysis_started", {
+          attemptId: submitAttemptId,
+          metadata: {
+            cvMode,
+            isAuthenticated,
+          },
+        });
         const [result] = await Promise.all([
           analyzeAuthenticatedCv(formData),
           new Promise((r) => setTimeout(r, 10000)),
         ]);
         analyzeResult = result;
       } else {
-        if (!file) {
+        const uploadedFile = file;
+        if (!uploadedFile) {
           setError("Selecione seu CV em PDF.");
           setLoading(false);
           return;
         }
-        formData.append("file", file);
+        formData.append("file", uploadedFile);
+        emitUiFunnelEvent("analysis_started", {
+          attemptId: submitAttemptId,
+          metadata: {
+            cvMode,
+            isAuthenticated,
+          },
+        });
         const [result] = await Promise.all([
           analyzeGuestCv(formData),
           new Promise((r) => setTimeout(r, 10000)),
@@ -181,6 +432,15 @@ export default function AdaptarPage() {
 
   return (
     <PageShell>
+      {turnstileSiteKey ? (
+        <Script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+          strategy="afterInteractive"
+          onReady={() => {
+            setTurnstileScriptReady(true);
+          }}
+        />
+      ) : null}
       <main
         style={{
           fontFamily: GEIST,
@@ -209,6 +469,17 @@ export default function AdaptarPage() {
         />
 
         <AppHeader userName={userName} />
+        <div
+          ref={turnstileContainerRef}
+          aria-hidden
+          style={{
+            position: "absolute",
+            width: 0,
+            height: 0,
+            overflow: "hidden",
+            pointerEvents: "none",
+          }}
+        />
 
         {/* Main */}
         <div
@@ -470,7 +741,12 @@ export default function AdaptarPage() {
                     <>
                       <button
                         type="button"
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => {
+                          emitUiFunnelEvent("cv_upload_started", {
+                            attemptId: buildClientAttemptId(),
+                          });
+                          fileInputRef.current?.click();
+                        }}
                         onMouseEnter={() => setFileHover(true)}
                         onMouseLeave={() => setFileHover(false)}
                         style={{
@@ -601,7 +877,20 @@ export default function AdaptarPage() {
                     type="file"
                     accept=".pdf,.doc,.docx"
                     className="hidden"
-                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    onChange={(e) => {
+                      const nextFile = e.target.files?.[0] ?? null;
+                      setFile(nextFile);
+                      if (nextFile) {
+                        emitUiFunnelEvent("cv_upload_completed", {
+                          attemptId: buildClientAttemptId(),
+                          metadata: {
+                            fileExtension:
+                              nextFile.name.split(".").pop()?.toLowerCase() ??
+                              null,
+                          },
+                        });
+                      }
+                    }}
                   />
                 </div>
 
@@ -700,9 +989,21 @@ export default function AdaptarPage() {
                   >
                     <textarea
                       value={jobDescription}
-                      onChange={(e) =>
-                        setJobDescription(e.target.value.slice(0, 12000))
-                      }
+                      onChange={(e) => {
+                        const nextJobDescription = e.target.value.slice(
+                          0,
+                          12000,
+                        );
+                        setJobDescription(nextJobDescription);
+
+                        if (
+                          !jobDescriptionFilledTrackedRef.current &&
+                          nextJobDescription.trim()
+                        ) {
+                          jobDescriptionFilledTrackedRef.current = true;
+                          emitUiFunnelEvent("job_description_filled");
+                        }
+                      }}
                       placeholder="Cole a vaga completa (isso melhora sua análise)..."
                       style={{
                         width: "100%",
@@ -776,6 +1077,7 @@ export default function AdaptarPage() {
                 >
                   {loading ? (
                     <>
+                      {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
                       <svg
                         aria-hidden
                         className="animate-spin"

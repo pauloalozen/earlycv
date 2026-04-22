@@ -3,6 +3,7 @@ import "reflect-metadata";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 
+import { requestContextMiddleware } from "./analysis-protection/request-context.middleware";
 import { AppModule } from "./app.module";
 import { loadAppEnv, loadLocalEnvFileIfPresent } from "./config/env.module";
 
@@ -20,6 +21,7 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+  app.use(requestContextMiddleware);
 
   await app.listen(env.API_PORT, env.API_HOST);
 }

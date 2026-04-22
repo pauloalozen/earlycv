@@ -37,6 +37,8 @@ export interface DocxTemplateData {
     cityInstituition: string;
     conclusionCourse: string;
   }>;
+  hasCertificacoes: boolean;
+  hasIdiomas: boolean;
   certificacoes: Array<{
     courseName: string;
     instituitionName: string;
@@ -118,6 +120,8 @@ const MOCK_DATA: DocxTemplateData = {
       conclusionCourse: "2016",
     },
   ],
+  hasCertificacoes: true,
+  hasIdiomas: true,
   certificacoes: [
     {
       courseName: "Microsoft Power BI Data Analyst (PL-300)",

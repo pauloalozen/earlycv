@@ -69,6 +69,22 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.userDailyAnalysisUsage;
   }
 
+  get analysisProtectionConfig() {
+    return this.prisma.analysisProtectionConfig;
+  }
+
+  get analysisProtectionEvent() {
+    return this.prisma.analysisProtectionEvent;
+  }
+
+  get businessFunnelEvent() {
+    return this.prisma.businessFunnelEvent;
+  }
+
+  get businessFunnelStageMetric() {
+    return this.prisma.businessFunnelStageMetric;
+  }
+
   get passwordResetToken() {
     return this.prisma.passwordResetToken;
   }

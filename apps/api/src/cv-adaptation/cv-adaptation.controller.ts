@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Query,
+  Req,
   Res,
   UploadedFile,
   UseGuards,
@@ -15,7 +16,7 @@ import {
   ValidationPipe,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
@@ -107,6 +108,7 @@ export class CvAdaptationController {
   )
   analyzeAuthenticated(
     @AuthenticatedUser() user: { id: string },
+    @Req() req: Request,
     @UploadedFile() file: FileUpload | undefined,
     @Body(
       new ValidationPipe({
@@ -117,7 +119,12 @@ export class CvAdaptationController {
     )
     dto: AnalyzeCvDto,
   ) {
-    return this.cvAdaptationService.analyzeAuthenticated(user.id, dto, file);
+    return this.cvAdaptationService.analyzeAuthenticated(
+      user.id,
+      dto,
+      file,
+      req.analysisContext,
+    );
   }
 
   @Post("save-guest-preview")

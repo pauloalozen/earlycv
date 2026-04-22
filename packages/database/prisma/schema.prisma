@@ -134,6 +134,22 @@ enum PaymentProvider {
   stripe
 }
 
+enum AnalysisConfigValueType {
+  boolean
+  int
+  duration_ms
+  percent
+  string
+  enum
+  json
+}
+
+enum AnalysisConfigRiskLevel {
+  low
+  medium
+  high
+}
+
 model User {
   id              String         @id @default(cuid())
   email           String         @unique
@@ -162,6 +178,11 @@ model User {
   dailyAnalysisUsages         UserDailyAnalysisUsage[]
   affiliateAttributions     AffiliateAttribution[]
   affiliateCommissionEvents AffiliateCommissionEvent[]
+  analysisSessions          AnalysisSession[]
+  analysisRequestFingerprints AnalysisRequestFingerprint[]
+  analysisUsageCounters     AnalysisUsageCounter[]
+  analysisProtectionEvents  AnalysisProtectionEvent[]
+  businessFunnelEvents      BusinessFunnelEvent[]
 }
 
 model UserDailyAnalysisUsage {
@@ -515,6 +536,151 @@ model AffiliateCommissionEvent {
   @@index([affiliateCampaignId])
   @@index([affiliateCodeId])
   @@index([status])
+}
+
+model AnalysisProtectionConfig {
+  id        String                  @id @default(cuid())
+  key       String                  @unique
+  valueJson Json
+  valueType AnalysisConfigValueType
+  riskLevel AnalysisConfigRiskLevel
+  isActive  Boolean                 @default(true)
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+}
+
+model AnalysisProtectionConfigAudit {
+  id                   String                  @id @default(cuid())
+  key                  String
+  oldValueJson         Json?
+  newValueJson         Json?
+  valueType            AnalysisConfigValueType
+  riskLevel            AnalysisConfigRiskLevel
+  actorId              String?
+  actorRole            InternalRole            @default(none)
+  source               String
+  technicalContextJson Json?
+  changedAt            DateTime                @default(now())
+
+  @@index([key, changedAt])
+}
+
+model AnalysisSession {
+  id                     String                     @id @default(cuid())
+  sessionPublicTokenHash String                     @unique
+  userId                 String?
+  userAgentHash          String?
+  ipHash                 String?
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+  lastSeenAt             DateTime                   @default(now())
+  user                   User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  requestFingerprints    AnalysisRequestFingerprint[]
+  usageCounters          AnalysisUsageCounter[]
+  protectionEvents       AnalysisProtectionEvent[]
+  businessFunnelEvents   BusinessFunnelEvent[]
+
+  @@index([userId])
+}
+
+model AnalysisRequestFingerprint {
+  id                String           @id @default(cuid())
+  canonicalHash     String
+  sessionInternalId String?
+  userId            String?
+  ipHash            String?
+  firstSeenAt       DateTime         @default(now())
+  lastSeenAt        DateTime         @default(now())
+  totalCount        Int              @default(1)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  session           AnalysisSession? @relation(fields: [sessionInternalId], references: [id], onDelete: SetNull)
+  user              User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Nullable dimensions require SQL expression uniqueness in migration.
+  @@index([canonicalHash])
+  @@index([sessionInternalId])
+  @@index([userId])
+}
+
+model AnalysisUsageCounter {
+  id                String           @id @default(cuid())
+  counterKey        String
+  periodKey         String
+  sessionInternalId String?
+  userId            String?
+  usedCount         Int              @default(0)
+  windowStartedAt   DateTime
+  windowEndsAt      DateTime
+  lastUsedAt        DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  session           AnalysisSession? @relation(fields: [sessionInternalId], references: [id], onDelete: SetNull)
+  user              User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Nullable dimensions require SQL expression uniqueness in migration.
+  @@index([counterKey, periodKey])
+  @@index([sessionInternalId])
+  @@index([userId])
+}
+
+model AnalysisProtectionEvent {
+  id                String           @id @default(cuid())
+  eventName         String
+  eventVersion      Int              @default(1)
+  idempotencyKey    String?          @unique
+  requestId         String
+  correlationId     String
+  sessionInternalId String?
+  userId            String?
+  routeKey          String?
+  metadataJson      Json?
+  createdAt         DateTime         @default(now())
+  session           AnalysisSession? @relation(fields: [sessionInternalId], references: [id], onDelete: SetNull)
+  user              User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eventName, createdAt])
+  @@index([requestId])
+  @@index([correlationId])
+  @@index([sessionInternalId])
+  @@index([userId])
+}
+
+model BusinessFunnelEvent {
+  id                String           @id @default(cuid())
+  eventName         String
+  eventVersion      Int
+  idempotencyKey    String?          @unique
+  requestId         String
+  correlationId     String
+  sessionInternalId String?
+  userId            String?
+  routeKey          String?
+  metadataJson      Json?
+  createdAt         DateTime         @default(now())
+  session           AnalysisSession? @relation(fields: [sessionInternalId], references: [id], onDelete: SetNull)
+  user              User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eventName, createdAt])
+  @@index([requestId])
+  @@index([correlationId])
+  @@index([sessionInternalId])
+  @@index([userId])
+}
+
+model BusinessFunnelStageMetric {
+  id            String   @id @default(cuid())
+  stageKey      String
+  metricDate    DateTime
+  totalCount    Int      @default(0)
+  successCount  Int      @default(0)
+  errorCount    Int      @default(0)
+  avgLatencyMs  Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([stageKey, metricDate])
+  @@index([metricDate])
 }
 
 model Job {
