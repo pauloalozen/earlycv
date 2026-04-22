@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import type { InternalRole } from "@prisma/client";
 import { DatabaseService } from "../database/database.service";
 import {
@@ -70,6 +70,9 @@ type AnalysisConfigServiceOptions = {
   now?: () => number;
 };
 
+export const ANALYSIS_CONFIG_SERVICE_OPTIONS =
+  "ANALYSIS_CONFIG_SERVICE_OPTIONS";
+
 type ResolvedAllConfig = {
   entries: {
     [K in AnalysisConfigKey]: ResolvedConfigEntry<K>;
@@ -86,6 +89,8 @@ export class AnalysisConfigService {
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Optional()
+    @Inject(ANALYSIS_CONFIG_SERVICE_OPTIONS)
     options: AnalysisConfigServiceOptions = {},
   ) {
     this.cacheTtlMs = options.cacheTtlMs ?? 5_000;
