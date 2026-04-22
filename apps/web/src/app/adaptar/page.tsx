@@ -9,6 +9,7 @@ import {
   analyzeAuthenticatedCv,
   analyzeGuestCv,
   emitBusinessFunnelEvent,
+  saveGuestPreview,
 } from "@/lib/cv-adaptation-api";
 import {
   appendTurnstileTokenToAnalyzeFormData,
@@ -67,7 +68,9 @@ type TurnstileApi = {
     container: HTMLElement,
     options: {
       sitekey: string;
-      size: "invisible";
+      appearance?: "always" | "execute" | "interaction-only";
+      execution?: "execute" | "render";
+      size: "compact" | "flexible" | "normal";
       callback: (token: string) => void;
       "error-callback": () => void;
       "expired-callback": () => void;
@@ -158,7 +161,9 @@ export default function AdaptarPage() {
 
     turnstileWidgetIdRef.current = turnstile.render(container, {
       sitekey: turnstileSiteKey,
-      size: "invisible",
+      appearance: "execute",
+      execution: "execute",
+      size: "normal",
       callback: (token) => {
         resolvePendingTurnstileToken(token.trim() || null);
       },
@@ -358,7 +363,7 @@ export default function AdaptarPage() {
         analyzeResult = result;
       } else if (isAuthenticated && file) {
         formData.append("file", file);
-        if (saveMasterCv) formData.append("saveAsMaster", "true");
+        if (saveMasterCv || !hasMaster) formData.append("saveAsMaster", "true");
         emitUiFunnelEvent("analysis_started", {
           attemptId: submitAttemptId,
           metadata: {
@@ -394,6 +399,25 @@ export default function AdaptarPage() {
       }
       setLoadingStep(3);
       await new Promise((r) => setTimeout(r, 2000));
+
+      if (isAuthenticated) {
+        try {
+          const saved = await saveGuestPreview({
+            adaptedContentJson: analyzeResult.adaptedContentJson,
+            companyName: analyzeResult.adaptedContentJson?.vaga?.empresa,
+            jobDescriptionText: jobDescription,
+            jobTitle: analyzeResult.adaptedContentJson?.vaga?.cargo,
+            masterCvText: analyzeResult.masterCvText,
+            previewText: analyzeResult.previewText,
+          });
+
+          router.push(`/adaptar/resultado?adaptationId=${saved.id}`);
+          return;
+        } catch {
+          // fallback to session storage path
+        }
+      }
+
       sessionStorage.setItem(
         "guestAnalysis",
         JSON.stringify({
@@ -473,11 +497,13 @@ export default function AdaptarPage() {
           ref={turnstileContainerRef}
           aria-hidden
           style={{
-            position: "absolute",
-            width: 0,
-            height: 0,
-            overflow: "hidden",
+            position: "fixed",
+            left: -10000,
+            top: -10000,
+            width: 320,
+            height: 80,
             pointerEvents: "none",
+            opacity: 0,
           }}
         />
 

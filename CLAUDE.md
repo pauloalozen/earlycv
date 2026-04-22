@@ -126,3 +126,4 @@ npm run test
 - Memoria mais nova: paginas publicas de `Privacidade` e `Termos de Uso` criadas com metadata completa + links discretos no rodape da landing; painel de planos atualizado com plano free e contadores de analise; bug de travamento no back/forward com spinner de transicao permanece pendente e em investigacao.
 - Memoria mais nova: slice `analysis-protection + analysis-observability` implementado (facade protegida, turnstile, rate-limit/dedupe/usage policy, telemetry e funnel idempotente) e integrado no `cv-adaptation` sem mudar UX visivel.
 - Referencia operacional oficial do slice: `docs/analysis-protection-operational-runbook.md`.
+- Convencao nova: documentos operacionais de uso diario devem ser criados em `docs/runbook/`.

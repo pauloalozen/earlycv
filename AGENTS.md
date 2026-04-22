@@ -25,3 +25,4 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Slice de protecao e observabilidade da analise de CV foi implementado em `apps/api/src/analysis-protection` e `apps/api/src/analysis-observability`, com boundary obrigatorio no `cv-adaptation`.
 - O fluxo `/cv-adaptation/analyze-guest` agora exige token turnstile encaminhado pelo web app, com cobertura dedicada em testes de API e web submit-flow.
 - Runbook operacional oficial da protecao/observabilidade: `docs/analysis-protection-operational-runbook.md` (checklists diarios/semanais, rollback e incident playbooks).
+- Convencao de documentacao operacional: novos guias de uso diario/runbook devem ser criados em `docs/runbook/`.

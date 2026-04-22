@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/cn";
 
-interface DeltaBadgeProps extends ComponentProps<"span"> {
+export interface DeltaBadgeProps extends ComponentProps<"span"> {
   delta: string | number;
 }
 

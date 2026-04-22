@@ -2,13 +2,13 @@ import type { ComponentProps } from "react";
 import { cn } from "@/lib/cn";
 import { DeltaBadge } from "./delta-badge";
 
-interface Keyword {
+export interface Keyword {
   name: string;
   presente: boolean;
   delta: number;
 }
 
-interface KeywordTableProps extends ComponentProps<"div"> {
+export interface KeywordTableProps extends ComponentProps<"div"> {
   keywords: Keyword[];
 }
 

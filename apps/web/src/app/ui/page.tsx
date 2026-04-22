@@ -9,13 +9,6 @@ export const metadata: Metadata = {
 };
 
 export default function UIShowcase() {
-  const segments = [
-    { name: "skills", pct: 25, color: "green" as const },
-    { name: "experience", pct: 30, color: "yellow" as const },
-    { name: "culture fit", pct: 20, color: "red" as const },
-    { name: "salary exp", pct: 25, color: "green" as const },
-  ];
-
   return (
     <div className="min-h-screen bg-background py-12 px-4 md:px-8 lg:px-16">
       <div className="max-w-4xl mx-auto">
@@ -27,7 +20,7 @@ export default function UIShowcase() {
             <h2 className="text-2xl font-semibold mb-4 text-stone-900">
               Metric Bar
             </h2>
-            <MetricBar score={72} segments={segments} />
+            <MetricBar label="Fit score" value={72} />
           </div>
           <div className="p-8 bg-white rounded-2xl shadow-sm border border-stone-200">
             <h2 className="text-2xl font-semibold mb-4 text-stone-900">
@@ -36,7 +29,7 @@ export default function UIShowcase() {
             <div className="space-y-2">
               <DeltaBadge delta={5} />
               <DeltaBadge delta={-3} />
-              <DeltaBadge delta={0} label="points" />
+              <DeltaBadge delta={0} />
             </div>
           </div>
         </div>

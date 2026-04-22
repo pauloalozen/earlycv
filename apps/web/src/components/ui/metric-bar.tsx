@@ -12,10 +12,13 @@ export function MetricBar({
   className,
   ...props
 }: MetricBarProps) {
+  const normalizedLabel =
+    typeof label === "string" && label.trim().length > 0 ? label : "metric";
+
   return (
     <div
       className={cn("w-full", className)}
-      data-testid={`metric-bar-${label.toLowerCase().replace(/\s+/g, "-")} `}
+      data-testid={`metric-bar-${normalizedLabel.toLowerCase().replace(/\s+/g, "-")}`}
       {...props}
     >
       <div className="relative h-4 w-full overflow-hidden rounded-full bg-[#EEEEEE]">

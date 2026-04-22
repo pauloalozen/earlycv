@@ -2,14 +2,18 @@ import "server-only";
 
 import { cookies } from "next/headers";
 
-import { getCurrentAppSession } from "./app-session.server";
+import { fetchCurrentAppUser, getAppSessionTokens } from "./app-session.server";
 import { BACKOFFICE_SESSION_COOKIE_NAME } from "./backoffice-session";
 
 export async function getBackofficeSessionToken() {
-  const session = await getCurrentAppSession();
+  const { accessToken } = await getAppSessionTokens();
 
-  if (session?.user.isStaff && session.user.internalRole !== "none") {
-    return session.accessToken;
+  if (accessToken) {
+    const user = await fetchCurrentAppUser(accessToken);
+
+    if (user?.isStaff && user.internalRole !== "none") {
+      return accessToken;
+    }
   }
 
   const cookieStore = await cookies();

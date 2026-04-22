@@ -11,6 +11,9 @@ const routerPushMock = vi.hoisted(() => vi.fn());
 const routerPrefetchMock = vi.hoisted(() => vi.fn());
 const emitBusinessFunnelEventMock = vi.hoisted(() => vi.fn());
 const analyzeGuestCvMock = vi.hoisted(() => vi.fn());
+const analyzeAuthenticatedCvMock = vi.hoisted(() => vi.fn());
+const saveGuestPreviewMock = vi.hoisted(() => vi.fn());
+const getAuthStatusMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -28,7 +31,7 @@ vi.mock("@/components/page-shell", () => ({
 }));
 
 vi.mock("@/lib/session-actions", () => ({
-  getAuthStatus: vi.fn(async () => ({ userName: null })),
+  getAuthStatus: getAuthStatusMock,
 }));
 
 vi.mock("@/lib/resumes-api", () => ({
@@ -36,9 +39,10 @@ vi.mock("@/lib/resumes-api", () => ({
 }));
 
 vi.mock("@/lib/cv-adaptation-api", () => ({
-  analyzeAuthenticatedCv: vi.fn(),
+  analyzeAuthenticatedCv: analyzeAuthenticatedCvMock,
   analyzeGuestCv: analyzeGuestCvMock,
   emitBusinessFunnelEvent: emitBusinessFunnelEventMock,
+  saveGuestPreview: saveGuestPreviewMock,
 }));
 
 import AdaptarPage from "./page";
@@ -57,8 +61,20 @@ describe("AdaptarPage submit analytics flow", () => {
     routerPrefetchMock.mockReset();
     emitBusinessFunnelEventMock.mockReset();
     analyzeGuestCvMock.mockReset();
+    analyzeAuthenticatedCvMock.mockReset();
+    saveGuestPreviewMock.mockReset();
+    getAuthStatusMock.mockReset();
+    getAuthStatusMock.mockResolvedValue({ userName: null });
     emitBusinessFunnelEventMock.mockResolvedValue(undefined);
     analyzeGuestCvMock.mockResolvedValue({ adaptationId: "adapt-1" });
+    analyzeAuthenticatedCvMock.mockResolvedValue({
+      adaptedContentJson: {
+        vaga: { cargo: "", empresa: "" },
+      },
+      previewText: "",
+      masterCvText: "master-cv",
+    });
+    saveGuestPreviewMock.mockResolvedValue({ id: "saved-1" });
     sessionStorage.clear();
     turnstileCallback = null;
   });
@@ -116,6 +132,11 @@ describe("AdaptarPage submit analytics flow", () => {
     });
 
     expect(turnstileRenderMock).toHaveBeenCalledTimes(1);
+    expect(turnstileRenderMock.mock.calls[0]?.[1]).toMatchObject({
+      appearance: "execute",
+      execution: "execute",
+      size: "normal",
+    });
     expect(turnstileExecuteMock).toHaveBeenCalledTimes(1);
 
     const formDataArg = analyzeGuestCvMock.mock.calls[0]?.[0] as
@@ -251,4 +272,53 @@ describe("AdaptarPage submit analytics flow", () => {
       order.indexOf("analyze_request"),
     );
   });
+
+  it("persists authenticated analysis before navigating to resultado", async () => {
+    getAuthStatusMock.mockResolvedValue({ userName: "Claudio" });
+
+    const { container } = render(<AdaptarPage />);
+
+    const textarea = await screen.findByPlaceholderText(
+      "Cole a vaga completa (isso melhora sua análise)...",
+    );
+    const fileInput =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
+
+    if (!fileInput) {
+      throw new Error("Expected file input to exist");
+    }
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(["cv"], "cv.pdf", { type: "application/pdf" })],
+      },
+    });
+    fireEvent.change(textarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeAuthenticatedCvMock).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(
+      () => {
+        expect(saveGuestPreviewMock).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 15000 },
+    );
+
+    const analyzeFormData = analyzeAuthenticatedCvMock.mock.calls[0]?.[0] as
+      | FormData
+      | undefined;
+    expect(analyzeFormData?.get("saveAsMaster")).toBe("true");
+
+    expect(routerPushMock).toHaveBeenCalledWith(
+      "/adaptar/resultado?adaptationId=saved-1",
+    );
+  }, 20000);
 });
