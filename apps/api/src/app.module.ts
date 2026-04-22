@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ScheduleModule } from "@nestjs/schedule";
 
 import { AdminProfilesModule } from "./admin-profiles/admin-profiles.module";
 import { AdminResumesModule } from "./admin-resumes/admin-resumes.module";
@@ -24,6 +25,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
 @Module({
   imports: [
     EnvModule,
+    ScheduleModule.forRoot(),
     DatabaseModule,
     InfraModule,
     StorageModule,

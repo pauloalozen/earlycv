@@ -8,8 +8,10 @@ const context: AnalysisRequestContext = {
   correlationId: "corr-1",
   ip: "203.0.113.10",
   requestId: "req-1",
+  routePath: "/api/cv-adaptation/analyze",
   sessionInternalId: "session-1",
   sessionPublicToken: null,
+  userAgentHash: "ua-1",
   userId: "user-1",
 };
 
@@ -39,6 +41,10 @@ test("creates telemetry event with scrubbed metadata and route key", async () =>
   assert.equal(
     (createPayload as { data: { routeKey: string } }).data.routeKey,
     "analysis/score-resume",
+  );
+  assert.equal(
+    (createPayload as { data: { eventVersion: number } }).data.eventVersion,
+    1,
   );
   assert.deepEqual(
     (createPayload as { data: { metadataJson: Record<string, unknown> } }).data
@@ -139,5 +145,28 @@ test("redacts sessionPublicToken keys nested inside metadata objects", async () 
       },
       list: [{ id: 1 }, { id: 2, child: { keep: true } }],
     },
+  );
+});
+
+test("throws controlled error when event is missing version registry entry", async () => {
+  const service = new AnalysisTelemetryService({
+    analysisProtectionEvent: {
+      create: async () => {
+        throw new Error("create should not be called");
+      },
+      upsert: async () => {
+        throw new Error("upsert should not be called");
+      },
+    },
+  } as any);
+
+  await assert.rejects(
+    service.emit(
+      "missing_event_name" as unknown as Parameters<
+        AnalysisTelemetryService["emit"]
+      >[0],
+      context,
+    ),
+    /Missing event version registry entry/i,
   );
 });

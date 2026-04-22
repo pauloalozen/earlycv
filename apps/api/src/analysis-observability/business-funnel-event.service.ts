@@ -2,6 +2,11 @@ import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { DatabaseService } from "../database/database.service";
+import { resolveBusinessFunnelEventVersion } from "./analysis-event-version.registry";
+import {
+  type BusinessFunnelEventSource,
+  FUNNEL_EVENT_OWNERSHIP,
+} from "./business-funnel-event-ownership";
 import { BusinessFunnelProjectionService } from "./business-funnel-projection.service";
 
 export type RecordBusinessFunnelEventInput = {
@@ -52,14 +57,18 @@ export class BusinessFunnelEventService {
   async record(
     input: RecordBusinessFunnelEventInput,
     context: AnalysisRequestContext,
+    source: BusinessFunnelEventSource = "frontend",
   ) {
-    const normalizedEventName = this.assertValidInput(input);
+    const { normalizedEventName, resolvedVersion } = this.assertValidInput(
+      input,
+      source,
+    );
 
     const normalizedKey = this.normalizeIdempotencyKey(input.idempotencyKey);
     const eventData = {
       correlationId: context.correlationId,
       eventName: normalizedEventName,
-      eventVersion: input.eventVersion,
+      eventVersion: resolvedVersion,
       metadataJson: this.toMetadataJson(input.metadata),
       requestId: context.requestId,
       routeKey: input.routeKey ?? null,
@@ -121,16 +130,15 @@ export class BusinessFunnelEventService {
     });
   }
 
-  private assertValidInput(input: RecordBusinessFunnelEventInput) {
+  private assertValidInput(
+    input: RecordBusinessFunnelEventInput,
+    source: BusinessFunnelEventSource,
+  ) {
     if (typeof input.eventName !== "string" || !input.eventName.trim()) {
       throw new BadRequestException("eventName is required");
     }
 
     const normalizedEventName = this.normalizeEventName(input.eventName);
-
-    if (!Number.isInteger(input.eventVersion) || input.eventVersion < 1) {
-      throw new BadRequestException("eventVersion must be a positive integer");
-    }
 
     if (this.isReservedProtectionSemanticEvent(normalizedEventName)) {
       throw new BadRequestException(
@@ -138,7 +146,45 @@ export class BusinessFunnelEventService {
       );
     }
 
-    return normalizedEventName;
+    const versionFromRegistry =
+      resolveBusinessFunnelEventVersion(normalizedEventName);
+
+    if (versionFromRegistry === null) {
+      throw new BadRequestException(
+        `business funnel event is missing from event version registry: ${normalizedEventName}`,
+      );
+    }
+
+    if (!Number.isInteger(input.eventVersion) || input.eventVersion < 1) {
+      throw new BadRequestException("eventVersion must be a positive integer");
+    }
+
+    if (input.eventVersion !== versionFromRegistry) {
+      throw new BadRequestException(
+        `eventVersion mismatch for ${normalizedEventName}: expected ${versionFromRegistry}, received ${input.eventVersion}`,
+      );
+    }
+
+    const ownershipKey =
+      normalizedEventName as keyof typeof FUNNEL_EVENT_OWNERSHIP;
+    const owner = FUNNEL_EVENT_OWNERSHIP[ownershipKey];
+
+    if (!owner) {
+      throw new BadRequestException(
+        `business funnel event is missing ownership registry entry: ${normalizedEventName}`,
+      );
+    }
+
+    if (owner !== source) {
+      throw new BadRequestException(
+        `business funnel event ownership mismatch for ${normalizedEventName}: owner is ${owner}, source is ${source}`,
+      );
+    }
+
+    return {
+      normalizedEventName,
+      resolvedVersion: versionFromRegistry,
+    };
   }
 
   private normalizeEventName(eventName: string) {

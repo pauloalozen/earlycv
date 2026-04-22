@@ -20,6 +20,7 @@ export class BusinessFunnelEventsController {
     const result = await this.businessFunnelEventService.record(
       payload,
       req.analysisContext,
+      "frontend",
     );
 
     return {

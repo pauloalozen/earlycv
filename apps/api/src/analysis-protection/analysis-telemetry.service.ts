@@ -1,39 +1,16 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import {
+  type AnalysisProtectionEventName,
+  resolveAnalysisProtectionEventVersion,
+} from "../analysis-observability/analysis-event-version.registry";
 import { DatabaseService } from "../database/database.service";
 import type { AnalysisRequestContext } from "./types";
 
-export type AnalysisTelemetryEventName =
-  | "abuse_detected"
-  | "cache_hit"
-  | "cache_miss"
-  | "canonical_hash_generated"
-  | "cooldown_block"
-  | "daily_limit_block"
-  | "dedupe_lock_acquired"
-  | "duplicate_request_blocked"
-  | "kill_switch_blocked"
-  | "kill_switch_passed"
-  | "openai_request_failed"
-  | "openai_request_started"
-  | "openai_request_success"
-  | "payload_invalid"
-  | "payload_valid"
-  | "rate_limit_block_contextual"
-  | "rate_limit_block_initial"
-  | "rate_limit_contextual_passed"
-  | "rate_limit_raw_passed"
-  | "turnstile_expired"
-  | "turnstile_invalid"
-  | "turnstile_missing"
-  | "turnstile_unavailable"
-  | "turnstile_unconfigured"
-  | "turnstile_valid"
-  | "usage_policy_passed";
+export type AnalysisTelemetryEventName = AnalysisProtectionEventName;
 
 export type AnalysisTelemetryInput = {
   eventName: AnalysisTelemetryEventName;
-  eventVersion?: number;
   idempotencyKey?: string;
   metadata?: Record<string, unknown>;
   routeKey?: string | null;
@@ -56,7 +33,7 @@ export class AnalysisTelemetryService {
     const payload = {
       correlationId: context.correlationId,
       eventName,
-      eventVersion: input.eventVersion ?? 1,
+      eventVersion: resolveAnalysisProtectionEventVersion(eventName),
       metadataJson,
       requestId: context.requestId,
       routeKey: input.routeKey ?? null,

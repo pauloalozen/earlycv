@@ -1,0 +1,74 @@
+export const ANALYSIS_PROTECTION_EVENT_VERSION_MAP = {
+  abuse_detected: 1,
+  cache_hit: 1,
+  cache_miss: 1,
+  canonical_hash_generated: 1,
+  cooldown_block: 1,
+  daily_limit_block: 1,
+  dedupe_lock_acquired: 1,
+  duplicate_request_blocked: 1,
+  kill_switch_blocked: 1,
+  kill_switch_passed: 1,
+  openai_request_failed: 1,
+  openai_request_started: 1,
+  openai_request_success: 1,
+  payload_invalid: 1,
+  payload_valid: 1,
+  rate_limit_block_contextual: 1,
+  rate_limit_block_initial: 1,
+  rate_limit_contextual_passed: 1,
+  rate_limit_raw_passed: 1,
+  turnstile_expired: 1,
+  turnstile_invalid: 1,
+  turnstile_missing: 1,
+  turnstile_unavailable: 1,
+  turnstile_unconfigured: 1,
+  turnstile_valid: 1,
+  usage_policy_passed: 1,
+} as const;
+
+export type AnalysisProtectionEventName =
+  keyof typeof ANALYSIS_PROTECTION_EVENT_VERSION_MAP;
+
+export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
+  adapt_page_view: 1,
+  analysis_started: 1,
+  analyze_submit_clicked: 1,
+  checkout_started: 1,
+  cv_upload_completed: 1,
+  cv_upload_started: 1,
+  dashboard_viewed: 1,
+  full_analysis_viewed: 1,
+  job_description_filled: 1,
+  landing_cta_click: 1,
+  landing_view: 1,
+  login_completed: 1,
+  purchase_completed: 1,
+  signup_completed: 1,
+  signup_started: 1,
+  teaser_viewed: 1,
+  unlock_cv_click: 1,
+} as const;
+
+export type BusinessFunnelEventName =
+  keyof typeof BUSINESS_FUNNEL_EVENT_VERSION_MAP;
+
+export function resolveAnalysisProtectionEventVersion(
+  eventName: AnalysisProtectionEventName,
+): number {
+  const version = ANALYSIS_PROTECTION_EVENT_VERSION_MAP[eventName];
+
+  if (!version) {
+    throw new Error(
+      `Missing event version registry entry for analysis protection event: ${eventName}`,
+    );
+  }
+
+  return version;
+}
+
+export function resolveBusinessFunnelEventVersion(eventName: string) {
+  const key = eventName as BusinessFunnelEventName;
+
+  return BUSINESS_FUNNEL_EVENT_VERSION_MAP[key] ?? null;
+}

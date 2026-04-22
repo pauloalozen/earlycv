@@ -23,8 +23,10 @@ const baseContext = {
   correlationId: "corr-1",
   ip: "203.0.113.10",
   requestId: "req-1",
+  routePath: "/api/cv-adaptation/analyze",
   sessionInternalId: "session-1",
   sessionPublicToken: null,
+  userAgentHash: "ua-1",
   userId: "user-1",
 };
 
@@ -94,6 +96,7 @@ test("records business event and updates projection for first ingestion", async 
 
   assert.equal(ingested.ingested, true);
   assert.equal(ingested.event.eventName, "analyze_submit_clicked");
+  assert.equal(ingested.event.eventVersion, 1);
   assert.equal(ingested.event.correlationId, "corr-1");
   assert.deepEqual(projectionApplied, ["analyze_submit_clicked"]);
 });
@@ -557,5 +560,101 @@ test("projection updates counters based on stage and outcome", async () => {
     (upsertPayload as { update: { errorCount: { increment: number } } }).update
       .errorCount.increment,
     0,
+  );
+});
+
+test("rejects business funnel event missing version registry entry", async () => {
+  const service = new BusinessFunnelEventService(
+    {
+      $transaction: async () => {
+        throw new Error("transaction should not be called");
+      },
+    } as any,
+    {
+      applyEvent: async () => {
+        throw new Error("projection should not be called");
+      },
+    } as BusinessFunnelProjectionService,
+  );
+
+  await assert.rejects(
+    service.record(
+      {
+        eventName: "unknown_event_for_registry",
+        eventVersion: 1,
+      },
+      baseContext,
+      "frontend",
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match(
+        (error as BadRequestException).message,
+        /event version registry/i,
+      );
+      return true;
+    },
+  );
+});
+
+test("rejects eventVersion mismatch against registry", async () => {
+  const service = new BusinessFunnelEventService(
+    {
+      $transaction: async () => {
+        throw new Error("transaction should not be called");
+      },
+    } as any,
+    {
+      applyEvent: async () => {
+        throw new Error("projection should not be called");
+      },
+    } as BusinessFunnelProjectionService,
+  );
+
+  await assert.rejects(
+    service.record(
+      {
+        eventName: "analyze_submit_clicked",
+        eventVersion: 2,
+      },
+      baseContext,
+      "frontend",
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match((error as BadRequestException).message, /eventVersion/i);
+      return true;
+    },
+  );
+});
+
+test("rejects frontend emission of backend-owned funnel events", async () => {
+  const service = new BusinessFunnelEventService(
+    {
+      $transaction: async () => {
+        throw new Error("transaction should not be called");
+      },
+    } as any,
+    {
+      applyEvent: async () => {
+        throw new Error("projection should not be called");
+      },
+    } as BusinessFunnelProjectionService,
+  );
+
+  await assert.rejects(
+    service.record(
+      {
+        eventName: "full_analysis_viewed",
+        eventVersion: 1,
+      },
+      baseContext,
+      "frontend",
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match((error as BadRequestException).message, /ownership/i);
+      return true;
+    },
   );
 });

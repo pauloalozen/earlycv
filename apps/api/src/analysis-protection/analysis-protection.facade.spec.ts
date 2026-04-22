@@ -26,6 +26,7 @@ type TelemetryCall = {
   context: AnalysisRequestContext;
   eventName: string;
   input: {
+    idempotencyKey?: string;
     metadata?: Record<string, unknown>;
     routeKey?: string | null;
   };
@@ -38,8 +39,10 @@ const makeContext = (
   ip: "203.0.113.10",
   requestId: "req-1",
   routeKey: "analysis/score-resume",
+  routePath: "/api/cv-adaptation/analyze",
   sessionInternalId: "session-1",
   sessionPublicToken: null,
+  userAgentHash: "ua-1",
   userId: null,
   ...overrides,
 });
@@ -1363,4 +1366,110 @@ test("smoke matrix covers key flag combinations and rollout transitions", async 
       assert.equal(result.reason, scenario.expectedReason);
     }
   }
+});
+
+test("telemetry includes idempotency keys derived from request and stage", async () => {
+  const { facade, telemetryCalls } = createFacadeHarness();
+
+  const result = await facade.executeProtectedAnalysis(
+    {
+      payload: { cv: "resume", job: "description" },
+      turnstileToken: "token",
+    },
+    makeContext({ requestId: "req-telemetry-idem" }),
+    async () => ({ adapted: true }),
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(telemetryCalls.length > 0, true);
+
+  for (const call of telemetryCalls) {
+    assert.equal(typeof call.input.idempotencyKey, "string");
+    assert.equal(
+      call.input.idempotencyKey?.startsWith("req-telemetry-idem:"),
+      true,
+    );
+  }
+});
+
+test("idempotency keys remain stable across retry and concurrency", async () => {
+  const idempotencyKeys = new Set<string>();
+
+  const facade = new AnalysisProtectionFacade(
+    {
+      getAll: async () => ({
+        ...defaultConfig,
+      }),
+    } as any,
+    {
+      checkRawLimit: async () => ({ allowed: true, count: 1, reason: null }),
+      checkContextualLimit: async () => ({
+        allowed: true,
+        count: 1,
+        reason: null,
+      }),
+    } as any,
+    {
+      buildCanonicalHash: () => "hash-1",
+      checkAntiBotHeuristic: async () => ({ blocked: false, count: 1 }),
+      getCachedResult: async () => null,
+      releaseLock: async () => {},
+      setCachedResult: async () => {},
+      tryAcquireLock: async () => ({ acquired: true, key: "dedupe-key" }),
+    } as any,
+    {
+      consumeIfNeeded: async () => ({
+        allowed: true,
+        dailyConsumed: true,
+        dailyCount: 1,
+        reason: null,
+      }),
+    } as any,
+    {
+      verifyToken: async () => ({ valid: true, reason: null }),
+    } as any,
+    {
+      execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+    } as any,
+    {
+      emit: async (
+        _eventName: string,
+        _context: AnalysisRequestContext,
+        input: TelemetryCall["input"] = {},
+      ) => {
+        if (input.idempotencyKey) {
+          idempotencyKeys.add(input.idempotencyKey);
+        }
+      },
+    } as any,
+    {
+      cooldownMs: 0,
+      dailyLimit: 100,
+      providerMaxExecutionMs: 5_000,
+      providerTimeoutMs: 5_000,
+    },
+  );
+
+  const context = makeContext({ requestId: "req-retry-concurrency" });
+  const run = () =>
+    facade.executeProtectedAnalysis(
+      {
+        payload: { cv: "resume", job: "description" },
+        turnstileToken: "token",
+      },
+      context,
+      async () => ({ adapted: true }),
+    );
+
+  await run();
+  const afterFirstRun = idempotencyKeys.size;
+
+  await run();
+  const afterRetry = idempotencyKeys.size;
+
+  await Promise.all([run(), run()]);
+
+  assert.equal(afterFirstRun > 0, true);
+  assert.equal(afterRetry, afterFirstRun);
+  assert.equal(idempotencyKeys.size, afterFirstRun);
 });

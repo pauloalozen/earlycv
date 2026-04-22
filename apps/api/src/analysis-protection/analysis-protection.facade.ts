@@ -2,7 +2,10 @@ import { HttpException, Inject, Injectable, Optional } from "@nestjs/common";
 import { AnalysisConfigService } from "./analysis-config.service";
 import { AnalysisDedupeCacheService } from "./analysis-dedupe-cache.service";
 import { AnalysisRateLimitService } from "./analysis-rate-limit.service";
-import { AnalysisTelemetryService } from "./analysis-telemetry.service";
+import {
+  type AnalysisTelemetryInput,
+  AnalysisTelemetryService,
+} from "./analysis-telemetry.service";
 import { AnalysisUsagePolicyService } from "./analysis-usage-policy.service";
 import { ProtectedAiProviderGateway } from "./protected-ai-provider.gateway";
 import { TurnstileVerificationService } from "./turnstile-verification.service";
@@ -417,13 +420,18 @@ export class AnalysisProtectionFacade {
     eventName: Parameters<AnalysisTelemetryService["emit"]>[0],
     context: AnalysisRequestContext,
     input: Omit<
-      Parameters<AnalysisTelemetryService["emit"]>[2],
-      "routeKey"
-    > = {},
+      AnalysisTelemetryInput,
+      "eventName" | "idempotencyKey" | "routeKey"
+    > & {
+      stage?: string;
+    } = {},
   ) {
     const routeKey = (context as { routeKey?: string | null }).routeKey ?? null;
+    const stage = input.stage ?? eventName;
+    const idempotencyKey = `${context.requestId}:${eventName}:${stage}`;
     await this.telemetry.emit(eventName, context, {
       ...input,
+      idempotencyKey,
       routeKey,
     });
   }
@@ -467,6 +475,7 @@ export class AnalysisProtectionFacade {
         rolloutMode,
         stageReason,
       },
+      stage: `rollout_allow:${stageReason}`,
     });
   }
 
