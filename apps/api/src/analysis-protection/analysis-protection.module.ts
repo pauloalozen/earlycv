@@ -1,6 +1,9 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../database/database.module";
-import { AnalysisConfigService } from "./analysis-config.service";
+import {
+  ANALYSIS_CONFIG_SERVICE_OPTIONS,
+  AnalysisConfigService,
+} from "./analysis-config.service";
 import { AnalysisDedupeCacheService } from "./analysis-dedupe-cache.service";
 import { AnalysisProtectionFacade } from "./analysis-protection.facade";
 import { AnalysisRateLimitService } from "./analysis-rate-limit.service";
@@ -17,6 +20,10 @@ import { TurnstileVerificationService } from "./turnstile-verification.service";
     {
       provide: ANALYSIS_OPERATIONAL_STORE,
       useFactory: () => new InMemoryOperationalStoreAdapter(),
+    },
+    {
+      provide: ANALYSIS_CONFIG_SERVICE_OPTIONS,
+      useValue: {},
     },
     AnalysisConfigService,
     AnalysisRateLimitService,
