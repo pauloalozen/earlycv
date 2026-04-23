@@ -10,9 +10,16 @@ import {
 import type { UserPlanType } from "@prisma/client";
 import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
 
+import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
+import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { DatabaseService } from "../database/database.service";
 
 type PlanId = "starter" | "pro" | "turbo";
+
+type MercadoPagoPaymentResolution = {
+  paymentReference: string | null;
+  status: "approved" | "failed" | "pending" | "unknown";
+};
 
 const PLAN_CONFIG: Record<
   PlanId,
@@ -65,6 +72,8 @@ export class PlansService {
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(BusinessFunnelEventService)
+    private readonly businessFunnelEventService: BusinessFunnelEventService,
   ) {}
 
   async createCheckout(
@@ -139,11 +148,35 @@ export class PlansService {
       throw new BadRequestException(`Provider ${provider} not supported`);
     }
 
-    const paymentReference = await this.resolveMercadoPagoPayment(body);
-    if (!paymentReference) return;
+    const payment = await this.resolveMercadoPagoPayment(body);
+    if (!payment.paymentReference) return;
+
+    if (payment.status === "failed") {
+      const purchase = await this.database.planPurchase.findUnique({
+        where: { paymentReference: payment.paymentReference },
+      });
+
+      if (
+        purchase &&
+        purchase.status !== "completed" &&
+        purchase.status !== "failed"
+      ) {
+        await this.database.planPurchase.update({
+          where: { id: purchase.id },
+          data: { status: "failed" },
+        });
+      }
+
+      await this.recordPaymentFailed(payment.paymentReference);
+      return;
+    }
+
+    if (payment.status !== "approved") {
+      return;
+    }
 
     const purchase = await this.database.planPurchase.findUnique({
-      where: { paymentReference },
+      where: { paymentReference: payment.paymentReference },
     });
 
     if (!purchase || purchase.status === "completed") return;
@@ -162,6 +195,40 @@ export class PlansService {
         purchase.analysisCreditsGranted,
       ),
     );
+  }
+
+  private async recordPaymentFailed(paymentReference: string) {
+    const context: AnalysisRequestContext = {
+      correlationId: `plans-webhook:${paymentReference}`,
+      ip: null,
+      requestId: `plans-webhook:${paymentReference}`,
+      routePath: "/api/plans/webhook/mercadopago",
+      sessionInternalId: null,
+      sessionPublicToken: null,
+      userAgentHash: null,
+      userId: null,
+    };
+
+    await this.businessFunnelEventService
+      .record(
+        {
+          eventName: "payment_failed",
+          eventVersion: 1,
+          idempotencyKey: `plans:${paymentReference}:payment_failed`,
+          metadata: {
+            paymentReference,
+            provider: "mercadopago",
+          },
+          routeKey: "api/plans/webhook/mercadopago",
+        },
+        context,
+        "backend",
+      )
+      .catch((error) => {
+        this.logger.warn(
+          `Failed to record payment_failed funnel event: ${error}`,
+        );
+      });
   }
 
   private async activatePlan(
@@ -287,32 +354,73 @@ export class PlansService {
 
   private async resolveMercadoPagoPayment(
     body: unknown,
-  ): Promise<string | null> {
-    if (!body || typeof body !== "object") return null;
+  ): Promise<MercadoPagoPaymentResolution> {
+    if (!body || typeof body !== "object") {
+      return {
+        paymentReference: null,
+        status: "unknown",
+      };
+    }
 
     const data = body as Record<string, unknown>;
 
     if (data.type !== "payment") {
       this.logger.log(`Ignoring MP webhook type: ${String(data.type)}`);
-      return null;
+      return {
+        paymentReference: null,
+        status: "unknown",
+      };
     }
 
-    const paymentId =
+    const paymentIdRaw =
       typeof data.data === "object" && data.data !== null
-        ? String((data.data as Record<string, unknown>).id)
+        ? (data.data as Record<string, unknown>).id
         : null;
+    const paymentId =
+      typeof paymentIdRaw === "string"
+        ? paymentIdRaw.trim()
+        : typeof paymentIdRaw === "number"
+          ? String(paymentIdRaw)
+          : null;
 
-    if (!paymentId) return null;
+    if (!paymentId) {
+      return {
+        paymentReference: null,
+        status: "unknown",
+      };
+    }
 
     const client = this.getMercadoPagoClient();
     const paymentClient = new Payment(client);
     const payment = await paymentClient.get({ id: paymentId });
 
-    if (payment.status !== "approved") {
-      this.logger.log(`Payment ${paymentId} not approved: ${payment.status}`);
-      return null;
+    const paymentReference = payment.external_reference ?? null;
+    if (payment.status === "approved") {
+      return {
+        paymentReference,
+        status: "approved",
+      };
     }
 
-    return payment.external_reference ?? null;
+    if (
+      payment.status === "cancelled" ||
+      payment.status === "charged_back" ||
+      payment.status === "rejected" ||
+      payment.status === "refunded"
+    ) {
+      this.logger.log(
+        `Payment ${paymentId} failed with status: ${payment.status}`,
+      );
+      return {
+        paymentReference,
+        status: "failed",
+      };
+    }
+
+    this.logger.log(`Payment ${paymentId} not approved: ${payment.status}`);
+    return {
+      paymentReference,
+      status: "pending",
+    };
   }
 }

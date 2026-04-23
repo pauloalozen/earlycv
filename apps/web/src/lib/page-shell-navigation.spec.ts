@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-test("PageShell handles back-forward restore without timeout gating", () => {
-  const filePath = resolve(
-    process.cwd(),
-    "apps/web/src/components/page-shell.tsx",
-  );
+const currentDir = dirname(fileURLToPath(import.meta.url));
+
+test("PageShell listens to pageshow and uses a short reveal timeout", () => {
+  const filePath = resolve(currentDir, "../components/page-shell.tsx");
   const content = readFileSync(filePath, "utf8");
 
   assert.match(content, /addEventListener\("pageshow"/);
-  assert.doesNotMatch(content, /setTimeout\(/);
+  assert.match(content, /setTimeout\(\(\) => setReady\(true\), 100\)/);
 });

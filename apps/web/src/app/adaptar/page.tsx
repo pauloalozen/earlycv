@@ -130,6 +130,8 @@ export default function AdaptarPage() {
   const [authReady, setAuthReady] = useState(false);
   const adaptPageViewTrackedRef = useRef(false);
   const jobDescriptionFilledTrackedRef = useRef(false);
+  const jobDescriptionFocusTrackedRef = useRef(false);
+  const jobDescriptionPasteTrackedRef = useRef(false);
   const flowSessionIdRef = useRef<string | null>(null);
   const turnstileContainerRef = useRef<HTMLDivElement>(null);
   const turnstileWidgetIdRef = useRef<string | null>(null);
@@ -257,11 +259,34 @@ export default function AdaptarPage() {
         eventName,
       });
 
+      const route =
+        typeof window !== "undefined" ? window.location.pathname : "/adaptar";
+      const previousRoute =
+        typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem("journey_previous_route")
+          : null;
+      const routeVisitId =
+        typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem("journey_current_route_visit_id")
+          : null;
+      const journeySessionId =
+        typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem("journey_session_internal_id")
+          : null;
+
       void emitBusinessFunnelEvent({
         eventName,
         eventVersion: 1,
         idempotencyKey,
-        metadata: payload?.metadata,
+        metadata: {
+          occurredAt: new Date().toISOString(),
+          previous_route: previousRoute,
+          route,
+          routeVisitId,
+          sessionInternalId: journeySessionId ?? flowSessionId,
+          userId: null,
+          ...payload?.metadata,
+        },
       }).catch(() => undefined);
     },
     [getFlowSessionId],
@@ -768,7 +793,7 @@ export default function AdaptarPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          emitUiFunnelEvent("cv_upload_started", {
+                          emitUiFunnelEvent("cv_upload_clicked", {
                             attemptId: buildClientAttemptId(),
                           });
                           fileInputRef.current?.click();
@@ -907,8 +932,12 @@ export default function AdaptarPage() {
                       const nextFile = e.target.files?.[0] ?? null;
                       setFile(nextFile);
                       if (nextFile) {
+                        const uploadAttemptId = buildClientAttemptId();
+                        emitUiFunnelEvent("cv_upload_started", {
+                          attemptId: uploadAttemptId,
+                        });
                         emitUiFunnelEvent("cv_upload_completed", {
-                          attemptId: buildClientAttemptId(),
+                          attemptId: uploadAttemptId,
                           metadata: {
                             fileExtension:
                               nextFile.name.split(".").pop()?.toLowerCase() ??
@@ -1015,6 +1044,22 @@ export default function AdaptarPage() {
                   >
                     <textarea
                       value={jobDescription}
+                      onFocus={() => {
+                        if (jobDescriptionFocusTrackedRef.current) {
+                          return;
+                        }
+
+                        jobDescriptionFocusTrackedRef.current = true;
+                        emitUiFunnelEvent("job_description_focus");
+                      }}
+                      onPaste={() => {
+                        if (jobDescriptionPasteTrackedRef.current) {
+                          return;
+                        }
+
+                        jobDescriptionPasteTrackedRef.current = true;
+                        emitUiFunnelEvent("job_description_paste");
+                      }}
                       onChange={(e) => {
                         const nextJobDescription = e.target.value.slice(
                           0,

@@ -8,6 +8,7 @@ import {
   FUNNEL_EVENT_OWNERSHIP,
 } from "./business-funnel-event-ownership";
 import { BusinessFunnelProjectionService } from "./business-funnel-projection.service";
+import { PosthogEventExporter } from "../posthog-integration/posthog-event-exporter.service";
 
 export type RecordBusinessFunnelEventInput = {
   correlationId?: string;
@@ -30,6 +31,23 @@ type BusinessFunnelEventWriteClient = {
   };
 };
 
+type BusinessFunnelEventReadClient = {
+  businessFunnelEvent: {
+    findUnique: (args: {
+      where: { idempotencyKey: string };
+    }) => Promise<Record<string, unknown> | null>;
+  };
+};
+
+type BusinessFunnelPosthogExporter = {
+  exportBusinessFunnelEvent: (
+    eventName: string,
+    properties: Record<string, unknown>,
+    source: "frontend" | "backend",
+  ) => void;
+  shouldExportBusinessFunnelEvent: (eventName: string) => boolean;
+};
+
 const PROTECTION_SEMANTIC_EVENT_PREFIXES = [
   "abuse_",
   "cache_",
@@ -46,12 +64,20 @@ const PROTECTION_SEMANTIC_EVENT_PREFIXES = [
   "usage_policy_",
 ] as const;
 
+const NOOP_POSTHOG_EXPORTER = {
+  exportBusinessFunnelEvent: () => {},
+  shouldExportBusinessFunnelEvent: () => false,
+} satisfies BusinessFunnelPosthogExporter;
+
 @Injectable()
 export class BusinessFunnelEventService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(BusinessFunnelProjectionService)
     private readonly projection: BusinessFunnelProjectionService,
+    @Inject(PosthogEventExporter)
+    private readonly posthogExporter: BusinessFunnelPosthogExporter =
+      NOOP_POSTHOG_EXPORTER,
   ) {}
 
   async record(
@@ -76,11 +102,10 @@ export class BusinessFunnelEventService {
       userId: context.userId,
     };
 
-    return this.database.$transaction(async (tx) => {
-      const writeClient = tx as unknown as BusinessFunnelEventWriteClient;
-
-      if (normalizedKey) {
-        try {
+    if (normalizedKey) {
+      try {
+        return await this.database.$transaction(async (tx) => {
+          const writeClient = tx as unknown as BusinessFunnelEventWriteClient;
           const created = await writeClient.businessFunnelEvent.create({
             data: {
               ...eventData,
@@ -89,31 +114,36 @@ export class BusinessFunnelEventService {
           });
 
           await this.projection.applyEvent(created as any, tx as any);
+          this.exportToPostHog(normalizedEventName, input, context, source);
 
           return {
             event: created,
             ingested: true,
           };
-        } catch (error) {
-          if (!this.isUniqueViolation(error)) {
-            throw error;
-          }
-
-          const existing = await writeClient.businessFunnelEvent.findUnique({
-            where: { idempotencyKey: normalizedKey },
-          });
-
-          if (!existing) {
-            throw error;
-          }
-
-          return {
-            event: existing,
-            ingested: false,
-          };
+        });
+      } catch (error) {
+        if (!this.isUniqueViolation(error)) {
+          throw error;
         }
-      }
 
+        const readClient = this.database as unknown as BusinessFunnelEventReadClient;
+        const existing = await readClient.businessFunnelEvent.findUnique({
+          where: { idempotencyKey: normalizedKey },
+        });
+
+        if (!existing) {
+          throw error;
+        }
+
+        return {
+          event: existing,
+          ingested: false,
+        };
+      }
+    }
+
+    return this.database.$transaction(async (tx) => {
+      const writeClient = tx as unknown as BusinessFunnelEventWriteClient;
       const created = await writeClient.businessFunnelEvent.create({
         data: {
           ...eventData,
@@ -122,6 +152,7 @@ export class BusinessFunnelEventService {
       });
 
       await this.projection.applyEvent(created as any, tx as any);
+      this.exportToPostHog(normalizedEventName, input, context, source);
 
       return {
         event: created,
@@ -270,5 +301,33 @@ export class BusinessFunnelEventService {
     }
 
     return undefined;
+  }
+
+  private exportToPostHog(
+    eventName: string,
+    input: RecordBusinessFunnelEventInput,
+    context: AnalysisRequestContext,
+    source: BusinessFunnelEventSource,
+  ) {
+    if (!this.posthogExporter.shouldExportBusinessFunnelEvent(eventName)) {
+      return;
+    }
+
+    const properties = {
+      event_version: input.eventVersion,
+      request_id: input.requestId ?? context.requestId,
+      correlation_id: input.correlationId ?? context.correlationId,
+      session_internal_id: context.sessionInternalId,
+      user_id: context.userId,
+      route_key: input.routeKey,
+      source: source === "frontend" ? "frontend" : "backend",
+      ...input.metadata,
+    };
+
+    this.posthogExporter.exportBusinessFunnelEvent(
+      eventName as any,
+      properties,
+      source === "frontend" ? "frontend" : "backend",
+    );
   }
 }

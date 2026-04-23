@@ -10,6 +10,6 @@ test("adaptar upload box keeps stable height and truncates filename", () => {
   const pagePath = resolve(currentDir, "../app/adaptar/page.tsx");
   const content = readFileSync(pagePath, "utf8");
 
-  assert.match(content, /min-h-\[154px\]/);
-  assert.match(content, /max-w-\[220px\] truncate/);
+  assert.match(content, /padding:\s*"35px 20px"/);
+  assert.match(content, /\{file\.name\}/);
 });

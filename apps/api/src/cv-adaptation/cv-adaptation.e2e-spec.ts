@@ -586,11 +586,17 @@ test("webhook activation uses persisted purchase grants even when env values cha
 
   const plansService = app.get(PlansService) as unknown as {
     handleWebhook: (provider: string, body: unknown) => Promise<void>;
-    resolveMercadoPagoPayment: (body: unknown) => Promise<string | null>;
+    resolveMercadoPagoPayment: (body: unknown) => Promise<{
+      paymentReference: string | null;
+      status: "approved" | "failed" | "pending" | "unknown";
+    }>;
   };
 
   const originalResolve = plansService.resolveMercadoPagoPayment;
-  plansService.resolveMercadoPagoPayment = async () => paymentReference;
+  plansService.resolveMercadoPagoPayment = async () => ({
+    paymentReference,
+    status: "approved",
+  });
 
   try {
     await plansService.handleWebhook("mercadopago", {
@@ -651,11 +657,17 @@ test("webhook activation falls back for legacy purchases with zero analysis gran
 
   const plansService = app.get(PlansService) as unknown as {
     handleWebhook: (provider: string, body: unknown) => Promise<void>;
-    resolveMercadoPagoPayment: (body: unknown) => Promise<string | null>;
+    resolveMercadoPagoPayment: (body: unknown) => Promise<{
+      paymentReference: string | null;
+      status: "approved" | "failed" | "pending" | "unknown";
+    }>;
   };
 
   const originalResolve = plansService.resolveMercadoPagoPayment;
-  plansService.resolveMercadoPagoPayment = async () => paymentReference;
+  plansService.resolveMercadoPagoPayment = async () => ({
+    paymentReference,
+    status: "approved",
+  });
 
   try {
     await plansService.handleWebhook("mercadopago", {

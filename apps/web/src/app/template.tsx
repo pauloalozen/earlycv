@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { JourneyTrackerProvider } from "./_components/journey-tracker-provider";
 
 export default function Template({
   children,
@@ -11,6 +12,7 @@ export default function Template({
   const pathname = usePathname();
   const [loading, setLoading] = useState(true);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: route transition must react to pathname changes
   useEffect(() => {
     setLoading(true);
     const timeout = setTimeout(() => setLoading(false), 400);
@@ -18,7 +20,7 @@ export default function Template({
   }, [pathname]);
 
   return (
-    <>
+    <JourneyTrackerProvider>
       {loading && (
         <div
           className="route-transition-overlay"
@@ -35,6 +37,6 @@ export default function Template({
       >
         {children}
       </div>
-    </>
+    </JourneyTrackerProvider>
   );
 }

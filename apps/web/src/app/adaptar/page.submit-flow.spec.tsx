@@ -273,6 +273,52 @@ describe("AdaptarPage submit analytics flow", () => {
     );
   });
 
+  it("emits cv_upload_clicked when upload trigger is clicked", async () => {
+    render(<AdaptarPage />);
+
+    const uploadTrigger = await screen.findByRole("button", {
+      name: /Arraste ou clique para enviar/i,
+    });
+
+    emitBusinessFunnelEventMock.mockClear();
+
+    fireEvent.click(uploadTrigger);
+
+    await waitFor(() => {
+      const eventNames = emitBusinessFunnelEventMock.mock.calls.map(
+        ([payload]) => payload.eventName,
+      );
+      expect(eventNames).toContain("cv_upload_clicked");
+    });
+  });
+
+  it("emits job_description_focus and job_description_paste only once per page visit", async () => {
+    render(<AdaptarPage />);
+
+    const textarea = await screen.findByPlaceholderText(
+      "Cole a vaga completa (isso melhora sua análise)...",
+    );
+
+    emitBusinessFunnelEventMock.mockClear();
+
+    fireEvent.focus(textarea);
+    fireEvent.focus(textarea);
+    fireEvent.paste(textarea);
+    fireEvent.paste(textarea);
+
+    await waitFor(() => {
+      const focusCalls = emitBusinessFunnelEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "job_description_focus",
+      );
+      const pasteCalls = emitBusinessFunnelEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "job_description_paste",
+      );
+
+      expect(focusCalls).toHaveLength(1);
+      expect(pasteCalls).toHaveLength(1);
+    });
+  });
+
   it("persists authenticated analysis before navigating to resultado", async () => {
     getAuthStatusMock.mockResolvedValue({ userName: "Claudio" });
 

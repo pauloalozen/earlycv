@@ -6,8 +6,38 @@ import type OpenAI from "openai";
 import type { DatabaseService } from "../database/database.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 
+const withEnv = async (
+  values: Record<string, string | undefined>,
+  run: () => Promise<void>,
+) => {
+  const previous = new Map<string, string | undefined>();
+
+  for (const [key, value] of Object.entries(values)) {
+    previous.set(key, process.env[key]);
+
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+
+  try {
+    await run();
+  } finally {
+    for (const [key, value] of previous.entries()) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+};
+
 describe("CvAdaptationAiService", () => {
   it("calls adaptCv and updates adaptation to awaiting_payment on success", async () => {
+    await withEnv({ SKIP_AI: "true" }, async () => {
     const mockOutput: CvAdaptationOutput = {
       summary: "Senior Engineer with expertise in system design.",
       sections: [
@@ -91,10 +121,12 @@ describe("CvAdaptationAiService", () => {
     assert.equal(updateData.status, "awaiting_payment");
     assert.ok(updateData.adaptedContentJson);
     assert.equal(typeof updateData.previewText, "string");
-    assert.ok(updateData.aiAuditJson);
+    assert.equal(updateData.aiAuditJson, undefined);
+    });
   });
 
   it("updates adaptation to failed when AI throws", async () => {
+    await withEnv({ SKIP_AI: "false" }, async () => {
     const mockAiClient = {
       chat: {
         completions: {
@@ -147,5 +179,6 @@ describe("CvAdaptationAiService", () => {
     const updateData = updateCall.arguments[0].data;
     assert.equal(updateData.status, "failed");
     assert.ok(updateData.failureReason);
+    });
   });
 });

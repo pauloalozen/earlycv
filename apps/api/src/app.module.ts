@@ -17,6 +17,7 @@ import { JobSourcesModule } from "./job-sources/job-sources.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { PlansModule } from "./plans/plans.module";
 import { ProfilesModule } from "./profiles/profiles.module";
+import { PosthogIntegrationModule } from "./posthog-integration/posthog-integration.module";
 import { ResumeTemplatesModule } from "./resume-templates/resume-templates.module";
 import { ResumesModule } from "./resumes/resumes.module";
 import { StorageModule } from "./storage/storage.module";
@@ -45,6 +46,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     AnalysisObservabilityModule,
     CvAdaptationModule,
     PlansModule,
+    PosthogIntegrationModule,
   ],
 })
 export class AppModule {}

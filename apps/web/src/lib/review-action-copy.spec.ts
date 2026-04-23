@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { getReviewActionCopy } from "./review-action-copy";
 
 test("getReviewActionCopy returns default label when idle", () => {
-  assert.equal(getReviewActionCopy(false), "Rever analise");
+  assert.equal(getReviewActionCopy(false), "Rever análise");
 });
 
 test("getReviewActionCopy returns loading label when navigating", () => {

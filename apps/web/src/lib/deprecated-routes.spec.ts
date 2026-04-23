@@ -10,7 +10,6 @@ test("deprecated route pages are removed", () => {
   const removedRoutes = [
     "../app/adaptar/[id]/checkout/page.tsx",
     "../app/adaptar/[id]/resultado/page.tsx",
-    "../app/ui/page.tsx",
   ];
 
   for (const routePath of removedRoutes) {

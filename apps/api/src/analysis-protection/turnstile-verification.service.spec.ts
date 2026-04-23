@@ -112,7 +112,12 @@ test("returns turnstile_unconfigured when configured secret is only whitespace",
 
 test("trims secret before sending verification payload", async () => {
   await withEnv(
-    { TURNSTILE_SECRET_KEY: "  secret-with-spaces  " },
+    {
+      CLOUDFLARE_TURNSTILE_SECRET_KEY: undefined,
+      SKIP_TURNSTILE_VERIFICATION: undefined,
+      TURNSTILE_SECRET: undefined,
+      TURNSTILE_SECRET_KEY: "  secret-with-spaces  ",
+    },
     async () => {
       let capturedSecret: string | null = null;
 

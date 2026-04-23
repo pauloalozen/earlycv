@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-test("root template always releases transition overlay on pageshow", () => {
-  const templatePath = resolve(process.cwd(), "apps/web/src/app/template.tsx");
+const currentDir = dirname(fileURLToPath(import.meta.url));
+
+test("root template uses pathname-driven transition and tracker provider", () => {
+  const templatePath = resolve(currentDir, "../app/template.tsx");
   const content = readFileSync(templatePath, "utf8");
 
-  assert.match(content, /addEventListener\("pageshow"/);
-  assert.match(content, /addEventListener\("popstate"/);
-  assert.match(content, /navigation.*back_forward/);
-  assert.match(content, /setPhase\("done"\)/);
-  assert.doesNotMatch(content, /if \(e\.persisted\)/);
+  assert.match(content, /usePathname/);
+  assert.match(content, /JourneyTrackerProvider/);
+  assert.match(content, /setTimeout\(\(\) => setLoading\(false\), 400\)/);
+  assert.match(content, /route-transition-overlay/);
 });

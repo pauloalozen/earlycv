@@ -11,7 +11,10 @@ import {
   downloadFromApi,
 } from "@/lib/client-download";
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
-import { saveGuestPreview } from "@/lib/cv-adaptation-api";
+import {
+  emitBusinessFunnelEvent,
+  saveGuestPreview,
+} from "@/lib/cv-adaptation-api";
 import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
 import { getAuthStatus } from "@/lib/session-actions";
 import { shouldPersistGuestAnalysis } from "./guest-analysis-persistence";
@@ -686,8 +689,35 @@ export default function ResultadoPage() {
     }
   };
 
+  const emitResultadoEvent = (
+    eventName: string,
+    metadata?: Record<string, unknown>,
+  ) => {
+    const routeVisitId =
+      sessionStorage.getItem("journey_current_route_visit_id") ??
+      `${window.location.pathname}:${Date.now()}`;
+    const previousRoute = sessionStorage.getItem("journey_previous_route");
+    void emitBusinessFunnelEvent({
+      eventName,
+      eventVersion: 1,
+      idempotencyKey: `${routeVisitId}:${eventName}`,
+      metadata: {
+        occurredAt: new Date().toISOString(),
+        previous_route: previousRoute,
+        route: window.location.pathname,
+        routeVisitId,
+        sessionInternalId: sessionStorage.getItem(
+          "journey_session_internal_id",
+        ),
+        userId: null,
+        ...metadata,
+      },
+    }).catch(() => undefined);
+  };
+
   const handleDownload = async (format: "pdf" | "docx") => {
     if (!reviewAdaptationId || downloading) return;
+    emitResultadoEvent("download_cv_clicked", { format });
     if (showReleasePopup) {
       setReleasePopupVisible(false);
       setShowReleasePopup(false);
@@ -3287,6 +3317,9 @@ export default function ResultadoPage() {
                         <a
                           href={`/entrar?next=${encodeURIComponent("/adaptar/resultado?autoSave=1")}`}
                           onClick={() => {
+                            emitResultadoEvent("cta_signup_click", {
+                              cta_location: "resultado_unlock",
+                            });
                             try {
                               // biome-ignore lint/suspicious/noDocumentCookie: redirect hint cookie for OAuth
                               document.cookie = `post_auth_next=${encodeURIComponent("/adaptar/resultado?autoSave=1")}; path=/; max-age=300; samesite=lax`;

@@ -6,6 +6,7 @@ import {
 } from "../analysis-observability/analysis-event-version.registry";
 import { DatabaseService } from "../database/database.service";
 import type { AnalysisRequestContext } from "./types";
+import { PosthogEventExporter } from "../posthog-integration/posthog-event-exporter.service";
 
 export type AnalysisTelemetryEventName = AnalysisProtectionEventName;
 
@@ -22,6 +23,8 @@ export class AnalysisTelemetryService {
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(PosthogEventExporter)
+    private readonly posthogExporter: PosthogEventExporter,
   ) {}
 
   async emit(
@@ -66,6 +69,30 @@ export class AnalysisTelemetryService {
         `Failed to persist analysis telemetry event ${eventName}: ${String(error)}`,
       );
     }
+
+    this.exportToPostHog(eventName, input, context);
+  }
+
+  private exportToPostHog(
+    eventName: AnalysisTelemetryEventName,
+    input: Omit<AnalysisTelemetryInput, "eventName">,
+    context: AnalysisRequestContext,
+  ) {
+    if (!this.posthogExporter.shouldExportProtectionEvent(eventName)) {
+      return;
+    }
+
+    const properties = {
+      request_id: context.requestId,
+      correlation_id: context.correlationId,
+      session_internal_id: context.sessionInternalId,
+      user_id: context.userId,
+      route_key: input.routeKey,
+      source: "backend",
+      ...input.metadata,
+    };
+
+    this.posthogExporter.exportProtectionEvent(eventName, properties, "backend");
   }
 
   private toMetadataJson(metadata: Record<string, unknown> | undefined) {

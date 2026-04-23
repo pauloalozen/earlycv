@@ -36,6 +36,15 @@ test("records business event and updates projection for first ingestion", async 
 
   const service = new BusinessFunnelEventService(
     {
+      businessFunnelEvent: {
+        findUnique: async ({
+          where,
+        }: {
+          where: { idempotencyKey: string };
+        }) => {
+          return storedByKey.get(where.idempotencyKey) ?? null;
+        },
+      },
       $transaction: async (
         callback: (tx: {
           businessFunnelEvent: {
@@ -101,12 +110,82 @@ test("records business event and updates projection for first ingestion", async 
   assert.deepEqual(projectionApplied, ["analyze_submit_clicked"]);
 });
 
+test("exports event to PostHog when ingestion succeeds", async () => {
+  const exported: Array<{
+    eventName: string;
+    properties: Record<string, unknown>;
+    source: string;
+  }> = [];
+
+  const service = new BusinessFunnelEventService(
+    {
+      $transaction: async (
+        callback: (tx: {
+          businessFunnelEvent: {
+            create: (args: {
+              data: Record<string, unknown>;
+            }) => Promise<StoredBusinessFunnelEvent>;
+            findUnique: (args: {
+              where: { idempotencyKey: string };
+            }) => Promise<StoredBusinessFunnelEvent | null>;
+          };
+        }) => Promise<unknown>,
+      ) => {
+        return callback({
+          businessFunnelEvent: {
+            create: async ({ data }: { data: Record<string, unknown> }) => {
+              return {
+                id: "event-1",
+                createdAt: new Date("2026-04-21T15:30:00.000Z"),
+                ...data,
+              } as StoredBusinessFunnelEvent;
+            },
+            findUnique: async () => null,
+          },
+        });
+      },
+    } as any,
+    {
+      applyEvent: async () => {},
+    } as BusinessFunnelProjectionService,
+    {
+      exportBusinessFunnelEvent: (
+        eventName: string,
+        properties: Record<string, unknown>,
+        source: string,
+      ) => {
+        exported.push({ eventName, properties, source });
+      },
+      shouldExportBusinessFunnelEvent: () => true,
+    } as any,
+  );
+
+  await service.record(
+    {
+      eventName: "analyze_submit_clicked",
+      eventVersion: 1,
+      metadata: { page: "adaptar" },
+      routeKey: "web/adaptar",
+    },
+    baseContext,
+    "frontend",
+  );
+
+  assert.equal(exported.length, 1);
+  assert.equal(exported[0].eventName, "analyze_submit_clicked");
+  assert.equal(exported[0].source, "frontend");
+  assert.equal(exported[0].properties.request_id, baseContext.requestId);
+});
+
 test("canonicalizes eventName before persisting and projecting", async () => {
   let persistedEventName: string | null = null;
   const projectionApplied: string[] = [];
 
   const service = new BusinessFunnelEventService(
     {
+      businessFunnelEvent: {
+        findUnique: async () => createdEvent,
+      },
       $transaction: async (
         callback: (tx: {
           businessFunnelEvent: {
@@ -164,6 +243,15 @@ test("drops duplicate business event by idempotency key", async () => {
 
   const service = new BusinessFunnelEventService(
     {
+      businessFunnelEvent: {
+        findUnique: async ({
+          where,
+        }: {
+          where: { idempotencyKey: string };
+        }) => {
+          return storedByKey.get(where.idempotencyKey) ?? null;
+        },
+      },
       $transaction: async (
         callback: (tx: {
           businessFunnelEvent: {
@@ -249,6 +337,9 @@ test("deduplicates concurrent idempotent ingestions without race", async () => {
 
   const service = new BusinessFunnelEventService(
     {
+      businessFunnelEvent: {
+        findUnique: async () => createdEvent,
+      },
       $transaction: async (
         callback: (tx: {
           businessFunnelEvent: {
@@ -314,6 +405,92 @@ test("deduplicates concurrent idempotent ingestions without race", async () => {
   assert.equal(firstResult.ingested, true);
   assert.equal(secondResult.ingested, false);
   assert.equal(createAttempts, 2);
+  assert.deepEqual(projectionApplied, ["analyze_submit_clicked"]);
+});
+
+test("deduplicates when transaction is aborted after duplicate key", async () => {
+  const storedByKey = new Map<string, StoredBusinessFunnelEvent>();
+  const projectionApplied: string[] = [];
+
+  const service = new BusinessFunnelEventService(
+    {
+      businessFunnelEvent: {
+        findUnique: async ({
+          where,
+        }: {
+          where: { idempotencyKey: string };
+        }) => {
+          return storedByKey.get(where.idempotencyKey) ?? null;
+        },
+      },
+      $transaction: async (
+        callback: (tx: {
+          businessFunnelEvent: {
+            create: (args: {
+              data: Record<string, unknown>;
+            }) => Promise<StoredBusinessFunnelEvent>;
+            findUnique: (args: {
+              where: { idempotencyKey: string };
+            }) => Promise<StoredBusinessFunnelEvent | null>;
+          };
+        }) => Promise<{
+          event: StoredBusinessFunnelEvent;
+          ingested: boolean;
+        }>,
+      ) => {
+        return callback({
+          businessFunnelEvent: {
+            create: async ({ data }: { data: Record<string, unknown> }) => {
+              if (
+                typeof data.idempotencyKey === "string" &&
+                storedByKey.has(data.idempotencyKey)
+              ) {
+                const uniqueConstraintError = new Error("duplicate key");
+                Object.assign(uniqueConstraintError, { code: "P2002" });
+                throw uniqueConstraintError;
+              }
+
+              const event = {
+                id: `event-${storedByKey.size + 1}`,
+                createdAt: new Date("2026-04-21T15:30:00.000Z"),
+                ...data,
+              } as StoredBusinessFunnelEvent;
+
+              if (typeof event.idempotencyKey === "string") {
+                storedByKey.set(event.idempotencyKey, event);
+              }
+
+              return event;
+            },
+            findUnique: async () => {
+              throw new Error(
+                "25P02 current transaction is aborted and cannot be reused",
+              );
+            },
+          },
+        });
+      },
+    } as any,
+    {
+      applyEvent: async (
+        event: Pick<StoredBusinessFunnelEvent, "eventName">,
+      ) => {
+        projectionApplied.push(event.eventName);
+      },
+    } as BusinessFunnelProjectionService,
+  );
+
+  const payload = {
+    eventName: "analyze_submit_clicked",
+    eventVersion: 1,
+    idempotencyKey: "evt-123",
+  };
+
+  await service.record(payload, baseContext);
+  const duplicate = await service.record(payload, baseContext);
+
+  assert.equal(duplicate.ingested, false);
+  assert.equal(storedByKey.size, 1);
   assert.deepEqual(projectionApplied, ["analyze_submit_clicked"]);
 });
 
@@ -646,6 +823,89 @@ test("rejects frontend emission of backend-owned funnel events", async () => {
     service.record(
       {
         eventName: "full_analysis_viewed",
+        eventVersion: 1,
+      },
+      baseContext,
+      "frontend",
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match((error as BadRequestException).message, /ownership/i);
+      return true;
+    },
+  );
+});
+
+test("accepts frontend page_view event from journey tracking", async () => {
+  const service = new BusinessFunnelEventService(
+    {
+      $transaction: async (
+        callback: (tx: {
+          businessFunnelEvent: {
+            create: (args: {
+              data: Record<string, unknown>;
+            }) => Promise<StoredBusinessFunnelEvent>;
+            findUnique: (args: {
+              where: { idempotencyKey: string };
+            }) => Promise<StoredBusinessFunnelEvent | null>;
+          };
+        }) => Promise<unknown>,
+      ) => {
+        return callback({
+          businessFunnelEvent: {
+            create: async ({ data }: { data: Record<string, unknown> }) => {
+              return {
+                id: "event-page-view",
+                createdAt: new Date("2026-04-22T12:00:00.000Z"),
+                ...data,
+              } as StoredBusinessFunnelEvent;
+            },
+            findUnique: async () => null,
+          },
+        });
+      },
+    } as any,
+    {
+      applyEvent: async () => {},
+    } as BusinessFunnelProjectionService,
+  );
+
+  const result = await service.record(
+    {
+      eventName: "page_view",
+      eventVersion: 1,
+      idempotencyKey: "journey-1:visit-1:page_view",
+      metadata: {
+        occurredAt: "2026-04-22T12:00:00.000Z",
+        route: "/adaptar",
+      },
+    },
+    baseContext,
+    "frontend",
+  );
+
+  assert.equal(result.ingested, true);
+  assert.equal(result.event.eventName, "page_view");
+});
+
+test("rejects frontend emission of payment_failed", async () => {
+  const service = new BusinessFunnelEventService(
+    {
+      $transaction: async () => {
+        throw new Error("transaction should not be called");
+      },
+    } as any,
+    {
+      applyEvent: async () => {
+        throw new Error("projection should not be called");
+      },
+    } as BusinessFunnelProjectionService,
+  );
+
+  await assert.rejects(
+    service.record(
+      {
+        eventName: "payment_failed",
         eventVersion: 1,
       },
       baseContext,

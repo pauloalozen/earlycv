@@ -79,107 +79,110 @@ test("resume endpoints stay scoped to the authenticated user", async () => {
   const firstUser = await registerUser(app, database, "resume-one");
   const secondUser = await registerUser(app, database, "resume-two");
 
-  const ownResumeResponse = await request(app.getHttpServer())
-    .post("/api/resumes")
-    .set("Authorization", `Bearer ${firstUser.accessToken}`)
-    .send({
-      title: "Data Resume",
-      sourceFileName: "resume-ana.pdf",
-      sourceFileType: "application/pdf",
-      status: "uploaded",
-    })
-    .expect(201);
+  try {
+    const ownResumeResponse = await request(app.getHttpServer())
+      .post("/api/resumes")
+      .set("Authorization", `Bearer ${firstUser.accessToken}`)
+      .send({
+        title: "Data Resume",
+        sourceFileName: "resume-ana.pdf",
+        status: "uploaded",
+      })
+      .expect(201);
 
-  const ownResumeId = ownResumeResponse.body.id as string;
+    const ownResumeId = ownResumeResponse.body.id as string;
 
-  const otherResume = await database.resume.create({
-    data: {
-      userId: secondUser.userId,
-      title: "Other Resume",
-      status: "draft",
-    },
-  });
-
-  await request(app.getHttpServer())
-    .get("/api/resumes")
-    .set("Authorization", `Bearer ${firstUser.accessToken}`)
-    .expect(200)
-    .expect(({ body }) => {
-      assert.equal(Array.isArray(body), true);
-      assert.equal(body.length, 1);
-      assert.equal(body[0]?.id, ownResumeId);
-      assert.equal(body[0]?.userId, firstUser.userId);
-      assert.equal(body[0]?.isMaster, true);
-      assert.equal(body[0]?.kind, "master");
+    const otherResume = await database.resume.create({
+      data: {
+        userId: secondUser.userId,
+        title: "Other Resume",
+        status: "draft",
+      },
     });
 
-  await request(app.getHttpServer())
-    .get(`/api/resumes/${ownResumeId}`)
-    .set("Authorization", `Bearer ${firstUser.accessToken}`)
-    .expect(200)
-    .expect(({ body }) => {
-      assert.equal(body.id, ownResumeId);
-      assert.equal(body.userId, firstUser.userId);
-      assert.equal(body.title, "Data Resume");
-    });
+    await request(app.getHttpServer())
+      .get("/api/resumes")
+      .set("Authorization", `Bearer ${firstUser.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        assert.equal(Array.isArray(body), true);
+        assert.equal(body.length, 1);
+        assert.equal(body[0]?.id, ownResumeId);
+        assert.equal(body[0]?.userId, firstUser.userId);
+        assert.equal(body[0]?.isMaster, true);
+        assert.equal(body[0]?.kind, "master");
+      });
 
-  await request(app.getHttpServer())
-    .get(`/api/resumes/${otherResume.id}`)
-    .set("Authorization", `Bearer ${firstUser.accessToken}`)
-    .expect(404);
+    await request(app.getHttpServer())
+      .get(`/api/resumes/${ownResumeId}`)
+      .set("Authorization", `Bearer ${firstUser.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        assert.equal(body.id, ownResumeId);
+        assert.equal(body.userId, firstUser.userId);
+        assert.equal(body.title, "Data Resume");
+      });
 
-  await request(app.getHttpServer())
-    .put(`/api/resumes/${otherResume.id}`)
-    .set("Authorization", `Bearer ${firstUser.accessToken}`)
-    .send({ title: "Should Not Leak" })
-    .expect(404);
+    await request(app.getHttpServer())
+      .get(`/api/resumes/${otherResume.id}`)
+      .set("Authorization", `Bearer ${firstUser.accessToken}`)
+      .expect(404);
 
-  await deleteUserByEmail(database, firstUser.email);
-  await deleteUserByEmail(database, secondUser.email);
-  await app.close();
+    await request(app.getHttpServer())
+      .put(`/api/resumes/${otherResume.id}`)
+      .set("Authorization", `Bearer ${firstUser.accessToken}`)
+      .send({ title: "Should Not Leak" })
+      .expect(404);
+  } finally {
+    await deleteUserByEmail(database, firstUser.email);
+    await deleteUserByEmail(database, secondUser.email);
+    await app.close();
+  }
 });
 
 test("POST /api/resumes keeps non-primary uploads as generic master resumes", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "resume-secondary");
 
-  await request(app.getHttpServer())
-    .post("/api/resumes")
-    .set("Authorization", `Bearer ${user.accessToken}`)
-    .send({
-      title: "Primary Resume",
-      sourceFileName: "resume-primary.pdf",
-      status: "uploaded",
-    })
-    .expect(201);
+  try {
+    await request(app.getHttpServer())
+      .post("/api/resumes")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send({
+        title: "Primary Resume",
+        sourceFileName: "resume-primary.pdf",
+        status: "uploaded",
+      })
+      .expect(201);
 
-  const secondResumeResponse = await request(app.getHttpServer())
-    .post("/api/resumes")
-    .set("Authorization", `Bearer ${user.accessToken}`)
-    .send({
-      title: "Secondary Resume",
-      sourceFileName: "resume-secondary.pdf",
-      status: "reviewed",
-    })
-    .expect(201);
+    const secondResumeResponse = await request(app.getHttpServer())
+      .post("/api/resumes")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send({
+        title: "Secondary Resume",
+        sourceFileName: "resume-secondary.pdf",
+        status: "reviewed",
+      })
+      .expect(201);
 
-  assert.equal(secondResumeResponse.body.isMaster, false);
-  assert.equal(secondResumeResponse.body.kind, "master");
-  assert.equal(secondResumeResponse.body.basedOnResumeId, null);
+    assert.equal(secondResumeResponse.body.isMaster, false);
+    assert.equal(secondResumeResponse.body.kind, "master");
+    assert.equal(secondResumeResponse.body.basedOnResumeId, null);
 
-  const resumes = await database.resume.findMany({
-    where: { userId: user.userId },
-    orderBy: { createdAt: "asc" },
-  });
+    const resumes = await database.resume.findMany({
+      where: { userId: user.userId },
+      orderBy: { createdAt: "asc" },
+    });
 
-  assert.equal(resumes.length, 2);
-  assert.equal(resumes[0]?.isMaster, true);
-  assert.equal(resumes[0]?.kind, "master");
-  assert.equal(resumes[1]?.isMaster, false);
-  assert.equal(resumes[1]?.kind, "master");
-
-  await deleteUserByEmail(database, user.email);
-  await app.close();
+    assert.equal(resumes.length, 2);
+    assert.equal(resumes[0]?.isMaster, true);
+    assert.equal(resumes[0]?.kind, "master");
+    assert.equal(resumes[1]?.isMaster, false);
+    assert.equal(resumes[1]?.kind, "master");
+  } finally {
+    await deleteUserByEmail(database, user.email);
+    await app.close();
+  }
 });
 
 test("POST /api/resumes/:id/set-primary keeps one primary resume per user", async () => {

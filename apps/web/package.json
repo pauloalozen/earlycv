@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "sh -c 'biome lint --config-path \"$(realpath ../../biome.json)\" src'",
     "check": "sh -c 'biome check --config-path \"$(realpath ../../biome.json)\" src'",
-    "test": "vitest"
+    "test": "npm run test:spec && npm run test:ui",
+    "test:spec": "node --import tsx --test src/**/*.spec.ts",
+    "test:ui": "vitest run"
   },
   "dependencies": {
     "@earlycv/config": "0.1.0",

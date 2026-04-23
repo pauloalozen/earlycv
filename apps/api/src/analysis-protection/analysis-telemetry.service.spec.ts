@@ -15,6 +15,11 @@ const context: AnalysisRequestContext = {
   userId: "user-1",
 };
 
+const posthogExporterStub = {
+  exportProtectionEvent: () => {},
+  shouldExportProtectionEvent: () => false,
+};
+
 test("creates telemetry event with scrubbed metadata and route key", async () => {
   let createPayload: Record<string, unknown> | null = null;
 
@@ -27,7 +32,7 @@ test("creates telemetry event with scrubbed metadata and route key", async () =>
         throw new Error("upsert should not be called");
       },
     },
-  } as any);
+  } as any, posthogExporterStub as any);
 
   await service.emit("payload_valid", context, {
     metadata: {
@@ -65,7 +70,7 @@ test("uses idempotent upsert when idempotency key is provided", async () => {
         upsertPayload = args;
       },
     },
-  } as any);
+  } as any, posthogExporterStub as any);
 
   await service.emit("cache_miss", context, {
     idempotencyKey: "idem-1",
@@ -93,7 +98,7 @@ test("swallows persistence errors and does not throw", async () => {
         throw new Error("database unavailable");
       },
     },
-  } as any);
+  } as any, posthogExporterStub as any);
 
   await assert.doesNotReject(async () => {
     await service.emit("openai_request_failed", context, {
@@ -114,7 +119,7 @@ test("redacts sessionPublicToken keys nested inside metadata objects", async () 
         throw new Error("upsert should not be called");
       },
     },
-  } as any);
+  } as any, posthogExporterStub as any);
 
   await service.emit("payload_valid", context, {
     metadata: {
@@ -158,7 +163,7 @@ test("throws controlled error when event is missing version registry entry", asy
         throw new Error("upsert should not be called");
       },
     },
-  } as any);
+  } as any, posthogExporterStub as any);
 
   await assert.rejects(
     service.emit(
