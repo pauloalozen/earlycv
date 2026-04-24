@@ -717,7 +717,7 @@ export default function ResultadoPage() {
 
   const handleDownload = async (format: "pdf" | "docx") => {
     if (!reviewAdaptationId || downloading) return;
-    emitResultadoEvent("download_cv_clicked", { format });
+    emitResultadoEvent("optimized_cv_downloaded", { format });
     if (showReleasePopup) {
       setReleasePopupVisible(false);
       setShowReleasePopup(false);

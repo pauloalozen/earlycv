@@ -107,11 +107,15 @@ export class CvAdaptationDocxService {
     const educationSection = output.sections?.find(
       (s) => s.sectionType === "education",
     );
-    const certSection = output.sections?.find(
-      (s) => s.sectionType === "certifications",
+    const certSection = this.findSectionByTypeOrTitle(
+      output.sections,
+      "certifications",
+      ["certificacoes", "certificações", "certifications"],
     );
-    const langSection = output.sections?.find(
-      (s) => s.sectionType === "languages",
+    const langSection = this.findSectionByTypeOrTitle(
+      output.sections,
+      "languages",
+      ["idiomas", "languages"],
     );
 
     const { candidateName, phone, email, location } =
@@ -190,18 +194,50 @@ export class CvAdaptationDocxService {
   }
 
   private mapCourseItems(section?: CvSection) {
-    return (section?.items ?? []).map((item) => ({
-      courseName: item.heading ?? "",
-      instituitionName: item.subheading ?? "",
-      cityInstituition: item.bullets?.[0] ?? "",
-      conclusionCourse: item.dateRange ?? "",
-    }));
+    return (section?.items ?? [])
+      .map((item) => ({
+        courseName: item.heading?.trim() ?? "",
+        instituitionName: item.subheading?.trim() ?? "",
+        cityInstituition: item.bullets?.[0]?.trim() ?? "",
+        conclusionCourse: item.dateRange?.trim() ?? "",
+      }))
+      .filter((item) => {
+        return (
+          item.courseName.length > 0 ||
+          item.instituitionName.length > 0 ||
+          item.cityInstituition.length > 0 ||
+          item.conclusionCourse.length > 0
+        );
+      });
   }
 
   private mapLanguages(section?: CvSection) {
-    return (section?.items ?? []).map((item) => ({
-      language: item.heading ?? "",
-      languageLevel: item.subheading ?? item.bullets?.[0] ?? "",
-    }));
+    return (section?.items ?? [])
+      .map((item) => ({
+        language: item.heading?.trim() ?? "",
+        languageLevel:
+          item.subheading?.trim() ?? item.bullets?.[0]?.trim() ?? "",
+      }))
+      .filter((item) => {
+        return item.language.length > 0 || item.languageLevel.length > 0;
+      });
+  }
+
+  private findSectionByTypeOrTitle(
+    sections: CvAdaptationOutput["sections"] | undefined,
+    sectionType: CvSection["sectionType"],
+    titleAliases: string[],
+  ) {
+    const byType = sections?.find(
+      (section) => section.sectionType === sectionType,
+    );
+    if (byType) {
+      return byType;
+    }
+
+    return sections?.find((section) => {
+      const normalizedTitle = section.title.trim().toLowerCase();
+      return titleAliases.includes(normalizedTitle);
+    });
   }
 }

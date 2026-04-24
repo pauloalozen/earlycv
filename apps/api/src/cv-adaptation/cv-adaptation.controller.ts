@@ -128,8 +128,26 @@ export class CvAdaptationController {
   }
 
   @Post("save-guest-preview")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      fileFilter: (_req, file, cb) => {
+        const allowed = [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ];
+        if (allowed.includes(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new Error("Only PDF, DOC or DOCX files are allowed"), false);
+        }
+      },
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
   saveGuestPreview(
     @AuthenticatedUser() user: { id: string },
+    @UploadedFile() file: FileUpload | undefined,
     @Body(
       new ValidationPipe({
         transform: true,
@@ -139,7 +157,7 @@ export class CvAdaptationController {
     )
     dto: SaveGuestPreviewDto,
   ) {
-    return this.cvAdaptationService.saveGuestPreview(user.id, dto);
+    return this.cvAdaptationService.saveGuestPreview(user.id, dto, file);
   }
 
   @Get()

@@ -4,32 +4,34 @@ description: Current priorities, built modules, and next slice for EarlyCV SaaS
 type: project
 ---
 
-**Current priority (as of 2026-04-04): CV Adaptation MVP** — CLAUDE.md explicitly overrides previous ingestion direction.
+**Current priority (as of 2026-04-23): CV Adaptation hardening + quality gates.**
 
-The job ingestion crawler slice (Gupy/Greenhouse adapters, capture rules, run metrics) is **paused**. Its design and plan docs exist but are not the active work.
+The ingestion roadmap still exists, but current execution is focused on correctness/safety in CV adaptation and paid delivery flows.
 
 ## What's built
 - `packages/database`: Prisma schema with User, Resume, Company, JobSource, IngestionRun, Job, ResumeTemplate, AffiliatePartner/Campaign/Code/Attribution/CommissionEvent
 - `apps/api`: NestJS with AuthModule, ProfilesModule, ResumesModule, CompaniesModule, JobSourcesModule, JobsModule, admin/superadmin surfaces
 - `apps/web`: Next.js App Router with auth, admin, backoffice, vagas pages; still uses mock jobs (`apps/web/src/lib/jobs.ts`)
-- `packages/ai`: exists (index.ts, types.ts) — needs wiring for CV adaptation
-- `packages/storage`: exists (index.ts, types.ts) — for PDF upload/storage
+- `packages/ai`: integrated into CV adaptation analysis flows
+- `packages/storage`: active in API flows for template and resume file storage
 
-## What's NOT built yet (CV Adaptation slice)
-- `CvAdaptation` Prisma model (cvFileUrl, jobDescription, adaptedContent, status, paidAt)
-- `cv-adaptation` NestJS module with POST /cv-adaptation/analyze
-- AI integration for CV analysis/rewrite in `packages/ai`
-- Checkout endpoint (Mercado Pago or Stripe)
-- Frontend: upload page, result page (with payment gate), checkout/confirmation
+## Current hardening status (CV Adaptation)
+- `cv-adaptation` module is live with guest/auth analysis, payment gating, and download (PDF/DOCX)
+- Protection boundary + observability are integrated and covered by tests
+- Regression guard added: adapted CV must never auto-become master resume
+- `saveAsMaster` now controls promotion explicitly; when true, promoted resume must be the uploaded source CV
+- Resume source file persistence/download supports original binary files (PDF/DOC/DOCX), with text fallback only for legacy records
 
 ## Key invariants
 - Never fabricate career facts (experiences, titles, results, certifications, technologies)
+- Adapted resume (`kind=adapted`) must never be promoted to master automatically
+- Uploaded source resume is the only eligible record for `isMaster=true` in adaptation save flows
 - `firstSeenAt` immutable after first job acceptance
 - `canonicalKey` deterministically derived from remote job identity
 - `apps/web` only talks to `apps/api`
 
-**Why:** CLAUDE.md updated to refocus on core product value (CV adaptation) before ingestion. Ingestion is second wave.
-**How to apply:** Start with CvAdaptation schema, then API module, then frontend flow.
+**Why:** Product trust depends on strict factual traceability and explicit user intent for master CV management.
+**How to apply:** Keep adding e2e/unit regressions first for CV adaptation flows, then evolve ingestion slice without regressing adaptation guarantees.
 
 ## Plan docs (CV adaptation)
 - Spec: `docs/superpowers/specs/2026-04-04-cv-adaptation-design.md`

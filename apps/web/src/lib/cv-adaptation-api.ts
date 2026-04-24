@@ -268,11 +268,30 @@ export async function saveGuestPreview(payload: {
   masterCvText: string;
   jobTitle?: string;
   companyName?: string;
+  saveAsMaster?: boolean;
+  file?: File;
 }): Promise<CvAdaptationDto> {
+  const body = (() => {
+    const formData = new FormData();
+    formData.append(
+      "adaptedContentJson",
+      JSON.stringify(payload.adaptedContentJson),
+    );
+    formData.append("jobDescriptionText", payload.jobDescriptionText);
+    formData.append("masterCvText", payload.masterCvText);
+    if (payload.file) formData.append("file", payload.file);
+    if (payload.previewText) formData.append("previewText", payload.previewText);
+    if (payload.jobTitle) formData.append("jobTitle", payload.jobTitle);
+    if (payload.companyName) formData.append("companyName", payload.companyName);
+    if (payload.saveAsMaster)
+      formData.append("saveAsMaster", String(payload.saveAsMaster));
+    return formData;
+  })();
+
   const response = await apiRequest(
     "POST",
     "/cv-adaptation/save-guest-preview",
-    payload,
+    body,
   );
   if (!response.ok) {
     const error = await response.text();

@@ -273,25 +273,6 @@ describe("AdaptarPage submit analytics flow", () => {
     );
   });
 
-  it("emits cv_upload_clicked when upload trigger is clicked", async () => {
-    render(<AdaptarPage />);
-
-    const uploadTrigger = await screen.findByRole("button", {
-      name: /Arraste ou clique para enviar/i,
-    });
-
-    emitBusinessFunnelEventMock.mockClear();
-
-    fireEvent.click(uploadTrigger);
-
-    await waitFor(() => {
-      const eventNames = emitBusinessFunnelEventMock.mock.calls.map(
-        ([payload]) => payload.eventName,
-      );
-      expect(eventNames).toContain("cv_upload_clicked");
-    });
-  });
-
   it("emits job_description_focus and job_description_paste only once per page visit", async () => {
     render(<AdaptarPage />);
 
@@ -361,7 +342,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const analyzeFormData = analyzeAuthenticatedCvMock.mock.calls[0]?.[0] as
       | FormData
       | undefined;
-    expect(analyzeFormData?.get("saveAsMaster")).toBe("true");
+    expect(analyzeFormData?.get("saveAsMaster")).toBeNull();
 
     expect(routerPushMock).toHaveBeenCalledWith(
       "/adaptar/resultado?adaptationId=saved-1",

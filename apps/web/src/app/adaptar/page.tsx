@@ -128,7 +128,6 @@ export default function AdaptarPage() {
   const [fileHover, setFileHover] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [authReady, setAuthReady] = useState(false);
-  const adaptPageViewTrackedRef = useRef(false);
   const jobDescriptionFilledTrackedRef = useRef(false);
   const jobDescriptionFocusTrackedRef = useRef(false);
   const jobDescriptionPasteTrackedRef = useRef(false);
@@ -306,15 +305,6 @@ export default function AdaptarPage() {
   }, [router]);
 
   useEffect(() => {
-    if (!authReady || adaptPageViewTrackedRef.current) {
-      return;
-    }
-
-    adaptPageViewTrackedRef.current = true;
-    emitUiFunnelEvent("adapt_page_view");
-  }, [authReady, emitUiFunnelEvent]);
-
-  useEffect(() => {
     if (!loading) {
       setLoadingStep(0);
       return;
@@ -388,7 +378,7 @@ export default function AdaptarPage() {
         analyzeResult = result;
       } else if (isAuthenticated && file) {
         formData.append("file", file);
-        if (saveMasterCv || !hasMaster) formData.append("saveAsMaster", "true");
+        if (saveMasterCv) formData.append("saveAsMaster", "true");
         emitUiFunnelEvent("analysis_started", {
           attemptId: submitAttemptId,
           metadata: {
@@ -434,6 +424,8 @@ export default function AdaptarPage() {
             jobTitle: analyzeResult.adaptedContentJson?.vaga?.cargo,
             masterCvText: analyzeResult.masterCvText,
             previewText: analyzeResult.previewText,
+            saveAsMaster: saveMasterCv,
+            file: file ?? undefined,
           });
 
           router.push(`/adaptar/resultado?adaptationId=${saved.id}`);
@@ -793,9 +785,6 @@ export default function AdaptarPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          emitUiFunnelEvent("cv_upload_clicked", {
-                            attemptId: buildClientAttemptId(),
-                          });
                           fileInputRef.current?.click();
                         }}
                         onMouseEnter={() => setFileHover(true)}
@@ -932,12 +921,8 @@ export default function AdaptarPage() {
                       const nextFile = e.target.files?.[0] ?? null;
                       setFile(nextFile);
                       if (nextFile) {
-                        const uploadAttemptId = buildClientAttemptId();
-                        emitUiFunnelEvent("cv_upload_started", {
-                          attemptId: uploadAttemptId,
-                        });
                         emitUiFunnelEvent("cv_upload_completed", {
-                          attemptId: uploadAttemptId,
+                          attemptId: buildClientAttemptId(),
                           metadata: {
                             fileExtension:
                               nextFile.name.split(".").pop()?.toLowerCase() ??

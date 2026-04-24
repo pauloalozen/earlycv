@@ -78,8 +78,9 @@ async function registerUser(
       email,
       password: "Super-secret-123",
       name: `${prefix} User`,
-    })
-    .expect(201);
+    });
+
+  assert.equal(response.status, 201, JSON.stringify(response.body));
 
   return {
     accessToken: response.body.accessToken as string,
@@ -329,6 +330,142 @@ test("DELETE /cv-adaptation/:id also deletes the adaptedResume if present", asyn
 
   await deleteUserByEmail(database, user.email);
   await app.close();
+});
+
+test("POST /cv-adaptation/save-guest-preview without saveAsMaster does not create a primary master resume", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(
+    app,
+    database,
+    "cv-save-nomaster",
+  );
+
+  try {
+    const response = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/save-guest-preview")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .field(
+        "adaptedContentJson",
+        JSON.stringify({
+          vaga: { cargo: "Data Analyst", empresa: "EarlyCV" },
+          fit: { score: 80, categoria: "alto", headline: "ok" },
+        }),
+      )
+      .field("jobDescriptionText", "Descricao da vaga")
+      .field("masterCvText", "CV original enviado pelo usuario")
+      .field("jobTitle", "Data Analyst")
+      .field("companyName", "EarlyCV")
+      .field("previewText", "preview");
+
+    assert.equal(response.status, 201, JSON.stringify(response.body));
+
+    const resumes = await database.resume.findMany({
+      where: { userId: user.userId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        kind: true,
+        isMaster: true,
+        sourceFileName: true,
+        sourceFileType: true,
+        sourceFileUrl: true,
+      },
+    });
+
+    assert.equal(resumes.length, 1);
+    assert.equal(resumes[0]?.id, response.body.masterResumeId);
+    assert.equal(resumes[0]?.kind, "master");
+    assert.equal(resumes[0]?.isMaster, false);
+    assert.equal(resumes[0]?.sourceFileName, null);
+    assert.equal(resumes[0]?.sourceFileType, null);
+    assert.equal(resumes[0]?.sourceFileUrl, null);
+
+    const primaryResumeCount = await database.resume.count({
+      where: { userId: user.userId, isMaster: true },
+    });
+    assert.equal(primaryResumeCount, 0);
+  } finally {
+    await deleteUserByEmail(database, user.email);
+    await app.close();
+  }
+});
+
+test("POST /cv-adaptation/save-guest-preview with saveAsMaster promotes uploaded resume as primary master", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-save-master");
+
+  const previousMaster = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV anterior",
+      kind: "master",
+      status: "uploaded",
+      rawText: "CV anterior",
+      isMaster: true,
+    },
+  });
+
+  try {
+    const response = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/save-guest-preview")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .attach("file", Buffer.from("%PDF-1.4\n%mock"), {
+        contentType: "application/pdf",
+        filename: "novo-cv.pdf",
+      })
+      .field(
+        "adaptedContentJson",
+        JSON.stringify({
+          vaga: { cargo: "Data Analyst", empresa: "EarlyCV" },
+          fit: { score: 87, categoria: "alto", headline: "ok" },
+        }),
+      )
+      .field("jobDescriptionText", "Descricao da vaga")
+      .field("masterCvText", "CV original enviado pelo usuario")
+      .field("jobTitle", "Data Analyst")
+      .field("companyName", "EarlyCV")
+      .field("previewText", "preview")
+      .field("saveAsMaster", "true");
+
+    assert.equal(response.status, 201, JSON.stringify(response.body));
+
+    const resumes = await database.resume.findMany({
+      where: { userId: user.userId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        isMaster: true,
+        kind: true,
+        sourceFileName: true,
+        sourceFileType: true,
+        sourceFileUrl: true,
+      },
+    });
+
+    assert.equal(resumes.length, 2);
+
+    const promoted = resumes.find((resume) => resume.id === response.body.masterResumeId);
+    assert.ok(promoted);
+    assert.equal(promoted?.kind, "master");
+    assert.equal(promoted?.isMaster, true);
+    assert.equal(promoted?.sourceFileName, "novo-cv.pdf");
+    assert.equal(promoted?.sourceFileType, "application/pdf");
+    assert.equal(typeof promoted?.sourceFileUrl, "string");
+    assert.ok((promoted?.sourceFileUrl?.length ?? 0) > 0);
+
+    const demotedPreviousMaster = resumes.find(
+      (resume) => resume.id === previousMaster.id,
+    );
+    assert.equal(demotedPreviousMaster?.isMaster, false);
+
+    const adaptedAsMasterCount = await database.resume.count({
+      where: { userId: user.userId, kind: "adapted", isMaster: true },
+    });
+    assert.equal(adaptedAsMasterCount, 0);
+  } finally {
+    await deleteUserByEmail(database, user.email);
+    await app.close();
+  }
 });
 
 test("claimed guest analysis can be downloaded as PDF and DOCX", async () => {

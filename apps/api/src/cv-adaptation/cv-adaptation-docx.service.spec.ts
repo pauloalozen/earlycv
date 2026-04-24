@@ -107,4 +107,112 @@ describe("CvAdaptationDocxService", () => {
     assert.equal(data.certificacoes.length, 1);
     assert.equal(data.idiomas.length, 1);
   });
+
+  it("maps certifications and languages by section title fallback when sectionType is other", async () => {
+    const fillFromStorage = mock.fn(async () => Buffer.from("docx"));
+    const templateDocx = {
+      fillFromStorage,
+      docxToPdf: mock.fn(async () => Buffer.from("pdf")),
+    } as unknown as ResumeTemplateDocxService;
+
+    const service = new CvAdaptationDocxService(templateDocx);
+
+    const output: CvAdaptationOutput = {
+      summary: "Resumo",
+      sections: [
+        {
+          sectionType: "other",
+          title: "Certificações",
+          items: [
+            {
+              heading: "AWS Certified Cloud Practitioner",
+              subheading: "AWS",
+              dateRange: "2025",
+              bullets: [],
+            },
+          ],
+        },
+        {
+          sectionType: "other",
+          title: "Idiomas",
+          items: [
+            {
+              heading: "Inglês",
+              subheading: "Avançado",
+              bullets: [],
+            },
+          ],
+        },
+      ],
+      highlightedSkills: [],
+      removedSections: [],
+    };
+
+    await service.generateDocx(output, "https://bucket/template.docx");
+
+    const calls = fillFromStorage.mock.calls as Array<{ arguments: unknown[] }>;
+    const call = calls[0];
+    assert.ok(call);
+    const data = call.arguments[1] as {
+      hasCertificacoes: boolean;
+      hasIdiomas: boolean;
+      certificacoes: Array<{ courseName: string }>;
+      idiomas: Array<{ language: string }>;
+    };
+
+    assert.equal(data.hasCertificacoes, true);
+    assert.equal(data.hasIdiomas, true);
+    assert.equal(
+      data.certificacoes[0]?.courseName,
+      "AWS Certified Cloud Practitioner",
+    );
+    assert.equal(data.idiomas[0]?.language, "Inglês");
+  });
+
+  it("removes empty certifications and languages to avoid blank rows", async () => {
+    const fillFromStorage = mock.fn(async () => Buffer.from("docx"));
+    const templateDocx = {
+      fillFromStorage,
+      docxToPdf: mock.fn(async () => Buffer.from("pdf")),
+    } as unknown as ResumeTemplateDocxService;
+
+    const service = new CvAdaptationDocxService(templateDocx);
+
+    const output: CvAdaptationOutput = {
+      summary: "Resumo",
+      sections: [
+        {
+          sectionType: "certifications",
+          title: "Certificações",
+          items: [
+            { heading: "", subheading: "", dateRange: "", bullets: [""] },
+          ],
+        },
+        {
+          sectionType: "languages",
+          title: "Idiomas",
+          items: [{ heading: "", subheading: "", bullets: [""] }],
+        },
+      ],
+      highlightedSkills: [],
+      removedSections: [],
+    };
+
+    await service.generateDocx(output, "https://bucket/template.docx");
+
+    const calls = fillFromStorage.mock.calls as Array<{ arguments: unknown[] }>;
+    const call = calls[0];
+    assert.ok(call);
+    const data = call.arguments[1] as {
+      hasCertificacoes: boolean;
+      hasIdiomas: boolean;
+      certificacoes: unknown[];
+      idiomas: unknown[];
+    };
+
+    assert.equal(data.hasCertificacoes, false);
+    assert.equal(data.hasIdiomas, false);
+    assert.deepEqual(data.certificacoes, []);
+    assert.deepEqual(data.idiomas, []);
+  });
 });

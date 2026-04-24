@@ -39,10 +39,12 @@ export async function GET(
   const contentDisposition =
     apiResponse.headers.get("Content-Disposition") ??
     'attachment; filename="cv.txt"';
+  const contentType =
+    apiResponse.headers.get("Content-Type") ?? "application/octet-stream";
 
   return new NextResponse(buffer, {
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Type": contentType,
       "Content-Disposition": contentDisposition,
     },
   });

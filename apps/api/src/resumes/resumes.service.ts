@@ -8,6 +8,7 @@ import { type Prisma, ResumeKind } from "@prisma/client";
 import type { Response } from "express";
 import type { FileUpload } from "../cv-adaptation/dto/create-cv-adaptation.dto";
 import { DatabaseService } from "../database/database.service";
+import { StorageService } from "../storage/storage.service";
 import type { CreateResumeDto } from "./dto/create-resume.dto";
 import type { UpdateResumeDto } from "./dto/update-resume.dto";
 
@@ -15,6 +16,8 @@ import type { UpdateResumeDto } from "./dto/update-resume.dto";
 export class ResumesService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(StorageService)
+    private readonly storage: Pick<StorageService, "getObject" | "putObject">,
   ) {}
 
   list(userId: string) {
@@ -41,6 +44,7 @@ export class ResumesService {
 
   async create(userId: string, dto: CreateResumeDto, file?: FileUpload) {
     let rawText: string | null = null;
+    let sourceFileUrl: string | null = null;
 
     if (file) {
       try {
@@ -51,6 +55,13 @@ export class ResumesService {
           `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
         );
       }
+
+      const key = `resumes/${userId}/${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+      sourceFileUrl = await this.storage.putObject(
+        key,
+        file.buffer,
+        file.mimetype,
+      );
     }
 
     return this.database.$transaction(async (tx) => {
@@ -67,6 +78,7 @@ export class ResumesService {
           title: dto.title,
           sourceFileName: dto.sourceFileName ?? file?.originalname ?? null,
           sourceFileType: file?.mimetype ?? null,
+          sourceFileUrl,
           rawText,
           status: dto.status ?? (rawText ? "uploaded" : "draft"),
           kind: ResumeKind.master,
@@ -138,6 +150,25 @@ export class ResumesService {
 
   async download(userId: string, resumeId: string, res: Response) {
     const resume = await this.getById(userId, resumeId);
+
+    if (resume.sourceFileUrl) {
+      const key = this.extractKeyFromUrl(resume.sourceFileUrl);
+      if (key) {
+        const sourceBuffer = await this.storage.getObject(key);
+        const filename = resume.sourceFileName ?? "cv";
+
+        res.setHeader(
+          "Content-Type",
+          resume.sourceFileType ?? "application/octet-stream",
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${filename}"`,
+        );
+        res.send(sourceBuffer);
+        return;
+      }
+    }
 
     const text = resume.rawText ?? "";
     const filename = resume.sourceFileName
@@ -214,5 +245,12 @@ export class ResumesService {
 
   private resolveNonMasterKind(kind: ResumeKind) {
     return kind;
+  }
+
+  private extractKeyFromUrl(url: string): string | null {
+    const bucket = process.env.S3_BUCKET ?? "earlycv-local";
+    const marker = `/${bucket}/`;
+    const idx = url.indexOf(marker);
+    return idx >= 0 ? url.slice(idx + marker.length) : null;
   }
 }

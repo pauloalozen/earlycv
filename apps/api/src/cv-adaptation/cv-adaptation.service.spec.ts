@@ -297,6 +297,114 @@ test("create marks adaptation as failed when protected boundary blocks analysis"
   });
 });
 
+test("saveGuestPreview does not auto-promote a resume to master when user did not request it", async () => {
+  const now = new Date();
+  let createdMasterWithFlag = 0;
+  let createdResumeWithoutMasterFlag = 0;
+  let capturedMasterResumeId: string | null = null;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: {
+        findFirst: async () => null,
+      },
+      resume: {
+        findFirst: async ({ where }: { where: { kind?: string } }) => {
+          if (where.kind === "master") {
+            return null;
+          }
+
+          return { id: "adapted-resume-1" };
+        },
+        create: async ({
+          data,
+        }: {
+          data: {
+            isMaster: boolean;
+          };
+        }) => {
+          if (data.isMaster) {
+            createdMasterWithFlag += 1;
+          } else {
+            createdResumeWithoutMasterFlag += 1;
+          }
+          return { id: "new-master-1" };
+        },
+      },
+      cvAdaptation: {
+        create: async ({
+          data,
+        }: {
+          data: {
+            masterResumeId: string;
+            templateId: string | null;
+          };
+        }) => {
+          capturedMasterResumeId = data.masterResumeId;
+          return {
+            adaptedResumeId: null,
+            aiAuditJson: null,
+            companyName: null,
+            createdAt: now,
+            failureReason: null,
+            id: "adapt-1",
+            jobDescriptionText: "Descricao da vaga",
+            jobTitle: null,
+            masterResumeId: data.masterResumeId,
+            paidAt: null,
+            paymentStatus: "none",
+            previewText: "preview",
+            status: "awaiting_payment",
+            template: null,
+            templateId: data.templateId,
+            updatedAt: now,
+            userId: "user-1",
+          };
+        },
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: {
+          adaptedContentJson: { ok: true },
+          masterCvText: "CV base",
+          previewText: "preview",
+        },
+      }),
+    },
+  );
+
+  await service.saveGuestPreview("user-1", {
+    adaptedContentJson: { fit: { headline: "ok" } },
+    companyName: "EarlyCV",
+    jobDescriptionText: "Descricao da vaga",
+    jobTitle: "Analista",
+    masterCvText: "CV enviado pelo usuario",
+    previewText: "preview",
+  });
+
+  assert.equal(createdMasterWithFlag, 0);
+  assert.equal(createdResumeWithoutMasterFlag, 1);
+  assert.equal(capturedMasterResumeId, "new-master-1");
+});
+
 test("create forwards turnstileToken to protected create analysis", async () => {
   const capturedTurnstileTokens: Array<string | null | undefined> = [];
   const now = new Date();

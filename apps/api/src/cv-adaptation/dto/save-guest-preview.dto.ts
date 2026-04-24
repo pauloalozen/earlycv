@@ -1,5 +1,11 @@
 import { Transform } from "class-transformer";
-import { Allow, IsOptional, IsString, MaxLength } from "class-validator";
+import {
+  Allow,
+  IsBoolean,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from "class-validator";
 
 export class SaveGuestPreviewDto {
   /**
@@ -8,6 +14,15 @@ export class SaveGuestPreviewDto {
    * issues with deeply nested JSON fields.
    */
   @Allow()
+  @Transform(({ value }) => {
+    if (typeof value !== "string") return value;
+
+    try {
+      return JSON.parse(value) as Record<string, unknown>;
+    } catch {
+      return value;
+    }
+  })
   adaptedContentJson!: Record<string, unknown>;
 
   @IsOptional()
@@ -23,6 +38,11 @@ export class SaveGuestPreviewDto {
   @IsString()
   @MaxLength(80000)
   masterCvText!: string;
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
+  @IsBoolean()
+  saveAsMaster?: boolean;
 
   @IsOptional()
   @IsString()

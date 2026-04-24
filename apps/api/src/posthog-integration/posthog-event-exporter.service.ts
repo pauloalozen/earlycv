@@ -7,15 +7,11 @@ import { PosthogClientService } from "./posthog-client.service";
 import type { PostHogEventSource } from "./types";
 
 const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
-  landing_view: "landing_view",
   landing_cta_click: "landing_cta_click",
-  adapt_page_view: "adapt_page_view",
   page_view: "page_view",
   page_leave: "page_leave",
   session_started: "session_started",
   session_engaged: "session_engaged",
-  cv_upload_started: "cv_upload_started",
-  cv_upload_clicked: "cv_upload_clicked",
   cv_upload_completed: "cv_upload_completed",
   job_description_focus: "job_description_focus",
   job_description_paste: "job_description_paste",
@@ -29,12 +25,12 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   signup_completed: "signup_completed",
   login_completed: "login_completed",
   full_analysis_viewed: "full_analysis_viewed",
-  download_cv_clicked: "download_cv_clicked",
+  optimized_cv_downloaded: "optimized_cv_downloaded",
   unlock_cv_click: "unlock_cv_click",
   checkout_abandoned: "checkout_abandoned",
   checkout_started: "checkout_started",
+  payment_approved: "payment_approved",
   payment_failed: "payment_failed",
-  purchase_completed: "purchase_completed",
   dashboard_viewed: "dashboard_viewed",
 };
 

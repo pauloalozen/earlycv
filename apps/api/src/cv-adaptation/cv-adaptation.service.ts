@@ -10,6 +10,7 @@ import type { Response } from "express";
 import type { ProtectedAnalysisBlockedResult } from "../analysis-protection/analysis-protection.facade";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { DatabaseService } from "../database/database.service";
+import { StorageService } from "../storage/storage.service";
 
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
@@ -43,6 +44,18 @@ export class CvAdaptationService {
     private readonly docxService: CvAdaptationDocxService,
     @Inject(CvAdaptationProtectedAnalyzeService)
     private readonly protectedAnalyzeService: CvAdaptationProtectedAnalyzeService,
+    @Inject(StorageService)
+    private readonly storage: Pick<
+      StorageService,
+      "getObject" | "putObject"
+    > = {
+      async getObject() {
+        return Buffer.alloc(0);
+      },
+      async putObject() {
+        return "";
+      },
+    },
   ) {}
 
   async create(userId: string, dto: CreateCvAdaptationDto, file?: FileUpload) {
@@ -61,6 +74,8 @@ export class CvAdaptationService {
         );
       }
 
+      const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
+
       // Create master Resume record
       const masterResume = await this.database.$transaction(async (tx) => {
         if (dto.saveAsMaster) {
@@ -76,7 +91,8 @@ export class CvAdaptationService {
             kind: "master",
             status: "uploaded",
             sourceFileName: file.originalname,
-            sourceFileType: "application/pdf",
+            sourceFileType: file.mimetype,
+            sourceFileUrl,
             rawText: masterCvText,
             isMaster: dto.saveAsMaster === true,
           },
@@ -227,7 +243,7 @@ export class CvAdaptationService {
 
     const adaptation = await this.database.$transaction(async (tx) => {
       const existingMaster = await tx.resume.findFirst({
-        where: { userId, isMaster: true },
+        where: { userId, isMaster: true, kind: "master" },
         select: { id: true },
       });
 
@@ -243,7 +259,7 @@ export class CvAdaptationService {
             status: "uploaded",
             sourceFileType: "application/pdf",
             rawText: dto.masterCvText,
-            isMaster: true,
+            isMaster: false,
           },
         });
         masterResumeId = created.id;
@@ -386,6 +402,11 @@ export class CvAdaptationService {
             }
 
             if (dto.saveAsMaster) {
+              const sourceFileUrl = await this.uploadResumeSourceFile(
+                userId,
+                file,
+              );
+
               await this.database.$transaction(async (tx) => {
                 await tx.resume.updateMany({
                   where: { userId, isMaster: true },
@@ -399,6 +420,7 @@ export class CvAdaptationService {
                     status: "uploaded",
                     sourceFileName: file.originalname,
                     sourceFileType: file.mimetype,
+                    sourceFileUrl,
                     rawText: masterCvText,
                     isMaster: true,
                   },
@@ -481,16 +503,48 @@ export class CvAdaptationService {
     return createHash("sha256").update(fileBuffer).digest("hex");
   }
 
-  async saveGuestPreview(userId: string, dto: SaveGuestPreviewDto) {
+  async saveGuestPreview(
+    userId: string,
+    dto: SaveGuestPreviewDto,
+    file?: FileUpload,
+  ) {
     const defaultTemplate = await this.getDefaultTemplate();
 
     const existingMaster = await this.database.resume.findFirst({
-      where: { userId, isMaster: true },
+      where: { userId, isMaster: true, kind: "master" },
       select: { id: true },
     });
 
     let masterResumeId: string;
-    if (existingMaster) {
+
+    if (file) {
+      const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
+
+      const created = await this.database.$transaction(async (tx) => {
+        if (dto.saveAsMaster) {
+          await tx.resume.updateMany({
+            where: { userId, isMaster: true },
+            data: { isMaster: false },
+          });
+        }
+
+        return tx.resume.create({
+          data: {
+            userId,
+            title: file.originalname.replace(/\.[^.]+$/, ""),
+            kind: "master",
+            status: "uploaded",
+            sourceFileName: file.originalname,
+            sourceFileType: file.mimetype,
+            sourceFileUrl,
+            rawText: dto.masterCvText,
+            isMaster: dto.saveAsMaster === true,
+          },
+        });
+      });
+
+      masterResumeId = created.id;
+    } else if (existingMaster) {
       masterResumeId = existingMaster.id;
     } else {
       const created = await this.database.resume.create({
@@ -499,11 +553,12 @@ export class CvAdaptationService {
           title: dto.jobTitle ? `CV para ${dto.jobTitle}` : "CV Importado",
           kind: "master",
           status: "uploaded",
-          sourceFileType: "application/pdf",
+          sourceFileType: null,
           rawText: dto.masterCvText,
-          isMaster: true,
+          isMaster: false,
         },
       });
+
       masterResumeId = created.id;
     }
 
@@ -1319,5 +1374,23 @@ export class CvAdaptationService {
         status: { not: "failed" },
       },
     });
+  }
+
+  private async uploadResumeSourceFile(userId: string, file: FileUpload) {
+    const extension = file.originalname.includes(".")
+      ? (file.originalname.split(".").pop()?.toLowerCase() ?? "bin")
+      : "bin";
+    const key = `resumes/${userId}/${randomUUID()}-${this.sanitizeFileName(file.originalname)}.${extension}`;
+    return this.storage.putObject(key, file.buffer, file.mimetype);
+  }
+
+  private sanitizeFileName(fileName: string): string {
+    const normalized = fileName
+      .replace(/\.[^.]+$/, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+
+    return normalized || "resume";
   }
 }
