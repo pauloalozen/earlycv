@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   Inject,
   Param,
@@ -16,6 +17,7 @@ import {
   ValidationPipe,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { SkipThrottle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
 
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
@@ -226,8 +228,20 @@ export class CvAdaptationController {
     return this.cvAdaptationService.getContent(user.id, id);
   }
 
+  @SkipThrottle()
   @Post("webhook/:provider")
-  webhook(@Param("provider") provider: string, @Body() body: unknown) {
+  webhook(
+    @Param("provider") provider: string,
+    @Body() body: unknown,
+    @Headers("x-signature") xSignature?: string,
+    @Headers("x-request-id") xRequestId?: string,
+  ) {
+    this.cvAdaptationService.verifyWebhookSignature(
+      provider,
+      body,
+      xSignature,
+      xRequestId,
+    );
     return this.cvAdaptationService.handleWebhook(provider, body);
   }
 }

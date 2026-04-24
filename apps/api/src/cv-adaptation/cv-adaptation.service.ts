@@ -1,9 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   BadRequestException,
   Inject,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { Response } from "express";
@@ -67,7 +68,7 @@ export class CvAdaptationService {
       // Extract text from PDF
       try {
         const { extractTextFromPdf } = await import("@earlycv/ai");
-        masterCvText = await extractTextFromPdf(file.buffer);
+        masterCvText = await extractTextFromPdf(file.buffer, { validateCv: true });
       } catch (error) {
         throw new BadRequestException(
           `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
@@ -208,8 +209,7 @@ export class CvAdaptationService {
             where: { id: adaptation.id },
             data: {
               status: "failed",
-              failureReason:
-                err instanceof Error ? err.message : "Unknown AI error",
+              failureReason: this.sanitizeFailureReason(err),
             },
           })
           .catch((updateError) => {
@@ -345,7 +345,7 @@ export class CvAdaptationService {
         loadMasterCvText: async () => {
           try {
             const { extractTextFromPdf } = await import("@earlycv/ai");
-            return await extractTextFromPdf(file.buffer);
+            return await extractTextFromPdf(file.buffer, { validateCv: true });
           } catch (error) {
             throw new BadRequestException(
               `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
@@ -394,7 +394,7 @@ export class CvAdaptationService {
 
             try {
               const { extractTextFromPdf } = await import("@earlycv/ai");
-              masterCvText = await extractTextFromPdf(file.buffer);
+              masterCvText = await extractTextFromPdf(file.buffer, { validateCv: true });
             } catch (error) {
               throw new BadRequestException(
                 `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
@@ -821,6 +821,57 @@ export class CvAdaptationService {
     });
 
     return createCvAdaptationResponseDto(updated);
+  }
+
+  verifyWebhookSignature(
+    provider: string,
+    body: unknown,
+    xSignature?: string,
+    xRequestId?: string,
+  ): void {
+    if (provider !== "mercadopago") return;
+
+    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+    if (!secret) return; // dev: sem secret configurado, aceita sem validar
+
+    if (!xSignature) {
+      throw new UnauthorizedException("Missing webhook signature");
+    }
+
+    const parts: Record<string, string> = {};
+    for (const part of xSignature.split(",")) {
+      const [k, v] = part.split("=");
+      if (k && v) parts[k.trim()] = v.trim();
+    }
+    const ts = parts["ts"];
+    const v1 = parts["v1"];
+
+    if (!ts || !v1) {
+      throw new UnauthorizedException("Invalid webhook signature format");
+    }
+
+    const dataId =
+      body !== null &&
+      typeof body === "object" &&
+      "data" in body &&
+      body.data !== null &&
+      typeof body.data === "object" &&
+      "id" in body.data
+        ? String((body.data as { id: unknown }).id)
+        : "";
+
+    const message = `id:${dataId};request-id:${xRequestId ?? ""};ts:${ts};`;
+    const expected = createHmac("sha256", secret).update(message).digest("hex");
+
+    const expectedBuf = Buffer.from(expected);
+    const receivedBuf = Buffer.from(v1);
+
+    if (
+      expectedBuf.length !== receivedBuf.length ||
+      !timingSafeEqual(expectedBuf, receivedBuf)
+    ) {
+      throw new UnauthorizedException("Invalid webhook signature");
+    }
   }
 
   async handleWebhook(provider: string, body: unknown) {
@@ -1392,5 +1443,10 @@ export class CvAdaptationService {
       .replace(/(^-|-$)/g, "");
 
     return normalized || "resume";
+  }
+
+  private sanitizeFailureReason(err: unknown): string {
+    const raw = err instanceof Error ? err.message : "Unknown AI error";
+    return raw.slice(0, 500);
   }
 }

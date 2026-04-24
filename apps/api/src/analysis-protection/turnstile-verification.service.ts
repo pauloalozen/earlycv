@@ -51,6 +51,11 @@ export class TurnstileVerificationService {
     }
 
     if (process.env.SKIP_TURNSTILE_VERIFICATION === "true") {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error(
+          "SKIP_TURNSTILE_VERIFICATION cannot be enabled in production",
+        );
+      }
       return { valid: true, reason: null };
     }
 

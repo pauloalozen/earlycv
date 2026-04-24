@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 
 import { AdminProfilesModule } from "./admin-profiles/admin-profiles.module";
 import { AdminResumesModule } from "./admin-resumes/admin-resumes.module";
@@ -26,6 +28,9 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
 @Module({
   imports: [
     EnvModule,
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60_000, limit: 60 }],
+    }),
     ScheduleModule.forRoot(),
     DatabaseModule,
     InfraModule,
@@ -48,5 +53,6 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     PlansModule,
     PosthogIntegrationModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

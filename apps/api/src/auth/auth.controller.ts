@@ -11,6 +11,7 @@ import {
   ValidationPipe,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { SkipThrottle, Throttle } from "@nestjs/throttler";
 
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
@@ -40,6 +41,7 @@ type SocialAuthRequest = {
 export class AuthController {
   constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
+  @Throttle({ default: { ttl: 600_000, limit: 5 } })
   @Post("register")
   register(
     @Body(
@@ -53,6 +55,7 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
+  @Throttle({ default: { ttl: 300_000, limit: 10 } })
   @Post("login")
   @UseGuards(LocalAuthGuard)
   login(
@@ -126,6 +129,7 @@ export class AuthController {
     return this.authService.resendVerificationCode(user.id, dto);
   }
 
+  @Throttle({ default: { ttl: 600_000, limit: 3 } })
   @Post("forgot-password")
   forgotPassword(
     @Body(
@@ -139,6 +143,7 @@ export class AuthController {
     return this.authService.forgotPassword(dto);
   }
 
+  @Throttle({ default: { ttl: 600_000, limit: 5 } })
   @Post("reset-password")
   resetPassword(
     @Body(
@@ -152,10 +157,12 @@ export class AuthController {
     return this.authService.resetPassword(dto);
   }
 
+  @SkipThrottle()
   @Get("google/start")
   @UseGuards(AuthGuard("google"))
   googleStart() {}
 
+  @SkipThrottle()
   @Get("google/callback")
   @UseGuards(AuthGuard("google"))
   @Redirect()
@@ -165,10 +172,12 @@ export class AuthController {
     );
   }
 
+  @SkipThrottle()
   @Get("linkedin/start")
   @UseGuards(AuthGuard("linkedin"))
   linkedinStart() {}
 
+  @SkipThrottle()
   @Get("linkedin/callback")
   @UseGuards(AuthGuard("linkedin"))
   @Redirect()
