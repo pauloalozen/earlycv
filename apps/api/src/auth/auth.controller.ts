@@ -172,20 +172,6 @@ export class AuthController {
     );
   }
 
-  @SkipThrottle()
-  @Get("linkedin/start")
-  @UseGuards(AuthGuard("linkedin"))
-  linkedinStart() {}
-
-  @SkipThrottle()
-  @Get("linkedin/callback")
-  @UseGuards(AuthGuard("linkedin"))
-  @Redirect()
-  async linkedinCallback(@Req() request: SocialAuthRequest) {
-    return this.buildSocialRedirect(
-      await this.authService.finishSocialLogin(this.getSocialProfile(request)),
-    );
-  }
 
   @Get("me")
   @UseGuards(JwtAuthGuard)

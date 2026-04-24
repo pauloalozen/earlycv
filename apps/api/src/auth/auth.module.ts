@@ -11,7 +11,6 @@ import { FakeEmailDeliveryService } from "./fake-email-delivery.service";
 import { ResendEmailDeliveryService } from "./resend-email-delivery.service";
 import { GoogleStrategy } from "./strategies/google.strategy";
 import { JwtStrategy } from "./strategies/jwt.strategy";
-import { LinkedinStrategy } from "./strategies/linkedin.strategy";
 import { LocalStrategy } from "./strategies/local.strategy";
 
 const useResend = Boolean(process.env.RESEND_API_KEY);
@@ -32,7 +31,6 @@ const useResend = Boolean(process.env.RESEND_API_KEY);
     JwtStrategy,
     LocalStrategy,
     GoogleStrategy,
-    LinkedinStrategy,
   ],
   exports: [AuthService, FakeEmailDeliveryService, EMAIL_DELIVERY_PORT],
 })
