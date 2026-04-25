@@ -1284,7 +1284,11 @@ export class CvAdaptationService {
     structureJson: unknown;
   } | null> {
     return this.database.resumeTemplate.findFirst({
-      where: { slug: "classico-simples", isActive: true },
+      where: {
+        isActive: true,
+        fileUrl: { not: null, endsWith: ".docx" },
+      },
+      orderBy: { slug: "asc" },
       select: {
         id: true,
         slug: true,
