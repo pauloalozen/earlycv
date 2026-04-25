@@ -526,6 +526,7 @@ export default function AdaptarPage() {
 
         {/* Main */}
         <div
+          className="adaptar-content"
           style={{
             flex: 1,
             padding: "32px 32px 28px",
@@ -569,7 +570,7 @@ export default function AdaptarPage() {
             </div>
             <h1
               style={{
-                fontSize: "clamp(32px, 3.5vw, 46px)",
+                fontSize: "clamp(26px, 6vw, 46px)",
                 fontWeight: 500,
                 letterSpacing: -1.8,
                 lineHeight: 1.04,
@@ -1333,6 +1334,9 @@ export default function AdaptarPage() {
         <style>{`
           @media (max-width: 860px) {
             .adaptar-grid { grid-template-columns: 1fr !important; }
+          }
+          @media (max-width: 768px) {
+            .adaptar-content { padding: 20px 16px 28px !important; }
           }
         `}</style>
       </main>

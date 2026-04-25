@@ -25,9 +25,8 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
     searchParams,
   ]);
 
-  const PLANS = buildPlanCatalog(process.env);
-
   const isAuthenticated = Boolean(user);
+  const PLANS = buildPlanCatalog(process.env, { isAuthenticated });
   const error = params.error;
 
   return (
@@ -62,6 +61,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
         />
 
         <div
+          className="planos-content"
           style={{
             maxWidth: 1100,
             margin: "0 auto",
@@ -489,6 +489,9 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
         .planos-cta-light:hover { opacity: 0.82; }
         @media (max-width: 860px) {
           .planos-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+        @media (max-width: 768px) {
+          .planos-content { padding: 20px 16px 48px !important; }
         }
         @media (max-width: 520px) {
           .planos-grid { grid-template-columns: 1fr !important; }

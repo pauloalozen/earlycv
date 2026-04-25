@@ -28,6 +28,11 @@ const adminNavItems: BackofficeNavItem[] = [
   { href: "/admin/curriculos", label: "Curriculos", phase: "fase 3" },
   { href: "/admin/templates", label: "Templates de CV" },
   { href: "/admin/configuracoes", label: "Configuracoes", phase: "fase 4" },
+  {
+    href: "/admin/eventos-e-logs",
+    label: "Eventos e logs",
+    phase: "fase 4",
+  },
 ];
 
 const superadminNavItems: BackofficeNavItem[] = [
@@ -116,11 +121,11 @@ export function buildBackofficeHref(baseHref: string) {
 }
 
 export function getAdminNavItems() {
-  return adminNavItems;
+  return [...adminNavItems];
 }
 
 export function getSuperadminNavItems() {
-  return superadminNavItems;
+  return [...superadminNavItems];
 }
 
 export function buildAdminUserDetailHref(userId: string) {
@@ -227,13 +232,8 @@ export function buildUserPendingItems({
 
   for (const user of users) {
     const userState = buildAdminUserState(user);
-    const completenessStatus = buildUserCompletenessStatus({
-      hasAnyProfile: userState.hasAnyProfile,
-      hasMasterResume: userState.hasMasterResume,
-      hasProfile: userState.hasProfile,
-    });
 
-    if (completenessStatus.label === "perfil ausente") {
+    if (!userState.hasAnyProfile) {
       items.push({
         cta: "Iniciar perfil",
         description:
@@ -247,7 +247,7 @@ export function buildUserPendingItems({
       continue;
     }
 
-    if (completenessStatus.label === "perfil incompleto") {
+    if (!userState.hasProfile) {
       items.push({
         cta: "Completar perfil",
         description:
@@ -261,7 +261,7 @@ export function buildUserPendingItems({
       continue;
     }
 
-    if (completenessStatus.label === "sem cv master") {
+    if (!userState.hasMasterResume) {
       items.push({
         cta: "Enviar CV master",
         description:

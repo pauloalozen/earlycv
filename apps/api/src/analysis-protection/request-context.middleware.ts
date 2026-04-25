@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-
 import type { NextFunction, Request, Response } from "express";
+import { verify } from "jsonwebtoken";
 
 import type { AnalysisRequestContext } from "./types";
 
@@ -8,6 +8,8 @@ const SESSION_COOKIE_KEYS = [
   "analysis_session_token",
   "analysisSessionToken",
 ] as const;
+
+const APP_ACCESS_TOKEN_COOKIE_KEYS = ["earlycv-access-token"] as const;
 
 const MAX_CORRELATION_ID_LENGTH = 128;
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
@@ -161,6 +163,86 @@ function resolveSessionPublicToken(req: Request): string | null {
   return null;
 }
 
+function resolveAccessToken(req: Request): string | null {
+  const authorization = pickFirstHeaderValue(req.headers.authorization);
+
+  if (authorization) {
+    const [scheme, token] = authorization.split(/\s+/, 2);
+
+    if (scheme?.toLowerCase() === "bearer" && token?.trim()) {
+      return token.trim();
+    }
+  }
+
+  const cookies: Record<string, unknown> = {};
+
+  if (req.cookies && typeof req.cookies === "object") {
+    Object.assign(cookies, req.cookies);
+  }
+
+  const cookieHeader = pickFirstHeaderValue(req.headers.cookie);
+
+  if (cookieHeader) {
+    for (const pair of cookieHeader.split(";")) {
+      const separatorIndex = pair.indexOf("=");
+
+      if (separatorIndex <= 0) {
+        continue;
+      }
+
+      const key = pair.slice(0, separatorIndex).trim();
+      const value = pair.slice(separatorIndex + 1).trim();
+
+      if (key.length === 0 || value.length === 0 || key in cookies) {
+        continue;
+      }
+
+      cookies[key] = value;
+    }
+  }
+
+  for (const key of APP_ACCESS_TOKEN_COOKIE_KEYS) {
+    const value = cookies[key];
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+
+  return null;
+}
+
+function resolveUserId(req: Request): string | null {
+  const accessToken = resolveAccessToken(req);
+  const secret = process.env.JWT_ACCESS_SECRET?.trim();
+
+  if (!accessToken || !secret) {
+    return null;
+  }
+
+  try {
+    const payload = verify(accessToken, secret);
+
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      payload.type !== "access" ||
+      typeof payload.sub !== "string" ||
+      payload.sub.trim().length === 0
+    ) {
+      return null;
+    }
+
+    return payload.sub;
+  } catch {
+    return null;
+  }
+}
+
 function sanitizeCorrelationId(
   value: string | string[] | undefined,
 ): string | null {
@@ -223,7 +305,7 @@ export function requestContextMiddleware(
     correlationId: correlationId ?? randomUUID(),
     sessionPublicToken: resolveSessionPublicToken(req),
     sessionInternalId: null,
-    userId: null,
+    userId: resolveUserId(req),
     ip: resolveIp(req),
     routePath: resolveRoutePath(req),
     userAgentHash: resolveUserAgentHash(req),

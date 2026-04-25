@@ -25,14 +25,10 @@ type BusinessFunnelEventWriteClient = {
     create: (args: {
       data: Record<string, unknown>;
     }) => Promise<Record<string, unknown>>;
-    findUnique: (args: {
-      where: { idempotencyKey: string };
-    }) => Promise<Record<string, unknown> | null>;
-  };
-};
-
-type BusinessFunnelEventReadClient = {
-  businessFunnelEvent: {
+    createMany: (args: {
+      data: Record<string, unknown>[];
+      skipDuplicates?: boolean;
+    }) => Promise<{ count: number }>;
     findUnique: (args: {
       where: { idempotencyKey: string };
     }) => Promise<Record<string, unknown> | null>;
@@ -103,43 +99,29 @@ export class BusinessFunnelEventService {
     };
 
     if (normalizedKey) {
-      try {
-        return await this.database.$transaction(async (tx) => {
-          const writeClient = tx as unknown as BusinessFunnelEventWriteClient;
-          const created = await writeClient.businessFunnelEvent.create({
-            data: {
-              ...eventData,
-              idempotencyKey: normalizedKey,
-            },
-          });
-
-          await this.projection.applyEvent(created as any, tx as any);
-          this.exportToPostHog(normalizedEventName, input, context, source);
-
-          return {
-            event: created,
-            ingested: true,
-          };
+      return await this.database.$transaction(async (tx) => {
+        const writeClient = tx as unknown as BusinessFunnelEventWriteClient;
+        const result = await writeClient.businessFunnelEvent.createMany({
+          data: [{ ...eventData, idempotencyKey: normalizedKey }],
+          skipDuplicates: true,
         });
-      } catch (error) {
-        if (!this.isUniqueViolation(error)) {
-          throw error;
-        }
 
-        const readClient = this.database as unknown as BusinessFunnelEventReadClient;
-        const existing = await readClient.businessFunnelEvent.findUnique({
+        const ingested = result.count === 1;
+        const event = await writeClient.businessFunnelEvent.findUnique({
           where: { idempotencyKey: normalizedKey },
         });
 
-        if (!existing) {
-          throw error;
+        if (!event) {
+          throw new Error(`Event not found after createMany: ${normalizedKey}`);
         }
 
-        return {
-          event: existing,
-          ingested: false,
-        };
-      }
+        if (ingested) {
+          await this.projection.applyEvent(event as any, tx as any);
+          this.exportToPostHog(normalizedEventName, input, context, source);
+        }
+
+        return { event, ingested };
+      });
     }
 
     return this.database.$transaction(async (tx) => {
@@ -225,15 +207,6 @@ export class BusinessFunnelEventService {
   private isReservedProtectionSemanticEvent(eventName: string) {
     return PROTECTION_SEMANTIC_EVENT_PREFIXES.some((prefix) =>
       eventName.startsWith(prefix),
-    );
-  }
-
-  private isUniqueViolation(error: unknown) {
-    return (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      (error as { code?: string }).code === "P2002"
     );
   }
 

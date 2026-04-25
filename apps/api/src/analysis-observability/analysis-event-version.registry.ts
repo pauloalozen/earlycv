@@ -46,6 +46,7 @@ export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   landing_cta_click: 1,
   login_completed: 1,
   page_leave: 1,
+  site_exit: 1,
   page_view: 1,
   payment_approved: 1,
   payment_failed: 1,

@@ -10,6 +10,7 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   landing_cta_click: "landing_cta_click",
   page_view: "page_view",
   page_leave: "page_leave",
+  site_exit: "site_exit",
   session_started: "session_started",
   session_engaged: "session_engaged",
   cv_upload_completed: "cv_upload_completed",

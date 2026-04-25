@@ -32,6 +32,9 @@ type Props = {
   hasCredits: boolean | null;
 };
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const GEIST_MONO = "var(--font-geist-mono), monospace";
+
 export function HistoryActionLinks({
   actions,
   adjustments,
@@ -47,8 +50,6 @@ export function HistoryActionLinks({
   const [isClient, setIsClient] = useState(false);
   const [isAdjustmentsOpen, setIsAdjustmentsOpen] = useState(false);
   const [adjustmentsVisible, setAdjustmentsVisible] = useState(false);
-  const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
-  const GREEN_HIGHLIGHT = "#c6ff3a";
   const chipClassName =
     "inline-flex h-8 appearance-none items-center justify-center whitespace-nowrap rounded-[10px] border border-[#DADADA] bg-white px-3 [font-family:var(--font-sans)] text-xs leading-none font-semibold transition-colors hover:border-[#BEBEBE]";
   const primaryChipClassName =
@@ -244,7 +245,7 @@ export function HistoryActionLinks({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              background: "rgba(10,10,10,0.35)",
+              background: "rgba(10,10,10,0.5)",
               padding: "0 16px",
               transition: "opacity 240ms ease-out",
               opacity: adjustmentsVisible ? 1 : 0,
@@ -270,26 +271,27 @@ export function HistoryActionLinks({
                 position: "relative",
                 width: "100%",
                 maxWidth: 560,
-                background: "#fff",
+                background: "#fafaf6",
                 fontFamily: GEIST,
                 border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 20,
+                borderRadius: 18,
                 padding: "24px",
-                boxShadow: "0 24px 60px -20px rgba(10,10,10,0.35)",
-                transition: "all 240ms ease-out",
+                boxShadow: "0 24px 60px -20px rgba(10,10,10,0.4)",
+                transition: "opacity 240ms ease-out, transform 240ms ease-out",
                 opacity: adjustmentsVisible ? 1 : 0,
                 transform: adjustmentsVisible
                   ? "translateY(0) scale(1)"
                   : "translateY(8px) scale(0.98)",
               }}
             >
+              {/* Header */}
               <div
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
                   justifyContent: "space-between",
                   gap: 12,
-                  marginBottom: 12,
+                  marginBottom: 16,
                 }}
               >
                 <div>
@@ -298,20 +300,29 @@ export function HistoryActionLinks({
                     style={{
                       fontSize: 18,
                       fontWeight: 500,
+                      letterSpacing: "-0.4px",
                       color: "#0a0a0a",
                       margin: "0 0 4px",
+                      fontFamily: GEIST,
                     }}
                   >
                     Ajustes feitos
                   </h3>
-                  <p style={{ fontSize: 13.5, color: "#6a6560", margin: 0 }}>
+                  <p
+                    style={{
+                      fontSize: 13.5,
+                      color: "#6a6560",
+                      margin: 0,
+                      fontFamily: GEIST,
+                    }}
+                  >
                     Resumo do que foi aplicado no seu CV para esta vaga.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={closeAdjustmentsPopup}
-                  aria-label="Fechar ajustes feitos"
+                  aria-label="Fechar"
                   style={{
                     background: "rgba(10,10,10,0.05)",
                     border: "none",
@@ -323,6 +334,7 @@ export function HistoryActionLinks({
                     alignItems: "center",
                     justifyContent: "center",
                     color: "#6a6560",
+                    fontSize: 18,
                     flexShrink: 0,
                   }}
                 >
@@ -330,40 +342,57 @@ export function HistoryActionLinks({
                 </button>
               </div>
 
+              {/* Context */}
               <div
                 style={{
-                  background: "#f7f7f4",
-                  border: "1px solid rgba(10,10,10,0.08)",
-                  borderRadius: 12,
+                  background: "#f0efe9",
+                  border: "1px solid rgba(10,10,10,0.06)",
+                  borderRadius: 10,
                   padding: "10px 12px",
-                  marginBottom: 14,
+                  marginBottom: 12,
                   display: "flex",
                   flexDirection: "column",
-                  gap: 6,
+                  gap: 5,
                 }}
               >
                 <p
                   style={{
-                    fontSize: 11,
+                    fontFamily: GEIST_MONO,
+                    fontSize: 10,
+                    fontWeight: 500,
+                    letterSpacing: 1,
+                    textTransform: "uppercase",
                     color: "#8a8a85",
                     margin: 0,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.5,
-                    fontWeight: 600,
                   }}
                 >
-                  Contexto da analise
+                  Contexto da análise
                 </p>
-                <p style={{ fontSize: 13, color: "#0a0a0a", margin: 0 }}>
-                  <strong>Vaga:</strong>{" "}
-                  {analysisContext.jobTitle ?? "Vaga sem titulo"}
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: "#0a0a0a",
+                    margin: 0,
+                    fontFamily: GEIST,
+                  }}
+                >
+                  <span style={{ fontWeight: 500 }}>Vaga:</span>{" "}
+                  {analysisContext.jobTitle ?? "Vaga sem título"}
                 </p>
-                <p style={{ fontSize: 13, color: "#0a0a0a", margin: 0 }}>
-                  <strong>CV master usado:</strong>{" "}
-                  {analysisContext.masterResumeTitle ?? "Nao identificado"}
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: "#0a0a0a",
+                    margin: 0,
+                    fontFamily: GEIST,
+                  }}
+                >
+                  <span style={{ fontWeight: 500 }}>CV master usado:</span>{" "}
+                  {analysisContext.masterResumeTitle ?? "Não identificado"}
                 </p>
               </div>
 
+              {/* Score cards */}
               <div
                 style={{
                   display: "grid",
@@ -374,7 +403,7 @@ export function HistoryActionLinks({
               >
                 <div
                   style={{
-                    background: "#f7f7f4",
+                    background: "rgba(10,10,10,0.04)",
                     border: "1px solid rgba(10,10,10,0.08)",
                     borderRadius: 12,
                     padding: "12px 14px",
@@ -382,65 +411,76 @@ export function HistoryActionLinks({
                 >
                   <p
                     style={{
-                      fontSize: 11,
+                      fontFamily: GEIST_MONO,
+                      fontSize: 10.5,
+                      fontWeight: 500,
+                      letterSpacing: 0.8,
+                      textTransform: "uppercase",
                       color: "#8a8a85",
-                      margin: "0 0 4px",
+                      margin: "0 0 6px",
                     }}
                   >
                     Score antes
                   </p>
                   <p
                     style={{
-                      fontSize: 24,
+                      fontSize: 28,
                       fontWeight: 500,
+                      letterSpacing: "-1px",
                       margin: 0,
                       color: "#0a0a0a",
-                      fontVariantNumeric: "tabular-nums",
+                      fontFamily: GEIST,
                     }}
                   >
                     {adjustments.scoreBefore !== null
                       ? `${adjustments.scoreBefore}%`
-                      : "--"}
+                      : "—"}
                   </p>
                 </div>
                 <div
                   style={{
                     background: "rgba(198,255,58,0.16)",
-                    border: `1px solid ${GREEN_HIGHLIGHT}`,
+                    border: "1px solid rgba(198,255,58,0.5)",
                     borderRadius: 12,
                     padding: "12px 14px",
                   }}
                 >
                   <p
                     style={{
-                      fontSize: 11,
-                      color: "#4f5f16",
-                      margin: "0 0 4px",
+                      fontFamily: GEIST_MONO,
+                      fontSize: 10.5,
+                      fontWeight: 500,
+                      letterSpacing: 0.8,
+                      textTransform: "uppercase",
+                      color: "#405410",
+                      margin: "0 0 6px",
                     }}
                   >
-                    Score final apos ajustes
+                    Score após ajustes
                   </p>
                   <p
                     style={{
-                      fontSize: 24,
+                      fontSize: 28,
                       fontWeight: 500,
+                      letterSpacing: "-1px",
                       margin: 0,
                       color: "#2f3f00",
-                      fontVariantNumeric: "tabular-nums",
+                      fontFamily: GEIST,
                     }}
                   >
                     {adjustments.scoreFinal !== null
                       ? `${adjustments.scoreFinal}%`
-                      : "--"}
+                      : "—"}
                   </p>
                 </div>
               </div>
 
+              {/* Notes */}
               <div
                 style={{
-                  borderLeft: `3px solid ${GREEN_HIGHLIGHT}`,
+                  borderLeft: "3px solid #c6ff3a",
                   paddingLeft: 12,
-                  marginBottom: 18,
+                  marginBottom: 20,
                   display: "flex",
                   flexDirection: "column",
                   gap: 6,
@@ -448,12 +488,13 @@ export function HistoryActionLinks({
               >
                 <p
                   style={{
-                    fontSize: 11,
-                    letterSpacing: 0.6,
-                    color: "#4f5f16",
-                    margin: 0,
+                    fontFamily: GEIST_MONO,
+                    fontSize: 10.5,
+                    fontWeight: 500,
+                    letterSpacing: 1,
                     textTransform: "uppercase",
-                    fontWeight: 600,
+                    color: "#405410",
+                    margin: 0,
                   }}
                 >
                   O que foi feito no seu CV
@@ -461,9 +502,10 @@ export function HistoryActionLinks({
                 <p
                   style={{
                     fontSize: 13.5,
-                    color: "#3f3f3c",
+                    color: "#45443e",
                     lineHeight: 1.6,
                     margin: 0,
+                    fontFamily: GEIST,
                   }}
                 >
                   {adjustments.notes ??
@@ -471,47 +513,47 @@ export function HistoryActionLinks({
                 </p>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={closeAdjustmentsPopup}
-                    style={{
-                      background: "#ffffff",
-                      color: "#111111",
-                      border: "1px solid rgba(10,10,10,0.14)",
-                      borderRadius: 10,
-                      padding: "10px 14px",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      fontFamily: GEIST,
-                    }}
-                  >
-                    Fechar
-                  </button>
-                  <a
-                    href={actions.resultHref}
-                    onClick={closeAdjustmentsPopup}
-                    style={{
-                      background: "#111111",
-                      color: "#ffffff",
-                      border: "1px solid #111111",
-                      borderRadius: 10,
-                      padding: "10px 14px",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      textDecoration: "none",
-                      lineHeight: 1,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontFamily: GEIST,
-                    }}
-                  >
-                    Ver analise completa
-                  </a>
-                </div>
+              {/* Actions */}
+              <div
+                style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+              >
+                <button
+                  type="button"
+                  onClick={closeAdjustmentsPopup}
+                  style={{
+                    background: "#fafaf6",
+                    color: "#0a0a0a",
+                    border: "1px solid #d8d6ce",
+                    borderRadius: 10,
+                    padding: "10px 16px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Fechar
+                </button>
+                <a
+                  href={actions.resultHref}
+                  onClick={closeAdjustmentsPopup}
+                  style={{
+                    background: "#0a0a0a",
+                    color: "#fafaf6",
+                    border: "1px solid #0a0a0a",
+                    borderRadius: 10,
+                    padding: "10px 16px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    textDecoration: "none",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Ver análise completa →
+                </a>
               </div>
             </div>
           </div>,

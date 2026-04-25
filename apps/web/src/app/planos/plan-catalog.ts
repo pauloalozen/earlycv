@@ -13,6 +13,10 @@ export type PlanCatalogItem = {
   checkoutPlanId: PaidPlanId | null;
 };
 
+type BuildPlanCatalogOptions = {
+  isAuthenticated?: boolean;
+};
+
 function parseCents(
   envVal: string | undefined,
   fallback: number,
@@ -29,7 +33,10 @@ function parseQuantity(envVal: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export function buildPlanCatalog(env: NodeJS.ProcessEnv): PlanCatalogItem[] {
+export function buildPlanCatalog(
+  env: NodeJS.ProcessEnv,
+  options?: BuildPlanCatalogOptions,
+): PlanCatalogItem[] {
   const starterPrice = parseCents(env.PRICE_PLAN_STARTER, 1190);
   const proPrice = parseCents(env.PRICE_PLAN_PRO, 2990);
   const turboPrice = parseCents(env.PRICE_PLAN_TURBO, 5990);
@@ -38,7 +45,7 @@ export function buildPlanCatalog(env: NodeJS.ProcessEnv): PlanCatalogItem[] {
   const qntProDownloads = parseQuantity(env.QNT_CV_PLAN_PRO, 9);
   const qntTurboDownloads = parseQuantity(env.QNT_CV_PLAN_TURBO, 20);
 
-  return [
+  const plans: PlanCatalogItem[] = [
     {
       id: "free",
       label: "Free",
@@ -116,4 +123,10 @@ export function buildPlanCatalog(env: NodeJS.ProcessEnv): PlanCatalogItem[] {
       ],
     },
   ];
+
+  if (options?.isAuthenticated) {
+    return plans.filter((plan) => plan.id !== "free");
+  }
+
+  return plans;
 }

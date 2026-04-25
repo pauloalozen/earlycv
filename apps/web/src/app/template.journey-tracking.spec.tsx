@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const emitBusinessFunnelEventMock = vi.hoisted(() => vi.fn());
@@ -76,20 +77,40 @@ describe("Template journey tracking", () => {
     });
   });
 
-  it("emits page_leave when component unmounts", async () => {
-    const { unmount } = render(
+  it("emits page_leave when pagehide fires", async () => {
+    render(
       <Template>
         <div>child</div>
       </Template>,
     );
 
-    unmount();
+    window.dispatchEvent(new Event("pagehide"));
 
     await waitFor(() => {
       const names = emitBusinessFunnelEventMock.mock.calls.map(
         ([payload]) => payload.eventName,
       );
       expect(names).toContain("page_leave");
+    });
+  });
+
+  it("does not duplicate navigation events in strict mode mount cycle", async () => {
+    usePathnameMock.mockReturnValue("/");
+
+    render(
+      <StrictMode>
+        <Template>
+          <div>child</div>
+        </Template>
+      </StrictMode>,
+    );
+
+    await waitFor(() => {
+      const navEvents = emitBusinessFunnelEventMock.mock.calls
+        .map(([payload]) => payload.eventName)
+        .filter((name) => name === "page_view" || name === "page_leave");
+
+      expect(navEvents).toEqual(["page_view"]);
     });
   });
 

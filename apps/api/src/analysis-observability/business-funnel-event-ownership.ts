@@ -21,6 +21,7 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   landing_cta_click: "frontend",
   login_completed: "backend",
   page_leave: "frontend",
+  site_exit: "frontend",
   page_view: "frontend",
   payment_approved: "backend",
   payment_failed: "backend",

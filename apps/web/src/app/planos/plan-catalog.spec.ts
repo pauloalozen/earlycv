@@ -39,3 +39,20 @@ test("buildPlanCatalog includes free plan and download quantities for paid plans
     true,
   );
 });
+
+test("buildPlanCatalog hides free plan for authenticated users", () => {
+  const plans = buildPlanCatalog(
+    {
+      QNT_CV_PLAN_STARTER: "1",
+      QNT_CV_PLAN_PRO: "3",
+      QNT_CV_PLAN_TURBO: "10",
+      PRICE_PLAN_STARTER: "1190",
+      PRICE_PLAN_PRO: "2990",
+      PRICE_PLAN_TURBO: "5990",
+    },
+    { isAuthenticated: true },
+  );
+
+  assert.equal(plans.some((plan) => plan.id === "free"), false);
+  assert.equal(plans.length, 3);
+});

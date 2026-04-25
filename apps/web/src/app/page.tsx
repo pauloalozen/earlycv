@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 import { AtsWidget } from "./_ats-widget";
+import { LandingMobileMenu } from "./_landing-mobile-menu";
 import { buildPlanCatalog } from "./planos/plan-catalog";
 
 export const dynamic = "force-dynamic";
@@ -85,6 +86,7 @@ export default async function Home() {
           zIndex: 10,
           background: "rgba(243,242,237,0.95)",
         }}
+        className="lp-nav"
       >
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -108,8 +110,8 @@ export default async function Home() {
           </span>
         </div>
 
-        {/* Nav right */}
-        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+        {/* Nav right — hidden on mobile */}
+        <div style={{ display: "flex", alignItems: "center", gap: 24 }} className="lp-nav-links">
           <a
             href="#como-funciona"
             style={{
@@ -186,6 +188,9 @@ export default async function Home() {
             </>
           )}
         </div>
+
+        {/* Mobile hamburger — client component */}
+        <LandingMobileMenu isLoggedIn={Boolean(user)} />
       </nav>
 
       {/* ── Hero ── */}
@@ -249,13 +254,14 @@ export default async function Home() {
             {/* H1 */}
             <h1
               style={{
-                fontSize: "clamp(48px, 5vw, 72px)",
+                fontSize: "clamp(36px, 8vw, 72px)",
                 fontWeight: 500,
                 letterSpacing: -2.6,
                 lineHeight: 0.98,
                 margin: "0 0 24px",
                 color: "#0a0a0a",
               }}
+              className="lp-hero-h1"
             >
               Um CV{" "}
               <em
@@ -393,8 +399,9 @@ export default async function Home() {
             </div>
           </div>
 
-          {/* Right — ATS Widget */}
+          {/* Right — ATS Widget (hidden on mobile) */}
           <div
+            className="lp-ats-wrap"
             style={{
               display: "flex",
               justifyContent: "center",
@@ -495,7 +502,7 @@ export default async function Home() {
             </span>
             <h2
               style={{
-                fontSize: "clamp(32px, 4vw, 48px)",
+                fontSize: "clamp(26px, 5.5vw, 48px)",
                 fontWeight: 500,
                 letterSpacing: -1.8,
                 lineHeight: 1.05,
@@ -668,7 +675,7 @@ export default async function Home() {
             </span>
             <h2
               style={{
-                fontSize: "clamp(32px, 4vw, 48px)",
+                fontSize: "clamp(26px, 5.5vw, 48px)",
                 fontWeight: 500,
                 letterSpacing: -1.8,
                 lineHeight: 1.05,
@@ -944,9 +951,22 @@ export default async function Home() {
         .lp-cta-primary:hover .lp-cta-arrow { transform: translateX(4px); }
 
         @media (max-width: 900px) {
-          .landing-hero { grid-template-columns: 1fr !important; gap: 40px !important; }
+          .landing-hero { grid-template-columns: 1fr !important; gap: 32px !important; }
           .how-steps-grid { grid-template-columns: 1fr !important; }
           .pricing-grid { grid-template-columns: 1fr 1fr !important; }
+        }
+        @media (max-width: 768px) {
+          /* Nav */
+          .lp-nav { padding: 14px 20px !important; background: #f3f2ed !important; }
+          .lp-nav-links { display: none !important; }
+
+          /* Hero */
+          .lp-hero-h1 { letter-spacing: -1.8px !important; }
+          .lp-ats-wrap { display: none !important; }
+
+          /* Sections padding */
+          section { padding-left: 20px !important; padding-right: 20px !important; }
+          footer { padding-left: 20px !important; padding-right: 20px !important; flex-direction: column !important; gap: 12px !important; align-items: flex-start !important; }
         }
         @media (max-width: 580px) {
           .pricing-grid { grid-template-columns: 1fr !important; }

@@ -49,7 +49,7 @@ export class ResumesService {
     if (file) {
       try {
         const { extractTextFromPdf } = await import("@earlycv/ai");
-        rawText = await extractTextFromPdf(file.buffer);
+        rawText = await extractTextFromPdf(file.buffer, { validateCv: true });
       } catch (error) {
         throw new BadRequestException(
           `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,

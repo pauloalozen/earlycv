@@ -17,12 +17,20 @@ const SESSION_KEY = "journey_session_internal_id";
 const CHECKOUT_INTENT_KEY = "journey_checkout_intent";
 const CHECKOUT_ABANDON_MIN_MS = 60_000;
 const CURRENT_ROUTE_VISIT_KEY = "journey_current_route_visit_id";
+const CURRENT_ROUTE_VISIT_SNAPSHOT_KEY = "journey_current_route_visit_snapshot";
 const PREVIOUS_ROUTE_KEY = "journey_previous_route";
+const SITE_EXIT_EMITTED_SESSION_KEY = "journey_site_exit_emitted_session";
 
 type CheckoutIntentMarker = {
   planId: string;
   routeVisitId: string;
   sessionInternalId: string;
+  startedAtMs: number;
+};
+
+type RouteVisitSnapshot = {
+  pathname: string;
+  routeVisitId: string;
   startedAtMs: number;
 };
 
@@ -160,12 +168,54 @@ function setCurrentRouteVisitId(routeVisitId: string) {
   sessionStorage.setItem(CURRENT_ROUTE_VISIT_KEY, routeVisitId);
 }
 
+function setCurrentRouteVisitSnapshot(snapshot: RouteVisitSnapshot) {
+  if (typeof sessionStorage === "undefined") {
+    return;
+  }
+
+  sessionStorage.setItem(
+    CURRENT_ROUTE_VISIT_SNAPSHOT_KEY,
+    JSON.stringify(snapshot),
+  );
+}
+
+function readCurrentRouteVisitSnapshot(): RouteVisitSnapshot | null {
+  if (typeof sessionStorage === "undefined") {
+    return null;
+  }
+
+  const raw = sessionStorage.getItem(CURRENT_ROUTE_VISIT_SNAPSHOT_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<RouteVisitSnapshot>;
+    if (
+      typeof parsed.pathname !== "string" ||
+      typeof parsed.routeVisitId !== "string" ||
+      typeof parsed.startedAtMs !== "number"
+    ) {
+      return null;
+    }
+
+    return {
+      pathname: parsed.pathname,
+      routeVisitId: parsed.routeVisitId,
+      startedAtMs: parsed.startedAtMs,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function clearCurrentRouteVisitId() {
   if (typeof sessionStorage === "undefined") {
     return;
   }
 
   sessionStorage.removeItem(CURRENT_ROUTE_VISIT_KEY);
+  sessionStorage.removeItem(CURRENT_ROUTE_VISIT_SNAPSHOT_KEY);
 }
 
 function setPreviousRoute(pathname: string) {
@@ -174,6 +224,24 @@ function setPreviousRoute(pathname: string) {
   }
 
   sessionStorage.setItem(PREVIOUS_ROUTE_KEY, pathname);
+}
+
+function hasSiteExitBeenEmittedForSession(sessionInternalId: string): boolean {
+  if (typeof sessionStorage === "undefined") {
+    return false;
+  }
+
+  return (
+    sessionStorage.getItem(SITE_EXIT_EMITTED_SESSION_KEY) === sessionInternalId
+  );
+}
+
+function markSiteExitEmittedForSession(sessionInternalId: string) {
+  if (typeof sessionStorage === "undefined") {
+    return;
+  }
+
+  sessionStorage.setItem(SITE_EXIT_EMITTED_SESSION_KEY, sessionInternalId);
 }
 
 export function JourneyTrackerProvider({
@@ -239,114 +307,7 @@ export function JourneyTrackerProvider({
   }, [pathname]);
 
   useEffect(() => {
-    if (!isJourneyRouteEligible(pathname)) {
-      return;
-    }
-
     const sessionInternalId = getSessionInternalId();
-    const occurredAt = new Date().toISOString();
-    const searchParams = new URLSearchParams(window.location.search);
-
-    if (previousRouteRef.current === null) {
-      previousRouteRef.current = sessionStorage.getItem(PREVIOUS_ROUTE_KEY);
-    }
-
-    if (
-      searchParams.get("plan") === "activated" ||
-      searchParams.get("error") === "payment_failed"
-    ) {
-      clearCheckoutIntent();
-    }
-
-    stateRef.current = startRouteVisit(
-      stateRef.current ?? createJourneyState(),
-      {
-        pathname,
-        startedAtMs: Date.now(),
-      },
-    );
-
-    const activeVisit = stateRef.current.activeRouteVisit;
-    if (!activeVisit) {
-      return;
-    }
-
-    setCurrentRouteVisitId(activeVisit.routeVisitId);
-
-    const baseMetadata = buildMetadata({
-      occurredAt,
-      previousRoute: previousRouteRef.current,
-      route: pathname,
-      routeVisitId: activeVisit.routeVisitId,
-      sessionInternalId,
-    });
-
-    emitInBackground({
-      eventName: "page_view",
-      eventVersion: 1,
-      idempotencyKey: `${sessionInternalId}:${activeVisit.routeVisitId}:page_view`,
-      metadata: baseMetadata,
-    });
-
-    const checkoutIntent = readCheckoutIntent();
-    if (
-      checkoutIntent &&
-      checkoutIntent.sessionInternalId === sessionInternalId &&
-      Date.now() - checkoutIntent.startedAtMs >= CHECKOUT_ABANDON_MIN_MS
-    ) {
-      emitInBackground({
-        eventName: "checkout_abandoned",
-        eventVersion: 1,
-        idempotencyKey: `${checkoutIntent.sessionInternalId}:${checkoutIntent.planId}:checkout_abandoned`,
-        metadata: {
-          ...baseMetadata,
-          routeVisitId: checkoutIntent.routeVisitId,
-          checkoutOriginRouteVisitId: checkoutIntent.routeVisitId,
-          checkoutStartedAt: new Date(checkoutIntent.startedAtMs).toISOString(),
-          planId: checkoutIntent.planId,
-        },
-      });
-      clearCheckoutIntent();
-    }
-
-    const startedResult = consumeSessionStartedOnce(
-      stateRef.current ?? createJourneyState(),
-    );
-    stateRef.current = startedResult.state;
-    if (startedResult.shouldEmit) {
-      emitInBackground({
-        eventName: "session_started",
-        eventVersion: 1,
-        idempotencyKey: `${sessionInternalId}:session_started`,
-        metadata: baseMetadata,
-      });
-    }
-
-    const handleEngagement = () => {
-      const engagedResult = consumeSessionEngagedOnce(
-        stateRef.current ?? createJourneyState(),
-      );
-      stateRef.current = engagedResult.state;
-      if (!engagedResult.shouldEmit) {
-        return;
-      }
-
-      emitInBackground({
-        eventName: "session_engaged",
-        eventVersion: 1,
-        idempotencyKey: `${sessionInternalId}:session_engaged`,
-        metadata: buildMetadata({
-          occurredAt: new Date().toISOString(),
-          previousRoute: previousRouteRef.current,
-          route: pathnameRef.current,
-          routeVisitId:
-            stateRef.current.activeRouteVisit?.routeVisitId ??
-            activeVisit.routeVisitId,
-          sessionInternalId,
-        }),
-      });
-    };
-
     const emitLeaveFromCurrentVisit = (shouldResetVisit: boolean) => {
       const finished = finishRouteVisitAndReset(
         stateRef.current ?? createJourneyState(),
@@ -393,7 +354,180 @@ export function JourneyTrackerProvider({
       }
     };
 
+    const previousActiveVisit = stateRef.current?.activeRouteVisit;
+    if (previousActiveVisit && previousActiveVisit.pathname !== pathname) {
+      emitLeaveFromCurrentVisit(true);
+    }
+
+    if (!previousActiveVisit) {
+      const snapshotVisit = readCurrentRouteVisitSnapshot();
+      if (snapshotVisit && snapshotVisit.pathname !== pathname) {
+        const leavePayload = {
+          eventName: "page_leave",
+          eventVersion: 1,
+          idempotencyKey: `${sessionInternalId}:${snapshotVisit.routeVisitId}:page_leave`,
+          metadata: buildMetadata({
+            occurredAt: new Date().toISOString(),
+            previousRoute: previousRouteRef.current,
+            route: snapshotVisit.pathname,
+            routeVisitId: snapshotVisit.routeVisitId,
+            sessionInternalId,
+            timeOnPageMs: Math.max(0, Date.now() - snapshotVisit.startedAtMs),
+          }),
+        };
+
+        tryEmitWithBeacon(leavePayload);
+        emitInBackground(leavePayload);
+
+        previousRouteRef.current = snapshotVisit.pathname;
+        setPreviousRoute(snapshotVisit.pathname);
+        clearCurrentRouteVisitId();
+      }
+    }
+
+    if (!isJourneyRouteEligible(pathname)) {
+      return;
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+
+    if (previousRouteRef.current === null) {
+      previousRouteRef.current = sessionStorage.getItem(PREVIOUS_ROUTE_KEY);
+    }
+
+    if (
+      searchParams.get("plan") === "activated" ||
+      searchParams.get("error") === "payment_failed"
+    ) {
+      clearCheckoutIntent();
+    }
+
+    const hasActiveVisitForPath =
+      stateRef.current?.activeRouteVisit?.pathname === pathname;
+
+    if (!hasActiveVisitForPath) {
+      stateRef.current = startRouteVisit(
+        stateRef.current ?? createJourneyState(),
+        {
+          pathname,
+          startedAtMs: Date.now(),
+        },
+      );
+    }
+
+    const activeVisit = stateRef.current?.activeRouteVisit;
+    if (!activeVisit) {
+      return;
+    }
+
+    setCurrentRouteVisitId(activeVisit.routeVisitId);
+    setCurrentRouteVisitSnapshot({
+      pathname,
+      routeVisitId: activeVisit.routeVisitId,
+      startedAtMs: activeVisit.startedAtMs,
+    });
+
+    if (!hasActiveVisitForPath) {
+      const occurredAt = new Date().toISOString();
+      const baseMetadata = buildMetadata({
+        occurredAt,
+        previousRoute: previousRouteRef.current,
+        route: pathname,
+        routeVisitId: activeVisit.routeVisitId,
+        sessionInternalId,
+      });
+
+      emitInBackground({
+        eventName: "page_view",
+        eventVersion: 1,
+        idempotencyKey: `${sessionInternalId}:${activeVisit.routeVisitId}:page_view`,
+        metadata: baseMetadata,
+      });
+
+      const checkoutIntent = readCheckoutIntent();
+      if (
+        checkoutIntent &&
+        checkoutIntent.sessionInternalId === sessionInternalId &&
+        Date.now() - checkoutIntent.startedAtMs >= CHECKOUT_ABANDON_MIN_MS
+      ) {
+        emitInBackground({
+          eventName: "checkout_abandoned",
+          eventVersion: 1,
+          idempotencyKey: `${checkoutIntent.sessionInternalId}:${checkoutIntent.planId}:checkout_abandoned`,
+          metadata: {
+            ...baseMetadata,
+            routeVisitId: checkoutIntent.routeVisitId,
+            checkoutOriginRouteVisitId: checkoutIntent.routeVisitId,
+            checkoutStartedAt: new Date(
+              checkoutIntent.startedAtMs,
+            ).toISOString(),
+            planId: checkoutIntent.planId,
+          },
+        });
+        clearCheckoutIntent();
+      }
+
+      const startedResult = consumeSessionStartedOnce(
+        stateRef.current ?? createJourneyState(),
+      );
+      stateRef.current = startedResult.state;
+      if (startedResult.shouldEmit) {
+        emitInBackground({
+          eventName: "session_started",
+          eventVersion: 1,
+          idempotencyKey: `${sessionInternalId}:session_started`,
+          metadata: baseMetadata,
+        });
+      }
+    }
+
+    const handleEngagement = () => {
+      const engagedResult = consumeSessionEngagedOnce(
+        stateRef.current ?? createJourneyState(),
+      );
+      stateRef.current = engagedResult.state;
+      if (!engagedResult.shouldEmit) {
+        return;
+      }
+
+      emitInBackground({
+        eventName: "session_engaged",
+        eventVersion: 1,
+        idempotencyKey: `${sessionInternalId}:session_engaged`,
+        metadata: buildMetadata({
+          occurredAt: new Date().toISOString(),
+          previousRoute: previousRouteRef.current,
+          route: pathnameRef.current,
+          routeVisitId:
+            stateRef.current.activeRouteVisit?.routeVisitId ??
+            activeVisit.routeVisitId,
+          sessionInternalId,
+        }),
+      });
+    };
+
     const handlePageHide = () => {
+      const activeVisit = stateRef.current?.activeRouteVisit;
+      if (activeVisit && !hasSiteExitBeenEmittedForSession(sessionInternalId)) {
+        const siteExitPayload = {
+          eventName: "site_exit",
+          eventVersion: 1,
+          idempotencyKey: `${sessionInternalId}:${activeVisit.routeVisitId}:site_exit`,
+          metadata: buildMetadata({
+            occurredAt: new Date().toISOString(),
+            previousRoute: previousRouteRef.current,
+            route: activeVisit.pathname,
+            routeVisitId: activeVisit.routeVisitId,
+            sessionInternalId,
+            timeOnPageMs: Math.max(0, Date.now() - activeVisit.startedAtMs),
+          }),
+        };
+
+        tryEmitWithBeacon(siteExitPayload);
+        emitInBackground(siteExitPayload);
+        markSiteExitEmittedForSession(sessionInternalId);
+      }
+
       emitLeaveFromCurrentVisit(true);
     };
 
@@ -402,7 +536,6 @@ export function JourneyTrackerProvider({
     window.addEventListener("keydown", handleEngagement, { once: true });
 
     return () => {
-      emitLeaveFromCurrentVisit(true);
       window.removeEventListener("pagehide", handlePageHide);
       window.removeEventListener("click", handleEngagement);
       window.removeEventListener("keydown", handleEngagement);

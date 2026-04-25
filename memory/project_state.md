@@ -4,9 +4,9 @@ description: Current priorities, built modules, and next slice for EarlyCV SaaS
 type: project
 ---
 
-**Current priority (as of 2026-04-23): CV Adaptation hardening + quality gates.**
+**Current priority (as of 2026-04-24): observability operacional + qualidade de tracking da jornada.**
 
-The ingestion roadmap still exists, but current execution is focused on correctness/safety in CV adaptation and paid delivery flows.
+The ingestion roadmap still exists, but active execution now includes admin observability tooling and reliability fixes on journey tracking, while preserving CV adaptation safety constraints.
 
 ## What's built
 - `packages/database`: Prisma schema with User, Resume, Company, JobSource, IngestionRun, Job, ResumeTemplate, AffiliatePartner/Campaign/Code/Attribution/CommissionEvent
@@ -22,6 +22,13 @@ The ingestion roadmap still exists, but current execution is focused on correctn
 - `saveAsMaster` now controls promotion explicitly; when true, promoted resume must be the uploaded source CV
 - Resume source file persistence/download supports original binary files (PDF/DOC/DOCX), with text fallback only for legacy records
 
+## Current implementation focus (observability + tracking)
+- Admin page `/admin/eventos-e-logs` introduced to listar/disparar eventos de observabilidade (individual, grupo e todos)
+- API added admin emit/catalog surface for synthetic event firing, with payload contract using `synthetic: true`
+- New business event `site_exit` added end-to-end (registry, ownership, exporter, tracker)
+- Journey tracker refined to reduce noisy `page_leave` behavior and preserve leave emission across remount/navigation edge cases
+- Request context middleware now resolves authenticated `user_id` from access token (Bearer or cookie), preserving `null` for guest/invalid tokens
+
 ## Key invariants
 - Never fabricate career facts (experiences, titles, results, certifications, technologies)
 - Adapted resume (`kind=adapted`) must never be promoted to master automatically
@@ -36,3 +43,7 @@ The ingestion roadmap still exists, but current execution is focused on correctn
 ## Plan docs (CV adaptation)
 - Spec: `docs/superpowers/specs/2026-04-04-cv-adaptation-design.md`
 - Implementation plan (13 tasks, TDD): `docs/superpowers/plans/2026-04-04-cv-adaptation-implementation.md`
+
+## Latest docs (observability/admin events)
+- Spec: `docs/superpowers/specs/2026-04-24-admin-eventos-e-logs-design.md`
+- Implementation plan: `docs/superpowers/plans/2026-04-24-admin-eventos-e-logs.md`

@@ -190,10 +190,11 @@ export default async function DashboardPage({
         <AppHeader userName={user.name} />
 
         <div
+          className="dashboard-content"
           style={{
-            maxWidth: 900,
+            maxWidth: 1100,
             margin: "0 auto",
-            padding: "16px 28px 72px",
+            padding: "12px 32px 80px",
             position: "relative",
             zIndex: 2,
           }}
@@ -817,6 +818,9 @@ export default async function DashboardPage({
         .dash-cta-arrow { display: inline-block; transition: transform 220ms cubic-bezier(.3,.9,.4,1); }
         .dash-cta-btn:hover .dash-cta-arrow { transform: translateX(4px); }
         .dash-page-btn:hover { background: rgba(10,10,10,0.05) !important; }
+        @media (max-width: 768px) {
+          .dashboard-content { padding: 12px 16px 60px !important; }
+        }
         @media (max-width: 680px) {
           .dash-top-grid { grid-template-columns: 1fr !important; }
           .dash-metrics-grid { grid-template-columns: repeat(2, 1fr) !important; }

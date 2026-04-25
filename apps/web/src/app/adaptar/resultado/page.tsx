@@ -861,6 +861,7 @@ export default function ResultadoPage() {
         <AppHeader userName={userName} />
 
         <div
+          className="resultado-content"
           style={{
             maxWidth: 1100,
             margin: "0 auto",
@@ -3688,6 +3689,9 @@ export default function ResultadoPage() {
           .res-cta-grid { grid-template-columns: 1fr !important; }
           .res-diff-grid { grid-template-columns: 1fr !important; }
           .res-campos-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+        @media (max-width: 768px) {
+          .resultado-content { padding: 12px 16px 60px !important; }
         }
         @media (max-width: 540px) {
           .res-campos-grid { grid-template-columns: 1fr !important; }

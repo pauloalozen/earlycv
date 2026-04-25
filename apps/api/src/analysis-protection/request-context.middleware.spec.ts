@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { sign } from "jsonwebtoken";
 
 import { requestContextMiddleware } from "./request-context.middleware";
 
@@ -40,7 +41,7 @@ test("request context middleware does not trust forwarded ip without trusted pro
 
 test("request context middleware accepts forwarded ip when trusted proxy is enabled", () => {
   const req = {
-    app: { get: (key: string) => (key === "trust proxy" ? true : false) },
+    app: { get: (key: string) => key === "trust proxy" },
     cookies: {},
     headers: { "x-forwarded-for": "203.0.113.10, 198.51.100.5" },
     socket: { remoteAddress: "127.0.0.1" },
@@ -145,4 +146,75 @@ test("request context middleware stores route path and user-agent hash", () => {
   );
   assert.equal(typeof req.analysisContext.userAgentHash, "string");
   assert.equal(req.analysisContext.userAgentHash.length > 0, true);
+});
+
+test("request context middleware resolves userId from bearer token", () => {
+  process.env.JWT_ACCESS_SECRET = "test-access-secret";
+  const token = sign(
+    {
+      sub: "user-123",
+      type: "access",
+    },
+    process.env.JWT_ACCESS_SECRET,
+  );
+
+  const req = {
+    app: { get: () => false },
+    cookies: {},
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+    socket: { remoteAddress: "127.0.0.1" },
+  } as any;
+
+  requestContextMiddleware(req, {} as any, () => {});
+
+  assert.equal(req.analysisContext.userId, "user-123");
+});
+
+test("request context middleware resolves userId from access token cookie", () => {
+  process.env.JWT_ACCESS_SECRET = "test-access-secret";
+  const token = sign(
+    {
+      sub: "user-cookie-123",
+      type: "access",
+    },
+    process.env.JWT_ACCESS_SECRET,
+  );
+
+  const req = {
+    app: { get: () => false },
+    headers: {
+      cookie: `earlycv-access-token=${token}`,
+    },
+    socket: { remoteAddress: "127.0.0.1" },
+  } as any;
+
+  requestContextMiddleware(req, {} as any, () => {});
+
+  assert.equal(req.analysisContext.userId, "user-cookie-123");
+});
+
+test("request context middleware keeps userId null for invalid token", () => {
+  process.env.JWT_ACCESS_SECRET = "test-access-secret";
+  const token = sign(
+    {
+      sub: "user-123",
+      type: "access",
+    },
+    "another-secret",
+  );
+
+  const req = {
+    app: { get: () => false },
+    cookies: {},
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+    socket: { remoteAddress: "127.0.0.1" },
+  } as any;
+
+  requestContextMiddleware(req, {} as any, () => {});
+
+  assert.equal(req.analysisContext.userId, null);
 });

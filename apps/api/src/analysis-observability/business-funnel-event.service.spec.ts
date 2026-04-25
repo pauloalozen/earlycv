@@ -48,9 +48,10 @@ test("records business event and updates projection for first ingestion", async 
       $transaction: async (
         callback: (tx: {
           businessFunnelEvent: {
-            create: (args: {
-              data: Record<string, unknown>;
-            }) => Promise<StoredBusinessFunnelEvent>;
+            createMany: (args: {
+              data: Record<string, unknown>[];
+              skipDuplicates?: boolean;
+            }) => Promise<{ count: number }>;
             findUnique: (args: {
               where: { idempotencyKey: string };
             }) => Promise<StoredBusinessFunnelEvent | null>;
@@ -59,18 +60,19 @@ test("records business event and updates projection for first ingestion", async 
       ) => {
         return callback({
           businessFunnelEvent: {
-            create: async ({ data }: { data: Record<string, unknown> }) => {
+            createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
+              const record = data[0];
               const event = {
                 id: `event-${storedByKey.size + 1}`,
                 createdAt: new Date("2026-04-21T15:30:00.000Z"),
-                ...data,
+                ...record,
               } as StoredBusinessFunnelEvent;
 
               if (typeof event.idempotencyKey === "string") {
                 storedByKey.set(event.idempotencyKey, event);
               }
 
-              return event;
+              return { count: 1 };
             },
             findUnique: async ({
               where,
@@ -239,25 +241,17 @@ test("canonicalizes eventName before persisting and projecting", async () => {
 test("drops duplicate business event by idempotency key", async () => {
   const storedByKey = new Map<string, StoredBusinessFunnelEvent>();
   const projectionApplied: string[] = [];
-  let createAttempts = 0;
+  let createManyAttempts = 0;
 
   const service = new BusinessFunnelEventService(
     {
-      businessFunnelEvent: {
-        findUnique: async ({
-          where,
-        }: {
-          where: { idempotencyKey: string };
-        }) => {
-          return storedByKey.get(where.idempotencyKey) ?? null;
-        },
-      },
       $transaction: async (
         callback: (tx: {
           businessFunnelEvent: {
-            create: (args: {
-              data: Record<string, unknown>;
-            }) => Promise<StoredBusinessFunnelEvent>;
+            createMany: (args: {
+              data: Record<string, unknown>[];
+              skipDuplicates?: boolean;
+            }) => Promise<{ count: number }>;
             findUnique: (args: {
               where: { idempotencyKey: string };
             }) => Promise<StoredBusinessFunnelEvent | null>;
@@ -266,29 +260,25 @@ test("drops duplicate business event by idempotency key", async () => {
       ) => {
         return callback({
           businessFunnelEvent: {
-            create: async ({ data }: { data: Record<string, unknown> }) => {
-              createAttempts += 1;
+            createMany: async ({ data, skipDuplicates }: { data: Record<string, unknown>[]; skipDuplicates?: boolean }) => {
+              createManyAttempts += 1;
+              const record = data[0];
 
-              if (
-                typeof data.idempotencyKey === "string" &&
-                storedByKey.has(data.idempotencyKey)
-              ) {
-                const uniqueConstraintError = new Error("duplicate key");
-                Object.assign(uniqueConstraintError, { code: "P2002" });
-                throw uniqueConstraintError;
+              if (skipDuplicates && typeof record.idempotencyKey === "string" && storedByKey.has(record.idempotencyKey)) {
+                return { count: 0 };
               }
 
               const event = {
                 id: `event-${storedByKey.size + 1}`,
                 createdAt: new Date("2026-04-21T15:30:00.000Z"),
-                ...data,
+                ...record,
               } as StoredBusinessFunnelEvent;
 
               if (typeof event.idempotencyKey === "string") {
                 storedByKey.set(event.idempotencyKey, event);
               }
 
-              return event;
+              return { count: 1 };
             },
             findUnique: async ({
               where,
@@ -320,115 +310,25 @@ test("drops duplicate business event by idempotency key", async () => {
   const duplicate = await service.record(payload, baseContext);
 
   assert.equal(duplicate.ingested, false);
-  assert.equal(createAttempts, 2);
+  assert.equal(createManyAttempts, 2);
   assert.equal(storedByKey.size, 1);
   assert.deepEqual(projectionApplied, ["analyze_submit_clicked"]);
 });
 
 test("deduplicates concurrent idempotent ingestions without race", async () => {
   const projectionApplied: string[] = [];
-  let createdEvent: StoredBusinessFunnelEvent | null = null;
-  let createAttempts = 0;
-  let releaseFirstCreate!: () => void;
-
-  const firstCreateReady = new Promise<void>((resolve) => {
-    releaseFirstCreate = resolve;
-  });
-
-  const service = new BusinessFunnelEventService(
-    {
-      businessFunnelEvent: {
-        findUnique: async () => createdEvent,
-      },
-      $transaction: async (
-        callback: (tx: {
-          businessFunnelEvent: {
-            create: (args: {
-              data: Record<string, unknown>;
-            }) => Promise<StoredBusinessFunnelEvent>;
-            findUnique: (args: {
-              where: { idempotencyKey: string };
-            }) => Promise<StoredBusinessFunnelEvent | null>;
-          };
-        }) => Promise<{
-          event: StoredBusinessFunnelEvent;
-          ingested: boolean;
-        }>,
-      ) => {
-        return callback({
-          businessFunnelEvent: {
-            create: async ({ data }: { data: Record<string, unknown> }) => {
-              createAttempts += 1;
-
-              if (createAttempts === 1) {
-                createdEvent = {
-                  id: "event-1",
-                  createdAt: new Date("2026-04-21T15:30:00.000Z"),
-                  ...data,
-                } as StoredBusinessFunnelEvent;
-
-                await firstCreateReady;
-                return createdEvent;
-              }
-
-              const uniqueConstraintError = new Error("duplicate key");
-              Object.assign(uniqueConstraintError, { code: "P2002" });
-              throw uniqueConstraintError;
-            },
-            findUnique: async () => createdEvent,
-          },
-        });
-      },
-    } as any,
-    {
-      applyEvent: async (
-        event: Pick<StoredBusinessFunnelEvent, "eventName">,
-      ) => {
-        projectionApplied.push(event.eventName);
-      },
-    } as BusinessFunnelProjectionService,
-  );
-
-  const payload = {
-    eventName: "analyze_submit_clicked",
-    eventVersion: 1,
-    idempotencyKey: "evt-123",
-  };
-
-  const first = service.record(payload, baseContext);
-  const second = service.record(payload, baseContext);
-
-  releaseFirstCreate();
-
-  const [firstResult, secondResult] = await Promise.all([first, second]);
-
-  assert.equal(firstResult.ingested, true);
-  assert.equal(secondResult.ingested, false);
-  assert.equal(createAttempts, 2);
-  assert.deepEqual(projectionApplied, ["analyze_submit_clicked"]);
-});
-
-test("deduplicates when transaction is aborted after duplicate key", async () => {
   const storedByKey = new Map<string, StoredBusinessFunnelEvent>();
-  const projectionApplied: string[] = [];
+  let createManyAttempts = 0;
 
   const service = new BusinessFunnelEventService(
     {
-      businessFunnelEvent: {
-        findUnique: async ({
-          where,
-        }: {
-          where: { idempotencyKey: string };
-        }) => {
-          return storedByKey.get(where.idempotencyKey) ?? null;
-        },
-      },
       $transaction: async (
         callback: (tx: {
           businessFunnelEvent: {
-            create: (args: {
-              data: Record<string, unknown>;
-            }) => Promise<StoredBusinessFunnelEvent>;
+            createMany: (args: {
+              data: Record<string, unknown>[];
+              skipDuplicates?: boolean;
+            }) => Promise<{ count: number }>;
             findUnique: (args: {
               where: { idempotencyKey: string };
             }) => Promise<StoredBusinessFunnelEvent | null>;
@@ -440,32 +340,32 @@ test("deduplicates when transaction is aborted after duplicate key", async () =>
       ) => {
         return callback({
           businessFunnelEvent: {
-            create: async ({ data }: { data: Record<string, unknown> }) => {
-              if (
-                typeof data.idempotencyKey === "string" &&
-                storedByKey.has(data.idempotencyKey)
-              ) {
-                const uniqueConstraintError = new Error("duplicate key");
-                Object.assign(uniqueConstraintError, { code: "P2002" });
-                throw uniqueConstraintError;
+            createMany: async ({ data, skipDuplicates }: { data: Record<string, unknown>[]; skipDuplicates?: boolean }) => {
+              createManyAttempts += 1;
+              const record = data[0];
+
+              if (skipDuplicates && typeof record.idempotencyKey === "string" && storedByKey.has(record.idempotencyKey)) {
+                return { count: 0 };
               }
 
               const event = {
                 id: `event-${storedByKey.size + 1}`,
                 createdAt: new Date("2026-04-21T15:30:00.000Z"),
-                ...data,
+                ...record,
               } as StoredBusinessFunnelEvent;
 
               if (typeof event.idempotencyKey === "string") {
                 storedByKey.set(event.idempotencyKey, event);
               }
 
-              return event;
+              return { count: 1 };
             },
-            findUnique: async () => {
-              throw new Error(
-                "25P02 current transaction is aborted and cannot be reused",
-              );
+            findUnique: async ({
+              where,
+            }: {
+              where: { idempotencyKey: string };
+            }) => {
+              return storedByKey.get(where.idempotencyKey) ?? null;
             },
           },
         });
@@ -486,12 +386,55 @@ test("deduplicates when transaction is aborted after duplicate key", async () =>
     idempotencyKey: "evt-123",
   };
 
-  await service.record(payload, baseContext);
-  const duplicate = await service.record(payload, baseContext);
+  const firstResult = await service.record(payload, baseContext);
+  const secondResult = await service.record(payload, baseContext);
 
-  assert.equal(duplicate.ingested, false);
-  assert.equal(storedByKey.size, 1);
+  assert.equal(firstResult.ingested, true);
+  assert.equal(secondResult.ingested, false);
+  assert.equal(createManyAttempts, 2);
   assert.deepEqual(projectionApplied, ["analyze_submit_clicked"]);
+});
+
+test("throws if findUnique returns null after createMany skip", async () => {
+  const service = new BusinessFunnelEventService(
+    {
+      $transaction: async (
+        callback: (tx: {
+          businessFunnelEvent: {
+            createMany: (args: {
+              data: Record<string, unknown>[];
+              skipDuplicates?: boolean;
+            }) => Promise<{ count: number }>;
+            findUnique: (args: {
+              where: { idempotencyKey: string };
+            }) => Promise<StoredBusinessFunnelEvent | null>;
+          };
+        }) => Promise<unknown>,
+      ) => {
+        return callback({
+          businessFunnelEvent: {
+            createMany: async () => ({ count: 0 }),
+            findUnique: async () => null,
+          },
+        });
+      },
+    } as any,
+    {
+      applyEvent: async () => {},
+    } as BusinessFunnelProjectionService,
+  );
+
+  await assert.rejects(
+    service.record(
+      {
+        eventName: "analyze_submit_clicked",
+        eventVersion: 1,
+        idempotencyKey: "evt-123",
+      },
+      baseContext,
+    ),
+    /Event not found after createMany/i,
+  );
 });
 
 test("rolls back event write when projection application fails", async () => {
@@ -837,14 +780,17 @@ test("rejects frontend emission of backend-owned funnel events", async () => {
 });
 
 test("accepts frontend page_view event from journey tracking", async () => {
+  const storedByKey = new Map<string, StoredBusinessFunnelEvent>();
+
   const service = new BusinessFunnelEventService(
     {
       $transaction: async (
         callback: (tx: {
           businessFunnelEvent: {
-            create: (args: {
-              data: Record<string, unknown>;
-            }) => Promise<StoredBusinessFunnelEvent>;
+            createMany: (args: {
+              data: Record<string, unknown>[];
+              skipDuplicates?: boolean;
+            }) => Promise<{ count: number }>;
             findUnique: (args: {
               where: { idempotencyKey: string };
             }) => Promise<StoredBusinessFunnelEvent | null>;
@@ -853,14 +799,23 @@ test("accepts frontend page_view event from journey tracking", async () => {
       ) => {
         return callback({
           businessFunnelEvent: {
-            create: async ({ data }: { data: Record<string, unknown> }) => {
-              return {
+            createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
+              const record = data[0];
+              const event = {
                 id: "event-page-view",
                 createdAt: new Date("2026-04-22T12:00:00.000Z"),
-                ...data,
+                ...record,
               } as StoredBusinessFunnelEvent;
+
+              if (typeof event.idempotencyKey === "string") {
+                storedByKey.set(event.idempotencyKey, event);
+              }
+
+              return { count: 1 };
             },
-            findUnique: async () => null,
+            findUnique: async ({ where }: { where: { idempotencyKey: string } }) => {
+              return storedByKey.get(where.idempotencyKey) ?? null;
+            },
           },
         });
       },
