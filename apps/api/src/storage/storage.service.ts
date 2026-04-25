@@ -28,9 +28,14 @@ export class StorageService {
 
     this.bucket = process.env.S3_BUCKET ?? "earlycv-local";
 
-    this.publicBaseUrl = endpoint
-      ? `${endpoint}/${this.bucket}`
-      : `https://${this.bucket}.s3.amazonaws.com`;
+    // S3_PUBLIC_BASE_URL: URL pública do bucket (ex: R2.dev subdomain).
+    // Quando definida, putObject retorna URLs públicas acessíveis pelo browser.
+    // Operações internas (getObject/deleteObject) continuam usando S3_ENDPOINT.
+    this.publicBaseUrl =
+      process.env.S3_PUBLIC_BASE_URL ??
+      (endpoint
+        ? `${endpoint}/${this.bucket}`
+        : `https://${this.bucket}.s3.amazonaws.com`);
   }
 
   async putObject(
@@ -72,6 +77,12 @@ export class StorageService {
   }
 
   extractKeyFromUrl(url: string): string | null {
+    // URLs públicas (S3_PUBLIC_BASE_URL): chave começa logo após a base pública
+    const publicBase = process.env.S3_PUBLIC_BASE_URL;
+    if (publicBase && url.startsWith(publicBase)) {
+      return url.slice(publicBase.length).replace(/^\//, "");
+    }
+    // URLs de endpoint (path-style): /<bucket>/<key>
     const marker = `/${this.bucket}/`;
     const idx = url.indexOf(marker);
     return idx >= 0 ? url.slice(idx + marker.length) : null;
