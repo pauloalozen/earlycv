@@ -81,6 +81,11 @@ export class AdminResumeTemplatesController {
     return this.resumeTemplatesService.update(id, dto);
   }
 
+  @Get(":id/signed-urls")
+  getSignedUrls(@Param("id") id: string) {
+    return this.resumeTemplatesService.getSignedUrls(id);
+  }
+
   @Post(":id/toggle-status")
   @HttpCode(200)
   toggleStatus(@Param("id") id: string) {

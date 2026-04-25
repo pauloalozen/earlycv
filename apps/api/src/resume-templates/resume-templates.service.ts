@@ -27,6 +27,27 @@ export class ResumeTemplatesService {
     private readonly docx: ResumeTemplateDocxService,
   ) {}
 
+  async getSignedUrls(id: string) {
+    const template = await this.database.resumeTemplate.findUnique({
+      where: { id },
+      select: { fileUrl: true, previewImageUrl: true },
+    });
+
+    if (!template) throw new NotFoundException("Template not found");
+
+    const sign = async (url: string | null) => {
+      if (!url) return null;
+      const key = this.storage.extractKeyFromUrl(url);
+      if (!key) return null;
+      return this.storage.getPresignedUrl(key, 900);
+    };
+
+    return {
+      fileUrl: await sign(template.fileUrl),
+      previewImageUrl: await sign(template.previewImageUrl),
+    };
+  }
+
   list() {
     return this.database.resumeTemplate.findMany({
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],

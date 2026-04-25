@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { buttonVariants } from "@/components/ui";
+import { getTemplateSignedUrlsAction } from "../_actions/get-template-signed-urls";
 import { uploadTemplateFileAction } from "../_actions/upload-template-file";
 
 type TemplateFileUploadProps = {
@@ -17,6 +18,7 @@ export function TemplateFileUpload({
 }: TemplateFileUploadProps) {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -42,18 +44,32 @@ export function TemplateFileUpload({
     }
   };
 
+  const handleView = async () => {
+    setOpening(true);
+    setError(null);
+    try {
+      const { fileUrl } = await getTemplateSignedUrlsAction(templateId);
+      if (!fileUrl) throw new Error("URL não disponível");
+      window.open(fileUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao abrir arquivo");
+    } finally {
+      setOpening(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
       {currentFileUrl && (
         <div className="flex items-center gap-3">
-          <a
+          <button
             className={buttonVariants({ variant: "outline" })}
-            href={currentFileUrl}
-            rel="noopener noreferrer"
-            target="_blank"
+            disabled={opening}
+            onClick={handleView}
+            type="button"
           >
-            Visualizar PDF
-          </a>
+            {opening ? "Abrindo..." : "Visualizar DOCX"}
+          </button>
           <span className="text-sm text-stone-500">Arquivo enviado</span>
         </div>
       )}
@@ -78,7 +94,7 @@ export function TemplateFileUpload({
             ? "Enviando..."
             : currentFileUrl
               ? "Substituir arquivo"
-              : "Selecionar PDF (máx. 10 MB)"}
+              : "Selecionar DOCX (máx. 10 MB)"}
         </span>
       </label>
     </div>

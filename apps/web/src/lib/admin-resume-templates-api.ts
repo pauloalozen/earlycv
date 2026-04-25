@@ -125,6 +125,21 @@ export async function adminToggleResumeTemplateStatus(
   return response.json() as Promise<AdminResumeTemplateDto>;
 }
 
+export async function adminGetTemplateSignedUrls(id: string): Promise<{
+  fileUrl: string | null;
+  previewImageUrl: string | null;
+}> {
+  const response = await adminApiRequest(
+    "GET",
+    `/admin/resume-templates/${id}/signed-urls`,
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to get signed URLs: ${text}`);
+  }
+  return response.json();
+}
+
 export async function adminUploadResumeTemplateFile(
   id: string,
   file: File,
