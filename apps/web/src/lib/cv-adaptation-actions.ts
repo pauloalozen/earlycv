@@ -1,4 +1,5 @@
-import type { CvAdaptationStatus, PaymentStatus } from "@prisma/client";
+type CvAdaptationStatus = "pending" | "analyzing" | "awaiting_payment" | "paid" | "delivered" | "failed";
+type PaymentStatus = "none" | "pending" | "completed" | "failed" | "refunded";
 
 export type HistoryAdaptationItem = {
   id: string;
