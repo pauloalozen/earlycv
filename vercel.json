@@ -1,3 +1,3 @@
 {
-  "installCommand": "npm install --include=dev --ignore-scripts && npm run build --workspace @earlycv/config"
+  "installCommand": "npm install --include=dev"
 }
