@@ -12,11 +12,11 @@ export class FakeEmailDeliveryService implements EmailDeliveryPort {
   async send(message: EmailDeliveryMessage) {
     this.sentMessages.push({ ...message });
 
-    if (process.env.NODE_ENV !== "production") {
-      console.info(
-        `[fake-email] to=${message.to} subject=${message.subject} text=${message.text}`,
-      );
-    }
+    const codeMatch = message.text.match(/\b(\d{6})\b/);
+    const highlight = codeMatch ? `\n\n  🔑  CÓDIGO: ${codeMatch[1]}\n` : "";
+    console.info(
+      `\n📧 [fake-email] para=${message.to} assunto="${message.subject}"${highlight}  texto: ${message.text}\n`,
+    );
   }
 
   listSentMessages() {

@@ -16,7 +16,7 @@ const MONO = "var(--font-geist-mono), monospace";
 const SERIF_ITALIC = "var(--font-instrument-serif), serif";
 
 type PlanosPageProps = {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; aid?: string }>;
 };
 
 export default async function PlanosPage({ searchParams }: PlanosPageProps) {
@@ -28,6 +28,8 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   const isAuthenticated = Boolean(user);
   const PLANS = buildPlanCatalog(process.env, { isAuthenticated });
   const error = params.error;
+  const adaptationId =
+    params.aid && /^[0-9a-f-]{36}$/.test(params.aid) ? params.aid : undefined;
 
   return (
     <>
@@ -53,64 +55,36 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
             "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
           color: "#0a0a0a",
           position: "relative",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <AppHeader
-          userName={user?.name}
-          
-        />
+        <AppHeader userName={user?.name} />
 
         <div
           className="planos-content"
           style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
             maxWidth: 1100,
             margin: "0 auto",
-            padding: "32px 32px 64px",
+            padding: "20px 32px 32px",
             position: "relative",
             zIndex: 2,
+            width: "100%",
           }}
         >
-          {/* Kicker */}
-          <div style={{ textAlign: "center", marginBottom: 20 }}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                fontFamily: MONO,
-                fontSize: 10.5,
-                letterSpacing: 1.2,
-                fontWeight: 500,
-                color: "#555",
-                background: "rgba(10,10,10,0.04)",
-                border: "1px solid rgba(10,10,10,0.06)",
-                padding: "6px 10px",
-                borderRadius: 999,
-              }}
-            >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "#c6ff3a",
-                  boxShadow: "0 0 6px #c6ff3a",
-                  display: "inline-block",
-                }}
-              />
-              PLANOS · EARLYCV
-            </div>
-          </div>
-
           {/* Hero */}
-          <div style={{ textAlign: "center", marginBottom: 36 }}>
+          <div style={{ textAlign: "center", marginBottom: 20 }}>
             <h1
               style={{
-                fontSize: "clamp(36px, 4vw, 52px)",
+                fontSize: "clamp(30px, 3.5vw, 44px)",
                 fontWeight: 500,
                 letterSpacing: -2,
                 lineHeight: 1.02,
-                margin: "0 0 14px",
+                margin: "0 0 10px",
               }}
             >
               Escolha o plano{" "}
@@ -126,9 +100,9 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
             </h1>
             <p
               style={{
-                fontSize: 16,
+                fontSize: 14.5,
                 color: "#45443e",
-                lineHeight: 1.55,
+                lineHeight: 1.5,
                 maxWidth: 480,
                 margin: "0 auto",
               }}
@@ -168,9 +142,9 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
             className="planos-grid"
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: 14,
-              marginBottom: 40,
+              gridTemplateColumns: `repeat(${PLANS.length}, 1fr)`,
+              gap: 12,
+              marginBottom: 24,
             }}
           >
             {PLANS.map((plan) => {
@@ -183,7 +157,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                     display: "flex",
                     flexDirection: "column",
                     borderRadius: 16,
-                    padding: "24px 22px",
+                    padding: "18px 18px",
                     background: dark ? "#0a0a0a" : "#fafaf6",
                     border: dark
                       ? "none"
@@ -233,7 +207,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                     style={{
                       fontSize: 12.5,
                       color: dark ? "rgba(250,250,246,0.55)" : "#6a6560",
-                      marginBottom: 20,
+                      marginBottom: 12,
                       lineHeight: 1.4,
                     }}
                   >
@@ -246,12 +220,12 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                       display: "flex",
                       alignItems: "flex-end",
                       gap: 2,
-                      marginBottom: 18,
+                      marginBottom: 14,
                     }}
                   >
                     <span
                       style={{
-                        fontSize: 42,
+                        fontSize: 36,
                         fontWeight: 500,
                         letterSpacing: -2,
                         lineHeight: 1,
@@ -284,11 +258,20 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                       method={plan.checkoutPlanId ? "post" : "get"}
                     >
                       {plan.checkoutPlanId && (
-                        <input
-                          type="hidden"
-                          name="planId"
-                          value={plan.checkoutPlanId}
-                        />
+                        <>
+                          <input
+                            type="hidden"
+                            name="planId"
+                            value={plan.checkoutPlanId}
+                          />
+                          {adaptationId && (
+                            <input
+                              type="hidden"
+                              name="adaptationId"
+                              value={adaptationId}
+                            />
+                          )}
+                        </>
                       )}
                       <button
                         type="submit"
@@ -349,7 +332,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                       background: dark
                         ? "rgba(250,250,246,0.08)"
                         : "rgba(10,10,10,0.06)",
-                      margin: "18px 0",
+                      margin: "12px 0",
                     }}
                   />
 
@@ -373,7 +356,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                       margin: 0,
                       display: "flex",
                       flexDirection: "column",
-                      gap: 8,
+                      gap: 6,
                     }}
                   >
                     {plan.features.map((feature) => (
@@ -383,7 +366,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                           display: "flex",
                           alignItems: "flex-start",
                           gap: 8,
-                          fontSize: 12.5,
+                          fontSize: 12,
                           color: dark
                             ? "rgba(250,250,246,0.7)"
                             : "#45443e",
@@ -415,8 +398,8 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              gap: 10,
-              marginBottom: 24,
+              gap: 6,
+              marginBottom: 16,
             }}
           >
             {[
@@ -429,9 +412,10 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
-                  fontSize: 13.5,
+                  fontSize: 12.5,
                   fontWeight: 500,
                   color: "#45443e",
+                  margin: 0,
                 }}
               >
                 <span style={{ color: "#c6ff3a", fontSize: 14 }}>✓</span>
@@ -450,7 +434,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
               background: "#fafaf6",
               border: "1px solid rgba(10,10,10,0.08)",
               borderRadius: 12,
-              padding: "14px 20px",
+              padding: "10px 20px",
             }}
           >
             {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}

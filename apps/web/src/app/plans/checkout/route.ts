@@ -24,6 +24,10 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const planId = String(formData.get("planId") ?? "").trim();
+  const rawAdaptationId = String(formData.get("adaptationId") ?? "").trim();
+  const adaptationId = /^[0-9a-f-]{36}$/.test(rawAdaptationId)
+    ? rawAdaptationId
+    : undefined;
 
   if (!isPlanId(planId)) {
     return createPostRedirectResponse(
@@ -32,14 +36,14 @@ export async function POST(request: Request) {
     );
   }
 
-  // Use pre-configured MP link if available
+  // Use pre-configured MP link if available (adaptationId can't be forwarded here)
   const directLink = PLAN_LINKS[planId];
   if (directLink) {
     return Response.redirect(directLink, 303);
   }
 
   try {
-    const { checkoutUrl } = await createPlanCheckout(planId);
+    const { checkoutUrl } = await createPlanCheckout(planId, adaptationId);
     return Response.redirect(checkoutUrl, 303);
   } catch {
     return createPostRedirectResponse(

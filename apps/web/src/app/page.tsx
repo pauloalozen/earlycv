@@ -929,12 +929,9 @@ export default async function Home() {
           >
             Privacidade
           </Link>
-          <a
-            href="#status"
-            style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
-          >
-            Status
-          </a>
+          <span style={{ fontSize: 12, color: "#6a6a66" }}>
+            contato@earlycv.com.br
+          </span>
         </div>
       </footer>
 

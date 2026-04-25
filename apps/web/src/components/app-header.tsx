@@ -252,16 +252,6 @@ export function AppHeader({
                   >
                     {[
                       {
-                        href: "/adaptar",
-                        label: "Adaptar CV",
-                        icon: (
-                          <>
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                          </>
-                        ),
-                      },
-                      {
                         href: "/dashboard",
                         label: "Dashboard",
                         icon: (
@@ -270,6 +260,16 @@ export function AppHeader({
                             <rect x="14" y="3" width="7" height="7" />
                             <rect x="3" y="14" width="7" height="7" />
                             <rect x="14" y="14" width="7" height="7" />
+                          </>
+                        ),
+                      },
+                      {
+                        href: "/adaptar",
+                        label: "Adaptar CV",
+                        icon: (
+                          <>
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                           </>
                         ),
                       },
@@ -306,6 +306,37 @@ export function AppHeader({
                         {item.label}
                       </a>
                     ))}
+                    <a
+                      href="/contato"
+                      onClick={() => setOpen(false)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "11px 16px",
+                        fontSize: 13,
+                        fontFamily: GEIST,
+                        color: "#0a0a0a",
+                        textDecoration: "none",
+                      }}
+                    >
+                      {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                      <svg
+                        aria-hidden="true"
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                        <polyline points="22,6 12,13 2,6" />
+                      </svg>
+                      Contato
+                    </a>
                     <div
                       style={{
                         margin: "0 12px",
@@ -324,7 +355,7 @@ export function AppHeader({
                           padding: "11px 16px",
                           fontFamily: GEIST,
                           fontSize: 13,
-                          color: "#8a8a85",
+                          color: "#0a0a0a",
                           background: "none",
                           border: "none",
                           cursor: "pointer",
@@ -419,9 +450,8 @@ export function AppHeader({
         {userName ? (
           <>
             {[
-              { href: "/adaptar", label: "Adaptar CV" },
               { href: "/dashboard", label: "Dashboard" },
-              { href: "/cv-base", label: "Meu CV base" },
+              { href: "/adaptar", label: "Adaptar CV" },
             ].map((item) => (
               <a
                 key={item.href}
@@ -432,6 +462,13 @@ export function AppHeader({
                 {item.label}
               </a>
             ))}
+            <a
+              href="/contato"
+              className="app-hdr-mob-nav-item"
+              onClick={() => setMobileOpen(false)}
+            >
+              Contato
+            </a>
             <div className="app-hdr-mob-nav-sep" />
             <form action="/auth/logout" method="post" className="app-hdr-mob-nav-form">
               <button type="submit" className="app-hdr-mob-nav-btn">

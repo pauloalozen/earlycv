@@ -34,7 +34,11 @@ export class PlansController {
     )
     dto: CreatePlanCheckoutDto,
   ) {
-    return this.plansService.createCheckout(user.id, dto.planId);
+    return this.plansService.createCheckout(
+      user.id,
+      dto.planId,
+      dto.adaptationId,
+    );
   }
 
   @Get("me")

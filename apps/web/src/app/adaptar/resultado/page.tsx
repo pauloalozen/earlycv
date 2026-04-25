@@ -662,7 +662,32 @@ export default function ResultadoPage() {
       .then((result) => {
         setReviewAdaptationId(result.id);
         setReviewPaymentStatus(result.paymentStatus ?? "none");
+        const score = parsed.adaptedContentJson?.fit?.score;
+        if (typeof score === "number") {
+          const apiProjetado = parsed.adaptedContentJson?.fit?.score_pos_ajustes;
+          let scoreProjetado: number;
+          if (typeof apiProjetado === "number") {
+            scoreProjetado = apiProjetado;
+          } else {
+            const totalAjustes = (
+              parsed.adaptedContentJson?.ajustes_conteudo ?? []
+            ).reduce((sum, a) => sum + (a.pontos ?? 0), 0);
+            const totalKw = (
+              parsed.adaptedContentJson?.keywords?.ausentes ?? []
+            ).reduce((sum, k) => sum + (k.pontos ?? 0), 0);
+            scoreProjetado = Math.min(100, score + totalAjustes + totalKw);
+          }
+          sessionStorage.setItem(
+            "lastAnalysisScore",
+            JSON.stringify({ score, scoreProjetado }),
+          );
+        }
         sessionStorage.removeItem("guestAnalysis");
+        window.history.replaceState(
+          null,
+          "",
+          `/adaptar/resultado?adaptationId=${result.id}`,
+        );
       })
       .catch(() => {
         // falha silenciosa — análise continua visível na sessão
@@ -3392,7 +3417,11 @@ export default function ResultadoPage() {
                       </button>
                     ) : (
                       <a
-                        href="/planos"
+                        href={
+                          reviewAdaptationId
+                            ? `/planos?aid=${reviewAdaptationId}`
+                            : "/planos"
+                        }
                         style={{
                           display: "block",
                           background: "#fafaf6",
@@ -3411,7 +3440,11 @@ export default function ResultadoPage() {
                     )
                   ) : hasCredits === false ? (
                     <a
-                      href="/planos"
+                      href={
+                        reviewAdaptationId
+                          ? `/planos?aid=${reviewAdaptationId}`
+                          : "/planos"
+                      }
                       style={{
                         display: "block",
                         background: "#fafaf6",

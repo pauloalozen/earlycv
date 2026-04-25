@@ -13,7 +13,8 @@ import { GoogleStrategy } from "./strategies/google.strategy";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { LocalStrategy } from "./strategies/local.strategy";
 
-const useResend = Boolean(process.env.RESEND_API_KEY);
+const useResend =
+  Boolean(process.env.RESEND_API_KEY) && process.env.APP_ENV === "production";
 
 @Module({
   imports: [EnvModule, DatabaseModule, PassportModule, JwtModule.register({})],

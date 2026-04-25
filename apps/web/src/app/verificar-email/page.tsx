@@ -62,16 +62,32 @@ export default async function VerifyEmailPage({
         <a
           href="/"
           style={{
-            fontFamily: "var(--font-instrument-serif), serif",
-            fontSize: "2rem",
-            letterSpacing: "-0.05em",
-            color: "#0a0a0a",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
             textDecoration: "none",
             marginBottom: 40,
-            display: "block",
           }}
         >
-          earlyCV
+          {/* biome-ignore lint/performance/noImgElement: logo estático */}
+          <img
+            src="/logo.svg"
+            alt="earlyCV"
+            style={{ height: 36, width: "auto", display: "block" }}
+          />
+          <span
+            style={{
+              fontFamily: "var(--font-geist-mono), monospace",
+              fontSize: 10,
+              color: "#8a8a85",
+              border: "1px solid #d8d6ce",
+              borderRadius: 3,
+              padding: "1px 5px",
+              fontWeight: 500,
+            }}
+          >
+            v1.2
+          </span>
         </a>
 
         {/* Card */}

@@ -79,6 +79,7 @@ export class PlansService {
   async createCheckout(
     userId: string,
     planId: PlanId,
+    adaptationId?: string,
   ): Promise<{ checkoutUrl: string; purchaseId: string }> {
     const plan = PLAN_CONFIG[planId];
     const paymentReference = randomUUID();
@@ -100,6 +101,7 @@ export class PlansService {
       purchase.id,
       paymentReference,
       plan,
+      adaptationId,
     );
 
     return { checkoutUrl, purchaseId: purchase.id };
@@ -298,6 +300,7 @@ export class PlansService {
     purchaseId: string,
     paymentReference: string,
     plan: { label: string; amountInCents: number },
+    adaptationId?: string,
   ): Promise<string> {
     const client = this.getMercadoPagoClient();
     const preference = new Preference(client);
@@ -308,7 +311,9 @@ export class PlansService {
       process.env.NEXT_PUBLIC_API_URL ??
       "http://localhost:4000";
     const notificationUrl = `${apiUrl}/api/plans/webhook/mercadopago`;
-    const successUrl = `${frontendUrl}/dashboard?plan=activated`;
+    const successUrl = adaptationId
+      ? `${frontendUrl}/adaptar/resultado?adaptationId=${adaptationId}&plan=activated`
+      : `${frontendUrl}/dashboard?plan=activated`;
     const isProduction = this.isMpProduction();
 
     try {

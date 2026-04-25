@@ -57,7 +57,7 @@ export function buildPlanCatalog(
       cta: "Começar grátis",
       checkoutPlanId: null,
       features: [
-        "Análises de vaga ilimitadas",
+        "Análises gratuitas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
         "Sem cartão de crédito",
@@ -74,7 +74,7 @@ export function buildPlanCatalog(
       cta: "Ajustar meu CV agora",
       checkoutPlanId: "starter",
       features: [
-        `${qntStarterDownloads} crédito de download de CV`,
+        `${qntStarterDownloads} créditos de download de CV`,
         "Análises de vaga ilimitadas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",

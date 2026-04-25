@@ -496,10 +496,67 @@ export class AuthService {
       });
     });
 
+    const frontendUrl =
+      process.env.FRONTEND_URL ??
+      process.env.APP_URL ??
+      "https://earlycv.com.br";
+    const logoUrl = `${frontendUrl}/logo@2x.png`;
+
     await this.emailDelivery.send({
       to: email,
-      subject: "Seu codigo de verificacao EarlyCV",
-      text: `Seu codigo de verificacao e ${code}. Ele expira em 15 minutos.`,
+      subject: "Seu código de verificação EarlyCV",
+      text: `Seu código de verificação é ${code}. Ele expira em 15 minutos.`,
+      html: `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verificação de e-mail</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
+          <!-- Logo + badge -->
+          <tr>
+            <td style="padding-bottom:28px;text-align:center;">
+              <table cellpadding="0" cellspacing="0" style="display:inline-table;">
+                <tr>
+                  <td style="vertical-align:middle;padding-right:8px;">
+                    <img src="${logoUrl}" alt="earlyCV" width="130" height="35" style="display:block;height:35px;width:auto;border:0;" />
+                  </td>
+                  <td style="vertical-align:middle;">
+                    <span style="font-family:monospace;font-size:10px;color:#8a8a85;border:1px solid #d8d6ce;border-radius:3px;padding:2px 6px;font-weight:500;white-space:nowrap;">v1.2</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Card -->
+          <tr>
+            <td style="background:#ffffff;border-radius:16px;padding:40px 36px;border:1px solid rgba(10,10,10,0.07);">
+              <p style="margin:0 0 8px;font-size:22px;font-weight:600;color:#0a0a0a;letter-spacing:-0.4px;">Confirme seu e-mail</p>
+              <p style="margin:0 0 28px;font-size:14px;color:#6a6a66;line-height:1.6;">Use o código abaixo para verificar sua conta. Ele expira em <strong>15 minutos</strong>.</p>
+              <!-- OTP -->
+              <div style="background:#f5f5f0;border-radius:12px;padding:24px;text-align:center;margin-bottom:28px;">
+                <span style="font-size:36px;font-weight:700;letter-spacing:10px;color:#0a0a0a;font-variant-numeric:tabular-nums;">${code}</span>
+              </div>
+              <p style="margin:0;font-size:12px;color:#8a8a85;line-height:1.6;">Se você não solicitou esse código, pode ignorar este e-mail com segurança.</p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding-top:20px;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#8a8a85;">© earlyCV · 2026 · <a href="mailto:contato@earlycv.com.br" style="color:#8a8a85;text-decoration:none;">contato@earlycv.com.br</a></p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
     });
   }
 

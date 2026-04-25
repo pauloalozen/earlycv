@@ -414,19 +414,19 @@ export default async function DashboardPage({
           >
             {[
               {
-                label: DASHBOARD_METRIC_LABELS.averageScore,
-                value: `${metrics.averageScore}%`,
-                color: getDashboardScoreColor(metrics.averageScore),
-              },
-              {
                 label: DASHBOARD_METRIC_LABELS.matchCount,
-                value: String(metrics.highCompatibilityCount),
+                value: String(adaptationTotal),
                 color: "#0a0a0a",
               },
               {
                 label: DASHBOARD_METRIC_LABELS.recentImprovement,
                 value: `+${metrics.evolutionPercentage}%`,
                 color: "#405410",
+              },
+              {
+                label: DASHBOARD_METRIC_LABELS.averageScore,
+                value: `${metrics.averageScore}%`,
+                color: getDashboardScoreColor(metrics.averageScore),
               },
             ].map((metric) => (
               <article key={metric.label} style={{ ...CARD, padding: "20px" }}>

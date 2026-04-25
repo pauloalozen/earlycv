@@ -17,8 +17,12 @@ export async function getMyPlan(): Promise<PlanInfo> {
 
 export async function createPlanCheckout(
   planId: "starter" | "pro" | "turbo",
+  adaptationId?: string,
 ): Promise<{ checkoutUrl: string; purchaseId: string }> {
-  const response = await apiRequest("POST", "/plans/checkout", { planId });
+  const response = await apiRequest("POST", "/plans/checkout", {
+    planId,
+    ...(adaptationId ? { adaptationId } : {}),
+  });
   if (!response.ok) {
     const err = await response.text();
     throw new Error(`Checkout failed: ${err}`);

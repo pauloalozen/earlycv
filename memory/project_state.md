@@ -4,9 +4,9 @@ description: Current priorities, built modules, and next slice for EarlyCV SaaS
 type: project
 ---
 
-**Current priority (as of 2026-04-24): observability operacional + qualidade de tracking da jornada.**
+**Current priority (as of 2026-04-25): polish de UI/UX pós-freemium consolidado.**
 
-The ingestion roadmap still exists, but active execution now includes admin observability tooling and reliability fixes on journey tracking, while preserving CV adaptation safety constraints.
+Observabilidade operacional e tracking de jornada estão integrados. Foco agora em refinar a experiência nas telas principais (planos, resultado, contato, verificar-email).
 
 ## What's built
 - `packages/database`: Prisma schema with User, Resume, Company, JobSource, IngestionRun, Job, ResumeTemplate, AffiliatePartner/Campaign/Code/Attribution/CommissionEvent
