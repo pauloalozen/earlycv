@@ -336,14 +336,62 @@ export class AuthService {
       });
     });
 
-    const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3000";
+    const frontendUrl =
+      process.env.FRONTEND_URL ??
+      process.env.APP_URL ??
+      "https://earlycv.com.br";
     const resetLink = `${frontendUrl}/redefinir-senha?token=${rawToken}`;
+    const logoUrl = "https://earlycv.com.br/assets/logo.png";
 
     await this.emailDelivery.send({
       to: user.email,
       subject: "Redefinir sua senha — EarlyCV",
       text: `Você solicitou a redefinição de senha.\n\nClique no link abaixo para criar uma nova senha (válido por 1 hora):\n\n${resetLink}\n\nSe não foi você, ignore este email.`,
-      html: `<p>Você solicitou a redefinição de senha.</p><p><a href="${resetLink}">Clique aqui para redefinir sua senha</a></p><p>O link expira em 1 hora.</p><p>Se não foi você, ignore este email.</p>`,
+      html: `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redefinir senha</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
+          <!-- Logo -->
+          <tr>
+            <td style="padding-bottom:28px;text-align:center;">
+              <img src="${logoUrl}" alt="EarlyCV" width="120" style="display:block;margin:0 auto;border:0;height:auto;" />
+            </td>
+          </tr>
+          <!-- Card -->
+          <tr>
+            <td style="background:#ffffff;border-radius:16px;padding:40px 36px;border:1px solid rgba(10,10,10,0.07);">
+              <p style="margin:0 0 8px;font-size:22px;font-weight:600;color:#0a0a0a;letter-spacing:-0.4px;">Redefinir sua senha</p>
+              <p style="margin:0 0 28px;font-size:14px;color:#6a6a66;line-height:1.6;">Você solicitou a redefinição de senha. Clique no botão abaixo para criar uma nova senha. O link expira em <strong>1 hora</strong>.</p>
+              <table cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+                <tr>
+                  <td style="background:#0a0a0a;border-radius:10px;padding:14px 28px;">
+                    <a href="${resetLink}" style="color:#fafaf6;font-size:14px;font-weight:600;text-decoration:none;display:inline-block;">Redefinir senha →</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0;font-size:12px;color:#8a8a85;line-height:1.6;">Se você não solicitou esse link, pode ignorar este e-mail com segurança. Sua senha não será alterada.</p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding-top:20px;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#8a8a85;">© EarlyCV · 2026 · <a href="mailto:contato@earlycv.com.br" style="color:#8a8a85;text-decoration:none;">contato@earlycv.com.br</a></p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
     });
 
     return { ok: true };
@@ -496,11 +544,7 @@ export class AuthService {
       });
     });
 
-    const frontendUrl =
-      process.env.FRONTEND_URL ??
-      process.env.APP_URL ??
-      "https://earlycv.com.br";
-    const logoUrl = `${frontendUrl}/logo@2x.png`;
+    const logoUrl = "https://earlycv.com.br/assets/logo.png";
 
     await this.emailDelivery.send({
       to: email,
@@ -518,19 +562,10 @@ export class AuthService {
     <tr>
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
-          <!-- Logo + badge -->
+          <!-- Logo -->
           <tr>
             <td style="padding-bottom:28px;text-align:center;">
-              <table cellpadding="0" cellspacing="0" style="display:inline-table;">
-                <tr>
-                  <td style="vertical-align:middle;padding-right:8px;">
-                    <img src="${logoUrl}" alt="earlyCV" width="130" height="35" style="display:block;height:35px;width:auto;border:0;" />
-                  </td>
-                  <td style="vertical-align:middle;">
-                    <span style="font-family:monospace;font-size:10px;color:#8a8a85;border:1px solid #d8d6ce;border-radius:3px;padding:2px 6px;font-weight:500;white-space:nowrap;">v1.2</span>
-                  </td>
-                </tr>
-              </table>
+              <img src="${logoUrl}" alt="EarlyCV" width="120" style="display:block;margin:0 auto;border:0;height:auto;" />
             </td>
           </tr>
           <!-- Card -->
