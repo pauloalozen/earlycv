@@ -26,3 +26,4 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - O fluxo `/cv-adaptation/analyze-guest` agora exige token turnstile encaminhado pelo web app, com cobertura dedicada em testes de API e web submit-flow.
 - Runbook operacional oficial da protecao/observabilidade: `docs/analysis-protection-operational-runbook.md` (checklists diarios/semanais, rollback e incident playbooks).
 - Convencao de documentacao operacional: novos guias de uso diario/runbook devem ser criados em `docs/runbook/`.
+- Convencao Railway/migrations: toda nova migration Prisma deve ser acompanhada de `npm run railway:touch-api` (grava timestamp em `apps/api/.railway-redeploy`). Commitar os dois juntos para que Railway detecte mudanca em `apps/api/**` e dispare redeploy, que executa `prisma migrate deploy` antes de subir o servidor.
