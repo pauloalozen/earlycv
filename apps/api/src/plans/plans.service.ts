@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 import {
   BadRequestException,
@@ -6,8 +6,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from "@nestjs/common";
-import type { UserPlanType } from "@prisma/client";
+import type { Prisma, UserPlanType } from "@prisma/client";
 import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
 
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
@@ -19,6 +20,24 @@ type PlanId = "starter" | "pro" | "turbo";
 type MercadoPagoPaymentResolution = {
   paymentReference: string | null;
   status: "approved" | "failed" | "pending" | "unknown";
+  paymentId: string | null;
+  merchantOrderId: string | null;
+  preferenceId: string | null;
+  rawStatus: string | null;
+};
+
+type AuditEntry = {
+  eventType: string;
+  actionTaken: string;
+  mpPaymentId?: string | null;
+  mpMerchantOrderId?: string | null;
+  mpPreferenceId?: string | null;
+  externalReference?: string | null;
+  internalCheckoutId?: string | null;
+  internalCheckoutType?: string;
+  mpStatus?: string | null;
+  errorMessage?: string | null;
+  rawPayload?: object | null;
 };
 
 const PLAN_CONFIG: Record<
@@ -145,17 +164,122 @@ export class PlansService {
     };
   }
 
+  verifyWebhookSignature(
+    provider: string,
+    body: unknown,
+    xSignature?: string,
+    xRequestId?: string,
+  ): void {
+    if (provider !== "mercadopago") return;
+
+    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+    if (!secret) return; // dev: sem secret configurado, aceita sem validar
+
+    if (!xSignature) {
+      this.logAuditEvent({
+        eventType: "webhook_received",
+        actionTaken: "invalid_signature",
+        errorMessage: "Missing x-signature header",
+        rawPayload: body as object,
+      });
+      throw new UnauthorizedException("Missing webhook signature");
+    }
+
+    const parts: Record<string, string> = {};
+    for (const part of xSignature.split(",")) {
+      const [k, v] = part.split("=");
+      if (k && v) parts[k.trim()] = v.trim();
+    }
+    const ts = parts.ts;
+    const v1 = parts.v1;
+
+    if (!ts || !v1) {
+      this.logAuditEvent({
+        eventType: "webhook_received",
+        actionTaken: "invalid_signature",
+        errorMessage: "Invalid x-signature format",
+        rawPayload: body as object,
+      });
+      throw new UnauthorizedException("Invalid webhook signature format");
+    }
+
+    const dataId =
+      body !== null &&
+      typeof body === "object" &&
+      "data" in body &&
+      body.data !== null &&
+      typeof body.data === "object" &&
+      "id" in body.data
+        ? String((body.data as { id: unknown }).id)
+        : "";
+
+    const message = `id:${dataId};request-id:${xRequestId ?? ""};ts:${ts};`;
+    const expected = createHmac("sha256", secret).update(message).digest("hex");
+
+    const expectedBuf = Buffer.from(expected);
+    const receivedBuf = Buffer.from(v1);
+
+    if (
+      expectedBuf.length !== receivedBuf.length ||
+      !timingSafeEqual(expectedBuf, receivedBuf)
+    ) {
+      this.logAuditEvent({
+        eventType: "webhook_received",
+        actionTaken: "invalid_signature",
+        errorMessage: "HMAC mismatch",
+        rawPayload: body as object,
+      });
+      throw new UnauthorizedException("Invalid webhook signature");
+    }
+  }
+
   async handleWebhook(provider: string, body: unknown): Promise<void> {
     if (provider !== "mercadopago") {
       throw new BadRequestException(`Provider ${provider} not supported`);
     }
 
-    const payment = await this.resolveMercadoPagoPayment(body);
-    if (!payment.paymentReference) return;
+    this.logger.log(`[webhook:plans] received`);
 
-    if (payment.status === "failed") {
+    let resolution: MercadoPagoPaymentResolution;
+    try {
+      resolution = await this.resolveMercadoPagoPayment(body);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`[webhook:plans] error resolving payment: ${msg}`);
+      this.logAuditEvent({
+        eventType: "unexpected_error",
+        actionTaken: "error",
+        errorMessage: msg,
+        rawPayload: body as object,
+      });
+      return; // return 200 to prevent MP from retrying indefinitely
+    }
+
+    if (!resolution.paymentReference) {
+      this.logger.log(`[webhook:plans] ignored — no payment reference`);
+      this.logAuditEvent({
+        eventType: "webhook_received",
+        actionTaken: "ignored",
+        mpPaymentId: resolution.paymentId,
+        mpStatus: resolution.rawStatus,
+        rawPayload: body as object,
+      });
+      return;
+    }
+
+    const auditBase = {
+      mpPaymentId: resolution.paymentId,
+      mpMerchantOrderId: resolution.merchantOrderId,
+      mpPreferenceId: resolution.preferenceId,
+      externalReference: resolution.paymentReference,
+      internalCheckoutType: "plan",
+      mpStatus: resolution.rawStatus,
+      rawPayload: body as object,
+    };
+
+    if (resolution.status === "failed") {
       const purchase = await this.database.planPurchase.findUnique({
-        where: { paymentReference: payment.paymentReference },
+        where: { paymentReference: resolution.paymentReference },
       });
 
       if (
@@ -165,38 +289,177 @@ export class PlansService {
       ) {
         await this.database.planPurchase.update({
           where: { id: purchase.id },
-          data: { status: "failed" },
+          data: {
+            status: "failed",
+            ...(!purchase.mpPaymentId && resolution.paymentId
+              ? { mpPaymentId: resolution.paymentId }
+              : {}),
+            ...(!purchase.mpMerchantOrderId && resolution.merchantOrderId
+              ? { mpMerchantOrderId: resolution.merchantOrderId }
+              : {}),
+          },
         });
+        this.logger.log(
+          `[webhook:plans] payment failed — purchase ${purchase.id}`,
+        );
       }
 
-      await this.recordPaymentFailed(payment.paymentReference);
+      await this.recordPaymentFailed(resolution.paymentReference);
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "payment_rejected",
+        actionTaken: "failed",
+        internalCheckoutId: purchase?.id ?? null,
+      });
       return;
     }
 
-    if (payment.status !== "approved") {
+    if (resolution.status !== "approved") {
+      this.logger.log(
+        `[webhook:plans] ignored — status is ${resolution.rawStatus}`,
+      );
+      const purchase = await this.database.planPurchase.findUnique({
+        where: { paymentReference: resolution.paymentReference },
+      });
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "payment_pending",
+        actionTaken: "pending",
+        internalCheckoutId: purchase?.id ?? null,
+      });
       return;
     }
 
     const purchase = await this.database.planPurchase.findUnique({
-      where: { paymentReference: payment.paymentReference },
+      where: { paymentReference: resolution.paymentReference },
     });
 
-    if (!purchase || purchase.status === "completed") return;
+    if (!purchase) {
+      this.logger.warn(
+        `[webhook:plans] unknown paymentReference: ${resolution.paymentReference}`,
+      );
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "webhook_received",
+        actionTaken: "ignored",
+        errorMessage: "purchase not found for external_reference",
+      });
+      return;
+    }
+
+    if (purchase.status === "completed") {
+      this.logger.log(
+        `[webhook:plans] already processed — purchase ${purchase.id}`,
+      );
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "webhook_duplicated",
+        actionTaken: "duplicated",
+        internalCheckoutId: purchase.id,
+      });
+      return;
+    }
+
+    // Atomic: re-check inside transaction to prevent double-credit on concurrent webhooks
+    await this.database.$transaction(async (tx) => {
+      const current = await tx.planPurchase.findUnique({
+        where: { id: purchase.id },
+      });
+      if (!current || current.status === "completed") return;
+
+      const analysisCredits = this.resolveAnalysisCreditsForActivation(
+        purchase.planType,
+        purchase.analysisCreditsGranted,
+      );
+      const isUnlimited = purchase.planType === "unlimited";
+      const planExpiresAt = isUnlimited
+        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        : null;
+
+      await tx.planPurchase.update({
+        where: { id: purchase.id },
+        data: {
+          status: "completed",
+          paidAt: new Date(),
+          ...(!purchase.mpPaymentId && resolution.paymentId
+            ? { mpPaymentId: resolution.paymentId }
+            : {}),
+          ...(!purchase.mpMerchantOrderId && resolution.merchantOrderId
+            ? { mpMerchantOrderId: resolution.merchantOrderId }
+            : {}),
+          ...(!purchase.mpPreferenceId && resolution.preferenceId
+            ? { mpPreferenceId: resolution.preferenceId }
+            : {}),
+        },
+      });
+
+      await tx.user.update({
+        where: { id: purchase.userId },
+        data: {
+          planType: purchase.planType,
+          planActivatedAt: new Date(),
+          planExpiresAt,
+          creditsRemaining: isUnlimited
+            ? 0
+            : { increment: purchase.creditsGranted },
+          analysisCreditsRemaining: isUnlimited
+            ? 0
+            : { increment: analysisCredits },
+        },
+      });
+    });
+
+    this.logger.log(
+      `[webhook:plans] payment approved — purchase ${purchase.id}`,
+    );
+    this.logAuditEvent({
+      ...auditBase,
+      eventType: "payment_approved",
+      actionTaken: "approved",
+      internalCheckoutId: purchase.id,
+    });
+  }
+
+  // Used by reconciliation: applies credit for an already-verified approved purchase
+  async applyApprovedPurchase(purchaseId: string): Promise<boolean> {
+    const purchase = await this.database.planPurchase.findUnique({
+      where: { id: purchaseId },
+    });
+
+    if (
+      !purchase ||
+      purchase.status === "completed" ||
+      purchase.status === "failed"
+    ) {
+      return false;
+    }
+
+    const analysisCredits = this.resolveAnalysisCreditsForActivation(
+      purchase.planType,
+      purchase.analysisCreditsGranted,
+    );
+
+    await this.activatePlan(
+      purchase.userId,
+      purchase.planType,
+      purchase.creditsGranted,
+      analysisCredits,
+    );
 
     await this.database.planPurchase.update({
       where: { id: purchase.id },
       data: { status: "completed", paidAt: new Date() },
     });
 
-    await this.activatePlan(
-      purchase.userId,
-      purchase.planType,
-      purchase.creditsGranted,
-      this.resolveAnalysisCreditsForActivation(
-        purchase.planType,
-        purchase.analysisCreditsGranted,
-      ),
-    );
+    this.logAuditEvent({
+      eventType: "reconciliation_approved",
+      actionTaken: "approved",
+      externalReference: purchase.paymentReference,
+      internalCheckoutId: purchase.id,
+      internalCheckoutType: "plan",
+    });
+
+    return true;
   }
 
   private async recordPaymentFailed(paymentReference: string) {
@@ -275,6 +538,31 @@ export class PlansService {
     return 0;
   }
 
+  private logAuditEvent(entry: AuditEntry): void {
+    this.database.paymentAuditLog
+      .create({
+        data: {
+          provider: "mercadopago",
+          eventType: entry.eventType,
+          actionTaken: entry.actionTaken,
+          mpPaymentId: entry.mpPaymentId ?? null,
+          mpMerchantOrderId: entry.mpMerchantOrderId ?? null,
+          mpPreferenceId: entry.mpPreferenceId ?? null,
+          externalReference: entry.externalReference ?? null,
+          internalCheckoutId: entry.internalCheckoutId ?? null,
+          internalCheckoutType: entry.internalCheckoutType ?? null,
+          mpStatus: entry.mpStatus ?? null,
+          errorMessage: entry.errorMessage ?? null,
+          ...(entry.rawPayload != null
+            ? { rawPayload: entry.rawPayload as Prisma.InputJsonValue }
+            : {}),
+        },
+      })
+      .catch((err: unknown) => {
+        this.logger.error(`[audit] write failed: ${err}`);
+      });
+  }
+
   private isMpProduction(): boolean {
     return (
       process.env.MERCADOPAGO_MODE === "production" ||
@@ -300,7 +588,7 @@ export class PlansService {
     purchaseId: string,
     paymentReference: string,
     plan: { label: string; amountInCents: number },
-    adaptationId?: string,
+    _adaptationId?: string,
   ): Promise<string> {
     const client = this.getMercadoPagoClient();
     const preference = new Preference(client);
@@ -311,9 +599,7 @@ export class PlansService {
       process.env.NEXT_PUBLIC_API_URL ??
       "http://localhost:4000";
     const notificationUrl = `${apiUrl}/api/plans/webhook/mercadopago`;
-    const successUrl = adaptationId
-      ? `${frontendUrl}/adaptar/resultado?adaptationId=${adaptationId}&plan=activated`
-      : `${frontendUrl}/dashboard?plan=activated`;
+    const successUrl = `${frontendUrl}/pagamento/concluido?checkoutId=${purchaseId}`;
     const isProduction = this.isMpProduction();
 
     try {
@@ -332,8 +618,8 @@ export class PlansService {
           notification_url: notificationUrl,
           back_urls: {
             success: successUrl,
-            failure: `${frontendUrl}/planos?error=payment_failed`,
-            pending: `${frontendUrl}/dashboard`,
+            failure: `${frontendUrl}/pagamento/falhou?checkoutId=${purchaseId}`,
+            pending: `${frontendUrl}/pagamento/pendente?checkoutId=${purchaseId}`,
           },
           ...(successUrl.startsWith("https://") && { auto_return: "approved" }),
         },
@@ -349,6 +635,18 @@ export class PlansService {
         );
       }
 
+      // Persist preference ID for traceability (non-blocking)
+      if (result.id) {
+        this.database.planPurchase
+          .update({
+            where: { id: purchaseId },
+            data: { mpPreferenceId: String(result.id) },
+          })
+          .catch((err) => {
+            this.logger.error(`Failed to save mpPreferenceId: ${err}`);
+          });
+      }
+
       return checkoutUrl;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -360,21 +658,22 @@ export class PlansService {
   private async resolveMercadoPagoPayment(
     body: unknown,
   ): Promise<MercadoPagoPaymentResolution> {
-    if (!body || typeof body !== "object") {
-      return {
-        paymentReference: null,
-        status: "unknown",
-      };
-    }
+    const empty: MercadoPagoPaymentResolution = {
+      paymentReference: null,
+      status: "unknown",
+      paymentId: null,
+      merchantOrderId: null,
+      preferenceId: null,
+      rawStatus: null,
+    };
+
+    if (!body || typeof body !== "object") return empty;
 
     const data = body as Record<string, unknown>;
 
     if (data.type !== "payment") {
       this.logger.log(`Ignoring MP webhook type: ${String(data.type)}`);
-      return {
-        paymentReference: null,
-        status: "unknown",
-      };
+      return empty;
     }
 
     const paymentIdRaw =
@@ -388,22 +687,31 @@ export class PlansService {
           ? String(paymentIdRaw)
           : null;
 
-    if (!paymentId) {
-      return {
-        paymentReference: null,
-        status: "unknown",
-      };
-    }
+    if (!paymentId) return empty;
 
     const client = this.getMercadoPagoClient();
     const paymentClient = new Payment(client);
     const payment = await paymentClient.get({ id: paymentId });
 
+    // Cast to access fields not fully typed in SDK
+    const mp = payment as unknown as {
+      preference_id?: string;
+      order?: { id?: number };
+    };
+
     const paymentReference = payment.external_reference ?? null;
+    const preferenceId = mp.preference_id ?? null;
+    const merchantOrderId = mp.order?.id != null ? String(mp.order.id) : null;
+    const rawStatus = payment.status ?? null;
+
     if (payment.status === "approved") {
       return {
         paymentReference,
         status: "approved",
+        paymentId,
+        merchantOrderId,
+        preferenceId,
+        rawStatus,
       };
     }
 
@@ -413,19 +721,23 @@ export class PlansService {
       payment.status === "rejected" ||
       payment.status === "refunded"
     ) {
-      this.logger.log(
-        `Payment ${paymentId} failed with status: ${payment.status}`,
-      );
       return {
         paymentReference,
         status: "failed",
+        paymentId,
+        merchantOrderId,
+        preferenceId,
+        rawStatus,
       };
     }
 
-    this.logger.log(`Payment ${paymentId} not approved: ${payment.status}`);
     return {
       paymentReference,
       status: "pending",
+      paymentId,
+      merchantOrderId,
+      preferenceId,
+      rawStatus,
     };
   }
 }

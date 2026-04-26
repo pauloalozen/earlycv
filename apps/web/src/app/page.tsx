@@ -1,10 +1,11 @@
-import React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import React from "react";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 import { AtsWidget } from "./_ats-widget";
 import { LandingMobileMenu } from "./_landing-mobile-menu";
+import { LandingScrollAnimations } from "./_landing-scroll-animations";
 import { buildPlanCatalog } from "./planos/plan-catalog";
 
 export const dynamic = "force-dynamic";
@@ -111,7 +112,10 @@ export default async function Home() {
         </div>
 
         {/* Nav right — hidden on mobile */}
-        <div style={{ display: "flex", alignItems: "center", gap: 24 }} className="lp-nav-links">
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 24 }}
+          className="lp-nav-links"
+        >
           <a
             href="#como-funciona"
             style={{
@@ -192,6 +196,8 @@ export default async function Home() {
         {/* Mobile hamburger — client component */}
         <LandingMobileMenu isLoggedIn={Boolean(user)} />
       </nav>
+
+      <LandingScrollAnimations />
 
       {/* ── Hero ── */}
       <section
@@ -369,7 +375,9 @@ export default async function Home() {
                       }}
                     />
                   )}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 2 }}
+                  >
                     <span
                       style={{
                         fontSize: 26,
@@ -554,6 +562,7 @@ export default async function Home() {
             ].map((item, i) => (
               <div
                 key={item.step}
+                className="reveal-card"
                 style={{
                   background: "rgba(255,255,255,0.7)",
                   border: "1px solid rgba(10,10,10,0.07)",
@@ -561,6 +570,7 @@ export default async function Home() {
                   padding: "32px 28px",
                   position: "relative",
                   backdropFilter: "blur(6px)",
+                  transitionDelay: `${i * 0.12}s`,
                 }}
               >
                 <div
@@ -717,9 +727,10 @@ export default async function Home() {
             }}
             className="pricing-grid"
           >
-            {plans.map((plan) => (
+            {plans.map((plan, i) => (
               <div
                 key={plan.id}
+                className="reveal-card"
                 style={{
                   background: plan.featured
                     ? "#0a0a0a"
@@ -733,6 +744,7 @@ export default async function Home() {
                   backdropFilter: "blur(6px)",
                   display: "flex",
                   flexDirection: "column",
+                  transitionDelay: `${i * 0.1}s`,
                 }}
               >
                 {plan.badge && (
@@ -855,9 +867,7 @@ export default async function Home() {
                 </ul>
 
                 <Link
-                  href={
-                    plan.checkoutPlanId ? "/adaptar" : "/entrar?tab=cadastrar"
-                  }
+                  href={plan.cta_link}
                   style={{
                     display: "block",
                     textAlign: "center",
@@ -871,7 +881,7 @@ export default async function Home() {
                     letterSpacing: -0.1,
                   }}
                 >
-                  {plan.cta}
+                  {plan.cta_lading}
                 </Link>
               </div>
             ))}
@@ -935,7 +945,7 @@ export default async function Home() {
         </div>
       </footer>
 
-      {/* CSS for CTA hover + responsive + smooth scroll */}
+      {/* CSS for CTA hover + responsive + smooth scroll + scroll reveal */}
       <style>{`
         html { scroll-behavior: smooth; }
 
@@ -946,6 +956,22 @@ export default async function Home() {
         }
         .lp-cta-arrow { display: inline-block; transition: transform 240ms cubic-bezier(.3,.9,.4,1); }
         .lp-cta-primary:hover .lp-cta-arrow { transform: translateX(4px); }
+
+        /* Scroll reveal — desktop: fade + slide up */
+        .reveal-card {
+          opacity: 0;
+          transform: translateY(24px);
+          transition: opacity 0.52s cubic-bezier(.25,.46,.45,.94), transform 0.52s cubic-bezier(.25,.46,.45,.94);
+        }
+        .reveal-card.reveal-visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        /* Mobile: slide from side instead */
+        @media (max-width: 768px) {
+          .reveal-card { transform: translateX(24px); }
+          .reveal-card.reveal-visible { transform: translateX(0); }
+        }
 
         @media (max-width: 900px) {
           .landing-hero { grid-template-columns: 1fr !important; gap: 32px !important; }

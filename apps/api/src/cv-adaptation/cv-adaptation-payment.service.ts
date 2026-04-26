@@ -9,6 +9,16 @@ export type PaymentIntent = {
   checkoutUrl: string;
   amountInCents: number;
   currency: string;
+  mpPreferenceId: string | null;
+};
+
+export type WebhookPaymentResolution = {
+  paymentReference: string | null;
+  status: "approved" | "failed" | "pending" | "unknown";
+  paymentId: string | null;
+  merchantOrderId: string | null;
+  preferenceId: string | null;
+  rawStatus: string | null;
 };
 
 @Injectable()
@@ -76,7 +86,7 @@ export class CvAdaptationPaymentService {
     const notificationUrl = `${apiUrl}/api/cv-adaptation/webhook/mercadopago`;
 
     const isProduction = this.isMpProduction();
-    const successUrl = `${frontendUrl}/adaptar/${adaptationId}/confirmacao`;
+    const successUrl = `${frontendUrl}/pagamento/concluido?checkoutId=${adaptationId}`;
 
     // auto_return only works with HTTPS back_urls
     const useAutoReturn = successUrl.startsWith("https://");
@@ -98,8 +108,8 @@ export class CvAdaptationPaymentService {
           notification_url: notificationUrl,
           back_urls: {
             success: successUrl,
-            failure: `${frontendUrl}/adaptar/${adaptationId}/confirmacao`,
-            pending: `${frontendUrl}/adaptar/${adaptationId}/confirmacao`,
+            failure: `${frontendUrl}/pagamento/falhou?checkoutId=${adaptationId}`,
+            pending: `${frontendUrl}/pagamento/pendente?checkoutId=${adaptationId}`,
           },
           ...(useAutoReturn && { auto_return: "approved" }),
         },
@@ -124,13 +134,14 @@ export class CvAdaptationPaymentService {
       checkoutUrl,
       amountInCents: this.priceInCents,
       currency: "BRL",
+      mpPreferenceId: result.id ? String(result.id) : null,
     };
   }
 
-  async resolvePaymentReference(
+  async resolveWebhookPayment(
     provider: string,
     body: unknown,
-  ): Promise<string | null> {
+  ): Promise<WebhookPaymentResolution> {
     if (provider === "mercadopago") {
       return this.resolveMercadoPagoPayment(body);
     }
@@ -154,44 +165,87 @@ export class CvAdaptationPaymentService {
 
   private async resolveMercadoPagoPayment(
     body: unknown,
-  ): Promise<string | null> {
-    if (!body || typeof body !== "object") return null;
+  ): Promise<WebhookPaymentResolution> {
+    const empty: WebhookPaymentResolution = {
+      paymentReference: null,
+      status: "unknown",
+      paymentId: null,
+      merchantOrderId: null,
+      preferenceId: null,
+      rawStatus: null,
+    };
+
+    if (!body || typeof body !== "object") return empty;
 
     const data = body as Record<string, unknown>;
 
     // MP sends { type: "payment", data: { id: "<payment_id>" } }
     if (data.type !== "payment") {
       this.logger.log(`Ignoring MP webhook type: ${String(data.type)}`);
-      return null;
+      return empty;
     }
 
-    const paymentId =
+    const paymentIdRaw =
       typeof data.data === "object" && data.data !== null
-        ? String((data.data as Record<string, unknown>).id)
+        ? (data.data as Record<string, unknown>).id
         : null;
+    const paymentId =
+      typeof paymentIdRaw === "string"
+        ? paymentIdRaw.trim()
+        : typeof paymentIdRaw === "number"
+          ? String(paymentIdRaw)
+          : null;
 
-    if (!paymentId) return null;
-
-    const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
-    if (!token) {
-      throw new BadRequestException("MERCADOPAGO_ACCESS_TOKEN not configured.");
-    }
+    if (!paymentId) return empty;
 
     const client = this.getMercadoPagoClient();
     const paymentClient = new Payment(client);
     const payment = await paymentClient.get({ id: paymentId });
 
-    if (payment.status !== "approved") {
-      this.logger.log(`Payment ${paymentId} not approved: ${payment.status}`);
-      return null;
+    const mp = payment as unknown as {
+      preference_id?: string;
+      order?: { id?: number };
+    };
+
+    const paymentReference = payment.external_reference ?? null;
+    const preferenceId = mp.preference_id ?? null;
+    const merchantOrderId = mp.order?.id != null ? String(mp.order.id) : null;
+    const rawStatus = payment.status ?? null;
+
+    if (payment.status === "approved") {
+      return {
+        paymentReference,
+        status: "approved",
+        paymentId,
+        merchantOrderId,
+        preferenceId,
+        rawStatus,
+      };
     }
 
-    const externalReference = payment.external_reference;
-    if (!externalReference) {
-      this.logger.warn(`Payment ${paymentId} has no external_reference`);
-      return null;
+    if (
+      payment.status === "cancelled" ||
+      payment.status === "charged_back" ||
+      payment.status === "rejected" ||
+      payment.status === "refunded"
+    ) {
+      return {
+        paymentReference,
+        status: "failed",
+        paymentId,
+        merchantOrderId,
+        preferenceId,
+        rawStatus,
+      };
     }
 
-    return externalReference;
+    return {
+      paymentReference,
+      status: "pending",
+      paymentId,
+      merchantOrderId,
+      preferenceId,
+      rawStatus,
+    };
   }
 }

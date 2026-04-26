@@ -9,6 +9,8 @@ export type PlanCatalogItem = {
   featured: boolean;
   badge: string | null;
   cta: string;
+  cta_lading: string;
+  cta_link: string;
   features: string[];
   checkoutPlanId: PaidPlanId | null;
 };
@@ -55,6 +57,8 @@ export function buildPlanCatalog(
       featured: false,
       badge: "Grátis",
       cta: "Começar grátis",
+      cta_lading: "Começar grátis",
+      cta_link: "/adaptar",
       checkoutPlanId: null,
       features: [
         "Análises gratuitas",
@@ -72,6 +76,8 @@ export function buildPlanCatalog(
       featured: false,
       badge: null,
       cta: "Ajustar meu CV agora",
+      cta_lading: "Comprar e ajustar meu CV",
+      cta_link: "https://mpago.li/1zWKBAo",
       checkoutPlanId: "starter",
       features: [
         `${qntStarterDownloads} créditos de download de CV`,
@@ -91,6 +97,8 @@ export function buildPlanCatalog(
       featured: true,
       badge: "Mais escolhido",
       cta: "Aumentar as chances",
+      cta_lading: "Comprar pacote Pro",
+      cta_link: "https://mpago.li/1hYLiqe",
       checkoutPlanId: "pro",
       features: [
         `${qntProDownloads} créditos de download de CV`,
@@ -111,6 +119,8 @@ export function buildPlanCatalog(
       featured: false,
       badge: null,
       cta: "Aplicar para mais vagas",
+      cta_lading: "Comprar pacote Turbo",
+      cta_link: "https://mpago.li/2BQjYW9",
       checkoutPlanId: "turbo",
       features: [
         `${qntTurboDownloads} créditos de download de CV`,

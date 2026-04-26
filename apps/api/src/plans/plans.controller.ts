@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Inject,
   Param,
   Post,
@@ -48,7 +49,18 @@ export class PlansController {
   }
 
   @Post("webhook/:provider")
-  webhook(@Param("provider") provider: string, @Body() body: unknown) {
+  webhook(
+    @Param("provider") provider: string,
+    @Body() body: unknown,
+    @Headers("x-signature") xSignature?: string,
+    @Headers("x-request-id") xRequestId?: string,
+  ) {
+    this.plansService.verifyWebhookSignature(
+      provider,
+      body,
+      xSignature,
+      xRequestId,
+    );
     return this.plansService.handleWebhook(provider, body);
   }
 }

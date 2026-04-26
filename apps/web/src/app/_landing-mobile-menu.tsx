@@ -41,12 +41,23 @@ export function LandingMobileMenu({ isLoggedIn }: Props) {
           z-index: 9;
           background: #f3f2ed;
           border-top: 1px solid rgba(10,10,10,0.07);
+          display: flex;
           flex-direction: column;
           overflow-y: auto;
           padding-bottom: 32px;
-          display: none;
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+          transform: translateY(-10px);
+          transition: opacity 0.22s ease, transform 0.22s ease, visibility 0s linear 0.22s;
         }
-        .lp-mob-nav--open { display: flex !important; }
+        .lp-mob-nav--open {
+          opacity: 1;
+          visibility: visible;
+          pointer-events: auto;
+          transform: translateY(0);
+          transition: opacity 0.22s ease, transform 0.22s ease, visibility 0s linear 0s;
+        }
         .lp-mob-nav-item {
           display: flex;
           align-items: center;

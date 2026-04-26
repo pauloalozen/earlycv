@@ -87,7 +87,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                 margin: "0 0 10px",
               }}
             >
-              Escolha o plano{" "}
+              Escolha o pacote{" "}
               <em
                 style={{
                   fontFamily: SERIF_ITALIC,
@@ -159,9 +159,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                     borderRadius: 16,
                     padding: "18px 18px",
                     background: dark ? "#0a0a0a" : "#fafaf6",
-                    border: dark
-                      ? "none"
-                      : "1px solid rgba(10,10,10,0.08)",
+                    border: dark ? "none" : "1px solid rgba(10,10,10,0.08)",
                     boxShadow: dark
                       ? "0 24px 60px -20px rgba(10,10,10,0.4)"
                       : "0 1px 2px rgba(0,0,0,0.03)",
@@ -179,9 +177,13 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                         fontSize: 9.5,
                         fontWeight: 600,
                         letterSpacing: 0.8,
-                        background: dark ? "rgba(198,255,58,0.2)" : "rgba(10,10,10,0.07)",
+                        background: dark
+                          ? "rgba(198,255,58,0.2)"
+                          : "rgba(10,10,10,0.07)",
                         color: dark ? "#c6ff3a" : "#1a1a1a",
-                        border: dark ? "1px solid rgba(198,255,58,0.25)" : "1px solid rgba(10,10,10,0.12)",
+                        border: dark
+                          ? "1px solid rgba(198,255,58,0.25)"
+                          : "1px solid rgba(10,10,10,0.12)",
                         padding: "3px 8px",
                         borderRadius: 999,
                       }}
@@ -239,9 +241,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                       style={{
                         fontSize: 18,
                         fontWeight: 500,
-                        color: dark
-                          ? "rgba(250,250,246,0.5)"
-                          : "#8a8a85",
+                        color: dark ? "rgba(250,250,246,0.5)" : "#8a8a85",
                         marginBottom: 4,
                       }}
                     >
@@ -291,7 +291,9 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                             ? "0 4px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)"
                             : "none",
                         }}
-                        className={dark ? "planos-cta-dark" : "planos-cta-light"}
+                        className={
+                          dark ? "planos-cta-dark" : "planos-cta-light"
+                        }
                       >
                         {plan.cta}
                       </button>
@@ -367,9 +369,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                           alignItems: "flex-start",
                           gap: 8,
                           fontSize: 12,
-                          color: dark
-                            ? "rgba(250,250,246,0.7)"
-                            : "#45443e",
+                          color: dark ? "rgba(250,250,246,0.7)" : "#45443e",
                           lineHeight: 1.4,
                         }}
                       >

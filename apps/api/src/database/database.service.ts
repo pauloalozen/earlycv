@@ -89,6 +89,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.passwordResetToken;
   }
 
+  get paymentAuditLog() {
+    return this.prisma.paymentAuditLog;
+  }
+
   get $transaction() {
     return this.prisma.$transaction.bind(this.prisma);
   }

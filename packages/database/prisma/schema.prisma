@@ -210,6 +210,9 @@ model PlanPurchase {
   paidAt           DateTime?
   creditsGranted   Int
   analysisCreditsGranted Int       @default(0)
+  mpPaymentId          String?
+  mpMerchantOrderId    String?
+  mpPreferenceId       String?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
@@ -217,6 +220,29 @@ model PlanPurchase {
 
   @@index([userId, createdAt])
   @@index([paymentReference])
+  @@index([mpPaymentId])
+}
+
+model PaymentAuditLog {
+  id                   String   @id @default(cuid())
+  provider             String
+  eventType            String
+  actionTaken          String
+  mpPaymentId          String?
+  mpMerchantOrderId    String?
+  mpPreferenceId       String?
+  externalReference    String?
+  internalCheckoutId   String?
+  internalCheckoutType String?
+  mpStatus             String?
+  errorMessage         String?
+  rawPayload           Json?
+  createdAt            DateTime @default(now())
+
+  @@index([mpPaymentId])
+  @@index([externalReference])
+  @@index([internalCheckoutId])
+  @@index([createdAt])
 }
 
 model PasswordResetToken {
@@ -382,6 +408,9 @@ model CvAdaptation {
   paymentAmountInCents Int?
   paymentCurrency      String?             @default("BRL")
   paidAt               DateTime?
+  mpPaymentId          String?
+  mpMerchantOrderId    String?
+  mpPreferenceId       String?
   failureReason        String?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
@@ -394,6 +423,7 @@ model CvAdaptation {
   @@index([userId, createdAt])
   @@index([masterResumeId])
   @@index([paymentReference])
+  @@index([mpPaymentId])
 }
 
 model JobSource {
