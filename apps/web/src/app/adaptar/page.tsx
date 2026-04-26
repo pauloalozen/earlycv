@@ -365,7 +365,7 @@ export default function AdaptarPage() {
       formData.append("jobDescriptionText", jobDescription);
       const turnstileToken = await requestTurnstileToken();
       appendTurnstileTokenToAnalyzeFormData(formData, turnstileToken);
-      let analyzeResult: Awaited<ReturnType<typeof analyzeGuestCv>>;
+      let analyzeResult: Awaited<ReturnType<typeof analyzeAuthenticatedCv>>;
       if (isAuthenticated && cvMode === "master" && masterResume) {
         formData.append("masterResumeId", masterResume.id);
         emitUiFunnelEvent("analysis_started", {
@@ -415,6 +415,11 @@ export default function AdaptarPage() {
           new Promise((r) => setTimeout(r, 10000)),
         ]);
         analyzeResult = result;
+      }
+      if (!analyzeResult.ok) {
+        setLoading(false);
+        setError(analyzeResult.error);
+        return;
       }
       setLoadingStep(3);
       await new Promise((r) => setTimeout(r, 2000));

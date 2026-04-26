@@ -199,6 +199,10 @@ export type GuestAnalysisResult = {
   masterCvText: string;
 };
 
+export type AnalyzeResult =
+  | ({ ok: true } & GuestAnalysisResult)
+  | { ok: false; error: string };
+
 export type BusinessFunnelEventPayload = {
   eventName: string;
   eventVersion?: number;
@@ -227,19 +231,20 @@ export async function emitBusinessFunnelEvent(
 
 export async function analyzeGuestCv(
   formData: FormData,
-): Promise<GuestAnalysisResult> {
+): Promise<AnalyzeResult> {
   const response = await apiRequest(
     "POST",
     "/cv-adaptation/analyze-guest",
     formData,
   );
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(
-      extractApiErrorMessage(error, "Falha ao analisar CV. Tente novamente."),
-    );
+    const raw = await response.text();
+    return {
+      ok: false,
+      error: extractApiErrorMessage(raw, "Falha ao analisar CV. Tente novamente."),
+    };
   }
-  return response.json() as Promise<GuestAnalysisResult>;
+  return { ok: true, ...(await response.json() as GuestAnalysisResult) };
 }
 
 export async function claimGuestAnalysis(payload: {
@@ -303,15 +308,16 @@ export async function saveGuestPreview(payload: {
 
 export async function analyzeAuthenticatedCv(
   formData: FormData,
-): Promise<GuestAnalysisResult> {
+): Promise<AnalyzeResult> {
   const response = await apiRequest("POST", "/cv-adaptation/analyze", formData);
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(
-      extractApiErrorMessage(error, "Falha ao analisar CV. Tente novamente."),
-    );
+    const raw = await response.text();
+    return {
+      ok: false,
+      error: extractApiErrorMessage(raw, "Falha ao analisar CV. Tente novamente."),
+    };
   }
-  return response.json() as Promise<GuestAnalysisResult>;
+  return { ok: true, ...(await response.json() as GuestAnalysisResult) };
 }
 
 export async function downloadCvAdaptationPdf(id: string): Promise<Blob> {
