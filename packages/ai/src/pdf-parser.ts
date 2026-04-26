@@ -1,5 +1,8 @@
 import pdfParse from "pdf-parse";
 
+// Words that appear exclusively (or almost exclusively) in CVs/resumes.
+// Deliberately excludes generic business words like "empresa", "profissional",
+// "cargo", "company", "work" — those appear in receipts, invoices, contracts.
 const CV_SIGNALS_PT = [
   "experiência",
   "experiencia",
@@ -10,28 +13,27 @@ const CV_SIGNALS_PT = [
   "competencias",
   "educação",
   "educacao",
-  "profissional",
-  "cargo",
-  "empresa",
-  "trabalho",
   "currículo",
   "curriculo",
+  "qualificações",
+  "qualificacoes",
 ];
 
 const CV_SIGNALS_EN = [
   "experience",
   "education",
   "skills",
-  "work",
   "employment",
   "resume",
-  "cv",
-  "professional",
-  "position",
-  "company",
   "university",
   "degree",
   "certification",
+  "projects",
+  "summary",
+  "references",
+  "achievements",
+  "objective",
+  "volunteer",
 ];
 
 const MIN_CV_CHARS = 100;
@@ -44,6 +46,24 @@ export class NotACvError extends Error {
       "O arquivo enviado não parece ser um currículo. Por favor, envie um arquivo PDF com seu currículo profissional.",
     );
     this.name = "NotACvError";
+  }
+}
+
+export class PasswordProtectedPdfError extends Error {
+  constructor() {
+    super(
+      "Não foi possível ler o arquivo. Verifique se o PDF não está protegido por senha ou corrompido.",
+    );
+    this.name = "PasswordProtectedPdfError";
+  }
+}
+
+export class ScannedPdfError extends Error {
+  constructor() {
+    super(
+      "Não conseguimos ler o texto do PDF. Envie um arquivo com texto selecionável.",
+    );
+    this.name = "ScannedPdfError";
   }
 }
 
@@ -66,12 +86,8 @@ export async function extractTextFromPdf(
     const data = await pdfParse(buffer);
     const text = data.text.trim();
 
-    if (!text) {
-      throw new Error("PDF contains no extractable text");
-    }
-
-    if (text.length < MIN_CV_CHARS) {
-      throw new Error("PDF content is too short to be a valid resume");
+    if (!text || text.length < MIN_CV_CHARS) {
+      throw new ScannedPdfError();
     }
 
     if (options.validateCv && !looksLikeCv(text)) {
@@ -81,15 +97,12 @@ export async function extractTextFromPdf(
     return text.slice(0, MAX_CV_CHARS);
   } catch (error) {
     if (
-      error instanceof Error &&
-      (error.message.includes("PDF contains no extractable text") ||
-        error.message.includes("too short") ||
-        error instanceof NotACvError)
+      error instanceof NotACvError ||
+      error instanceof PasswordProtectedPdfError ||
+      error instanceof ScannedPdfError
     ) {
       throw error;
     }
-    throw new Error(
-      `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
-    );
+    throw new PasswordProtectedPdfError();
   }
 }

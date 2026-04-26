@@ -350,6 +350,10 @@ export default function AdaptarPage() {
       setError("Selecione seu CV em PDF.");
       return;
     }
+    if (file && file.size > 5 * 1024 * 1024) {
+      setError("O arquivo é muito grande. Envie um PDF de até 5 MB.");
+      return;
+    }
     if (!jobDescription.trim()) {
       setError("Cole a descrição da vaga.");
       return;

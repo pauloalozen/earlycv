@@ -1,8 +1,14 @@
-import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -15,7 +21,10 @@ import { StorageService } from "../storage/storage.service";
 
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
-import { CvAdaptationPaymentService } from "./cv-adaptation-payment.service";
+import {
+  CvAdaptationPaymentService,
+  type WebhookPaymentResolution,
+} from "./cv-adaptation-payment.service";
 import {
   CvAdaptationPdfService,
   type TemplateStructureJson,
@@ -31,8 +40,24 @@ import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 import { createCvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
 import type { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
 
+type AuditEntry = {
+  eventType: string;
+  actionTaken: string;
+  mpPaymentId?: string | null;
+  mpMerchantOrderId?: string | null;
+  mpPreferenceId?: string | null;
+  externalReference?: string | null;
+  internalCheckoutId?: string | null;
+  internalCheckoutType?: string;
+  mpStatus?: string | null;
+  errorMessage?: string | null;
+  rawPayload?: object | null;
+};
+
 @Injectable()
 export class CvAdaptationService {
+  private readonly logger = new Logger(CvAdaptationService.name);
+
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(CvAdaptationAiService)
@@ -60,6 +85,8 @@ export class CvAdaptationService {
   ) {}
 
   async create(userId: string, dto: CreateCvAdaptationDto, file?: FileUpload) {
+    this.validateJobDescription(dto.jobDescriptionText);
+
     let masterResumeId = dto.masterResumeId;
     let masterCvText: string | null = null;
 
@@ -68,11 +95,11 @@ export class CvAdaptationService {
       // Extract text from PDF
       try {
         const { extractTextFromPdf } = await import("@earlycv/ai");
-        masterCvText = await extractTextFromPdf(file.buffer, { validateCv: true });
+        masterCvText = await extractTextFromPdf(file.buffer, {
+          validateCv: true,
+        });
       } catch (error) {
-        throw new BadRequestException(
-          `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
-        );
+        this.mapPdfExtractionError(error);
       }
 
       const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
@@ -334,6 +361,8 @@ export class CvAdaptationService {
       throw new BadRequestException("PDF file is required.");
     }
 
+    this.validateJobDescription(jobDescriptionText);
+
     const protectionResult =
       await this.protectedAnalyzeService.executeProtectedAnalyze({
         context: this.buildProtectionContext(
@@ -347,9 +376,7 @@ export class CvAdaptationService {
             const { extractTextFromPdf } = await import("@earlycv/ai");
             return await extractTextFromPdf(file.buffer, { validateCv: true });
           } catch (error) {
-            throw new BadRequestException(
-              `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
-            );
+            this.mapPdfExtractionError(error);
           }
         },
         payload: {
@@ -380,6 +407,8 @@ export class CvAdaptationService {
     previewText: string;
     masterCvText: string;
   }> {
+    this.validateJobDescription(dto.jobDescriptionText);
+
     const protectionResult =
       await this.protectedAnalyzeService.executeProtectedAnalyze({
         context: this.buildProtectionContext(
@@ -394,11 +423,11 @@ export class CvAdaptationService {
 
             try {
               const { extractTextFromPdf } = await import("@earlycv/ai");
-              masterCvText = await extractTextFromPdf(file.buffer, { validateCv: true });
+              masterCvText = await extractTextFromPdf(file.buffer, {
+                validateCv: true,
+              });
             } catch (error) {
-              throw new BadRequestException(
-                `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
-              );
+              this.mapPdfExtractionError(error);
             }
 
             if (dto.saveAsMaster) {
@@ -690,6 +719,9 @@ export class CvAdaptationService {
         paymentReference: intent.paymentReference,
         paymentAmountInCents: intent.amountInCents,
         paymentCurrency: intent.currency,
+        ...(intent.mpPreferenceId
+          ? { mpPreferenceId: intent.mpPreferenceId }
+          : {}),
       },
     });
 
@@ -704,65 +736,26 @@ export class CvAdaptationService {
   async confirmPayment(userId: string, id: string) {
     const adaptation = await this.database.cvAdaptation.findFirst({
       where: { id, userId },
+      include: { template: { select: { id: true, name: true, slug: true } } },
     });
 
     if (!adaptation) {
       throw new NotFoundException("adaptation not found");
     }
 
-    if (adaptation.status === "delivered") {
-      return createCvAdaptationResponseDto(
-        await this.database.cvAdaptation.findUniqueOrThrow({
-          where: { id },
-          include: {
-            template: { select: { id: true, name: true, slug: true } },
-          },
-        }),
-      );
+    // Webhook already confirmed — return success
+    if (adaptation.paymentStatus === "completed") {
+      return createCvAdaptationResponseDto(adaptation);
     }
 
-    if (adaptation.status !== "awaiting_payment") {
-      throw new BadRequestException(
-        `Cannot confirm payment. Current status: ${adaptation.status}`,
-      );
+    if (adaptation.paymentStatus === "failed") {
+      throw new BadRequestException("Pagamento recusado. Tente novamente.");
     }
 
-    if (!adaptation.paymentReference) {
-      throw new BadRequestException(
-        "No payment reference found for this adaptation.",
-      );
-    }
-
-    const approved = await this.paymentService.checkPaymentApprovedByReference(
-      adaptation.paymentReference,
+    // Not yet confirmed by webhook — frontend must poll the status endpoint
+    throw new BadRequestException(
+      "Pagamento ainda não confirmado. Aguarde a confirmação.",
     );
-
-    if (!approved) {
-      throw new BadRequestException("Payment not approved yet.");
-    }
-
-    await this.database.cvAdaptation.update({
-      where: { id },
-      data: {
-        paymentStatus: "completed",
-        paidAt: new Date(),
-        status: "paid",
-      },
-    });
-
-    this.deliverAdaptation(id).catch((err) => {
-      console.error(
-        `Delivery failed for adaptation ${id}:`,
-        err instanceof Error ? err.message : String(err),
-      );
-    });
-
-    const updated = await this.database.cvAdaptation.findUniqueOrThrow({
-      where: { id },
-      include: { template: { select: { id: true, name: true, slug: true } } },
-    });
-
-    return createCvAdaptationResponseDto(updated);
   }
 
   async redeemWithCredit(userId: string, id: string) {
@@ -843,8 +836,8 @@ export class CvAdaptationService {
       const [k, v] = part.split("=");
       if (k && v) parts[k.trim()] = v.trim();
     }
-    const ts = parts["ts"];
-    const v1 = parts["v1"];
+    const ts = parts.ts;
+    const v1 = parts.v1;
 
     if (!ts || !v1) {
       throw new UnauthorizedException("Invalid webhook signature format");
@@ -875,46 +868,191 @@ export class CvAdaptationService {
   }
 
   async handleWebhook(provider: string, body: unknown) {
-    const paymentReference = await this.paymentService.resolvePaymentReference(
-      provider,
-      body,
-    );
+    this.logger.log(`[webhook:cv-adaptation] received`);
 
-    if (!paymentReference) {
+    let resolution: WebhookPaymentResolution;
+    try {
+      resolution = await this.paymentService.resolveWebhookPayment(
+        provider,
+        body,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `[webhook:cv-adaptation] error resolving payment: ${msg}`,
+      );
+      this.logAuditEvent({
+        eventType: "unexpected_error",
+        actionTaken: "error",
+        errorMessage: msg,
+        rawPayload: body as object,
+      });
       return { acknowledged: true };
     }
 
-    // Find adaptation by payment reference
+    if (!resolution.paymentReference) {
+      this.logger.log(`[webhook:cv-adaptation] ignored — no payment reference`);
+      this.logAuditEvent({
+        eventType: "webhook_received",
+        actionTaken: "ignored",
+        mpPaymentId: resolution.paymentId,
+        mpStatus: resolution.rawStatus,
+        rawPayload: body as object,
+      });
+      return { acknowledged: true };
+    }
+
+    const auditBase = {
+      mpPaymentId: resolution.paymentId,
+      mpMerchantOrderId: resolution.merchantOrderId,
+      mpPreferenceId: resolution.preferenceId,
+      externalReference: resolution.paymentReference,
+      internalCheckoutType: "adaptation",
+      mpStatus: resolution.rawStatus,
+      rawPayload: body as object,
+    };
+
+    if (resolution.status === "failed") {
+      const adaptation = await this.database.cvAdaptation.findFirst({
+        where: { paymentReference: resolution.paymentReference },
+      });
+
+      if (
+        adaptation &&
+        adaptation.paymentStatus !== "completed" &&
+        adaptation.paymentStatus !== "failed"
+      ) {
+        await this.database.cvAdaptation.update({
+          where: { id: adaptation.id },
+          data: {
+            paymentStatus: "failed",
+            ...(!adaptation.mpPaymentId && resolution.paymentId
+              ? { mpPaymentId: resolution.paymentId }
+              : {}),
+          },
+        });
+      }
+
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "payment_rejected",
+        actionTaken: "failed",
+        internalCheckoutId: adaptation?.id ?? null,
+      });
+      return { acknowledged: true };
+    }
+
+    if (resolution.status !== "approved") {
+      this.logger.log(
+        `[webhook:cv-adaptation] ignored — status is ${resolution.rawStatus}`,
+      );
+      const adaptation = await this.database.cvAdaptation.findFirst({
+        where: { paymentReference: resolution.paymentReference },
+      });
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "payment_pending",
+        actionTaken: "pending",
+        internalCheckoutId: adaptation?.id ?? null,
+      });
+      return { acknowledged: true };
+    }
+
     const adaptation = await this.database.cvAdaptation.findFirst({
-      where: { paymentReference },
+      where: { paymentReference: resolution.paymentReference },
     });
 
     if (!adaptation) {
-      console.warn(
-        `Webhook received for unknown payment reference: ${paymentReference}`,
+      this.logger.warn(
+        `[webhook:cv-adaptation] unknown paymentReference: ${resolution.paymentReference}`,
       );
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "webhook_received",
+        actionTaken: "ignored",
+        errorMessage: "adaptation not found for paymentReference",
+      });
       return { acknowledged: true };
     }
 
-    // Update status to completed
-    await this.database.cvAdaptation.update({
-      where: { id: adaptation.id },
-      data: {
-        paymentStatus: "completed",
-        paidAt: new Date(),
-        status: "paid",
-      },
+    if (adaptation.paymentStatus === "completed") {
+      this.logger.log(
+        `[webhook:cv-adaptation] already processed — adaptation ${adaptation.id}`,
+      );
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "webhook_duplicated",
+        actionTaken: "duplicated",
+        internalCheckoutId: adaptation.id,
+      });
+      return { acknowledged: true };
+    }
+
+    // Atomic: re-check inside transaction to prevent double-credit on concurrent webhooks
+    await this.database.$transaction(async (tx) => {
+      const current = await tx.cvAdaptation.findUnique({
+        where: { id: adaptation.id },
+      });
+      if (!current || current.paymentStatus === "completed") return;
+
+      await tx.cvAdaptation.update({
+        where: { id: adaptation.id },
+        data: {
+          paymentStatus: "completed",
+          paidAt: new Date(),
+          status: "paid",
+          ...(!current.mpPaymentId && resolution.paymentId
+            ? { mpPaymentId: resolution.paymentId }
+            : {}),
+          ...(!current.mpMerchantOrderId && resolution.merchantOrderId
+            ? { mpMerchantOrderId: resolution.merchantOrderId }
+            : {}),
+        },
+      });
     });
 
-    // Trigger delivery pipeline (generate PDF, create adapted Resume)
+    this.logger.log(
+      `[webhook:cv-adaptation] payment approved — adaptation ${adaptation.id}`,
+    );
+    this.logAuditEvent({
+      ...auditBase,
+      eventType: "payment_approved",
+      actionTaken: "approved",
+      internalCheckoutId: adaptation.id,
+    });
+
     this.deliverAdaptation(adaptation.id).catch((err) => {
-      console.error(
-        `Delivery failed for adaptation ${adaptation.id}:`,
-        err instanceof Error ? err.message : String(err),
+      this.logger.error(
+        `[webhook:cv-adaptation] delivery failed for ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
     });
 
     return { acknowledged: true };
+  }
+
+  private logAuditEvent(entry: AuditEntry): void {
+    this.database.paymentAuditLog
+      .create({
+        data: {
+          provider: "mercadopago",
+          eventType: entry.eventType,
+          actionTaken: entry.actionTaken,
+          mpPaymentId: entry.mpPaymentId ?? null,
+          mpMerchantOrderId: entry.mpMerchantOrderId ?? null,
+          mpPreferenceId: entry.mpPreferenceId ?? null,
+          externalReference: entry.externalReference ?? null,
+          internalCheckoutId: entry.internalCheckoutId ?? null,
+          internalCheckoutType: entry.internalCheckoutType ?? null,
+          mpStatus: entry.mpStatus ?? null,
+          errorMessage: entry.errorMessage ?? null,
+          ...(entry.rawPayload != null
+            ? { rawPayload: entry.rawPayload as Prisma.InputJsonValue }
+            : {}),
+        },
+      })
+      .catch((err: unknown) => {
+        this.logger.error(`[audit] write failed: ${err}`);
+      });
   }
 
   async downloadPdf(userId: string, id: string, res: Response): Promise<void> {
@@ -1429,6 +1567,77 @@ export class CvAdaptationService {
         status: { not: "failed" },
       },
     });
+  }
+
+  private mapPdfExtractionError(error: unknown): never {
+    if (error instanceof Error) {
+      if (error.name === "NotACvError") {
+        this.logger.warn("[cv-validation] uploaded file does not look like a CV");
+        throw new BadRequestException(
+          "O arquivo enviado não parece ser um currículo. Envie um CV em PDF para análise.",
+        );
+      }
+      if (error.name === "ScannedPdfError") {
+        this.logger.warn("[cv-validation] PDF has no extractable text (scanned/image)");
+        throw new BadRequestException(
+          "Não conseguimos ler o texto do PDF. Envie um arquivo com texto selecionável.",
+        );
+      }
+      this.logger.warn(`[cv-validation] PDF extraction failed: ${error.message}`);
+    }
+    throw new BadRequestException(
+      "Não foi possível ler o arquivo. Verifique se o PDF não está protegido por senha ou corrompido.",
+    );
+  }
+
+  private validateJobDescription(text: string): void {
+    const JOB_MIN_CHARS = 80;
+    const JOB_SIGNALS = [
+      "requisitos",
+      "responsabilidades",
+      "vaga",
+      "experiência",
+      "experiencia",
+      "habilidades",
+      "perfil",
+      "função",
+      "funcao",
+      "cargo",
+      "empresa",
+      "contratação",
+      "contratacao",
+      "candidato",
+      "oportunidade",
+      "buscamos",
+      "procuramos",
+      "requirements",
+      "responsibilities",
+      "job",
+      "position",
+      "skills",
+      "role",
+      "company",
+      "hiring",
+      "candidate",
+    ];
+
+    if (!text || text.trim().length < JOB_MIN_CHARS) {
+      this.logger.warn("[cv-validation] job description too short");
+      throw new BadRequestException(
+        "O texto informado não parece uma descrição de vaga. Cole uma descrição válida para continuar.",
+      );
+    }
+
+    const lower = text.toLowerCase();
+    const hasSignal = JOB_SIGNALS.some((s) => lower.includes(s));
+    if (!hasSignal) {
+      this.logger.warn(
+        "[cv-validation] job description does not look like a job posting",
+      );
+      throw new BadRequestException(
+        "O texto informado não parece uma descrição de vaga. Cole uma descrição válida para continuar.",
+      );
+    }
   }
 
   private async uploadResumeSourceFile(userId: string, file: FileUpload) {
