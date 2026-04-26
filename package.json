@@ -22,7 +22,8 @@
     "db:generate": "if [ -f packages/database/package.json ]; then npm run generate --workspace packages/database; else printf 'packages/database workspace not created yet; skipping db:generate.\\n'; fi",
     "db:migrate": "if [ -f packages/database/package.json ]; then npm run migrate --workspace packages/database; else printf 'packages/database workspace not created yet; skipping db:migrate.\\n'; fi",
     "compose:up": "if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yml ] || [ -f compose.yaml ]; then docker compose up -d; else printf 'Compose file not created yet; skipping compose:up.\\n'; fi",
-    "compose:down": "if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yml ] || [ -f compose.yaml ]; then docker compose down; else printf 'Compose file not created yet; skipping compose:down.\\n'; fi"
+    "compose:down": "if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yml ] || [ -f compose.yaml ]; then docker compose down; else printf 'Compose file not created yet; skipping compose:down.\\n'; fi",
+    "railway:touch-api": "date +%Y-%m-%dT%H:%M:%S > apps/api/.railway-redeploy"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.9"

@@ -1,2 +1,5 @@
 [phases.setup]
 nixPkgs = ["libreoffice", "poppler_utils"]
+
+[start]
+cmd = "npm run start --workspace @earlycv/api"
