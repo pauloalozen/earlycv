@@ -69,7 +69,9 @@ export default function PrivacyPage() {
           borderBottom: "1px solid rgba(0,0,0,0.04)",
         }}
       >
-        <Logo />
+        <a href="/" style={{ display: "flex", textDecoration: "none" }}>
+          <Logo />
+        </a>
         <Link
           href="/"
           style={{

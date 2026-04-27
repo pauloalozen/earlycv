@@ -87,7 +87,10 @@ export default function Home() {
         className="lp-nav"
       >
         {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Link
+          href="/"
+          style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
+        >
           <Logo />
           <span
             style={{
@@ -102,7 +105,7 @@ export default function Home() {
           >
             v1.2
           </span>
-        </div>
+        </Link>
 
         {/* Nav right + mobile — client component (keeps landing page static/cacheable) */}
         <LandingNavAuth />
