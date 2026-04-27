@@ -10,16 +10,14 @@ Testes Pagamentos:
 Testes Arquivos de CV e Descrição de vagas:
 [ ] PDF com senha mostra mensagem amigável
 [ ] PDF escaneado mostra mensagem específica
-[ ] PDF que não é CV é barrado antes da IA
+[X] PDF que não é CV é barrado antes da IA
 [ ] CV em inglês não é barrado
-[ ] Descrição de vaga inválida é barrada antes da IA
+[X] Descrição de vaga inválida é barrada antes da IA
 [ ] Erros técnicos ficam só no log interno
 
 1. PDF com senha
 2. PDF escaneado
-3. PDF de boleto/contrato
-4. CV em PT-BR
-5. CV em inglês
-6. Descrição de vaga válida PT-BR
-7. Descrição de vaga válida EN
-8. Texto aleatório no campo da vaga
+3. CV em PT-BR
+4. CV em inglês
+5. Descrição de vaga válida PT-BR
+6. Descrição de vaga válida EN
