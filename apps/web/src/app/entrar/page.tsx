@@ -405,7 +405,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
             .entrar-footer { display: none !important; }
             .entrar-desc { display: none !important; }
             .entrar-badge { display: none !important; }
-            .entrar-body { padding-left: 0 !important; justify-content: flex-start !important; }
+            .entrar-body { padding-left: 0 !important; justify-content: flex-start !important; padding-top: 28px !important; }
             .entrar-h1 { margin: 0 !important; font-size: 38px !important; }
             .entrar-form-title { font-size: 22px !important; }
           }
