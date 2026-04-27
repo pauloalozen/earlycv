@@ -269,6 +269,18 @@ export function AppHeader({
                           </>
                         ),
                       },
+                      {
+                        href: "/compras",
+                        label: "Minhas compras",
+                        icon: (
+                          <>
+                            <rect x="1" y="3" width="15" height="13" rx="2" />
+                            <path d="M16 8h2a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                            <path d="M5 8h6" />
+                            <path d="M5 12h6" />
+                          </>
+                        ),
+                      },
                     ].map((item) => (
                       <a
                         key={item.href}
@@ -448,6 +460,7 @@ export function AppHeader({
             {[
               { href: "/dashboard", label: "Dashboard" },
               { href: "/adaptar", label: "Adaptar CV" },
+              { href: "/compras", label: "Minhas compras" },
             ].map((item) => (
               <a
                 key={item.href}

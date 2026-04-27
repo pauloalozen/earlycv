@@ -706,12 +706,23 @@ export class CvAdaptationService {
       );
     }
 
+    if (adaptation.paymentStatus === "completed") {
+      throw new BadRequestException("Pagamento já confirmado para esta análise.");
+    }
+
+    // If a paymentReference already exists (pending), reuse it to avoid orphaning
+    // a payment made on a previously generated MP preference.
+    const existingReference =
+      adaptation.paymentStatus === "pending" && adaptation.paymentReference
+        ? adaptation.paymentReference
+        : null;
+
     const intent = await this.paymentService.createIntent(
       adaptation.id,
       userId,
+      existingReference ?? undefined,
     );
 
-    // Store payment reference and set status to pending
     await this.database.cvAdaptation.update({
       where: { id },
       data: {

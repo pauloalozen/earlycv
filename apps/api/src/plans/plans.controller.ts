@@ -51,6 +51,12 @@ export class PlansController {
     return this.plansService.getPlanInfo(user.id);
   }
 
+  @Get("purchases/me")
+  @UseGuards(JwtAuthGuard)
+  listMyPurchases(@AuthenticatedUser() user: { id: string }) {
+    return this.plansService.listMyPurchases(user.id);
+  }
+
   @Post("webhook/:provider")
   webhook(
     @Param("provider") provider: string,

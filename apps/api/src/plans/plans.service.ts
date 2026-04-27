@@ -95,12 +95,95 @@ export class PlansService {
     private readonly businessFunnelEventService: BusinessFunnelEventService,
   ) {}
 
+  async listMyPurchases(userId: string): Promise<
+    {
+      id: string;
+      planType: string;
+      planName: string | null;
+      amountInCents: number;
+      currency: string;
+      status: string;
+      paidAt: string | null;
+      creditsGranted: number;
+      analysisCreditsGranted: number;
+      mpPaymentId: string | null;
+      mpPreferenceId: string | null;
+      paymentReference: string;
+      createdAt: string;
+      pendingPaymentUrl: string | null;
+    }[]
+  > {
+    const purchases = await this.database.planPurchase.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        planType: true,
+        amountInCents: true,
+        currency: true,
+        status: true,
+        paidAt: true,
+        creditsGranted: true,
+        analysisCreditsGranted: true,
+        mpPaymentId: true,
+        mpPreferenceId: true,
+        paymentReference: true,
+        createdAt: true,
+      },
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3000";
+
+    return purchases.map((p) => ({
+      id: p.id,
+      planType: p.planType,
+      planName: planTypeToDisplayName(p.planType),
+      amountInCents: p.amountInCents,
+      currency: p.currency,
+      status: p.status,
+      paidAt: p.paidAt?.toISOString() ?? null,
+      creditsGranted: p.creditsGranted,
+      analysisCreditsGranted: p.analysisCreditsGranted,
+      mpPaymentId: p.mpPaymentId ?? null,
+      mpPreferenceId: p.mpPreferenceId ?? null,
+      paymentReference: p.paymentReference,
+      createdAt: p.createdAt.toISOString(),
+      pendingPaymentUrl:
+        p.status === "pending" || p.status === "none"
+          ? `${frontendUrl}/pagamento/pendente?checkoutId=${p.id}`
+          : null,
+    }));
+  }
+
   async createCheckout(
     userId: string,
     planId: PlanId,
     adaptationId?: string,
   ): Promise<{ checkoutUrl: string; purchaseId: string }> {
     const plan = PLAN_CONFIG[planId];
+
+    const existing = await this.database.planPurchase.findFirst({
+      where: {
+        userId,
+        planType: planId as UserPlanType,
+        status: { in: ["none", "pending"] },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (existing) {
+      this.logger.log(
+        `[checkout] reusing existing purchase ${existing.id} for user ${userId}`,
+      );
+      const checkoutUrl = await this.createMercadoPagoPreference(
+        existing.id,
+        existing.paymentReference,
+        plan,
+        adaptationId,
+      );
+      return { checkoutUrl, purchaseId: existing.id };
+    }
+
     const paymentReference = randomUUID();
 
     const purchase = await this.database.planPurchase.create({
@@ -740,4 +823,14 @@ export class PlansService {
       rawStatus,
     };
   }
+}
+
+function planTypeToDisplayName(planType: string): string | null {
+  const names: Record<string, string> = {
+    starter: "Starter",
+    pro: "Pro",
+    turbo: "Turbo",
+    unlimited: "Ilimitado",
+  };
+  return names[planType] ?? null;
 }

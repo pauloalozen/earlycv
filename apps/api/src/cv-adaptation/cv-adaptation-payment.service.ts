@@ -35,9 +35,10 @@ export class CvAdaptationPaymentService {
   async createIntent(
     adaptationId: string,
     _userId: string,
+    existingReference?: string,
   ): Promise<PaymentIntent> {
     if (this.provider === "mercadopago") {
-      return this.createMercadoPagoIntent(adaptationId);
+      return this.createMercadoPagoIntent(adaptationId, existingReference);
     }
 
     throw new BadRequestException(
@@ -71,11 +72,12 @@ export class CvAdaptationPaymentService {
 
   private async createMercadoPagoIntent(
     adaptationId: string,
+    existingReference?: string,
   ): Promise<PaymentIntent> {
     const client = this.getMercadoPagoClient();
     const preference = new Preference(client);
 
-    const paymentReference = randomUUID();
+    const paymentReference = existingReference ?? randomUUID();
     const priceInReais = this.priceInCents / 100;
 
     const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3000";

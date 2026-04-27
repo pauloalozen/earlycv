@@ -9,10 +9,33 @@ export type PlanInfo = {
   isActive: boolean;
 };
 
+export type PurchaseItem = {
+  id: string;
+  planType: string;
+  planName: string | null;
+  amountInCents: number;
+  currency: string;
+  status: "none" | "pending" | "completed" | "failed" | "refunded";
+  paidAt: string | null;
+  creditsGranted: number;
+  analysisCreditsGranted: number;
+  mpPaymentId: string | null;
+  mpPreferenceId: string | null;
+  paymentReference: string;
+  createdAt: string;
+  pendingPaymentUrl: string | null;
+};
+
 export async function getMyPlan(): Promise<PlanInfo> {
   const response = await apiRequest("GET", "/plans/me");
   if (!response.ok) throw new Error("Failed to fetch plan info");
   return response.json() as Promise<PlanInfo>;
+}
+
+export async function listMyPurchases(): Promise<PurchaseItem[]> {
+  const response = await apiRequest("GET", "/plans/purchases/me");
+  if (!response.ok) throw new Error("Failed to fetch purchases");
+  return response.json() as Promise<PurchaseItem[]>;
 }
 
 export async function createPlanCheckout(
