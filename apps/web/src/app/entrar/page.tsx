@@ -212,6 +212,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
 
             {/* Receipt */}
             <div
+              className="entrar-receipt"
               style={{
                 borderTop: "1px solid rgba(250,250,246,0.12)",
                 paddingTop: 16,
@@ -243,6 +244,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
 
           {/* Footer */}
           <div
+            className="entrar-footer"
             style={{
               display: "flex",
               justifyContent: "space-between",
@@ -392,8 +394,10 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
           .entrar-google-btn:hover { background: #f5f4ee !important; }
           @media (max-width: 760px) {
             .entrar-grid { grid-template-columns: 1fr !important; }
-            .entrar-left { min-height: auto !important; padding: 28px 24px !important; }
+            .entrar-left { min-height: auto !important; padding: 48px 24px 24px !important; }
             .entrar-right { min-height: auto !important; }
+            .entrar-receipt { display: none !important; }
+            .entrar-footer { display: none !important; }
           }
         `}</style>
       </main>

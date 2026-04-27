@@ -240,7 +240,8 @@ export default function Home() {
                 }}
                 className="lp-cta-primary"
               >
-                <span>Analisar meu CV grátis</span>
+                <span className="lp-cta-text-desktop">Analisar meu CV grátis</span>
+                <span className="lp-cta-text-mobile">Testar grátis</span>
                 <span className="lp-cta-arrow">→</span>
               </Link>
               <Link
@@ -897,6 +898,12 @@ export default function Home() {
       {/* CSS for CTA hover + responsive + smooth scroll + scroll reveal */}
       <style>{`
         html { scroll-behavior: smooth; }
+
+        .lp-cta-text-mobile { display: none; }
+        @media (max-width: 768px) {
+          .lp-cta-text-desktop { display: none; }
+          .lp-cta-text-mobile { display: inline; }
+        }
 
         .lp-cta-primary { transition: transform 180ms, box-shadow 180ms !important; }
         .lp-cta-primary:hover {

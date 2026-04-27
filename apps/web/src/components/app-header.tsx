@@ -122,11 +122,22 @@ export function AppHeader({
           .app-hdr-desktop { display: none !important; }
           .app-hdr-burger { display: flex; }
           .app-hdr-mob-nav {
-            display: none;
+            display: flex;
             background: ${mobileBg};
             border-top: 1px solid rgba(10,10,10,0.07);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transform: translateY(-10px);
+            transition: opacity 0.22s ease, transform 0.22s ease, visibility 0s linear 0.22s;
           }
-          .app-hdr-mob-nav--open { display: flex !important; }
+          .app-hdr-mob-nav--open {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+            transform: translateY(0);
+            transition: opacity 0.22s ease, transform 0.22s ease, visibility 0s linear 0s;
+          }
         }
       `}</style>
 

@@ -105,7 +105,13 @@ export function HistoryActionLinks({
   };
 
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div className="history-actions mt-3 flex flex-wrap gap-2">
+      <style>{`
+        @media (max-width: 640px) {
+          .history-actions { display: grid !important; grid-template-columns: 1fr 1fr; }
+          .history-actions > * { width: 100%; justify-content: center; }
+        }
+      `}</style>
       <a
         href={actions.resultHref}
         onClick={(event) => {
