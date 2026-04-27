@@ -399,7 +399,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
           .entrar-google-btn:hover { background: #f5f4ee !important; }
           @media (max-width: 760px) {
             .entrar-grid { grid-template-columns: 1fr !important; }
-            .entrar-left { min-height: auto !important; padding: 52px 24px 20px !important; }
+            .entrar-left { min-height: auto !important; padding: 18px 24px 20px !important; }
             .entrar-right { min-height: auto !important; padding: 24px 24px 32px !important; }
             .entrar-receipt { display: none !important; }
             .entrar-footer { display: none !important; }
