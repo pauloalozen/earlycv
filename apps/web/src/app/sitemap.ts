@@ -14,12 +14,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1,
     },
     {
-      url: getAbsoluteUrl("/ui"),
-      lastModified,
-      changeFrequency: "monthly",
-      priority: 0.2,
-    },
-    {
       url: getAbsoluteUrl("/privacidade"),
       lastModified,
       changeFrequency: "yearly",

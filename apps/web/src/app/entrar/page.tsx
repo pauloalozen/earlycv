@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Logo } from "@/components/logo";
 import { PageShell } from "@/components/page-shell";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
@@ -91,11 +92,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
                 textDecoration: "none",
               }}
             >
-              <img
-                src="/logo-white.svg"
-                alt="earlyCV"
-                style={{ height: 26, width: "auto", display: "block" }}
-              />
+              <Logo variant="dark" />
               <span
                 style={{
                   fontFamily: MONO,

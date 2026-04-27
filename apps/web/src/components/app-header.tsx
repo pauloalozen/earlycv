@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Logo } from "@/components/logo";
 
 const MONO = "var(--font-geist-mono), monospace";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -141,21 +142,16 @@ export function AppHeader({
               textDecoration: "none",
             }}
           >
-            <img
-              src={variant === "light" ? "/logo-white.svg" : "/logo.svg"}
-              alt="earlyCV"
-              style={{
-                height: logoSize === "sm" ? 22 : 26,
-                width: "auto",
-                display: "block",
-              }}
+            <Logo
+              variant={variant === "light" ? "dark" : "light"}
+              size={logoSize === "sm" ? "sm" : "md"}
             />
             <span
               style={{
                 fontFamily: MONO,
                 fontSize: 10,
-                color: "#8a8a85",
-                border: "1px solid #d8d6ce",
+                color: variant === "light" ? "#555551" : "#8a8a85",
+                border: `1px solid ${variant === "light" ? "#3a3a38" : "#d8d6ce"}`,
                 borderRadius: 3,
                 padding: "1px 5px",
                 fontWeight: 500,
@@ -470,7 +466,11 @@ export function AppHeader({
               Contato
             </a>
             <div className="app-hdr-mob-nav-sep" />
-            <form action="/auth/logout" method="post" className="app-hdr-mob-nav-form">
+            <form
+              action="/auth/logout"
+              method="post"
+              className="app-hdr-mob-nav-form"
+            >
               <button type="submit" className="app-hdr-mob-nav-btn">
                 Sair
               </button>

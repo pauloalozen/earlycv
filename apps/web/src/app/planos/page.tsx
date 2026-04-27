@@ -80,14 +80,14 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
           <div style={{ textAlign: "center", marginBottom: 20 }}>
             <h1
               style={{
-                fontSize: "clamp(30px, 3.5vw, 44px)",
+                fontSize: "clamp(28px, 3.5vw, 44px)",
                 fontWeight: 500,
                 letterSpacing: -2,
-                lineHeight: 1.02,
-                margin: "0 0 10px",
+                lineHeight: 1.05,
+                margin: "0 0 12px",
               }}
             >
-              Escolha o pacote{" "}
+              Seu CV não passa no filtro automático.{" "}
               <em
                 style={{
                   fontFamily: SERIF_ITALIC,
@@ -95,7 +95,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                   fontWeight: 400,
                 }}
               >
-                certo para você.
+                Mude isso.
               </em>
             </h1>
             <p
@@ -104,7 +104,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                 color: "#45443e",
                 lineHeight: 1.5,
                 maxWidth: 480,
-                margin: "0 auto",
+                margin: "0 auto 12px",
               }}
             >
               Um único CV bem ajustado pode ser a diferença entre ser ignorado
@@ -143,12 +143,15 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
             style={{
               display: "grid",
               gridTemplateColumns: `repeat(${PLANS.length}, 1fr)`,
-              gap: 12,
+              gap: 16,
               marginBottom: 24,
+              alignItems: "stretch",
+              paddingTop: 12,
             }}
           >
             {PLANS.map((plan) => {
               const dark = plan.featured;
+              const priceNum = plan.price.replace("R$", "");
               return (
                 <div
                   key={plan.id}
@@ -157,59 +160,58 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                     display: "flex",
                     flexDirection: "column",
                     borderRadius: 16,
-                    padding: "18px 18px",
+                    padding: "22px 22px 24px",
                     background: dark ? "#0a0a0a" : "#fafaf6",
                     border: dark ? "none" : "1px solid rgba(10,10,10,0.08)",
                     boxShadow: dark
-                      ? "0 24px 60px -20px rgba(10,10,10,0.4)"
-                      : "0 1px 2px rgba(0,0,0,0.03)",
+                      ? "0 28px 70px -20px rgba(10,10,10,0.4)"
+                      : "0 1px 2px rgba(0,0,0,0.02)",
                     color: dark ? "#fafaf6" : "#0a0a0a",
                   }}
                 >
-                  {/* Badge */}
-                  {plan.badge && (
-                    <span
+                  {/* Badge — floats above card for featured */}
+                  {dark && plan.badge && (
+                    <div
                       style={{
                         position: "absolute",
-                        top: 16,
-                        right: 16,
+                        top: -12,
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        background: "#c6ff3a",
+                        color: "#0a0a0a",
                         fontFamily: MONO,
-                        fontSize: 9.5,
+                        fontSize: 10,
                         fontWeight: 600,
-                        letterSpacing: 0.8,
-                        background: dark
-                          ? "rgba(198,255,58,0.2)"
-                          : "rgba(10,10,10,0.07)",
-                        color: dark ? "#c6ff3a" : "#1a1a1a",
-                        border: dark
-                          ? "1px solid rgba(198,255,58,0.25)"
-                          : "1px solid rgba(10,10,10,0.12)",
-                        padding: "3px 8px",
+                        letterSpacing: 1,
+                        padding: "4px 12px",
                         borderRadius: 999,
+                        whiteSpace: "nowrap",
                       }}
                     >
-                      {plan.badge}
-                    </span>
+                      MAIS ESCOLHIDO
+                    </div>
                   )}
 
-                  {/* Name */}
+                  {/* Tag */}
                   <p
                     style={{
                       fontFamily: MONO,
                       fontSize: 10,
-                      letterSpacing: 1.2,
+                      letterSpacing: 1.5,
                       fontWeight: 500,
-                      color: dark ? "#8a8a85" : "#8a8a85",
-                      marginBottom: 4,
+                      color: dark ? "#a0a098" : "#8a8a85",
+                      marginBottom: 6,
                     }}
                   >
                     {plan.label.toUpperCase()}
                   </p>
+
+                  {/* Tagline */}
                   <p
                     style={{
-                      fontSize: 12.5,
-                      color: dark ? "rgba(250,250,246,0.55)" : "#6a6560",
-                      marginBottom: 12,
+                      fontSize: 16,
+                      color: dark ? "#a0a098" : "#6a6560",
+                      marginBottom: 18,
                       lineHeight: 1.4,
                     }}
                   >
@@ -220,14 +222,28 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                   <div
                     style={{
                       display: "flex",
-                      alignItems: "flex-end",
+                      alignItems: "baseline",
                       gap: 2,
-                      marginBottom: 14,
+                      marginBottom: 18,
+                      paddingBottom: 18,
+                      borderBottom: dark
+                        ? "1px solid rgba(250,250,246,0.1)"
+                        : "1px solid rgba(10,10,10,0.08)",
                     }}
                   >
                     <span
                       style={{
-                        fontSize: 36,
+                        fontFamily: MONO,
+                        fontSize: 13,
+                        color: dark ? "#a0a098" : "#6a6560",
+                        marginRight: 1,
+                      }}
+                    >
+                      R$
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 44,
                         fontWeight: 500,
                         letterSpacing: -2,
                         lineHeight: 1,
@@ -235,18 +251,20 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                         color: dark ? "#fafaf6" : "#0a0a0a",
                       }}
                     >
-                      {plan.price}
+                      {priceNum}
                     </span>
-                    <span
-                      style={{
-                        fontSize: 18,
-                        fontWeight: 500,
-                        color: dark ? "rgba(250,250,246,0.5)" : "#8a8a85",
-                        marginBottom: 4,
-                      }}
-                    >
-                      {plan.cents}
-                    </span>
+                    {plan.cents && (
+                      <span
+                        style={{
+                          fontSize: 16,
+                          fontWeight: 500,
+                          letterSpacing: -0.3,
+                          color: dark ? "#a0a098" : "#8a8a85",
+                        }}
+                      >
+                        {plan.cents}
+                      </span>
+                    )}
                   </div>
 
                   {/* CTA */}
@@ -277,19 +295,19 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                         type="submit"
                         style={{
                           width: "100%",
-                          background: dark ? "#fafaf6" : "#0a0a0a",
+                          background: dark ? "#c6ff3a" : "#0a0a0a",
                           color: dark ? "#0a0a0a" : "#fafaf6",
                           border: "none",
                           borderRadius: 10,
                           padding: "12px",
-                          fontSize: 13,
-                          fontWeight: 500,
+                          fontSize: 13.5,
+                          fontWeight: 600,
                           cursor: "pointer",
                           fontFamily: GEIST,
-                          letterSpacing: -0.1,
+                          marginBottom: 18,
                           boxShadow: dark
-                            ? "0 4px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)"
-                            : "none",
+                            ? "0 6px 14px rgba(198,255,58,0.25)"
+                            : "0 4px 12px rgba(10,10,10,0.12)",
                         }}
                         className={
                           dark ? "planos-cta-dark" : "planos-cta-light"
@@ -307,19 +325,19 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                       }
                       style={{
                         display: "block",
-                        background: dark ? "#fafaf6" : "#0a0a0a",
+                        background: dark ? "#c6ff3a" : "#0a0a0a",
                         color: dark ? "#0a0a0a" : "#fafaf6",
                         borderRadius: 10,
                         padding: "12px",
-                        fontSize: 13,
-                        fontWeight: 500,
+                        fontSize: 13.5,
+                        fontWeight: 600,
                         textDecoration: "none",
                         textAlign: "center",
                         fontFamily: GEIST,
-                        letterSpacing: -0.1,
+                        marginBottom: 18,
                         boxShadow: dark
-                          ? "0 4px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)"
-                          : "none",
+                          ? "0 6px 14px rgba(198,255,58,0.25)"
+                          : "0 4px 12px rgba(10,10,10,0.12)",
                       }}
                       className={dark ? "planos-cta-dark" : "planos-cta-light"}
                     >
@@ -327,100 +345,103 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                     </a>
                   )}
 
-                  {/* Divider */}
-                  <div
-                    style={{
-                      height: 1,
-                      background: dark
-                        ? "rgba(250,250,246,0.08)"
-                        : "rgba(10,10,10,0.06)",
-                      margin: "12px 0",
-                    }}
-                  />
-
                   {/* Features */}
                   <p
                     style={{
                       fontFamily: MONO,
                       fontSize: 9.5,
-                      letterSpacing: 1.2,
+                      letterSpacing: 1,
                       fontWeight: 500,
-                      color: dark ? "rgba(250,250,246,0.35)" : "#8a8a85",
-                      marginBottom: 10,
+                      color: dark ? "#7a7a74" : "#8a8a85",
+                      marginBottom: 8,
                     }}
                   >
                     INCLUSO
                   </p>
-                  <ul
+                  <div
                     style={{
-                      listStyle: "none",
-                      padding: 0,
-                      margin: 0,
                       display: "flex",
                       flexDirection: "column",
-                      gap: 6,
+                      gap: 7,
                     }}
                   >
                     {plan.features.map((feature) => (
-                      <li
+                      <div
                         key={feature}
                         style={{
                           display: "flex",
-                          alignItems: "flex-start",
+                          alignItems: "center",
                           gap: 8,
-                          fontSize: 12,
-                          color: dark ? "rgba(250,250,246,0.7)" : "#45443e",
-                          lineHeight: 1.4,
+                          fontSize: 12.5,
+                          color: dark ? "#e8e7df" : "#2a2a28",
                         }}
                       >
                         <span
                           style={{
-                            color: dark ? "#c6ff3a" : "#8a8a85",
-                            fontSize: 11,
-                            marginTop: 1,
+                            width: 14,
+                            height: 14,
+                            borderRadius: "50%",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 8,
+                            fontWeight: 700,
+                            background: dark
+                              ? "rgba(198,255,58,0.9)"
+                              : "rgba(198,255,58,0.4)",
+                            color: dark ? "#0a0a0a" : "#405410",
                             flexShrink: 0,
                           }}
                         >
                           ✓
                         </span>
                         {feature}
-                      </li>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               );
             })}
           </div>
 
-          {/* Social proof */}
+          {/* Trust row */}
           <div
             style={{
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              gap: 6,
-              marginBottom: 16,
+              gap: 8,
+              marginBottom: 20,
             }}
           >
             {[
               "Compatível com ATS usados por empresas como Gupy e LinkedIn",
               "Aumente suas chances de entrevista",
             ].map((text) => (
-              <p
+              <span
                 key={text}
                 style={{
-                  display: "flex",
+                  display: "inline-flex",
                   alignItems: "center",
                   gap: 8,
-                  fontSize: 12.5,
-                  fontWeight: 500,
-                  color: "#45443e",
-                  margin: 0,
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  color: "#6a6560",
+                  letterSpacing: 0.3,
                 }}
               >
-                <span style={{ color: "#c6ff3a", fontSize: 14 }}>✓</span>
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "#c6ff3a",
+                    flexShrink: 0,
+                    display: "inline-block",
+                  }}
+                />
                 {text}
-              </p>
+              </span>
             ))}
           </div>
 

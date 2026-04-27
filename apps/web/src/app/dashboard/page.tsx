@@ -335,44 +335,67 @@ export default async function DashboardPage({
               style={{
                 background: "#0a0a0a",
                 borderRadius: 14,
-                padding: "24px",
+                padding: "24px 26px",
                 display: "flex",
                 flexDirection: "column",
-                alignItems: "center",
                 justifyContent: "center",
-                textAlign: "center",
                 color: "#fafaf6",
-                boxShadow: "0 16px 48px -16px rgba(10,10,10,0.35)",
+                boxShadow: "0 20px 50px -16px rgba(10,10,10,0.4)",
               }}
             >
-              <p
+              <div
                 style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
                   fontFamily: MONO,
                   fontSize: 10,
                   letterSpacing: 1.2,
-                  color: "rgba(255,255,255,0.35)",
-                  marginBottom: 10,
+                  color: "#7a7a74",
+                  fontWeight: 500,
+                  marginBottom: 16,
+                  width: "fit-content",
                 }}
               >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "#c6ff3a",
+                    boxShadow: "0 0 6px #c6ff3a",
+                    flexShrink: 0,
+                  }}
+                />
                 PRÓXIMO PASSO
-              </p>
+              </div>
               <h2
                 style={{
-                  fontSize: 22,
+                  fontSize: 28,
                   fontWeight: 500,
-                  letterSpacing: -0.8,
+                  letterSpacing: -1.2,
                   color: "#fafaf6",
                   margin: "0 0 6px",
-                  lineHeight: 1.2,
+                  lineHeight: 1.05,
                 }}
               >
-                Analisar nova vaga
+                Analisar{" "}
+                <em
+                  style={{
+                    fontFamily: SERIF_ITALIC,
+                    fontStyle: "italic",
+                    fontWeight: 400,
+                    color: "#c6ff3a",
+                  }}
+                >
+                  nova vaga.
+                </em>
               </h2>
               <p
                 style={{
-                  fontSize: 13,
-                  color: "rgba(255,255,255,0.45)",
-                  margin: "0 0 24px",
+                  fontSize: 13.5,
+                  color: "#a0a098",
+                  margin: "0 0 22px",
                 }}
               >
                 Leva menos de 2 minutos
@@ -383,16 +406,16 @@ export default async function DashboardPage({
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 8,
-                  background: "#fafaf6",
+                  background: "#c6ff3a",
                   color: "#0a0a0a",
-                  borderRadius: 12,
-                  padding: "13px 22px",
+                  borderRadius: 10,
+                  padding: "12px 18px",
                   fontSize: 14,
-                  fontWeight: 500,
+                  fontWeight: 600,
                   textDecoration: "none",
                   letterSpacing: -0.2,
-                  boxShadow:
-                    "0 4px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
+                  width: "fit-content",
+                  boxShadow: "0 6px 14px rgba(198,255,58,0.2)",
                 }}
                 className="dash-cta-btn"
               >

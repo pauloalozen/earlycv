@@ -20,7 +20,7 @@ export const siteConfig = {
   ],
   name: "EarlyCV",
   ogImage: "/og-image.png",
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://earlycv.app",
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://www.earlycv.com.br",
   titleTemplate: "%s | EarlyCV",
 } as const;
 

@@ -395,26 +395,28 @@ export function HistoryActionLinks({
               {/* Score cards */}
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
+                  display: "flex",
+                  alignItems: "center",
                   gap: 10,
                   marginBottom: 14,
                 }}
               >
                 <div
                   style={{
-                    background: "rgba(10,10,10,0.04)",
+                    flex: 1,
+                    background: "#fff",
                     border: "1px solid rgba(10,10,10,0.08)",
-                    borderRadius: 12,
-                    padding: "12px 14px",
+                    borderRadius: 10,
+                    padding: "14px 16px",
+                    textAlign: "center",
                   }}
                 >
                   <p
                     style={{
                       fontFamily: GEIST_MONO,
-                      fontSize: 10.5,
+                      fontSize: 9.5,
                       fontWeight: 500,
-                      letterSpacing: 0.8,
+                      letterSpacing: 1,
                       textTransform: "uppercase",
                       color: "#8a8a85",
                       margin: "0 0 6px",
@@ -424,12 +426,13 @@ export function HistoryActionLinks({
                   </p>
                   <p
                     style={{
-                      fontSize: 28,
+                      fontSize: 36,
                       fontWeight: 500,
-                      letterSpacing: "-1px",
+                      letterSpacing: "-1.4px",
                       margin: 0,
                       color: "#0a0a0a",
                       fontFamily: GEIST,
+                      fontVariantNumeric: "tabular-nums",
                     }}
                   >
                     {adjustments.scoreBefore !== null
@@ -437,20 +440,25 @@ export function HistoryActionLinks({
                       : "—"}
                   </p>
                 </div>
+                <span style={{ fontSize: 20, color: "#c0beb4", flexShrink: 0 }}>
+                  →
+                </span>
                 <div
                   style={{
-                    background: "rgba(198,255,58,0.16)",
-                    border: "1px solid rgba(198,255,58,0.5)",
-                    borderRadius: 12,
-                    padding: "12px 14px",
+                    flex: 1,
+                    background: "rgba(198,255,58,0.2)",
+                    border: "1px solid rgba(110,150,20,0.2)",
+                    borderRadius: 10,
+                    padding: "14px 16px",
+                    textAlign: "center",
                   }}
                 >
                   <p
                     style={{
                       fontFamily: GEIST_MONO,
-                      fontSize: 10.5,
+                      fontSize: 9.5,
                       fontWeight: 500,
-                      letterSpacing: 0.8,
+                      letterSpacing: 1,
                       textTransform: "uppercase",
                       color: "#405410",
                       margin: "0 0 6px",
@@ -460,12 +468,13 @@ export function HistoryActionLinks({
                   </p>
                   <p
                     style={{
-                      fontSize: 28,
+                      fontSize: 36,
                       fontWeight: 500,
-                      letterSpacing: "-1px",
+                      letterSpacing: "-1.4px",
                       margin: 0,
-                      color: "#2f3f00",
+                      color: "#405410",
                       fontFamily: GEIST,
+                      fontVariantNumeric: "tabular-nums",
                     }}
                   >
                     {adjustments.scoreFinal !== null

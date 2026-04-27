@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { Logo } from "@/components/logo";
 import { PageShell } from "@/components/page-shell";
 import { CopyEmail } from "./copy-email";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
+const SERIF_ITALIC = "var(--font-instrument-serif), serif";
 
 export const metadata: Metadata = {
   title: "Contato | EarlyCV",
@@ -40,12 +42,7 @@ export default function ContatoPage() {
             marginBottom: 48,
           }}
         >
-          {/* biome-ignore lint/performance/noImgElement: logo estático */}
-          <img
-            src="/logo.svg"
-            alt="earlyCV"
-            style={{ height: 36, width: "auto", display: "block" }}
-          />
+          <Logo size="lg" />
           <span
             style={{
               fontFamily: MONO,
@@ -74,30 +71,58 @@ export default function ContatoPage() {
           }}
         >
           {/* Kicker */}
-          <p
+          <div
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
               fontFamily: MONO,
-              fontSize: 10,
+              fontSize: 10.5,
               letterSpacing: 1.2,
-              color: "#8a8a85",
-              marginBottom: 12,
-              textTransform: "uppercase",
+              fontWeight: 500,
+              color: "#555",
+              background: "rgba(10,10,10,0.04)",
+              border: "1px solid rgba(10,10,10,0.06)",
+              padding: "6px 10px",
+              borderRadius: 999,
+              marginBottom: 20,
             }}
           >
-            Fale conosco
-          </p>
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#c6ff3a",
+                boxShadow: "0 0 6px #c6ff3a",
+                flexShrink: 0,
+              }}
+            />
+            FALE CONOSCO
+          </div>
 
           <h1
             style={{
-              fontSize: 26,
+              fontSize: 36,
               fontWeight: 500,
-              letterSpacing: -0.8,
+              letterSpacing: -1.4,
               color: "#0a0a0a",
               margin: "0 0 16px",
-              lineHeight: 1.15,
+              lineHeight: 1.08,
             }}
           >
-            Tem alguma dúvida ou sugestão?
+            Tem alguma dúvida
+            <br />
+            ou{" "}
+            <em
+              style={{
+                fontFamily: SERIF_ITALIC,
+                fontStyle: "italic",
+                fontWeight: 400,
+              }}
+            >
+              sugestão?
+            </em>
           </h1>
 
           <p
@@ -131,6 +156,62 @@ export default function ContatoPage() {
               ← Voltar para o início
             </a>
           </div>
+        </div>
+
+        {/* Trust strip */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            marginTop: 18,
+          }}
+        >
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: "#6a6560",
+              letterSpacing: 0.2,
+            }}
+          >
+            <span
+              style={{
+                width: 5,
+                height: 5,
+                borderRadius: "50%",
+                background: "#c6ff3a",
+                flexShrink: 0,
+              }}
+            />
+            Respondemos em até 24h
+          </span>
+          <span style={{ color: "#c0beb4" }}>·</span>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: "#6a6560",
+              letterSpacing: 0.2,
+            }}
+          >
+            <span
+              style={{
+                width: 5,
+                height: 5,
+                borderRadius: "50%",
+                background: "#c6ff3a",
+                flexShrink: 0,
+              }}
+            />
+            Toda mensagem é lida
+          </span>
         </div>
       </main>
     </PageShell>

@@ -1,9 +1,11 @@
-<svg width="32" height="32" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <title>EarlyCV</title>
-  <path d="M4.17145 26.5679C4.17145 14.4176 14.0212 4.56787 26.1714 4.56787H61.5645C67.0874 4.56787 71.5645 9.04502 71.5645 14.5679V47.9609C71.5645 61.2158 60.8193 71.9609 47.5645 71.9609H14.1714C8.6486 71.9609 4.17145 67.4838 4.17145 61.9609V26.5679Z" fill="#47FF19"/>
-  <path d="M22 1H66.3936V45.3936C66.3933 56.9911 56.9911 66.3933 45.3936 66.3936H1V22C1 10.402 10.402 1 22 1Z" fill="white" stroke="#1E1E1E" stroke-width="2"/>
-  <path d="M21 20.9609H37" stroke="#1E1E1E" stroke-width="5" stroke-linecap="round"/>
-  <path d="M21 29.9609H47" stroke="#A8A8A8" stroke-width="3" stroke-linecap="round"/>
-  <path d="M21 37.9609H33" stroke="#1E1E1E" stroke-width="3" stroke-linecap="round"/>
-  <path d="M20 46.9609H44" stroke="#1E1E1E" stroke-width="3" stroke-linecap="round"/>
+<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>earlyCV</title>
+  <rect x="0"  y="0"  width="15" height="4" rx="1.5" fill="rgba(250,250,246,0.75)"/>
+  <rect x="17" y="0"  width="12" height="4" rx="1.5" fill="rgba(250,250,246,0.75)"/>
+  <rect x="31" y="0"  width="10" height="4" rx="1.5" fill="#c6ff3a"/>
+  <rect x="0"  y="14" width="17" height="4" rx="1.5" fill="#c6ff3a"/>
+  <rect x="19" y="14" width="24" height="4" rx="1.5" fill="rgba(250,250,246,0.75)"/>
+  <rect x="0"  y="28" width="9"  height="4" rx="1.5" fill="rgba(250,250,246,0.75)"/>
+  <rect x="12" y="28" width="17" height="4" rx="1.5" fill="#c6ff3a"/>
+  <rect x="31" y="28" width="10" height="4" rx="1.5" fill="rgba(250,250,246,0.15)"/>
 </svg>

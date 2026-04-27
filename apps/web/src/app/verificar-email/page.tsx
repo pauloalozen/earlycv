@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Logo } from "@/components/logo";
 import { PageShell } from "@/components/page-shell";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
@@ -69,12 +70,7 @@ export default async function VerifyEmailPage({
             marginBottom: 40,
           }}
         >
-          {/* biome-ignore lint/performance/noImgElement: logo estático */}
-          <img
-            src="/logo.svg"
-            alt="earlyCV"
-            style={{ height: 36, width: "auto", display: "block" }}
-          />
+          <Logo size="lg" />
           <span
             style={{
               fontFamily: "var(--font-geist-mono), monospace",

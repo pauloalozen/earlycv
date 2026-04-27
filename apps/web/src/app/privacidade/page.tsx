@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { Logo } from "@/components/logo";
 import { getAbsoluteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -27,155 +28,364 @@ export const metadata: Metadata = {
   },
 };
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
+
 export default function PrivacyPage() {
   return (
-    <main className="min-h-screen bg-[#FAFAFA] px-6 py-10 text-[#1C1917] md:px-10">
-      <div className="mx-auto w-full max-w-4xl space-y-8">
-        <header className="space-y-3">
-          <Link
-            className="text-sm text-[#C2410C] hover:text-[#9A3412]"
-            href="/"
-          >
-            Voltar para a home
-          </Link>
-          <h1 className="text-3xl font-bold tracking-tight text-[#111111]">
-            Politica de Privacidade
-          </h1>
-          <p className="text-sm text-[#57534E]">
-            Ultima atualizacao: 14/04/2026
-          </p>
-          <p className="text-sm leading-6 text-[#44403C]">
-            Esta Politica de Privacidade descreve como o EarlyCV trata dados
-            pessoais no contexto do fornecimento de servicos de analise de
-            vagas, adaptacao de curriculo e funcionalidades relacionadas. Ao
-            usar a plataforma, voce declara ciencia e concordancia com os termos
-            abaixo.
-          </p>
-        </header>
+    <div
+      style={{
+        fontFamily: GEIST,
+        minHeight: "100dvh",
+        background:
+          "radial-gradient(ellipse 80% 40% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+        color: "#0a0a0a",
+        position: "relative",
+      }}
+    >
+      {/* Grain */}
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: 0.4,
+          mixBlendMode: "multiply",
+          zIndex: 0,
+          backgroundImage: `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.03 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`,
+        }}
+      />
 
-        <section className="space-y-3 rounded-2xl border border-[#FED7AA] bg-[#FFF7ED] p-5">
-          <h2 className="text-lg font-semibold text-[#9A3412]">
+      {/* Nav */}
+      <nav
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "20px 40px",
+          position: "relative",
+          zIndex: 2,
+          borderBottom: "1px solid rgba(0,0,0,0.04)",
+        }}
+      >
+        <Logo />
+        <Link
+          href="/"
+          style={{
+            fontFamily: MONO,
+            fontSize: 13,
+            color: "#6a6560",
+            textDecoration: "none",
+            letterSpacing: 0.2,
+          }}
+        >
+          ← Voltar para home
+        </Link>
+      </nav>
+
+      {/* Content */}
+      <div
+        style={{
+          maxWidth: 760,
+          margin: "0 auto",
+          padding: "60px 40px 80px",
+          position: "relative",
+          zIndex: 2,
+        }}
+      >
+        {/* Kicker */}
+        <div style={{ marginBottom: 16 }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              fontFamily: MONO,
+              fontSize: 10.5,
+              letterSpacing: 1.2,
+              fontWeight: 500,
+              color: "#555",
+              background: "rgba(10,10,10,0.04)",
+              border: "1px solid rgba(10,10,10,0.06)",
+              padding: "6px 10px",
+              borderRadius: 999,
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#c6ff3a",
+                boxShadow: "0 0 6px #c6ff3a",
+                flexShrink: 0,
+              }}
+            />
+            PRIVACIDADE
+          </div>
+        </div>
+
+        <h1
+          style={{
+            fontSize: 46,
+            fontWeight: 500,
+            letterSpacing: -1.8,
+            lineHeight: 1.05,
+            margin: "16px 0 10px",
+          }}
+        >
+          Política de Privacidade
+        </h1>
+
+        <p
+          style={{
+            fontFamily: MONO,
+            fontSize: 11,
+            color: "#8a8a85",
+            letterSpacing: 0.3,
+            marginBottom: 24,
+          }}
+        >
+          Última atualização: 14/04/2026
+        </p>
+
+        <p
+          style={{
+            fontSize: 15.5,
+            lineHeight: 1.65,
+            color: "#3a3a38",
+            margin: "0 0 28px",
+          }}
+        >
+          Esta Política de Privacidade descreve como o EarlyCV trata dados
+          pessoais no contexto do fornecimento de serviços de análise de vagas,
+          adaptação de currículo e funcionalidades relacionadas. Ao usar a
+          plataforma, você declara ciência e concordância com os termos abaixo.
+        </p>
+
+        {/* Highlight block */}
+        <div
+          style={{
+            background: "#fafaf6",
+            border: "1px solid rgba(10,10,10,0.08)",
+            borderLeft: "3px solid #0a0a0a",
+            borderRadius: "0 10px 10px 0",
+            padding: "20px 24px",
+            marginBottom: 36,
+          }}
+        >
+          <p
+            style={{
+              fontSize: 14.5,
+              fontWeight: 600,
+              marginBottom: 10,
+              letterSpacing: -0.2,
+            }}
+          >
             Consentimento e aceite
-          </h2>
-          <p className="text-sm leading-6 text-[#7C2D12]">
-            Ao criar conta, enviar curriculo, colar descricao de vaga, integrar
+          </p>
+          <p style={{ fontSize: 13.5, lineHeight: 1.65, color: "#3a3a38" }}>
+            Ao criar conta, enviar currículo, colar descrição de vaga, integrar
             login social ou continuar navegando em funcionalidades autenticadas,
-            voce consente com o tratamento de dados pessoais nos limites desta
-            politica, da legislacao aplicavel (incluindo LGPD) e dos Termos de
+            você consente com o tratamento de dados pessoais nos limites desta
+            política, da legislação aplicável (incluindo LGPD) e dos Termos de
             Uso do EarlyCV.
           </p>
-        </section>
+        </div>
 
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold text-[#111111]">
+        {/* Section 1 */}
+        <div style={{ marginBottom: 32 }}>
+          <h2
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: -0.8,
+              margin: "0 0 12px",
+              lineHeight: 1.2,
+            }}
+          >
             1. Dados coletados
           </h2>
-          <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-[#44403C]">
-            <li>
-              Dados de cadastro e autenticacao (nome, email, identificadores de
-              sessao e tokens).
-            </li>
-            <li>
-              Dados de perfil profissional informados por voce (headline,
-              localidade e informacoes correlatas).
-            </li>
-            <li>
-              Dados de curriculo e historico de adaptacoes (arquivos, texto
-              extraido, metadados e resultados).
-            </li>
-            <li>
-              Dados de uso e telemetria tecnica (logs, IP, dispositivo, datas e
-              horarios de acesso).
-            </li>
-            <li>
-              Dados de pagamento e compra de planos, observadas as informacoes
-              efetivamente disponibilizadas pelos provedores de pagamento.
-            </li>
+          <ul style={{ margin: "0 0 8px", paddingLeft: 18 }}>
+            {[
+              "Dados de cadastro e autenticação (nome, email, identificadores de sessão e tokens).",
+              "Dados de perfil profissional informados por você (headline, localidade e informações correlatas).",
+              "Dados de currículo e histórico de adaptações (arquivos, texto extraído, metadados e resultados).",
+              "Dados de uso e telemetria técnica (logs, IP, dispositivo, datas e horários de acesso).",
+              "Dados de pagamento e compra de planos, observadas as informações efetivamente disponibilizadas pelos provedores de pagamento.",
+            ].map((item) => (
+              <li
+                key={item}
+                style={{
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  color: "#3a3a38",
+                  marginBottom: 6,
+                }}
+              >
+                {item}
+              </li>
+            ))}
           </ul>
-        </section>
+        </div>
 
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold text-[#111111]">
+        {/* Section 2 */}
+        <div style={{ marginBottom: 32 }}>
+          <h2
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: -0.8,
+              margin: "0 0 12px",
+              lineHeight: 1.2,
+            }}
+          >
             2. Finalidades e bases legais
           </h2>
-          <p className="text-sm leading-6 text-[#44403C]">
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}>
             O EarlyCV trata dados para: (a) executar o contrato e prestar o
-            servico solicitado; (b) autenticar contas e proteger o ambiente; (c)
-            operar credito, limite diario e recursos de assinatura; (d) cumprir
-            obrigacoes legais e regulatórias; (e) prevenir fraude, abuso e uso
-            indevido; e (f) aprimorar seguranca, estabilidade e qualidade do
-            servico, com base em interesse legitimo quando cabivel.
+            serviço solicitado; (b) autenticar contas e proteger o ambiente; (c)
+            operar crédito, limite diário e recursos de assinatura; (d) cumprir
+            obrigações legais e regulatórias; (e) prevenir fraude, abuso e uso
+            indevido; e (f) aprimorar segurança, estabilidade e qualidade do
+            serviço, com base em interesse legítimo quando cabível.
           </p>
-        </section>
+        </div>
 
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold text-[#111111]">
+        {/* Section 3 */}
+        <div style={{ marginBottom: 32 }}>
+          <h2
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: -0.8,
+              margin: "0 0 12px",
+              lineHeight: 1.2,
+            }}
+          >
             3. Compartilhamento de dados
           </h2>
-          <p className="text-sm leading-6 text-[#44403C]">
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}>
             Dados podem ser compartilhados com operadores e subprocessadores
-            necessarios para hospedagem, autenticacao, armazenamento,
-            processamento de IA, monitoramento, pagamentos e comunicacoes
-            transacionais, sempre no limite necessario para execucao
-            operacional. O EarlyCV tambem pode compartilhar dados mediante
-            obrigacao legal, ordem judicial ou para exercicio regular de
+            necessários para hospedagem, autenticação, armazenamento,
+            processamento de IA, monitoramento, pagamentos e comunicações
+            transacionais, sempre no limite necessário para execução
+            operacional. O EarlyCV também pode compartilhar dados mediante
+            obrigação legal, ordem judicial ou para exercício regular de
             direitos em processos administrativos, arbitrais ou judiciais.
           </p>
-        </section>
+        </div>
 
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold text-[#111111]">
+        {/* Section 4 */}
+        <div style={{ marginBottom: 32 }}>
+          <h2
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: -0.8,
+              margin: "0 0 12px",
+              lineHeight: 1.2,
+            }}
+          >
             4. Uso de IA e dados profissionais
           </h2>
-          <p className="text-sm leading-6 text-[#44403C]">
-            Ao submeter curriculo e descricao de vaga, voce autoriza o
-            tratamento dessas informacoes para gerar analises e sugestoes de
-            adaptacao. Voce declara ter legitimidade para enviar os dados e
-            assume responsabilidade pelo conteudo submetido. O EarlyCV nao
-            garante entrevista, contratacao, aprovacao em processos seletivos ou
-            qualquer resultado profissional especifico.
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}>
+            Ao submeter currículo e descrição de vaga, você autoriza o
+            tratamento dessas informações para gerar análises e sugestões de
+            adaptação. Você declara ter legitimidade para enviar os dados e
+            assume responsabilidade pelo conteúdo submetido. O EarlyCV não
+            garante entrevista, contratação, aprovação em processos seletivos ou
+            qualquer resultado profissional específico.
           </p>
-        </section>
+        </div>
 
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold text-[#111111]">
-            5. Retencao, seguranca e transferencia
+        {/* Section 5 */}
+        <div style={{ marginBottom: 32 }}>
+          <h2
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: -0.8,
+              margin: "0 0 12px",
+              lineHeight: 1.2,
+            }}
+          >
+            5. Retenção, segurança e transferência
           </h2>
-          <p className="text-sm leading-6 text-[#44403C]">
-            Dados sao armazenados pelo periodo necessario para as finalidades
-            descritas, cumprimento de obrigacoes legais e defesa de direitos. O
-            EarlyCV adota medidas tecnicas e administrativas razoaveis de
-            seguranca, sem garantia absoluta contra incidentes. Dependendo da
-            infraestrutura de fornecedores, pode haver transferencia
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}>
+            Dados são armazenados pelo período necessário para as finalidades
+            descritas, cumprimento de obrigações legais e defesa de direitos. O
+            EarlyCV adota medidas técnicas e administrativas razoáveis de
+            segurança, sem garantia absoluta contra incidentes. Dependendo da
+            infraestrutura de fornecedores, pode haver transferência
             internacional de dados, com salvaguardas contratuais e controles
-            compativeis.
+            compatíveis.
           </p>
-        </section>
+        </div>
 
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold text-[#111111]">
+        {/* Section 6 */}
+        <div style={{ marginBottom: 32 }}>
+          <h2
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: -0.8,
+              margin: "0 0 12px",
+              lineHeight: 1.2,
+            }}
+          >
             6. Direitos do titular
           </h2>
-          <p className="text-sm leading-6 text-[#44403C]">
-            Nos termos da LGPD, voce pode solicitar confirmacao de tratamento,
-            acesso, correcao, anonimizaçao quando aplicavel, portabilidade,
-            eliminacao de dados tratados por consentimento e informacoes sobre
-            compartilhamento. Para exercicio desses direitos, contate:
-            <span className="font-medium"> privacidade@earlycv.app</span>.
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}>
+            Nos termos da LGPD, você pode solicitar confirmação de tratamento,
+            acesso, correção, anonimização quando aplicável, portabilidade,
+            eliminação de dados tratados por consentimento e informações sobre
+            compartilhamento. Para exercício desses direitos, contate:{" "}
+            <span style={{ fontWeight: 500 }}>privacidade@earlycv.app</span>.
           </p>
-        </section>
+        </div>
 
-        <section className="space-y-4 pb-8">
-          <h2 className="text-xl font-semibold text-[#111111]">
-            7. Atualizacoes desta politica
+        {/* Section 7 */}
+        <div style={{ marginBottom: 32 }}>
+          <h2
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: -0.8,
+              margin: "0 0 12px",
+              lineHeight: 1.2,
+            }}
+          >
+            7. Atualizações desta política
           </h2>
-          <p className="text-sm leading-6 text-[#44403C]">
-            Esta politica pode ser alterada a qualquer tempo para refletir
-            evolucoes legais, tecnicas e de produto. A versao vigente sera
-            sempre publicada nesta rota, com indicacao da data de atualizacao.
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}>
+            Esta política pode ser alterada a qualquer tempo para refletir
+            evoluções legais, técnicas e de produto. A versão vigente será
+            sempre publicada nesta rota, com indicação da data de atualização.
           </p>
-        </section>
+        </div>
+
+        {/* Footer doc */}
+        <div
+          style={{
+            marginTop: 60,
+            paddingTop: 20,
+            borderTop: "1px solid rgba(10,10,10,0.08)",
+          }}
+        >
+          <p
+            style={{
+              fontFamily: MONO,
+              fontSize: 11,
+              color: "#8a8a85",
+              letterSpacing: 0.3,
+            }}
+          >
+            earlyCV · 2026 · São Paulo, SP
+          </p>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }

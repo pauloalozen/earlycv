@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import React from "react";
-import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { Logo } from "@/components/logo";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 import { AtsWidget } from "./_ats-widget";
-import { LandingMobileMenu } from "./_landing-mobile-menu";
+import { LandingNavAuth } from "./_landing-nav-auth";
 import { LandingScrollAnimations } from "./_landing-scroll-animations";
 import { buildPlanCatalog } from "./planos/plan-catalog";
-
-export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Seu CV ajustado para cada vaga",
@@ -29,13 +27,13 @@ export const metadata: Metadata = {
     title: "EarlyCV - Seu CV ajustado para cada vaga",
     description:
       "Descubra o que está te eliminando nas vagas e receba um CV ajustado para aumentar suas chances de entrevista.",
-    images: [getAbsoluteUrl(siteConfig.ogImage)],
+    type: "website",
   },
   twitter: {
+    card: "summary_large_image",
     title: "EarlyCV - Seu CV ajustado para cada vaga",
     description:
       "Descubra o que está te eliminando nas vagas e receba um CV ajustado para aumentar suas chances de entrevista.",
-    images: [getAbsoluteUrl(siteConfig.ogImage)],
   },
 };
 
@@ -43,8 +41,7 @@ const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 const SERIF_ITALIC = "var(--font-instrument-serif), serif";
 
-export default async function Home() {
-  const user = await getCurrentAppUserFromCookies();
+export default function Home() {
   const plans = buildPlanCatalog(process.env);
 
   return (
@@ -91,11 +88,7 @@ export default async function Home() {
       >
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <img
-            src="/logo.svg"
-            alt="earlyCV"
-            style={{ height: 26, width: "auto", display: "block" }}
-          />
+          <Logo />
           <span
             style={{
               fontFamily: MONO,
@@ -111,90 +104,8 @@ export default async function Home() {
           </span>
         </div>
 
-        {/* Nav right — hidden on mobile */}
-        <div
-          style={{ display: "flex", alignItems: "center", gap: 24 }}
-          className="lp-nav-links"
-        >
-          <a
-            href="#como-funciona"
-            style={{
-              fontSize: 13,
-              color: "#3a3a38",
-              fontWeight: 450,
-              letterSpacing: -0.1,
-              textDecoration: "none",
-            }}
-          >
-            Como funciona
-          </a>
-          <a
-            href="#precos"
-            style={{
-              fontSize: 13,
-              color: "#3a3a38",
-              fontWeight: 450,
-              letterSpacing: -0.1,
-              textDecoration: "none",
-            }}
-          >
-            Preços
-          </a>
-          {user ? (
-            <Link
-              href="/dashboard"
-              style={{
-                background: "#0a0a0a",
-                color: "#fff",
-                borderRadius: 8,
-                padding: "9px 14px",
-                fontSize: 12.5,
-                fontWeight: 500,
-                letterSpacing: -0.1,
-                textDecoration: "none",
-                boxShadow:
-                  "0 1px 2px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.08)",
-              }}
-            >
-              Ir para o painel →
-            </Link>
-          ) : (
-            <>
-              <Link
-                href="/entrar?tab=entrar"
-                style={{
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: "#0a0a0a",
-                  textDecoration: "none",
-                  padding: "8px 4px",
-                }}
-              >
-                Entrar
-              </Link>
-              <Link
-                href="/entrar?tab=cadastrar"
-                style={{
-                  background: "#0a0a0a",
-                  color: "#fff",
-                  borderRadius: 8,
-                  padding: "9px 14px",
-                  fontSize: 12.5,
-                  fontWeight: 500,
-                  letterSpacing: -0.1,
-                  textDecoration: "none",
-                  boxShadow:
-                    "0 1px 2px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.08)",
-                }}
-              >
-                Começar grátis →
-              </Link>
-            </>
-          )}
-        </div>
-
-        {/* Mobile hamburger — client component */}
-        <LandingMobileMenu isLoggedIn={Boolean(user)} />
+        {/* Nav right + mobile — client component (keeps landing page static/cacheable) */}
+        <LandingNavAuth />
       </nav>
 
       <LandingScrollAnimations />
@@ -496,18 +407,36 @@ export default async function Home() {
       >
         <div style={{ maxWidth: 1100, margin: "0 auto", width: "100%" }}>
           <div style={{ textAlign: "center", marginBottom: 64 }}>
-            <span
+            <div
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
                 fontFamily: MONO,
                 fontSize: 10.5,
                 letterSpacing: 1.4,
-                color: "#6a6a66",
                 fontWeight: 500,
-                textTransform: "uppercase",
+                color: "#555",
+                background: "rgba(10,10,10,0.04)",
+                border: "1px solid rgba(10,10,10,0.06)",
+                padding: "6px 10px",
+                borderRadius: 999,
+                marginBottom: 22,
+                textTransform: "uppercase" as const,
               }}
             >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "#c6ff3a",
+                  boxShadow: "0 0 6px #c6ff3a",
+                  flexShrink: 0,
+                }}
+              />
               Como funciona
-            </span>
+            </div>
             <h2
               style={{
                 fontSize: "clamp(26px, 5.5vw, 48px)",
@@ -544,70 +473,74 @@ export default async function Home() {
               {
                 step: "01",
                 title: "Envie seu CV e a vaga",
-                body: "Cole o PDF do seu currículo e a descrição da vaga. Funciona com qualquer formato de CV.",
-                icon: "↑",
+                body: "Cole o PDF do seu currículo e a descrição da vaga. Funciona com qualquer formato de CV — PDF, DOC ou DOCX.",
+                detail: "Upload · Cole a vaga",
+                highlight: false,
               },
               {
                 step: "02",
                 title: "Analisamos e mostramos o que ajustar",
                 body: "Nossa IA compara seu CV com os requisitos da vaga e identifica lacunas, keywords e pontuação ATS.",
-                icon: "⟳",
+                detail: "Score ATS · Keywords · Gaps",
+                highlight: true,
               },
               {
                 step: "03",
                 title: "Baixe seu CV pronto para aplicar",
                 body: "Receba o CV reescrito e otimizado para a vaga em PDF e DOCX, pronto para enviar.",
-                icon: "↓",
+                detail: "PDF · DOCX · 1 crédito",
+                highlight: false,
               },
             ].map((item, i) => (
               <div
                 key={item.step}
-                className="reveal-card"
+                className={`reveal-card${item.highlight ? " how-card-featured" : ""}`}
                 style={{
-                  background: "rgba(255,255,255,0.7)",
-                  border: "1px solid rgba(10,10,10,0.07)",
+                  background: item.highlight ? "#0a0a0a" : "#fafaf6",
+                  border: item.highlight
+                    ? "none"
+                    : "1px solid rgba(10,10,10,0.08)",
                   borderRadius: 16,
-                  padding: "32px 28px",
+                  padding: "28px 28px 24px",
                   position: "relative",
-                  backdropFilter: "blur(6px)",
+                  boxShadow: item.highlight
+                    ? "0 28px 60px -20px rgba(10,10,10,0.4)"
+                    : "0 1px 2px rgba(0,0,0,0.03)",
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: 300,
                   transitionDelay: `${i * 0.12}s`,
                 }}
               >
                 <div
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    marginBottom: 20,
+                    fontFamily: MONO,
+                    fontSize: 11,
+                    letterSpacing: 1.4,
+                    fontWeight: 500,
+                    color: item.highlight ? "#a0a098" : "#8a8a85",
+                    marginBottom: 24,
                   }}
                 >
-                  <span
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "#8a8a85",
-                      letterSpacing: 1,
-                    }}
-                  >
-                    {item.step}
-                  </span>
-                  <div
-                    style={{
-                      flex: 1,
-                      height: 1,
-                      background:
-                        "linear-gradient(90deg, rgba(10,10,10,0.12) 0%, transparent 100%)",
-                    }}
-                  />
+                  {item.step}
                 </div>
+                <div
+                  style={{
+                    width: 32,
+                    height: 1,
+                    background: item.highlight
+                      ? "rgba(198,255,58,0.6)"
+                      : "rgba(10,10,10,0.12)",
+                    marginBottom: 24,
+                  }}
+                />
                 <h3
                   style={{
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: 500,
-                    letterSpacing: -0.5,
-                    color: "#0a0a0a",
-                    margin: "0 0 10px",
+                    letterSpacing: -0.7,
+                    color: item.highlight ? "#fafaf6" : "#0a0a0a",
+                    margin: "0 0 14px",
                     lineHeight: 1.2,
                   }}
                 >
@@ -617,13 +550,29 @@ export default async function Home() {
                   style={{
                     fontSize: 14,
                     lineHeight: 1.6,
-                    color: "#5a5a55",
-                    margin: 0,
+                    color: item.highlight ? "#a0a098" : "#5a5a55",
+                    margin: "0 0 24px",
                     fontWeight: 400,
+                    flex: 1,
                   }}
                 >
                   {item.body}
                 </p>
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    letterSpacing: 1,
+                    color: item.highlight ? "#7a7a74" : "#a0a098",
+                    borderTop: item.highlight
+                      ? "1px solid rgba(250,250,246,0.08)"
+                      : "1px solid rgba(10,10,10,0.06)",
+                    paddingTop: 14,
+                    marginTop: "auto",
+                  }}
+                >
+                  {item.detail}
+                </div>
               </div>
             ))}
           </div>
@@ -967,10 +916,15 @@ export default async function Home() {
           opacity: 1;
           transform: translateY(0);
         }
+        /* Featured "como funciona" card — elevated 6px above peers, both hidden and revealed */
+        .how-card-featured { transform: translateY(18px); }
+        .how-card-featured.reveal-visible { transform: translateY(-6px); }
         /* Mobile: slide from side instead */
         @media (max-width: 768px) {
           .reveal-card { transform: translateX(24px); }
           .reveal-card.reveal-visible { transform: translateX(0); }
+          .how-card-featured { transform: translateX(24px); }
+          .how-card-featured.reveal-visible { transform: translateX(0); }
         }
 
         @media (max-width: 900px) {
@@ -995,6 +949,50 @@ export default async function Home() {
           .pricing-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
+
+      {/* JSON-LD structured data */}
+      <script
+        type="application/ld+json"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: static structured data, no user input
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify([
+            {
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: "EarlyCV",
+              url: siteConfig.siteUrl,
+            },
+            {
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              name: "EarlyCV",
+              applicationCategory: "BusinessApplication",
+              operatingSystem: "Web",
+              url: siteConfig.siteUrl,
+              description:
+                "Adapte seu currículo para cada vaga em segundos e aumente suas chances de passar pelos filtros ATS e ser chamado para entrevista.",
+              offers: {
+                "@type": "Offer",
+                price: "0",
+                priceCurrency: "BRL",
+                description: "Análise gratuita disponível",
+              },
+            },
+            {
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              name: "EarlyCV",
+              url: siteConfig.siteUrl,
+              contactPoint: {
+                "@type": "ContactPoint",
+                email: "contato@earlycv.app",
+                contactType: "customer support",
+                availableLanguage: "Portuguese",
+              },
+            },
+          ]),
+        }}
+      />
     </main>
   );
 }

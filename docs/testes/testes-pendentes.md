@@ -21,3 +21,6 @@ Testes Arquivos de CV e Descrição de vagas:
 4. CV em inglês
 5. Descrição de vaga válida PT-BR
 6. Descrição de vaga válida EN
+
+Validar Design Ajustado.
+Trocar logo.
