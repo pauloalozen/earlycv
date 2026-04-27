@@ -190,43 +190,82 @@ export default async function ComprasPage() {
                 marginBottom: 16,
               }}
             >
-              {[
-                { label: "Total de pedidos", value: String(purchases.length) },
-                {
-                  label: "Pedidos pagos",
-                  value: String(completed),
-                  color: "#405410",
-                },
-                {
-                  label: "Aguardando pagamento",
-                  value: String(pending),
-                  color: pending > 0 ? "#7a5a00" : "#0a0a0a",
-                },
-              ].map((m) => (
-                <article key={m.label} style={{ ...CARD, padding: "20px" }}>
-                  <p
-                    style={{
-                      fontSize: 12.5,
-                      color: "#6a6560",
-                      margin: "0 0 6px",
-                    }}
-                  >
-                    {m.label}
-                  </p>
-                  <p
-                    style={{
-                      fontSize: 32,
-                      fontWeight: 500,
-                      letterSpacing: -1.2,
-                      color: m.color ?? "#0a0a0a",
-                      margin: 0,
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {m.value}
-                  </p>
-                </article>
-              ))}
+              {/* Total — dark CTA card */}
+              <article
+                style={{
+                  background: "#0a0a0a",
+                  borderRadius: 14,
+                  padding: "20px",
+                  boxShadow: "0 20px 50px -16px rgba(10,10,10,0.4)",
+                }}
+              >
+                <p
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    letterSpacing: 1.2,
+                    color: "#7a7a74",
+                    fontWeight: 500,
+                    margin: "0 0 6px",
+                  }}
+                >
+                  TOTAL DE PEDIDOS
+                </p>
+                <p
+                  style={{
+                    fontSize: 32,
+                    fontWeight: 500,
+                    letterSpacing: -1.2,
+                    color: "#c6ff3a",
+                    margin: 0,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {purchases.length}
+                </p>
+              </article>
+
+              {/* Pagos */}
+              <article style={{ ...CARD, padding: "20px" }}>
+                <p
+                  style={{ fontSize: 12.5, color: "#6a6560", margin: "0 0 6px" }}
+                >
+                  Pedidos pagos
+                </p>
+                <p
+                  style={{
+                    fontSize: 32,
+                    fontWeight: 500,
+                    letterSpacing: -1.2,
+                    color: "#405410",
+                    margin: 0,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {completed}
+                </p>
+              </article>
+
+              {/* Pendentes */}
+              <article style={{ ...CARD, padding: "20px" }}>
+                <p
+                  style={{ fontSize: 12.5, color: "#6a6560", margin: "0 0 6px" }}
+                >
+                  Aguardando pagamento
+                </p>
+                <p
+                  style={{
+                    fontSize: 32,
+                    fontWeight: 500,
+                    letterSpacing: -1.2,
+                    color: pending > 0 ? "#7a5a00" : "#0a0a0a",
+                    margin: 0,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {pending}
+                </p>
+              </article>
             </div>
           )}
 
@@ -410,22 +449,6 @@ export default async function ComprasPage() {
                                   {item.creditsGranted === 1
                                     ? "crédito"
                                     : "créditos"}
-                                </span>
-                              )}
-                              {item.analysisCreditsGranted > 0 && (
-                                <span
-                                  style={{
-                                    display: "inline-block",
-                                    padding: "3px 10px",
-                                    borderRadius: 20,
-                                    fontSize: 11,
-                                    fontFamily: MONO,
-                                    color: "#6a6560",
-                                    background: "rgba(10,10,10,0.04)",
-                                    border: "1px solid rgba(10,10,10,0.08)",
-                                  }}
-                                >
-                                  {item.analysisCreditsGranted} análises
                                 </span>
                               )}
                             </div>
