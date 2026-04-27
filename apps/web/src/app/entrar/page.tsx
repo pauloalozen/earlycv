@@ -279,6 +279,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
         >
           <div style={{ width: "100%", maxWidth: 380 }}>
             <h2
+              className="entrar-form-title"
               style={{
                 fontSize: 28,
                 fontWeight: 500,
@@ -398,14 +399,15 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
           .entrar-google-btn:hover { background: #f5f4ee !important; }
           @media (max-width: 760px) {
             .entrar-grid { grid-template-columns: 1fr !important; }
-            .entrar-left { min-height: auto !important; padding: 28px 24px 20px !important; }
+            .entrar-left { min-height: auto !important; padding: 52px 24px 20px !important; }
             .entrar-right { min-height: auto !important; padding: 24px 24px 32px !important; }
             .entrar-receipt { display: none !important; }
             .entrar-footer { display: none !important; }
             .entrar-desc { display: none !important; }
+            .entrar-badge { display: none !important; }
             .entrar-body { padding-left: 0 !important; justify-content: flex-start !important; }
-            .entrar-h1 { order: 1; margin: 0 0 12px !important; font-size: 38px !important; }
-            .entrar-badge { order: 2; margin-bottom: 0 !important; margin-top: 10px !important; }
+            .entrar-h1 { margin: 0 !important; font-size: 38px !important; }
+            .entrar-form-title { font-size: 22px !important; }
           }
         `}</style>
       </main>
