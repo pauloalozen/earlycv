@@ -16,6 +16,7 @@ import { CvAdaptationPublicController } from "./cv-adaptation-public.controller"
 @Module({
   imports: [DatabaseModule, ResumeTemplatesModule, AnalysisProtectionModule],
   controllers: [CvAdaptationController, CvAdaptationPublicController],
+  exports: [CvAdaptationService],
   providers: [
     CvAdaptationService,
     CvAdaptationAiService,

@@ -29,12 +29,49 @@ export class PaymentsController {
     return this.paymentsService.getCheckoutStatus(user.id, checkoutId);
   }
 
-  @Post("admin/reconcile")
+  @Get("admin/list")
   @UseGuards(RolesGuard)
   @InternalRoles("superadmin")
-  reconcile(@Query("limit") limit?: string) {
+  listPayments(
+    @Query("type") type?: "plan" | "adaptation",
+    @Query("status") status?: string,
+    @Query("userId") userId?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.paymentsService.listPayments({
+      type,
+      status,
+      userId,
+      from,
+      to,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  @Get("admin/:checkoutId")
+  @UseGuards(RolesGuard)
+  @InternalRoles("superadmin")
+  getPaymentDetail(@Param("checkoutId") checkoutId: string) {
+    return this.paymentsService.getPaymentDetail(checkoutId);
+  }
+
+  @Post("admin/reconcile-all")
+  @UseGuards(RolesGuard)
+  @InternalRoles("superadmin")
+  reconcileAll(@Query("limit") limit?: string) {
     return this.paymentsService.reconcilePending(
       limit ? parseInt(limit, 10) : undefined,
     );
+  }
+
+  @Post("admin/reconcile/:checkoutId")
+  @UseGuards(RolesGuard)
+  @InternalRoles("superadmin")
+  reconcileOne(@Param("checkoutId") checkoutId: string) {
+    return this.paymentsService.reconcileOne(checkoutId);
   }
 }

@@ -804,16 +804,56 @@ export class CvAdaptationService {
         data: {
           paymentStatus: "completed",
           paidAt: new Date(),
-          status:
-            adaptation.status === "analyzing"
-              ? "awaiting_payment"
-              : adaptation.status,
+          status: "paid",
         },
         include: { template: { select: { id: true, name: true, slug: true } } },
       });
     });
 
+    this.deliverAdaptation(adaptation.id).catch((err) => {
+      this.logger.error(
+        `[redeem-credit] delivery failed for ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+
     return createCvAdaptationResponseDto(updated);
+  }
+
+  async reconcileAdaptation(adaptationId: string): Promise<boolean> {
+    const adaptation = await this.database.cvAdaptation.findUnique({
+      where: { id: adaptationId },
+    });
+
+    if (!adaptation || adaptation.paymentStatus === "completed") return false;
+
+    await this.database.$transaction(async (tx) => {
+      const current = await tx.cvAdaptation.findUnique({
+        where: { id: adaptationId },
+      });
+      if (!current || current.paymentStatus === "completed") return;
+
+      await tx.cvAdaptation.update({
+        where: { id: adaptationId },
+        data: { paymentStatus: "completed", paidAt: new Date(), status: "paid" },
+      });
+    });
+
+    this.logAuditEvent({
+      eventType: "reconciliation_approved",
+      actionTaken: "approved",
+      internalCheckoutId: adaptationId,
+      internalCheckoutType: "adaptation",
+    });
+
+    if (!adaptation.adaptedResumeId) {
+      this.deliverAdaptation(adaptationId).catch((err) => {
+        this.logger.error(
+          `[reconcile] delivery failed for ${adaptationId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }
+
+    return true;
   }
 
   verifyWebhookSignature(

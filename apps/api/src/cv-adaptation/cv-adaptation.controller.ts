@@ -6,6 +6,7 @@ import {
   Headers,
   HttpCode,
   Inject,
+  Logger,
   Param,
   Post,
   Query,
@@ -40,6 +41,8 @@ const claimGuestValidationPipe = new ValidationPipe({
 @Controller("cv-adaptation")
 @UseGuards(JwtAuthGuard)
 export class CvAdaptationController {
+  private readonly logger = new Logger(CvAdaptationController.name);
+
   constructor(
     @Inject(CvAdaptationService)
     private readonly cvAdaptationService: CvAdaptationService,
@@ -236,6 +239,9 @@ export class CvAdaptationController {
     @Headers("x-signature") xSignature?: string,
     @Headers("x-request-id") xRequestId?: string,
   ) {
+    this.logger.log(
+      `[webhook:cv-adaptation:${provider}] received — sig=${xSignature ? "present" : "absent"} reqId=${xRequestId ?? "-"} body=${JSON.stringify(body).slice(0, 200)}`,
+    );
     this.cvAdaptationService.verifyWebhookSignature(
       provider,
       body,

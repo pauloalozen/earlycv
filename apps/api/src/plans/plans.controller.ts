@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   Inject,
+  Logger,
   Param,
   Post,
   UseGuards,
@@ -17,6 +18,8 @@ import { PlansService } from "./plans.service";
 
 @Controller("plans")
 export class PlansController {
+  private readonly logger = new Logger(PlansController.name);
+
   constructor(
     @Inject(PlansService) private readonly plansService: PlansService,
   ) {}
@@ -55,6 +58,9 @@ export class PlansController {
     @Headers("x-signature") xSignature?: string,
     @Headers("x-request-id") xRequestId?: string,
   ) {
+    this.logger.log(
+      `[webhook:plans:${provider}] received — sig=${xSignature ? "present" : "absent"} reqId=${xRequestId ?? "-"} body=${JSON.stringify(body).slice(0, 200)}`,
+    );
     this.plansService.verifyWebhookSignature(
       provider,
       body,

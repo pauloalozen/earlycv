@@ -4,13 +4,13 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import { getCheckoutStatus } from "@/lib/payments-api";
 
-type UIState = "waiting" | "approved" | "failed";
+type UIState = "waiting" | "approved" | "failed" | "timeout";
 
-const MAX_POLLS = 30; // ~60 segundos para pagamentos pendentes (PIX/boleto)
+const MAX_POLLS = 150; // ~5 minutos para PIX/boleto
 const POLL_INTERVAL_MS = 2000;
 
 function PendenteContent() {
@@ -20,9 +20,12 @@ function PendenteContent() {
   const [state, setState] = useState<UIState>("waiting");
   const [adaptationId, setAdaptationId] = useState<string | null>(null);
   const pollCount = useRef(0);
+  const polling = useRef(false);
 
-  useEffect(() => {
-    if (!checkoutId) return;
+  const startPolling = useCallback(() => {
+    if (!checkoutId || polling.current) return;
+    polling.current = true;
+    pollCount.current = 0;
 
     const poll = async () => {
       try {
@@ -31,6 +34,7 @@ function PendenteContent() {
         if (data.nextAction === "show_success") {
           setAdaptationId(data.adaptationId);
           setState("approved");
+          polling.current = false;
           return;
         }
 
@@ -39,20 +43,34 @@ function PendenteContent() {
           data.nextAction === "retry_payment"
         ) {
           setState("failed");
+          polling.current = false;
           return;
         }
 
         pollCount.current += 1;
         if (pollCount.current < MAX_POLLS) {
           setTimeout(poll, POLL_INTERVAL_MS);
+        } else {
+          setState("timeout");
+          polling.current = false;
         }
       } catch {
-        // silently keep waiting — don't error out
+        pollCount.current += 1;
+        if (pollCount.current < MAX_POLLS) {
+          setTimeout(poll, POLL_INTERVAL_MS);
+        } else {
+          setState("timeout");
+          polling.current = false;
+        }
       }
     };
 
     poll();
   }, [checkoutId]);
+
+  useEffect(() => {
+    startPolling();
+  }, [startPolling]);
 
   return (
     <main className="min-h-screen bg-[#F2F2F2] flex items-center justify-center p-6">
@@ -151,6 +169,57 @@ function PendenteContent() {
               Adaptar meu CV agora
             </Link>
           )}
+        </div>
+      )}
+
+      {state === "timeout" && (
+        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+          <div className="w-16 h-16 rounded-full bg-yellow-50 flex items-center justify-center mx-auto mb-6">
+            <svg
+              aria-hidden="true"
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-yellow-500"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v6l4 2" />
+            </svg>
+          </div>
+
+          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+            Ainda aguardando confirmação
+          </h1>
+          <p className="text-gray-500 text-sm mb-2">
+            O pagamento ainda não foi confirmado pelo Mercado Pago. Pode levar
+            alguns minutos para PIX e boleto.
+          </p>
+          <p className="text-gray-400 text-xs mb-8">
+            Assim que confirmar, seus créditos serão liberados automaticamente.
+            Você pode verificar novamente ou ir ao painel.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              setState("waiting");
+              startPolling();
+            }}
+            className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center text-white transition-colors hover:bg-[#222222] mb-3"
+          >
+            Verificar novamente
+          </button>
+          <Link
+            href="/dashboard"
+            className="text-sm text-gray-400 hover:text-gray-600"
+          >
+            Ir para o painel
+          </Link>
         </div>
       )}
 
