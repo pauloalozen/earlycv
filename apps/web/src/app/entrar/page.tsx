@@ -121,6 +121,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
 
           {/* Body */}
           <div
+            className="entrar-body"
             style={{
               flex: 1,
               display: "flex",
@@ -131,6 +132,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
             }}
           >
             <div
+              className="entrar-badge"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -156,6 +158,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
             </div>
 
             <h1
+              className="entrar-h1"
               style={{
                 fontSize: "clamp(40px, 4vw, 64px)",
                 fontWeight: 500,
@@ -198,6 +201,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
             </h1>
 
             <p
+              className="entrar-desc"
               style={{
                 fontSize: 15.5,
                 lineHeight: 1.55,
@@ -394,10 +398,14 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
           .entrar-google-btn:hover { background: #f5f4ee !important; }
           @media (max-width: 760px) {
             .entrar-grid { grid-template-columns: 1fr !important; }
-            .entrar-left { min-height: auto !important; padding: 48px 24px 24px !important; }
-            .entrar-right { min-height: auto !important; }
+            .entrar-left { min-height: auto !important; padding: 28px 24px 20px !important; }
+            .entrar-right { min-height: auto !important; padding: 24px 24px 32px !important; }
             .entrar-receipt { display: none !important; }
             .entrar-footer { display: none !important; }
+            .entrar-desc { display: none !important; }
+            .entrar-body { padding-left: 0 !important; justify-content: flex-start !important; }
+            .entrar-h1 { order: 1; margin: 0 0 12px !important; font-size: 38px !important; }
+            .entrar-badge { order: 2; margin-bottom: 0 !important; margin-top: 10px !important; }
           }
         `}</style>
       </main>
