@@ -13,6 +13,11 @@ import { StorageService } from "../storage/storage.service";
 
 const execFileAsync = promisify(execFile);
 
+type ExecFileFailure = NodeJS.ErrnoException & {
+  stderr?: string;
+  stdout?: string;
+};
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -292,33 +297,60 @@ export class ResumeTemplateDocxService {
     return url.slice(idx + marker.length);
   }
 
+  protected async runExecFile(
+    binary: string,
+    args: string[],
+  ): Promise<void> {
+    await execFileAsync(binary, args);
+  }
+
   private async execLibreOfficeConvert(docxPath: string): Promise<void> {
     const binaries = [
       process.env.LIBREOFFICE_BINARY?.trim(),
       "soffice",
       "libreoffice",
+      "/usr/bin/soffice",
+      "/usr/local/bin/soffice",
+      "/usr/lib/libreoffice/program/soffice",
+      "/snap/bin/libreoffice",
     ].filter((value): value is string => Boolean(value && value.length > 0));
 
-    let lastError: unknown;
+    const uniqueBinaries = [...new Set(binaries)];
 
-    for (const binary of binaries) {
+    const args = [
+      "--headless",
+      "--convert-to",
+      "pdf",
+      "--outdir",
+      tmpdir(),
+      docxPath,
+    ];
+
+    const attempts: string[] = [];
+    let lastError: unknown = null;
+
+    for (const binary of uniqueBinaries) {
       try {
-        await execFileAsync(binary, [
-          "--headless",
-          "--convert-to",
-          "pdf",
-          "--outdir",
-          tmpdir(),
-          docxPath,
-        ]);
+        await this.runExecFile(binary, args);
         return;
       } catch (error) {
+        const err = error as ExecFileFailure;
+        attempts.push(
+          `${binary}: ${err.code ?? "UNKNOWN"} ${err.message}`,
+        );
         lastError = error;
+
+        if (err.code !== "ENOENT") {
+          break;
+        }
       }
     }
 
+    const pathValue = process.env.PATH ?? "<empty>";
+    const details = attempts.length > 0 ? attempts.join(" | ") : "no-attempts";
+
     this.logger.error(
-      `[docx-convert] failed for ${docxPath}: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+      `[docx-convert] failed for ${docxPath}: ${lastError instanceof Error ? lastError.message : String(lastError)}; path=${pathValue}; attempts=${details}`,
     );
     throw new Error(
       "Falha ao converter CV para PDF no servidor. Tente novamente em instantes.",
