@@ -5,7 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { BadRequestException, Inject, Injectable, Logger } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from "@nestjs/common";
 import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";
 
@@ -154,12 +160,20 @@ const MOCK_DATA: DocxTemplateData = {
 // ---------------------------------------------------------------------------
 
 @Injectable()
-export class ResumeTemplateDocxService {
+export class ResumeTemplateDocxService implements OnModuleInit {
   private readonly logger = new Logger(ResumeTemplateDocxService.name);
 
   constructor(
     @Inject(StorageService) private readonly storage: StorageService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    if (process.env.NODE_ENV !== "production") {
+      return;
+    }
+
+    await this.assertPdfConverterAvailable();
+  }
 
   /**
    * Generate a preview PNG from the DOCX template filled with mock data.
@@ -304,7 +318,7 @@ export class ResumeTemplateDocxService {
     await execFileAsync(binary, args);
   }
 
-  private async execLibreOfficeConvert(docxPath: string): Promise<void> {
+  private getLibreOfficeCandidates(): string[] {
     const binaries = [
       process.env.LIBREOFFICE_BINARY?.trim(),
       "soffice",
@@ -315,7 +329,40 @@ export class ResumeTemplateDocxService {
       "/snap/bin/libreoffice",
     ].filter((value): value is string => Boolean(value && value.length > 0));
 
-    const uniqueBinaries = [...new Set(binaries)];
+    return [...new Set(binaries)];
+  }
+
+  private async assertPdfConverterAvailable(): Promise<void> {
+    const attempts: string[] = [];
+
+    for (const binary of this.getLibreOfficeCandidates()) {
+      try {
+        await this.runExecFile(binary, ["--version"]);
+        this.logger.log(`[docx-convert] runtime binary detected: ${binary}`);
+        return;
+      } catch (error) {
+        const err = error as ExecFileFailure;
+        attempts.push(`${binary}: ${err.code ?? "UNKNOWN"} ${err.message}`);
+
+        if (err.code !== "ENOENT") {
+          break;
+        }
+      }
+    }
+
+    const pathValue = process.env.PATH ?? "<empty>";
+    const details = attempts.length > 0 ? attempts.join(" | ") : "no-attempts";
+    this.logger.error(
+      `[docx-convert] runtime check failed; path=${pathValue}; attempts=${details}`,
+    );
+
+    throw new Error(
+      "PDF converter unavailable in runtime. Configure LibreOffice in deploy image and set LIBREOFFICE_BINARY when needed.",
+    );
+  }
+
+  private async execLibreOfficeConvert(docxPath: string): Promise<void> {
+    const uniqueBinaries = this.getLibreOfficeCandidates();
 
     const args = [
       "--headless",

@@ -64,4 +64,24 @@ describe("ResumeTemplateDocxService libreoffice lookup", () => {
 
     assert.deepEqual(service.attempted, ["soffice"]);
   });
+
+  it("fails application startup in production when converter is missing", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    try {
+      const service = new TestResumeTemplateDocxService(async () => {
+        const err = new Error("spawn ENOENT") as NodeJS.ErrnoException;
+        err.code = "ENOENT";
+        throw err;
+      });
+
+      await assert.rejects(
+        () => service.onModuleInit(),
+        /PDF converter unavailable in runtime/,
+      );
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
 });

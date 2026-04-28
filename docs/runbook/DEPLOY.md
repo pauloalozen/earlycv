@@ -37,7 +37,7 @@
 Em **Settings** do serviço:
 
 - Root Directory: `/`
-- O build usa `nixpacks.toml` na raiz do repositório para instalar dependências de runtime da API (incluindo `libreoffice` e `poppler_utils`, necessários para download de PDF)
+- Builder: **Dockerfile** (na raiz do repositório)
 - Build Command:
 
 ```bash
@@ -49,6 +49,8 @@ npm ci && npm run build --workspace @earlycv/database && npm run build --workspa
 ```bash
 npx prisma migrate deploy --schema packages/database/prisma/schema.prisma && node apps/api/dist/main.js
 ```
+
+Se estiver usando Dockerfile, o `CMD` já inicializa a API e executa as migrations via `npm run start --workspace @earlycv/api`.
 
 - Watch Paths: `apps/api/**`, `packages/**`
 
@@ -80,6 +82,9 @@ AWS_SECRET_ACCESS_KEY=<R2 Secret Access Key>
 AWS_REGION=auto
 S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 S3_BUCKET=earlycv-prod
+
+# PDF conversion
+LIBREOFFICE_BINARY=/usr/bin/soffice
 
 # OpenAI
 OPENAI_API_KEY=sk-...
