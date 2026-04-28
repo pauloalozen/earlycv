@@ -24,6 +24,7 @@ import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMasterResumeFromList, listMyResumes } from "@/lib/resumes-api";
 import { CvMasterCard } from "./cv-master-card";
+import { DeleteAccountDangerZone } from "./delete-account-danger-zone";
 import { HistoryActionLinks } from "./history-action-links";
 
 export const metadata: Metadata = {
@@ -633,6 +634,7 @@ export default async function DashboardPage({
                         }}
                       >
                         <div
+                          className="dash-history-row"
                           style={{
                             display: "flex",
                             alignItems: "flex-start",
@@ -668,7 +670,10 @@ export default async function DashboardPage({
                             </p>
                           </div>
 
-                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div
+                            className="dash-history-score"
+                            style={{ textAlign: "right", flexShrink: 0 }}
+                          >
                             <p
                               style={{
                                 fontFamily: MONO,
@@ -831,6 +836,16 @@ export default async function DashboardPage({
               </div>
             )}
           </div>
+
+          <div style={{ marginTop: 16 }}>
+            <DeleteAccountDangerZone
+              creditsRemaining={
+                typeof planInfo?.creditsRemaining === "number"
+                  ? Math.max(0, planInfo.creditsRemaining)
+                  : 0
+              }
+            />
+          </div>
         </div>
       </main>
 
@@ -847,6 +862,8 @@ export default async function DashboardPage({
         @media (max-width: 680px) {
           .dash-top-grid { grid-template-columns: 1fr !important; }
           .dash-metrics-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .dash-history-row { align-items: flex-start !important; }
+          .dash-history-score { margin-left: auto !important; text-align: right !important; }
         }
         @media (max-width: 420px) {
           .dash-metrics-grid { grid-template-columns: 1fr !important; }

@@ -12,7 +12,7 @@ function getApiBaseUrl() {
 }
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -24,12 +24,18 @@ export async function POST(
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
+  const body = await request.text();
+
   const apiResponse = await fetch(
     `${getApiBaseUrl()}/cv-adaptation/${id}/redeem-credit`,
     {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       cache: "no-store",
+      body,
     },
   );
 

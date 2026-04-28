@@ -141,6 +141,7 @@ export class CvAdaptationDocxService {
       email,
       location,
       mainGoal,
+      hasMainGoal: mainGoal.trim().length > 0,
       summary: summaryText,
       items: this.mapExperience(experienceSection),
       competencias: this.mapSkills(skillsSection),

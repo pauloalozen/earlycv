@@ -13,7 +13,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Direcao de monorepo: `apps/web`, `apps/api`, `packages/config`, `packages/database`, `packages/queue`, `packages/storage`, `packages/ai`.
 - `apps/web` fala apenas com `apps/api`; `apps/api` concentra regras de negocio e orquestracao de infraestrutura.
 - Stack principal: Next.js App Router, TypeScript, Tailwind CSS v4, Biome.
-- Preserve a linguagem visual do produto: fundo claro, acento laranja/terracota, tipografia limpa e navegacao suave.
+- Diretriz visual antiga (laranja/terracota) esta descontinuada e nao deve mais ser utilizada.
+- Nova diretriz ativa: linguagem monocromatica escura-sobre-clara nas paginas de usuario, conforme `CODE_GUIDELINES.md` (secao 7); manter laranja fora do produto por enquanto.
 - Componentes genericos reutilizaveis ficam no pacote de UI compartilhada do monorepo; enquanto essa extracao nao acontece, use `apps/web/src/components/ui` no app web e siga tambem `apps/web/src/components/ui/AGENTS.md`.
 - SEO e requisito de produto: toda rota publica deve sair com metadata completa, canonical, OG/Twitter, robots e structured data quando fizer sentido.
 - Vagas publicas devem ter URL dedicada, conteudo renderizado no servidor e `JobPosting` estruturado.

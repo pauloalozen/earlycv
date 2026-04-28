@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import { AppHeader } from "@/components/app-header";
+import { PageShell } from "@/components/page-shell";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import {
+  getCvAdaptationContent,
+  type CvAnalysisData,
+} from "@/lib/cv-adaptation-api";
+import { normalizeData } from "../adaptar/resultado/normalize-data";
 import { buildPlanCatalog } from "./plan-catalog";
 import { ScoreIndicator } from "./score-indicator";
 
@@ -16,7 +22,7 @@ const MONO = "var(--font-geist-mono), monospace";
 const SERIF_ITALIC = "var(--font-instrument-serif), serif";
 
 type PlanosPageProps = {
-  searchParams: Promise<{ error?: string; aid?: string }>;
+  searchParams: Promise<{ error?: string; aid?: string; source?: string }>;
 };
 
 export default async function PlanosPage({ searchParams }: PlanosPageProps) {
@@ -29,10 +35,31 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   const PLANS = buildPlanCatalog(process.env, { isAuthenticated });
   const error = params.error;
   const adaptationId =
-    params.aid && /^[0-9a-f-]{36}$/.test(params.aid) ? params.aid : undefined;
+    typeof params.aid === "string" && params.aid.trim().length > 0
+      ? params.aid.trim()
+      : undefined;
+  const showScoreIndicator =
+    params.source === "resultado-buy-credits" && Boolean(adaptationId);
+
+  let initialScore: number | null = null;
+  let initialProjectedScore: number | null = null;
+
+  if (showScoreIndicator && adaptationId) {
+    try {
+      const payload = await getCvAdaptationContent(adaptationId);
+      const normalized = normalizeData(
+        payload.adaptedContentJson as CvAnalysisData,
+      );
+      initialScore = normalized.fit.score;
+      initialProjectedScore = normalized.fit.score_pos_ajustes ?? null;
+    } catch {
+      initialScore = null;
+      initialProjectedScore = null;
+    }
+  }
 
   return (
-    <>
+    <PageShell>
       {/* Grain */}
       <div
         aria-hidden
@@ -113,7 +140,13 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
           </div>
 
           {/* ScoreIndicator */}
-          <ScoreIndicator />
+          {showScoreIndicator ? (
+            <ScoreIndicator
+              adaptationId={adaptationId}
+              initialScore={initialScore}
+              initialProjectedScore={initialProjectedScore}
+            />
+          ) : null}
 
           {/* Error */}
           {error && (
@@ -502,6 +535,6 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
           .planos-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
-    </>
+    </PageShell>
   );
 }

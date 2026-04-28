@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Inject,
@@ -172,12 +173,18 @@ export class AuthController {
     );
   }
 
-
   @Get("me")
   @UseGuards(JwtAuthGuard)
   @HttpCode(200)
   me(@AuthenticatedUser() user: AuthUser) {
     return user;
+  }
+
+  @Delete("me")
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  deleteMe(@AuthenticatedUser() user: AuthUser) {
+    return this.authService.deleteCurrentUser(user.id);
   }
 
   private buildSocialRedirect(tokens: {

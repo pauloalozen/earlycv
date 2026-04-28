@@ -311,6 +311,14 @@ export class AuthService {
     return this.sanitizeUser(user);
   }
 
+  async deleteCurrentUser(userId: string): Promise<{ ok: true }> {
+    await this.requireUserById(userId);
+
+    await this.database.user.delete({ where: { id: userId } });
+
+    return { ok: true };
+  }
+
   async forgotPassword(input: ForgotPasswordDto): Promise<{ ok: true }> {
     const user = await this.database.user.findUnique({
       where: { email: input.email.trim().toLowerCase() },

@@ -581,6 +581,7 @@ export default function ResultadoPage() {
           masterCvText: parsed.masterCvText ?? "",
           jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
           companyName: parsed.adaptedContentJson?.vaga?.empresa,
+          selectedMissingKeywords: Array.from(effectiveSelected),
         }),
       });
       if (!res.ok) {
@@ -664,7 +665,8 @@ export default function ResultadoPage() {
         setReviewPaymentStatus(result.paymentStatus ?? "none");
         const score = parsed.adaptedContentJson?.fit?.score;
         if (typeof score === "number") {
-          const apiProjetado = parsed.adaptedContentJson?.fit?.score_pos_ajustes;
+          const apiProjetado =
+            parsed.adaptedContentJson?.fit?.score_pos_ajustes;
           let scoreProjetado: number;
           if (typeof apiProjetado === "number") {
             scoreProjetado = apiProjetado;
@@ -702,7 +704,14 @@ export default function ResultadoPage() {
     try {
       const res = await fetch(
         `/api/cv-adaptation/${reviewAdaptationId}/redeem-credit`,
-        { method: "POST", cache: "no-store" },
+        {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            selectedMissingKeywords: Array.from(effectiveSelected),
+          }),
+        },
       );
       if (!res.ok) throw new Error("Falha ao liberar");
       setReviewPaymentStatus("completed");
@@ -804,6 +813,16 @@ export default function ResultadoPage() {
   // ── Derived data ───────────────────────────────────────────
 
   const data = normalizeData(rawData);
+  const frozenKeywords = Array.isArray(
+    (rawData as CvAnalysisData & { selectedMissingKeywords?: unknown })
+      .selectedMissingKeywords,
+  )
+    ? ((rawData as CvAnalysisData & { selectedMissingKeywords: string[] })
+        .selectedMissingKeywords ?? [])
+    : [];
+  const effectiveSelected =
+    frozenKeywords.length > 0 ? new Set(frozenKeywords) : selecionadas;
+  const isKeywordsFrozen = frozenKeywords.length > 0;
   const isGuestView = isAuthenticated !== true && !isDemo;
   const vagaSeed = `${data.vaga.cargo}::${data.vaga.empresa}`;
   const mediaScore = seededInt(vagaSeed, 78, 85);
@@ -811,7 +830,7 @@ export default function ResultadoPage() {
 
   const delta = data.fit.score - mediaScore;
   const ptsKwSelecionadas = data.keywords.ausentes
-    .filter((k) => selecionadas.has(k.kw))
+    .filter((k) => effectiveSelected.has(k.kw))
     .reduce((s, k) => s + k.pontos, 0);
   const totalAjustesConteudo = data.ajustes_conteudo.reduce(
     (s, a) => s + a.pontos,
@@ -1133,6 +1152,7 @@ export default function ResultadoPage() {
                   />
                 </svg>
                 <div
+                  className="res-preview-chrome"
                   style={{
                     position: "absolute",
                     inset: 0,
@@ -2021,7 +2041,7 @@ export default function ResultadoPage() {
                 ? data.keywords.ausentes.slice(0, GUEST_VISIBLE)
                 : data.keywords.ausentes
               ).map((k) => {
-                const sel = selecionadas.has(k.kw);
+                const sel = effectiveSelected.has(k.kw);
                 return (
                   <label
                     key={k.kw}
@@ -2035,7 +2055,8 @@ export default function ResultadoPage() {
                       border: `1px solid ${sel ? "rgba(110,150,20,0.25)" : "rgba(245,158,11,0.2)"}`,
                       borderRadius: 10,
                       padding: "11px 14px",
-                      cursor: locked ? "default" : "pointer",
+                      cursor:
+                        locked || isKeywordsFrozen ? "default" : "pointer",
                     }}
                   >
                     <div
@@ -2075,6 +2096,7 @@ export default function ResultadoPage() {
                       type="checkbox"
                       className="sr-only"
                       checked={sel}
+                      disabled={locked || isKeywordsFrozen}
                       onChange={() => toggleKw(k.kw)}
                     />
                     <span
@@ -2174,7 +2196,7 @@ export default function ResultadoPage() {
               </GuestBlurOverlay>
             )}
 
-            {selecionadas.size > 0 && (
+            {effectiveSelected.size > 0 && (
               <div
                 style={{
                   marginTop: 12,
@@ -2196,9 +2218,9 @@ export default function ResultadoPage() {
                       margin: "0 0 2px",
                     }}
                   >
-                    {selecionadas.size} palavra
-                    {selecionadas.size > 1 ? "s" : ""}-chave selecionada
-                    {selecionadas.size > 1 ? "s" : ""}
+                    {effectiveSelected.size} palavra
+                    {effectiveSelected.size > 1 ? "s" : ""}-chave selecionada
+                    {effectiveSelected.size > 1 ? "s" : ""}
                   </p>
                   <p
                     style={{
@@ -2760,6 +2782,7 @@ export default function ResultadoPage() {
                     }}
                   />
                   <span
+                    className="res-preview-title"
                     style={{
                       position: "absolute",
                       left: 0,
@@ -2813,6 +2836,10 @@ export default function ResultadoPage() {
                         color: "#5a5a55",
                         lineHeight: 1.6,
                         margin: 0,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
                       }}
                     >
                       {data.preview.antes}
@@ -2843,6 +2870,10 @@ export default function ResultadoPage() {
                         color: "#2a2a28",
                         lineHeight: 1.6,
                         margin: 0,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
                         ...(isDemo
                           ? {}
                           : {
@@ -3167,7 +3198,7 @@ export default function ResultadoPage() {
                   >
                     {[
                       `${data.ajustes_conteudo.length} ajustes de conteúdo prontos para aplicar`,
-                      `${selecionadas.size > 0 ? selecionadas.size : data.keywords.ausentes.length} palavras-chave da vaga inseridas no contexto certo`,
+                      `${effectiveSelected.size > 0 ? effectiveSelected.size : data.keywords.ausentes.length} palavras-chave da vaga inseridas no contexto certo`,
                       "Formato validado para sistemas ATS — sem colunas, sem tabelas",
                       "Download em PDF e DOCX prontos para enviar hoje",
                     ].map((item) => (
@@ -3419,7 +3450,7 @@ export default function ResultadoPage() {
                       <a
                         href={
                           reviewAdaptationId
-                            ? `/planos?aid=${reviewAdaptationId}`
+                            ? `/planos?aid=${reviewAdaptationId}&source=resultado-buy-credits`
                             : "/planos"
                         }
                         style={{
@@ -3442,7 +3473,7 @@ export default function ResultadoPage() {
                     <a
                       href={
                         reviewAdaptationId
-                          ? `/planos?aid=${reviewAdaptationId}`
+                          ? `/planos?aid=${reviewAdaptationId}&source=resultado-buy-credits`
                           : "/planos"
                       }
                       style={{
@@ -3485,27 +3516,6 @@ export default function ResultadoPage() {
                       {claiming
                         ? "Liberando CV..."
                         : "Liberar meu CV otimizado agora →"}
-                    </button>
-                  )}
-
-                  {!isDownloadReady && isAuthenticated !== false && (
-                    <button
-                      type="button"
-                      onClick={() => window.location.assign("/planos")}
-                      style={{
-                        width: "100%",
-                        background: "rgba(255,255,255,0.07)",
-                        color: "rgba(255,255,255,0.6)",
-                        border: "none",
-                        borderRadius: 12,
-                        padding: "12px",
-                        fontSize: 13,
-                        fontWeight: 500,
-                        cursor: "pointer",
-                        fontFamily: GEIST,
-                      }}
-                    >
-                      Ver pacotes de créditos
                     </button>
                   )}
 
@@ -3728,6 +3738,8 @@ export default function ResultadoPage() {
         }
         @media (max-width: 540px) {
           .res-campos-grid { grid-template-columns: 1fr !important; }
+          .res-preview-chrome { justify-content: flex-start !important; flex-wrap: wrap !important; row-gap: 6px !important; }
+          .res-preview-title { position: static !important; width: 100% !important; text-align: left !important; margin-top: 2px !important; display: block !important; }
         }
       `}</style>
     </PageShell>

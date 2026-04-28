@@ -1,4 +1,11 @@
-import { IsObject, IsOptional, IsString, MaxLength } from "class-validator";
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from "class-validator";
 
 export class ClaimGuestAdaptationDto {
   @IsObject()
@@ -26,4 +33,10 @@ export class ClaimGuestAdaptationDto {
   @IsString()
   @MaxLength(200)
   companyName?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(80)
+  @IsString({ each: true })
+  selectedMissingKeywords?: string[];
 }

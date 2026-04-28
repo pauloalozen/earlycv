@@ -38,6 +38,7 @@ import type {
 } from "./dto/create-cv-adaptation.dto";
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 import { createCvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
+import type { RedeemCreditDto } from "./dto/redeem-credit.dto";
 import type { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
 
 type AuditEntry = {
@@ -292,6 +293,11 @@ export class CvAdaptationService {
         masterResumeId = created.id;
       }
 
+      const adaptedContent = this.withFrozenMissingKeywords(
+        dto.adaptedContentJson,
+        dto.selectedMissingKeywords,
+      );
+
       const created = await tx.cvAdaptation.create({
         data: {
           userId,
@@ -300,7 +306,7 @@ export class CvAdaptationService {
           templateId: defaultTemplate?.id ?? null,
           jobTitle: dto.jobTitle ?? null,
           companyName: dto.companyName ?? null,
-          adaptedContentJson: dto.adaptedContentJson as Prisma.InputJsonValue,
+          adaptedContentJson: adaptedContent as Prisma.InputJsonValue,
           // aiAuditJson is generated lazily via ensureLegacyStructuredOutput on download
           previewText: dto.previewText ?? null,
           status: "delivered",
@@ -707,7 +713,9 @@ export class CvAdaptationService {
     }
 
     if (adaptation.paymentStatus === "completed") {
-      throw new BadRequestException("Pagamento já confirmado para esta análise.");
+      throw new BadRequestException(
+        "Pagamento já confirmado para esta análise.",
+      );
     }
 
     // If a paymentReference already exists (pending), reuse it to avoid orphaning
@@ -769,7 +777,7 @@ export class CvAdaptationService {
     );
   }
 
-  async redeemWithCredit(userId: string, id: string) {
+  async redeemWithCredit(userId: string, id: string, dto?: RedeemCreditDto) {
     const user = await this.database.user.findUnique({
       where: { id: userId },
       select: { creditsRemaining: true, internalRole: true },
@@ -810,12 +818,18 @@ export class CvAdaptationService {
         });
       }
 
+      const updatedContent = this.withFrozenMissingKeywords(
+        adaptation.adaptedContentJson,
+        dto?.selectedMissingKeywords,
+      );
+
       return tx.cvAdaptation.update({
         where: { id: adaptation.id },
         data: {
           paymentStatus: "completed",
           paidAt: new Date(),
           status: "paid",
+          adaptedContentJson: updatedContent as Prisma.InputJsonValue,
         },
         include: { template: { select: { id: true, name: true, slug: true } } },
       });
@@ -828,6 +842,28 @@ export class CvAdaptationService {
     });
 
     return createCvAdaptationResponseDto(updated);
+  }
+
+  private withFrozenMissingKeywords(
+    adaptedContentJson: unknown,
+    selectedMissingKeywords?: string[],
+  ) {
+    if (
+      !selectedMissingKeywords?.length ||
+      typeof adaptedContentJson !== "object"
+    ) {
+      return adaptedContentJson;
+    }
+
+    const sanitized = selectedMissingKeywords
+      .map((keyword) => keyword.trim())
+      .filter((keyword) => keyword.length > 0)
+      .slice(0, 80);
+
+    return {
+      ...(adaptedContentJson as Record<string, unknown>),
+      selectedMissingKeywords: sanitized,
+    };
   }
 
   async reconcileAdaptation(adaptationId: string): Promise<boolean> {
@@ -845,7 +881,11 @@ export class CvAdaptationService {
 
       await tx.cvAdaptation.update({
         where: { id: adaptationId },
-        data: { paymentStatus: "completed", paidAt: new Date(), status: "paid" },
+        data: {
+          paymentStatus: "completed",
+          paidAt: new Date(),
+          status: "paid",
+        },
       });
     });
 
@@ -1623,18 +1663,24 @@ export class CvAdaptationService {
   private mapPdfExtractionError(error: unknown): never {
     if (error instanceof Error) {
       if (error.name === "NotACvError") {
-        this.logger.warn("[cv-validation] uploaded file does not look like a CV");
+        this.logger.warn(
+          "[cv-validation] uploaded file does not look like a CV",
+        );
         throw new BadRequestException(
           "O arquivo enviado não parece ser um currículo. Envie um CV em PDF para análise.",
         );
       }
       if (error.name === "ScannedPdfError") {
-        this.logger.warn("[cv-validation] PDF has no extractable text (scanned/image)");
+        this.logger.warn(
+          "[cv-validation] PDF has no extractable text (scanned/image)",
+        );
         throw new BadRequestException(
           "Não conseguimos ler o texto do PDF. Envie um arquivo com texto selecionável.",
         );
       }
-      this.logger.warn(`[cv-validation] PDF extraction failed: ${error.message}`);
+      this.logger.warn(
+        `[cv-validation] PDF extraction failed: ${error.message}`,
+      );
     }
     throw new BadRequestException(
       "Não foi possível ler o arquivo. Verifique se o PDF não está protegido por senha ou corrompido.",

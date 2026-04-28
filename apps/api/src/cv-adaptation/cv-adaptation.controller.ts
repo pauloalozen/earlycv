@@ -30,6 +30,7 @@ import {
   CreateCvAdaptationDto,
   type FileUpload,
 } from "./dto/create-cv-adaptation.dto";
+import { RedeemCreditDto } from "./dto/redeem-credit.dto";
 import { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
 
 const claimGuestValidationPipe = new ValidationPipe({
@@ -206,8 +207,16 @@ export class CvAdaptationController {
   redeemWithCredit(
     @AuthenticatedUser() user: { id: string },
     @Param("id") id: string,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        expectedType: RedeemCreditDto,
+      }),
+    )
+    dto: RedeemCreditDto,
   ) {
-    return this.cvAdaptationService.redeemWithCredit(user.id, id);
+    return this.cvAdaptationService.redeemWithCredit(user.id, id, dto);
   }
 
   @Get(":id/download")

@@ -21,7 +21,53 @@ export function wrapOptionalDocxSections(xml: string): WrapResult {
   next = langResult.xml;
   changed = changed || langResult.changed;
 
+  const goalResult = wrapSectionByField(next, {
+    fieldTag: "mainGoal",
+    wrapperTag: "hasMainGoal",
+  });
+  next = goalResult.xml;
+  changed = changed || goalResult.changed;
+
   return { xml: next, changed };
+}
+
+function wrapSectionByField(
+  xml: string,
+  options: { fieldTag: string; wrapperTag: string },
+): WrapResult {
+  const { fieldTag, wrapperTag } = options;
+  const fieldToken = `{${fieldTag}}`;
+  const fieldIdx = xml.indexOf(fieldToken);
+  if (fieldIdx < 0) return { xml, changed: false };
+
+  const paragraphStartIdx = xml.lastIndexOf("<w:p", fieldIdx);
+  const paragraphCloseIdx = xml.indexOf("</w:p>", fieldIdx);
+  if (paragraphStartIdx < 0 || paragraphCloseIdx < 0) {
+    return { xml, changed: false };
+  }
+  const paragraphEndIdx = paragraphCloseIdx + "</w:p>".length;
+  const headingParagraphIdx = findHeadingParagraphStart(xml, paragraphStartIdx);
+  const sectionStartIdx = headingParagraphIdx ?? paragraphStartIdx;
+
+  const wrapperOpenTag = `{#${wrapperTag}}`;
+  const wrapperCloseTag = `{/${wrapperTag}}`;
+  const openWrapperIdx = xml.lastIndexOf(wrapperOpenTag, sectionStartIdx);
+  const closeWrapperIdx = xml.indexOf(wrapperCloseTag, paragraphEndIdx);
+  const alreadyWrapped =
+    openWrapperIdx >= 0 &&
+    closeWrapperIdx >= 0 &&
+    openWrapperIdx < sectionStartIdx &&
+    closeWrapperIdx > paragraphEndIdx;
+  if (alreadyWrapped) return { xml, changed: false };
+
+  const wrapped =
+    xml.slice(0, sectionStartIdx) +
+    tagParagraph(`#${wrapperTag}`) +
+    xml.slice(sectionStartIdx, paragraphEndIdx) +
+    tagParagraph(`/${wrapperTag}`) +
+    xml.slice(paragraphEndIdx);
+
+  return { xml: wrapped, changed: true };
 }
 
 function wrapSection(

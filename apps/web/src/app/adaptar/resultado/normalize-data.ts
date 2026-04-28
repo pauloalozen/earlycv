@@ -65,17 +65,26 @@ export function normalizeData(raw: CvAnalysisData) {
     : (raw.ats_keywords?.ausentes ?? []).map((kw) => ({ kw, pontos: 4 }));
 
   const s1All = applyBudget([...positivosRaw, ...ajustesConteudoRaw], 40);
-  const positivos = s1All.slice(0, positivosRaw.length) as typeof positivosRaw;
-  const ajustesConteudo = s1All.slice(
-    positivosRaw.length,
-  ) as typeof ajustesConteudoRaw;
+  const positivos = (s1All.slice(0, positivosRaw.length) as typeof positivosRaw)
+    .slice()
+    .sort((a, b) => b.pontos - a.pontos);
+  const ajustesConteudo = (
+    s1All.slice(positivosRaw.length) as typeof ajustesConteudoRaw
+  )
+    .slice()
+    .sort((a, b) => b.pontos - a.pontos);
 
   const s2All = applyBudget([...kwPresentesRaw, ...kwAusentesRaw], 40);
-  const kwPresentes = s2All.slice(
-    0,
-    kwPresentesRaw.length,
-  ) as typeof kwPresentesRaw;
-  const kwAusentes = s2All.slice(kwPresentesRaw.length) as typeof kwAusentesRaw;
+  const kwPresentes = (
+    s2All.slice(0, kwPresentesRaw.length) as typeof kwPresentesRaw
+  )
+    .slice()
+    .sort((a, b) => b.pontos - a.pontos);
+  const kwAusentes = (
+    s2All.slice(kwPresentesRaw.length) as typeof kwAusentesRaw
+  )
+    .slice()
+    .sort((a, b) => b.pontos - a.pontos);
 
   const scorePosAjustes =
     raw.fit.score_pos_ajustes ??
@@ -101,7 +110,13 @@ export function normalizeData(raw: CvAnalysisData) {
           ? raw.formato_cv.campos
           : [],
         problemas: Array.isArray(raw.formato_cv.problemas)
-          ? raw.formato_cv.problemas
+          ? raw.formato_cv.problemas.toSorted(
+              (a, b) =>
+                a.impacto - b.impacto ||
+                a.titulo.localeCompare(b.titulo, "pt-BR", {
+                  sensitivity: "base",
+                }),
+            )
           : [],
       }
     : null;

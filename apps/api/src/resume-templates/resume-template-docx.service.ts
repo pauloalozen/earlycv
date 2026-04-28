@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { Inject, Injectable } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger } from "@nestjs/common";
 import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";
 
@@ -23,6 +23,7 @@ export interface DocxTemplateData {
   email: string;
   location: string;
   mainGoal: string;
+  hasMainGoal: boolean;
   summary: string;
   items: Array<{
     heading: string;
@@ -59,6 +60,7 @@ const MOCK_DATA: DocxTemplateData = {
   location: "São Paulo, SP",
   mainGoal:
     "Contribuir com minha experiência em análise de dados e inteligência de negócios para impulsionar decisões estratégicas e criar valor mensurável para o negócio.",
+  hasMainGoal: true,
   summary:
     "Profissional de Dados e Analytics com 8 anos de experiência em Business Intelligence, modelagem de dados e desenvolvimento de dashboards executivos. Histórico comprovado na implementação de soluções analíticas que aumentaram a eficiência operacional em 35%. Expertise em Power BI, SQL e Python aplicados ao contexto de negócios.",
   items: [
@@ -148,6 +150,8 @@ const MOCK_DATA: DocxTemplateData = {
 
 @Injectable()
 export class ResumeTemplateDocxService {
+  private readonly logger = new Logger(ResumeTemplateDocxService.name);
+
   constructor(
     @Inject(StorageService) private readonly storage: StorageService,
   ) {}
@@ -180,15 +184,48 @@ export class ResumeTemplateDocxService {
   }
 
   fillTemplate(docxBuffer: Buffer, data: DocxTemplateData): Buffer {
-    const zip = new PizZip(docxBuffer);
-    const doc = new Docxtemplater(zip, {
-      paragraphLoop: true,
-      linebreaks: true,
-    });
+    try {
+      const zip = new PizZip(docxBuffer);
+      const doc = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks: true,
+      });
 
-    doc.render(data);
+      doc.render(data);
 
-    return doc.getZip().generate({ type: "nodebuffer" }) as Buffer;
+      return doc.getZip().generate({ type: "nodebuffer" }) as Buffer;
+    } catch (error) {
+      const message = this.extractDocxTemplateErrorMessage(error);
+      this.logger.warn(`[docx-template] invalid template: ${message}`);
+      throw new BadRequestException(
+        `Template DOCX invalido: ${message}. Revise as tags condicionais no arquivo e tente novamente.`,
+      );
+    }
+  }
+
+  private extractDocxTemplateErrorMessage(error: unknown): string {
+    if (!(error instanceof Error)) {
+      return "erro desconhecido";
+    }
+
+    const errorWithProperties = error as Error & {
+      properties?: {
+        errors?: Array<{
+          properties?: {
+            explanation?: string;
+          };
+        }>;
+      };
+    };
+
+    const explanation =
+      errorWithProperties.properties?.errors?.[0]?.properties?.explanation;
+
+    if (typeof explanation === "string" && explanation.trim().length > 0) {
+      return explanation.trim();
+    }
+
+    return error.message;
   }
 
   /** Convert a DOCX buffer to PDF via LibreOffice. */
@@ -200,14 +237,7 @@ export class ResumeTemplateDocxService {
     writeFileSync(docxPath, docxBuffer);
 
     try {
-      await execFileAsync("soffice", [
-        "--headless",
-        "--convert-to",
-        "pdf",
-        "--outdir",
-        tmpdir(),
-        docxPath,
-      ]);
+      await this.execLibreOfficeConvert(docxPath);
 
       return await readFile(pdfPath);
     } finally {
@@ -231,14 +261,7 @@ export class ResumeTemplateDocxService {
     writeFileSync(docxPath, docxBuffer);
 
     try {
-      await execFileAsync("soffice", [
-        "--headless",
-        "--convert-to",
-        "pdf",
-        "--outdir",
-        tmpdir(),
-        docxPath,
-      ]);
+      await this.execLibreOfficeConvert(docxPath);
 
       await execFileAsync("pdftoppm", [
         "-r",
@@ -267,5 +290,38 @@ export class ResumeTemplateDocxService {
     const idx = url.indexOf(marker);
     if (idx < 0) throw new Error(`Cannot extract MinIO key from URL: ${url}`);
     return url.slice(idx + marker.length);
+  }
+
+  private async execLibreOfficeConvert(docxPath: string): Promise<void> {
+    const binaries = [
+      process.env.LIBREOFFICE_BINARY?.trim(),
+      "soffice",
+      "libreoffice",
+    ].filter((value): value is string => Boolean(value && value.length > 0));
+
+    let lastError: unknown;
+
+    for (const binary of binaries) {
+      try {
+        await execFileAsync(binary, [
+          "--headless",
+          "--convert-to",
+          "pdf",
+          "--outdir",
+          tmpdir(),
+          docxPath,
+        ]);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    this.logger.error(
+      `[docx-convert] failed for ${docxPath}: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+    );
+    throw new Error(
+      "Falha ao converter CV para PDF no servidor. Tente novamente em instantes.",
+    );
   }
 }

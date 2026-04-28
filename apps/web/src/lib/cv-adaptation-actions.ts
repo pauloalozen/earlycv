@@ -1,4 +1,10 @@
-type CvAdaptationStatus = "pending" | "analyzing" | "awaiting_payment" | "paid" | "delivered" | "failed";
+type CvAdaptationStatus =
+  | "pending"
+  | "analyzing"
+  | "awaiting_payment"
+  | "paid"
+  | "delivered"
+  | "failed";
 type PaymentStatus = "none" | "pending" | "completed" | "failed" | "refunded";
 
 export type HistoryAdaptationItem = {
@@ -14,6 +20,7 @@ export function getHistoryActions(item: HistoryAdaptationItem) {
   return {
     resultHref,
     redeemHref,
+    plansHref: `/planos?aid=${item.id}&source=resultado-buy-credits`,
     pdfHref: `/api/cv-adaptation/${item.id}/download?format=pdf`,
     docxHref: `/api/cv-adaptation/${item.id}/download?format=docx`,
     canDownload: item.paymentStatus === "completed",

@@ -212,6 +212,39 @@ test("auth endpoints validate payloads, rotate refresh tokens, logout, and retur
   await app.close();
 });
 
+test("DELETE /api/auth/me deletes current user account", async () => {
+  const { app, database } = await createApp();
+  const email = `delete-me+${randomUUID()}@earlycv.dev`;
+
+  await deleteUserByEmail(database, email);
+
+  const registerResponse = await request(app.getHttpServer())
+    .post("/api/auth/register")
+    .send({
+      email,
+      password: "Super-secret-123",
+      name: "Delete Me",
+    })
+    .expect(201);
+
+  const accessToken = registerResponse.body.accessToken as string;
+
+  await request(app.getHttpServer())
+    .delete("/api/auth/me")
+    .set("Authorization", `Bearer ${accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.deepEqual(body, { ok: true });
+    });
+
+  await request(app.getHttpServer())
+    .get("/api/auth/me")
+    .set("Authorization", `Bearer ${accessToken}`)
+    .expect(401);
+
+  await app.close();
+});
+
 test("reset-password validates the same password policy as register", async () => {
   const { app } = await createApp();
 

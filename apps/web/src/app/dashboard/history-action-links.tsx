@@ -18,6 +18,7 @@ type Props = {
   actions: {
     resultHref: string;
     redeemHref: string;
+    plansHref: string;
     pdfHref: string;
     docxHref: string;
     canDownload: boolean;
@@ -110,6 +111,10 @@ export function HistoryActionLinks({
         @media (max-width: 640px) {
           .history-actions { display: grid !important; grid-template-columns: 1fr 1fr; }
           .history-actions > * { width: 100%; justify-content: center; }
+          .history-adjustments-modal { padding: 16px !important; }
+          .history-adjustments-scores { flex-direction: column !important; }
+          .history-adjustments-actions { flex-direction: column !important; }
+          .history-adjustments-actions > * { width: 100%; justify-content: center; }
         }
       `}</style>
       <a
@@ -225,7 +230,7 @@ export function HistoryActionLinks({
         </button>
       ) : (
         <a
-          href="/planos"
+          href={actions.plansHref}
           style={{
             color: "#ffffff",
             ...sharedChipTextStyle,
@@ -270,6 +275,7 @@ export function HistoryActionLinks({
               }}
             />
             <div
+              className="history-adjustments-modal"
               role="dialog"
               aria-modal="true"
               aria-labelledby="dashboard-ajustes-feitos-title"
@@ -292,6 +298,7 @@ export function HistoryActionLinks({
             >
               {/* Header */}
               <div
+                className="history-adjustments-scores"
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
@@ -530,6 +537,7 @@ export function HistoryActionLinks({
 
               {/* Actions */}
               <div
+                className="history-adjustments-actions"
                 style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
               >
                 <button

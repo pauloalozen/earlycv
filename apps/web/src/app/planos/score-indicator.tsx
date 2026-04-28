@@ -2,15 +2,64 @@
 
 import { useEffect, useState } from "react";
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
+import { normalizeData } from "../adaptar/resultado/normalize-data";
 
 const MONO = "var(--font-geist-mono), monospace";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 
-export function ScoreIndicator() {
-  const [score, setScore] = useState<number | null>(null);
-  const [scoreProjetado, setScoreProjetado] = useState<number | null>(null);
+export function ScoreIndicator({
+  adaptationId,
+  initialScore = null,
+  initialProjectedScore = null,
+}: {
+  adaptationId?: string;
+  initialScore?: number | null;
+  initialProjectedScore?: number | null;
+}) {
+  const [score, setScore] = useState<number | null>(initialScore);
+  const [scoreProjetado, setScoreProjetado] = useState<number | null>(
+    initialProjectedScore,
+  );
 
   useEffect(() => {
+    if (adaptationId) return;
+
+    let cancelled = false;
+
+    fetch(`/api/cv-adaptation/${adaptationId}/content`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        return response.json() as Promise<{
+          adaptedContentJson?: CvAnalysisData;
+        }>;
+      })
+      .then((payload) => {
+        const raw = payload.adaptedContentJson;
+        if (!raw || cancelled) return;
+        const normalized = normalizeData(raw);
+        const baseScore = normalized.fit.score;
+        const projected = normalized.fit.score_pos_ajustes;
+        if (typeof baseScore === "number") {
+          setScore(baseScore);
+        }
+        if (typeof projected === "number") {
+          setScoreProjetado(projected);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setScore(null);
+          setScoreProjetado(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [adaptationId]);
+
+  useEffect(() => {
+    if (adaptationId) return;
     try {
       const stored = sessionStorage.getItem("guestAnalysis");
       if (stored) {
@@ -51,42 +100,9 @@ export function ScoreIndicator() {
     } catch {
       // sem análise prévia — não exibir score
     }
-  }, []);
+  }, [adaptationId]);
 
-  if (score === null) {
-    return (
-      <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            fontFamily: MONO,
-            fontSize: 10.5,
-            letterSpacing: 1.2,
-            fontWeight: 500,
-            color: "#555",
-            background: "rgba(10,10,10,0.04)",
-            border: "1px solid rgba(10,10,10,0.06)",
-            padding: "5px 10px",
-            borderRadius: 999,
-          }}
-        >
-          <span
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: "#c6ff3a",
-              boxShadow: "0 0 6px #c6ff3a",
-              display: "inline-block",
-            }}
-          />
-          PLANOS · EARLYCV
-        </div>
-      </div>
-    );
-  }
+  if (score === null) return null;
 
   return (
     <div
