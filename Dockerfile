@@ -1,11 +1,21 @@
 FROM node:22-bookworm-slim
 
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV SAL_USE_VCLPLUGIN=gen
+
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     libreoffice-writer \
     poppler-utils \
     fonts-dejavu-core \
+    fonts-liberation2 \
+    fonts-crosextra-carlito \
+    fonts-crosextra-caladea \
+    fonts-noto-core \
   && rm -rf /var/lib/apt/lists/*
+
+RUN fc-cache -f -v
 
 WORKDIR /app
 
