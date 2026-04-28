@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { unlinkSync, writeFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -22,6 +22,15 @@ const execFileAsync = promisify(execFile);
 type ExecFileFailure = NodeJS.ErrnoException & {
   stderr?: string;
   stdout?: string;
+};
+
+type ExecFileSuccess = {
+  stderr: string;
+  stdout: string;
+};
+
+type LibreOfficeExecution = ExecFileSuccess & {
+  binary: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -256,7 +265,18 @@ export class ResumeTemplateDocxService implements OnModuleInit {
     writeFileSync(docxPath, docxBuffer);
 
     try {
-      await this.execLibreOfficeConvert(docxPath);
+      const conversion = await this.execLibreOfficeConvert(docxPath);
+
+      try {
+        await access(pdfPath);
+      } catch {
+        this.logger.error(
+          `[docx-convert] converter did not generate PDF output at ${pdfPath}; binary=${conversion.binary}; stdout=${conversion.stdout}; stderr=${conversion.stderr}`,
+        );
+        throw new Error(
+          "Falha ao converter CV para PDF: converter did not generate PDF output.",
+        );
+      }
 
       return await readFile(pdfPath);
     } finally {
@@ -280,7 +300,18 @@ export class ResumeTemplateDocxService implements OnModuleInit {
     writeFileSync(docxPath, docxBuffer);
 
     try {
-      await this.execLibreOfficeConvert(docxPath);
+      const conversion = await this.execLibreOfficeConvert(docxPath);
+
+      try {
+        await access(pdfPath);
+      } catch {
+        this.logger.error(
+          `[docx-convert] converter did not generate PDF output at ${pdfPath}; binary=${conversion.binary}; stdout=${conversion.stdout}; stderr=${conversion.stderr}`,
+        );
+        throw new Error(
+          "Falha ao converter DOCX de preview: converter did not generate PDF output.",
+        );
+      }
 
       await execFileAsync("pdftoppm", [
         "-r",
@@ -314,8 +345,8 @@ export class ResumeTemplateDocxService implements OnModuleInit {
   protected async runExecFile(
     binary: string,
     args: string[],
-  ): Promise<void> {
-    await execFileAsync(binary, args);
+  ): Promise<ExecFileSuccess> {
+    return execFileAsync(binary, args);
   }
 
   private getLibreOfficeCandidates(): string[] {
@@ -361,7 +392,9 @@ export class ResumeTemplateDocxService implements OnModuleInit {
     );
   }
 
-  private async execLibreOfficeConvert(docxPath: string): Promise<void> {
+  private async execLibreOfficeConvert(
+    docxPath: string,
+  ): Promise<LibreOfficeExecution> {
     const uniqueBinaries = this.getLibreOfficeCandidates();
 
     const args = [
@@ -378,8 +411,8 @@ export class ResumeTemplateDocxService implements OnModuleInit {
 
     for (const binary of uniqueBinaries) {
       try {
-        await this.runExecFile(binary, args);
-        return;
+        const output = await this.runExecFile(binary, args);
+        return { binary, ...output };
       } catch (error) {
         const err = error as ExecFileFailure;
         attempts.push(

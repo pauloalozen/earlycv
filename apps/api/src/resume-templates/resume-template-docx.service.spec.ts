@@ -15,9 +15,10 @@ class TestResumeTemplateDocxService extends ResumeTemplateDocxService {
   protected override async runExecFile(
     binary: string,
     _args: string[],
-  ): Promise<void> {
+  ): Promise<{ stdout: string; stderr: string }> {
     this.attempted.push(binary);
     await this.behavior(binary);
+    return { stdout: "", stderr: "" };
   }
 }
 
@@ -83,5 +84,16 @@ describe("ResumeTemplateDocxService libreoffice lookup", () => {
     } finally {
       process.env.NODE_ENV = previousNodeEnv;
     }
+  });
+
+  it("throws clear error when converter exits without generating PDF", async () => {
+    const service = new TestResumeTemplateDocxService(async () => {
+      return;
+    });
+
+    await assert.rejects(
+      () => service.docxToPdf(Buffer.from("fake-docx")),
+      /converter did not generate PDF output/,
+    );
   });
 });
