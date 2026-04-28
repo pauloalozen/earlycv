@@ -46,6 +46,10 @@ function hasDisplayError(output: {
   );
 }
 
+function buildLibreOfficeArgs(docxPath: string): string[] {
+  return ["--headless", "--convert-to", "pdf", "--outdir", tmpdir(), docxPath];
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -278,20 +282,41 @@ export class ResumeTemplateDocxService implements OnModuleInit {
     writeFileSync(docxPath, docxBuffer);
 
     try {
-      const conversion = await this.execLibreOfficeConvert(docxPath);
+      let conversion = await this.execLibreOfficeConvert(docxPath);
 
       try {
         await access(pdfPath);
       } catch {
-        this.logger.error(
-          `[docx-convert] converter did not generate PDF output at ${pdfPath}; binary=${conversion.binary}; stdout=${conversion.stdout}; stderr=${conversion.stderr}`,
-        );
-        throw new Error(
-          "Falha ao converter CV para PDF: converter did not generate PDF output.",
-        );
+        if (hasDisplayError(conversion) && !conversion.binary.startsWith("xvfb-run ")) {
+          conversion = await this.runWithXvfb(conversion.binary, docxPath);
+          try {
+            await access(pdfPath);
+          } catch {
+            this.logger.error(
+              `[docx-convert] converter did not generate PDF output at ${pdfPath}; binary=${conversion.binary}; stdout=${conversion.stdout}; stderr=${conversion.stderr}`,
+            );
+            throw new Error(
+              "Falha ao converter CV para PDF: converter did not generate PDF output.",
+            );
+          }
+        } else {
+          this.logger.error(
+            `[docx-convert] converter did not generate PDF output at ${pdfPath}; binary=${conversion.binary}; stdout=${conversion.stdout}; stderr=${conversion.stderr}`,
+          );
+          throw new Error(
+            "Falha ao converter CV para PDF: converter did not generate PDF output.",
+          );
+        }
       }
 
       return await readFile(pdfPath);
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error(
+          `[docx-convert] pdf conversion failed for ${pdfPath}: ${error.message}`,
+        );
+      }
+      throw error;
     } finally {
       for (const p of [docxPath, pdfPath]) {
         try {
@@ -313,17 +338,31 @@ export class ResumeTemplateDocxService implements OnModuleInit {
     writeFileSync(docxPath, docxBuffer);
 
     try {
-      const conversion = await this.execLibreOfficeConvert(docxPath);
+      let conversion = await this.execLibreOfficeConvert(docxPath);
 
       try {
         await access(pdfPath);
       } catch {
-        this.logger.error(
-          `[docx-convert] converter did not generate PDF output at ${pdfPath}; binary=${conversion.binary}; stdout=${conversion.stdout}; stderr=${conversion.stderr}`,
-        );
-        throw new Error(
-          "Falha ao converter DOCX de preview: converter did not generate PDF output.",
-        );
+        if (hasDisplayError(conversion) && !conversion.binary.startsWith("xvfb-run ")) {
+          conversion = await this.runWithXvfb(conversion.binary, docxPath);
+          try {
+            await access(pdfPath);
+          } catch {
+            this.logger.error(
+              `[docx-convert] converter did not generate PDF output at ${pdfPath}; binary=${conversion.binary}; stdout=${conversion.stdout}; stderr=${conversion.stderr}`,
+            );
+            throw new Error(
+              "Falha ao converter DOCX de preview: converter did not generate PDF output.",
+            );
+          }
+        } else {
+          this.logger.error(
+            `[docx-convert] converter did not generate PDF output at ${pdfPath}; binary=${conversion.binary}; stdout=${conversion.stdout}; stderr=${conversion.stderr}`,
+          );
+          throw new Error(
+            "Falha ao converter DOCX de preview: converter did not generate PDF output.",
+          );
+        }
       }
 
       await execFileAsync("pdftoppm", [
@@ -336,6 +375,13 @@ export class ResumeTemplateDocxService implements OnModuleInit {
       ]);
 
       return await readFile(pngPath);
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error(
+          `[docx-convert] preview conversion failed for ${pdfPath}: ${error.message}`,
+        );
+      }
+      throw error;
     } finally {
       for (const p of [docxPath, pdfPath, pngPath]) {
         try {
@@ -409,15 +455,7 @@ export class ResumeTemplateDocxService implements OnModuleInit {
     docxPath: string,
   ): Promise<LibreOfficeExecution> {
     const uniqueBinaries = this.getLibreOfficeCandidates();
-
-    const args = [
-      "--headless",
-      "--convert-to",
-      "pdf",
-      "--outdir",
-      tmpdir(),
-      docxPath,
-    ];
+    const args = buildLibreOfficeArgs(docxPath);
 
     const attempts: string[] = [];
     let lastError: unknown = null;
@@ -470,5 +508,21 @@ export class ResumeTemplateDocxService implements OnModuleInit {
     throw new Error(
       "Falha ao converter CV para PDF no servidor. Tente novamente em instantes.",
     );
+  }
+
+  private async runWithXvfb(
+    binary: string,
+    docxPath: string,
+  ): Promise<LibreOfficeExecution> {
+    const output = await this.runExecFile("xvfb-run", [
+      "-a",
+      binary,
+      ...buildLibreOfficeArgs(docxPath),
+    ]);
+
+    return {
+      binary: `xvfb-run ${binary}`,
+      ...output,
+    };
   }
 }

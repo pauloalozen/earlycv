@@ -10,7 +10,7 @@ class TestResumeTemplateDocxService extends ResumeTemplateDocxService {
     private readonly behavior: (
       binary: string,
       args: string[],
-    ) => Promise<void>,
+    ) => Promise<{ stdout?: string; stderr?: string } | void>,
   ) {
     super({} as never);
   }
@@ -20,8 +20,11 @@ class TestResumeTemplateDocxService extends ResumeTemplateDocxService {
     args: string[],
   ): Promise<{ stdout: string; stderr: string }> {
     this.attempted.push(binary);
-    await this.behavior(binary, args);
-    return { stdout: "", stderr: "" };
+    const output = await this.behavior(binary, args);
+    return {
+      stdout: output?.stdout ?? "",
+      stderr: output?.stderr ?? "",
+    };
   }
 }
 
@@ -123,6 +126,25 @@ describe("ResumeTemplateDocxService libreoffice lookup", () => {
 
     await (service as unknown as { execLibreOfficeConvert(path: string): Promise<void> }).execLibreOfficeConvert(
       "/tmp/test.docx",
+    );
+
+    assert.deepEqual(service.attempted, ["soffice", "xvfb-run"]);
+  });
+
+  it("retries docxToPdf with xvfb when stdout/stderr report display error", async () => {
+    const service = new TestResumeTemplateDocxService(async (binary) => {
+      if (binary === "soffice") {
+        return { stderr: "X11 error: Can't open display:" };
+      }
+
+      if (binary === "xvfb-run") {
+        return;
+      }
+    });
+
+    await assert.rejects(
+      () => service.docxToPdf(Buffer.from("fake-docx")),
+      /converter did not generate PDF output/,
     );
 
     assert.deepEqual(service.attempted, ["soffice", "xvfb-run"]);
