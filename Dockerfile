@@ -8,6 +8,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     libreoffice-writer \
     poppler-utils \
+    xvfb \
     fonts-dejavu-core \
     fonts-liberation2 \
     fonts-crosextra-carlito \

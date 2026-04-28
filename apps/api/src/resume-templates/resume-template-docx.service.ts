@@ -33,6 +33,19 @@ type LibreOfficeExecution = ExecFileSuccess & {
   binary: string;
 };
 
+function hasDisplayError(output: {
+  message?: string;
+  stderr?: string;
+  stdout?: string;
+}): boolean {
+  const combined = `${output.message ?? ""}\n${output.stderr ?? ""}\n${output.stdout ?? ""}`.toLowerCase();
+  return (
+    combined.includes("can't open display") ||
+    combined.includes("x11 error") ||
+    combined.includes("set display environment variable")
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -415,6 +428,28 @@ export class ResumeTemplateDocxService implements OnModuleInit {
         return { binary, ...output };
       } catch (error) {
         const err = error as ExecFileFailure;
+
+        if (hasDisplayError(err)) {
+          try {
+            const xvfbOutput = await this.runExecFile("xvfb-run", [
+              "-a",
+              binary,
+              ...args,
+            ]);
+            return {
+              binary: `xvfb-run ${binary}`,
+              ...xvfbOutput,
+            };
+          } catch (xvfbError) {
+            const xvfbErr = xvfbError as ExecFileFailure;
+            attempts.push(
+              `xvfb-run ${binary}: ${xvfbErr.code ?? "UNKNOWN"} ${xvfbErr.message}`,
+            );
+            lastError = xvfbError;
+            continue;
+          }
+        }
+
         attempts.push(
           `${binary}: ${err.code ?? "UNKNOWN"} ${err.message}`,
         );

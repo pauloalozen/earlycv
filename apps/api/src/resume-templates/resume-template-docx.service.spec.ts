@@ -7,17 +7,20 @@ class TestResumeTemplateDocxService extends ResumeTemplateDocxService {
   public readonly attempted: string[] = [];
 
   constructor(
-    private readonly behavior: (binary: string) => Promise<void>,
+    private readonly behavior: (
+      binary: string,
+      args: string[],
+    ) => Promise<void>,
   ) {
     super({} as never);
   }
 
   protected override async runExecFile(
     binary: string,
-    _args: string[],
+    args: string[],
   ): Promise<{ stdout: string; stderr: string }> {
     this.attempted.push(binary);
-    await this.behavior(binary);
+    await this.behavior(binary, args);
     return { stdout: "", stderr: "" };
   }
 }
@@ -95,5 +98,33 @@ describe("ResumeTemplateDocxService libreoffice lookup", () => {
       () => service.docxToPdf(Buffer.from("fake-docx")),
       /converter did not generate PDF output/,
     );
+  });
+
+  it("retries with xvfb-run when soffice fails with display error", async () => {
+    const service = new TestResumeTemplateDocxService(async (binary, args) => {
+      if (binary === "soffice") {
+        const err = new Error("display error") as NodeJS.ErrnoException & {
+          stderr?: string;
+        };
+        err.code = "EPIPE";
+        err.stderr = "X11 error: Can't open display:";
+        throw err;
+      }
+
+      if (binary === "xvfb-run") {
+        assert.equal(args[0], "-a");
+        return;
+      }
+
+      const err = new Error("unexpected binary") as NodeJS.ErrnoException;
+      err.code = "ENOENT";
+      throw err;
+    });
+
+    await (service as unknown as { execLibreOfficeConvert(path: string): Promise<void> }).execLibreOfficeConvert(
+      "/tmp/test.docx",
+    );
+
+    assert.deepEqual(service.attempted, ["soffice", "xvfb-run"]);
   });
 });
