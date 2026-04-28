@@ -9,6 +9,7 @@ RUN apt-get update \
     libreoffice-writer \
     poppler-utils \
     xvfb \
+    xauth \
     fonts-dejavu-core \
     fonts-liberation2 \
     fonts-crosextra-carlito \
