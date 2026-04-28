@@ -37,6 +37,7 @@
 Em **Settings** do serviço:
 
 - Root Directory: `/`
+- O build usa `nixpacks.toml` na raiz do repositório para instalar dependências de runtime da API (incluindo `libreoffice` e `poppler_utils`, necessários para download de PDF)
 - Build Command:
 
 ```bash
