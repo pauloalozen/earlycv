@@ -515,6 +515,8 @@ export type CvAnalysisOutput = {
     antes: string;
     depois: string;
   };
+  /** Descrição das principais adaptações feitas no CV para esta vaga */
+  adaptation_notes?: string;
   // Campos legados mantidos para compatibilidade com análises anteriores
   pontos_fortes: string[];
   lacunas: string[];
@@ -532,8 +534,6 @@ export type CvAnalysisOutput = {
     titulo: string;
     subtexto: string;
   };
-  /** Descrição das principais adaptações feitas no CV para esta vaga */
-  adaptation_notes?: string;
 };
 
 const ANALYSIS_SYSTEM_PROMPT = `Você é um especialista em análise de currículo com foco em aumentar chances reais de entrevista.
@@ -727,6 +727,7 @@ SAÍDA — JSON válido, sem markdown:
     "titulo": "frase curta focada em resultado prático para esta vaga específica",
     "subtexto": "frase direta sobre ganho concreto"
   }
+  "adaptation_notes": "3 frases em PT-BR descrevendo as principais adaptações feitas no CV para esta vaga: (1) o que foi reposicionado ou reescrito, (2) quais keywords foram incorporadas e onde, (3) o que foi priorizado ou condensado. Escrever como se a adaptação já tivesse sido feita. Direto, específico, sem fluff."
 }
 
 REGRA DE CALIBRAÇÃO DE PONTOS — OBRIGATÓRIA:
