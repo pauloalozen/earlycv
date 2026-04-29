@@ -2,11 +2,8 @@ import type { Metadata } from "next";
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
-import {
-  getCvAdaptationContent,
-  type CvAnalysisData,
-} from "@/lib/cv-adaptation-api";
-import { normalizeData } from "../adaptar/resultado/normalize-data";
+import { getCvAdaptationContent } from "@/lib/cv-adaptation-api";
+import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import { buildPlanCatalog } from "./plan-catalog";
 import { ScoreIndicator } from "./score-indicator";
 
@@ -47,11 +44,9 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   if (showScoreIndicator && adaptationId) {
     try {
       const payload = await getCvAdaptationContent(adaptationId);
-      const normalized = normalizeData(
-        payload.adaptedContentJson as CvAnalysisData,
-      );
-      initialScore = normalized.fit.score;
-      initialProjectedScore = normalized.fit.score_pos_ajustes ?? null;
+      const signal = extractDashboardAnalysisSignal(payload.adaptedContentJson);
+      initialScore = signal.adjustments.scoreBefore;
+      initialProjectedScore = signal.adjustments.scoreFinal;
     } catch {
       initialScore = null;
       initialProjectedScore = null;

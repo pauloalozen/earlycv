@@ -356,6 +356,7 @@ export class CvAdaptationService {
   async analyzeGuest(
     jobDescriptionText: string,
     file?: FileUpload,
+    masterCvText?: string,
     turnstileToken?: string,
     analysisContext?: AnalysisRequestContext,
   ): Promise<{
@@ -363,11 +364,15 @@ export class CvAdaptationService {
     previewText: string;
     masterCvText: string;
   }> {
-    if (!file) {
-      throw new BadRequestException("PDF file is required.");
-    }
-
     this.validateJobDescription(jobDescriptionText);
+
+    const normalizedMasterCvText =
+      typeof masterCvText === "string" ? masterCvText.trim() : "";
+    const hasTextInput = normalizedMasterCvText.length > 0;
+
+    if (!file && !hasTextInput) {
+      throw new BadRequestException("PDF file or CV text is required.");
+    }
 
     const protectionResult =
       await this.protectedAnalyzeService.executeProtectedAnalyze({
@@ -378,6 +383,14 @@ export class CvAdaptationService {
         ),
         jobDescriptionText,
         loadMasterCvText: async () => {
+          if (hasTextInput) {
+            return normalizedMasterCvText;
+          }
+
+          if (!file) {
+            throw new BadRequestException("PDF file or CV text is required.");
+          }
+
           try {
             const { extractTextFromPdf } = await import("@earlycv/ai");
             return await extractTextFromPdf(file.buffer, { validateCv: true });
@@ -386,9 +399,10 @@ export class CvAdaptationService {
           }
         },
         payload: {
-          cvFingerprint: this.buildFileFingerprint(file.buffer),
-          hasFile: true,
+          cvFingerprint: file ? this.buildFileFingerprint(file.buffer) : null,
+          hasFile: Boolean(file),
           jobDescriptionText,
+          hasTextInput,
           route: "cv-adaptation/analyze-guest",
         },
         turnstileToken,
@@ -424,6 +438,10 @@ export class CvAdaptationService {
         ),
         jobDescriptionText: dto.jobDescriptionText,
         loadMasterCvText: async () => {
+          if (dto.masterCvText?.trim()) {
+            return dto.masterCvText;
+          }
+
           if (file) {
             let masterCvText: string;
 
@@ -484,12 +502,13 @@ export class CvAdaptationService {
           }
 
           throw new BadRequestException(
-            "masterResumeId or PDF file is required.",
+            "masterResumeId, PDF file or CV text is required.",
           );
         },
         payload: {
           cvFingerprint: file ? this.buildFileFingerprint(file.buffer) : null,
           hasFile: Boolean(file),
+          hasTextInput: Boolean(dto.masterCvText?.trim()),
           jobDescriptionText: dto.jobDescriptionText,
           masterResumeId: dto.masterResumeId ?? null,
           route: "cv-adaptation/analyze",

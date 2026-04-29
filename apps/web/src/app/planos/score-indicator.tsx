@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
-import { normalizeData } from "../adaptar/resultado/normalize-data";
+import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 
 const MONO = "var(--font-geist-mono), monospace";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -22,7 +22,7 @@ export function ScoreIndicator({
   );
 
   useEffect(() => {
-    if (adaptationId) return;
+    if (!adaptationId) return;
 
     let cancelled = false;
 
@@ -36,9 +36,9 @@ export function ScoreIndicator({
       .then((payload) => {
         const raw = payload.adaptedContentJson;
         if (!raw || cancelled) return;
-        const normalized = normalizeData(raw);
-        const baseScore = normalized.fit.score;
-        const projected = normalized.fit.score_pos_ajustes;
+        const signal = extractDashboardAnalysisSignal(raw);
+        const baseScore = signal.adjustments.scoreBefore;
+        const projected = signal.adjustments.scoreFinal;
         if (typeof baseScore === "number") {
           setScore(baseScore);
         }
@@ -66,22 +66,12 @@ export function ScoreIndicator({
         const parsed = JSON.parse(stored) as {
           adaptedContentJson: CvAnalysisData;
         };
-        const s = parsed?.adaptedContentJson?.fit?.score;
-        if (typeof s === "number") {
-          setScore(s);
-          const apiProjetado =
-            parsed.adaptedContentJson?.fit?.score_pos_ajustes;
-          if (typeof apiProjetado === "number") {
-            setScoreProjetado(apiProjetado);
-          } else {
-            const totalAjustes = (
-              parsed.adaptedContentJson?.ajustes_conteudo ?? []
-            ).reduce((sum, a) => sum + (a.pontos ?? 0), 0);
-            const totalKw = (
-              parsed.adaptedContentJson?.keywords?.ausentes ?? []
-            ).reduce((sum, k) => sum + (k.pontos ?? 0), 0);
-            setScoreProjetado(Math.min(100, s + totalAjustes + totalKw));
-          }
+        if (parsed?.adaptedContentJson) {
+          const signal = extractDashboardAnalysisSignal(
+            parsed.adaptedContentJson,
+          );
+          setScore(signal.adjustments.scoreBefore);
+          setScoreProjetado(signal.adjustments.scoreFinal);
           return;
         }
       }

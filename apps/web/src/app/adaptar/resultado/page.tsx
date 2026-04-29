@@ -2,8 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import React, { type ReactNode, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { AppHeader } from "@/components/app-header";
+import {
+  CvReleaseModal,
+  type CvReleaseModalStatus,
+} from "@/components/cv-release-modal";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
 import {
@@ -372,6 +375,7 @@ function IssueIcon({ tipo }: { tipo: "critico" | "atencao" | "ok" }) {
 // ─────────────────────────────────────────────────────────────
 
 const RELEASE_POPUP_FADE_MS = 260;
+const RELEASE_MIN_LOADING_MS = 3000;
 
 type GuestAnalysisStored = {
   adaptedContentJson: CvAnalysisData;
@@ -430,6 +434,9 @@ export default function ResultadoPage() {
   }, []);
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [internalRole, setInternalRole] = useState<
+    "none" | "admin" | "superadmin" | null
+  >(null);
   const [hasCredits, setHasCredits] = useState<boolean | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [reviewAdaptationId, setReviewAdaptationId] = useState<string | null>(
@@ -448,9 +455,13 @@ export default function ResultadoPage() {
   const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
   const [downloadStage, setDownloadStage] =
     useState<DownloadProgressStage | null>(null);
-  const [showReleasePopup, setShowReleasePopup] = useState(false);
-  const [releasePopupVisible, setReleasePopupVisible] = useState(false);
+  const [releaseModalOpen, setReleaseModalOpen] = useState(false);
+  const [releaseModalVisible, setReleaseModalVisible] = useState(false);
+  const [releaseStatus, setReleaseStatus] =
+    useState<CvReleaseModalStatus>("loading");
+  const [releaseError, setReleaseError] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
+  const closeReleaseModalTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -458,30 +469,46 @@ export default function ResultadoPage() {
 
   useEffect(() => {
     if (!isClient) return;
-    if (showReleasePopup) {
+    if (releaseModalOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
       return () => {
         document.body.style.overflow = prev;
       };
     }
-  }, [isClient, showReleasePopup]);
+  }, [isClient, releaseModalOpen]);
 
   useEffect(() => {
+    return () => {
+      if (closeReleaseModalTimeoutRef.current !== null) {
+        window.clearTimeout(closeReleaseModalTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
     const params = new URLSearchParams(window.location.search);
     const adaptationId = params.get("adaptationId");
 
     getAuthStatus().then(
-      ({ isAuthenticated: auth, userName: name, hasCredits }) => {
+      ({ isAuthenticated: auth, userName: name, hasCredits, internalRole }) => {
+        if (!active) return;
         setIsAuthenticated(auth);
         setUserName(name);
         setHasCredits(hasCredits);
+        setInternalRole(internalRole);
       },
     );
 
     if (adaptationId) {
       setReviewAdaptationId(adaptationId);
-      fetch(`/api/cv-adaptation/${adaptationId}/content`, { cache: "no-store" })
+      fetch(`/api/cv-adaptation/${adaptationId}/content`, {
+        cache: "no-store",
+        signal: controller.signal,
+      })
         .then(async (res) => {
           if (!res.ok) throw new Error();
           return res.json() as Promise<{
@@ -497,15 +524,20 @@ export default function ResultadoPage() {
           }>;
         })
         .then((payload) => {
+          if (!active) return;
           setRawData(payload.adaptedContentJson);
           setReviewPaymentStatus(payload.paymentStatus);
           setJobAnalysisCount(payload.jobAnalysisCount ?? null);
         })
         .catch(() => {
+          if (!active || controller.signal.aborted) return;
           setClaimError("Não foi possível carregar essa análise agora.");
           router.replace("/dashboard");
         });
-      return;
+      return () => {
+        active = false;
+        controller.abort();
+      };
     }
 
     const stored = sessionStorage.getItem("guestAnalysis");
@@ -520,15 +552,23 @@ export default function ResultadoPage() {
       const { cargo, empresa } = parsed.adaptedContentJson.vaga;
       fetch(
         `/api/cv-adaptation/job-count?jobTitle=${encodeURIComponent(cargo)}&companyName=${encodeURIComponent(empresa)}`,
-        { cache: "no-store" },
+        { cache: "no-store", signal: controller.signal },
       )
         .then((r) => r.json() as Promise<{ count: number }>)
-        .then((body) => setJobAnalysisCount(body.count))
+        .then((body) => {
+          if (!active) return;
+          setJobAnalysisCount(body.count);
+        })
         .catch(() => {});
     } catch {
       sessionStorage.removeItem("guestAnalysis");
       router.replace("/adaptar");
     }
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [router]);
 
   // ── Handlers ──────────────────────────────────────────────
@@ -543,24 +583,47 @@ export default function ResultadoPage() {
     });
   };
 
+  const waitForMinimumDuration = async (startedAt: number, minMs: number) => {
+    const elapsed = Date.now() - startedAt;
+    if (elapsed < minMs) {
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, minMs - elapsed),
+      );
+    }
+  };
+
   const handleUseCredit = async () => {
     if (!hasCredits || claiming) return;
+    const startedAt = Date.now();
+    setReleaseError(null);
+    setReleaseStatus("loading");
+    setReleaseModalOpen(true);
+    requestAnimationFrame(() => setReleaseModalVisible(true));
     const raw = sessionStorage.getItem("guestAnalysis");
     if (!raw) {
-      setClaimError("Análise não encontrada. Reanalise seu CV.");
+      const message = "Análise não encontrada. Reanalise seu CV.";
+      setClaimError(message);
+      setReleaseError(message);
+      setReleaseStatus("error");
       return;
     }
     let parsed: GuestAnalysisStored;
     try {
       parsed = JSON.parse(raw) as GuestAnalysisStored;
     } catch {
-      setClaimError("Não foi possível carregar sua análise. Reanalise seu CV.");
+      const message =
+        "Não foi possível carregar sua análise. Reanalise seu CV.";
+      setClaimError(message);
+      setReleaseError(message);
+      setReleaseStatus("error");
       return;
     }
     if (!parsed.masterCvText?.trim()) {
-      setClaimError(
-        "Análise em formato antigo. Reanalise seu CV para liberar o download.",
-      );
+      const message =
+        "Análise em formato antigo. Reanalise seu CV para liberar o download.";
+      setClaimError(message);
+      setReleaseError(message);
+      setReleaseStatus("error");
       return;
     }
     setLocked(true);
@@ -608,16 +671,18 @@ export default function ResultadoPage() {
       if (payload.id) setReviewAdaptationId(payload.id);
       setReviewPaymentStatus(payload.paymentStatus ?? "completed");
       setHasCredits(false);
+      await waitForMinimumDuration(startedAt, RELEASE_MIN_LOADING_MS);
+      setReleaseStatus("success");
       setClaiming(false);
-      setShowReleasePopup(true);
-      requestAnimationFrame(() => setReleasePopupVisible(true));
       sessionStorage.removeItem("guestAnalysis");
     } catch (err) {
-      setClaimError(
+      const message =
         err instanceof Error && err.message.trim()
           ? err.message
-          : "Não foi possível usar seu crédito agora. Tente novamente.",
-      );
+          : "Não foi possível usar seu crédito agora. Tente novamente.";
+      setClaimError(message);
+      setReleaseError(message);
+      setReleaseStatus("error");
       setClaiming(false);
       setLocked(false);
     }
@@ -663,22 +728,10 @@ export default function ResultadoPage() {
       .then((result) => {
         setReviewAdaptationId(result.id);
         setReviewPaymentStatus(result.paymentStatus ?? "none");
-        const score = parsed.adaptedContentJson?.fit?.score;
+        const normalized = normalizeData(parsed.adaptedContentJson);
+        const score = normalized.score.scoreAtualBase;
         if (typeof score === "number") {
-          const apiProjetado =
-            parsed.adaptedContentJson?.fit?.score_pos_ajustes;
-          let scoreProjetado: number;
-          if (typeof apiProjetado === "number") {
-            scoreProjetado = apiProjetado;
-          } else {
-            const totalAjustes = (
-              parsed.adaptedContentJson?.ajustes_conteudo ?? []
-            ).reduce((sum, a) => sum + (a.pontos ?? 0), 0);
-            const totalKw = (
-              parsed.adaptedContentJson?.keywords?.ausentes ?? []
-            ).reduce((sum, k) => sum + (k.pontos ?? 0), 0);
-            scoreProjetado = Math.min(100, score + totalAjustes + totalKw);
-          }
+          const scoreProjetado = normalized.score.scoreAposLiberarBase;
           sessionStorage.setItem(
             "lastAnalysisScore",
             JSON.stringify({ score, scoreProjetado }),
@@ -698,6 +751,11 @@ export default function ResultadoPage() {
 
   const handleRedeemReview = async () => {
     if (!reviewAdaptationId || hasCredits !== true || claiming) return;
+    const startedAt = Date.now();
+    setReleaseError(null);
+    setReleaseStatus("loading");
+    setReleaseModalOpen(true);
+    requestAnimationFrame(() => setReleaseModalVisible(true));
     setLocked(true);
     setClaiming(true);
     setClaimError(null);
@@ -713,11 +771,31 @@ export default function ResultadoPage() {
           }),
         },
       );
-      if (!res.ok) throw new Error("Falha ao liberar");
+      if (!res.ok) {
+        let message = "Não foi possível liberar o CV agora. Tente novamente.";
+        try {
+          const body = (await res.json()) as { message?: string };
+          if (typeof body.message === "string" && body.message.trim()) {
+            message = body.message;
+          }
+        } catch {
+          // no-op
+        }
+        throw new Error(message);
+      }
       setReviewPaymentStatus("completed");
+      setHasCredits(false);
+      await waitForMinimumDuration(startedAt, RELEASE_MIN_LOADING_MS);
+      setReleaseStatus("success");
       setClaiming(false);
-    } catch {
-      setClaimError("Não foi possível liberar o CV agora. Tente novamente.");
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "Não foi possível liberar o CV agora. Tente novamente.";
+      setClaimError(message);
+      setReleaseError(message);
+      setReleaseStatus("error");
       setClaiming(false);
       setLocked(false);
     }
@@ -752,9 +830,15 @@ export default function ResultadoPage() {
   const handleDownload = async (format: "pdf" | "docx") => {
     if (!reviewAdaptationId || downloading) return;
     emitResultadoEvent("optimized_cv_downloaded", { format });
-    if (showReleasePopup) {
-      setReleasePopupVisible(false);
-      setShowReleasePopup(false);
+    if (releaseModalOpen) {
+      setReleaseModalVisible(false);
+      if (closeReleaseModalTimeoutRef.current !== null) {
+        window.clearTimeout(closeReleaseModalTimeoutRef.current);
+      }
+      closeReleaseModalTimeoutRef.current = window.setTimeout(() => {
+        setReleaseModalOpen(false);
+        closeReleaseModalTimeoutRef.current = null;
+      }, RELEASE_POPUP_FADE_MS);
     }
     setDownloading(format);
     setClaimError(null);
@@ -774,9 +858,34 @@ export default function ResultadoPage() {
     }
   };
 
-  const handleCloseReleasePopup = () => {
-    setReleasePopupVisible(false);
-    window.setTimeout(() => setShowReleasePopup(false), RELEASE_POPUP_FADE_MS);
+  const handleCloseReleaseModal = () => {
+    setReleaseModalVisible(false);
+    if (closeReleaseModalTimeoutRef.current !== null) {
+      window.clearTimeout(closeReleaseModalTimeoutRef.current);
+    }
+    closeReleaseModalTimeoutRef.current = window.setTimeout(() => {
+      setReleaseModalOpen(false);
+      closeReleaseModalTimeoutRef.current = null;
+    }, RELEASE_POPUP_FADE_MS);
+  };
+
+  const handleDownloadRawJson = () => {
+    if (!rawData) return;
+    try {
+      const blob = new Blob([JSON.stringify(rawData, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = `analise-ia-bruta-${reviewAdaptationId ?? "guest"}-${Date.now()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+    } catch {
+      setClaimError("Nao foi possivel baixar o JSON bruto agora.");
+    }
   };
 
   // ── Loading ────────────────────────────────────────────────
@@ -828,7 +937,7 @@ export default function ResultadoPage() {
   const mediaScore = seededInt(vagaSeed, 78, 85);
   const scoreMinimo = 80;
 
-  const delta = data.fit.score - mediaScore;
+  const delta = data.score.scoreAtualBase - mediaScore;
   const ptsKwSelecionadas = data.keywords.ausentes
     .filter((k) => effectiveSelected.has(k.kw))
     .reduce((s, k) => s + k.pontos, 0);
@@ -836,27 +945,25 @@ export default function ResultadoPage() {
     (s, a) => s + a.pontos,
     0,
   );
-  const totalKwAusentes = data.keywords.ausentes.reduce(
-    (s, k) => s + k.pontos,
-    0,
-  );
   const totalAjustes =
     data.ajustes_conteudo.length + data.keywords.ausentes.length;
 
   const scoreProjetado = Math.min(
-    data.fit.score + totalAjustesConteudo + ptsKwSelecionadas,
     100,
+    data.score.scoreAposLiberarBase + ptsKwSelecionadas,
   );
-  const scoreMaxPossivel = Math.min(
-    data.fit.score + totalAjustesConteudo + totalKwAusentes,
-    100,
-  );
+  const scoreMaxPossivel = data.score.scoreAposLiberarBase;
 
   const criticos =
     data.formato_cv?.problemas.filter((p) => p.tipo === "critico") ?? [];
   const atencoes =
     data.formato_cv?.problemas.filter((p) => p.tipo === "atencao") ?? [];
   const oks = data.formato_cv?.problemas.filter((p) => p.tipo === "ok") ?? [];
+  const problemasPontuacao = [...criticos, ...atencoes];
+  const pontosPerdidosApresentacao = problemasPontuacao.reduce(
+    (total, problema) => total + Math.abs(problema.impacto),
+    0,
+  );
   const camposPresentes =
     data.formato_cv?.campos.filter((c) => c.presente).length ?? 0;
   const ptsFaltando =
@@ -868,11 +975,14 @@ export default function ResultadoPage() {
     reviewAdaptationId !== null && reviewPaymentStatus === "completed";
 
   const adaptationNotes = rawData?.adaptation_notes ?? null;
+  const isAdminView =
+    isAuthenticated === true &&
+    (internalRole === "admin" || internalRole === "superadmin");
 
   // Gauge constants
   const R_GAUGE = 78;
   const C_GAUGE = 2 * Math.PI * R_GAUGE;
-  const dashScore = C_GAUGE * (data.fit.score / 100);
+  const dashScore = C_GAUGE * (data.score.scoreAtualBase / 100);
   const dashProjected = C_GAUGE * (scoreMaxPossivel / 100);
   const ptsPositivos = data.positivos.reduce((s, p) => s + p.pontos, 0);
 
@@ -1007,9 +1117,12 @@ export default function ResultadoPage() {
                 }}
               >
                 {[
-                  { num: String(data.fit.score), label: "score\natual" },
                   {
-                    num: `+${scoreMaxPossivel - data.fit.score}`,
+                    num: String(data.score.scoreAtualBase),
+                    label: "score\natual",
+                  },
+                  {
+                    num: `+${scoreMaxPossivel - data.score.scoreAtualBase}`,
                     label: "pts\ndisponíveis",
                   },
                   {
@@ -1172,7 +1285,7 @@ export default function ResultadoPage() {
                       fontVariantNumeric: "tabular-nums",
                     }}
                   >
-                    {data.fit.score}
+                    {data.score.scoreAtualBase}
                   </span>
                   <span
                     style={{
@@ -1208,7 +1321,7 @@ export default function ResultadoPage() {
                     letterSpacing: -0.8,
                   }}
                 >
-                  +{scoreMaxPossivel - data.fit.score} pts
+                  +{scoreMaxPossivel - data.score.scoreAtualBase} pts
                 </span>
                 <span
                   style={{
@@ -1878,43 +1991,8 @@ export default function ResultadoPage() {
                 Libere o CV para inserir as{" "}
                 <span style={{ color: "#c6ff3a", fontWeight: 600 }}>
                   {data.keywords.ausentes.length} que faltam
-                </span>{" "}
-                e ganhar até{" "}
-                <span style={{ color: "#c6ff3a", fontWeight: 600 }}>
-                  +{totalKwAusentes} pts
                 </span>
               </p>
-            </div>
-            <div
-              style={{
-                background: "rgba(198,255,58,0.12)",
-                borderRadius: 12,
-                padding: "10px 16px",
-                textAlign: "center",
-                flexShrink: 0,
-              }}
-            >
-              <span
-                style={{
-                  display: "block",
-                  fontSize: 22,
-                  fontWeight: 500,
-                  color: "#c6ff3a",
-                  letterSpacing: -0.8,
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                +{totalKwAusentes}
-              </span>
-              <span
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  color: "rgba(198,255,58,0.6)",
-                }}
-              >
-                pts em jogo
-              </span>
             </div>
           </div>
 
@@ -2296,7 +2374,6 @@ export default function ResultadoPage() {
                       style={{
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "space-between",
                         gap: 8,
                       }}
                     >
@@ -2308,24 +2385,8 @@ export default function ResultadoPage() {
                           margin: 0,
                         }}
                       >
-                        Compatibilidade com ATS
+                        Formatação e compatibilidade ATS
                       </p>
-                      <span
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          color:
-                            data.secoes.formatacao.score >= 14
-                              ? "#405410"
-                              : data.secoes.formatacao.score >= 8
-                                ? "#92400e"
-                                : "#991b1b",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {data.secoes.formatacao.score}/20 pts
-                      </span>
                     </div>
                     <p
                       style={{
@@ -2335,14 +2396,224 @@ export default function ResultadoPage() {
                         margin: "4px 0 0",
                       }}
                     >
-                      {data.formato_cv.resumo}
+                      {ptsFaltando === 0
+                        ? "Você tem todos os campos essenciais, mas perde pontos por estrutura e linguagem pouco orientadas à vaga."
+                        : "Seu CV perde pontos por campos ausentes e problemas de estrutura."}
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 12.5,
+                        color: "#5a5a55",
+                        lineHeight: 1.5,
+                        margin: "6px 0 0",
+                      }}
+                    >
+                      {problemasPontuacao.length === 0
+                        ? "Nenhuma perda por problemas de apresentação."
+                        : `Você perdeu ${pontosPerdidosApresentacao} pontos nesta seção por ${problemasPontuacao.length} ${problemasPontuacao.length === 1 ? "problema" : "problemas"} de apresentação.`}
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Problemas */}
+              {/* Campos */}
               <div style={{ ...CARD, marginBottom: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 14,
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "#0a0a0a",
+                      margin: 0,
+                    }}
+                  >
+                    Campos do currículo
+                  </p>
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 11,
+                      color: "#8a8a85",
+                    }}
+                  >
+                    {camposPresentes}/{data.formato_cv.campos.length}{" "}
+                    encontrados
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: 8,
+                  }}
+                  className="res-campos-grid"
+                >
+                  {data.formato_cv.campos.map((campo) => {
+                    const visualPenaltyPerMissingField = 1;
+                    return (
+                      <div
+                        key={campo.nome}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          background: campo.presente
+                            ? "rgba(198,255,58,0.1)"
+                            : "rgba(239,68,68,0.05)",
+                          border: `1px solid ${campo.presente ? "rgba(110,150,20,0.15)" : "rgba(239,68,68,0.12)"}`,
+                          borderRadius: 8,
+                          padding: "8px 11px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: campo.presente ? "#405410" : "#ef4444",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {campo.presente ? "✓" : "✕"}
+                        </span>
+                        <span
+                          style={{
+                            flex: 1,
+                            fontSize: 12,
+                            color: campo.presente ? "#2a2a28" : "#991b1b",
+                          }}
+                        >
+                          {campo.nome}
+                        </span>
+                        {!campo.presente && (
+                          <span
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: "#ef4444",
+                              flexShrink: 0,
+                            }}
+                          >
+                            -{visualPenaltyPerMissingField}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p
+                  style={{
+                    fontSize: 12.5,
+                    color: ptsFaltando === 0 ? "#405410" : "#991b1b",
+                    margin: "10px 0 0",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {ptsFaltando === 0
+                    ? "Nenhuma penalidade por campos ausentes."
+                    : "Campos ausentes dependem de informação real do usuário e não podem ser inventados pela IA."}
+                </p>
+                {ptsFaltando === 0 && (
+                  <p
+                    style={{
+                      fontSize: 12.5,
+                      color: "#5a5a55",
+                      margin: "6px 0 0",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Campos completos evitam penalidades, mas a nota também
+                    considera clareza, estrutura e aderência da linguagem.
+                  </p>
+                )}
+              </div>
+
+              {/* O que está correto */}
+              <div style={{ ...CARD, marginBottom: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 14,
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "#0a0a0a",
+                      margin: 0,
+                    }}
+                  >
+                    O que está correto
+                  </p>
+                </div>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
+                  {oks.length === 0 && (
+                    <span
+                      style={{
+                        fontSize: 12.5,
+                        color: "#8a8a85",
+                      }}
+                    >
+                      Nenhum item positivo de formatação identificado.
+                    </span>
+                  )}
+                  {(isGuestView ? oks.slice(0, GUEST_VISIBLE) : oks).map(
+                    (p) => (
+                      <div
+                        key={p.titulo}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 12,
+                          background: "rgba(198,255,58,0.07)",
+                          border: "1px solid rgba(110,150,20,0.15)",
+                          borderRadius: 10,
+                          padding: "12px 14px",
+                        }}
+                      >
+                        <IssueIcon tipo="ok" />
+                        <div style={{ flex: 1 }}>
+                          <p
+                            style={{
+                              fontSize: 13.5,
+                              fontWeight: 500,
+                              color: "#0a0a0a",
+                              margin: 0,
+                            }}
+                          >
+                            {p.titulo}
+                          </p>
+                          <p
+                            style={{
+                              fontSize: 12.5,
+                              color: "#5a5a55",
+                              lineHeight: 1.5,
+                              margin: "4px 0 0",
+                            }}
+                          >
+                            {p.descricao}
+                          </p>
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+
+              {/* Problemas */}
+              <div style={{ ...CARD, marginBottom: 0 }}>
                 <div
                   style={{
                     display: "flex",
@@ -2360,7 +2631,7 @@ export default function ResultadoPage() {
                       margin: 0,
                     }}
                   >
-                    Problemas encontrados
+                    Problemas que reduzem sua pontuação
                   </p>
                   {criticos.length > 0 && (
                     <span
@@ -2392,26 +2663,11 @@ export default function ResultadoPage() {
                       {atencoes.length} atenção
                     </span>
                   )}
-                  {oks.length > 0 && (
-                    <span
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 10,
-                        fontWeight: 600,
-                        padding: "2px 7px",
-                        borderRadius: 99,
-                        background: "rgba(198,255,58,0.2)",
-                        color: "#405410",
-                      }}
-                    >
-                      {oks.length} ok
-                    </span>
-                  )}
                 </div>
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 8 }}
                 >
-                  {data.formato_cv.problemas.length === 0 && (
+                  {[...criticos, ...atencoes].length === 0 && (
                     <div
                       style={{
                         display: "flex",
@@ -2437,8 +2693,8 @@ export default function ResultadoPage() {
                     </div>
                   )}
                   {(isGuestView
-                    ? data.formato_cv.problemas.slice(0, GUEST_VISIBLE)
-                    : data.formato_cv.problemas
+                    ? [...criticos, ...atencoes].slice(0, GUEST_VISIBLE)
+                    : [...criticos, ...atencoes]
                   ).map((p) => (
                     <div
                       key={p.titulo}
@@ -2483,12 +2739,12 @@ export default function ResultadoPage() {
                                 fontFamily: MONO,
                                 fontSize: 11,
                                 fontWeight: 600,
-                                color: p.impacto > 0 ? "#405410" : "#991b1b",
+                                color:
+                                  p.tipo === "atencao" ? "#92400e" : "#991b1b",
                                 flexShrink: 0,
                               }}
                             >
-                              {p.impacto > 0 ? "+" : ""}
-                              {p.impacto} pts
+                              -{Math.abs(p.impacto)} pts
                             </span>
                           )}
                         </div>
@@ -2506,10 +2762,10 @@ export default function ResultadoPage() {
                     </div>
                   ))}
                   {isGuestView &&
-                    data.formato_cv.problemas.length > GUEST_VISIBLE && (
+                    [...criticos, ...atencoes].length > GUEST_VISIBLE && (
                       <GuestBlurOverlay
                         count={Math.min(
-                          data.formato_cv.problemas.length - GUEST_VISIBLE,
+                          [...criticos, ...atencoes].length - GUEST_VISIBLE,
                           GUEST_MOCK_PROBLEMAS.length,
                         )}
                       >
@@ -2523,7 +2779,7 @@ export default function ResultadoPage() {
                           {GUEST_MOCK_PROBLEMAS.slice(
                             0,
                             Math.min(
-                              data.formato_cv.problemas.length - GUEST_VISIBLE,
+                              [...criticos, ...atencoes].length - GUEST_VISIBLE,
                               GUEST_MOCK_PROBLEMAS.length,
                             ),
                           ).map((p) => (
@@ -2570,116 +2826,6 @@ export default function ResultadoPage() {
                         </div>
                       </GuestBlurOverlay>
                     )}
-                </div>
-              </div>
-
-              {/* Campos */}
-              <div style={{ ...CARD, marginBottom: 0 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: 14,
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: "#0a0a0a",
-                      margin: 0,
-                    }}
-                  >
-                    Campos do currículo
-                  </p>
-                  {ptsFaltando > 0 ? (
-                    <span
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        background: "rgba(239,68,68,0.1)",
-                        color: "#991b1b",
-                        padding: "3px 8px",
-                        borderRadius: 6,
-                      }}
-                    >
-                      -{ptsFaltando} pts
-                    </span>
-                  ) : (
-                    <span
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 11,
-                        color: "#8a8a85",
-                      }}
-                    >
-                      {camposPresentes}/{data.formato_cv.campos.length}{" "}
-                      encontrados
-                    </span>
-                  )}
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3, 1fr)",
-                    gap: 8,
-                  }}
-                  className="res-campos-grid"
-                >
-                  {data.formato_cv.campos.map((campo) => {
-                    const pts = CAMPO_PTS_MAP[campo.nome] ?? 1;
-                    return (
-                      <div
-                        key={campo.nome}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          background: campo.presente
-                            ? "rgba(198,255,58,0.1)"
-                            : "rgba(239,68,68,0.05)",
-                          border: `1px solid ${campo.presente ? "rgba(110,150,20,0.15)" : "rgba(239,68,68,0.12)"}`,
-                          borderRadius: 8,
-                          padding: "8px 11px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 700,
-                            color: campo.presente ? "#405410" : "#ef4444",
-                            flexShrink: 0,
-                          }}
-                        >
-                          {campo.presente ? "✓" : "✕"}
-                        </span>
-                        <span
-                          style={{
-                            flex: 1,
-                            fontSize: 12,
-                            color: campo.presente ? "#2a2a28" : "#991b1b",
-                          }}
-                        >
-                          {campo.nome}
-                        </span>
-                        {!campo.presente && (
-                          <span
-                            style={{
-                              fontFamily: MONO,
-                              fontSize: 10,
-                              fontWeight: 700,
-                              color: "#ef4444",
-                              flexShrink: 0,
-                            }}
-                          >
-                            -{pts}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             </>
@@ -2932,7 +3078,7 @@ export default function ResultadoPage() {
             }}
           >
             {/* Urgency bar */}
-            {Math.max(0, scoreMinimo - data.fit.score) > 0 && (
+            {Math.max(0, scoreMinimo - data.score.scoreAtualBase) > 0 && (
               <div
                 style={{
                   display: "flex",
@@ -2951,7 +3097,8 @@ export default function ResultadoPage() {
                     margin: 0,
                   }}
                 >
-                  Você está a {Math.max(0, scoreMinimo - data.fit.score)} pts do
+                  Você está a{" "}
+                  {Math.max(0, scoreMinimo - data.score.scoreAtualBase)} pts do
                   score mínimo recomendado para ser chamado para entrevista
                 </p>
               </div>
@@ -3131,11 +3278,11 @@ export default function ResultadoPage() {
                         style={{
                           position: "absolute",
                           inset: "0 auto 0 0",
-                          width: `${data.fit.score}%`,
+                          width: `${data.score.scoreAtualBase}%`,
                           background:
-                            data.fit.score >= 70
+                            data.score.scoreAtualBase >= 70
                               ? "#c6ff3a"
-                              : data.fit.score >= 40
+                              : data.score.scoreAtualBase >= 40
                                 ? "#f59e0b"
                                 : "#ef4444",
                           borderRadius: 99,
@@ -3164,11 +3311,14 @@ export default function ResultadoPage() {
                         style={{
                           fontSize: 18,
                           fontWeight: 500,
-                          color: data.fit.score >= 70 ? "#c6ff3a" : "#f59e0b",
+                          color:
+                            data.score.scoreAtualBase >= 70
+                              ? "#c6ff3a"
+                              : "#f59e0b",
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
-                        {data.fit.score}
+                        {data.score.scoreAtualBase}
                       </span>
                       <span
                         style={{
@@ -3277,10 +3427,10 @@ export default function ResultadoPage() {
                         color: "rgba(255,255,255,0.3)",
                       }}
                     >
-                      <span>{data.fit.score}</span>
-                      <span>+{totalAjustesConteudo} ajustes</span>
+                      <span>{data.score.scoreAtualBase}</span>
+                      <span>+{data.score.pontosDisponiveisBase} pts disponíveis</span>
                       {ptsKwSelecionadas > 0 && (
-                        <span>+{ptsKwSelecionadas} palavras</span>
+                        <span>+{ptsKwSelecionadas} keywords ausentes</span>
                       )}
                       <span style={{ color: "rgba(255,255,255,0.5)" }}>
                         = {scoreProjetado}/100
@@ -3550,6 +3700,26 @@ export default function ResultadoPage() {
                       {claimError}
                     </p>
                   )}
+
+                  {isAdminView && (
+                    <button
+                      type="button"
+                      onClick={handleDownloadRawJson}
+                      style={{
+                        width: "100%",
+                        background: "transparent",
+                        color: "rgba(255,255,255,0.75)",
+                        border: "1px dashed rgba(255,255,255,0.35)",
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                        fontSize: 12,
+                        fontFamily: MONO,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Baixar JSON bruto da IA (admin)
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -3557,164 +3727,18 @@ export default function ResultadoPage() {
         </div>
       </main>
 
-      {/* ── Release popup ── */}
-      {showReleasePopup &&
-        isClient &&
-        createPortal(
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 100,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(10,10,10,0.35)",
-              padding: "0 16px",
-              transition: "opacity 260ms ease-out",
-              opacity: releasePopupVisible ? 1 : 0,
-            }}
-          >
-            <button
-              type="button"
-              aria-label="Fechar aviso"
-              onClick={handleCloseReleasePopup}
-              style={{
-                position: "absolute",
-                inset: 0,
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-              }}
-            />
-            <div
-              style={{
-                position: "relative",
-                width: "100%",
-                maxWidth: 520,
-                background: "#fff",
-                border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 20,
-                padding: "24px",
-                boxShadow: "0 24px 60px -20px rgba(10,10,10,0.35)",
-                transition: "all 260ms ease-out",
-                opacity: releasePopupVisible ? 1 : 0,
-                transform: releasePopupVisible
-                  ? "translateY(0) scale(1)"
-                  : "translateY(8px) scale(0.98)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  marginBottom: 20,
-                }}
-              >
-                <div>
-                  <p
-                    style={{
-                      fontSize: 17,
-                      fontWeight: 500,
-                      color: "#0a0a0a",
-                      margin: "0 0 4px",
-                    }}
-                  >
-                    CV liberado para download
-                  </p>
-                  <p style={{ fontSize: 13.5, color: "#6a6560", margin: 0 }}>
-                    Seu CV final já está pronto. Escolha o formato para baixar.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCloseReleasePopup}
-                  style={{
-                    background: "rgba(10,10,10,0.05)",
-                    border: "none",
-                    borderRadius: 8,
-                    width: 32,
-                    height: 32,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                    color: "#6a6560",
-                  }}
-                  aria-label="Fechar aviso"
-                >
-                  {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
-                  <svg
-                    aria-hidden
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M18 6 6 18" />
-                    <path d="m6 6 12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 10,
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => handleDownload("pdf")}
-                  disabled={downloading !== null || !reviewAdaptationId}
-                  style={{
-                    background: "#fafaf6",
-                    border: "1px solid rgba(10,10,10,0.08)",
-                    borderRadius: 12,
-                    padding: "13px",
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    cursor: downloading !== null ? "default" : "pointer",
-                    color: "#0a0a0a",
-                    fontFamily: GEIST,
-                    opacity:
-                      downloading !== null || !reviewAdaptationId ? 0.6 : 1,
-                  }}
-                >
-                  {getDownloadCtaCopy("pdf", downloading)}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownload("docx")}
-                  disabled={downloading !== null || !reviewAdaptationId}
-                  style={{
-                    background: "#fafaf6",
-                    border: "1px solid rgba(10,10,10,0.08)",
-                    borderRadius: 12,
-                    padding: "13px",
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    cursor: downloading !== null ? "default" : "pointer",
-                    color: "#0a0a0a",
-                    fontFamily: GEIST,
-                    opacity:
-                      downloading !== null || !reviewAdaptationId ? 0.6 : 1,
-                  }}
-                >
-                  {getDownloadCtaCopy("docx", downloading)}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+      <CvReleaseModal
+        open={releaseModalOpen}
+        visible={releaseModalVisible}
+        status={releaseStatus}
+        message={releaseError}
+        canClose={releaseStatus !== "loading"}
+        canDownload={Boolean(reviewAdaptationId) && releaseStatus === "success"}
+        downloading={downloading}
+        onDownloadPdf={() => handleDownload("pdf")}
+        onDownloadDocx={() => handleDownload("docx")}
+        onClose={handleCloseReleaseModal}
+      />
 
       <DownloadProgressOverlay
         open={downloadStage !== null}

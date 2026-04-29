@@ -34,8 +34,40 @@ export function extractDashboardAnalysisSignal(
             score_pos_otimizacao?: unknown;
           };
           adaptation_notes?: unknown;
+          selectedMissingKeywords?: unknown;
         })
       : {};
+
+  try {
+    const normalized = normalizeData(parsed as CvAnalysisData);
+    const selectedMissingKeywords = Array.isArray(parsed.selectedMissingKeywords)
+      ? parsed.selectedMissingKeywords.filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0,
+        )
+      : [];
+    const selectedSet = new Set(selectedMissingKeywords);
+    const selectedKeywordsPoints = normalized.keywords.ausentes
+      .filter((keyword) => selectedSet.has(keyword.kw))
+      .reduce((sum, keyword) => sum + keyword.pontos, 0);
+    const scoreBefore = normalized.score.scoreAtualBase;
+    const scoreFinal = Math.min(
+      100,
+      normalized.score.scoreAposLiberarBase + selectedKeywordsPoints,
+    );
+
+    return {
+      adjustments: {
+        notes: parseText(parsed.adaptation_notes),
+        scoreBefore,
+        scoreFinal,
+      },
+      score: scoreFinal,
+      improvement: scoreFinal - scoreBefore,
+    };
+  } catch {
+    // Keep legacy fallback for malformed historical payloads.
+  }
 
   const fitScore = parseNumber(parsed.fit?.score);
   const fitScorePosAjustes = parseNumber(parsed.fit?.score_pos_ajustes);
@@ -121,3 +153,5 @@ export function getDashboardScoreColor(score: number): string {
 
   return `rgb(${r}, ${g}, ${b})`;
 }
+import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
+import { normalizeData } from "@/app/adaptar/resultado/normalize-data";

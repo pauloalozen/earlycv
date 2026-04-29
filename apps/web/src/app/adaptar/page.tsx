@@ -30,6 +30,8 @@ const LOADING_STEPS = [
   "Melhorando seu CV...",
 ];
 
+const CV_INPUT_BOX_MIN_HEIGHT = 154;
+
 const EXAMPLE_JOB = `Analista de Dados Sênior — Nubank
 
 Somos um dos maiores bancos digitais do mundo e buscamos um Analista de Dados Sênior para integrar nosso time de Growth Analytics.
@@ -55,7 +57,7 @@ Diferenciais:
 
 Local: Remoto (Brasil) | Regime: CLT | Área: Dados & Analytics`;
 
-type CvMode = "master" | "upload";
+type CvMode = "master" | "upload" | "text";
 
 const ADAPT_FLOW_SESSION_ID_KEY = "adaptFlowSessionId";
 
@@ -113,6 +115,7 @@ export default function AdaptarPage() {
   const turnstileSiteKey = getTurnstileSiteKey();
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
+  const [cvText, setCvText] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
@@ -333,6 +336,38 @@ export default function AdaptarPage() {
   const isAuthenticated = !!userName;
   const hasMaster = !!masterResume;
 
+  const validateCvTextInput = (input: string): string | null => {
+    const normalized = input.trim();
+    if (!normalized) {
+      return "Digite o texto do seu CV.";
+    }
+
+    if (normalized.length < 120) {
+      return "O texto do CV está muito curto. Inclua mais detalhes antes de analisar.";
+    }
+
+    const nonEmptyLines = normalized
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (nonEmptyLines.length < 3) {
+      return "Organize o CV em mais linhas (resumo, experiências e competências, por exemplo).";
+    }
+
+    const hasCommonCvSection =
+      /(experi[eê]ncia|forma[cç][aã]o|habilidades|compet[eê]ncias|resumo|projetos|idiomas|certifica[cç][oõ]es)/i.test(
+        normalized,
+      );
+    const hasDateSignal = /\b(19|20)\d{2}\b/.test(normalized);
+
+    if (!hasCommonCvSection && !hasDateSignal) {
+      return "Esse texto não parece ser um currículo. Inclua seções como experiência, formação ou competências.";
+    }
+
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const submitAttemptId = buildClientAttemptId();
@@ -344,7 +379,9 @@ export default function AdaptarPage() {
       },
     });
 
-    const requiresUploadedFile = !isAuthenticated || cvMode === "upload";
+    const isTextMode = cvMode === "text";
+    const requiresUploadedFile =
+      cvMode === "upload" || (!isAuthenticated && !isTextMode);
 
     if (requiresUploadedFile && !file) {
       setError("Selecione seu CV em PDF.");
@@ -358,11 +395,23 @@ export default function AdaptarPage() {
       setError("Cole a descrição da vaga.");
       return;
     }
+
+    if (isTextMode) {
+      const cvTextError = validateCvTextInput(cvText);
+      if (cvTextError) {
+        setError(cvTextError);
+        return;
+      }
+    }
+
     setLoading(true);
     setError(null);
     try {
       const formData = new FormData();
       formData.append("jobDescriptionText", jobDescription);
+      if (isTextMode) {
+        formData.append("masterCvText", cvText.trim());
+      }
       const turnstileToken = await requestTurnstileToken();
       appendTurnstileTokenToAnalyzeFormData(formData, turnstileToken);
       let analyzeResult: Awaited<ReturnType<typeof analyzeAuthenticatedCv>>;
@@ -380,7 +429,7 @@ export default function AdaptarPage() {
           new Promise((r) => setTimeout(r, 10000)),
         ]);
         analyzeResult = result;
-      } else if (isAuthenticated && file) {
+      } else if (isAuthenticated && cvMode === "upload" && file) {
         formData.append("file", file);
         if (saveMasterCv) formData.append("saveAsMaster", "true");
         emitUiFunnelEvent("analysis_started", {
@@ -395,7 +444,51 @@ export default function AdaptarPage() {
           new Promise((r) => setTimeout(r, 10000)),
         ]);
         analyzeResult = result;
+      } else if (isAuthenticated && cvMode === "text") {
+        emitUiFunnelEvent("analysis_started", {
+          attemptId: submitAttemptId,
+          metadata: {
+            cvMode,
+            isAuthenticated,
+          },
+        });
+        const [result] = await Promise.all([
+          analyzeAuthenticatedCv(formData),
+          new Promise((r) => setTimeout(r, 10000)),
+        ]);
+        analyzeResult = result;
       } else {
+        if (cvMode === "text") {
+          emitUiFunnelEvent("analysis_started", {
+            attemptId: submitAttemptId,
+            metadata: {
+              cvMode,
+              isAuthenticated,
+            },
+          });
+          const [result] = await Promise.all([
+            analyzeGuestCv(formData),
+            new Promise((r) => setTimeout(r, 10000)),
+          ]);
+          analyzeResult = result;
+          if (!analyzeResult.ok) {
+            setLoading(false);
+            setError(analyzeResult.error);
+            return;
+          }
+          setLoadingStep(3);
+          await new Promise((r) => setTimeout(r, 2000));
+          sessionStorage.setItem(
+            "guestAnalysis",
+            JSON.stringify({
+              ...analyzeResult,
+              jobDescriptionText: jobDescription,
+            }),
+          );
+          router.push("/adaptar/resultado");
+          return;
+        }
+
         const uploadedFile = file;
         if (!uploadedFile) {
           setError("Selecione seu CV em PDF.");
@@ -696,13 +789,59 @@ export default function AdaptarPage() {
                           padding: 3,
                         }}
                       >
-                        {(["master", "upload"] as CvMode[]).map((mode) => (
+                        {(["master", "upload", "text"] as CvMode[]).map(
+                          (mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => {
+                                setCvMode(mode);
+                                if (mode === "master") setFile(null);
+                                if (mode === "text") setFile(null);
+                                setError(null);
+                              }}
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: 10,
+                                fontWeight: 500,
+                                letterSpacing: 0.3,
+                                padding: "4px 10px",
+                                borderRadius: 6,
+                                border: "none",
+                                cursor: "pointer",
+                                background:
+                                  cvMode === mode ? "#0a0a0a" : "transparent",
+                                color: cvMode === mode ? "#fafaf6" : "#7a7a74",
+                                transition: "all 120ms",
+                              }}
+                            >
+                              {mode === "master"
+                                ? "CV base"
+                                : mode === "upload"
+                                  ? "Outro CV"
+                                  : "Digitar texto"}
+                            </button>
+                          ),
+                        )}
+                      </div>
+                    )}
+                    {!isAuthenticated && (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 4,
+                          background: "rgba(10,10,10,0.05)",
+                          borderRadius: 8,
+                          padding: 3,
+                        }}
+                      >
+                        {(["upload", "text"] as CvMode[]).map((mode) => (
                           <button
                             key={mode}
                             type="button"
                             onClick={() => {
                               setCvMode(mode);
-                              if (mode === "master") setFile(null);
+                              if (mode === "text") setFile(null);
                               setError(null);
                             }}
                             style={{
@@ -720,7 +859,7 @@ export default function AdaptarPage() {
                               transition: "all 120ms",
                             }}
                           >
-                            {mode === "master" ? "CV base" : "Outro CV"}
+                            {mode === "upload" ? "Upload" : "Digitar texto"}
                           </button>
                         ))}
                       </div>
@@ -736,6 +875,10 @@ export default function AdaptarPage() {
                         borderRadius: 14,
                         padding: "28px 20px",
                         textAlign: "center",
+                        minHeight: CV_INPUT_BOX_MIN_HEIGHT,
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "center",
                       }}
                     >
                       <div
@@ -789,6 +932,52 @@ export default function AdaptarPage() {
                         <span style={{ color: "#405410" }}>✓ pronto</span>
                       </div>
                     </div>
+                  ) : cvMode === "text" ? (
+                    <div
+                      style={{
+                        width: "100%",
+                        border: "1.5px dashed #d0ceC6",
+                        borderRadius: 14,
+                        padding: "14px 14px 10px",
+                        background: "#fafaf6",
+                        minHeight: CV_INPUT_BOX_MIN_HEIGHT,
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <textarea
+                        value={cvText}
+                        onChange={(e) =>
+                          setCvText(e.target.value.slice(0, 20000))
+                        }
+                        placeholder="Cole seu currículo em texto (resumo, experiências, formação, competências)..."
+                        style={{
+                          width: "100%",
+                          border: "none",
+                          outline: "none",
+                          fontFamily: GEIST,
+                          fontSize: 13.5,
+                          lineHeight: 1.5,
+                          color: "#0a0a0a",
+                          resize: "none",
+                          minHeight: 0,
+                          flex: 1,
+                          background: "transparent",
+                        }}
+                      />
+                      <div
+                        style={{
+                          marginTop: 8,
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#7a7a74",
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        Sem upload. Use texto real do seu CV para manter
+                        rastreabilidade.
+                      </div>
+                    </div>
                   ) : (
                     /* Upload area */
                     <>
@@ -812,6 +1001,8 @@ export default function AdaptarPage() {
                           flexDirection: "column",
                           alignItems: "center",
                           gap: 8,
+                          minHeight: CV_INPUT_BOX_MIN_HEIGHT,
+                          justifyContent: "center",
                         }}
                       >
                         {file ? (
@@ -930,6 +1121,9 @@ export default function AdaptarPage() {
                     onChange={(e) => {
                       const nextFile = e.target.files?.[0] ?? null;
                       setFile(nextFile);
+                      if (nextFile) {
+                        setCvMode("upload");
+                      }
                       if (nextFile) {
                         emitUiFunnelEvent("cv_upload_completed", {
                           attemptId: buildClientAttemptId(),

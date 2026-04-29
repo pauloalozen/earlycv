@@ -13,6 +13,12 @@ export class AnalyzeCvDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(20000)
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  masterCvText?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(4096)
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   turnstileToken?: string;

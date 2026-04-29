@@ -18,7 +18,8 @@ const makeFile = (buffer: Buffer) => ({
 });
 
 const makeAnalyzeDto = () => ({
-  jobDescriptionText: "Descricao da vaga",
+  jobDescriptionText:
+    "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
   masterResumeId: "resume-1",
   saveAsMaster: false,
   turnstileToken: "token",
@@ -112,10 +113,20 @@ test("analyzeGuest payload uses deterministic file fingerprint for dedupe", asyn
   );
 
   await assert.rejects(
-    service.analyzeGuest("JD", makeFile(Buffer.from("resume-a")), "token"),
+    service.analyzeGuest(
+      "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+      makeFile(Buffer.from("resume-a")),
+      undefined,
+      "token",
+    ),
   );
   await assert.rejects(
-    service.analyzeGuest("JD", makeFile(Buffer.from("resume-b")), "token"),
+    service.analyzeGuest(
+      "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+      makeFile(Buffer.from("resume-b")),
+      undefined,
+      "token",
+    ),
   );
 
   assert.equal(capturedPayloads.length, 2);
@@ -131,6 +142,95 @@ test("analyzeGuest payload uses deterministic file fingerprint for dedupe", asyn
     createHash("sha256").update(Buffer.from("resume-b")).digest("hex"),
   );
   assert.notEqual(firstFingerprint, secondFingerprint);
+});
+
+test("analyzeGuest accepts CV text without file", async () => {
+  const service = new CvAdaptationServiceCtor(
+    { resume: { findFirst: async () => null } },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: {
+          adaptedContentJson: { ok: true },
+          masterCvText: "CV texto",
+          previewText: "preview",
+        },
+      }),
+    },
+  );
+
+  const result = await service.analyzeGuest(
+    "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    undefined,
+    "Resumo\nExperiencia\n2022\nSQL",
+    "token",
+  );
+
+  assert.equal(result.masterCvText, "CV texto");
+});
+
+test("analyzeAuthenticated accepts masterCvText without file or masterResumeId", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: {
+        findFirst: async () => {
+          throw new Error("resume lookup should not run");
+        },
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: {
+          adaptedContentJson: { ok: true },
+          masterCvText: "CV texto",
+          previewText: "preview",
+        },
+      }),
+    },
+  );
+
+  const result = await service.analyzeAuthenticated("user-1", {
+    jobDescriptionText:
+      "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    masterCvText: "Resumo\nExperiencia\n2022\nSQL",
+    saveAsMaster: false,
+    turnstileToken: "token",
+  });
+
+  assert.equal(result.previewText, "preview");
 });
 
 test("create delegates async analysis through protected boundary instead of direct AI call", async () => {
@@ -149,7 +249,8 @@ test("create delegates async analysis through protected boundary instead of dire
           companyName: null,
           createdAt: now,
           id: "adapt-1",
-          jobDescriptionText: "Descricao da vaga",
+          jobDescriptionText:
+            "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
           jobTitle: null,
           masterResumeId: "resume-1",
           paidAt: null,
@@ -204,7 +305,8 @@ test("create delegates async analysis through protected boundary instead of dire
   );
 
   await service.create("user-1", {
-    jobDescriptionText: "Descricao da vaga",
+    jobDescriptionText:
+      "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
     masterResumeId: "resume-1",
   });
 
@@ -227,7 +329,8 @@ test("create marks adaptation as failed when protected boundary blocks analysis"
           companyName: null,
           createdAt: now,
           id: "adapt-1",
-          jobDescriptionText: "Descricao da vaga",
+          jobDescriptionText:
+            "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
           jobTitle: null,
           masterResumeId: "resume-1",
           paidAt: null,
@@ -281,7 +384,8 @@ test("create marks adaptation as failed when protected boundary blocks analysis"
   );
 
   await service.create("user-1", {
-    jobDescriptionText: "Descricao da vaga",
+    jobDescriptionText:
+      "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
     masterResumeId: "resume-1",
   });
 
@@ -348,7 +452,8 @@ test("saveGuestPreview does not auto-promote a resume to master when user did no
             createdAt: now,
             failureReason: null,
             id: "adapt-1",
-            jobDescriptionText: "Descricao da vaga",
+            jobDescriptionText:
+              "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
             jobTitle: null,
             masterResumeId: data.masterResumeId,
             paidAt: null,
@@ -394,7 +499,8 @@ test("saveGuestPreview does not auto-promote a resume to master when user did no
   await service.saveGuestPreview("user-1", {
     adaptedContentJson: { fit: { headline: "ok" } },
     companyName: "EarlyCV",
-    jobDescriptionText: "Descricao da vaga",
+    jobDescriptionText:
+      "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
     jobTitle: "Analista",
     masterCvText: "CV enviado pelo usuario",
     previewText: "preview",
@@ -420,7 +526,8 @@ test("create forwards turnstileToken to protected create analysis", async () => 
           companyName: null,
           createdAt: now,
           id: "adapt-1",
-          jobDescriptionText: "Descricao da vaga",
+          jobDescriptionText:
+            "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
           jobTitle: null,
           masterResumeId: "resume-1",
           paidAt: null,
@@ -478,7 +585,8 @@ test("create forwards turnstileToken to protected create analysis", async () => 
   );
 
   await service.create("user-1", {
-    jobDescriptionText: "Descricao da vaga",
+    jobDescriptionText:
+      "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
     masterResumeId: "resume-1",
     turnstileToken: "turnstile-create-token",
   });
@@ -556,7 +664,8 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
     aiAuditJson: null,
     companyName: "Acme",
     id: "adapt-1",
-    jobDescriptionText: "JD",
+    jobDescriptionText:
+      "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
     jobTitle: "Engenheiro",
     masterResume: { rawText: "CV" },
     userId: "user-1",
@@ -638,7 +747,8 @@ test("ensureLegacyStructuredOutput returns null when protected boundary blocks",
     aiAuditJson: null,
     companyName: "Acme",
     id: "adapt-1",
-    jobDescriptionText: "JD",
+    jobDescriptionText:
+      "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
     jobTitle: "Engenheiro",
     masterResume: { rawText: "CV" },
     userId: "user-1",

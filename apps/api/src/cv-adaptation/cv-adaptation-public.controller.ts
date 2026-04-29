@@ -45,6 +45,7 @@ export class CvAdaptationPublicController {
     @Req() req: Request,
     @UploadedFile() file: FileUpload | undefined,
     @Body("jobDescriptionText") jobDescriptionText: string,
+    @Body("masterCvText") masterCvText?: string,
     @Body("turnstileToken") turnstileToken?: string,
   ) {
     if (!jobDescriptionText?.trim()) {
@@ -53,6 +54,7 @@ export class CvAdaptationPublicController {
     return this.cvAdaptationService.analyzeGuest(
       jobDescriptionText,
       file,
+      masterCvText,
       turnstileToken,
       req.analysisContext,
     );

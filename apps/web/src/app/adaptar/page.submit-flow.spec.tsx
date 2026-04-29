@@ -273,6 +273,127 @@ describe("AdaptarPage submit analytics flow", () => {
     );
   });
 
+  it("blocks submit in text mode when CV text does not look like a resume", async () => {
+    render(<AdaptarPage />);
+
+    const toggleTextModeButton = await screen.findByRole("button", {
+      name: /Digitar texto/i,
+    });
+    fireEvent.click(toggleTextModeButton);
+
+    const cvTextarea = screen.getByPlaceholderText(
+      /Cole seu currículo em texto/i,
+    );
+    const jobTextarea = screen.getByPlaceholderText(
+      "Cole a vaga completa (isso melhora sua análise)...",
+    );
+
+    fireEvent.change(cvTextarea, {
+      target: { value: "oi" },
+    });
+    fireEvent.change(jobTextarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeGuestCvMock).not.toHaveBeenCalled();
+    });
+
+    expect(
+      screen.getByText(/texto não parece ser um currículo/i),
+    ).toBeInTheDocument();
+  });
+
+  it("submits guest analysis in text mode without requiring file", async () => {
+    render(<AdaptarPage />);
+
+    const toggleTextModeButton = await screen.findByRole("button", {
+      name: /Digitar texto/i,
+    });
+    fireEvent.click(toggleTextModeButton);
+
+    const cvTextarea = screen.getByPlaceholderText(
+      /Cole seu currículo em texto/i,
+    );
+    const jobTextarea = screen.getByPlaceholderText(
+      "Cole a vaga completa (isso melhora sua análise)...",
+    );
+
+    fireEvent.change(cvTextarea, {
+      target: {
+        value:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL e Python",
+      },
+    });
+    fireEvent.change(jobTextarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeGuestCvMock).toHaveBeenCalledTimes(1);
+    });
+
+    const formDataArg = analyzeGuestCvMock.mock.calls[0]?.[0] as
+      | FormData
+      | undefined;
+    expect(formDataArg?.get("masterCvText")).toContain("Analista de Dados");
+    expect(formDataArg?.get("file")).toBeNull();
+  });
+
+  it("submits authenticated analysis in text mode without saveAsMaster", async () => {
+    getAuthStatusMock.mockResolvedValue({ userName: "Claudio" });
+    render(<AdaptarPage />);
+
+    const toggleTextModeButton = await screen.findByRole("button", {
+      name: /Digitar texto/i,
+    });
+    fireEvent.click(toggleTextModeButton);
+
+    const cvTextarea = screen.getByPlaceholderText(
+      /Cole seu currículo em texto/i,
+    );
+    const jobTextarea = screen.getByPlaceholderText(
+      "Cole a vaga completa (isso melhora sua análise)...",
+    );
+
+    fireEvent.change(cvTextarea, {
+      target: {
+        value:
+          "Bruno Costa\nResumo\nProfissional de Produto\nExperiencia\nPM Senior\n2020-2024\nRoadmap, discovery, SQL",
+      },
+    });
+    fireEvent.change(jobTextarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeAuthenticatedCvMock).toHaveBeenCalledTimes(1);
+    });
+
+    const formDataArg = analyzeAuthenticatedCvMock.mock.calls[0]?.[0] as
+      | FormData
+      | undefined;
+    expect(formDataArg?.get("masterCvText")).toContain(
+      "Profissional de Produto",
+    );
+    expect(formDataArg?.get("saveAsMaster")).toBeNull();
+  });
+
   it("emits job_description_focus and job_description_paste only once per page visit", async () => {
     render(<AdaptarPage />);
 
