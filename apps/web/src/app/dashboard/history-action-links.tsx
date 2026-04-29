@@ -1,8 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  CvReleaseModal,
+  type CvReleaseModalStatus,
+} from "@/components/cv-release-modal";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import {
   type DownloadProgressStage,
@@ -36,6 +40,17 @@ type Props = {
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const GEIST_MONO = "var(--font-geist-mono), monospace";
 
+const MIN_RELEASE_LOADING_MS = 3000;
+
+const buildRedeemSessionKey = (redeemHref: string) =>
+  `dashboard-cv-redeemed:${redeemHref}`;
+
+const waitForMinimumDuration = async (startedAt: number, minMs: number) => {
+  const elapsed = Date.now() - startedAt;
+  if (elapsed >= minMs) return;
+  await new Promise((resolve) => setTimeout(resolve, minMs - elapsed));
+};
+
 export function HistoryActionLinks({
   actions,
   adjustments,
@@ -51,6 +66,27 @@ export function HistoryActionLinks({
   const [isClient, setIsClient] = useState(false);
   const [isAdjustmentsOpen, setIsAdjustmentsOpen] = useState(false);
   const [adjustmentsVisible, setAdjustmentsVisible] = useState(false);
+  const [releaseModalOpen, setReleaseModalOpen] = useState(false);
+  const [releaseModalVisible, setReleaseModalVisible] = useState(false);
+  const [releaseStatus, setReleaseStatus] =
+    useState<CvReleaseModalStatus>("loading");
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+  const [wasRedeemedInSession, setWasRedeemedInSession] = useState(false);
+  const redeemInFlightRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const adjustmentsCloseTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const releaseCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const redeemAbortControllerRef = useRef<AbortController | null>(null);
+  const releaseWatchdogTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const adjustmentsDialogRef = useRef<HTMLDivElement | null>(null);
+  const adjustmentsCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const adjustmentsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const chipClassName =
     "inline-flex h-8 appearance-none items-center justify-center whitespace-nowrap rounded-[10px] border border-[#DADADA] bg-white px-3 [font-family:var(--font-sans)] text-xs leading-none font-semibold transition-colors hover:border-[#BEBEBE]";
   const primaryChipClassName =
@@ -61,8 +97,11 @@ export function HistoryActionLinks({
     fontWeight: 600,
     lineHeight: 1,
   } as const;
+  const canDownloadNow = actions.canDownload || wasRedeemedInSession;
+  const canRedeemNow = actions.canRedeem && !wasRedeemedInSession;
+
   const showAdjustmentsAction = shouldShowAdjustmentsAction({
-    canDownload: actions.canDownload,
+    canDownload: canDownloadNow,
     notes: adjustments.notes,
     scoreBefore: adjustments.scoreBefore,
     scoreFinal: adjustments.scoreFinal,
@@ -73,12 +112,99 @@ export function HistoryActionLinks({
   }, []);
 
   useEffect(() => {
+    if (!isClient) return;
+    try {
+      const cached = sessionStorage.getItem(
+        buildRedeemSessionKey(actions.redeemHref),
+      );
+      if (cached === "1") {
+        setWasRedeemedInSession(true);
+      }
+    } catch {
+      // no-op
+    }
+  }, [actions.redeemHref, isClient]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      if (adjustmentsCloseTimeoutRef.current) {
+        clearTimeout(adjustmentsCloseTimeoutRef.current);
+      }
+      if (releaseCloseTimeoutRef.current) {
+        clearTimeout(releaseCloseTimeoutRef.current);
+      }
+      if (redeemAbortControllerRef.current) {
+        redeemAbortControllerRef.current.abort();
+      }
+      if (releaseWatchdogTimeoutRef.current) {
+        clearTimeout(releaseWatchdogTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!releaseModalOpen || releaseStatus !== "loading") return;
+    if (releaseWatchdogTimeoutRef.current) {
+      clearTimeout(releaseWatchdogTimeoutRef.current);
+    }
+
+    releaseWatchdogTimeoutRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
+      setReleaseStatus("error");
+      setReleaseError(
+        "A liberacao esta demorando mais do que o esperado. Tente novamente.",
+      );
+      setRedeeming(false);
+      redeemInFlightRef.current = false;
+      redeemAbortControllerRef.current?.abort();
+      redeemAbortControllerRef.current = null;
+    }, 20_000);
+
+    return () => {
+      if (releaseWatchdogTimeoutRef.current) {
+        clearTimeout(releaseWatchdogTimeoutRef.current);
+        releaseWatchdogTimeoutRef.current = null;
+      }
+    };
+  }, [releaseModalOpen, releaseStatus]);
+
+  useEffect(() => {
     if (!isClient || !isAdjustmentsOpen) return;
 
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setAdjustmentsVisible(false);
-        setTimeout(() => setIsAdjustmentsOpen(false), 240);
+        if (adjustmentsCloseTimeoutRef.current) {
+          clearTimeout(adjustmentsCloseTimeoutRef.current);
+        }
+        adjustmentsCloseTimeoutRef.current = setTimeout(() => {
+          if (!isMountedRef.current) return;
+          setIsAdjustmentsOpen(false);
+        }, 240);
+        return;
+      }
+
+      if (event.key === "Tab") {
+        const root = adjustmentsDialogRef.current;
+        if (!root) return;
+
+        const focusables = root.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const current = document.activeElement as HTMLElement | null;
+
+        if (event.shiftKey && current === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && current === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
 
@@ -87,6 +213,7 @@ export function HistoryActionLinks({
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
     window.addEventListener("keydown", onEscape);
+    requestAnimationFrame(() => adjustmentsCloseButtonRef.current?.focus());
 
     return () => {
       document.body.style.overflow = previousOverflow;
@@ -97,7 +224,14 @@ export function HistoryActionLinks({
 
   const closeAdjustmentsPopup = () => {
     setAdjustmentsVisible(false);
-    setTimeout(() => setIsAdjustmentsOpen(false), 240);
+    if (adjustmentsCloseTimeoutRef.current) {
+      clearTimeout(adjustmentsCloseTimeoutRef.current);
+    }
+    adjustmentsCloseTimeoutRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
+      setIsAdjustmentsOpen(false);
+      adjustmentsTriggerRef.current?.focus();
+    }, 240);
   };
 
   const openAdjustmentsPopup = () => {
@@ -105,22 +239,42 @@ export function HistoryActionLinks({
     requestAnimationFrame(() => setAdjustmentsVisible(true));
   };
 
+  const closeReleaseModal = () => {
+    setReleaseModalVisible(false);
+    if (releaseCloseTimeoutRef.current) {
+      clearTimeout(releaseCloseTimeoutRef.current);
+    }
+    releaseCloseTimeoutRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
+      setReleaseModalOpen(false);
+      setReleaseStatus("loading");
+      setReleaseError(null);
+    }, 260);
+  };
+
+  const handleDownload = async (format: "pdf" | "docx") => {
+    if (downloading) return;
+    setDownloading(format);
+    try {
+      await downloadFromApi({
+        url: format === "pdf" ? actions.pdfHref : actions.docxHref,
+        fallbackFilename:
+          format === "pdf" ? "cv-adaptado.pdf" : "cv-adaptado.docx",
+        onStageChange: setDownloadStage,
+      });
+    } finally {
+      if (isMountedRef.current) {
+        setDownloading(null);
+        setDownloadStage(null);
+      }
+    }
+  };
+
   return (
-    <div className="history-actions mt-3 flex flex-wrap gap-2">
-      <style>{`
-        @media (max-width: 640px) {
-          .history-actions { display: grid !important; grid-template-columns: 1fr 1fr; }
-          .history-actions > * { width: 100%; justify-content: center; }
-          .history-adjustments-modal { padding: 16px !important; }
-          .history-adjustments-scores { flex-direction: column !important; }
-          .history-adjustments-actions { flex-direction: column !important; }
-          .history-adjustments-actions > * { width: 100%; justify-content: center; }
-        }
-      `}</style>
-      <a
-        href={actions.resultHref}
-        onClick={(event) => {
-          event.preventDefault();
+    <div className="history-actions mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+      <button
+        type="button"
+        onClick={() => {
           if (openingReview) return;
           setOpeningReview(true);
           router.push(actions.resultHref);
@@ -130,14 +284,15 @@ export function HistoryActionLinks({
         className={`${chipClassName} ${openingReview ? "cursor-not-allowed opacity-75" : ""}`}
       >
         {getReviewActionCopy(openingReview)}
-      </a>
+      </button>
 
-      {actions.canDownload ? (
+      {canDownloadNow ? (
         <>
           {showAdjustmentsAction ? (
             <button
               type="button"
               onClick={openAdjustmentsPopup}
+              ref={adjustmentsTriggerRef}
               style={{
                 color: "#ffffff",
                 borderColor: "#111111",
@@ -152,20 +307,7 @@ export function HistoryActionLinks({
           ) : null}
           <button
             type="button"
-            onClick={async () => {
-              if (downloading) return;
-              setDownloading("pdf");
-              try {
-                await downloadFromApi({
-                  url: actions.pdfHref,
-                  fallbackFilename: "cv-adaptado.pdf",
-                  onStageChange: setDownloadStage,
-                });
-              } finally {
-                setDownloading(null);
-                setDownloadStage(null);
-              }
-            }}
+            onClick={() => handleDownload("pdf")}
             style={{ color: "#111111", ...sharedChipTextStyle }}
             className={chipClassName}
             disabled={Boolean(downloading)}
@@ -174,20 +316,7 @@ export function HistoryActionLinks({
           </button>
           <button
             type="button"
-            onClick={async () => {
-              if (downloading) return;
-              setDownloading("docx");
-              try {
-                await downloadFromApi({
-                  url: actions.docxHref,
-                  fallbackFilename: "cv-adaptado.docx",
-                  onStageChange: setDownloadStage,
-                });
-              } finally {
-                setDownloading(null);
-                setDownloadStage(null);
-              }
-            }}
+            onClick={() => handleDownload("docx")}
             style={{ color: "#111111", ...sharedChipTextStyle }}
             className={chipClassName}
             disabled={Boolean(downloading)}
@@ -199,23 +328,83 @@ export function HistoryActionLinks({
         <span className="rounded-[10px] bg-[#F2F2F2] px-3 py-1.5 text-xs font-semibold text-[#666666]">
           Análise em processamento...
         </span>
-      ) : actions.canRedeem && hasCredits ? (
+      ) : canRedeemNow && hasCredits ? (
         <button
           type="button"
           onClick={async () => {
-            if (redeeming) return;
+            if (redeeming || redeemInFlightRef.current) return;
+            redeemInFlightRef.current = true;
             setRedeeming(true);
+            const startedAt = Date.now();
+            setReleaseModalOpen(true);
+            requestAnimationFrame(() => setReleaseModalVisible(true));
+            setReleaseStatus("loading");
+            setReleaseError(null);
+
+            redeemAbortControllerRef.current?.abort();
+            const controller = new AbortController();
+            redeemAbortControllerRef.current = controller;
+            const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
             try {
               const response = await fetch(actions.redeemHref, {
                 method: "POST",
                 cache: "no-store",
+                signal: controller.signal,
               });
               if (!response.ok) {
-                throw new Error("Falha ao liberar CV");
+                let apiMessage = "Falha ao liberar CV";
+                try {
+                  const body = (await response.json()) as { message?: string };
+                  if (typeof body.message === "string" && body.message.trim()) {
+                    apiMessage = body.message;
+                  }
+                } catch {
+                  // noop
+                }
+                throw new Error(apiMessage);
               }
-              router.push(actions.resultHref);
-            } catch {
-              setRedeeming(false);
+
+              await waitForMinimumDuration(startedAt, MIN_RELEASE_LOADING_MS);
+              if (!isMountedRef.current) return;
+              setWasRedeemedInSession(true);
+              try {
+                sessionStorage.setItem(
+                  buildRedeemSessionKey(actions.redeemHref),
+                  "1",
+                );
+              } catch {
+                // no-op
+              }
+              setReleaseStatus("success");
+            } catch (error) {
+              if (!isMountedRef.current) return;
+              const message = (() => {
+                if (
+                  error instanceof DOMException &&
+                  error.name === "AbortError"
+                ) {
+                  return "A liberacao demorou mais do que o esperado. Verifique sua conexao e tente novamente.";
+                }
+                if (error instanceof TypeError) {
+                  return "Nao foi possivel conectar ao servidor. Verifique sua internet e tente novamente.";
+                }
+                if (error instanceof Error && error.message) {
+                  return error.message;
+                }
+                return "Nao foi possivel liberar o CV agora. Tente novamente.";
+              })();
+              setReleaseStatus("error");
+              setReleaseError(message);
+            } finally {
+              clearTimeout(timeoutId);
+              if (redeemAbortControllerRef.current === controller) {
+                redeemAbortControllerRef.current = null;
+              }
+              if (isMountedRef.current) {
+                setRedeeming(false);
+              }
+              redeemInFlightRef.current = false;
             }
           }}
           style={{
@@ -244,6 +433,18 @@ export function HistoryActionLinks({
         open={downloadStage !== null}
         stage={downloadStage}
         format={downloading}
+      />
+      <CvReleaseModal
+        open={releaseModalOpen}
+        visible={releaseModalVisible}
+        status={releaseStatus}
+        message={releaseError}
+        canClose={releaseStatus !== "loading"}
+        onClose={closeReleaseModal}
+        onDownloadPdf={() => handleDownload("pdf")}
+        onDownloadDocx={() => handleDownload("docx")}
+        downloading={downloading}
+        canDownload={releaseStatus === "success"}
       />
       {isClient &&
         isAdjustmentsOpen &&
@@ -275,19 +476,16 @@ export function HistoryActionLinks({
               }}
             />
             <div
-              className="history-adjustments-modal"
+              className="history-adjustments-modal w-full max-w-[560px] rounded-[18px] p-4 sm:p-6"
               role="dialog"
               aria-modal="true"
               aria-labelledby="dashboard-ajustes-feitos-title"
+              ref={adjustmentsDialogRef}
               style={{
                 position: "relative",
-                width: "100%",
-                maxWidth: 560,
                 background: "#fafaf6",
                 fontFamily: GEIST,
                 border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 18,
-                padding: "24px",
                 boxShadow: "0 24px 60px -20px rgba(10,10,10,0.4)",
                 transition: "opacity 240ms ease-out, transform 240ms ease-out",
                 opacity: adjustmentsVisible ? 1 : 0,
@@ -298,7 +496,7 @@ export function HistoryActionLinks({
             >
               {/* Header */}
               <div
-                className="history-adjustments-scores"
+                className="history-adjustments-scores flex-col sm:flex-row"
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
@@ -336,6 +534,7 @@ export function HistoryActionLinks({
                   type="button"
                   onClick={closeAdjustmentsPopup}
                   aria-label="Fechar"
+                  ref={adjustmentsCloseButtonRef}
                   style={{
                     background: "rgba(10,10,10,0.05)",
                     border: "none",
@@ -537,7 +736,7 @@ export function HistoryActionLinks({
 
               {/* Actions */}
               <div
-                className="history-adjustments-actions"
+                className="history-adjustments-actions flex-col sm:flex-row"
                 style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
               >
                 <button
@@ -557,9 +756,12 @@ export function HistoryActionLinks({
                 >
                   Fechar
                 </button>
-                <a
-                  href={actions.resultHref}
-                  onClick={closeAdjustmentsPopup}
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeAdjustmentsPopup();
+                    router.push(actions.resultHref);
+                  }}
                   style={{
                     background: "#0a0a0a",
                     color: "#fafaf6",
@@ -568,15 +770,15 @@ export function HistoryActionLinks({
                     padding: "10px 16px",
                     fontSize: 13,
                     fontWeight: 500,
-                    textDecoration: "none",
                     display: "inline-flex",
                     alignItems: "center",
                     justifyContent: "center",
                     fontFamily: GEIST,
+                    cursor: "pointer",
                   }}
                 >
                   Ver análise completa →
-                </a>
+                </button>
               </div>
             </div>
           </div>,

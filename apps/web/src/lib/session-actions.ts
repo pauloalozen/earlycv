@@ -9,6 +9,7 @@ export async function getAuthStatus(): Promise<{
   isAuthenticated: boolean;
   userName: string | null;
   hasCredits: boolean | null;
+  internalRole: "none" | "admin" | "superadmin" | null;
 }> {
   const user = await getCurrentAppUserFromCookies();
 
@@ -17,6 +18,7 @@ export async function getAuthStatus(): Promise<{
       isAuthenticated: false,
       userName: null,
       hasCredits: null,
+      internalRole: null,
     };
   }
 
@@ -28,12 +30,14 @@ export async function getAuthStatus(): Promise<{
       hasCredits: hasAvailableCredits({
         creditsRemaining: plan.creditsRemaining,
       }),
+      internalRole: user.internalRole,
     };
   } catch {
     return {
       isAuthenticated: true,
       userName: user.name ?? null,
       hasCredits: null,
+      internalRole: user.internalRole,
     };
   }
 }

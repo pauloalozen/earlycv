@@ -118,13 +118,16 @@ Avoid keyword stuffing or disconnected usage.
 ---
 
 6. SUMMARY (HIGH IMPACT)
-Write a 3–4 sentence summary that:
-- Starts with the exact job title from the vacancy
-- Positions the candidate as already operating in that domain
-- Highlights the most relevant experience (not generic background)
+Write a 3–4 sentence professional summary that:
+- Does NOT start with the exact job title from the vacancy
+- Does NOT copy the vacancy title literally
+- Positions the candidate as already operating in the target domain
+- Highlights the most relevant experience, seniority, scope, and business impact
 - Connects past experience with the job's responsibilities
+- For leadership/management roles, emphasize team leadership, strategy, governance, stakeholder management, and business impact when supported by the CV
 
 Avoid generic phrases like “results-driven professional”.
+Avoid duplicating the same wording used in mainGoal.
 
 ---
 
@@ -157,10 +160,44 @@ If a bullet does not support this, reframe it to better align.
 
 ---
 
-11. MAIN GOAL (objetivo)
-- Start with the exact job title
-- Clearly position the candidate as capable of performing the role TODAY
-- Focus on domain alignment, not generic ambition
+11. MAIN GOAL / OBJECTIVE (objetivo)
+
+First, classify whether the vacancy is a leadership/management role.
+
+A vacancy MUST be treated as leadership/management if the job title or description contains indicators such as:
+- gerente / manager
+- coordenador / coordinator
+- head
+- diretor / director
+- C-level
+- liderança de time
+- gestão de equipe
+- gestão de área
+- chapter lead
+- people management
+- team leadership
+
+If the vacancy is leadership/management:
+- Set mainGoal to an empty string.
+- Do NOT generate an objective sentence.
+- Do NOT include an Objective/Objetivo section in the CV.
+- The professional summary is enough for positioning the candidate.
+
+If the vacancy is NOT leadership/management:
+- Write one sharp objective sentence.
+- Do NOT start with the exact job title from the vacancy.
+- Do NOT copy the vacancy title literally.
+- Do NOT repeat the same opening or wording used in the summary.
+- Describe the target contribution using correlated actions and domain language.
+
+Examples:
+Bad:
+"Gerente de Dados com experiência em..."
+"Pessoa Gerente de Analytics com atuação em..."
+
+Good:
+"Liderar iniciativas de analytics, governança e geração de insights para apoiar decisões estratégicas de negócio."
+"Contribuir para a evolução de plataformas analíticas e indicadores de performance orientados a valor para o negócio."
 
 ---
 
@@ -409,6 +446,11 @@ Examples:
 - If no languages are provided → remove the "Languages" section entirely
 - If no certifications exist → omit the section
 
+Special rule for Objective/Objetivo:
+- If mainGoal is empty, null, undefined, or not meaningful, do NOT include an Objective/Objetivo section.
+- If the vacancy is leadership/management, Objective/Objetivo must always be omitted.
+- Never render an empty Objective/Objetivo heading.
+
 Goal:
 Ensure the CV looks complete and professionally curated, not automatically generated.
 
@@ -489,7 +531,7 @@ OUTPUT — valid JSON only, no markdown
   ],
   "highlightedSkills": ["only skills from original CV"],
   "removedSections": [],
-  "mainGoal": "Job title from vacancy — one sharp sentence about what the candidate brings to this role",
+  "mainGoal": "Empty string for leadership/management vacancies. For non-leadership vacancies only: one sharp objective sentence that does not copy the exact vacancy title and does not duplicate the summary.",
   "adaptationNotes": "O CV foi reposicionado para destacar X. Keywords Y foram incorporadas nos bullets de experiência. Z foi condensado para dar peso a W."
 }`;
 
