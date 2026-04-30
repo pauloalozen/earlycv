@@ -150,7 +150,7 @@ export class PlansService {
       createdAt: p.createdAt.toISOString(),
       pendingPaymentUrl:
         p.status === "pending" || p.status === "none"
-          ? `${frontendUrl}/pagamento/pendente?checkoutId=${p.id}`
+          ? `${frontendUrl}/pagamento/pendente?checkoutId=${p.id}&resume=1`
           : null,
     }));
   }
@@ -207,6 +207,54 @@ export class PlansService {
     );
 
     return { checkoutUrl, purchaseId: purchase.id };
+  }
+
+  async resumeCheckout(
+    userId: string,
+    purchaseId: string,
+  ): Promise<{ checkoutUrl: string }> {
+    const purchase = await this.database.planPurchase.findUnique({
+      where: { id: purchaseId },
+      select: {
+        id: true,
+        userId: true,
+        planType: true,
+        amountInCents: true,
+        creditsGranted: true,
+        analysisCreditsGranted: true,
+        paymentReference: true,
+        status: true,
+      },
+    });
+
+    if (!purchase || purchase.userId !== userId) {
+      throw new NotFoundException("Compra nao encontrada.");
+    }
+
+    if (purchase.status !== "pending" && purchase.status !== "none") {
+      throw new BadRequestException("Compra nao pode ser retomada.");
+    }
+
+    if (!isPaidPlanType(purchase.planType)) {
+      throw new BadRequestException("Tipo de compra invalido para retomada.");
+    }
+
+    const checkoutUrl = await this.createMercadoPagoPreference(
+      purchase.id,
+      purchase.paymentReference,
+      {
+        label: `${purchase.creditsGranted} CV${purchase.creditsGranted === 1 ? "" : "s"} Otimizado${purchase.creditsGranted === 1 ? "" : "s"} — EarlyCV`,
+        amountInCents: purchase.amountInCents,
+        downloadCreditsGranted: purchase.creditsGranted,
+        analysisCreditsGranted: purchase.analysisCreditsGranted,
+      },
+    );
+
+    this.logger.log(
+      `[checkout:resume] purchase=${purchase.id} user=${userId} status=${purchase.status}`,
+    );
+
+    return { checkoutUrl };
   }
 
   async getPlanInfo(userId: string) {
@@ -505,40 +553,60 @@ export class PlansService {
 
   // Used by reconciliation: applies credit for an already-verified approved purchase
   async applyApprovedPurchase(purchaseId: string): Promise<boolean> {
-    const purchase = await this.database.planPurchase.findUnique({
-      where: { id: purchaseId },
+    const appliedPurchase = await this.database.$transaction(async (tx) => {
+      const purchase = await tx.planPurchase.findUnique({
+        where: { id: purchaseId },
+      });
+
+      if (
+        !purchase ||
+        purchase.status === "completed" ||
+        purchase.status === "failed"
+      ) {
+        return null;
+      }
+
+      const analysisCredits = this.resolveAnalysisCreditsForActivation(
+        purchase.planType,
+        purchase.analysisCreditsGranted,
+      );
+      const isUnlimited = purchase.planType === "unlimited";
+      const planExpiresAt = isUnlimited
+        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        : null;
+
+      await tx.user.update({
+        where: { id: purchase.userId },
+        data: {
+          planType: purchase.planType,
+          planActivatedAt: new Date(),
+          planExpiresAt,
+          creditsRemaining: isUnlimited
+            ? 0
+            : { increment: purchase.creditsGranted },
+          analysisCreditsRemaining: isUnlimited
+            ? 0
+            : { increment: analysisCredits },
+        },
+      });
+
+      await tx.planPurchase.update({
+        where: { id: purchase.id },
+        data: { status: "completed", paidAt: new Date() },
+      });
+
+      return purchase;
     });
 
-    if (
-      !purchase ||
-      purchase.status === "completed" ||
-      purchase.status === "failed"
-    ) {
+    if (!appliedPurchase) {
       return false;
     }
-
-    const analysisCredits = this.resolveAnalysisCreditsForActivation(
-      purchase.planType,
-      purchase.analysisCreditsGranted,
-    );
-
-    await this.activatePlan(
-      purchase.userId,
-      purchase.planType,
-      purchase.creditsGranted,
-      analysisCredits,
-    );
-
-    await this.database.planPurchase.update({
-      where: { id: purchase.id },
-      data: { status: "completed", paidAt: new Date() },
-    });
 
     this.logAuditEvent({
       eventType: "reconciliation_approved",
       actionTaken: "approved",
-      externalReference: purchase.paymentReference,
-      internalCheckoutId: purchase.id,
+      externalReference: appliedPurchase.paymentReference,
+      internalCheckoutId: appliedPurchase.id,
       internalCheckoutType: "plan",
     });
 
@@ -577,33 +645,6 @@ export class PlansService {
           `Failed to record payment_failed funnel event: ${error}`,
         );
       });
-  }
-
-  private async activatePlan(
-    userId: string,
-    planType: UserPlanType,
-    downloadCreditsGranted: number,
-    analysisCreditsGranted: number,
-  ): Promise<void> {
-    const isUnlimited = planType === "unlimited";
-    const planExpiresAt = isUnlimited
-      ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      : null;
-
-    await this.database.user.update({
-      where: { id: userId },
-      data: {
-        planType,
-        planActivatedAt: new Date(),
-        planExpiresAt,
-        creditsRemaining: isUnlimited
-          ? 0
-          : { increment: downloadCreditsGranted },
-        analysisCreditsRemaining: isUnlimited
-          ? 0
-          : { increment: analysisCreditsGranted },
-      },
-    });
   }
 
   private resolveAnalysisCreditsForActivation(
@@ -670,7 +711,12 @@ export class PlansService {
   private async createMercadoPagoPreference(
     purchaseId: string,
     paymentReference: string,
-    plan: { label: string; amountInCents: number },
+    plan: {
+      label: string;
+      amountInCents: number;
+      downloadCreditsGranted?: number;
+      analysisCreditsGranted?: number;
+    },
     _adaptationId?: string,
   ): Promise<string> {
     const client = this.getMercadoPagoClient();
@@ -833,4 +879,8 @@ function planTypeToDisplayName(planType: string): string | null {
     unlimited: "Ilimitado",
   };
   return names[planType] ?? null;
+}
+
+function isPaidPlanType(planType: string): planType is PlanId {
+  return planType === "starter" || planType === "pro" || planType === "turbo";
 }

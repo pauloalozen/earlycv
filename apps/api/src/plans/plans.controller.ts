@@ -45,6 +45,15 @@ export class PlansController {
     );
   }
 
+  @Post("checkout/:purchaseId/resume")
+  @UseGuards(JwtAuthGuard)
+  resumeCheckout(
+    @AuthenticatedUser() user: { id: string },
+    @Param("purchaseId") purchaseId: string,
+  ) {
+    return this.plansService.resumeCheckout(user.id, purchaseId);
+  }
+
   @Get("me")
   @UseGuards(JwtAuthGuard)
   getMyPlan(@AuthenticatedUser() user: { id: string }) {

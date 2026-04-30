@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Inject,
+  Logger,
   Param,
   Post,
   Query,
@@ -17,6 +18,8 @@ import { PaymentsService } from "./payments.service";
 @Controller("payments")
 @UseGuards(JwtAuthGuard)
 export class PaymentsController {
+  private readonly logger = new Logger(PaymentsController.name);
+
   constructor(
     @Inject(PaymentsService) private readonly paymentsService: PaymentsService,
   ) {}
@@ -25,7 +28,16 @@ export class PaymentsController {
   getCheckoutStatus(
     @AuthenticatedUser() user: { id: string },
     @Param("checkoutId") checkoutId: string,
+    @Query("payment_id") paymentId?: string,
+    @Query("preference_id") preferenceId?: string,
+    @Query("status") status?: string,
+    @Query("collection_status") collectionStatus?: string,
   ) {
+    if (paymentId || preferenceId || status || collectionStatus) {
+      this.logger.log(
+        `[checkout:status] checkoutId=${checkoutId} user=${user.id} payment_id=${paymentId ?? "-"} preference_id=${preferenceId ?? "-"} status=${status ?? collectionStatus ?? "-"}`,
+      );
+    }
     return this.paymentsService.getCheckoutStatus(user.id, checkoutId);
   }
 

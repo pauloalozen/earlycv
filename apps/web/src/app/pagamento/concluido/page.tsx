@@ -8,8 +8,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import {
   type CheckoutStatusResponse,
-  getCheckoutStatus,
-} from "@/lib/payments-api";
+  getCheckoutStatusClient,
+} from "@/lib/payments-browser-api";
 
 type UIState = "polling" | "approved" | "pending-long" | "failed" | "error";
 
@@ -33,7 +33,7 @@ function ConcluidoContent() {
 
     const poll = async () => {
       try {
-        const data = await getCheckoutStatus(checkoutId);
+        const data = await getCheckoutStatusClient(checkoutId);
         setResult(data);
 
         if (data.nextAction === "show_success") {

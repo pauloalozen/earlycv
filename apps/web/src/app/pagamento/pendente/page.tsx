@@ -6,7 +6,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/page-shell";
-import { getCheckoutStatus } from "@/lib/payments-api";
+import {
+  getCheckoutStatusClient,
+  resumeCheckoutClient,
+} from "@/lib/payments-browser-api";
 
 type UIState = "waiting" | "approved" | "failed" | "timeout";
 
@@ -16,11 +19,21 @@ const POLL_INTERVAL_MS = 2000;
 function PendenteContent() {
   const searchParams = useSearchParams();
   const checkoutId = searchParams.get("checkoutId");
+  const shouldAutoResume = searchParams.get("resume") === "1";
+  const mpPaymentId =
+    searchParams.get("payment_id") ?? searchParams.get("collection_id");
+  const mpPreferenceId = searchParams.get("preference_id");
+  const mpRawStatus = searchParams.get("status");
+  const mpCollectionStatus = searchParams.get("collection_status");
+  const mpStatus = mpRawStatus ?? mpCollectionStatus;
 
   const [state, setState] = useState<UIState>("waiting");
   const [adaptationId, setAdaptationId] = useState<string | null>(null);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const [isResuming, setIsResuming] = useState(false);
   const pollCount = useRef(0);
   const polling = useRef(false);
+  const triedAutoResume = useRef(false);
 
   const startPolling = useCallback(() => {
     if (!checkoutId || polling.current) return;
@@ -29,7 +42,12 @@ function PendenteContent() {
 
     const poll = async () => {
       try {
-        const data = await getCheckoutStatus(checkoutId);
+        const data = await getCheckoutStatusClient(checkoutId, {
+          paymentId: mpPaymentId,
+          preferenceId: mpPreferenceId,
+          status: mpRawStatus,
+          collectionStatus: mpCollectionStatus,
+        });
 
         if (data.nextAction === "show_success") {
           setAdaptationId(data.adaptationId);
@@ -66,11 +84,50 @@ function PendenteContent() {
     };
 
     poll();
-  }, [checkoutId]);
+  }, [
+    checkoutId,
+    mpCollectionStatus,
+    mpPaymentId,
+    mpPreferenceId,
+    mpRawStatus,
+  ]);
+
+  const handleResumeCheckout = useCallback(async () => {
+    if (!checkoutId || isResuming) return;
+    setIsResuming(true);
+    setResumeError(null);
+
+    try {
+      const data = await resumeCheckoutClient(checkoutId);
+      window.location.href = data.checkoutUrl;
+    } catch {
+      setResumeError(
+        "Nao foi possivel abrir o Pix agora. Tente novamente em alguns instantes.",
+      );
+      setIsResuming(false);
+    }
+  }, [checkoutId, isResuming]);
 
   useEffect(() => {
     startPolling();
   }, [startPolling]);
+
+  useEffect(() => {
+    if (!shouldAutoResume || triedAutoResume.current) return;
+    triedAutoResume.current = true;
+    void handleResumeCheckout();
+  }, [handleResumeCheckout, shouldAutoResume]);
+
+  useEffect(() => {
+    if (!checkoutId) return;
+    if (!mpPaymentId && !mpPreferenceId && !mpStatus) return;
+    console.info("[payment-pending:return]", {
+      checkoutId,
+      payment_id: mpPaymentId,
+      preference_id: mpPreferenceId,
+      status: mpStatus,
+    });
+  }, [checkoutId, mpPaymentId, mpPreferenceId, mpStatus]);
 
   return (
     <main className="min-h-screen bg-[#F2F2F2] flex items-center justify-center p-6">
@@ -101,6 +158,10 @@ function PendenteContent() {
             Seu pagamento está aguardando confirmação. Assim que aprovado, seus
             créditos serão liberados automaticamente.
           </p>
+          <p className="text-gray-500 text-sm mb-2">
+            Pagamento pendente. Se você ainda não concluiu o Pix, pode abrir o
+            pagamento novamente.
+          </p>
           <p className="text-gray-400 text-xs mb-8">
             Para pagamentos via PIX ou boleto, isso pode levar alguns minutos.
           </p>
@@ -117,11 +178,22 @@ function PendenteContent() {
             />
           </div>
 
+          <button
+            type="button"
+            onClick={() => void handleResumeCheckout()}
+            disabled={isResuming}
+            className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center text-white transition-colors hover:bg-[#222222] mb-3 disabled:opacity-60"
+          >
+            {isResuming ? "Abrindo Pix..." : "Abrir Pix novamente"}
+          </button>
+          {resumeError && (
+            <p className="text-xs text-red-600 mb-3">{resumeError}</p>
+          )}
           <Link
-            href="/dashboard"
+            href="/compras"
             className="text-sm text-gray-400 hover:text-gray-600"
           >
-            Ir para o painel
+            Voltar para minhas compras
           </Link>
         </div>
       )}
