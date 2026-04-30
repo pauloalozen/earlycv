@@ -17,6 +17,12 @@ export type CvAdaptationDto = {
   paymentStatus: PaymentStatus;
   paidAt: string | null;
   adaptedResumeId: string | null;
+  analysisCvSnapshotId: string | null;
+  canDownloadBaseCv: boolean;
+  baseCvDownloadKind:
+    | "original_file"
+    | "markdown_snapshot"
+    | "unavailable_legacy";
   createdAt: string;
   updatedAt: string;
 };
@@ -197,6 +203,8 @@ export type GuestAnalysisResult = {
   adaptedContentJson: CvAnalysisData;
   previewText: string;
   masterCvText: string;
+  analysisCvSnapshotId: string;
+  guestSessionPublicToken: string | null;
 };
 
 export type AnalyzeResult =
@@ -252,8 +260,10 @@ export async function claimGuestAnalysis(payload: {
   previewText?: string;
   jobDescriptionText: string;
   masterCvText: string;
+  analysisCvSnapshotId: string;
   jobTitle?: string;
   companyName?: string;
+  guestSessionPublicToken?: string;
 }): Promise<CvAdaptationDto> {
   const response = await apiRequest(
     "POST",
@@ -272,10 +282,12 @@ export async function saveGuestPreview(payload: {
   previewText?: string;
   jobDescriptionText: string;
   masterCvText: string;
+  analysisCvSnapshotId: string;
   jobTitle?: string;
   companyName?: string;
   saveAsMaster?: boolean;
   file?: File;
+  guestSessionPublicToken?: string;
 }): Promise<CvAdaptationDto> {
   const body = (() => {
     const formData = new FormData();
@@ -285,10 +297,13 @@ export async function saveGuestPreview(payload: {
     );
     formData.append("jobDescriptionText", payload.jobDescriptionText);
     formData.append("masterCvText", payload.masterCvText);
+    formData.append("analysisCvSnapshotId", payload.analysisCvSnapshotId);
     if (payload.file) formData.append("file", payload.file);
     if (payload.previewText) formData.append("previewText", payload.previewText);
     if (payload.jobTitle) formData.append("jobTitle", payload.jobTitle);
     if (payload.companyName) formData.append("companyName", payload.companyName);
+    if (payload.guestSessionPublicToken)
+      formData.append("guestSessionPublicToken", payload.guestSessionPublicToken);
     if (payload.saveAsMaster)
       formData.append("saveAsMaster", String(payload.saveAsMaster));
     return formData;

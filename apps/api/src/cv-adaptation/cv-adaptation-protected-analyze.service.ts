@@ -27,6 +27,7 @@ type ProtectedAnalyzeAndPersistInput<TPayload> = {
     companyName?: string | null;
     id: string;
     jobDescriptionText: string;
+    selectedMissingKeywords?: string[];
     jobTitle?: string | null;
   };
   context: AnalysisRequestContext & { routeKey: string };
@@ -41,6 +42,7 @@ type ProtectedBuildPaidCvOutputInput<TPayload> = {
   jobDescriptionText: string;
   jobTitle?: string;
   masterCvText: string;
+  selectedMissingKeywords?: string[];
   payload: TPayload;
 };
 
@@ -111,6 +113,7 @@ export class CvAdaptationProtectedAnalyzeService {
           jobDescriptionText: input.jobDescriptionText,
           jobTitle: input.jobTitle,
           masterCvText: input.masterCvText,
+          selectedMissingKeywords: input.selectedMissingKeywords,
         });
       },
     );

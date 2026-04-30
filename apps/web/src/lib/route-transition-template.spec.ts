@@ -38,7 +38,7 @@ test("resultado page hydrates guest data in initial state", () => {
     content,
     /const \[rawData, setRawData\] = useState<CvAnalysisData \| null>\(\(\) =>/,
   );
-  assert.match(content, /sessionStorage\.getItem\("guestAnalysis"\)/);
+  assert.match(content, /getGuestAnalysisRaw\(/);
 });
 
 test("resultado page claims guest analysis via local API route", () => {

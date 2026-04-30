@@ -19,7 +19,12 @@ import {
   saveGuestPreview,
 } from "@/lib/cv-adaptation-api";
 import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
+import {
+  clearGuestAnalysisRaw,
+  getGuestAnalysisRaw,
+} from "@/lib/guest-analysis-storage";
 import { getAuthStatus } from "@/lib/session-actions";
+import { buildContentFetchErrorMessage } from "./content-fetch-error";
 import { shouldPersistGuestAnalysis } from "./guest-analysis-persistence";
 import { normalizeData } from "./normalize-data";
 
@@ -382,6 +387,8 @@ type GuestAnalysisStored = {
   previewText?: string;
   jobDescriptionText?: string;
   masterCvText?: string;
+  analysisCvSnapshotId?: string;
+  guestSessionPublicToken?: string | null;
 };
 
 const CARD: React.CSSProperties = {
@@ -414,7 +421,7 @@ export default function ResultadoPage() {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
     if (params.get("adaptationId")) return null;
-    const stored = sessionStorage.getItem("guestAnalysis");
+    const stored = getGuestAnalysisRaw();
     if (!stored) return null;
     try {
       const parsed = JSON.parse(stored) as GuestAnalysisStored;
@@ -426,7 +433,14 @@ export default function ResultadoPage() {
 
   const [isDemo, setIsDemo] = useState(false);
   const [autoSave, setAutoSave] = useState(false);
+  const [autoSaveRetryTick, setAutoSaveRetryTick] = useState(0);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
   const autoSaveAttempted = useRef(false);
+  const autoSaveInFlight = useRef(false);
+  const autoSaveRetryCount = useRef(0);
+  const autoSaveStatusTimeoutRef = useRef<number | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setIsDemo(params.get("demo") === "1");
@@ -487,6 +501,26 @@ export default function ResultadoPage() {
   }, []);
 
   useEffect(() => {
+    if (autoSaveStatusTimeoutRef.current !== null) {
+      window.clearTimeout(autoSaveStatusTimeoutRef.current);
+      autoSaveStatusTimeoutRef.current = null;
+    }
+
+    if (autoSaveStatus === "saved") {
+      autoSaveStatusTimeoutRef.current = window.setTimeout(() => {
+        setAutoSaveStatus("idle");
+      }, 3200);
+    }
+
+    return () => {
+      if (autoSaveStatusTimeoutRef.current !== null) {
+        window.clearTimeout(autoSaveStatusTimeoutRef.current);
+        autoSaveStatusTimeoutRef.current = null;
+      }
+    };
+  }, [autoSaveStatus]);
+
+  useEffect(() => {
     const controller = new AbortController();
     let active = true;
 
@@ -510,7 +544,12 @@ export default function ResultadoPage() {
         signal: controller.signal,
       })
         .then(async (res) => {
-          if (!res.ok) throw new Error();
+          if (!res.ok) {
+            const responseText = await res.text();
+            throw new Error(
+              buildContentFetchErrorMessage(res.status, responseText),
+            );
+          }
           return res.json() as Promise<{
             adaptedContentJson: CvAnalysisData;
             paymentStatus:
@@ -529,10 +568,34 @@ export default function ResultadoPage() {
           setReviewPaymentStatus(payload.paymentStatus);
           setJobAnalysisCount(payload.jobAnalysisCount ?? null);
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           if (!active || controller.signal.aborted) return;
-          setClaimError("Não foi possível carregar essa análise agora.");
-          router.replace("/dashboard");
+
+          const stored = getGuestAnalysisRaw();
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored) as GuestAnalysisStored;
+              if (parsed?.adaptedContentJson) {
+                setRawData(parsed.adaptedContentJson);
+                setClaimError(
+                  "Não foi possível sincronizar esta análise com sua conta agora.",
+                );
+                return;
+              }
+            } catch {
+              // ignore parse errors and fallback to route redirect below
+            }
+          }
+
+          const message =
+            error instanceof Error && error.message.trim()
+              ? error.message
+              : "Não foi possível carregar essa análise agora.";
+          console.error(
+            `[resultado] failed to load adaptation ${adaptationId}: ${message}`,
+          );
+          setClaimError(message);
+          router.replace("/adaptar");
         });
       return () => {
         active = false;
@@ -540,7 +603,7 @@ export default function ResultadoPage() {
       };
     }
 
-    const stored = sessionStorage.getItem("guestAnalysis");
+    const stored = getGuestAnalysisRaw();
     if (!stored) {
       router.replace("/adaptar");
       return;
@@ -561,7 +624,7 @@ export default function ResultadoPage() {
         })
         .catch(() => {});
     } catch {
-      sessionStorage.removeItem("guestAnalysis");
+      clearGuestAnalysisRaw();
       router.replace("/adaptar");
     }
 
@@ -574,7 +637,13 @@ export default function ResultadoPage() {
   // ── Handlers ──────────────────────────────────────────────
 
   const toggleKw = (kw: string) => {
-    if (locked) return;
+    if (
+      locked ||
+      isKeywordsFrozen ||
+      (reviewAdaptationId !== null && reviewPaymentStatus === "completed")
+    ) {
+      return;
+    }
     setSelecionadas((prev) => {
       const next = new Set(prev);
       if (next.has(kw)) next.delete(kw);
@@ -599,7 +668,7 @@ export default function ResultadoPage() {
     setReleaseStatus("loading");
     setReleaseModalOpen(true);
     requestAnimationFrame(() => setReleaseModalVisible(true));
-    const raw = sessionStorage.getItem("guestAnalysis");
+    const raw = getGuestAnalysisRaw();
     if (!raw) {
       const message = "Análise não encontrada. Reanalise seu CV.";
       setClaimError(message);
@@ -626,6 +695,14 @@ export default function ResultadoPage() {
       setReleaseStatus("error");
       return;
     }
+    if (!parsed.analysisCvSnapshotId?.trim()) {
+      const message =
+        "Análise em formato antigo. Reanalise seu CV para liberar o download.";
+      setClaimError(message);
+      setReleaseError(message);
+      setReleaseStatus("error");
+      return;
+    }
     setLocked(true);
     setClaiming(true);
     setClaimError(null);
@@ -642,6 +719,8 @@ export default function ResultadoPage() {
           previewText: parsed.previewText,
           jobDescriptionText: parsed.jobDescriptionText ?? "",
           masterCvText: parsed.masterCvText ?? "",
+          analysisCvSnapshotId: parsed.analysisCvSnapshotId,
+          guestSessionPublicToken: parsed.guestSessionPublicToken ?? undefined,
           jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
           companyName: parsed.adaptedContentJson?.vaga?.empresa,
           selectedMissingKeywords: Array.from(effectiveSelected),
@@ -674,7 +753,7 @@ export default function ResultadoPage() {
       await waitForMinimumDuration(startedAt, RELEASE_MIN_LOADING_MS);
       setReleaseStatus("success");
       setClaiming(false);
-      sessionStorage.removeItem("guestAnalysis");
+      clearGuestAnalysisRaw();
     } catch (err) {
       const message =
         err instanceof Error && err.message.trim()
@@ -688,8 +767,8 @@ export default function ResultadoPage() {
     }
   };
 
-  // Vincular análise da sessão ao usuário recém-criado (autoSave=1 na URL)
-  // Usa saveGuestPreview — não consome crédito, apenas salva no histórico
+  // Vincular análise guest ao usuário autenticado imediatamente no resultado.
+  // Não consome crédito, apenas persiste no histórico.
   // biome-ignore lint/correctness/useExhaustiveDependencies: one-shot effect guarded by ref
   useEffect(() => {
     if (
@@ -704,7 +783,7 @@ export default function ResultadoPage() {
       return;
     }
 
-    const raw = sessionStorage.getItem("guestAnalysis");
+    const raw = getGuestAnalysisRaw();
     if (!raw) return;
 
     let parsed: GuestAnalysisStored;
@@ -713,19 +792,36 @@ export default function ResultadoPage() {
     } catch {
       return;
     }
-    if (!parsed.masterCvText?.trim()) return;
+    if (!parsed.masterCvText?.trim() || !parsed.analysisCvSnapshotId?.trim()) {
+      return;
+    }
 
-    autoSaveAttempted.current = true;
+    const masterCvText = parsed.masterCvText;
+    const analysisCvSnapshotId = parsed.analysisCvSnapshotId;
 
-    saveGuestPreview({
-      adaptedContentJson: parsed.adaptedContentJson as Record<string, unknown>,
-      previewText: parsed.previewText,
-      jobDescriptionText: parsed.jobDescriptionText ?? "",
-      masterCvText: parsed.masterCvText,
-      jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
-      companyName: parsed.adaptedContentJson?.vaga?.empresa,
-    })
-      .then((result) => {
+    if (autoSaveInFlight.current) return;
+    autoSaveInFlight.current = true;
+    setAutoSaveStatus("saving");
+
+    const runPersist = async () => {
+      try {
+        const result = await saveGuestPreview({
+          adaptedContentJson: parsed.adaptedContentJson as Record<
+            string,
+            unknown
+          >,
+          previewText: parsed.previewText,
+          jobDescriptionText: parsed.jobDescriptionText ?? "",
+          masterCvText,
+          analysisCvSnapshotId,
+          guestSessionPublicToken: parsed.guestSessionPublicToken ?? undefined,
+          jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
+          companyName: parsed.adaptedContentJson?.vaga?.empresa,
+        });
+
+        autoSaveAttempted.current = true;
+        autoSaveInFlight.current = false;
+        setAutoSaveStatus("saved");
         setReviewAdaptationId(result.id);
         setReviewPaymentStatus(result.paymentStatus ?? "none");
         const normalized = normalizeData(parsed.adaptedContentJson);
@@ -737,17 +833,35 @@ export default function ResultadoPage() {
             JSON.stringify({ score, scoreProjetado }),
           );
         }
-        sessionStorage.removeItem("guestAnalysis");
+        clearGuestAnalysisRaw();
         window.history.replaceState(
           null,
           "",
           `/adaptar/resultado?adaptationId=${result.id}`,
         );
-      })
-      .catch(() => {
-        // falha silenciosa — análise continua visível na sessão
-      });
-  }, [autoSave, isAuthenticated, rawData, reviewAdaptationId]);
+      } catch {
+        autoSaveInFlight.current = false;
+        autoSaveRetryCount.current += 1;
+        if (autoSaveRetryCount.current <= 3) {
+          setAutoSaveStatus("saving");
+          window.setTimeout(() => {
+            autoSaveAttempted.current = false;
+            setAutoSaveRetryTick((value) => value + 1);
+          }, 1200);
+        } else {
+          setAutoSaveStatus("error");
+        }
+      }
+    };
+
+    void runPersist();
+  }, [
+    autoSave,
+    isAuthenticated,
+    rawData,
+    reviewAdaptationId,
+    autoSaveRetryTick,
+  ]);
 
   const handleRedeemReview = async () => {
     if (!reviewAdaptationId || hasCredits !== true || claiming) return;
@@ -973,6 +1087,8 @@ export default function ResultadoPage() {
 
   const isDownloadReady =
     reviewAdaptationId !== null && reviewPaymentStatus === "completed";
+  const isKeywordSelectionLocked =
+    locked || isKeywordsFrozen || isDownloadReady;
 
   const adaptationNotes = rawData?.adaptation_notes ?? null;
   const isAdminView =
@@ -1024,6 +1140,8 @@ export default function ResultadoPage() {
             zIndex: 2,
           }}
         >
+          {/* Auto-save banner hidden for now; keep state machine active */}
+
           {/* ── Hero ── */}
           <div
             className="res-hero"
@@ -1108,6 +1226,7 @@ export default function ResultadoPage() {
 
               {/* Meta row */}
               <div
+                className="res-meta-row"
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1142,6 +1261,7 @@ export default function ResultadoPage() {
                       />
                     )}
                     <div
+                      className="res-meta-item"
                       style={{
                         display: "flex",
                         flexDirection: "column",
@@ -1149,6 +1269,7 @@ export default function ResultadoPage() {
                       }}
                     >
                       <span
+                        className="res-meta-num"
                         style={{
                           fontSize: 28,
                           fontWeight: 500,
@@ -1179,6 +1300,7 @@ export default function ResultadoPage() {
 
             {/* Right — dark gauge card */}
             <div
+              className="res-gauge-card"
               style={{
                 background: "#0a0a0a",
                 color: "#fff",
@@ -1219,6 +1341,7 @@ export default function ResultadoPage() {
 
               {/* Gauge */}
               <div
+                className="res-gauge-wrap"
                 style={{
                   position: "relative",
                   width: 200,
@@ -1276,6 +1399,7 @@ export default function ResultadoPage() {
                   }}
                 >
                   <span
+                    className="res-gauge-value"
                     style={{
                       fontSize: 64,
                       fontWeight: 500,
@@ -1303,6 +1427,7 @@ export default function ResultadoPage() {
 
               {/* Delta */}
               <div
+                className="res-gauge-delta"
                 style={{
                   display: "flex",
                   alignItems: "baseline",
@@ -1337,6 +1462,7 @@ export default function ResultadoPage() {
 
               {/* vs media */}
               <div
+                className="res-gauge-vs"
                 style={{
                   marginTop: 10,
                   display: "flex",
@@ -2123,6 +2249,16 @@ export default function ResultadoPage() {
                 return (
                   <label
                     key={k.kw}
+                    title={
+                      isKeywordSelectionLocked
+                        ? "Seleção bloqueada: CV já liberado"
+                        : undefined
+                    }
+                    aria-label={
+                      isKeywordSelectionLocked
+                        ? `Keyword ${k.kw} bloqueada: CV já liberado`
+                        : undefined
+                    }
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -2133,8 +2269,7 @@ export default function ResultadoPage() {
                       border: `1px solid ${sel ? "rgba(110,150,20,0.25)" : "rgba(245,158,11,0.2)"}`,
                       borderRadius: 10,
                       padding: "11px 14px",
-                      cursor:
-                        locked || isKeywordsFrozen ? "default" : "pointer",
+                      cursor: isKeywordSelectionLocked ? "default" : "pointer",
                     }}
                   >
                     <div
@@ -2174,7 +2309,7 @@ export default function ResultadoPage() {
                       type="checkbox"
                       className="sr-only"
                       checked={sel}
-                      disabled={locked || isKeywordsFrozen}
+                      disabled={isKeywordSelectionLocked}
                       onChange={() => toggleKw(k.kw)}
                     />
                     <span
@@ -3428,9 +3563,11 @@ export default function ResultadoPage() {
                       }}
                     >
                       <span>{data.score.scoreAtualBase}</span>
-                      <span>+{data.score.pontosDisponiveisBase} pts disponíveis</span>
+                      <span>
+                        + {data.score.pontosDisponiveisBase} pts disponíveis
+                      </span>
                       {ptsKwSelecionadas > 0 && (
-                        <span>+{ptsKwSelecionadas} keywords ausentes</span>
+                        <span>+ {ptsKwSelecionadas} pts keywords ausentes</span>
                       )}
                       <span style={{ color: "rgba(255,255,255,0.5)" }}>
                         = {scoreProjetado}/100
@@ -3458,8 +3595,28 @@ export default function ResultadoPage() {
                           fontFamily: GEIST,
                           transition: "opacity 150ms",
                           opacity: downloading !== null ? 0.6 : 1,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 8,
                         }}
                       >
+                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                        <svg
+                          aria-hidden="true"
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
                         {getDownloadCtaCopy("pdf", downloading)}
                       </button>
                       <button
@@ -3479,8 +3636,28 @@ export default function ResultadoPage() {
                           fontFamily: GEIST,
                           transition: "opacity 150ms",
                           opacity: downloading !== null ? 0.6 : 1,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 8,
                         }}
                       >
+                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                        <svg
+                          aria-hidden="true"
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
                         {getDownloadCtaCopy("docx", downloading)}
                       </button>
                     </>
@@ -3590,8 +3767,28 @@ export default function ResultadoPage() {
                           cursor: claiming ? "default" : "pointer",
                           fontFamily: GEIST,
                           opacity: claiming ? 0.6 : 1,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 8,
                         }}
                       >
+                        <span className="hidden sm:inline-flex" aria-hidden="true">
+                          {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                          <svg
+                            width="15"
+                            height="15"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 9.5-2.2" />
+                          </svg>
+                        </span>
                         {claiming
                           ? "Liberando CV..."
                           : "Liberar CV com 1 crédito"}
@@ -3761,6 +3958,13 @@ export default function ResultadoPage() {
           .resultado-content { padding: 12px 16px 60px !important; }
         }
         @media (max-width: 540px) {
+          .res-meta-row { gap: 12px !important; padding-top: 14px !important; }
+          .res-meta-num { font-size: 24px !important; }
+          .res-gauge-card { padding: 18px 14px !important; border-radius: 16px !important; }
+          .res-gauge-wrap { width: 170px !important; height: 170px !important; margin-bottom: 8px !important; }
+          .res-gauge-value { font-size: 52px !important; letter-spacing: -2px !important; }
+          .res-gauge-delta { flex-wrap: wrap; row-gap: 4px; }
+          .res-gauge-vs { flex-wrap: wrap; row-gap: 4px; }
           .res-campos-grid { grid-template-columns: 1fr !important; }
           .res-preview-chrome { justify-content: flex-start !important; flex-wrap: wrap !important; row-gap: 6px !important; }
           .res-preview-title { position: static !important; width: 100% !important; text-align: left !important; margin-top: 2px !important; display: block !important; }

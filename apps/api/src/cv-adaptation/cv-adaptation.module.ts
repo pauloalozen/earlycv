@@ -12,6 +12,7 @@ import { CvAdaptationPaymentService } from "./cv-adaptation-payment.service";
 import { CvAdaptationPdfService } from "./cv-adaptation-pdf.service";
 import { CvAdaptationProtectedAnalyzeService } from "./cv-adaptation-protected-analyze.service";
 import { CvAdaptationPublicController } from "./cv-adaptation-public.controller";
+import { CvAdaptationSnapshotCleanupScheduler } from "./cv-adaptation-snapshot-cleanup.scheduler";
 
 @Module({
   imports: [DatabaseModule, ResumeTemplatesModule, AnalysisProtectionModule],
@@ -24,6 +25,7 @@ import { CvAdaptationPublicController } from "./cv-adaptation-public.controller"
     CvAdaptationPdfService,
     CvAdaptationDocxService,
     CvAdaptationProtectedAnalyzeService,
+    CvAdaptationSnapshotCleanupScheduler,
     {
       provide: "OPENAI_CLIENT",
       useFactory: () =>

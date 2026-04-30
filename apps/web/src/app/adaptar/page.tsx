@@ -11,6 +11,7 @@ import {
   emitBusinessFunnelEvent,
   saveGuestPreview,
 } from "@/lib/cv-adaptation-api";
+import { setGuestAnalysisRaw } from "@/lib/guest-analysis-storage";
 import {
   appendTurnstileTokenToAnalyzeFormData,
   buildFunnelEventIdempotencyKey,
@@ -126,7 +127,7 @@ export default function AdaptarPage() {
   const [masterResume, setMasterResume] = useState<
     ResumeDto | null | undefined
   >(undefined);
-  const [cvMode, setCvMode] = useState<CvMode>("master");
+  const [cvMode, setCvMode] = useState<CvMode>("upload");
   const [saveMasterCv, setSaveMasterCv] = useState(false);
   const [fileHover, setFileHover] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -302,7 +303,11 @@ export default function AdaptarPage() {
     ]).then(([status, resume]) => {
       setUserName(status.userName ?? null);
       setMasterResume(resume ?? null);
-      if (status.userName && !resume) setCvMode("upload");
+      if (status.userName && resume) {
+        setCvMode("master");
+      } else {
+        setCvMode("upload");
+      }
       setAuthReady(true);
     });
   }, [router]);
@@ -478,8 +483,7 @@ export default function AdaptarPage() {
           }
           setLoadingStep(3);
           await new Promise((r) => setTimeout(r, 2000));
-          sessionStorage.setItem(
-            "guestAnalysis",
+          setGuestAnalysisRaw(
             JSON.stringify({
               ...analyzeResult,
               jobDescriptionText: jobDescription,
@@ -525,6 +529,7 @@ export default function AdaptarPage() {
             jobDescriptionText: jobDescription,
             jobTitle: analyzeResult.adaptedContentJson?.vaga?.cargo,
             masterCvText: analyzeResult.masterCvText,
+            analysisCvSnapshotId: analyzeResult.analysisCvSnapshotId,
             previewText: analyzeResult.previewText,
             saveAsMaster: saveMasterCv,
             file: file ?? undefined,
@@ -537,8 +542,7 @@ export default function AdaptarPage() {
         }
       }
 
-      sessionStorage.setItem(
-        "guestAnalysis",
+      setGuestAnalysisRaw(
         JSON.stringify({
           ...analyzeResult,
           jobDescriptionText: jobDescription,
@@ -668,7 +672,7 @@ export default function AdaptarPage() {
                   display: "inline-block",
                 }}
               />
-              ANÁLISE · 60 SEGUNDOS
+              ANÁLISE EM ATÉ 2 MINUTOS
             </div>
             <h1
               style={{
@@ -732,6 +736,7 @@ export default function AdaptarPage() {
                 {/* Step 01 — CV */}
                 <div style={{ marginBottom: 14 }}>
                   <div
+                    className="adaptar-cv-header"
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -757,7 +762,7 @@ export default function AdaptarPage() {
                     >
                       01
                     </div>
-                    <div style={{ flex: 1 }}>
+                    <div className="adaptar-cv-heading" style={{ flex: 1 }}>
                       <div
                         style={{
                           fontSize: 15,
@@ -778,9 +783,10 @@ export default function AdaptarPage() {
                         PDF, DOC ou DOCX · até 5 MB
                       </div>
                     </div>
-                    {/* Mode toggle when has master */}
-                    {isAuthenticated && hasMaster && (
+                    {/* Mode toggle */}
+                    {isAuthenticated && (
                       <div
+                        className="adaptar-cv-mode-toggle"
                         style={{
                           display: "flex",
                           gap: 4,
@@ -789,44 +795,48 @@ export default function AdaptarPage() {
                           padding: 3,
                         }}
                       >
-                        {(["master", "upload", "text"] as CvMode[]).map(
-                          (mode) => (
-                            <button
-                              key={mode}
-                              type="button"
-                              onClick={() => {
-                                setCvMode(mode);
-                                if (mode === "master") setFile(null);
-                                if (mode === "text") setFile(null);
-                                setError(null);
-                              }}
-                              style={{
-                                fontFamily: MONO,
-                                fontSize: 10,
-                                fontWeight: 500,
-                                letterSpacing: 0.3,
-                                padding: "4px 10px",
-                                borderRadius: 6,
-                                border: "none",
-                                cursor: "pointer",
-                                background:
-                                  cvMode === mode ? "#0a0a0a" : "transparent",
-                                color: cvMode === mode ? "#fafaf6" : "#7a7a74",
-                                transition: "all 120ms",
-                              }}
-                            >
-                              {mode === "master"
-                                ? "CV base"
-                                : mode === "upload"
+                        {(hasMaster
+                          ? (["master", "upload", "text"] as CvMode[])
+                          : (["upload", "text"] as CvMode[])
+                        ).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => {
+                              setCvMode(mode);
+                              if (mode === "master") setFile(null);
+                              if (mode === "text") setFile(null);
+                              setError(null);
+                            }}
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10,
+                              fontWeight: 500,
+                              letterSpacing: 0.3,
+                              padding: "4px 10px",
+                              borderRadius: 6,
+                              border: "none",
+                              cursor: "pointer",
+                              background:
+                                cvMode === mode ? "#0a0a0a" : "transparent",
+                              color: cvMode === mode ? "#fafaf6" : "#7a7a74",
+                              transition: "all 120ms",
+                            }}
+                          >
+                            {mode === "master"
+                              ? "CV base"
+                              : mode === "upload"
+                                ? hasMaster
                                   ? "Outro CV"
-                                  : "Digitar texto"}
-                            </button>
-                          ),
-                        )}
+                                  : "Upload"
+                                : "Digitar texto"}
+                          </button>
+                        ))}
                       </div>
                     )}
                     {!isAuthenticated && (
                       <div
+                        className="adaptar-cv-mode-toggle"
                         style={{
                           display: "flex",
                           gap: 4,
@@ -1490,9 +1500,9 @@ export default function AdaptarPage() {
                 {/* Trust badges */}
                 <div style={{ display: "flex", gap: 8 }}>
                   {[
-                    { label: "TEMPO MÉDIO", v: "60s" },
-                    { label: "CRIPTOGRAFIA", v: "e2e" },
-                    { label: "MELHORIAS", v: "20" },
+                    { label: "DIAGNÓSTICO", v: "≈ 2min" },
+                    { label: "DADOS", v: "protegidos" },
+                    { label: "MELHORIAS", v: "10+" },
                   ].map((b) => (
                     <div
                       key={b.label}
@@ -1540,6 +1550,15 @@ export default function AdaptarPage() {
           }
           @media (max-width: 768px) {
             .adaptar-content { padding: 20px 16px 28px !important; }
+            .adaptar-cv-header {
+              flex-wrap: wrap;
+              align-items: flex-start !important;
+              gap: 10px !important;
+            }
+            .adaptar-cv-mode-toggle {
+              width: 100%;
+              margin-left: 46px;
+            }
           }
         `}</style>
       </main>

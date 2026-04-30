@@ -73,6 +73,7 @@ export class CvAdaptationAiService {
   async buildPaidCvOutputFromGuest(input: {
     masterCvText: string;
     jobDescriptionText: string;
+    selectedMissingKeywords?: string[];
     jobTitle?: string;
     companyName?: string;
   }): Promise<CvAdaptationOutput> {
@@ -106,6 +107,7 @@ export class CvAdaptationAiService {
     const { output } = await adaptCv(this.aiClient as any, model, {
       masterCvText: input.masterCvText,
       jobDescriptionText: input.jobDescriptionText,
+      selectedKeywords: input.selectedMissingKeywords,
       jobTitle: input.jobTitle,
       companyName: input.companyName,
     });
@@ -117,6 +119,7 @@ export class CvAdaptationAiService {
     adaptation: {
       id: string;
       jobDescriptionText: string;
+      selectedMissingKeywords?: string[];
       jobTitle?: string | null;
       companyName?: string | null;
     },
@@ -165,6 +168,7 @@ export class CvAdaptationAiService {
       const { output, audit } = await adaptCv(this.aiClient as any, model, {
         masterCvText,
         jobDescriptionText: adaptation.jobDescriptionText,
+        selectedKeywords: adaptation.selectedMissingKeywords,
         jobTitle: adaptation.jobTitle || undefined,
         companyName: adaptation.companyName || undefined,
       });

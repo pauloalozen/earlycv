@@ -52,7 +52,32 @@ export function LandingNavAuth() {
           Preços
         </a>
         {isLoggedIn ? (
-          <Link href="/dashboard" style={BTN_PRIMARY}>
+          <Link
+            href="/dashboard"
+            style={{
+              ...BTN_PRIMARY,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <span aria-hidden="true" style={{ display: "inline-flex" }}>
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="4" />
+                <rect x="14" y="12" width="7" height="9" />
+                <rect x="3" y="14" width="7" height="7" />
+              </svg>
+            </span>
             Ir para o painel →
           </Link>
         ) : (
@@ -69,7 +94,30 @@ export function LandingNavAuth() {
             >
               Entrar
             </Link>
-            <Link href="/entrar?tab=cadastrar" style={BTN_PRIMARY}>
+            <Link
+              href="/entrar?tab=cadastrar"
+              style={{
+                ...BTN_PRIMARY,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
+              </span>
               Começar grátis →
             </Link>
           </>

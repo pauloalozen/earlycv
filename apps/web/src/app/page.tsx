@@ -89,7 +89,12 @@ export default function Home() {
         {/* Logo */}
         <Link
           href="/"
-          style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            textDecoration: "none",
+          }}
         >
           <Logo />
           <span
@@ -243,7 +248,24 @@ export default function Home() {
                 }}
                 className="lp-cta-primary"
               >
-                <span className="lp-cta-text-desktop">Analisar meu CV grátis</span>
+                <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                  </svg>
+                </span>
+                <span className="lp-cta-text-desktop">
+                  Analisar meu CV grátis
+                </span>
                 <span className="lp-cta-text-mobile">Testar grátis</span>
                 <span className="lp-cta-arrow">→</span>
               </Link>
@@ -275,9 +297,9 @@ export default function Home() {
               }}
             >
               {[
-                { num: "60s", label: "análise\ncompleta" },
-                { num: "32%", label: "aumento médio\nno ATS" },
-                { num: "20+", label: "melhorias\nem média por CV" },
+                { num: "2min", label: "análise\ncompleta do CV" },
+                { num: "32%", label: "ganho médio de\naderência a vaga" },
+                { num: "12+", label: "melhorias\nsugeridas por CV" },
               ].map((item, i) => (
                 <React.Fragment key={item.num}>
                   {i > 0 && (
@@ -601,6 +623,21 @@ export default function Home() {
               }}
               className="lp-cta-primary"
             >
+              <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
+              </span>
               <span>Começar agora grátis</span>
               <span className="lp-cta-arrow">→</span>
             </Link>
@@ -624,18 +661,36 @@ export default function Home() {
       >
         <div style={{ maxWidth: 1100, margin: "0 auto", width: "100%" }}>
           <div style={{ textAlign: "center", marginBottom: 64 }}>
-            <span
+            <div
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
                 fontFamily: MONO,
                 fontSize: 10.5,
                 letterSpacing: 1.4,
-                color: "#6a6a66",
                 fontWeight: 500,
-                textTransform: "uppercase",
+                color: "#555",
+                background: "rgba(10,10,10,0.04)",
+                border: "1px solid rgba(10,10,10,0.06)",
+                padding: "6px 10px",
+                borderRadius: 999,
+                marginBottom: 22,
+                textTransform: "uppercase" as const,
               }}
             >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "#c6ff3a",
+                  boxShadow: "0 0 6px #c6ff3a",
+                  flexShrink: 0,
+                }}
+              />
               Preços
-            </span>
+            </div>
             <h2
               style={{
                 fontSize: "clamp(26px, 5.5vw, 48px)",

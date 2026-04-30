@@ -88,10 +88,11 @@ export class CvAdaptationController {
   @Post("claim-guest")
   claimGuest(
     @AuthenticatedUser() user: { id: string },
+    @Req() req: Request,
     @Body(claimGuestValidationPipe)
     dto: ClaimGuestAdaptationDto,
   ) {
-    return this.cvAdaptationService.claimGuest(user.id, dto);
+    return this.cvAdaptationService.claimGuest(user.id, dto, req.analysisContext);
   }
 
   @Post("analyze")
@@ -153,6 +154,7 @@ export class CvAdaptationController {
   )
   saveGuestPreview(
     @AuthenticatedUser() user: { id: string },
+    @Req() req: Request,
     @UploadedFile() file: FileUpload | undefined,
     @Body(
       new ValidationPipe({
@@ -163,7 +165,12 @@ export class CvAdaptationController {
     )
     dto: SaveGuestPreviewDto,
   ) {
-    return this.cvAdaptationService.saveGuestPreview(user.id, dto, file);
+    return this.cvAdaptationService.saveGuestPreview(
+      user.id,
+      dto,
+      file,
+      req.analysisContext,
+    );
   }
 
   @Get()
@@ -230,6 +237,15 @@ export class CvAdaptationController {
       return this.cvAdaptationService.downloadDocx(user.id, id, res);
     }
     return this.cvAdaptationService.downloadPdf(user.id, id, res);
+  }
+
+  @Get(":id/base-cv")
+  downloadBaseCv(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+    @Res() res: Response,
+  ) {
+    return this.cvAdaptationService.downloadBaseCv(user.id, id, res);
   }
 
   @Get(":id/content")

@@ -24,9 +24,14 @@ export async function apiRequest(
   const url = `${getApiBaseUrl()}${path}`;
 
   const headers: Record<string, string> = {};
+  const cookieHeader = cookieStore.toString();
 
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  if (cookieHeader) {
+    headers.Cookie = cookieHeader;
   }
 
   if (!(body instanceof FormData)) {

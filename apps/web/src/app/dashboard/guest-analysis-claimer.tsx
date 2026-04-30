@@ -4,12 +4,18 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 import { saveGuestPreview } from "@/lib/cv-adaptation-api";
+import {
+  clearGuestAnalysisRaw,
+  getGuestAnalysisRaw,
+} from "@/lib/guest-analysis-storage";
 
 type GuestAnalysisStored = {
   adaptedContentJson: CvAnalysisData;
   previewText: string;
   jobDescriptionText: string;
   masterCvText: string;
+  analysisCvSnapshotId?: string;
+  guestSessionPublicToken?: string | null;
 };
 
 export function GuestAnalysisClaimer() {
@@ -19,19 +25,19 @@ export function GuestAnalysisClaimer() {
   );
 
   useEffect(() => {
-    const raw = sessionStorage.getItem("guestAnalysis");
+    const raw = getGuestAnalysisRaw();
     if (!raw) return;
 
     let parsed: GuestAnalysisStored;
     try {
       parsed = JSON.parse(raw) as GuestAnalysisStored;
     } catch {
-      sessionStorage.removeItem("guestAnalysis");
+      clearGuestAnalysisRaw();
       return;
     }
 
-    if (!parsed.masterCvText?.trim()) {
-      sessionStorage.removeItem("guestAnalysis");
+    if (!parsed.masterCvText?.trim() || !parsed.analysisCvSnapshotId?.trim()) {
+      clearGuestAnalysisRaw();
       return;
     }
 
@@ -42,11 +48,13 @@ export function GuestAnalysisClaimer() {
       previewText: parsed.previewText,
       jobDescriptionText: parsed.jobDescriptionText,
       masterCvText: parsed.masterCvText,
+      analysisCvSnapshotId: parsed.analysisCvSnapshotId,
+      guestSessionPublicToken: parsed.guestSessionPublicToken ?? undefined,
       jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
       companyName: parsed.adaptedContentJson?.vaga?.empresa,
     })
       .then(() => {
-        sessionStorage.removeItem("guestAnalysis");
+        clearGuestAnalysisRaw();
         setStatus("done");
         router.refresh();
       })

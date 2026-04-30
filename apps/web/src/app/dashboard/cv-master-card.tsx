@@ -149,6 +149,9 @@ export function CvMasterCard({ initialResume }: Props) {
               onClick={handleUpload}
               disabled={!pendingFile || uploading}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
                 background: "#0a0a0a",
                 color: "#fafaf6",
                 border: "none",
@@ -162,6 +165,22 @@ export function CvMasterCard({ initialResume }: Props) {
               }}
               className="dash-btn-dark"
             >
+              <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 3v12" />
+                  <path d="m7 10 5 5 5-5" />
+                  <path d="M5 21h14" />
+                </svg>
+              </span>
               {uploading ? "Salvando…" : "Salvar CV"}
             </button>
             {resume && (
@@ -334,6 +353,9 @@ export function CvMasterCard({ initialResume }: Props) {
               type="button"
               onClick={() => setMode("uploading")}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
                 background: "#0a0a0a",
                 color: "#fafaf6",
                 border: "none",
@@ -346,6 +368,21 @@ export function CvMasterCard({ initialResume }: Props) {
               }}
               className="dash-btn-dark"
             >
+              <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
+              </span>
               Atualizar CV
             </button>
             <a
@@ -353,6 +390,9 @@ export function CvMasterCard({ initialResume }: Props) {
               target="_blank"
               rel="noreferrer"
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
                 background: "transparent",
                 color: "#0a0a0a",
                 border: "1px solid rgba(10,10,10,0.14)",
@@ -365,12 +405,30 @@ export function CvMasterCard({ initialResume }: Props) {
               }}
               className="dash-btn-outline"
             >
+              <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </span>
               Ver CV
             </a>
             <button
               type="button"
               onClick={() => setMode("confirming-delete")}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
                 background: "transparent",
                 color: "#c0392b",
                 border: "1px solid rgba(192,57,43,0.2)",
@@ -382,6 +440,22 @@ export function CvMasterCard({ initialResume }: Props) {
                 letterSpacing: -0.1,
               }}
             >
+              <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M19 6l-1 14H6L5 6" />
+                </svg>
+              </span>
               Eliminar CV
             </button>
           </div>

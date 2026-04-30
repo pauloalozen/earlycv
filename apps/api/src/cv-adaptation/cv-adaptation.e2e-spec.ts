@@ -341,6 +341,16 @@ test("POST /cv-adaptation/save-guest-preview without saveAsMaster does not creat
   );
 
   try {
+    const snapshot = await database.analysisCvSnapshot.create({
+      data: {
+        userId: user.userId,
+        sourceType: "text_input",
+        textStorageKey: "analysis-cv-snapshots/test-save-no-master.md",
+        textSha256: "hash-save-no-master",
+        textSizeBytes: 123,
+      },
+    });
+
     const response = await request(app.getHttpServer())
       .post("/api/cv-adaptation/save-guest-preview")
       .set("Authorization", `Bearer ${user.accessToken}`)
@@ -353,6 +363,7 @@ test("POST /cv-adaptation/save-guest-preview without saveAsMaster does not creat
       )
       .field("jobDescriptionText", "Descricao da vaga")
       .field("masterCvText", "CV original enviado pelo usuario")
+      .field("analysisCvSnapshotId", snapshot.id)
       .field("jobTitle", "Data Analyst")
       .field("companyName", "EarlyCV")
       .field("previewText", "preview");
@@ -406,6 +417,16 @@ test("POST /cv-adaptation/save-guest-preview with saveAsMaster promotes uploaded
   });
 
   try {
+    const snapshot = await database.analysisCvSnapshot.create({
+      data: {
+        userId: user.userId,
+        sourceType: "uploaded_file",
+        textStorageKey: "analysis-cv-snapshots/test-save-master.md",
+        textSha256: "hash-save-master",
+        textSizeBytes: 123,
+      },
+    });
+
     const response = await request(app.getHttpServer())
       .post("/api/cv-adaptation/save-guest-preview")
       .set("Authorization", `Bearer ${user.accessToken}`)
@@ -422,6 +443,7 @@ test("POST /cv-adaptation/save-guest-preview with saveAsMaster promotes uploaded
       )
       .field("jobDescriptionText", "Descricao da vaga")
       .field("masterCvText", "CV original enviado pelo usuario")
+      .field("analysisCvSnapshotId", snapshot.id)
       .field("jobTitle", "Data Analyst")
       .field("companyName", "EarlyCV")
       .field("previewText", "preview")
@@ -502,6 +524,17 @@ test("claimed guest analysis can be downloaded as PDF and DOCX", async () => {
       },
       jobDescriptionText: "Descricao da vaga",
       masterCvText: "Resumo profissional\nExperiencia com produto e dados",
+      analysisCvSnapshotId: (
+        await database.analysisCvSnapshot.create({
+          data: {
+            userId: user.userId,
+            sourceType: "text_input",
+            textStorageKey: "analysis-cv-snapshots/test-claim-download.md",
+            textSha256: "hash-claim-download",
+            textSizeBytes: 123,
+          },
+        })
+      ).id,
       jobTitle: "Analista de Produto",
       companyName: "EarlyCV",
       previewText: "Bom alinhamento com a vaga",
@@ -592,6 +625,17 @@ test("superadmin can claim guest analysis even with zero credits", async () => {
       },
       jobDescriptionText: "Descricao da vaga",
       masterCvText: "Resumo profissional com experiencia em dados",
+      analysisCvSnapshotId: (
+        await database.analysisCvSnapshot.create({
+          data: {
+            userId: user.userId,
+            sourceType: "text_input",
+            textStorageKey: "analysis-cv-snapshots/test-superadmin-claim.md",
+            textSha256: "hash-superadmin-claim",
+            textSizeBytes: 123,
+          },
+        })
+      ).id,
       jobTitle: "Data Manager",
       companyName: "EarlyCV",
       previewText: "ok",
@@ -884,6 +928,7 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
       .expect(({ body }) => {
         assert.equal(typeof body.previewText, "string");
         assert.equal(typeof body.masterCvText, "string");
+        assert.equal(typeof body.analysisCvSnapshotId, "string");
         assert.ok(body.adaptedContentJson);
       });
   } finally {

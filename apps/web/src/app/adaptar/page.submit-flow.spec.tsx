@@ -66,13 +66,23 @@ describe("AdaptarPage submit analytics flow", () => {
     getAuthStatusMock.mockReset();
     getAuthStatusMock.mockResolvedValue({ userName: null });
     emitBusinessFunnelEventMock.mockResolvedValue(undefined);
-    analyzeGuestCvMock.mockResolvedValue({ adaptationId: "adapt-1" });
+    analyzeGuestCvMock.mockResolvedValue({
+      ok: true,
+      adaptedContentJson: { vaga: { cargo: "", empresa: "" } },
+      previewText: "",
+      masterCvText: "master-cv",
+      analysisCvSnapshotId: "snapshot-1",
+      guestSessionPublicToken: "guest-token-1",
+    });
     analyzeAuthenticatedCvMock.mockResolvedValue({
+      ok: true,
       adaptedContentJson: {
         vaga: { cargo: "", empresa: "" },
       },
       previewText: "",
       masterCvText: "master-cv",
+      analysisCvSnapshotId: "snapshot-1",
+      guestSessionPublicToken: null,
     });
     saveGuestPreviewMock.mockResolvedValue({ id: "saved-1" });
     sessionStorage.clear();
@@ -227,7 +237,14 @@ describe("AdaptarPage submit analytics flow", () => {
     });
     analyzeGuestCvMock.mockImplementation(async () => {
       order.push("analyze_request");
-      return { adaptationId: "adapt-2" };
+      return {
+        ok: true,
+        adaptedContentJson: { vaga: { cargo: "", empresa: "" } },
+        previewText: "",
+        masterCvText: "master-cv",
+        analysisCvSnapshotId: "snapshot-2",
+        guestSessionPublicToken: "guest-token-2",
+      };
     });
 
     const { container } = render(<AdaptarPage />);
@@ -350,6 +367,52 @@ describe("AdaptarPage submit analytics flow", () => {
     expect(formDataArg?.get("file")).toBeNull();
   });
 
+  it("persists guest analysis in sessionStorage and localStorage before redirect", async () => {
+    const { container } = render(<AdaptarPage />);
+
+    const textarea = await screen.findByPlaceholderText(
+      "Cole a vaga completa (isso melhora sua análise)...",
+    );
+    const fileInput =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
+
+    if (!fileInput) {
+      throw new Error("Expected file input to exist");
+    }
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(["cv"], "cv.pdf", { type: "application/pdf" })],
+      },
+    });
+    fireEvent.change(textarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeGuestCvMock).toHaveBeenCalledTimes(1);
+    });
+
+    await waitFor(
+      () => {
+        expect(routerPushMock).toHaveBeenCalledWith("/adaptar/resultado");
+      },
+      { timeout: 15000 },
+    );
+
+    const sessionStored = sessionStorage.getItem("guestAnalysis");
+    const localStored = localStorage.getItem("guestAnalysis");
+
+    expect(sessionStored).toBeTruthy();
+    expect(localStored).toBeTruthy();
+    expect(sessionStored).toEqual(localStored);
+  }, 20000);
+
   it("submits authenticated analysis in text mode without saveAsMaster", async () => {
     getAuthStatusMock.mockResolvedValue({ userName: "Claudio" });
     render(<AdaptarPage />);
@@ -418,8 +481,27 @@ describe("AdaptarPage submit analytics flow", () => {
 
       expect(focusCalls).toHaveLength(1);
       expect(pasteCalls).toHaveLength(1);
-    });
   });
+
+  it("shows upload/text selector for authenticated user without master CV", async () => {
+    getAuthStatusMock.mockResolvedValueOnce({ userName: "Ana" });
+
+    render(<AdaptarPage />);
+
+    expect(await screen.findByRole("button", { name: "Upload" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Digitar texto" })).toBeInTheDocument();
+  });
+
+  it("defaults guest selector to upload mode", async () => {
+    getAuthStatusMock.mockResolvedValueOnce({ userName: null });
+
+    render(<AdaptarPage />);
+
+    const uploadButton = await screen.findByRole("button", { name: "Upload" });
+    expect(uploadButton).toBeInTheDocument();
+    expect(uploadButton).toHaveStyle({ background: "#0a0a0a" });
+  });
+});
 
   it("persists authenticated analysis before navigating to resultado", async () => {
     getAuthStatusMock.mockResolvedValue({ userName: "Claudio" });

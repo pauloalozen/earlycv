@@ -39,6 +39,10 @@ export class SaveGuestPreviewDto {
   @MaxLength(80000)
   masterCvText!: string;
 
+  @IsString()
+  @MaxLength(191)
+  analysisCvSnapshotId!: string;
+
   @IsOptional()
   @Transform(({ value }) => value === true || value === "true")
   @IsBoolean()
@@ -55,4 +59,10 @@ export class SaveGuestPreviewDto {
   @MaxLength(200)
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   companyName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  guestSessionPublicToken?: string;
 }

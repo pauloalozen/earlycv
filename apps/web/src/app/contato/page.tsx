@@ -187,29 +187,6 @@ export default function ContatoPage() {
                 flexShrink: 0,
               }}
             />
-            Respondemos em até 24h
-          </span>
-          <span style={{ color: "#c0beb4" }}>·</span>
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              fontFamily: MONO,
-              fontSize: 10.5,
-              color: "#6a6560",
-              letterSpacing: 0.2,
-            }}
-          >
-            <span
-              style={{
-                width: 5,
-                height: 5,
-                borderRadius: "50%",
-                background: "#c6ff3a",
-                flexShrink: 0,
-              }}
-            />
             Toda mensagem é lida
           </span>
         </div>

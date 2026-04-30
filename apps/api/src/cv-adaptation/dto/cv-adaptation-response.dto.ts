@@ -1,4 +1,5 @@
 import type {
+  AnalysisCvSnapshot,
   CvAdaptation,
   CvAdaptationStatus,
   PaymentStatus,
@@ -20,6 +21,12 @@ export type CvAdaptationResponseDto = {
   paymentStatus: PaymentStatus;
   paidAt: string | null;
   adaptedResumeId: string | null;
+  analysisCvSnapshotId: string | null;
+  canDownloadBaseCv: boolean;
+  baseCvDownloadKind:
+    | "original_file"
+    | "markdown_snapshot"
+    | "unavailable_legacy";
   createdAt: string;
   updatedAt: string;
 };
@@ -27,6 +34,10 @@ export type CvAdaptationResponseDto = {
 export const createCvAdaptationResponseDto = (
   adaptation: CvAdaptation & {
     template?: { id: string; name: string; slug: string } | null;
+    analysisCvSnapshot?: Pick<
+      AnalysisCvSnapshot,
+      "sourceType" | "originalFileStorageKey"
+    > | null;
   },
 ): CvAdaptationResponseDto => ({
   id: adaptation.id,
@@ -46,6 +57,14 @@ export const createCvAdaptationResponseDto = (
   paymentStatus: adaptation.paymentStatus,
   paidAt: adaptation.paidAt ? adaptation.paidAt.toISOString() : null,
   adaptedResumeId: adaptation.adaptedResumeId,
+  analysisCvSnapshotId: adaptation.analysisCvSnapshotId,
+  canDownloadBaseCv: Boolean(adaptation.analysisCvSnapshotId),
+  baseCvDownloadKind: adaptation.analysisCvSnapshotId
+    ? adaptation.analysisCvSnapshot?.sourceType === "uploaded_file" &&
+      adaptation.analysisCvSnapshot.originalFileStorageKey
+      ? "original_file"
+      : "markdown_snapshot"
+    : "unavailable_legacy",
   createdAt: adaptation.createdAt.toISOString(),
   updatedAt: adaptation.updatedAt.toISOString(),
 });

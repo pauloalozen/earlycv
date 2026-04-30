@@ -24,6 +24,10 @@ export class ClaimGuestAdaptationDto {
   @MaxLength(60000)
   masterCvText!: string;
 
+  @IsString()
+  @MaxLength(191)
+  analysisCvSnapshotId!: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(200)
@@ -39,4 +43,9 @@ export class ClaimGuestAdaptationDto {
   @ArrayMaxSize(80)
   @IsString({ each: true })
   selectedMissingKeywords?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  guestSessionPublicToken?: string;
 }

@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.text();
+  const cookieHeader = request.headers.get("cookie") ?? "";
 
   const apiResponse = await fetch(
     `${getApiBaseUrl()}/cv-adaptation/claim-guest`,
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
       },
       cache: "no-store",
       body,

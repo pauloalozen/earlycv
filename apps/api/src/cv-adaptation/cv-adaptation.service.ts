@@ -74,8 +74,11 @@ export class CvAdaptationService {
     @Inject(StorageService)
     private readonly storage: Pick<
       StorageService,
-      "getObject" | "putObject"
+      "deleteObject" | "getObject" | "putObject"
     > = {
+      async deleteObject() {
+        return;
+      },
       async getObject() {
         return Buffer.alloc(0);
       },
@@ -253,7 +256,11 @@ export class CvAdaptationService {
     return createCvAdaptationResponseDto(adaptation);
   }
 
-  async claimGuest(userId: string, dto: ClaimGuestAdaptationDto) {
+  async claimGuest(
+    userId: string,
+    dto: ClaimGuestAdaptationDto,
+    analysisContext?: AnalysisRequestContext,
+  ) {
     const user = await this.database.user.findUnique({
       where: { id: userId },
       select: { creditsRemaining: true, internalRole: true },
@@ -268,6 +275,9 @@ export class CvAdaptationService {
     }
 
     const defaultTemplate = await this.getDefaultTemplate();
+    const guestSessionHash = this.hashGuestSessionToken(
+      dto.guestSessionPublicToken ?? analysisContext?.sessionPublicToken,
+    );
 
     const adaptation = await this.database.$transaction(async (tx) => {
       const existingMaster = await tx.resume.findFirst({
@@ -298,6 +308,20 @@ export class CvAdaptationService {
         dto.selectedMissingKeywords,
       );
 
+      const snapshot = await this.validateAndClaimSnapshot({
+        tx,
+        snapshotId: dto.analysisCvSnapshotId,
+        userId,
+        guestSessionHash,
+      });
+
+      const releaseDate = this.getSnapshotEnforcementReleaseDate();
+      if (!snapshot && new Date() >= releaseDate) {
+        throw new BadRequestException(
+          "Analysis snapshot is required to claim this adaptation.",
+        );
+      }
+
       const created = await tx.cvAdaptation.create({
         data: {
           userId,
@@ -309,12 +333,16 @@ export class CvAdaptationService {
           adaptedContentJson: adaptedContent as Prisma.InputJsonValue,
           // aiAuditJson is generated lazily via ensureLegacyStructuredOutput on download
           previewText: dto.previewText ?? null,
+          analysisCvSnapshotId: snapshot?.id ?? null,
           status: "delivered",
           paymentStatus: "completed",
           paidAt: new Date(),
         },
         include: {
           template: { select: { id: true, name: true, slug: true } },
+          analysisCvSnapshot: {
+            select: { sourceType: true, originalFileStorageKey: true },
+          },
         },
       });
 
@@ -337,6 +365,9 @@ export class CvAdaptationService {
         data: { adaptedResumeId: adaptedResume.id },
         include: {
           template: { select: { id: true, name: true, slug: true } },
+          analysisCvSnapshot: {
+            select: { sourceType: true, originalFileStorageKey: true },
+          },
         },
       });
 
@@ -363,12 +394,17 @@ export class CvAdaptationService {
     adaptedContentJson: unknown;
     previewText: string;
     masterCvText: string;
+    analysisCvSnapshotId: string;
+    guestSessionPublicToken: string | null;
   }> {
     this.validateJobDescription(jobDescriptionText);
 
     const normalizedMasterCvText =
-      typeof masterCvText === "string" ? masterCvText.trim() : "";
+      typeof masterCvText === "string"
+        ? this.normalizeSnapshotText(masterCvText)
+        : "";
     const hasTextInput = normalizedMasterCvText.length > 0;
+    let resolvedMasterCvText: string | null = null;
 
     if (!file && !hasTextInput) {
       throw new BadRequestException("PDF file or CV text is required.");
@@ -383,8 +419,13 @@ export class CvAdaptationService {
         ),
         jobDescriptionText,
         loadMasterCvText: async () => {
+          if (resolvedMasterCvText) {
+            return resolvedMasterCvText;
+          }
+
           if (hasTextInput) {
-            return normalizedMasterCvText;
+            resolvedMasterCvText = normalizedMasterCvText;
+            return resolvedMasterCvText;
           }
 
           if (!file) {
@@ -393,7 +434,10 @@ export class CvAdaptationService {
 
           try {
             const { extractTextFromPdf } = await import("@earlycv/ai");
-            return await extractTextFromPdf(file.buffer, { validateCv: true });
+            resolvedMasterCvText = this.normalizeSnapshotText(
+              await extractTextFromPdf(file.buffer, { validateCv: true }),
+            );
+            return resolvedMasterCvText;
           } catch (error) {
             this.mapPdfExtractionError(error);
           }
@@ -414,7 +458,24 @@ export class CvAdaptationService {
       );
     }
 
-    return protectionResult.result;
+    const finalMasterCvText =
+      resolvedMasterCvText ?? this.normalizeSnapshotText(protectionResult.result.masterCvText);
+    const snapshot = await this.createAnalysisCvSnapshot({
+      sourceType: hasTextInput ? "text_input" : "uploaded_file",
+      text: finalMasterCvText,
+      guestSessionHash: this.hashGuestSessionToken(
+        analysisContext?.sessionPublicToken,
+      ),
+      file,
+      userId: null,
+    });
+
+    return {
+      ...protectionResult.result,
+      masterCvText: finalMasterCvText,
+      analysisCvSnapshotId: snapshot.id,
+      guestSessionPublicToken: analysisContext?.sessionPublicToken ?? null,
+    };
   }
 
   async analyzeAuthenticated(
@@ -426,8 +487,13 @@ export class CvAdaptationService {
     adaptedContentJson: unknown;
     previewText: string;
     masterCvText: string;
+    analysisCvSnapshotId: string;
   }> {
     this.validateJobDescription(dto.jobDescriptionText);
+    const hasTextInput = Boolean(dto.masterCvText?.trim());
+    let sourceType: "text_input" | "uploaded_file" | "master_resume" =
+      "master_resume";
+    let resolvedMasterCvText: string | null = null;
 
     const protectionResult =
       await this.protectedAnalyzeService.executeProtectedAnalyze({
@@ -438,12 +504,19 @@ export class CvAdaptationService {
         ),
         jobDescriptionText: dto.jobDescriptionText,
         loadMasterCvText: async () => {
+          if (resolvedMasterCvText) {
+            return resolvedMasterCvText;
+          }
+
           if (dto.masterCvText?.trim()) {
-            return dto.masterCvText;
+            sourceType = "text_input";
+            resolvedMasterCvText = this.normalizeSnapshotText(dto.masterCvText);
+            return resolvedMasterCvText;
           }
 
           if (file) {
             let masterCvText: string;
+            sourceType = "uploaded_file";
 
             try {
               const { extractTextFromPdf } = await import("@earlycv/ai");
@@ -481,10 +554,12 @@ export class CvAdaptationService {
               });
             }
 
-            return masterCvText;
+            resolvedMasterCvText = this.normalizeSnapshotText(masterCvText);
+            return resolvedMasterCvText;
           }
 
           if (dto.masterResumeId) {
+            sourceType = "master_resume";
             const resume = await this.database.resume.findFirst({
               where: { id: dto.masterResumeId, userId },
               select: { rawText: true },
@@ -498,7 +573,8 @@ export class CvAdaptationService {
               throw new BadRequestException("Resume has no text content.");
             }
 
-            return resume.rawText;
+            resolvedMasterCvText = this.normalizeSnapshotText(resume.rawText);
+            return resolvedMasterCvText;
           }
 
           throw new BadRequestException(
@@ -508,7 +584,7 @@ export class CvAdaptationService {
         payload: {
           cvFingerprint: file ? this.buildFileFingerprint(file.buffer) : null,
           hasFile: Boolean(file),
-          hasTextInput: Boolean(dto.masterCvText?.trim()),
+          hasTextInput,
           jobDescriptionText: dto.jobDescriptionText,
           masterResumeId: dto.masterResumeId ?? null,
           route: "cv-adaptation/analyze",
@@ -524,7 +600,21 @@ export class CvAdaptationService {
       );
     }
 
-    return protectionResult.result;
+    const finalMasterCvText =
+      resolvedMasterCvText ?? this.normalizeSnapshotText(protectionResult.result.masterCvText);
+    const snapshot = await this.createAnalysisCvSnapshot({
+      sourceType,
+      text: finalMasterCvText,
+      guestSessionHash: null,
+      file,
+      userId,
+    });
+
+    return {
+      ...protectionResult.result,
+      masterCvText: finalMasterCvText,
+      analysisCvSnapshotId: snapshot.id,
+    };
   }
 
   private buildProtectionContext(
@@ -561,8 +651,12 @@ export class CvAdaptationService {
     userId: string,
     dto: SaveGuestPreviewDto,
     file?: FileUpload,
+    analysisContext?: AnalysisRequestContext,
   ) {
     const defaultTemplate = await this.getDefaultTemplate();
+    const guestSessionHash = this.hashGuestSessionToken(
+      dto.guestSessionPublicToken ?? analysisContext?.sessionPublicToken,
+    );
 
     const existingMaster = await this.database.resume.findFirst({
       where: { userId, isMaster: true, kind: "master" },
@@ -616,6 +710,38 @@ export class CvAdaptationService {
       masterResumeId = created.id;
     }
 
+    const snapshot = await this.validateAndClaimSnapshot({
+      tx: this.database,
+      snapshotId: dto.analysisCvSnapshotId,
+      userId,
+      guestSessionHash,
+    });
+
+    const releaseDate = this.getSnapshotEnforcementReleaseDate();
+    if (!snapshot && new Date() >= releaseDate) {
+      throw new BadRequestException(
+        "Analysis snapshot is required to persist this adaptation.",
+      );
+    }
+
+    const existingAdaptation = await this.database.cvAdaptation.findFirst({
+      where: {
+        userId,
+        analysisCvSnapshotId: snapshot?.id ?? null,
+      },
+      include: {
+        template: { select: { id: true, name: true, slug: true } },
+        analysisCvSnapshot: {
+          select: { sourceType: true, originalFileStorageKey: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (existingAdaptation) {
+      return createCvAdaptationResponseDto(existingAdaptation);
+    }
+
     const adaptation = await this.database.cvAdaptation.create({
       data: {
         userId,
@@ -626,11 +752,15 @@ export class CvAdaptationService {
         companyName: dto.companyName ?? null,
         adaptedContentJson: dto.adaptedContentJson as Prisma.InputJsonValue,
         previewText: dto.previewText ?? null,
-        status: "awaiting_payment",
+        analysisCvSnapshotId: snapshot?.id ?? null,
+        status: "pending",
         paymentStatus: "none",
       },
       include: {
         template: { select: { id: true, name: true, slug: true } },
+        analysisCvSnapshot: {
+          select: { sourceType: true, originalFileStorageKey: true },
+        },
       },
     });
 
@@ -651,6 +781,9 @@ export class CvAdaptationService {
               slug: true,
             },
           },
+          analysisCvSnapshot: {
+            select: { sourceType: true, originalFileStorageKey: true },
+          },
         },
         orderBy: { createdAt: "desc" },
         skip,
@@ -667,6 +800,44 @@ export class CvAdaptationService {
     };
   }
 
+  async cleanupExpiredGuestSnapshots(now = new Date()) {
+    const expired = await this.database.analysisCvSnapshot.findMany({
+      where: {
+        userId: null,
+        expiresAt: { lte: now },
+        cvAdaptation: { is: null },
+      },
+      select: {
+        id: true,
+        textStorageKey: true,
+        originalFileStorageKey: true,
+      },
+      take: 200,
+      orderBy: { expiresAt: "asc" },
+    });
+
+    for (const snapshot of expired) {
+      await this.storage.deleteObject(snapshot.textStorageKey).catch(() => null);
+      if (snapshot.originalFileStorageKey) {
+        await this.storage
+          .deleteObject(snapshot.originalFileStorageKey)
+          .catch(() => null);
+      }
+    }
+
+    if (expired.length === 0) {
+      return { deleted: 0 };
+    }
+
+    const deleted = await this.database.analysisCvSnapshot.deleteMany({
+      where: {
+        id: { in: expired.map((snapshot: { id: string }) => snapshot.id) },
+      },
+    });
+
+    return { deleted: deleted.count };
+  }
+
   async getById(userId: string, id: string) {
     const adaptation = await this.database.cvAdaptation.findFirst({
       where: {
@@ -680,6 +851,9 @@ export class CvAdaptationService {
             name: true,
             slug: true,
           },
+        },
+        analysisCvSnapshot: {
+          select: { sourceType: true, originalFileStorageKey: true },
         },
       },
     });
@@ -1293,6 +1467,59 @@ export class CvAdaptationService {
     res.send(docxBuffer);
   }
 
+  async downloadBaseCv(userId: string, id: string, res: Response): Promise<void> {
+    const adaptation = await this.database.cvAdaptation.findFirst({
+      where: { id, userId },
+      select: {
+        id: true,
+        analysisCvSnapshotId: true,
+        createdAt: true,
+      },
+    });
+
+    if (!adaptation) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    if (!adaptation.analysisCvSnapshotId) {
+      if (adaptation.createdAt >= this.getSnapshotEnforcementReleaseDate()) {
+        throw new BadRequestException("Analysis snapshot is required.");
+      }
+      throw new BadRequestException(
+        "Base CV unavailable for legacy adaptations.",
+      );
+    }
+
+    const snapshot = await this.database.analysisCvSnapshot.findUnique({
+      where: { id: adaptation.analysisCvSnapshotId },
+      select: {
+        textStorageKey: true,
+        originalFileStorageKey: true,
+        originalFileName: true,
+        originalMimeType: true,
+      },
+    });
+
+    if (!snapshot) {
+      throw new NotFoundException("analysis snapshot not found");
+    }
+
+    if (snapshot.originalFileStorageKey) {
+      const fileBuffer = await this.storage.getObject(snapshot.originalFileStorageKey);
+      const filename = snapshot.originalFileName || "cv-base";
+      const mimeType = snapshot.originalMimeType || "application/octet-stream";
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
+      res.send(fileBuffer);
+      return;
+    }
+
+    const markdownBuffer = await this.storage.getObject(snapshot.textStorageKey);
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=cv-base-analise.md");
+    res.send(markdownBuffer);
+  }
+
   async getContent(userId: string, id: string) {
     const adaptation = await this.database.cvAdaptation.findFirst({
       where: { id, userId },
@@ -1422,6 +1649,8 @@ export class CvAdaptationService {
     jobTitle: string | null;
     companyName: string | null;
     userId: string;
+    createdAt: Date;
+    analysisCvSnapshotId: string | null;
     masterResume: { rawText: string | null };
   }): Promise<CvAdaptationOutput | null> {
     if (
@@ -1433,11 +1662,7 @@ export class CvAdaptationService {
       return adaptation.aiAuditJson as CvAdaptationOutput;
     }
 
-    const masterCvText =
-      adaptation.masterResume.rawText?.trim() ||
-      this.synthesizeMasterCvTextFromGuestAnalysis(
-        adaptation.adaptedContentJson,
-      );
+    const masterCvText = await this.resolveGenerationMasterCvText(adaptation);
 
     if (!masterCvText) return null;
 
@@ -1454,6 +1679,9 @@ export class CvAdaptationService {
             jobDescriptionText: adaptation.jobDescriptionText,
             jobTitle: adaptation.jobTitle ?? undefined,
             masterCvText,
+            selectedMissingKeywords: this.getSelectedMissingKeywords(
+              adaptation.adaptedContentJson,
+            ),
             payload: {
               adaptationId: adaptation.id,
               companyName: adaptation.companyName,
@@ -1523,6 +1751,25 @@ export class CvAdaptationService {
     }
 
     return lines.join("\n").trim();
+  }
+
+  private getSelectedMissingKeywords(adaptedContentJson: unknown): string[] {
+    if (!adaptedContentJson || typeof adaptedContentJson !== "object") {
+      return [];
+    }
+
+    const raw = (adaptedContentJson as { selectedMissingKeywords?: unknown })
+      .selectedMissingKeywords;
+
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+
+    return raw
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .slice(0, 80);
   }
 
   private async getDefaultTemplate(): Promise<{
@@ -1703,6 +1950,174 @@ export class CvAdaptationService {
     }
     throw new BadRequestException(
       "Não foi possível ler o arquivo. Verifique se o PDF não está protegido por senha ou corrompido.",
+    );
+  }
+
+  private normalizeSnapshotText(input: string): string {
+    return input.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").trim();
+  }
+
+  private hashGuestSessionToken(sessionPublicToken: string | null | undefined) {
+    const token = sessionPublicToken?.trim();
+    if (!token) return null;
+    return createHash("sha256").update(token).digest("hex");
+  }
+
+  private getSnapshotEnforcementReleaseDate() {
+    return new Date("2026-04-29T14:30:00.000Z");
+  }
+
+  private async createAnalysisCvSnapshot(input: {
+    userId: string | null;
+    guestSessionHash: string | null;
+    sourceType: "text_input" | "uploaded_file" | "master_resume";
+    text: string;
+    file?: FileUpload;
+  }) {
+    const normalizedText = this.normalizeSnapshotText(input.text);
+    const textBuffer = Buffer.from(normalizedText, "utf8");
+    const textSha256 = createHash("sha256").update(textBuffer).digest("hex");
+    const textStorageKey = `analysis-cv-snapshots/text/${randomUUID()}.md`;
+    await this.storage.putObject(textStorageKey, textBuffer, "text/markdown");
+
+    let originalFileStorageKey: string | null = null;
+    let originalFileSha256: string | null = null;
+    let originalFileName: string | null = null;
+    let originalMimeType: string | null = null;
+    let originalFileSizeBytes: number | null = null;
+
+    if (input.file) {
+      const extension = input.file.originalname.includes(".")
+        ? (input.file.originalname.split(".").pop()?.toLowerCase() ?? "bin")
+        : "bin";
+      originalFileStorageKey = `analysis-cv-snapshots/original/${randomUUID()}-${this.sanitizeFileName(input.file.originalname)}.${extension}`;
+      await this.storage.putObject(
+        originalFileStorageKey,
+        input.file.buffer,
+        input.file.mimetype,
+      );
+      originalFileSha256 = this.buildFileFingerprint(input.file.buffer);
+      originalFileName = input.file.originalname;
+      originalMimeType = input.file.mimetype;
+      originalFileSizeBytes = input.file.size;
+    }
+
+    const expiresAt = input.userId
+      ? null
+      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    return this.database.analysisCvSnapshot.create({
+      data: {
+        userId: input.userId,
+        guestSessionHash: input.guestSessionHash,
+        sourceType: input.sourceType,
+        textStorageKey,
+        textSha256,
+        textSizeBytes: textBuffer.byteLength,
+        originalFileStorageKey,
+        originalFileSha256,
+        originalFileName,
+        originalMimeType,
+        originalFileSizeBytes,
+        expiresAt,
+      },
+    });
+  }
+
+  private async validateAndClaimSnapshot(input: {
+    tx: {
+      analysisCvSnapshot: {
+        findUnique: (args: { where: { id: string } }) => Promise<{
+          id: string;
+          userId: string | null;
+          guestSessionHash: string | null;
+          expiresAt: Date | null;
+          claimedAt: Date | null;
+          claimedByUserId: string | null;
+        } | null>;
+        update: (args: {
+          where: { id: string };
+          data: {
+            claimedAt: Date;
+            claimedByUserId: string;
+          };
+        }) => Promise<{ id: string }>;
+      };
+    };
+    snapshotId: string;
+    userId: string;
+    guestSessionHash: string | null;
+  }) {
+    const snapshot = await input.tx.analysisCvSnapshot.findUnique({
+      where: { id: input.snapshotId },
+    });
+
+    if (!snapshot) {
+      throw new BadRequestException("Analysis snapshot not found.");
+    }
+
+    if (snapshot.expiresAt && snapshot.expiresAt <= new Date()) {
+      throw new BadRequestException("Analysis snapshot expired.");
+    }
+
+    if (snapshot.userId && snapshot.userId !== input.userId) {
+      throw new UnauthorizedException("Snapshot does not belong to this user.");
+    }
+
+    if (!snapshot.userId) {
+      if (snapshot.guestSessionHash) {
+        if (
+          !input.guestSessionHash ||
+          snapshot.guestSessionHash !== input.guestSessionHash
+        ) {
+          throw new UnauthorizedException("Snapshot guest session mismatch.");
+        }
+      }
+
+      if (snapshot.claimedByUserId && snapshot.claimedByUserId !== input.userId) {
+        throw new BadRequestException("Analysis snapshot already claimed.");
+      }
+
+      return input.tx.analysisCvSnapshot.update({
+        where: { id: snapshot.id },
+        data: {
+          claimedAt: snapshot.claimedAt ?? new Date(),
+          claimedByUserId: snapshot.claimedByUserId ?? input.userId,
+        },
+      });
+    }
+
+    return snapshot;
+  }
+
+  private async resolveGenerationMasterCvText(adaptation: {
+    id: string;
+    adaptedContentJson: unknown;
+    analysisCvSnapshotId: string | null;
+    createdAt: Date;
+    masterResume: { rawText: string | null };
+  }): Promise<string | null> {
+    if (adaptation.analysisCvSnapshotId) {
+      const snapshot = await this.database.analysisCvSnapshot.findUnique({
+        where: { id: adaptation.analysisCvSnapshotId },
+        select: { textStorageKey: true },
+      });
+      if (!snapshot) {
+        throw new BadRequestException("Analysis snapshot not found for adaptation.");
+      }
+      const buffer = await this.storage.getObject(snapshot.textStorageKey);
+      return this.normalizeSnapshotText(buffer.toString("utf8"));
+    }
+
+    if (adaptation.createdAt >= this.getSnapshotEnforcementReleaseDate()) {
+      throw new BadRequestException(
+        "Adaptation has no analysis snapshot and cannot be generated.",
+      );
+    }
+
+    return (
+      adaptation.masterResume.rawText?.trim() ||
+      this.synthesizeMasterCvTextFromGuestAnalysis(adaptation.adaptedContentJson)
     );
   }
 

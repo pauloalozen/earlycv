@@ -25,9 +25,16 @@ type Props = {
     plansHref: string;
     pdfHref: string;
     docxHref: string;
+    baseCvHref: string;
+    canDownloadBaseCv: boolean;
+    baseCvDownloadKind:
+      | "original_file"
+      | "markdown_snapshot"
+      | "unavailable_legacy";
     canDownload: boolean;
     canRedeem: boolean;
     isProcessing: boolean;
+    selectedMissingKeywords?: string[];
   };
   adjustments: DashboardAdjustmentsData;
   analysisContext: {
@@ -35,6 +42,8 @@ type Props = {
     masterResumeTitle: string | null;
   };
   hasCredits: boolean | null;
+  hideBaseCvAction?: boolean;
+  removeTopMargin?: boolean;
 };
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -51,16 +60,100 @@ const waitForMinimumDuration = async (startedAt: number, minMs: number) => {
   await new Promise((resolve) => setTimeout(resolve, minMs - elapsed));
 };
 
+function ActionIcon({
+  kind,
+}: {
+  kind: "review" | "download" | "unlock" | "edit";
+}) {
+  if (kind === "review") {
+    return (
+      <svg
+        aria-hidden="true"
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    );
+  }
+
+  if (kind === "unlock") {
+    return (
+      <svg
+        aria-hidden="true"
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="4" y="11" width="16" height="10" rx="2" ry="2" />
+        <path d="M8 11V8a4 4 0 1 1 8 0" />
+      </svg>
+    );
+  }
+
+  if (kind === "edit") {
+    return (
+      <svg
+        aria-hidden="true"
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      aria-hidden="true"
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
 export function HistoryActionLinks({
   actions,
   adjustments,
   analysisContext,
   hasCredits,
+  hideBaseCvAction = false,
+  removeTopMargin = false,
 }: Props) {
   const router = useRouter();
   const [openingReview, setOpeningReview] = useState(false);
   const [redeeming, setRedeeming] = useState(false);
   const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
+  const [downloadingBaseCv, setDownloadingBaseCv] = useState(false);
   const [downloadStage, setDownloadStage] =
     useState<DownloadProgressStage | null>(null);
   const [isClient, setIsClient] = useState(false);
@@ -88,9 +181,9 @@ export function HistoryActionLinks({
   const adjustmentsCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const adjustmentsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const chipClassName =
-    "inline-flex h-8 appearance-none items-center justify-center whitespace-nowrap rounded-[10px] border border-[#DADADA] bg-white px-3 [font-family:var(--font-sans)] text-xs leading-none font-semibold transition-colors hover:border-[#BEBEBE]";
+    "inline-flex h-8 w-full appearance-none items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border border-[#DADADA] bg-white px-3 [font-family:var(--font-sans)] text-xs leading-none font-semibold transition-colors hover:border-[#BEBEBE] sm:w-auto";
   const primaryChipClassName =
-    "inline-flex h-8 appearance-none items-center justify-center whitespace-nowrap rounded-[10px] border border-[#111111] bg-[#111111] px-3 [font-family:var(--font-sans)] text-xs leading-none font-semibold transition-colors hover:bg-[#1F1F1F] disabled:opacity-75";
+    "inline-flex h-8 w-full appearance-none items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border border-[#111111] bg-[#111111] px-3 [font-family:var(--font-sans)] text-xs leading-none font-semibold transition-colors hover:bg-[#1F1F1F] disabled:opacity-75 sm:w-auto";
   const sharedChipTextStyle = {
     fontFamily: "var(--font-sans)",
     fontSize: "12px",
@@ -270,8 +363,30 @@ export function HistoryActionLinks({
     }
   };
 
+  const handleDownloadBaseCv = async () => {
+    if (downloadingBaseCv) return;
+    setDownloadingBaseCv(true);
+    try {
+      await downloadFromApi({
+        url: actions.baseCvHref,
+        fallbackFilename:
+          actions.baseCvDownloadKind === "markdown_snapshot"
+            ? "cv-base-analise.md"
+            : "cv-base-analise",
+        onStageChange: setDownloadStage,
+      });
+    } finally {
+      if (isMountedRef.current) {
+        setDownloadingBaseCv(false);
+        setDownloadStage(null);
+      }
+    }
+  };
+
   return (
-    <div className="history-actions mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+    <div
+      className={`history-actions mt-3 grid w-full grid-cols-2 gap-2 sm:mt-0 sm:flex sm:w-auto sm:flex-wrap ${removeTopMargin ? "mt-0" : ""}`}
+    >
       <button
         type="button"
         onClick={() => {
@@ -283,11 +398,54 @@ export function HistoryActionLinks({
         style={{ color: "#111111", ...sharedChipTextStyle }}
         className={`${chipClassName} ${openingReview ? "cursor-not-allowed opacity-75" : ""}`}
       >
+        <span aria-hidden="true" style={{ display: "inline-flex" }}>
+          <ActionIcon kind="review" />
+        </span>
         {getReviewActionCopy(openingReview)}
       </button>
 
+      {!hideBaseCvAction && actions.canDownloadBaseCv ? (
+        <button
+          type="button"
+          onClick={handleDownloadBaseCv}
+          title="Baixa o CV base usado na analise e adaptacao (apenas para conferencia)."
+          style={{ color: "#111111", ...sharedChipTextStyle }}
+          className={chipClassName}
+          disabled={downloadingBaseCv}
+        >
+          <span aria-hidden="true" style={{ display: "inline-flex" }}>
+            <ActionIcon kind="download" />
+          </span>
+          Baixar CV usado na análise
+        </button>
+      ) : null}
+
       {canDownloadNow ? (
         <>
+          <button
+            type="button"
+            onClick={() => handleDownload("pdf")}
+            style={{ color: "#111111", ...sharedChipTextStyle }}
+            className={chipClassName}
+            disabled={Boolean(downloading)}
+          >
+            <span aria-hidden="true" style={{ display: "inline-flex" }}>
+              <ActionIcon kind="download" />
+            </span>
+            Baixar PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDownload("docx")}
+            style={{ color: "#111111", ...sharedChipTextStyle }}
+            className={chipClassName}
+            disabled={Boolean(downloading)}
+          >
+            <span aria-hidden="true" style={{ display: "inline-flex" }}>
+              <ActionIcon kind="download" />
+            </span>
+            Baixar DOCX
+          </button>
           {showAdjustmentsAction ? (
             <button
               type="button"
@@ -302,27 +460,12 @@ export function HistoryActionLinks({
               }}
               className={chipClassName}
             >
+              <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                <ActionIcon kind="edit" />
+              </span>
               Ajustes feitos
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => handleDownload("pdf")}
-            style={{ color: "#111111", ...sharedChipTextStyle }}
-            className={chipClassName}
-            disabled={Boolean(downloading)}
-          >
-            Baixar PDF
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDownload("docx")}
-            style={{ color: "#111111", ...sharedChipTextStyle }}
-            className={chipClassName}
-            disabled={Boolean(downloading)}
-          >
-            Baixar DOCX
-          </button>
         </>
       ) : actions.isProcessing ? (
         <span className="rounded-[10px] bg-[#F2F2F2] px-3 py-1.5 text-xs font-semibold text-[#666666]">
@@ -351,6 +494,14 @@ export function HistoryActionLinks({
                 method: "POST",
                 cache: "no-store",
                 signal: controller.signal,
+                ...(actions.selectedMissingKeywords?.length
+                  ? {
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        selectedMissingKeywords: actions.selectedMissingKeywords,
+                      }),
+                    }
+                  : {}),
               });
               if (!response.ok) {
                 let apiMessage = "Falha ao liberar CV";
@@ -415,6 +566,9 @@ export function HistoryActionLinks({
           className={primaryChipClassName}
           disabled={redeeming}
         >
+          <span aria-hidden="true" className="hidden sm:inline-flex">
+            <ActionIcon kind="unlock" />
+          </span>
           {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
         </button>
       ) : (
@@ -450,15 +604,16 @@ export function HistoryActionLinks({
         isAdjustmentsOpen &&
         createPortal(
           <div
+            className="overflow-y-auto p-4 sm:p-6"
             style={{
               position: "fixed",
               inset: 0,
               zIndex: 120,
               display: "flex",
-              alignItems: "center",
+              alignItems: "flex-start",
               justifyContent: "center",
               background: "rgba(10,10,10,0.5)",
-              padding: "0 16px",
+              padding: "16px",
               transition: "opacity 240ms ease-out",
               opacity: adjustmentsVisible ? 1 : 0,
             }}
@@ -476,13 +631,14 @@ export function HistoryActionLinks({
               }}
             />
             <div
-              className="history-adjustments-modal w-full max-w-[560px] rounded-[18px] p-4 sm:p-6"
+              className="history-adjustments-modal w-full max-w-[560px] overflow-y-auto rounded-[18px] p-4 sm:p-6"
               role="dialog"
               aria-modal="true"
               aria-labelledby="dashboard-ajustes-feitos-title"
               ref={adjustmentsDialogRef}
               style={{
                 position: "relative",
+                maxHeight: "calc(100dvh - 32px)",
                 background: "#fafaf6",
                 fontFamily: GEIST,
                 border: "1px solid rgba(10,10,10,0.08)",
@@ -535,6 +691,7 @@ export function HistoryActionLinks({
                   onClick={closeAdjustmentsPopup}
                   aria-label="Fechar"
                   ref={adjustmentsCloseButtonRef}
+                  className="hidden sm:flex"
                   style={{
                     background: "rgba(10,10,10,0.05)",
                     border: "none",
@@ -542,7 +699,6 @@ export function HistoryActionLinks({
                     width: 32,
                     height: 32,
                     cursor: "pointer",
-                    display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     color: "#6a6560",

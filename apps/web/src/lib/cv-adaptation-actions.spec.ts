@@ -13,6 +13,8 @@ function buildItem(
     id: "adapt-1",
     status: "awaiting_payment",
     paymentStatus: "pending",
+    canDownloadBaseCv: true,
+    baseCvDownloadKind: "markdown_snapshot",
     ...overrides,
   };
 }
@@ -26,7 +28,11 @@ test("getHistoryActions returns result and download actions for completed adapta
     redeemHref: `/api/cv-adaptation/${item.id}/redeem-credit`,
     docxHref: `/api/cv-adaptation/${item.id}/download?format=docx`,
     pdfHref: `/api/cv-adaptation/${item.id}/download?format=pdf`,
+    baseCvHref: `/api/cv-adaptation/${item.id}/base-cv`,
+    canDownloadBaseCv: true,
+    baseCvDownloadKind: "markdown_snapshot",
     resultHref: `/adaptar/resultado?adaptationId=${item.id}`,
+    plansHref: `/planos?aid=${item.id}&source=resultado-buy-credits`,
     canRedeem: false,
     isProcessing: false,
   });

@@ -134,6 +134,12 @@ enum PaymentProvider {
   stripe
 }
 
+enum AnalysisCvSourceType {
+  text_input
+  uploaded_file
+  master_resume
+}
+
 enum AnalysisConfigValueType {
   boolean
   int
@@ -183,6 +189,8 @@ model User {
   analysisUsageCounters     AnalysisUsageCounter[]
   analysisProtectionEvents  AnalysisProtectionEvent[]
   businessFunnelEvents      BusinessFunnelEvent[]
+  analysisCvSnapshots       AnalysisCvSnapshot[]           @relation("AnalysisCvSnapshotOwner")
+  claimedAnalysisCvSnapshots AnalysisCvSnapshot[]          @relation("AnalysisCvSnapshotClaimedBy")
 }
 
 model UserDailyAnalysisUsage {
@@ -412,6 +420,7 @@ model CvAdaptation {
   mpMerchantOrderId    String?
   mpPreferenceId       String?
   failureReason        String?
+  analysisCvSnapshotId String?             @unique
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
@@ -419,11 +428,43 @@ model CvAdaptation {
   masterResume  Resume          @relation("CvAdaptationMaster", fields: [masterResumeId], references: [id], onDelete: Cascade)
   template      ResumeTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   adaptedResume Resume?         @relation("CvAdaptationResult", fields: [adaptedResumeId], references: [id], onDelete: SetNull)
+  analysisCvSnapshot AnalysisCvSnapshot? @relation(fields: [analysisCvSnapshotId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([masterResumeId])
   @@index([paymentReference])
   @@index([mpPaymentId])
+  @@index([analysisCvSnapshotId])
+}
+
+model AnalysisCvSnapshot {
+  id                    String               @id @default(cuid())
+  userId                String?
+  guestSessionHash      String?
+  sourceType            AnalysisCvSourceType
+  textStorageKey        String
+  textSha256            String
+  textSizeBytes         Int
+  originalFileStorageKey String?
+  originalFileSha256    String?
+  originalFileName      String?
+  originalMimeType      String?
+  originalFileSizeBytes Int?
+  capturedAt            DateTime             @default(now())
+  expiresAt             DateTime?
+  claimedAt             DateTime?
+  claimedByUserId       String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  ownerUser             User?                @relation("AnalysisCvSnapshotOwner", fields: [userId], references: [id], onDelete: SetNull)
+  claimedByUser         User?                @relation("AnalysisCvSnapshotClaimedBy", fields: [claimedByUserId], references: [id], onDelete: SetNull)
+  cvAdaptation          CvAdaptation?
+
+  @@index([userId])
+  @@index([guestSessionHash])
+  @@index([expiresAt])
+  @@index([textSha256])
 }
 
 model JobSource {

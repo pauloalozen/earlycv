@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
+import { getGuestAnalysisRaw } from "@/lib/guest-analysis-storage";
 
 const MONO = "var(--font-geist-mono), monospace";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -61,7 +62,7 @@ export function ScoreIndicator({
   useEffect(() => {
     if (adaptationId) return;
     try {
-      const stored = sessionStorage.getItem("guestAnalysis");
+      const stored = getGuestAnalysisRaw();
       if (stored) {
         const parsed = JSON.parse(stored) as {
           adaptedContentJson: CvAnalysisData;

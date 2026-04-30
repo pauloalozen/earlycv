@@ -10,6 +10,7 @@ type AnalysisSignal = {
     scoreBefore: number | null;
     scoreFinal: number | null;
   };
+  selectedMissingKeywords: string[];
   improvement: number | null;
   score: number | null;
 };
@@ -62,6 +63,7 @@ export function extractDashboardAnalysisSignal(
         scoreBefore,
         scoreFinal,
       },
+      selectedMissingKeywords,
       score: scoreFinal,
       improvement: scoreFinal - scoreBefore,
     };
@@ -83,6 +85,7 @@ export function extractDashboardAnalysisSignal(
       scoreBefore: scoreAtual,
       scoreFinal: finalScore,
     },
+    selectedMissingKeywords: [],
     score: finalScore,
     improvement:
       scoreAtual !== null && scorePosOtimizacao !== null

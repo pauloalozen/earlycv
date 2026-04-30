@@ -15,6 +15,9 @@ const baseProps = {
     plansHref: "/planos",
     pdfHref: "/api/cv-adaptation/abc/download?format=pdf",
     docxHref: "/api/cv-adaptation/abc/download?format=docx",
+    baseCvHref: "/api/cv-adaptation/abc/base-cv",
+    canDownloadBaseCv: true,
+    baseCvDownloadKind: "markdown_snapshot",
     canDownload: false,
     canRedeem: true,
     isProcessing: false,
@@ -53,6 +56,35 @@ describe("HistoryActionLinks redeem persistence", () => {
 
     expect(screen.getAllByText("Baixar PDF").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Baixar DOCX").length).toBeGreaterThan(0);
+  });
+
+  it("sends selected missing keywords when redeeming from dashboard", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({}),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <HistoryActionLinks
+        {...baseProps}
+        actions={{
+          ...baseProps.actions,
+          selectedMissingKeywords: ["Python", "SQL"],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Liberar CV · 1 Crédito"));
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(fetchMock).toHaveBeenCalledWith(baseProps.actions.redeemHref, {
+      method: "POST",
+      cache: "no-store",
+      signal: expect.any(AbortSignal),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ selectedMissingKeywords: ["Python", "SQL"] }),
+    });
   });
 
   it("restores redeemed state from sessionStorage on mount", () => {

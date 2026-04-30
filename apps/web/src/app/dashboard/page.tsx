@@ -25,6 +25,7 @@ import { getMyPlan } from "@/lib/plans-api";
 import { getMasterResumeFromList, listMyResumes } from "@/lib/resumes-api";
 import { CvMasterCard } from "./cv-master-card";
 import { DeleteAccountDangerZone } from "./delete-account-danger-zone";
+import { GuestAnalysisClaimer } from "./guest-analysis-claimer";
 import { HistoryActionLinks } from "./history-action-links";
 
 export const metadata: Metadata = {
@@ -131,6 +132,7 @@ export default async function DashboardPage({
     string,
     {
       adjustments: DashboardAdjustmentsData;
+      selectedMissingKeywords: string[];
       score: number | null;
       improvement: number | null;
     }
@@ -200,6 +202,8 @@ export default async function DashboardPage({
             zIndex: 2,
           }}
         >
+          <GuestAnalysisClaimer />
+
           {/* Plan activated banner */}
           {showPlanActivated && (
             <div
@@ -302,6 +306,9 @@ export default async function DashboardPage({
             <a
               href="/planos"
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
                 background: "#0a0a0a",
                 color: "#fafaf6",
                 borderRadius: 10,
@@ -314,6 +321,21 @@ export default async function DashboardPage({
               }}
               className="dash-btn-dark"
             >
+              <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 1v22" />
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14.5a3.5 3.5 0 0 1 0 7H7" />
+                </svg>
+              </span>
               Comprar créditos
             </a>
           </div>
@@ -420,6 +442,22 @@ export default async function DashboardPage({
                 }}
                 className="dash-cta-btn"
               >
+                <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <path d="M16 3h5v5" />
+                    <path d="M10 14 21 3" />
+                  </svg>
+                </span>
                 Adaptar meu CV
                 <span className="dash-cta-arrow">→</span>
               </a>
@@ -609,7 +647,10 @@ export default async function DashboardPage({
                   }}
                 >
                   {adaptationList.map((item) => {
-                    const actions = getHistoryActions(item);
+                    const actions = getHistoryActions(
+                      item,
+                      analysisSignalsById.get(item.id)?.selectedMissingKeywords,
+                    );
                     const history = buildDashboardTestHistoryView({
                       id: item.id,
                       score: analysisSignalsById.get(item.id)?.score ?? null,
@@ -672,7 +713,14 @@ export default async function DashboardPage({
 
                           <div
                             className="dash-history-score"
-                            style={{ textAlign: "right", flexShrink: 0 }}
+                            style={{
+                              textAlign: "right",
+                              flexShrink: 0,
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "flex-end",
+                              gap: 2,
+                            }}
                           >
                             <p
                               style={{
@@ -708,7 +756,7 @@ export default async function DashboardPage({
                                   fontSize: 10.5,
                                   fontWeight: 600,
                                   color: "#405410",
-                                  margin: 0,
+                                  margin: "-7px 0 10px",
                                 }}
                               >
                                 +{history.improvement}% após ajustes
@@ -717,16 +765,55 @@ export default async function DashboardPage({
                           </div>
                         </div>
 
-                        <HistoryActionLinks
-                          actions={actions}
-                          hasCredits={hasCredits}
-                          adjustments={adjustments}
-                          analysisContext={{
-                            jobTitle: item.jobTitle,
-                            masterResumeTitle:
-                              resumeTitleById.get(item.masterResumeId) ?? null,
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-end",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            flexWrap: "wrap",
                           }}
-                        />
+                        >
+                          <HistoryActionLinks
+                            actions={actions}
+                            hasCredits={hasCredits}
+                            adjustments={adjustments}
+                            analysisContext={{
+                              jobTitle: item.jobTitle,
+                              masterResumeTitle:
+                                resumeTitleById.get(item.masterResumeId) ?? null,
+                            }}
+                            hideBaseCvAction
+                            removeTopMargin
+                          />
+
+                          {actions.canDownloadBaseCv ? (
+                            <a
+                              href={actions.baseCvHref}
+                              title="Baixa o CV base usado na analise e adaptacao (apenas para conferencia)."
+                              className="inline-flex h-8 w-full appearance-none items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border border-[#DADADA] bg-white px-3 [font-family:var(--font-sans)] text-xs leading-none font-semibold text-[#757570] transition-colors hover:border-[#BEBEBE] sm:w-auto"
+                              style={{ color: "#757570" }}
+                            >
+                              <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M12 3v12" />
+                                  <path d="m7 10 5 5 5-5" />
+                                  <path d="M5 21h14" />
+                                </svg>
+                              </span>
+                              <span>CV usado na análise</span>
+                            </a>
+                          ) : null}
+                        </div>
                       </article>
                     );
                   })}
