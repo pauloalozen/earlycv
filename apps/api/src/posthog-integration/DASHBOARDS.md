@@ -126,8 +126,15 @@ Track analysis execution health and performance.
 ## Filter Properties
 
 All dashboards should filter by:
+- `env`: `production` for official business dashboards
 - `source`: `frontend` or `backend`
 - Date range: Last 7 days, 30 days, custom
+
+For debugging dashboards, prefer:
+- `env = development` for local validation
+- `env = staging` for preview checks
+
+Ignore legacy events without `env` in official reporting (they were emitted before environment tagging became mandatory).
 
 ## Notes
 

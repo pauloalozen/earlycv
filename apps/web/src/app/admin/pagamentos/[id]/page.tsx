@@ -99,8 +99,7 @@ export default async function AdminPagamentoDetailPage({
       <div className="mb-8 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-stone-900">
-            {checkout.type === "plan" ? "Plano" : "Adaptação"} —{" "}
-            {checkout.planName ?? "CV Adaptado"}
+            Plano — {checkout.planName ?? "Créditos"}
           </h1>
           <p className="mt-1 text-sm text-stone-500">
             {checkout.userEmail ?? checkout.userId}
@@ -122,7 +121,7 @@ export default async function AdminPagamentoDetailPage({
           <Field label="Checkout ID" value={checkout.checkoutId} />
           <Field
             label="Tipo"
-            value={checkout.type === "plan" ? "Plano" : "Adaptação"}
+            value="Plano"
           />
           <Field label="User ID" value={checkout.userId} />
           <Field label="E-mail" value={checkout.userEmail} />
@@ -153,8 +152,8 @@ export default async function AdminPagamentoDetailPage({
             Reconciliação manual
           </h2>
           <p className="mb-4 text-sm text-orange-800">
-            Consulta o Mercado Pago e libera créditos/entrega se o pagamento
-            estiver aprovado.{" "}
+            Consulta o Mercado Pago e libera os créditos da compra se o
+            pagamento estiver aprovado.{" "}
             {isPending
               ? "Este pagamento está pendente."
               : "Este pagamento foi marcado como falho — só reconcilia se o MP confirmar aprovação."}

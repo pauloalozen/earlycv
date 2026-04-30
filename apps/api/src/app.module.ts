@@ -12,6 +12,7 @@ import { AuthModule } from "./auth/auth.module";
 import { CompaniesModule } from "./companies/companies.module";
 import { EnvModule } from "./config/env.module";
 import { CvAdaptationModule } from "./cv-adaptation/cv-adaptation.module";
+import { CvUnlocksModule } from "./cv-unlocks/cv-unlocks.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
 import { InfraModule } from "./infra/infra.module";
@@ -51,6 +52,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     AnalysisProtectionModule,
     AnalysisObservabilityModule,
     CvAdaptationModule,
+    CvUnlocksModule,
     PlansModule,
     PaymentsModule,
     PosthogIntegrationModule,

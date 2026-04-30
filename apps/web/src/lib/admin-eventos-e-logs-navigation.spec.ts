@@ -14,6 +14,16 @@ test("admin nav includes eventos e logs route", () => {
   );
 });
 
+test("admin nav includes liberacoes de cv route", () => {
+  assert.deepEqual(
+    getAdminNavItems().find((item) => item.href === "/admin/liberacoes-cv"),
+    {
+      href: "/admin/liberacoes-cv",
+      label: "Liberacoes de CV",
+    },
+  );
+});
+
 test("resolveEmitPayload returns expected payload for single mode", () => {
   const formData = new FormData();
   formData.set("mode", "single");

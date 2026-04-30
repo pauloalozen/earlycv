@@ -3,6 +3,7 @@ export const POSTHOG_INTEGRATION_CONFIG = Symbol("POSTHOG_INTEGRATION_CONFIG");
 export const POSTHOG_INTEGRATION_CONFIG_PREFIX = "POSTHOG_";
 
 export type PostHogEventSource = "backend" | "frontend";
+export type PostHogEventEnv = "production" | "staging" | "development";
 
 export interface PostHogEvent {
   event: string;
@@ -18,6 +19,8 @@ export interface PostHogEventProperties {
   user_id?: string | null;
   route_key?: string | null;
   source?: PostHogEventSource;
+  env?: PostHogEventEnv;
+  app?: "earlycv";
   $ip?: never;
   $timezone?: never;
 }

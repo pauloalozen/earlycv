@@ -134,6 +134,18 @@ enum PaymentProvider {
   stripe
 }
 
+enum CvUnlockSource {
+  CREDIT
+  ADMIN
+  PLAN_ENTITLEMENT
+  LEGACY
+}
+
+enum CvUnlockStatus {
+  UNLOCKED
+  REVOKED
+}
+
 enum AnalysisCvSourceType {
   text_input
   uploaded_file
@@ -180,6 +192,7 @@ model User {
   passwordResetTokens         PasswordResetToken[]
   resumes          Resume[]
   cvAdaptations    CvAdaptation[]
+  cvUnlocks        CvUnlock[]
   planPurchases    PlanPurchase[]
   dailyAnalysisUsages         UserDailyAnalysisUsage[]
   affiliateAttributions     AffiliateAttribution[]
@@ -420,6 +433,8 @@ model CvAdaptation {
   mpMerchantOrderId    String?
   mpPreferenceId       String?
   failureReason        String?
+  isUnlocked           Boolean             @default(false)
+  unlockedAt           DateTime?
   analysisCvSnapshotId String?             @unique
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
@@ -429,12 +444,34 @@ model CvAdaptation {
   template      ResumeTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   adaptedResume Resume?         @relation("CvAdaptationResult", fields: [adaptedResumeId], references: [id], onDelete: SetNull)
   analysisCvSnapshot AnalysisCvSnapshot? @relation(fields: [analysisCvSnapshotId], references: [id], onDelete: SetNull)
+  cvUnlock     CvUnlock?
 
   @@index([userId, createdAt])
   @@index([masterResumeId])
   @@index([paymentReference])
   @@index([mpPaymentId])
   @@index([analysisCvSnapshotId])
+}
+
+model CvUnlock {
+  id             String         @id @default(cuid())
+  userId         String
+  cvAdaptationId String         @unique
+  creditsConsumed Int           @default(1)
+  source         CvUnlockSource @default(CREDIT)
+  status         CvUnlockStatus @default(UNLOCKED)
+  unlockedAt     DateTime       @default(now())
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cvAdaptation CvAdaptation @relation(fields: [cvAdaptationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([cvAdaptationId])
+  @@index([unlockedAt])
+  @@index([source])
+  @@index([status])
 }
 
 model AnalysisCvSnapshot {

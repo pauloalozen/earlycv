@@ -112,6 +112,89 @@ test("records business event and updates projection for first ingestion", async 
   assert.deepEqual(projectionApplied, ["analyze_submit_clicked"]);
 });
 
+test("falls back to null userId when persistence hits user foreign key violation", async () => {
+  const storedByKey = new Map<string, StoredBusinessFunnelEvent>();
+  const projectionApplied: string[] = [];
+  let createManyAttempts = 0;
+
+  const service = new BusinessFunnelEventService(
+    {
+      $transaction: async (
+        callback: (tx: {
+          businessFunnelEvent: {
+            createMany: (args: {
+              data: Record<string, unknown>[];
+              skipDuplicates?: boolean;
+            }) => Promise<{ count: number }>;
+            findUnique: (args: {
+              where: { idempotencyKey: string };
+            }) => Promise<StoredBusinessFunnelEvent | null>;
+          };
+        }) => Promise<unknown>,
+      ) => {
+        return callback({
+          businessFunnelEvent: {
+            createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
+              createManyAttempts += 1;
+              const record = data[0];
+
+              if (createManyAttempts === 1) {
+                const error = new Error("fk violation") as Error & {
+                  code: string;
+                  meta: { constraint: string };
+                };
+                error.code = "P2003";
+                error.meta = { constraint: "BusinessFunnelEvent_userId_fkey" };
+                throw error;
+              }
+
+              const event = {
+                id: `event-${storedByKey.size + 1}`,
+                createdAt: new Date("2026-04-21T15:30:00.000Z"),
+                ...record,
+              } as StoredBusinessFunnelEvent;
+
+              if (typeof event.idempotencyKey === "string") {
+                storedByKey.set(event.idempotencyKey, event);
+              }
+
+              return { count: 1 };
+            },
+            findUnique: async ({
+              where,
+            }: {
+              where: { idempotencyKey: string };
+            }) => {
+              return storedByKey.get(where.idempotencyKey) ?? null;
+            },
+          },
+        });
+      },
+    } as any,
+    {
+      applyEvent: async (
+        event: Pick<StoredBusinessFunnelEvent, "eventName">,
+      ) => {
+        projectionApplied.push(event.eventName);
+      },
+    } as BusinessFunnelProjectionService,
+  );
+
+  const ingested = await service.record(
+    {
+      eventName: "analyze_submit_clicked",
+      eventVersion: 1,
+      idempotencyKey: "evt-fk-1",
+    },
+    baseContext,
+  );
+
+  assert.equal(ingested.ingested, true);
+  assert.equal(ingested.event.userId, null);
+  assert.equal(createManyAttempts, 2);
+  assert.deepEqual(projectionApplied, ["analyze_submit_clicked"]);
+});
+
 test("exports event to PostHog when ingestion succeeds", async () => {
   const exported: Array<{
     eventName: string;

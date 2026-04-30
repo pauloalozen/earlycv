@@ -101,10 +101,10 @@ export class BusinessFunnelEventService {
     if (normalizedKey) {
       return await this.database.$transaction(async (tx) => {
         const writeClient = tx as unknown as BusinessFunnelEventWriteClient;
-        const result = await writeClient.businessFunnelEvent.createMany({
-          data: [{ ...eventData, idempotencyKey: normalizedKey }],
-          skipDuplicates: true,
-        });
+        const result = await this.createManyWithUserFallback(
+          writeClient,
+          [{ ...eventData, idempotencyKey: normalizedKey }],
+        );
 
         const ingested = result.count === 1;
         const event = await writeClient.businessFunnelEvent.findUnique({
@@ -126,11 +126,9 @@ export class BusinessFunnelEventService {
 
     return this.database.$transaction(async (tx) => {
       const writeClient = tx as unknown as BusinessFunnelEventWriteClient;
-      const created = await writeClient.businessFunnelEvent.create({
-        data: {
-          ...eventData,
-          idempotencyKey: null,
-        },
+      const created = await this.createWithUserFallback(writeClient, {
+        ...eventData,
+        idempotencyKey: null,
       });
 
       await this.projection.applyEvent(created as any, tx as any);
@@ -141,6 +139,60 @@ export class BusinessFunnelEventService {
         ingested: true,
       };
     });
+  }
+
+  private async createManyWithUserFallback(
+    writeClient: BusinessFunnelEventWriteClient,
+    data: Record<string, unknown>[],
+  ): Promise<{ count: number }> {
+    try {
+      return await writeClient.businessFunnelEvent.createMany({
+        data,
+        skipDuplicates: true,
+      });
+    } catch (error) {
+      if (!this.isUserForeignKeyViolation(error) || data.length !== 1) {
+        throw error;
+      }
+
+      const retried = [{ ...data[0], userId: null }];
+      return await writeClient.businessFunnelEvent.createMany({
+        data: retried,
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  private async createWithUserFallback(
+    writeClient: BusinessFunnelEventWriteClient,
+    data: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    try {
+      return await writeClient.businessFunnelEvent.create({ data });
+    } catch (error) {
+      if (!this.isUserForeignKeyViolation(error)) {
+        throw error;
+      }
+
+      return await writeClient.businessFunnelEvent.create({
+        data: {
+          ...data,
+          userId: null,
+        },
+      });
+    }
+  }
+
+  private isUserForeignKeyViolation(error: unknown): boolean {
+    if (!error || typeof error !== "object") {
+      return false;
+    }
+
+    const code = (error as { code?: unknown }).code;
+    const constraint = (error as { meta?: { constraint?: unknown } }).meta
+      ?.constraint;
+
+    return code === "P2003" && constraint === "BusinessFunnelEvent_userId_fkey";
   }
 
   private assertValidInput(

@@ -11,6 +11,7 @@ export type HistoryAdaptationItem = {
   id: string;
   status: CvAdaptationStatus;
   paymentStatus: PaymentStatus;
+  isUnlocked?: boolean;
   canDownloadBaseCv: boolean;
   baseCvDownloadKind:
     | "original_file"
@@ -34,8 +35,9 @@ export function getHistoryActions(
     baseCvHref: `/api/cv-adaptation/${item.id}/base-cv`,
     canDownloadBaseCv: item.canDownloadBaseCv,
     baseCvDownloadKind: item.baseCvDownloadKind,
-    canDownload: item.paymentStatus === "completed",
+    canDownload: item.isUnlocked === true || item.paymentStatus === "completed",
     canRedeem:
+      item.isUnlocked !== true &&
       item.paymentStatus !== "completed" &&
       item.status !== "analyzing" &&
       item.status !== "failed",

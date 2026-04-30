@@ -20,6 +20,8 @@ export type CvAdaptationResponseDto = {
   } | null;
   paymentStatus: PaymentStatus;
   paidAt: string | null;
+  isUnlocked: boolean;
+  unlockedAt: string | null;
   adaptedResumeId: string | null;
   analysisCvSnapshotId: string | null;
   canDownloadBaseCv: boolean;
@@ -56,6 +58,8 @@ export const createCvAdaptationResponseDto = (
     : null,
   paymentStatus: adaptation.paymentStatus,
   paidAt: adaptation.paidAt ? adaptation.paidAt.toISOString() : null,
+  isUnlocked: adaptation.isUnlocked,
+  unlockedAt: adaptation.unlockedAt ? adaptation.unlockedAt.toISOString() : null,
   adaptedResumeId: adaptation.adaptedResumeId,
   analysisCvSnapshotId: adaptation.analysisCvSnapshotId,
   canDownloadBaseCv: Boolean(adaptation.analysisCvSnapshotId),

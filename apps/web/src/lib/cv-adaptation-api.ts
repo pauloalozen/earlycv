@@ -3,6 +3,7 @@
 type CvAdaptationStatus = "pending" | "analyzing" | "awaiting_payment" | "paid" | "delivered" | "failed";
 type PaymentStatus = "none" | "pending" | "completed" | "failed" | "refunded";
 import { apiRequest } from "./api-request";
+import { getFrontendAnalyticsContext } from "./analytics-context";
 import { extractApiErrorMessage } from "./cv-adaptation-api-errors";
 
 export type CvAdaptationDto = {
@@ -16,6 +17,8 @@ export type CvAdaptationDto = {
   template: { id: string; name: string; slug: string } | null;
   paymentStatus: PaymentStatus;
   paidAt: string | null;
+  isUnlocked: boolean;
+  unlockedAt: string | null;
   adaptedResumeId: string | null;
   analysisCvSnapshotId: string | null;
   canDownloadBaseCv: boolean;
@@ -115,13 +118,19 @@ export async function deleteCvAdaptation(id: string): Promise<void> {
 
 export async function getCvAdaptationContent(
   id: string,
-): Promise<{ adaptedContentJson: Record<string, unknown> }> {
+): Promise<{
+  adaptedContentJson: Record<string, unknown>;
+  paymentStatus?: PaymentStatus;
+  isUnlocked?: boolean;
+}> {
   const response = await apiRequest("GET", `/cv-adaptation/${id}/content`);
   if (!response.ok) {
     throw new Error("Failed to fetch adaptation content");
   }
   return response.json() as Promise<{
     adaptedContentJson: Record<string, unknown>;
+    paymentStatus?: PaymentStatus;
+    isUnlocked?: boolean;
   }>;
 }
 
@@ -221,6 +230,7 @@ export type BusinessFunnelEventPayload = {
 export async function emitBusinessFunnelEvent(
   payload: BusinessFunnelEventPayload,
 ): Promise<void> {
+  const analyticsContext = getFrontendAnalyticsContext();
   const response = await apiRequest(
     "POST",
     "/analysis-observability/business-funnel-events",
@@ -228,7 +238,10 @@ export async function emitBusinessFunnelEvent(
       eventName: payload.eventName,
       eventVersion: payload.eventVersion ?? 1,
       idempotencyKey: payload.idempotencyKey,
-      metadata: payload.metadata,
+      metadata: {
+        ...payload.metadata,
+        ...analyticsContext,
+      },
     },
   );
 

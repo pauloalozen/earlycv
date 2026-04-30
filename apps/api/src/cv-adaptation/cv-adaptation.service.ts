@@ -335,8 +335,8 @@ export class CvAdaptationService {
           previewText: dto.previewText ?? null,
           analysisCvSnapshotId: snapshot?.id ?? null,
           status: "delivered",
-          paymentStatus: "completed",
-          paidAt: new Date(),
+          isUnlocked: true,
+          unlockedAt: new Date(),
         },
         include: {
           template: { select: { id: true, name: true, slug: true } },
@@ -377,6 +377,17 @@ export class CvAdaptationService {
           data: { creditsRemaining: { decrement: 1 } },
         });
       }
+
+      await tx.cvUnlock.create({
+        data: {
+          userId,
+          cvAdaptationId: linked.id,
+          creditsConsumed: hasUnlimitedClaims ? 0 : 1,
+          source: hasUnlimitedClaims ? "ADMIN" : "CREDIT",
+          status: "UNLOCKED",
+          unlockedAt: new Date(),
+        },
+      });
 
       return linked;
     });
@@ -956,7 +967,7 @@ export class CvAdaptationService {
     }
 
     // Webhook already confirmed — return success
-    if (adaptation.paymentStatus === "completed") {
+    if (adaptation.isUnlocked) {
       return createCvAdaptationResponseDto(adaptation);
     }
 
@@ -989,7 +1000,15 @@ export class CvAdaptationService {
       throw new NotFoundException("adaptation not found");
     }
 
-    if (adaptation.paymentStatus === "completed") {
+    const existingUnlock = await this.database.cvUnlock.findUnique({
+      where: { cvAdaptationId: adaptation.id },
+    });
+
+    if (existingUnlock?.status === "UNLOCKED") {
+      return createCvAdaptationResponseDto(adaptation);
+    }
+
+    if (adaptation.isUnlocked) {
       return createCvAdaptationResponseDto(adaptation);
     }
 
@@ -1004,6 +1023,23 @@ export class CvAdaptationService {
     }
 
     const updated = await this.database.$transaction(async (tx) => {
+      const currentUnlock = await tx.cvUnlock.findUnique({
+        where: { cvAdaptationId: adaptation.id },
+      });
+
+      if (currentUnlock?.status === "UNLOCKED") {
+        const currentAdaptation = await tx.cvAdaptation.findUnique({
+          where: { id: adaptation.id },
+          include: {
+            template: { select: { id: true, name: true, slug: true } },
+          },
+        });
+        if (!currentAdaptation) {
+          throw new NotFoundException("adaptation not found");
+        }
+        return currentAdaptation;
+      }
+
       if (!hasUnlimitedClaims) {
         await tx.user.update({
           where: { id: userId },
@@ -1016,16 +1052,29 @@ export class CvAdaptationService {
         dto?.selectedMissingKeywords,
       );
 
-      return tx.cvAdaptation.update({
+      const nextAdaptation = await tx.cvAdaptation.update({
         where: { id: adaptation.id },
         data: {
-          paymentStatus: "completed",
-          paidAt: new Date(),
           status: "paid",
+          isUnlocked: true,
+          unlockedAt: new Date(),
           adaptedContentJson: updatedContent as Prisma.InputJsonValue,
         },
         include: { template: { select: { id: true, name: true, slug: true } } },
       });
+
+      await tx.cvUnlock.create({
+        data: {
+          userId,
+          cvAdaptationId: adaptation.id,
+          creditsConsumed: hasUnlimitedClaims ? 0 : 1,
+          source: hasUnlimitedClaims ? "ADMIN" : "CREDIT",
+          status: "UNLOCKED",
+          unlockedAt: new Date(),
+        },
+      });
+
+      return nextAdaptation;
     });
 
     this.deliverAdaptation(adaptation.id).catch((err) => {
@@ -1078,6 +1127,25 @@ export class CvAdaptationService {
           paymentStatus: "completed",
           paidAt: new Date(),
           status: "paid",
+          isUnlocked: true,
+          unlockedAt: new Date(),
+        },
+      });
+
+      await tx.cvUnlock.upsert({
+        where: { cvAdaptationId: adaptationId },
+        update: {
+          status: "UNLOCKED",
+          source: "PLAN_ENTITLEMENT",
+          unlockedAt: new Date(),
+        },
+        create: {
+          userId: current.userId,
+          cvAdaptationId: adaptationId,
+          creditsConsumed: 0,
+          source: "PLAN_ENTITLEMENT",
+          status: "UNLOCKED",
+          unlockedAt: new Date(),
         },
       });
     });
@@ -1285,12 +1353,31 @@ export class CvAdaptationService {
           paymentStatus: "completed",
           paidAt: new Date(),
           status: "paid",
+          isUnlocked: true,
+          unlockedAt: new Date(),
           ...(!current.mpPaymentId && resolution.paymentId
             ? { mpPaymentId: resolution.paymentId }
             : {}),
           ...(!current.mpMerchantOrderId && resolution.merchantOrderId
             ? { mpMerchantOrderId: resolution.merchantOrderId }
             : {}),
+        },
+      });
+
+      await tx.cvUnlock.upsert({
+        where: { cvAdaptationId: adaptation.id },
+        update: {
+          status: "UNLOCKED",
+          source: "PLAN_ENTITLEMENT",
+          unlockedAt: new Date(),
+        },
+        create: {
+          userId: current.userId,
+          cvAdaptationId: adaptation.id,
+          creditsConsumed: 0,
+          source: "PLAN_ENTITLEMENT",
+          status: "UNLOCKED",
+          unlockedAt: new Date(),
         },
       });
     });
@@ -1339,11 +1426,19 @@ export class CvAdaptationService {
       });
   }
 
+  private isAdaptationUnlocked(
+    isUnlocked: boolean,
+    cvUnlock?: { status: "UNLOCKED" | "REVOKED" } | null,
+  ): boolean {
+    return isUnlocked || cvUnlock?.status === "UNLOCKED";
+  }
+
   async downloadPdf(userId: string, id: string, res: Response): Promise<void> {
     const adaptation = await this.database.cvAdaptation.findFirst({
       where: { id, userId },
       include: {
         masterResume: { select: { title: true, rawText: true } },
+        cvUnlock: { select: { status: true } },
         template: {
           select: { slug: true, structureJson: true, fileUrl: true },
         },
@@ -1354,7 +1449,7 @@ export class CvAdaptationService {
       throw new NotFoundException("adaptation not found");
     }
 
-    if (adaptation.paymentStatus !== "completed") {
+    if (!this.isAdaptationUnlocked(adaptation.isUnlocked, adaptation.cvUnlock)) {
       throw new BadRequestException(
         `Adaptation must be paid to download. Status: ${adaptation.paymentStatus}`,
       );
@@ -1420,6 +1515,7 @@ export class CvAdaptationService {
     const adaptation = await this.database.cvAdaptation.findFirst({
       where: { id, userId },
       include: {
+        cvUnlock: { select: { status: true } },
         masterResume: { select: { title: true, rawText: true } },
         template: { select: { slug: true, fileUrl: true } },
       },
@@ -1429,7 +1525,7 @@ export class CvAdaptationService {
       throw new NotFoundException("adaptation not found");
     }
 
-    if (adaptation.paymentStatus !== "completed") {
+    if (!this.isAdaptationUnlocked(adaptation.isUnlocked, adaptation.cvUnlock)) {
       throw new BadRequestException(
         `Adaptation must be paid to download. Status: ${adaptation.paymentStatus}`,
       );
@@ -1542,6 +1638,7 @@ export class CvAdaptationService {
     return {
       adaptedContentJson: adaptation.adaptedContentJson,
       paymentStatus: adaptation.paymentStatus,
+      isUnlocked: adaptation.isUnlocked,
       status: adaptation.status,
       jobTitle: adaptation.jobTitle,
       companyName: adaptation.companyName,

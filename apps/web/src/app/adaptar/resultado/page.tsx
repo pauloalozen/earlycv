@@ -558,6 +558,7 @@ export default function ResultadoPage() {
               | "completed"
               | "failed"
               | "refunded";
+            isUnlocked?: boolean;
             jobAnalysisCount?: number;
             adaptationNotes?: string | null;
           }>;
@@ -565,7 +566,9 @@ export default function ResultadoPage() {
         .then((payload) => {
           if (!active) return;
           setRawData(payload.adaptedContentJson);
-          setReviewPaymentStatus(payload.paymentStatus);
+          setReviewPaymentStatus(
+            payload.isUnlocked ? "completed" : payload.paymentStatus,
+          );
           setJobAnalysisCount(payload.jobAnalysisCount ?? null);
         })
         .catch((error: unknown) => {
@@ -746,9 +749,12 @@ export default function ResultadoPage() {
           | "completed"
           | "failed"
           | "refunded";
+        isUnlocked?: boolean;
       };
       if (payload.id) setReviewAdaptationId(payload.id);
-      setReviewPaymentStatus(payload.paymentStatus ?? "completed");
+      setReviewPaymentStatus(
+        payload.isUnlocked ? "completed" : (payload.paymentStatus ?? "completed"),
+      );
       setHasCredits(false);
       await waitForMinimumDuration(startedAt, RELEASE_MIN_LOADING_MS);
       setReleaseStatus("success");
@@ -823,7 +829,9 @@ export default function ResultadoPage() {
         autoSaveInFlight.current = false;
         setAutoSaveStatus("saved");
         setReviewAdaptationId(result.id);
-        setReviewPaymentStatus(result.paymentStatus ?? "none");
+        setReviewPaymentStatus(
+          result.isUnlocked ? "completed" : (result.paymentStatus ?? "none"),
+        );
         const normalized = normalizeData(parsed.adaptedContentJson);
         const score = normalized.score.scoreAtualBase;
         if (typeof score === "number") {
@@ -3576,7 +3584,7 @@ export default function ResultadoPage() {
                   </div>
 
                   {/* Action buttons */}
-                  {isDownloadReady ? (
+                  {isDownloadReady && !releaseModalOpen ? (
                     <>
                       <button
                         type="button"
@@ -3661,6 +3669,46 @@ export default function ResultadoPage() {
                         {getDownloadCtaCopy("docx", downloading)}
                       </button>
                     </>
+                  ) : releaseModalOpen ? (
+                    <button
+                      type="button"
+                      disabled
+                      style={{
+                        width: "100%",
+                        background: "#fafaf6",
+                        color: "#0a0a0a",
+                        border: "none",
+                        borderRadius: 12,
+                        padding: "15px",
+                        fontSize: 14.5,
+                        fontWeight: 500,
+                        cursor: "default",
+                        fontFamily: GEIST,
+                        opacity: 0.6,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <span className="hidden sm:inline-flex" aria-hidden="true">
+                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                        <svg
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                          <path d="M7 11V7a5 5 0 0 1 9.5-2.2" />
+                        </svg>
+                      </span>
+                      Liberando CV...
+                    </button>
                   ) : isAuthenticated === false ? (
                     isDemo ? (
                       <>

@@ -61,6 +61,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.cvAdaptation;
   }
 
+  get cvUnlock() {
+    return this.prisma.cvUnlock;
+  }
+
   get analysisCvSnapshot() {
     return this.prisma.analysisCvSnapshot;
   }

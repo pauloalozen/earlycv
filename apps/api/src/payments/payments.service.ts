@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import MercadoPagoConfig, { Payment } from "mercadopago";
-import { CvAdaptationService } from "../cv-adaptation/cv-adaptation.service";
 import { DatabaseService } from "../database/database.service";
 import { PlansService } from "../plans/plans.service";
 
@@ -13,7 +12,7 @@ type NextAction =
 
 export type PaymentListRecord = {
   checkoutId: string;
-  type: "plan" | "adaptation";
+  type: "plan";
   userId: string;
   userEmail: string | null;
   planName: string | null;
@@ -46,7 +45,7 @@ export type CheckoutStatusResponse = {
   checkoutId: string;
   status: CheckoutStatus;
   nextAction: NextAction;
-  type: "plan" | "adaptation";
+  type: "plan";
   planPurchased: string | null;
   planName: string | null;
   creditsGranted: number | null;
@@ -63,8 +62,6 @@ export class PaymentsService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(PlansService) private readonly plansService: PlansService,
-    @Inject(CvAdaptationService)
-    private readonly cvAdaptationService: CvAdaptationService,
   ) {}
 
   async getCheckoutStatus(
@@ -93,48 +90,19 @@ export class PaymentsService {
       };
     }
 
-    const adaptation = await this.database.cvAdaptation.findFirst({
-      where: { id: checkoutId, userId },
-    });
-
-    if (!adaptation) {
-      throw new NotFoundException("Checkout não encontrado.");
-    }
-
-    const status = mapPaymentStatus(adaptation.paymentStatus);
-    const nextAction = mapNextAction(status);
-    return {
-      checkoutId,
-      status,
-      nextAction,
-      type: "adaptation",
-      planPurchased: null,
-      planName: null,
-      creditsGranted: null,
-      analysisCreditsGranted: null,
-      adaptationId: adaptation.id,
-      paymentId: adaptation.mpPaymentId ?? null,
-      message: buildMessage(status, "adaptation"),
-    };
+    throw new NotFoundException("Checkout não encontrado.");
   }
 
   async reconcilePending(limit = 50): Promise<{
     reconciledPlans: number;
-    reconciledAdaptations: number;
-    total: number;
-  }> {
-    const [pendingPurchases, pendingAdaptations] = await Promise.all([
-      this.database.planPurchase.findMany({
-        where: { status: "pending" },
-        take: limit,
-        orderBy: { createdAt: "asc" },
-      }),
-      this.database.cvAdaptation.findMany({
-        where: { paymentStatus: "pending" },
-        take: limit,
-        orderBy: { createdAt: "asc" },
-      }),
-    ]);
+      reconciledAdaptations: number;
+      total: number;
+    }> {
+    const pendingPurchases = await this.database.planPurchase.findMany({
+      where: { status: "pending" },
+      take: limit,
+      orderBy: { createdAt: "asc" },
+    });
 
     const client = this.getMercadoPagoClient();
     if (!client) {
@@ -144,7 +112,7 @@ export class PaymentsService {
 
     const paymentClient = new Payment(client);
     let reconciledPlans = 0;
-    let reconciledAdaptations = 0;
+    const reconciledAdaptations = 0;
 
     for (const purchase of pendingPurchases) {
       try {
@@ -165,26 +133,6 @@ export class PaymentsService {
       }
     }
 
-    for (const adaptation of pendingAdaptations) {
-      if (!adaptation.paymentReference) continue;
-      try {
-        const results = await paymentClient.search({
-          options: { external_reference: adaptation.paymentReference },
-        });
-        const approved = results.results?.find((p) => p.status === "approved");
-        if (!approved) continue;
-
-        const reconciled = await this.cvAdaptationService.reconcileAdaptation(
-          adaptation.id,
-        );
-        if (reconciled) reconciledAdaptations++;
-      } catch (err) {
-        this.logger.warn(
-          `[reconcile] adaptation ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
-
     this.logger.log(
       `[reconcile] done — plans: ${reconciledPlans}, adaptations: ${reconciledAdaptations}`,
     );
@@ -197,7 +145,6 @@ export class PaymentsService {
   }
 
   async listPayments(filters: {
-    type?: "plan" | "adaptation";
     status?: string;
     userId?: string;
     from?: string;
@@ -219,95 +166,47 @@ export class PaymentsService {
           }
         : {};
 
-    const planItems: PaymentListRecord[] = [];
-    const adaptationItems: PaymentListRecord[] = [];
+    const where = {
+      ...(filters.userId ? { userId: filters.userId } : {}),
+      ...(filters.status
+        ? { status: filters.status as "pending" | "completed" | "failed" }
+        : {}),
+      ...dateFilter,
+    };
+    const plans = await this.database.planPurchase.findMany({
+      where,
+      include: { user: { select: { email: true } } },
+      orderBy: { createdAt: "desc" },
+    });
 
-    if (!filters.type || filters.type === "plan") {
-      const where = {
-        ...(filters.userId ? { userId: filters.userId } : {}),
-        ...(filters.status
-          ? { status: filters.status as "pending" | "completed" | "failed" }
-          : {}),
-        ...dateFilter,
-      };
-      const plans = await this.database.planPurchase.findMany({
-        where,
-        include: { user: { select: { email: true } } },
-        orderBy: { createdAt: "desc" },
-      });
-      for (const p of plans) {
-        planItems.push({
-          checkoutId: p.id,
-          type: "plan",
-          userId: p.userId,
-          userEmail: p.user?.email ?? null,
-          planName: planTypeToName(p.planType),
-          status: p.status,
-          mpPaymentId: p.mpPaymentId ?? null,
-          mpPreferenceId: p.mpPreferenceId ?? null,
-          externalReference: p.paymentReference,
-          amountInCents: p.amountInCents,
-          createdAt: p.createdAt.toISOString(),
-          updatedAt: p.updatedAt.toISOString(),
-        });
-      }
-    }
-
-    if (!filters.type || filters.type === "adaptation") {
-      const where = {
-        ...(filters.userId ? { userId: filters.userId } : {}),
-        ...(filters.status
-          ? {
-              paymentStatus: filters.status as
-                | "pending"
-                | "completed"
-                | "failed",
-            }
-          : { paymentStatus: { not: "none" as const } }),
-        ...dateFilter,
-      };
-      const adaptations = await this.database.cvAdaptation.findMany({
-        where,
-        include: { user: { select: { email: true } } },
-        orderBy: { createdAt: "desc" },
-      });
-      for (const a of adaptations) {
-        adaptationItems.push({
-          checkoutId: a.id,
-          type: "adaptation",
-          userId: a.userId,
-          userEmail: a.user?.email ?? null,
-          planName: null,
-          status: a.paymentStatus,
-          mpPaymentId: a.mpPaymentId ?? null,
-          mpPreferenceId: a.mpPreferenceId ?? null,
-          externalReference: a.paymentReference ?? null,
-          amountInCents: a.paymentAmountInCents ?? null,
-          createdAt: a.createdAt.toISOString(),
-          updatedAt: a.updatedAt.toISOString(),
-        });
-      }
-    }
-
-    const all = [...planItems, ...adaptationItems].sort(
+    const all = plans
+      .map((p) => ({
+        checkoutId: p.id,
+        type: "plan" as const,
+        userId: p.userId,
+        userEmail: p.user?.email ?? null,
+        planName: planTypeToName(p.planType),
+        status: p.status,
+        mpPaymentId: p.mpPaymentId ?? null,
+        mpPreferenceId: p.mpPreferenceId ?? null,
+        externalReference: p.paymentReference,
+        amountInCents: p.amountInCents,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
+      }))
+      .sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+      );
 
     return { items: all.slice(skip, skip + limit), total: all.length };
   }
 
   async getPaymentDetail(checkoutId: string): Promise<PaymentDetailRecord> {
-    const [plan, adaptation] = await Promise.all([
-      this.database.planPurchase.findUnique({
-        where: { id: checkoutId },
-        include: { user: { select: { email: true } } },
-      }),
-      this.database.cvAdaptation.findUnique({
-        where: { id: checkoutId },
-        include: { user: { select: { email: true } } },
-      }),
-    ]);
+    const plan = await this.database.planPurchase.findUnique({
+      where: { id: checkoutId },
+      include: { user: { select: { email: true } } },
+    });
 
     let checkout: PaymentListRecord | null = null;
 
@@ -325,21 +224,6 @@ export class PaymentsService {
         amountInCents: plan.amountInCents,
         createdAt: plan.createdAt.toISOString(),
         updatedAt: plan.updatedAt.toISOString(),
-      };
-    } else if (adaptation) {
-      checkout = {
-        checkoutId: adaptation.id,
-        type: "adaptation",
-        userId: adaptation.userId,
-        userEmail: adaptation.user?.email ?? null,
-        planName: null,
-        status: adaptation.paymentStatus,
-        mpPaymentId: adaptation.mpPaymentId ?? null,
-        mpPreferenceId: adaptation.mpPreferenceId ?? null,
-        externalReference: adaptation.paymentReference ?? null,
-        amountInCents: adaptation.paymentAmountInCents ?? null,
-        createdAt: adaptation.createdAt.toISOString(),
-        updatedAt: adaptation.updatedAt.toISOString(),
       };
     }
 
@@ -404,38 +288,6 @@ export class PaymentsService {
       };
     }
 
-    const adaptation = await this.database.cvAdaptation.findUnique({
-      where: { id: checkoutId },
-    });
-
-    if (adaptation) {
-      if (adaptation.paymentStatus === "completed") {
-        return { reconciled: false, message: "Pagamento já processado." };
-      }
-      if (!adaptation.paymentReference) {
-        return { reconciled: false, message: "Sem paymentReference." };
-      }
-      const paymentClient = new Payment(client);
-      const results = await paymentClient.search({
-        options: { external_reference: adaptation.paymentReference },
-      });
-      const approved = results.results?.find((p) => p.status === "approved");
-      if (!approved) {
-        return {
-          reconciled: false,
-          message: "Pagamento não está aprovado no Mercado Pago.",
-        };
-      }
-      const reconciled =
-        await this.cvAdaptationService.reconcileAdaptation(checkoutId);
-      return {
-        reconciled,
-        message: reconciled
-          ? "Adaptação liberada com sucesso."
-          : "Já processada.",
-      };
-    }
-
     throw new NotFoundException("Checkout não encontrado.");
   }
 
@@ -477,12 +329,10 @@ function planTypeToName(planType: string): string | null {
 
 function buildMessage(
   status: CheckoutStatus,
-  type: "plan" | "adaptation",
+  type: "plan",
 ): string {
   if (status === "approved") {
-    return type === "plan"
-      ? "Pagamento confirmado! Seus créditos estão disponíveis."
-      : "Pagamento confirmado! Seu CV adaptado está pronto.";
+    return "Pagamento confirmado! Seus créditos estão disponíveis.";
   }
   if (status === "failed") {
     return "Pagamento não aprovado. Tente novamente.";

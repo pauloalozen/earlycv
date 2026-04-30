@@ -17,3 +17,10 @@ test("resultado locks missing keyword checkboxes when adaptation is already rele
   );
   assert.match(content, /title=\{\s*isKeywordSelectionLocked/);
 });
+
+test("resultado hides CTA download buttons while release popup is open", () => {
+  const pagePath = resolve(process.cwd(), "src/app/adaptar/resultado/page.tsx");
+  const content = readFileSync(pagePath, "utf8");
+
+  assert.match(content, /\{isDownloadReady && !releaseModalOpen \? \(/);
+});

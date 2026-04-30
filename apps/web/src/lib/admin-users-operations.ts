@@ -19,6 +19,7 @@ export type BackofficeNavItem = {
 const adminNavItems: BackofficeNavItem[] = [
   { href: "/admin", label: "Visao geral" },
   { href: "/admin/pagamentos", label: "Pagamentos" },
+  { href: "/admin/liberacoes-cv", label: "Liberacoes de CV" },
   { href: "/admin/empresas", label: "Empresas" },
   { href: "/admin/fontes", label: "Fontes de vagas" },
   { href: "/admin/runs", label: "Runs de ingestao" },

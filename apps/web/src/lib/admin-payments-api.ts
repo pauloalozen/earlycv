@@ -4,7 +4,7 @@ import { getBackofficeSessionToken } from "./backoffice-session.server";
 
 export type PaymentListRecord = {
   checkoutId: string;
-  type: "plan" | "adaptation";
+  type: "plan";
   userId: string;
   userEmail: string | null;
   planName: string | null;
@@ -73,7 +73,6 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function listAdminPayments(params: {
-  type?: "plan" | "adaptation";
   status?: string;
   userId?: string;
   from?: string;
@@ -82,7 +81,6 @@ export async function listAdminPayments(params: {
   limit?: number;
 }): Promise<PaymentListResponse> {
   const qs = new URLSearchParams();
-  if (params.type) qs.set("type", params.type);
   if (params.status) qs.set("status", params.status);
   if (params.userId) qs.set("userId", params.userId);
   if (params.from) qs.set("from", params.from);

@@ -33,7 +33,6 @@ export class PaymentsController {
   @UseGuards(RolesGuard)
   @InternalRoles("superadmin")
   listPayments(
-    @Query("type") type?: "plan" | "adaptation",
     @Query("status") status?: string,
     @Query("userId") userId?: string,
     @Query("from") from?: string,
@@ -42,7 +41,6 @@ export class PaymentsController {
     @Query("limit") limit?: string,
   ) {
     return this.paymentsService.listPayments({
-      type,
       status,
       userId,
       from,

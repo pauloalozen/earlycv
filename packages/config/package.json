@@ -11,6 +11,11 @@
   ],
   "exports": {
     "./biome/base": "./biome/base.json",
+    "./analytics-env": {
+      "development": "./src/analytics-env.ts",
+      "types": "./src/analytics-env.ts",
+      "default": "./dist/analytics-env.js"
+    },
     "./env": {
       "development": "./src/env.ts",
       "types": "./src/env.ts",

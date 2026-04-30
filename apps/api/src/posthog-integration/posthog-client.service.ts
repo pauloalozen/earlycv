@@ -4,6 +4,38 @@ import { POSTHOG_INTEGRATION_CONFIG } from "./types";
 import type { PosthogIntegrationConfig } from "./types";
 
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
+const ANALYTICS_APP = "earlycv" as const;
+
+type AnalyticsEnv = "production" | "staging" | "development";
+
+function normalizeCandidate(value?: string | null): string | null {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  return normalized;
+}
+
+function resolveAnalyticsEnv(input: {
+  appEnv?: string | null;
+  platformEnv?: string | null;
+  nodeEnv?: string | null;
+}): AnalyticsEnv {
+  const candidate =
+    normalizeCandidate(input.appEnv) ??
+    normalizeCandidate(input.platformEnv) ??
+    normalizeCandidate(input.nodeEnv);
+
+  if (candidate === "production") {
+    return "production";
+  }
+
+  if (candidate === "staging" || candidate === "preview") {
+    return "staging";
+  }
+
+  return "development";
+}
 
 export function resolvePosthogHost(projectId: string): string {
   const raw = projectId.trim();
@@ -78,13 +110,22 @@ export class PosthogClientService {
     }
 
     try {
+      const env = resolveAnalyticsEnv({
+        appEnv: process.env.APP_ENV,
+        platformEnv: process.env.RAILWAY_ENVIRONMENT_NAME,
+        nodeEnv: process.env.NODE_ENV,
+      });
       const message: EventMessage = {
         distinctId:
           (properties?.session_internal_id as string) ??
           (properties?.user_id as string) ??
           "anonymous",
         event,
-        properties: properties ?? {},
+        properties: {
+          ...(properties ?? {}),
+          app: ANALYTICS_APP,
+          env,
+        },
       };
 
       this.client.capture(message);

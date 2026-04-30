@@ -5,7 +5,7 @@ import { listAdminPayments } from "@/lib/admin-payments-api";
 
 export const metadata: Metadata = { title: "Pagamentos" };
 
-function statusLabel(status: string, _type: "plan" | "adaptation") {
+function statusLabel(status: string) {
   const map: Record<string, string> = {
     completed: "Aprovado",
     pending: "Pendente",
@@ -40,7 +40,6 @@ function formatDate(iso: string) {
 }
 
 type SearchParams = {
-  type?: string;
   status?: string;
   userId?: string;
   from?: string;
@@ -57,7 +56,6 @@ export default async function AdminPagamentosPage({
   const page = sp.page ? parseInt(sp.page, 10) : 1;
 
   const { items, total } = await listAdminPayments({
-    type: sp.type as "plan" | "adaptation" | undefined,
     status: sp.status,
     userId: sp.userId,
     from: sp.from,
@@ -69,7 +67,6 @@ export default async function AdminPagamentosPage({
   const buildUrl = (overrides: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
     const merged = {
-      type: sp.type,
       status: sp.status,
       userId: sp.userId,
       from: sp.from,
@@ -99,16 +96,6 @@ export default async function AdminPagamentosPage({
         action="/admin/pagamentos"
         className="flex flex-wrap gap-3 mb-6"
       >
-        <select
-          name="type"
-          defaultValue={sp.type ?? ""}
-          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700"
-        >
-          <option value="">Todos os tipos</option>
-          <option value="plan">Plano</option>
-          <option value="adaptation">Adaptação</option>
-        </select>
-
         <select
           name="status"
           defaultValue={sp.status ?? ""}
@@ -161,9 +148,8 @@ export default async function AdminPagamentosPage({
         <table className="w-full text-sm">
           <thead className="border-b border-stone-100 bg-stone-50 text-left text-xs font-semibold uppercase tracking-wide text-stone-500">
             <tr>
-              <th className="px-4 py-3">Tipo</th>
               <th className="px-4 py-3">Usuário</th>
-              <th className="px-4 py-3">Plano / Adaptação</th>
+              <th className="px-4 py-3">Plano</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Valor</th>
               <th className="px-4 py-3">Data</th>
@@ -174,7 +160,7 @@ export default async function AdminPagamentosPage({
             {items.length === 0 && (
               <tr>
                 <td
-                  colSpan={7}
+                   colSpan={6}
                   className="px-4 py-8 text-center text-stone-400"
                 >
                   Nenhum pagamento encontrado.
@@ -183,9 +169,6 @@ export default async function AdminPagamentosPage({
             )}
             {items.map((item) => (
               <tr key={item.checkoutId} className="hover:bg-stone-50">
-                <td className="px-4 py-3 font-mono text-xs text-stone-500">
-                  {item.type === "plan" ? "Plano" : "Adaptação"}
-                </td>
                 <td className="px-4 py-3">
                   <div className="text-stone-800 font-medium truncate max-w-[160px]">
                     {item.userEmail ?? item.userId}
@@ -202,7 +185,7 @@ export default async function AdminPagamentosPage({
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusClass(item.status)}`}
                   >
-                    {statusLabel(item.status, item.type)}
+                      {statusLabel(item.status)}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-stone-700">

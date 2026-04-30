@@ -1026,8 +1026,25 @@ test("user can redeem an awaiting analysis with one credit", async () => {
     .set("Authorization", `Bearer ${user.accessToken}`)
     .expect(201)
     .expect(({ body }) => {
-      assert.equal(body.paymentStatus, "completed");
+      assert.equal(body.isUnlocked, true);
     });
+
+  const unlock = await database.cvUnlock.findUnique({
+    where: { cvAdaptationId: adaptation.id },
+  });
+  assert.ok(unlock);
+  assert.equal(unlock?.source, "CREDIT");
+  assert.equal(unlock?.creditsConsumed, 1);
+
+  const planPurchasesCount = await database.planPurchase.count({
+    where: { userId: user.userId },
+  });
+  assert.equal(planPurchasesCount, 0);
+
+  const paymentLogsCount = await database.paymentAuditLog.count({
+    where: { internalCheckoutId: adaptation.id },
+  });
+  assert.equal(paymentLogsCount, 0);
 
   const refreshedUser = await database.user.findUnique({
     where: { id: user.userId },
@@ -1037,5 +1054,135 @@ test("user can redeem an awaiting analysis with one credit", async () => {
   assert.equal(refreshedUser?.creditsRemaining, 0);
 
   await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("redeem-credit does not debit twice for the same adaptation", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-redeem-idempotent");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      sourceFileType: "application/pdf",
+      rawText: "Resumo profissional de teste",
+    },
+  });
+
+  const adaptation = await database.cvAdaptation.create({
+    data: {
+      userId: user.userId,
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Descricao da vaga",
+      status: "awaiting_payment",
+      paymentStatus: "none",
+      adaptedContentJson: {
+        vaga: { cargo: "Data Manager", empresa: "EarlyCV" },
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: { creditsRemaining: 2 },
+  });
+
+  await request(app.getHttpServer())
+    .post(`/api/cv-adaptation/${adaptation.id}/redeem-credit`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(201);
+
+  await request(app.getHttpServer())
+    .post(`/api/cv-adaptation/${adaptation.id}/redeem-credit`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(201);
+
+  const refreshedUser = await database.user.findUnique({
+    where: { id: user.userId },
+    select: { creditsRemaining: true },
+  });
+  assert.equal(refreshedUser?.creditsRemaining, 1);
+
+  const unlockCount = await database.cvUnlock.count({
+    where: { cvAdaptationId: adaptation.id },
+  });
+  assert.equal(unlockCount, 1);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("admin payments list excludes cv unlock entries and cv-unlocks list includes them", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-admin-lists-user");
+  const superadmin = await registerUser(
+    app,
+    database,
+    "cv-adapt-admin-lists-superadmin",
+  );
+  await promoteToInternalAdmin(database, superadmin.userId, "superadmin");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      sourceFileType: "application/pdf",
+      rawText: "Resumo profissional de teste",
+    },
+  });
+
+  const adaptation = await database.cvAdaptation.create({
+    data: {
+      userId: user.userId,
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Descricao da vaga",
+      status: "awaiting_payment",
+      paymentStatus: "none",
+      adaptedContentJson: {
+        vaga: { cargo: "Data Analyst", empresa: "EarlyCV" },
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: { creditsRemaining: 1 },
+  });
+
+  await request(app.getHttpServer())
+    .post(`/api/cv-adaptation/${adaptation.id}/redeem-credit`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(201);
+
+  await request(app.getHttpServer())
+    .get("/api/payments/admin/list")
+    .set("Authorization", `Bearer ${superadmin.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(Array.isArray(body.items), true);
+      assert.equal(body.items.some((item: { checkoutId: string }) => item.checkoutId === adaptation.id), false);
+    });
+
+  await request(app.getHttpServer())
+    .get("/api/cv-unlocks/admin/list")
+    .set("Authorization", `Bearer ${superadmin.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(Array.isArray(body.items), true);
+      assert.equal(
+        body.items.some(
+          (item: { cvAdaptationId: string }) => item.cvAdaptationId === adaptation.id,
+        ),
+        true,
+      );
+    });
+
+  await deleteUserByEmail(database, user.email);
+  await deleteUserByEmail(database, superadmin.email);
   await app.close();
 });
