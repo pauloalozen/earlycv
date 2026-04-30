@@ -228,7 +228,11 @@ export default async function ComprasPage() {
               {/* Pagos */}
               <article style={{ ...CARD, padding: "20px" }}>
                 <p
-                  style={{ fontSize: 12.5, color: "#6a6560", margin: "0 0 6px" }}
+                  style={{
+                    fontSize: 12.5,
+                    color: "#6a6560",
+                    margin: "0 0 6px",
+                  }}
                 >
                   Pedidos pagos
                 </p>
@@ -249,7 +253,11 @@ export default async function ComprasPage() {
               {/* Pendentes */}
               <article style={{ ...CARD, padding: "20px" }}>
                 <p
-                  style={{ fontSize: 12.5, color: "#6a6560", margin: "0 0 6px" }}
+                  style={{
+                    fontSize: 12.5,
+                    color: "#6a6560",
+                    margin: "0 0 6px",
+                  }}
                 >
                   Aguardando pagamento
                 </p>
@@ -362,7 +370,7 @@ export default async function ComprasPage() {
                   }}
                   className="compras-btn-dark"
                 >
-                  Ver planos
+                  Ver pacotes
                 </a>
               </div>
             ) : (
@@ -402,7 +410,7 @@ export default async function ComprasPage() {
                                 margin: "0 0 4px",
                               }}
                             >
-                              Plano {item.planName ?? item.planType}
+                              Pacote {item.planName ?? item.planType}
                             </p>
                             <p
                               style={{
@@ -415,7 +423,11 @@ export default async function ComprasPage() {
                               {formatDate(item.createdAt)}
                             </p>
                             <div
-                              style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                flexWrap: "wrap",
+                              }}
                             >
                               <span
                                 style={{
@@ -506,7 +518,7 @@ export default async function ComprasPage() {
                                 }}
                                 className="compras-btn-dark"
                               >
-                                Continuar pagamento →
+                                Abrir pagamento novamente →
                               </a>
                             )}
                           </div>
