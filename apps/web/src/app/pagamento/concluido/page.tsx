@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
+import { AuthMonoShell } from "@/components/auth/auth-mono-shell";
 import { PageShell } from "@/components/page-shell";
 import {
   type CheckoutStatusResponse,
@@ -65,7 +66,7 @@ function ConcluidoContent() {
   }, [checkoutId]);
 
   return (
-    <main className="min-h-screen bg-[#F2F2F2] flex items-center justify-center p-6">
+    <AuthMonoShell>
       {state === "polling" && (
         <div className="text-center">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111] mx-auto mb-4" />
@@ -74,7 +75,7 @@ function ConcluidoContent() {
       )}
 
       {state === "approved" && (
-        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+        <div className="text-center">
           <div className="w-16 h-16 rounded-full bg-lime-100 flex items-center justify-center mx-auto mb-6">
             <svg
               aria-hidden="true"
@@ -115,13 +116,27 @@ function ConcluidoContent() {
             result.autoUnlockProcessedAt &&
             !result.autoUnlockError &&
             result.adaptationUnlocked && (
-              <Link
-                href={`/adaptar/resultado?adaptationId=${result.originAdaptationId}`}
-                style={{ color: "#ffffff" }}
-                className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222] mb-3"
-              >
-                Baixar CV liberado
-              </Link>
+              <>
+                <a
+                  href={`/api/cv-adaptation/${result.originAdaptationId}/download?format=pdf`}
+                  style={{ color: "#ffffff" }}
+                  className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222] mb-3"
+                >
+                  Baixar PDF
+                </a>
+                <a
+                  href={`/api/cv-adaptation/${result.originAdaptationId}/download?format=docx`}
+                  className="block w-full rounded-[14px] border border-[#D0D0D0] bg-white py-[14px] text-base font-medium leading-none text-center text-[#111111] transition-colors hover:bg-[#F5F5F5] mb-3"
+                >
+                  Baixar DOCX
+                </a>
+                <Link
+                  href={`/adaptar/resultado?adaptationId=${result.originAdaptationId}`}
+                  className="block w-full rounded-[14px] border border-[#D0D0D0] bg-white py-[14px] text-base font-medium leading-none text-center text-[#111111] transition-colors hover:bg-[#F5F5F5]"
+                >
+                  Ver análise do CV
+                </Link>
+              </>
             )}
 
           {result?.type === "adaptation" && result.adaptationId ? (
@@ -157,7 +172,7 @@ function ConcluidoContent() {
       )}
 
       {state === "pending-long" && (
-        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+        <div className="text-center">
           <div className="w-16 h-16 rounded-full bg-yellow-50 flex items-center justify-center mx-auto mb-6">
             <svg
               aria-hidden="true"
@@ -180,22 +195,23 @@ function ConcluidoContent() {
             Confirmação em andamento
           </h1>
           <p className="text-gray-500 text-sm mb-8">
-            Seu pagamento está sendo processado. Pode levar alguns minutos.
-            Assim que confirmado, você receberá acesso automaticamente.
+            Ainda estamos aguardando a confirmação do pagamento. Em pagamentos
+            via PIX ou boleto, isso pode levar alguns minutos. Assim que
+            confirmar, seus créditos e acesso serão liberados automaticamente.
           </p>
 
           <Link
-            href="/dashboard"
+            href="/adaptar"
             style={{ color: "#ffffff" }}
             className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222]"
           >
-            Ir para o painel
+            Voltar para análise e tentar depois
           </Link>
         </div>
       )}
 
       {state === "failed" && (
-        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+        <div className="text-center">
           <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-6">
             <svg
               aria-hidden="true"
@@ -229,11 +245,17 @@ function ConcluidoContent() {
           >
             Tentar novamente
           </Link>
+          <Link
+            href="/adaptar"
+            className="mt-4 inline-block text-sm text-gray-500 hover:text-gray-700"
+          >
+            Voltar para análise e tentar depois
+          </Link>
         </div>
       )}
 
       {state === "error" && (
-        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+        <div className="text-center">
           <p className="text-gray-500 text-sm mb-6">
             Não foi possível verificar o status do pagamento.
           </p>
@@ -245,7 +267,7 @@ function ConcluidoContent() {
           </Link>
         </div>
       )}
-    </main>
+    </AuthMonoShell>
   );
 }
 

@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { AuthMonoShell } from "@/components/auth/auth-mono-shell";
 import { PageShell } from "@/components/page-shell";
 
 export default function PagamentoFalhou() {
@@ -10,8 +11,8 @@ export default function PagamentoFalhou() {
 
   return (
     <PageShell>
-      <main className="min-h-screen bg-[#F2F2F2] flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+      <AuthMonoShell>
+        <div className="text-center">
           <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-6">
             <svg
               aria-hidden="true"
@@ -31,11 +32,10 @@ export default function PagamentoFalhou() {
           </div>
 
           <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-            Não foi possível processar o pagamento
+            Pagamento não aprovado
           </h1>
           <p className="text-gray-500 text-sm mb-8">
-            O pagamento foi recusado. Verifique os dados do cartão ou tente
-            outro método de pagamento.
+            O pagamento foi recusado ou expirou. Tente novamente.
           </p>
 
           <Link
@@ -48,12 +48,12 @@ export default function PagamentoFalhou() {
 
           <Link
             href="/dashboard"
-            className="text-sm text-gray-400 hover:text-gray-600"
+            className="text-sm text-gray-500 hover:text-gray-700"
           >
-            Voltar para o painel
+            Voltar para análise e tentar depois
           </Link>
         </div>
-      </main>
+      </AuthMonoShell>
     </PageShell>
   );
 }

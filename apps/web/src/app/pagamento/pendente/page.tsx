@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { AuthMonoShell } from "@/components/auth/auth-mono-shell";
 import { PageShell } from "@/components/page-shell";
 import {
   getCheckoutStatusClient,
@@ -130,9 +131,9 @@ function PendenteContent() {
   }, [checkoutId, mpPaymentId, mpPreferenceId, mpStatus]);
 
   return (
-    <main className="min-h-screen bg-[#F2F2F2] flex items-center justify-center p-6">
+    <AuthMonoShell>
       {state === "waiting" && (
-        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+        <div className="text-center">
           <div className="w-16 h-16 rounded-full bg-yellow-50 flex items-center justify-center mx-auto mb-6">
             <svg
               aria-hidden="true"
@@ -199,7 +200,7 @@ function PendenteContent() {
       )}
 
       {state === "approved" && (
-        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+        <div className="text-center">
           <div className="w-16 h-16 rounded-full bg-lime-100 flex items-center justify-center mx-auto mb-6">
             <svg
               aria-hidden="true"
@@ -221,17 +222,31 @@ function PendenteContent() {
             Pagamento confirmado!
           </h1>
           <p className="text-gray-500 text-sm mb-8">
-            Seus créditos estão disponíveis.
+            Seus créditos já estão disponíveis e seu cv já está liberado.
           </p>
 
           {adaptationId ? (
-            <Link
-              href={`/adaptar/resultado?adaptationId=${adaptationId}`}
-              style={{ color: "#ffffff" }}
-              className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222]"
-            >
-              Ver e baixar meu CV
-            </Link>
+            <>
+              <a
+                href={`/api/cv-adaptation/${adaptationId}/download?format=pdf`}
+                style={{ color: "#ffffff" }}
+                className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222] mb-3"
+              >
+                Baixar PDF
+              </a>
+              <a
+                href={`/api/cv-adaptation/${adaptationId}/download?format=docx`}
+                className="block w-full rounded-[14px] border border-[#D0D0D0] bg-white py-[14px] text-base font-medium leading-none text-center text-[#111111] transition-colors hover:bg-[#F5F5F5] mb-3"
+              >
+                Baixar DOCX
+              </a>
+              <Link
+                href={`/adaptar/resultado?adaptationId=${adaptationId}`}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                Voltar para análise e baixar depois
+              </Link>
+            </>
           ) : (
             <Link
               href="/adaptar"
@@ -245,7 +260,7 @@ function PendenteContent() {
       )}
 
       {state === "timeout" && (
-        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+        <div className="text-center">
           <div className="w-16 h-16 rounded-full bg-yellow-50 flex items-center justify-center mx-auto mb-6">
             <svg
               aria-hidden="true"
@@ -268,12 +283,11 @@ function PendenteContent() {
             Ainda aguardando confirmação
           </h1>
           <p className="text-gray-500 text-sm mb-2">
-            O pagamento ainda não foi confirmado pelo Mercado Pago. Pode levar
-            alguns minutos para PIX e boleto.
+            Ainda estamos aguardando a confirmação do pagamento.
           </p>
           <p className="text-gray-400 text-xs mb-8">
+            Em pagamentos via PIX ou boleto, isso pode levar alguns minutos.
             Assim que confirmar, seus créditos serão liberados automaticamente.
-            Você pode verificar novamente ou ir ao painel.
           </p>
 
           <button
@@ -287,16 +301,16 @@ function PendenteContent() {
             Verificar novamente
           </button>
           <Link
-            href="/dashboard"
-            className="text-sm text-gray-400 hover:text-gray-600"
+            href="/adaptar"
+            className="text-sm text-gray-500 hover:text-gray-700"
           >
-            Ir para o painel
+            Voltar para análise e tentar depois
           </Link>
         </div>
       )}
 
       {state === "failed" && (
-        <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm text-center">
+        <div className="text-center">
           <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-6">
             <svg
               aria-hidden="true"
@@ -329,9 +343,15 @@ function PendenteContent() {
           >
             Tentar novamente
           </Link>
+          <Link
+            href="/adaptar"
+            className="mt-4 inline-block text-sm text-gray-500 hover:text-gray-700"
+          >
+            Voltar para análise e tentar depois
+          </Link>
         </div>
       )}
-    </main>
+    </AuthMonoShell>
   );
 }
 
@@ -340,7 +360,7 @@ export default function PagamentoPendente() {
     <PageShell>
       <Suspense
         fallback={
-          <main className="min-h-screen bg-[#F2F2F2] flex items-center justify-center p-6">
+          <main className="min-h-screen flex items-center justify-center p-6">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111]" />
           </main>
         }
