@@ -102,6 +102,28 @@ function ConcluidoContent() {
                 : "Seu CV adaptado está pronto.")}
           </p>
 
+          {result?.originAction === "unlock_cv" && result.autoUnlockError && (
+            <p className="text-sm text-amber-700 mb-4">
+              Seu pagamento foi aprovado e os créditos foram adicionados. Não
+              conseguimos liberar automaticamente este CV, mas você pode
+              liberá-lo manualmente.
+            </p>
+          )}
+
+          {result?.originAction === "unlock_cv" &&
+            result.originAdaptationId &&
+            result.autoUnlockProcessedAt &&
+            !result.autoUnlockError &&
+            result.adaptationUnlocked && (
+              <Link
+                href={`/adaptar/${result.originAdaptationId}/resultado`}
+                style={{ color: "#ffffff" }}
+                className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222] mb-3"
+              >
+                Baixar CV liberado
+              </Link>
+            )}
+
           {result?.type === "adaptation" && result.adaptationId ? (
             <button
               type="button"

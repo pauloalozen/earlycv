@@ -134,6 +134,11 @@ enum PaymentProvider {
   stripe
 }
 
+enum PlanPurchaseOriginAction {
+  buy_credits
+  unlock_cv
+}
+
 enum CvUnlockSource {
   CREDIT
   ADMIN
@@ -234,12 +239,17 @@ model PlanPurchase {
   mpPaymentId          String?
   mpMerchantOrderId    String?
   mpPreferenceId       String?
+  originAction         PlanPurchaseOriginAction @default(buy_credits)
+  originAdaptationId   String?
+  autoUnlockProcessedAt DateTime?
+  autoUnlockError      String?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([originAdaptationId])
   @@index([paymentReference])
   @@index([mpPaymentId])
 }

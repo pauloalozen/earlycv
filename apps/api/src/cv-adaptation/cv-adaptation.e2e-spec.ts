@@ -89,6 +89,34 @@ async function registerUser(
   };
 }
 
+async function markPurchaseAsApproved(
+  app: INestApplication,
+  paymentReference: string,
+) {
+  const plansService = app.get(PlansService) as unknown as {
+    handleWebhook: (provider: string, body: unknown) => Promise<void>;
+    resolveMercadoPagoPayment: (body: unknown) => Promise<{
+      paymentReference: string | null;
+      status: "approved" | "failed" | "pending" | "unknown";
+    }>;
+  };
+
+  const originalResolve = plansService.resolveMercadoPagoPayment;
+  plansService.resolveMercadoPagoPayment = async () => ({
+    paymentReference,
+    status: "approved",
+  });
+
+  try {
+    await plansService.handleWebhook("mercadopago", {
+      type: "payment",
+      data: { id: "fake" },
+    });
+  } finally {
+    plansService.resolveMercadoPagoPayment = originalResolve;
+  }
+}
+
 test("POST /cv-adaptation with masterResumeId creates an adaptation", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "cv-adaptation-user");
@@ -334,11 +362,7 @@ test("DELETE /cv-adaptation/:id also deletes the adaptedResume if present", asyn
 
 test("POST /cv-adaptation/save-guest-preview without saveAsMaster does not create a primary master resume", async () => {
   const { app, database } = await createApp();
-  const user = await registerUser(
-    app,
-    database,
-    "cv-save-nomaster",
-  );
+  const user = await registerUser(app, database, "cv-save-nomaster");
 
   try {
     const snapshot = await database.analysisCvSnapshot.create({
@@ -466,7 +490,9 @@ test("POST /cv-adaptation/save-guest-preview with saveAsMaster promotes uploaded
 
     assert.equal(resumes.length, 2);
 
-    const promoted = resumes.find((resume) => resume.id === response.body.masterResumeId);
+    const promoted = resumes.find(
+      (resume) => resume.id === response.body.masterResumeId,
+    );
     assert.ok(promoted);
     assert.equal(promoted?.kind, "master");
     assert.equal(promoted?.isMaster, true);
@@ -1165,7 +1191,12 @@ test("admin payments list excludes cv unlock entries and cv-unlocks list include
     .expect(200)
     .expect(({ body }) => {
       assert.equal(Array.isArray(body.items), true);
-      assert.equal(body.items.some((item: { checkoutId: string }) => item.checkoutId === adaptation.id), false);
+      assert.equal(
+        body.items.some(
+          (item: { checkoutId: string }) => item.checkoutId === adaptation.id,
+        ),
+        false,
+      );
     });
 
   await request(app.getHttpServer())
@@ -1176,7 +1207,8 @@ test("admin payments list excludes cv unlock entries and cv-unlocks list include
       assert.equal(Array.isArray(body.items), true);
       assert.equal(
         body.items.some(
-          (item: { cvAdaptationId: string }) => item.cvAdaptationId === adaptation.id,
+          (item: { cvAdaptationId: string }) =>
+            item.cvAdaptationId === adaptation.id,
         ),
         true,
       );
@@ -1184,5 +1216,495 @@ test("admin payments list excludes cv unlock entries and cv-unlocks list include
 
   await deleteUserByEmail(database, user.email);
   await deleteUserByEmail(database, superadmin.email);
+  await app.close();
+});
+
+test("approved buy_credits purchase does not auto-unlock adaptation", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "p-buy-no-unlock");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Resumo profissional",
+    },
+  });
+
+  const adaptation = await database.cvAdaptation.create({
+    data: {
+      userId: user.userId,
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Descricao da vaga",
+      status: "awaiting_payment",
+      paymentStatus: "none",
+      adaptedContentJson: { vaga: { cargo: "Data" } } as Prisma.InputJsonValue,
+    },
+  });
+
+  const paymentReference = randomUUID();
+  await database.planPurchase.create({
+    data: {
+      userId: user.userId,
+      planType: "starter",
+      amountInCents: 1190,
+      currency: "BRL",
+      paymentProvider: "mercadopago",
+      paymentReference,
+      status: "pending",
+      creditsGranted: 3,
+      analysisCreditsGranted: 6,
+      originAction: "buy_credits",
+    },
+  });
+
+  await markPurchaseAsApproved(app, paymentReference);
+
+  const refreshedAdaptation = await database.cvAdaptation.findUnique({
+    where: { id: adaptation.id },
+    select: { isUnlocked: true },
+  });
+  assert.equal(refreshedAdaptation?.isUnlocked, false);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("approved unlock_cv purchase with one credit unlocks and leaves net zero credits", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "p-unlock-1");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Resumo profissional",
+    },
+  });
+
+  const adaptation = await database.cvAdaptation.create({
+    data: {
+      userId: user.userId,
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Descricao da vaga",
+      status: "awaiting_payment",
+      paymentStatus: "none",
+      adaptedContentJson: { vaga: { cargo: "Data" } } as Prisma.InputJsonValue,
+    },
+  });
+
+  const paymentReference = randomUUID();
+  await database.planPurchase.create({
+    data: {
+      userId: user.userId,
+      planType: "starter",
+      amountInCents: 1190,
+      currency: "BRL",
+      paymentProvider: "mercadopago",
+      paymentReference,
+      status: "pending",
+      creditsGranted: 1,
+      analysisCreditsGranted: 6,
+      originAction: "unlock_cv",
+      originAdaptationId: adaptation.id,
+    },
+  });
+
+  await markPurchaseAsApproved(app, paymentReference);
+
+  const refreshedUser = await database.user.findUnique({
+    where: { id: user.userId },
+    select: { creditsRemaining: true },
+  });
+  assert.equal(refreshedUser?.creditsRemaining, 0);
+
+  const refreshedAdaptation = await database.cvAdaptation.findUnique({
+    where: { id: adaptation.id },
+    select: { isUnlocked: true },
+  });
+  assert.equal(refreshedAdaptation?.isUnlocked, true);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("approved unlock_cv purchase with five credits unlocks and leaves net +4 credits", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "p-unlock-5");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Resumo profissional",
+    },
+  });
+
+  const adaptation = await database.cvAdaptation.create({
+    data: {
+      userId: user.userId,
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Descricao da vaga",
+      status: "awaiting_payment",
+      paymentStatus: "none",
+      adaptedContentJson: { vaga: { cargo: "Data" } } as Prisma.InputJsonValue,
+    },
+  });
+
+  const paymentReference = randomUUID();
+  await database.planPurchase.create({
+    data: {
+      userId: user.userId,
+      planType: "pro",
+      amountInCents: 2990,
+      currency: "BRL",
+      paymentProvider: "mercadopago",
+      paymentReference,
+      status: "pending",
+      creditsGranted: 5,
+      analysisCreditsGranted: 9,
+      originAction: "unlock_cv",
+      originAdaptationId: adaptation.id,
+    },
+  });
+
+  await markPurchaseAsApproved(app, paymentReference);
+
+  const refreshedUser = await database.user.findUnique({
+    where: { id: user.userId },
+    select: { creditsRemaining: true },
+  });
+  assert.equal(refreshedUser?.creditsRemaining, 4);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("duplicate approved webhook does not duplicate credit or debit", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "p-dup-webhook");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Resumo profissional",
+    },
+  });
+
+  const adaptation = await database.cvAdaptation.create({
+    data: {
+      userId: user.userId,
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Descricao da vaga",
+      status: "awaiting_payment",
+      paymentStatus: "none",
+      adaptedContentJson: { vaga: { cargo: "Data" } } as Prisma.InputJsonValue,
+    },
+  });
+
+  const paymentReference = randomUUID();
+  await database.planPurchase.create({
+    data: {
+      userId: user.userId,
+      planType: "pro",
+      amountInCents: 2990,
+      currency: "BRL",
+      paymentProvider: "mercadopago",
+      paymentReference,
+      status: "pending",
+      creditsGranted: 5,
+      analysisCreditsGranted: 9,
+      originAction: "unlock_cv",
+      originAdaptationId: adaptation.id,
+    },
+  });
+
+  await markPurchaseAsApproved(app, paymentReference);
+  await markPurchaseAsApproved(app, paymentReference);
+
+  const refreshedUser = await database.user.findUnique({
+    where: { id: user.userId },
+    select: { creditsRemaining: true },
+  });
+  assert.equal(refreshedUser?.creditsRemaining, 4);
+
+  const unlockCount = await database.cvUnlock.count({
+    where: { cvAdaptationId: adaptation.id },
+  });
+  assert.equal(unlockCount, 1);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("approved unlock_cv does not debit again when adaptation is already unlocked", async () => {
+  const { app, database } = await createApp();
+  let user: RegisterResult | null = null;
+
+  try {
+    user = await registerUser(app, database, "p-unlock-already");
+
+    const masterResume = await database.resume.create({
+      data: {
+        userId: user.userId,
+        title: "CV Master",
+        kind: "master",
+        status: "uploaded",
+        rawText: "Resumo profissional",
+      },
+    });
+
+    const adaptation = await database.cvAdaptation.create({
+      data: {
+        userId: user.userId,
+        masterResumeId: masterResume.id,
+        jobDescriptionText: "Descricao da vaga",
+        status: "paid",
+        paymentStatus: "none",
+        isUnlocked: true,
+        unlockedAt: new Date(),
+        adaptedContentJson: {
+          vaga: { cargo: "Data" },
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    const paymentReference = randomUUID();
+    const purchase = await database.planPurchase.create({
+      data: {
+        userId: user.userId,
+        planType: "starter",
+        amountInCents: 1190,
+        currency: "BRL",
+        paymentProvider: "mercadopago",
+        paymentReference,
+        status: "pending",
+        creditsGranted: 1,
+        analysisCreditsGranted: 6,
+        originAction: "unlock_cv",
+        originAdaptationId: adaptation.id,
+      },
+    });
+
+    await markPurchaseAsApproved(app, paymentReference);
+
+    const refreshedUser = await database.user.findUnique({
+      where: { id: user.userId },
+      select: { creditsRemaining: true },
+    });
+
+    const unlockCount = await database.cvUnlock.count({
+      where: { cvAdaptationId: adaptation.id },
+    });
+
+    const refreshedPurchase = await database.planPurchase.findUnique({
+      where: { id: purchase.id },
+      select: {
+        status: true,
+        originAction: true,
+        creditsGranted: true,
+        autoUnlockProcessedAt: true,
+        autoUnlockError: true,
+      },
+    });
+
+    const refreshedAdaptation = await database.cvAdaptation.findUnique({
+      where: { id: adaptation.id },
+      select: { isUnlocked: true },
+    });
+
+    assert.equal(
+      refreshedUser?.creditsRemaining,
+      1,
+      `creditsRemaining expected 1, got ${String(refreshedUser?.creditsRemaining)}`,
+    );
+    assert.equal(
+      refreshedPurchase?.status,
+      "completed",
+      `purchase status expected completed, got ${String(refreshedPurchase?.status)}`,
+    );
+    assert.equal(
+      refreshedPurchase?.originAction,
+      "unlock_cv",
+      `originAction expected unlock_cv, got ${String(refreshedPurchase?.originAction)}`,
+    );
+    assert.equal(
+      refreshedPurchase?.creditsGranted,
+      1,
+      `creditsGranted expected 1, got ${String(refreshedPurchase?.creditsGranted)}`,
+    );
+    assert.equal(
+      refreshedAdaptation?.isUnlocked,
+      true,
+      `adaptationUnlocked expected true, got ${String(refreshedAdaptation?.isUnlocked)}`,
+    );
+    assert.equal(
+      refreshedPurchase?.autoUnlockError,
+      null,
+      `autoUnlockError expected null, got ${String(refreshedPurchase?.autoUnlockError)}`,
+    );
+    assert.ok(
+      refreshedPurchase?.autoUnlockProcessedAt,
+      `autoUnlockProcessedAt expected present, got ${String(refreshedPurchase?.autoUnlockProcessedAt)}`,
+    );
+    assert.equal(
+      unlockCount,
+      0,
+      `unlockCount expected 0, got ${String(unlockCount)}`,
+    );
+  } finally {
+    if (user) {
+      await deleteUserByEmail(database, user.email);
+    }
+    await app.close();
+  }
+});
+
+test("ownership mismatch records autoUnlockError and preserves purchased credits", async () => {
+  const { app, database } = await createApp();
+  const buyer = await registerUser(app, database, "p-mismatch-buyer");
+  const owner = await registerUser(app, database, "p-mismatch-owner");
+
+  const ownerResume = await database.resume.create({
+    data: {
+      userId: owner.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Resumo profissional",
+    },
+  });
+
+  const adaptation = await database.cvAdaptation.create({
+    data: {
+      userId: owner.userId,
+      masterResumeId: ownerResume.id,
+      jobDescriptionText: "Descricao da vaga",
+      status: "awaiting_payment",
+      paymentStatus: "none",
+      adaptedContentJson: { vaga: { cargo: "Data" } } as Prisma.InputJsonValue,
+    },
+  });
+
+  const paymentReference = randomUUID();
+  const purchase = await database.planPurchase.create({
+    data: {
+      userId: buyer.userId,
+      planType: "starter",
+      amountInCents: 1190,
+      currency: "BRL",
+      paymentProvider: "mercadopago",
+      paymentReference,
+      status: "pending",
+      creditsGranted: 1,
+      analysisCreditsGranted: 6,
+      originAction: "unlock_cv",
+      originAdaptationId: adaptation.id,
+    },
+  });
+
+  await markPurchaseAsApproved(app, paymentReference);
+
+  const refreshedBuyer = await database.user.findUnique({
+    where: { id: buyer.userId },
+    select: { creditsRemaining: true },
+  });
+  assert.equal(refreshedBuyer?.creditsRemaining, 1);
+
+  const refreshedAdaptation = await database.cvAdaptation.findUnique({
+    where: { id: adaptation.id },
+    select: { isUnlocked: true },
+  });
+  assert.equal(refreshedAdaptation?.isUnlocked, false);
+
+  const refreshedPurchase = await database.planPurchase.findUnique({
+    where: { id: purchase.id },
+    select: { autoUnlockError: true },
+  });
+  assert.match(
+    String(refreshedPurchase?.autoUnlockError),
+    /ownership mismatch/i,
+  );
+
+  await deleteUserByEmail(database, buyer.email);
+  await deleteUserByEmail(database, owner.email);
+  await app.close();
+});
+
+test("missing adapted content records autoUnlockError and preserves purchased credits", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "p-unlock-no-content");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Resumo profissional",
+    },
+  });
+
+  const adaptation = await database.cvAdaptation.create({
+    data: {
+      userId: user.userId,
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Descricao da vaga",
+      status: "awaiting_payment",
+      paymentStatus: "none",
+      adaptedContentJson: null,
+    },
+  });
+
+  const paymentReference = randomUUID();
+  const purchase = await database.planPurchase.create({
+    data: {
+      userId: user.userId,
+      planType: "starter",
+      amountInCents: 1190,
+      currency: "BRL",
+      paymentProvider: "mercadopago",
+      paymentReference,
+      status: "pending",
+      creditsGranted: 1,
+      analysisCreditsGranted: 6,
+      originAction: "unlock_cv",
+      originAdaptationId: adaptation.id,
+    },
+  });
+
+  await markPurchaseAsApproved(app, paymentReference);
+
+  const refreshedUser = await database.user.findUnique({
+    where: { id: user.userId },
+    select: { creditsRemaining: true },
+  });
+  assert.equal(refreshedUser?.creditsRemaining, 1);
+
+  const refreshedAdaptation = await database.cvAdaptation.findUnique({
+    where: { id: adaptation.id },
+    select: { isUnlocked: true },
+  });
+  assert.equal(refreshedAdaptation?.isUnlocked, false);
+
+  const refreshedPurchase = await database.planPurchase.findUnique({
+    where: { id: purchase.id },
+    select: { autoUnlockError: true },
+  });
+  assert.match(
+    String(refreshedPurchase?.autoUnlockError),
+    /no adapted content/i,
+  );
+
+  await deleteUserByEmail(database, user.email);
   await app.close();
 });

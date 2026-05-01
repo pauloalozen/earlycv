@@ -176,6 +176,12 @@ test("resumeCheckout recreates MP checkout for pending purchase owned by user", 
           status: "pending",
         }),
       },
+      user: {
+        findUnique: async () => ({
+          email: "user-1@earlycv.com.br",
+          name: "User One",
+        }),
+      },
     } as never,
     {
       record: async () => ({ event: { id: "evt-1" }, ingested: true }),
@@ -193,18 +199,27 @@ test("resumeCheckout recreates MP checkout for pending purchase owned by user", 
           downloadCreditsGranted: number;
           analysisCreditsGranted: number;
         },
+        payer?: {
+          email: string;
+          name?: string;
+        },
       ) => Promise<string>;
     }
   ).createMercadoPagoPreference = async (
     purchaseId,
     paymentReference,
     plan,
+    payer,
   ) => {
     assert.equal(purchaseId, "purchase-1");
     assert.equal(paymentReference, "pay-ref-1");
     assert.equal(plan.amountInCents, 2990);
     assert.equal(plan.downloadCreditsGranted, 3);
     assert.equal(plan.analysisCreditsGranted, 9);
+    assert.deepEqual(payer, {
+      email: "user-1@earlycv.com.br",
+      name: "User One",
+    });
     return "https://mp.test/checkout/new";
   };
 
@@ -226,6 +241,12 @@ test("resumeCheckout rejects purchase from another user", async () => {
           analysisCreditsGranted: 9,
           paymentReference: "pay-ref-1",
           status: "pending",
+        }),
+      },
+      user: {
+        findUnique: async () => ({
+          email: "user-1@earlycv.com.br",
+          name: "User One",
         }),
       },
     } as never,
@@ -255,6 +276,12 @@ test("resumeCheckout rejects non-pending purchase", async () => {
           status: "completed",
         }),
       },
+      user: {
+        findUnique: async () => ({
+          email: "user-1@earlycv.com.br",
+          name: "User One",
+        }),
+      },
     } as never,
     {
       record: async () => ({ event: { id: "evt-3" }, ingested: true }),
@@ -265,4 +292,158 @@ test("resumeCheckout rejects non-pending purchase", async () => {
     () => service.resumeCheckout("user-1", "purchase-1"),
     /Compra nao pode ser retomada/,
   );
+});
+
+test("resumeCheckout keeps working when user email is invalid", async () => {
+  const service = new PlansService(
+    {
+      planPurchase: {
+        findUnique: async () => ({
+          id: "purchase-1",
+          userId: "user-1",
+          planType: "pro",
+          amountInCents: 2990,
+          creditsGranted: 3,
+          analysisCreditsGranted: 9,
+          paymentReference: "pay-ref-1",
+          status: "pending",
+        }),
+      },
+      user: {
+        findUnique: async () => ({
+          email: "invalid-email",
+          name: "User One",
+        }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-4" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      createMercadoPagoPreference: (
+        purchaseId: string,
+        paymentReference: string,
+        plan: {
+          label: string;
+          amountInCents: number;
+          downloadCreditsGranted: number;
+          analysisCreditsGranted: number;
+        },
+        payer?: {
+          email: string;
+          name?: string;
+        },
+      ) => Promise<string>;
+    }
+  ).createMercadoPagoPreference = async (
+    purchaseId,
+    paymentReference,
+    plan,
+    payer,
+  ) => {
+    assert.equal(purchaseId, "purchase-1");
+    assert.equal(paymentReference, "pay-ref-1");
+    assert.equal(plan.amountInCents, 2990);
+    assert.equal(payer, undefined);
+    return "https://mp.test/checkout/new";
+  };
+
+  const result = await service.resumeCheckout("user-1", "purchase-1");
+
+  assert.deepEqual(result, { checkoutUrl: "https://mp.test/checkout/new" });
+});
+
+test("createCheckout with adaptationId reuses only unlock_cv purchase", async () => {
+  let receivedWhere: Record<string, unknown> | null = null;
+  const service = new PlansService(
+    {
+      cvAdaptation: {
+        findUnique: async () => ({
+          userId: "user-1",
+          isUnlocked: false,
+          adaptedContentJson: { ok: true },
+        }),
+      },
+      planPurchase: {
+        findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+          receivedWhere = where;
+          return null;
+        },
+        create: async () => ({
+          id: "purchase-1",
+          paymentReference: "pay-ref-1",
+        }),
+      },
+      user: {
+        findUnique: async () => ({ email: "a@b.com", name: "User" }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-5" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      createMercadoPagoPreference: (
+        purchaseId: string,
+        paymentReference: string,
+        plan: { label: string; amountInCents: number },
+      ) => Promise<string>;
+    }
+  ).createMercadoPagoPreference = async () => "https://mp.test/checkout/new";
+
+  await service.createCheckout(
+    "user-1",
+    "starter",
+    "00000000-0000-0000-0000-000000000001",
+  );
+
+  assert.equal(receivedWhere?.originAction, "unlock_cv");
+  assert.equal(
+    receivedWhere?.originAdaptationId,
+    "00000000-0000-0000-0000-000000000001",
+  );
+});
+
+test("createCheckout without adaptationId reuses only buy_credits purchase", async () => {
+  let receivedWhere: Record<string, unknown> | null = null;
+  const service = new PlansService(
+    {
+      planPurchase: {
+        findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+          receivedWhere = where;
+          return null;
+        },
+        create: async () => ({
+          id: "purchase-1",
+          paymentReference: "pay-ref-1",
+        }),
+      },
+      user: {
+        findUnique: async () => ({ email: "a@b.com", name: "User" }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-6" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      createMercadoPagoPreference: (
+        purchaseId: string,
+        paymentReference: string,
+        plan: { label: string; amountInCents: number },
+      ) => Promise<string>;
+    }
+  ).createMercadoPagoPreference = async () => "https://mp.test/checkout/new";
+
+  await service.createCheckout("user-1", "starter");
+
+  assert.equal(receivedWhere?.originAction, "buy_credits");
+  assert.equal(receivedWhere?.originAdaptationId, null);
 });

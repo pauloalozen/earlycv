@@ -40,6 +40,13 @@ type AuditEntry = {
   rawPayload?: object | null;
 };
 
+type MercadoPagoPayerInput = {
+  email: string;
+  name?: string;
+};
+
+type PurchaseOriginAction = "buy_credits" | "unlock_cv";
+
 const PLAN_CONFIG: Record<
   PlanId,
   {
@@ -111,6 +118,10 @@ export class PlansService {
       paymentReference: string;
       createdAt: string;
       pendingPaymentUrl: string | null;
+      originAction: PurchaseOriginAction;
+      originAdaptationId: string | null;
+      autoUnlockProcessedAt: string | null;
+      autoUnlockError: string | null;
     }[]
   > {
     const purchases = await this.database.planPurchase.findMany({
@@ -129,6 +140,10 @@ export class PlansService {
         mpPreferenceId: true,
         paymentReference: true,
         createdAt: true,
+        originAction: true,
+        originAdaptationId: true,
+        autoUnlockProcessedAt: true,
+        autoUnlockError: true,
       },
     });
 
@@ -148,6 +163,10 @@ export class PlansService {
       mpPreferenceId: p.mpPreferenceId ?? null,
       paymentReference: p.paymentReference,
       createdAt: p.createdAt.toISOString(),
+      originAction: p.originAction,
+      originAdaptationId: p.originAdaptationId,
+      autoUnlockProcessedAt: p.autoUnlockProcessedAt?.toISOString() ?? null,
+      autoUnlockError: p.autoUnlockError,
       pendingPaymentUrl:
         p.status === "pending" || p.status === "none"
           ? `${frontendUrl}/pagamento/pendente?checkoutId=${p.id}&resume=1`
@@ -161,12 +180,19 @@ export class PlansService {
     adaptationId?: string,
   ): Promise<{ checkoutUrl: string; purchaseId: string }> {
     const plan = PLAN_CONFIG[planId];
+    const payer = await this.resolveMercadoPagoPayer(userId);
+
+    if (adaptationId) {
+      await this.assertAdaptationCanBeAutoUnlocked(userId, adaptationId);
+    }
 
     const existing = await this.database.planPurchase.findFirst({
       where: {
         userId,
         planType: planId as UserPlanType,
         status: { in: ["none", "pending"] },
+        originAction: adaptationId ? "unlock_cv" : "buy_credits",
+        originAdaptationId: adaptationId ?? null,
       },
       orderBy: { createdAt: "desc" },
     });
@@ -179,6 +205,7 @@ export class PlansService {
         existing.id,
         existing.paymentReference,
         plan,
+        payer,
         adaptationId,
       );
       return { checkoutUrl, purchaseId: existing.id };
@@ -196,6 +223,8 @@ export class PlansService {
         paymentReference,
         creditsGranted: plan.downloadCreditsGranted,
         analysisCreditsGranted: plan.analysisCreditsGranted,
+        originAction: adaptationId ? "unlock_cv" : "buy_credits",
+        originAdaptationId: adaptationId ?? null,
       },
     });
 
@@ -203,6 +232,7 @@ export class PlansService {
       purchase.id,
       paymentReference,
       plan,
+      payer,
       adaptationId,
     );
 
@@ -213,6 +243,7 @@ export class PlansService {
     userId: string,
     purchaseId: string,
   ): Promise<{ checkoutUrl: string }> {
+    const payer = await this.resolveMercadoPagoPayer(userId);
     const purchase = await this.database.planPurchase.findUnique({
       where: { id: purchaseId },
       select: {
@@ -248,6 +279,7 @@ export class PlansService {
         downloadCreditsGranted: purchase.creditsGranted,
         analysisCreditsGranted: purchase.analysisCreditsGranted,
       },
+      payer,
     );
 
     this.logger.log(
@@ -498,45 +530,10 @@ export class PlansService {
       });
       if (!current || current.status === "completed") return;
 
-      const analysisCredits = this.resolveAnalysisCreditsForActivation(
-        purchase.planType,
-        purchase.analysisCreditsGranted,
-      );
-      const isUnlimited = purchase.planType === "unlimited";
-      const planExpiresAt = isUnlimited
-        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-        : null;
-
-      await tx.planPurchase.update({
-        where: { id: purchase.id },
-        data: {
-          status: "completed",
-          paidAt: new Date(),
-          ...(!purchase.mpPaymentId && resolution.paymentId
-            ? { mpPaymentId: resolution.paymentId }
-            : {}),
-          ...(!purchase.mpMerchantOrderId && resolution.merchantOrderId
-            ? { mpMerchantOrderId: resolution.merchantOrderId }
-            : {}),
-          ...(!purchase.mpPreferenceId && resolution.preferenceId
-            ? { mpPreferenceId: resolution.preferenceId }
-            : {}),
-        },
-      });
-
-      await tx.user.update({
-        where: { id: purchase.userId },
-        data: {
-          planType: purchase.planType,
-          planActivatedAt: new Date(),
-          planExpiresAt,
-          creditsRemaining: isUnlimited
-            ? 0
-            : { increment: purchase.creditsGranted },
-          analysisCreditsRemaining: isUnlimited
-            ? 0
-            : { increment: analysisCredits },
-        },
+      await this.applyApprovedPurchaseInsideTransaction(tx, current, {
+        mpMerchantOrderId: resolution.merchantOrderId,
+        mpPaymentId: resolution.paymentId,
+        mpPreferenceId: resolution.preferenceId,
       });
     });
 
@@ -566,34 +563,7 @@ export class PlansService {
         return null;
       }
 
-      const analysisCredits = this.resolveAnalysisCreditsForActivation(
-        purchase.planType,
-        purchase.analysisCreditsGranted,
-      );
-      const isUnlimited = purchase.planType === "unlimited";
-      const planExpiresAt = isUnlimited
-        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-        : null;
-
-      await tx.user.update({
-        where: { id: purchase.userId },
-        data: {
-          planType: purchase.planType,
-          planActivatedAt: new Date(),
-          planExpiresAt,
-          creditsRemaining: isUnlimited
-            ? 0
-            : { increment: purchase.creditsGranted },
-          analysisCreditsRemaining: isUnlimited
-            ? 0
-            : { increment: analysisCredits },
-        },
-      });
-
-      await tx.planPurchase.update({
-        where: { id: purchase.id },
-        data: { status: "completed", paidAt: new Date() },
-      });
+      await this.applyApprovedPurchaseInsideTransaction(tx, purchase);
 
       return purchase;
     });
@@ -647,6 +617,205 @@ export class PlansService {
       });
   }
 
+  private async applyApprovedPurchaseInsideTransaction(
+    tx: Prisma.TransactionClient,
+    purchase: {
+      id: string;
+      userId: string;
+      planType: UserPlanType;
+      paymentReference: string;
+      status: string;
+      creditsGranted: number;
+      analysisCreditsGranted: number;
+      originAction: PurchaseOriginAction;
+      originAdaptationId: string | null;
+      mpPaymentId: string | null;
+      mpMerchantOrderId: string | null;
+      mpPreferenceId: string | null;
+    },
+    updates?: {
+      mpPaymentId?: string | null;
+      mpMerchantOrderId?: string | null;
+      mpPreferenceId?: string | null;
+    },
+  ): Promise<void> {
+    const analysisCredits = this.resolveAnalysisCreditsForActivation(
+      purchase.planType,
+      purchase.analysisCreditsGranted,
+    );
+    const isUnlimited = purchase.planType === "unlimited";
+    const planExpiresAt = isUnlimited
+      ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      : null;
+
+    await tx.planPurchase.update({
+      where: { id: purchase.id },
+      data: {
+        status: "completed",
+        paidAt: new Date(),
+        ...(!purchase.mpPaymentId && updates?.mpPaymentId
+          ? { mpPaymentId: updates.mpPaymentId }
+          : {}),
+        ...(!purchase.mpMerchantOrderId && updates?.mpMerchantOrderId
+          ? { mpMerchantOrderId: updates.mpMerchantOrderId }
+          : {}),
+        ...(!purchase.mpPreferenceId && updates?.mpPreferenceId
+          ? { mpPreferenceId: updates.mpPreferenceId }
+          : {}),
+      },
+    });
+
+    await tx.user.update({
+      where: { id: purchase.userId },
+      data: {
+        planType: purchase.planType,
+        planActivatedAt: new Date(),
+        planExpiresAt,
+        creditsRemaining: isUnlimited
+          ? 0
+          : { increment: purchase.creditsGranted },
+        analysisCreditsRemaining: isUnlimited
+          ? 0
+          : { increment: analysisCredits },
+      },
+    });
+
+    if (
+      purchase.originAction !== "unlock_cv" ||
+      !purchase.originAdaptationId ||
+      isUnlimited
+    ) {
+      return;
+    }
+
+    if (purchase.creditsGranted <= 0) {
+      await tx.planPurchase.update({
+        where: { id: purchase.id },
+        data: {
+          autoUnlockError: "purchase has no credits to auto-unlock",
+        },
+      });
+      return;
+    }
+
+    const adaptation = await tx.cvAdaptation.findUnique({
+      where: { id: purchase.originAdaptationId },
+      select: {
+        id: true,
+        userId: true,
+        isUnlocked: true,
+        adaptedContentJson: true,
+      },
+    });
+
+    if (!adaptation) {
+      await tx.planPurchase.update({
+        where: { id: purchase.id },
+        data: {
+          autoUnlockError: "origin adaptation not found",
+        },
+      });
+      return;
+    }
+
+    if (adaptation.userId !== purchase.userId) {
+      await tx.planPurchase.update({
+        where: { id: purchase.id },
+        data: {
+          autoUnlockError: "origin adaptation ownership mismatch",
+        },
+      });
+      return;
+    }
+
+    if (adaptation.isUnlocked) {
+      await tx.planPurchase.update({
+        where: { id: purchase.id },
+        data: {
+          autoUnlockProcessedAt: new Date(),
+          autoUnlockError: null,
+        },
+      });
+      return;
+    }
+
+    if (!adaptation.adaptedContentJson) {
+      await tx.planPurchase.update({
+        where: { id: purchase.id },
+        data: {
+          autoUnlockError: "origin adaptation has no adapted content",
+        },
+      });
+      return;
+    }
+
+    await tx.user.update({
+      where: { id: purchase.userId },
+      data: { creditsRemaining: { decrement: 1 } },
+    });
+
+    await tx.cvAdaptation.update({
+      where: { id: adaptation.id },
+      data: {
+        status: "paid",
+        isUnlocked: true,
+        unlockedAt: new Date(),
+      },
+    });
+
+    await tx.cvUnlock.upsert({
+      where: { cvAdaptationId: adaptation.id },
+      create: {
+        userId: purchase.userId,
+        cvAdaptationId: adaptation.id,
+        creditsConsumed: 1,
+        source: "CREDIT",
+        status: "UNLOCKED",
+        unlockedAt: new Date(),
+      },
+      update: {
+        status: "UNLOCKED",
+        creditsConsumed: 1,
+        source: "CREDIT",
+        unlockedAt: new Date(),
+      },
+    });
+
+    await tx.planPurchase.update({
+      where: { id: purchase.id },
+      data: {
+        autoUnlockProcessedAt: new Date(),
+        autoUnlockError: null,
+      },
+    });
+  }
+
+  private async assertAdaptationCanBeAutoUnlocked(
+    userId: string,
+    adaptationId: string,
+  ): Promise<void> {
+    const adaptation = await this.database.cvAdaptation.findUnique({
+      where: { id: adaptationId },
+      select: {
+        userId: true,
+        isUnlocked: true,
+        adaptedContentJson: true,
+      },
+    });
+
+    if (!adaptation || adaptation.userId !== userId) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    if (adaptation.isUnlocked) {
+      throw new BadRequestException("CV ja esta liberado.");
+    }
+
+    if (!adaptation.adaptedContentJson) {
+      throw new BadRequestException("Adaptation analysis is not ready yet.");
+    }
+  }
+
   private resolveAnalysisCreditsForActivation(
     planType: UserPlanType,
     analysisCreditsGranted: number,
@@ -660,6 +829,28 @@ export class PlansService {
     }
 
     return 0;
+  }
+
+  private async resolveMercadoPagoPayer(
+    userId: string,
+  ): Promise<MercadoPagoPayerInput | undefined> {
+    const user = await this.database.user.findUnique({
+      where: { id: userId },
+      select: {
+        email: true,
+        name: true,
+      },
+    });
+
+    if (!user || !isValidEmail(user.email)) {
+      return undefined;
+    }
+
+    const name = user.name.trim();
+    return {
+      email: user.email,
+      ...(name ? { name } : {}),
+    };
   }
 
   private logAuditEvent(entry: AuditEntry): void {
@@ -717,6 +908,7 @@ export class PlansService {
       downloadCreditsGranted?: number;
       analysisCreditsGranted?: number;
     },
+    payer?: MercadoPagoPayerInput,
     _adaptationId?: string,
   ): Promise<string> {
     const client = this.getMercadoPagoClient();
@@ -744,11 +936,15 @@ export class PlansService {
             },
           ],
           external_reference: paymentReference,
+          ...(payer ? { payer } : {}),
           notification_url: notificationUrl,
           back_urls: {
             success: successUrl,
             failure: `${frontendUrl}/pagamento/falhou?checkoutId=${purchaseId}`,
             pending: `${frontendUrl}/pagamento/pendente?checkoutId=${purchaseId}`,
+          },
+          payment_methods: {
+            excluded_payment_types: [{ id: "ticket" }],
           },
           ...(successUrl.startsWith("https://") && { auto_return: "approved" }),
         },
@@ -883,4 +1079,10 @@ function planTypeToDisplayName(planType: string): string | null {
 
 function isPaidPlanType(planType: string): planType is PlanId {
   return planType === "starter" || planType === "pro" || planType === "turbo";
+}
+
+function isValidEmail(value: string): boolean {
+  const email = value.trim();
+  if (!email) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }

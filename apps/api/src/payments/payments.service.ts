@@ -51,6 +51,11 @@ export type CheckoutStatusResponse = {
   creditsGranted: number | null;
   analysisCreditsGranted: number | null;
   adaptationId: string | null;
+  originAction: "buy_credits" | "unlock_cv";
+  originAdaptationId: string | null;
+  autoUnlockProcessedAt: string | null;
+  autoUnlockError: string | null;
+  adaptationUnlocked: boolean;
   paymentId: string | null;
   message: string;
 };
@@ -73,6 +78,15 @@ export class PaymentsService {
     });
 
     if (purchase) {
+      const adaptation = purchase.originAdaptationId
+        ? await this.database.cvAdaptation.findFirst({
+            where: {
+              id: purchase.originAdaptationId,
+              userId,
+            },
+            select: { isUnlocked: true },
+          })
+        : null;
       const status = mapPaymentStatus(purchase.status);
       const nextAction = mapNextAction(status);
       return {
@@ -84,7 +98,13 @@ export class PaymentsService {
         planName: planTypeToName(purchase.planType),
         creditsGranted: purchase.creditsGranted,
         analysisCreditsGranted: purchase.analysisCreditsGranted,
-        adaptationId: null,
+        adaptationId: purchase.originAdaptationId,
+        originAction: purchase.originAction,
+        originAdaptationId: purchase.originAdaptationId,
+        autoUnlockProcessedAt:
+          purchase.autoUnlockProcessedAt?.toISOString() ?? null,
+        autoUnlockError: purchase.autoUnlockError,
+        adaptationUnlocked: adaptation?.isUnlocked ?? false,
         paymentId: purchase.mpPaymentId ?? null,
         message: buildMessage(status, "plan"),
       };
@@ -95,9 +115,9 @@ export class PaymentsService {
 
   async reconcilePending(limit = 50): Promise<{
     reconciledPlans: number;
-      reconciledAdaptations: number;
-      total: number;
-    }> {
+    reconciledAdaptations: number;
+    total: number;
+  }> {
     const pendingPurchases = await this.database.planPurchase.findMany({
       where: { status: "pending" },
       take: limit,
@@ -195,8 +215,8 @@ export class PaymentsService {
         updatedAt: p.updatedAt.toISOString(),
       }))
       .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
 
     return { items: all.slice(skip, skip + limit), total: all.length };
@@ -327,10 +347,7 @@ function planTypeToName(planType: string): string | null {
   return names[planType] ?? null;
 }
 
-function buildMessage(
-  status: CheckoutStatus,
-  type: "plan",
-): string {
+function buildMessage(status: CheckoutStatus, _type: "plan"): string {
   if (status === "approved") {
     return "Pagamento confirmado! Seus créditos estão disponíveis.";
   }

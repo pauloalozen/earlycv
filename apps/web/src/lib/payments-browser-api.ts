@@ -14,6 +14,11 @@ export type CheckoutStatusResponse = {
   creditsGranted: number | null;
   analysisCreditsGranted: number | null;
   adaptationId: string | null;
+  originAction: "buy_credits" | "unlock_cv";
+  originAdaptationId: string | null;
+  autoUnlockProcessedAt: string | null;
+  autoUnlockError: string | null;
+  adaptationUnlocked: boolean;
   paymentId: string | null;
   message: string;
 };
