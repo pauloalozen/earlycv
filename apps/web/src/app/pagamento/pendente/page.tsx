@@ -226,7 +226,7 @@ function PendenteContent() {
 
           {adaptationId ? (
             <Link
-              href={`/adaptar/${adaptationId}/resultado`}
+              href={`/adaptar/resultado?adaptationId=${adaptationId}`}
               style={{ color: "#ffffff" }}
               className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222]"
             >

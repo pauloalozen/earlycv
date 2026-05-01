@@ -25,9 +25,7 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const planId = String(formData.get("planId") ?? "").trim();
   const rawAdaptationId = String(formData.get("adaptationId") ?? "").trim();
-  const adaptationId = /^[0-9a-f-]{36}$/.test(rawAdaptationId)
-    ? rawAdaptationId
-    : undefined;
+  const adaptationId = rawAdaptationId.length > 0 ? rawAdaptationId : undefined;
 
   if (!isPlanId(planId)) {
     return createPostRedirectResponse(

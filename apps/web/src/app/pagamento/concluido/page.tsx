@@ -116,7 +116,7 @@ function ConcluidoContent() {
             !result.autoUnlockError &&
             result.adaptationUnlocked && (
               <Link
-                href={`/adaptar/${result.originAdaptationId}/resultado`}
+                href={`/adaptar/resultado?adaptationId=${result.originAdaptationId}`}
                 style={{ color: "#ffffff" }}
                 className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222] mb-3"
               >
@@ -128,7 +128,9 @@ function ConcluidoContent() {
             <button
               type="button"
               onClick={() =>
-                router.push(`/adaptar/${result.adaptationId}/resultado`)
+                router.push(
+                  `/adaptar/resultado?adaptationId=${result.adaptationId}`,
+                )
               }
               style={{ color: "#ffffff" }}
               className="w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none transition-colors hover:bg-[#222222]"
