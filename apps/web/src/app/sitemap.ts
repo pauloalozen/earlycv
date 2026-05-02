@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 
 import { getBlogSitemapEntries } from "@/lib/blog/posts";
 import { jobs } from "@/lib/jobs";
+import { getSeoSitemapEntries } from "@/lib/seo-pages/pages";
 import { getAbsoluteUrl } from "@/lib/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -40,6 +41,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     })),
     ...getBlogSitemapEntries().map((entry) => ({
       url: getAbsoluteUrl(`/blog/${entry.slug}`),
+      lastModified: entry.lastModified,
+      changeFrequency: entry.changeFrequency,
+      priority: entry.priority,
+    })),
+    ...getSeoSitemapEntries().map((entry) => ({
+      url: getAbsoluteUrl(entry.path),
       lastModified: entry.lastModified,
       changeFrequency: entry.changeFrequency,
       priority: entry.priority,

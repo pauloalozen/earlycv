@@ -36,6 +36,8 @@ export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   blog_cta_clicked: 1,
   blog_index_viewed: 1,
   blog_post_viewed: 1,
+  seo_page_cta_clicked: 1,
+  seo_page_viewed: 1,
   cta_signup_click: 1,
   checkout_abandoned: 1,
   checkout_started: 1,

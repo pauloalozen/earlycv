@@ -22,6 +22,8 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   blog_cta_clicked: "blog_cta_clicked",
   blog_index_viewed: "blog_index_viewed",
   blog_post_viewed: "blog_post_viewed",
+  seo_page_cta_clicked: "seo_page_cta_clicked",
+  seo_page_viewed: "seo_page_viewed",
   teaser_scroll: "teaser_scroll",
   teaser_viewed: "teaser_viewed",
   signup_started: "signup_started",

@@ -52,7 +52,7 @@ describe("HistoryActionLinks redeem persistence", () => {
     render(<HistoryActionLinks {...baseProps} />);
 
     fireEvent.click(screen.getByText("Liberar CV · 1 Crédito"));
-    await vi.advanceTimersByTimeAsync(3100);
+    await vi.runAllTimersAsync();
 
     expect(screen.getAllByText("Baixar PDF").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Baixar DOCX").length).toBeGreaterThan(0);
@@ -76,7 +76,7 @@ describe("HistoryActionLinks redeem persistence", () => {
     );
 
     fireEvent.click(screen.getByText("Liberar CV · 1 Crédito"));
-    await vi.advanceTimersByTimeAsync(1);
+    await vi.runAllTimersAsync();
 
     expect(fetchMock).toHaveBeenCalledWith(baseProps.actions.redeemHref, {
       method: "POST",

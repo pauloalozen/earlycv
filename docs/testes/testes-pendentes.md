@@ -25,13 +25,24 @@
 
 # FASE 2
 
-Agora vamos implementar a Fase 2 do SEO do EarlyCV: páginas transacionais indexáveis.
+Vamos implementar a Fase 2 do SEO do EarlyCV: páginas transacionais indexáveis.
 
 Contexto:
-A Fase 1 criou a base do blog com /blog e /blog/[slug]. Agora queremos criar páginas SEO mais próximas da conversão, com conteúdo evergreen e CTA forte para análise gratuita.
+A Fase 1 do blog já foi implementada e validada:
 
-Objetivo:
-Criar páginas públicas, cacheáveis e indexáveis para capturar buscas com intenção comercial/informacional forte.
+- /blog
+- /blog/[slug]
+- Markdown local
+- SEO metadata
+- JSON-LD BlogPosting/FAQPage
+- sitemap com posts publicados
+- CTA BlogAnalysisCTA
+- tracking de blog
+- build do @earlycv/web passando
+
+O objetivo agora é criar páginas SEO transacionais fora do /blog, mais próximas da conversão.
+
+Essas páginas devem capturar buscas com intenção comercial/informacional forte e levar o usuário para o fluxo de análise gratuita do EarlyCV.
 
 Rotas da Fase 2:
 
@@ -40,184 +51,524 @@ Rotas da Fase 2:
 - /curriculo-gupy
 - /modelo-curriculo-ats
 
-Não implementar ainda:
+Importante:
 
-- página de 500 palavras-chave;
-- páginas por profissão;
-- ferramenta extratora de keywords;
-- CMS;
-- newsletter.
+- Não criar CMS.
+- Não criar páginas por profissão ainda.
+- Não criar hub de 500 palavras-chave ainda.
+- Não criar ferramenta extratora de keywords ainda.
+- Não mexer no fluxo de pagamento.
+- Não mexer no dashboard.
+- Não alterar a landing principal, exceto se for necessário adicionar links discretos no footer/menu.
+- Não prometer contratação, entrevista, aprovação ou “passar em qualquer ATS”.
+- Não inventar estatísticas.
+- Não copiar conteúdo de concorrentes.
+- Manter identidade visual atual do EarlyCV.
+- Reaproveitar componentes existentes quando fizer sentido.
+- Reaproveitar BlogAnalysisCTA ou criar um SEOAnalysisCTA genérico se o nome “Blog” não fizer sentido fora do blog.
 
-Requisitos por página:
+Objetivo técnico:
+Criar uma base reutilizável para páginas SEO transacionais, com:
 
-Cada página deve ter:
+1. layout consistente;
+2. metadata dinâmica ou estática por página;
+3. JSON-LD WebPage;
+4. FAQPage quando houver FAQ;
+5. BreadcrumbList;
+6. sitemap;
+7. tracking;
+8. CTA forte para análise gratuita;
+9. links internos para blog e outras páginas SEO.
 
-1. hero com headline clara;
-2. subtítulo;
-3. CTA para análise gratuita;
-4. seções educativas;
-5. exemplos práticos;
-6. FAQ;
-7. links internos para artigos do blog;
-8. links para outras páginas SEO;
-9. schema adequado:
-   - WebPage;
-   - FAQPage quando houver FAQ;
-   - BreadcrumbList;
-10. metadados SEO:
+==================================================
+
+1. # Arquitetura recomendada
+
+Criar estrutura simples para dados de páginas SEO, por exemplo:
+
+apps/web/src/lib/seo-pages/
+
+Arquivos possíveis:
+
+- types.ts
+- pages.ts
+- schema.ts, se necessário
+- tracking.ts, se necessário
+
+Cada página SEO pode ser definida por objeto tipado contendo:
+
+- slug
+- path
+- title
+- description
+- seoTitle
+- seoDescription
+- heroTitle
+- heroDescription
+- category
+- sections
+- faq
+- relatedLinks
+- cta
+- updatedAt
+
+Exemplo conceitual:
+
+{
+slug: "curriculo-ats",
+path: "/curriculo-ats",
+seoTitle: "Currículo ATS: como criar um currículo compatível | EarlyCV",
+seoDescription: "Entenda como criar um currículo compatível com ATS, evitar erros de formatação e melhorar a aderência com vagas.",
+heroTitle: "Currículo ATS: crie um currículo que sistemas conseguem ler",
+heroDescription: "Entenda como sistemas de triagem analisam currículos e veja como melhorar a compatibilidade do seu CV com cada vaga.",
+faq: [...]
+}
+
+A implementação pode ser feita com páginas estáticas individuais ou uma camada compartilhada. Escolha o caminho mais simples e limpo para o padrão atual do projeto.
+
+================================================== 2. Componentes reutilizáveis
+==================================================
+
+Criar ou reaproveitar componentes para páginas SEO:
+
+- SeoPageLayout
+- SeoHero
+- SeoSection
+- SeoFAQ
+- SeoInternalLinks
+- SeoAnalysisCTA
+
+Se já existir componente equivalente no blog, reaproveitar sem duplicar desnecessariamente.
+
+O CTA deve ter:
+
+Título:
+"Descubra se seu currículo combina com a vaga"
+
+Texto:
+"Cole a descrição da vaga, envie seu currículo e receba uma análise gratuita de compatibilidade em poucos minutos."
+
+Botão:
+"Analisar meu currículo grátis"
+
+Rota:
+Usar a rota atual do fluxo de análise do EarlyCV. Pelo que foi usado na Fase 1, o target atual é "/adaptar". Confirmar no código existente antes de usar.
+
+================================================== 3. Tracking
+==================================================
+
+Adicionar tracking específico para páginas SEO transacionais.
+
+Eventos:
+
+seo_page_viewed
+Propriedades:
+
+- slug
+- path
+- page_type="transactional_seo"
+- source="seo_page"
+
+seo_page_cta_clicked
+Propriedades:
+
+- slug
+- path
+- location="hero" | "middle" | "bottom"
+- target="/adaptar" ou rota real
+- source="seo_page"
+
+Se houver tracking global de page_view, não duplicar como page_view. Estes eventos são específicos de funil SEO.
+
+Criar trackers client separados, sem importar conteúdo pesado no client.
+
+================================================== 4. SEO técnico
+==================================================
+
+Para cada página:
 
 - title;
 - description;
 - canonical;
-- Open Graph.
+- Open Graph;
+- robots index/follow;
+- JSON-LD WebPage;
+- JSON-LD BreadcrumbList;
+- FAQPage condicional quando houver FAQ.
 
-Tom de comunicação:
+Adicionar ao sitemap:
 
-- claro;
-- direto;
-- sem promessa de contratação;
-- sem dizer “garantimos passar no ATS”;
-- reforçar que o EarlyCV aumenta clareza, compatibilidade e aderência com a vaga.
+- /curriculo-ats
+- /adaptar-curriculo-para-vaga
+- /curriculo-gupy
+- /modelo-curriculo-ats
 
-Página 1: /curriculo-ats
+Garantir que robots não bloqueia essas páginas.
+
+================================================== 5. Página /curriculo-ats
+==================================================
 
 Objetivo:
 Capturar buscas sobre currículo ATS.
 
-Headline sugerida:
-“Currículo ATS: crie um currículo que sistemas conseguem ler”
+SEO title:
+"Currículo ATS: como criar um currículo compatível | EarlyCV"
 
-Subheadline:
-“Entenda como sistemas de triagem analisam currículos e veja como melhorar a compatibilidade do seu CV com cada vaga.”
+SEO description:
+"Entenda como criar um currículo compatível com ATS, evitar erros de formatação e melhorar a aderência do seu CV com cada vaga."
 
-Seções:
+Hero title:
+"Currículo ATS: crie um currículo que sistemas conseguem ler"
 
-- O que é um currículo ATS;
-- Por que currículos bonitos demais podem atrapalhar;
-- Erros comuns;
-- Como estruturar um currículo compatível;
-- Como usar palavras-chave;
-- Exemplo de estrutura;
-- Como o EarlyCV ajuda;
-- FAQ.
+Hero description:
+"Entenda como sistemas de triagem analisam currículos e veja como melhorar a compatibilidade do seu CV com cada vaga."
 
-CTA:
-“Analisar meu currículo grátis”
+Seções obrigatórias:
 
-Página 2: /adaptar-curriculo-para-vaga
+1. O que é um currículo ATS
+   Explicar que ATS são sistemas usados para organizar, filtrar ou apoiar processos seletivos. Evitar afirmar funcionamento interno específico de qualquer plataforma.
 
-Objetivo:
-Capturar busca de alta intenção: pessoas querendo adaptar CV.
+2. Por que a formatação importa
+   Explicar problemas com excesso de colunas, imagens, tabelas complexas, ícones e layouts muito visuais.
 
-Headline sugerida:
-“Adapte seu currículo para cada vaga sem inventar experiência”
+3. O que melhora a leitura do currículo
+   Lista:
 
-Subheadline:
-“Compare seu currículo com a descrição da vaga, identifique lacunas e gere uma versão mais alinhada ao que a empresa procura.”
+- estrutura simples;
+- títulos claros;
+- experiências com cargo, empresa, período e resultados;
+- competências relevantes;
+- palavras-chave compatíveis com a vaga;
+- arquivo em formato adequado.
 
-Seções:
+4. Erros comuns
 
-- Por que adaptar o currículo;
-- O que deve mudar de uma vaga para outra;
-- O que não deve ser inventado;
-- Como destacar experiências relevantes;
-- Como usar palavras-chave da vaga;
-- Exemplo antes/depois;
-- Como o EarlyCV faz a análise;
-- FAQ.
+- currículo só em imagem;
+- design complexo;
+- palavras-chave soltas sem contexto;
+- resumo genérico;
+- experiências sem resultado;
+- falta de aderência à vaga.
 
-Página 3: /curriculo-gupy
+5. Como o EarlyCV ajuda
+   Explicar:
 
-Objetivo:
-Capturar buscas brasileiras sobre Gupy.
+- compara currículo com vaga;
+- mostra score de compatibilidade;
+- identifica lacunas;
+- sugere melhorias;
+- gera versão otimizada mediante liberação.
 
-Headline sugerida:
-“Currículo para Gupy: como aumentar a aderência com a vaga”
+FAQ:
 
-Subheadline:
-“Veja como estruturar seu currículo, usar palavras-chave e evitar erros que prejudicam sua leitura em plataformas de recrutamento.”
+- O que significa ATS?
+- Currículo em PDF passa em ATS?
+- Currículo feito no Canva pode prejudicar?
+- Palavras-chave garantem aprovação?
+- Preciso adaptar o currículo para cada vaga?
 
-Cuidados:
-
-- Não afirmar funcionamento interno exato da Gupy sem fonte.
-- Não dizer que a Gupy dá uma nota específica se não houver comprovação.
-- Usar linguagem segura:
-  “plataformas como Gupy podem considerar informações estruturadas, aderência textual e dados fornecidos na candidatura.”
-
-Seções:
-
-- Por que muita gente sente que o currículo não avança;
-- O que normalmente prejudica candidaturas;
-- Palavras-chave e aderência com a vaga;
-- Formatação e clareza;
-- Como adaptar sem mentir;
-- Como o EarlyCV pode ajudar antes de se candidatar;
-- FAQ.
-
-Página 4: /modelo-curriculo-ats
+================================================== 6. Página /adaptar-curriculo-para-vaga
+==================================================
 
 Objetivo:
-Capturar busca por modelo.
+Capturar busca de alta intenção comercial.
 
-Headline sugerida:
-“Modelo de currículo ATS simples, limpo e fácil de ler”
+SEO title:
+"Adaptar currículo para vaga: como melhorar sua aderência | EarlyCV"
 
-Subheadline:
-“Veja uma estrutura recomendada para criar um currículo objetivo, compatível com triagens automatizadas e fácil para recrutadores lerem.”
+SEO description:
+"Compare seu currículo com a descrição da vaga, encontre lacunas e gere uma versão mais alinhada ao que a empresa procura."
 
-Seções:
+Hero title:
+"Adapte seu currículo para cada vaga sem inventar experiência"
 
-- Estrutura recomendada;
-- Cabeçalho;
-- Resumo profissional;
-- Experiência;
-- Competências;
-- Formação;
-- Projetos;
-- O que evitar;
-- Exemplo de modelo em texto;
-- CTA para adaptar o modelo à vaga;
-- FAQ.
+Hero description:
+"Compare seu currículo com a descrição da vaga, identifique lacunas e gere uma versão mais alinhada ao que a empresa procura."
 
-Tracking:
-Criar eventos:
+Seções obrigatórias:
 
-- seo_page_viewed
-  - slug
-  - page_type="transactional_seo"
-- seo_page_cta_clicked
-  - slug
-  - location
-  - target
+1. Por que adaptar o currículo para cada vaga
+   Explicar que vagas parecidas podem priorizar competências diferentes.
 
-Sitemap:
-Adicionar todas as páginas ao sitemap.
+2. O que deve mudar no currículo
 
-Footer/menu:
-Se fizer sentido, adicionar links discretos no footer para:
+- resumo profissional;
+- ordem e destaque das experiências;
+- competências;
+- palavras-chave;
+- projetos;
+- resultados mais relevantes.
+
+3. O que não deve ser inventado
+   Deixar claro que adaptação não é mentir. É reorganizar e destacar experiências reais.
+
+4. Como usar a descrição da vaga
+   Explicar:
+
+- identificar responsabilidades;
+- separar requisitos obrigatórios e desejáveis;
+- observar ferramentas e metodologias;
+- usar palavras-chave com contexto.
+
+5. Exemplo simples antes/depois
+   Criar exemplo textual curto:
+   Antes:
+   "Responsável por relatórios e indicadores."
+   Depois:
+   "Desenvolveu dashboards em Power BI para acompanhamento de indicadores comerciais, apoiando decisões de vendas e priorização de oportunidades."
+
+6. Como o EarlyCV ajuda
+
+- analisa currículo + vaga;
+- calcula compatibilidade;
+- mostra palavras importantes;
+- aponta lacunas;
+- gera currículo adaptado.
+
+FAQ:
+
+- Posso adaptar o mesmo currículo para várias vagas?
+- Adaptar currículo é mentir?
+- O que muda entre uma versão e outra?
+- Preciso mudar o currículo inteiro?
+- Como saber quais palavras-chave usar?
+
+================================================== 7. Página /curriculo-gupy
+==================================================
+
+Objetivo:
+Capturar buscas brasileiras sobre Gupy e plataformas de recrutamento.
+
+SEO title:
+"Currículo para Gupy: como melhorar sua aderência à vaga | EarlyCV"
+
+SEO description:
+"Veja como estruturar seu currículo, usar palavras-chave e evitar erros que podem prejudicar sua candidatura em plataformas como a Gupy."
+
+Hero title:
+"Currículo para Gupy: como aumentar a aderência com a vaga"
+
+Hero description:
+"Veja como estruturar seu currículo, usar palavras-chave e evitar erros que prejudicam a clareza da sua candidatura em plataformas de recrutamento."
+
+Cuidados obrigatórios:
+
+- Não afirmar funcionamento interno exato da Gupy.
+- Não dizer que a Gupy dá uma nota específica ao currículo.
+- Não dizer que existe fórmula garantida para passar.
+- Usar termos seguros como:
+  "plataformas como a Gupy podem usar informações estruturadas, dados preenchidos e aderência textual para apoiar recrutadores e empresas."
+
+Seções obrigatórias:
+
+1. Por que seu currículo pode não avançar
+   Explicar possibilidades:
+
+- alta concorrência;
+- vaga com muitos candidatos;
+- currículo genérico;
+- baixa aderência textual;
+- experiências pouco claras;
+- falta de requisitos importantes.
+
+2. O que normalmente ajuda
+
+- clareza;
+- palavras-chave relevantes;
+- experiências conectadas à vaga;
+- resultados;
+- estrutura simples;
+- dados completos.
+
+3. Como adaptar currículo antes de se candidatar
+
+- ler a vaga;
+- mapear requisitos;
+- revisar resumo;
+- ajustar competências;
+- destacar experiências relacionadas;
+- evitar exageros.
+
+4. Erros comuns
+
+- copiar a vaga inteira;
+- colocar termos que não domina;
+- usar currículo visual demais;
+- enviar sempre o mesmo CV;
+- deixar experiências vagas.
+
+5. Como o EarlyCV ajuda
+
+- compara CV com a vaga antes da candidatura;
+- mostra lacunas;
+- sugere melhorias;
+- ajuda a gerar uma versão adaptada.
+
+FAQ:
+
+- A Gupy reprova currículo automaticamente?
+- Existe currículo perfeito para Gupy?
+- Devo fazer um currículo diferente para cada vaga?
+- Posso usar currículo em PDF?
+- O que mais pesa em uma candidatura?
+
+================================================== 8. Página /modelo-curriculo-ats
+==================================================
+
+Objetivo:
+Capturar busca por modelo de currículo compatível com ATS.
+
+SEO title:
+"Modelo de currículo ATS simples e fácil de ler | EarlyCV"
+
+SEO description:
+"Veja uma estrutura simples de currículo ATS, com seções claras para resumo, experiência, competências, formação e projetos."
+
+Hero title:
+"Modelo de currículo ATS simples, limpo e fácil de ler"
+
+Hero description:
+"Veja uma estrutura recomendada para criar um currículo objetivo, compatível com triagens automatizadas e fácil para recrutadores analisarem."
+
+Seções obrigatórias:
+
+1. Estrutura recomendada
+   Mostrar ordem:
+
+- dados de contato;
+- resumo profissional;
+- experiências;
+- competências;
+- formação;
+- certificações;
+- projetos, se fizer sentido.
+
+2. Cabeçalho
+   Explicar o que incluir e o que evitar.
+
+3. Resumo profissional
+   Exemplo simples.
+
+4. Experiência profissional
+   Mostrar estrutura:
+   Cargo | Empresa | Período
+   Bullets com ação + contexto + resultado.
+
+5. Competências
+   Separar por grupos:
+
+- técnicas;
+- ferramentas;
+- metodologias;
+- idiomas;
+- comportamentais, se relevantes.
+
+6. O que evitar
+
+- foto, salvo quando fizer sentido;
+- excesso de ícones;
+- gráficos;
+- tabelas complexas;
+- colunas difíceis de ler;
+- informações pessoais desnecessárias.
+
+7. Exemplo de modelo em texto
+   Criar um modelo simples, não muito longo.
+
+8. Como adaptar o modelo à vaga
+   Conectar ao EarlyCV.
+
+FAQ:
+
+- Qual melhor formato para currículo ATS?
+- Currículo ATS precisa ser feio?
+- Posso usar duas colunas?
+- Devo colocar foto?
+- Posso baixar um modelo pronto?
+
+================================================== 9. Links internos
+==================================================
+
+Adicionar links entre páginas:
+
+- /curriculo-ats deve linkar para:
+  - /modelo-curriculo-ats
+  - /adaptar-curriculo-para-vaga
+  - /blog/palavras-chave-curriculo
+
+- /adaptar-curriculo-para-vaga deve linkar para:
+  - /curriculo-ats
+  - /curriculo-gupy
+  - /blog/como-adaptar-curriculo-para-vaga
+
+- /curriculo-gupy deve linkar para:
+  - /adaptar-curriculo-para-vaga
+  - /curriculo-ats
+  - /blog/curriculo-ats
+
+- /modelo-curriculo-ats deve linkar para:
+  - /curriculo-ats
+  - /adaptar-curriculo-para-vaga
+  - /blog/palavras-chave-curriculo
+
+Se algum link de blog não existir ou tiver slug diferente, ajustar para o slug real.
+
+================================================== 10. Menu/footer
+==================================================
+
+Se existir footer com links institucionais, adicionar discretamente:
 
 - Blog
 - Currículo ATS
 - Adaptar currículo para vaga
 
-Critérios de aceite:
+Não poluir header principal se isso exigir redesign.
 
-- As 4 rotas abrem corretamente;
-- Todas têm metadata;
-- Todas têm CTA;
-- Todas têm FAQ;
-- Todas entram no sitemap;
-- Todas têm tracking;
-- Build/lint/typecheck passam;
-- Nenhum fluxo existente foi quebrado.
+================================================== 11. Testes
+==================================================
+
+Adicionar testes simples para:
+
+- cada rota renderiza;
+- metadata básica existe, se o padrão do projeto permitir testar;
+- sitemap inclui as 4 páginas;
+- CTA aponta para a rota correta;
+- tracking gera payload esperado;
+- FAQPage só existe quando há FAQ.
+
+Não criar teste frágil baseado em textos enormes.
+
+================================================== 12. Critérios de aceite
+==================================================
+
+A implementação estará concluída quando:
+
+- /curriculo-ats abre corretamente;
+- /adaptar-curriculo-para-vaga abre corretamente;
+- /curriculo-gupy abre corretamente;
+- /modelo-curriculo-ats abre corretamente;
+- todas têm CTA funcional;
+- todas têm metadata;
+- todas têm JSON-LD WebPage;
+- todas têm BreadcrumbList;
+- todas têm FAQPage quando houver FAQ;
+- todas estão no sitemap;
+- tracking seo_page_viewed e seo_page_cta_clicked funciona;
+- build do @earlycv/web passa;
+- check/test específicos novos passam;
+- não houve alteração em pagamento, dashboard ou fluxo principal.
 
 Ao final, retorne:
 
-1. arquivos criados/alterados;
-2. resumo das páginas;
-3. eventos criados;
-4. comandos executados;
-5. próximos passos para Fase 3.
+1. resumo do que foi implementado;
+2. arquivos criados/alterados;
+3. rotas criadas;
+4. eventos de tracking criados;
+5. links internos adicionados;
+6. comandos executados;
+7. status de build/check/test;
+8. pendências ou limitações;
+9. recomendação para Fase 3: hub de palavras-chave.
 
 # FASE 3
 

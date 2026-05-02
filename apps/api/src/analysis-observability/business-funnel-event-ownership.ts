@@ -11,6 +11,8 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   blog_cta_clicked: "frontend",
   blog_index_viewed: "frontend",
   blog_post_viewed: "frontend",
+  seo_page_cta_clicked: "frontend",
+  seo_page_viewed: "frontend",
   cta_signup_click: "frontend",
   checkout_abandoned: "frontend",
   checkout_started: "backend",

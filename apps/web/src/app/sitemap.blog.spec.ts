@@ -19,4 +19,20 @@ test("sitemap includes /blog and published blog posts", () => {
     urls.some((url) => url.endsWith("/blog/rascunho-blog-exemplo")),
     false,
   );
+  assert.equal(
+    urls.some((url) => url.endsWith("/curriculo-ats")),
+    true,
+  );
+  assert.equal(
+    urls.some((url) => url.endsWith("/adaptar-curriculo-para-vaga")),
+    true,
+  );
+  assert.equal(
+    urls.some((url) => url.endsWith("/curriculo-gupy")),
+    true,
+  );
+  assert.equal(
+    urls.some((url) => url.endsWith("/modelo-curriculo-ats")),
+    true,
+  );
 });

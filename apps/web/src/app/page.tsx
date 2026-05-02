@@ -938,6 +938,24 @@ export default function Home() {
         </span>
         <div style={{ display: "flex", gap: 20 }}>
           <Link
+            href="/blog"
+            style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
+          >
+            Blog
+          </Link>
+          <Link
+            href="/curriculo-ats"
+            style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
+          >
+            Curriculo ATS
+          </Link>
+          <Link
+            href="/adaptar-curriculo-para-vaga"
+            style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
+          >
+            Adaptar curriculo
+          </Link>
+          <Link
             href="/termos-de-uso"
             style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
           >
