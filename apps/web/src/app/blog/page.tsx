@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { BlogAnalysisCta } from "@/components/blog/blog-analysis-cta";
 import { BlogCard } from "@/components/blog/blog-card";
 import { BlogIndexViewTracker } from "@/components/blog/blog-view-trackers";
+import { PublicFooter } from "@/components/public-footer";
 import {
   getAllPublishedBlogPosts,
   getFeaturedBlogPost,
@@ -75,6 +76,7 @@ export default function BlogIndexPage() {
 
         <BlogAnalysisCta location="index" />
       </div>
+      <PublicFooter />
     </main>
   );
 }

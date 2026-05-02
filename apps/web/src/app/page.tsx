@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import React from "react";
 import { Logo } from "@/components/logo";
+import { PublicFooter } from "@/components/public-footer";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 import { AtsWidget } from "./_ats-widget";
 import { LandingNavAuth } from "./_landing-nav-auth";
@@ -914,70 +915,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Footer ── */}
-      <footer
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "16px 32px",
-          position: "relative",
-          zIndex: 2,
-          borderTop: "1px solid rgba(10,10,10,0.05)",
-        }}
-      >
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 11,
-            color: "#8a8a85",
-            letterSpacing: 0.2,
-          }}
-        >
-          © earlyCV · 2026
-        </span>
-        <div style={{ display: "flex", gap: 20 }}>
-          <Link
-            href="/blog"
-            style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
-          >
-            Blog
-          </Link>
-          <Link
-            href="/curriculo-ats"
-            style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
-          >
-            Curriculo ATS
-          </Link>
-          <Link
-            href="/adaptar-curriculo-para-vaga"
-            style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
-          >
-            Adaptar curriculo
-          </Link>
-          <Link
-            href="/palavras-chave-curriculo"
-            style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
-          >
-            Palavras-chave
-          </Link>
-          <Link
-            href="/termos-de-uso"
-            style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
-          >
-            Termos
-          </Link>
-          <Link
-            href="/privacidade"
-            style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
-          >
-            Privacidade
-          </Link>
-          <span style={{ fontSize: 12, color: "#6a6a66" }}>
-            contato@earlycv.com.br
-          </span>
-        </div>
-      </footer>
+      <PublicFooter />
 
       {/* CSS for CTA hover + responsive + smooth scroll + scroll reveal */}
       <style>{`

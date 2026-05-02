@@ -6,6 +6,7 @@ import { BlogPostLayout } from "@/components/blog/blog-post-layout";
 import { BlogPostViewTracker } from "@/components/blog/blog-view-trackers";
 import { FaqBlock } from "@/components/blog/faq-block";
 import { RelatedPosts } from "@/components/blog/related-posts";
+import { PublicFooter } from "@/components/public-footer";
 import {
   getBlogPostBySlug,
   getBlogPostHtmlBySlug,
@@ -145,6 +146,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
           </div>
         ) : null}
       </div>
+      <PublicFooter />
     </main>
   );
 }

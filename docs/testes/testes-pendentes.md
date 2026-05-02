@@ -3,15 +3,31 @@
 1. Colocar a rota /pagamentos dentro do padrão do site, com exibição do header e logo acima como em recuperar senha
 2. Personalizar o erro 404 para padrão do site
 3. Suspense no header da landing para não mudar status quando carrega.
+4. Centrar o ajustes feitos na pagina versão desktop (tela grande).
 
-4. Ao fazer a compra pelo seu já usar 1 crédito para liberar o cv.
-5. Ao liberar o CV, teve que atualizar a tela para diminuir o crédito, tem que atualizar automático.
-6. Criar rota para entrar e outra para criar-conta, a mesma rota ta gerando confusão.
+5. Ao fazer a compra pelo seu já usar 1 crédito para liberar o cv.
+6. Ao liberar o CV, teve que atualizar a tela para diminuir o crédito, tem que atualizar automático.
+7. Criar rota para entrar e outra para criar-conta, a mesma rota ta gerando confusão.
 
-7. Ajustar COPY onde aparecer o termo ATS.
-8. Layout do score ats no resultado quebrado.
-9. criar um suspense no loanding da tela result no card abaixo do ats score (esta mudando estado na tela)
-10. Trocar o botão "COmprar Cŕeditos" quando logado no cta do resultado (mudar para Liberar meu CV agora.)
+8. Ajustar COPY onde aparecer o termo ATS.
+9. Layout do score ats no resultado quebrado.
+10. criar um suspense no loanding da tela result no card abaixo do ats score (esta mudando estado na tela)
+11. Trocar o botão "COmprar Cŕeditos" quando logado no cta do resultado (mudar para Liberar meu CV agora.)
+
+==================================================================
+
+# PENDENCIAS
+
+==================================================================
+
+Search Console Depois do deploy:
+enviar ou reprocessar sitemap.xml;
+inspecionar manualmente:
+/curriculo-ats
+/adaptar-curriculo-para-vaga
+/curriculo-gupy
+/modelo-curriculo-ats
+solicitar indexação das quatro.
 
 # Novas Features:
 
@@ -126,8 +142,7 @@ faq: [...]
 
 A implementação pode ser feita com páginas estáticas individuais ou uma camada compartilhada. Escolha o caminho mais simples e limpo para o padrão atual do projeto.
 
-================================================== 2. Componentes reutilizáveis
-==================================================
+# ================================================== 2. Componentes reutilizáveis
 
 Criar ou reaproveitar componentes para páginas SEO:
 
@@ -154,8 +169,7 @@ Botão:
 Rota:
 Usar a rota atual do fluxo de análise do EarlyCV. Pelo que foi usado na Fase 1, o target atual é "/adaptar". Confirmar no código existente antes de usar.
 
-================================================== 3. Tracking
-==================================================
+# ================================================== 3. Tracking
 
 Adicionar tracking específico para páginas SEO transacionais.
 
@@ -182,8 +196,7 @@ Se houver tracking global de page_view, não duplicar como page_view. Estes even
 
 Criar trackers client separados, sem importar conteúdo pesado no client.
 
-================================================== 4. SEO técnico
-==================================================
+# ================================================== 4. SEO técnico
 
 Para cada página:
 
@@ -205,8 +218,7 @@ Adicionar ao sitemap:
 
 Garantir que robots não bloqueia essas páginas.
 
-================================================== 5. Página /curriculo-ats
-==================================================
+# ================================================== 5. Página /curriculo-ats
 
 Objetivo:
 Capturar buscas sobre currículo ATS.
@@ -267,8 +279,7 @@ FAQ:
 - Palavras-chave garantem aprovação?
 - Preciso adaptar o currículo para cada vaga?
 
-================================================== 6. Página /adaptar-curriculo-para-vaga
-==================================================
+# ================================================== 6. Página /adaptar-curriculo-para-vaga
 
 Objetivo:
 Capturar busca de alta intenção comercial.
@@ -333,8 +344,7 @@ FAQ:
 - Preciso mudar o currículo inteiro?
 - Como saber quais palavras-chave usar?
 
-================================================== 7. Página /curriculo-gupy
-==================================================
+# ================================================== 7. Página /curriculo-gupy
 
 Objetivo:
 Capturar buscas brasileiras sobre Gupy e plataformas de recrutamento.
@@ -412,8 +422,7 @@ FAQ:
 - Posso usar currículo em PDF?
 - O que mais pesa em uma candidatura?
 
-================================================== 8. Página /modelo-curriculo-ats
-==================================================
+# ================================================== 8. Página /modelo-curriculo-ats
 
 Objetivo:
 Capturar busca por modelo de currículo compatível com ATS.
@@ -486,8 +495,7 @@ FAQ:
 - Devo colocar foto?
 - Posso baixar um modelo pronto?
 
-================================================== 9. Links internos
-==================================================
+# ================================================== 9. Links internos
 
 Adicionar links entre páginas:
 
@@ -513,8 +521,7 @@ Adicionar links entre páginas:
 
 Se algum link de blog não existir ou tiver slug diferente, ajustar para o slug real.
 
-================================================== 10. Menu/footer
-==================================================
+# ================================================== 10. Menu/footer
 
 Se existir footer com links institucionais, adicionar discretamente:
 
@@ -524,8 +531,7 @@ Se existir footer com links institucionais, adicionar discretamente:
 
 Não poluir header principal se isso exigir redesign.
 
-================================================== 11. Testes
-==================================================
+# ================================================== 11. Testes
 
 Adicionar testes simples para:
 
@@ -538,8 +544,7 @@ Adicionar testes simples para:
 
 Não criar teste frágil baseado em textos enormes.
 
-================================================== 12. Critérios de aceite
-==================================================
+# ================================================== 12. Critérios de aceite
 
 A implementação estará concluída quando:
 

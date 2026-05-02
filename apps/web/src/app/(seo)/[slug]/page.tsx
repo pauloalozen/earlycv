@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { FaqBlock } from "@/components/blog/faq-block";
+import { PublicFooter } from "@/components/public-footer";
 import { SeoAnalysisCta } from "@/components/seo-pages/seo-analysis-cta";
 import { SeoBackToAreasFab } from "@/components/seo-pages/seo-back-to-areas-fab";
 import { SeoHero } from "@/components/seo-pages/seo-hero";
@@ -116,99 +117,104 @@ export default async function SeoPage({ params }: SeoPageProps) {
     : null;
 
   return (
-    <SeoPageLayout>
-      <SeoPageViewTracker
-        pageType={page.pageType}
-        path={page.path}
-        slug={page.slug}
-      />
-      <script type="application/ld+json">
-        {JSON.stringify(webPageJsonLd)}
-      </script>
-      <script type="application/ld+json">
-        {JSON.stringify(breadcrumbJsonLd)}
-      </script>
-      {faqJsonLd ? (
-        <script type="application/ld+json">{JSON.stringify(faqJsonLd)}</script>
-      ) : null}
+    <>
+      <SeoPageLayout>
+        <SeoPageViewTracker
+          pageType={page.pageType}
+          path={page.path}
+          slug={page.slug}
+        />
+        <script type="application/ld+json">
+          {JSON.stringify(webPageJsonLd)}
+        </script>
+        <script type="application/ld+json">
+          {JSON.stringify(breadcrumbJsonLd)}
+        </script>
+        {faqJsonLd ? (
+          <script type="application/ld+json">
+            {JSON.stringify(faqJsonLd)}
+          </script>
+        ) : null}
 
-      <SeoHero description={page.hero.description} title={page.hero.title} />
-      <SeoAnalysisCta
-        buttonLabel={page.cta.buttonLabel}
-        description={page.cta.description}
-        location="hero"
-        pageType={page.pageType}
-        path={page.path}
-        slug={page.slug}
-        target={page.cta.target}
-        title={page.cta.title}
-      />
+        <SeoHero description={page.hero.description} title={page.hero.title} />
+        <SeoAnalysisCta
+          buttonLabel={page.cta.buttonLabel}
+          description={page.cta.description}
+          location="hero"
+          pageType={page.pageType}
+          path={page.path}
+          slug={page.slug}
+          target={page.cta.target}
+          title={page.cta.title}
+        />
 
-      {page.alertMessage ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          {page.alertMessage}
-        </section>
-      ) : null}
-
-      {page.sections.map((section) => (
-        <SeoSection key={section.heading} section={section} />
-      ))}
-
-      {page.pageType === "hub" && page.keywordGroups?.length ? (
-        <>
-          <section className="rounded-2xl border border-stone-200 bg-white p-6">
-            <h2 className="text-2xl font-semibold tracking-tight">
-              Lista por area e cargo
-            </h2>
-            <p className="mt-2 text-sm text-stone-600">
-              Este hub utilitario organiza termos por area e cargo. Diferente do
-              artigo do blog, aqui o foco e consulta rapida para montagem de
-              curriculo.
-            </p>
+        {page.alertMessage ? (
+          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            {page.alertMessage}
           </section>
-          <SeoKeywordAreaNav groups={page.keywordGroups} />
-          <SeoKeywordHub groups={page.keywordGroups} />
-          <SeoBackToAreasFab />
-        </>
-      ) : null}
+        ) : null}
 
-      <SeoAnalysisCta
-        buttonLabel={
-          page.pageType === "hub"
-            ? "Analisar meu curriculo gratis"
-            : page.cta.buttonLabel
-        }
-        description={
-          page.pageType === "hub"
-            ? "O EarlyCV compara seu curriculo com a vaga e mostra lacunas, pontos fortes e termos relevantes para melhorar sua aderencia."
-            : page.cta.description
-        }
-        location="middle"
-        pageType={page.pageType}
-        path={page.path}
-        slug={page.slug}
-        target={page.cta.target}
-        title={
-          page.pageType === "hub"
-            ? "Quer saber quais palavras da vaga faltam no seu curriculo?"
-            : page.cta.title
-        }
-      />
+        {page.sections.map((section) => (
+          <SeoSection key={section.heading} section={section} />
+        ))}
 
-      <SeoInternalLinks links={page.relatedLinks} />
+        {page.pageType === "hub" && page.keywordGroups?.length ? (
+          <>
+            <section className="rounded-2xl border border-stone-200 bg-white p-6">
+              <h2 className="text-2xl font-semibold tracking-tight">
+                Lista por area e cargo
+              </h2>
+              <p className="mt-2 text-sm text-stone-600">
+                Este hub utilitario organiza termos por area e cargo. Diferente
+                do artigo do blog, aqui o foco e consulta rapida para montagem
+                de curriculo.
+              </p>
+            </section>
+            <SeoKeywordAreaNav groups={page.keywordGroups} />
+            <SeoKeywordHub groups={page.keywordGroups} />
+            <SeoBackToAreasFab />
+          </>
+        ) : null}
 
-      {page.faq?.length ? <FaqBlock items={page.faq} /> : null}
+        <SeoAnalysisCta
+          buttonLabel={
+            page.pageType === "hub"
+              ? "Analisar meu curriculo gratis"
+              : page.cta.buttonLabel
+          }
+          description={
+            page.pageType === "hub"
+              ? "O EarlyCV compara seu curriculo com a vaga e mostra lacunas, pontos fortes e termos relevantes para melhorar sua aderencia."
+              : page.cta.description
+          }
+          location="middle"
+          pageType={page.pageType}
+          path={page.path}
+          slug={page.slug}
+          target={page.cta.target}
+          title={
+            page.pageType === "hub"
+              ? "Quer saber quais palavras da vaga faltam no seu curriculo?"
+              : page.cta.title
+          }
+        />
 
-      <SeoAnalysisCta
-        buttonLabel={page.cta.buttonLabel}
-        description={page.cta.description}
-        location="bottom"
-        pageType={page.pageType}
-        path={page.path}
-        slug={page.slug}
-        target={page.cta.target}
-        title={page.cta.title}
-      />
-    </SeoPageLayout>
+        <SeoInternalLinks links={page.relatedLinks} />
+
+        {page.faq?.length ? <FaqBlock items={page.faq} /> : null}
+
+        <SeoAnalysisCta
+          buttonLabel={page.cta.buttonLabel}
+          description={page.cta.description}
+          location="bottom"
+          pageType={page.pageType}
+          path={page.path}
+          slug={page.slug}
+          target={page.cta.target}
+          title={page.cta.title}
+        />
+      </SeoPageLayout>
+      <PublicFooter />
+    </>
   );
 }
