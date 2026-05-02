@@ -6,7 +6,12 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AuthMonoShell } from "@/components/auth/auth-mono-shell";
+import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
+import {
+  type DownloadProgressStage,
+  downloadFromApi,
+} from "@/lib/client-download";
 import {
   getCheckoutStatusClient,
   resumeCheckoutClient,
@@ -32,6 +37,9 @@ function PendenteContent() {
   const [adaptationId, setAdaptationId] = useState<string | null>(null);
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [isResuming, setIsResuming] = useState(false);
+  const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
+  const [downloadStage, setDownloadStage] =
+    useState<DownloadProgressStage | null>(null);
   const pollCount = useRef(0);
   const polling = useRef(false);
   const triedAutoResume = useRef(false);
@@ -108,6 +116,24 @@ function PendenteContent() {
       setIsResuming(false);
     }
   }, [checkoutId, isResuming]);
+
+  const handleDownload = useCallback(
+    async (format: "pdf" | "docx", targetAdaptationId: string) => {
+      if (downloading) return;
+      setDownloading(format);
+      try {
+        await downloadFromApi({
+          url: `/api/cv-adaptation/${targetAdaptationId}/download?format=${format}`,
+          fallbackFilename: `cv-adaptado.${format}`,
+          onStageChange: setDownloadStage,
+        });
+      } finally {
+        setDownloading(null);
+        setDownloadStage(null);
+      }
+    },
+    [downloading],
+  );
 
   useEffect(() => {
     startPolling();
@@ -229,6 +255,10 @@ function PendenteContent() {
             <>
               <a
                 href={`/api/cv-adaptation/${adaptationId}/download?format=pdf`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleDownload("pdf", adaptationId);
+                }}
                 style={{ color: "#ffffff" }}
                 className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222] mb-3"
               >
@@ -236,6 +266,10 @@ function PendenteContent() {
               </a>
               <a
                 href={`/api/cv-adaptation/${adaptationId}/download?format=docx`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleDownload("docx", adaptationId);
+                }}
                 className="block w-full rounded-[14px] border border-[#D0D0D0] bg-white py-[14px] text-base font-medium leading-none text-center text-[#111111] transition-colors hover:bg-[#F5F5F5] mb-3"
               >
                 Baixar DOCX
@@ -351,6 +385,11 @@ function PendenteContent() {
           </Link>
         </div>
       )}
+      <DownloadProgressOverlay
+        open={downloadStage !== null}
+        stage={downloadStage}
+        format={downloading}
+      />
     </AuthMonoShell>
   );
 }

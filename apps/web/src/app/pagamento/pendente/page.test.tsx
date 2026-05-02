@@ -1,9 +1,16 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PagamentoPendente from "./page";
 
 const mockUseSearchParams = vi.fn();
 const mockGetCheckoutStatusClient = vi.fn();
+const mockDownloadFromApi = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => mockUseSearchParams(),
@@ -17,6 +24,10 @@ vi.mock("@/lib/payments-browser-api", () => ({
   getCheckoutStatusClient: (...args: unknown[]) =>
     mockGetCheckoutStatusClient(...args),
   resumeCheckoutClient: vi.fn(),
+}));
+
+vi.mock("@/lib/client-download", () => ({
+  downloadFromApi: (...args: unknown[]) => mockDownloadFromApi(...args),
 }));
 
 describe("PagamentoPendente", () => {
@@ -58,5 +69,33 @@ describe("PagamentoPendente", () => {
         .getByRole("link", { name: "Voltar para análise e baixar depois" })
         .getAttribute("href"),
     ).toBe("/adaptar/resultado?adaptationId=adapt-1");
+  });
+
+  it("aciona microfeedback ao iniciar download", async () => {
+    mockGetCheckoutStatusClient.mockResolvedValue({
+      nextAction: "show_success",
+      adaptationId: "adapt-1",
+    });
+    mockDownloadFromApi.mockImplementation(async (options: unknown) => {
+      const payload = options as {
+        onStageChange?: (stage: "preparing" | "finalizing") => void;
+      };
+      payload.onStageChange?.("preparing");
+    });
+
+    render(<PagamentoPendente />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "Baixar PDF" })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("link", { name: "Baixar PDF" }));
+
+    await waitFor(() => {
+      expect(mockDownloadFromApi).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByText(/aguarde, estamos preparando seu download\./i),
+      ).toBeTruthy();
+    });
   });
 });

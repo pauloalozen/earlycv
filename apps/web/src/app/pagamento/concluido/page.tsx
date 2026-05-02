@@ -6,7 +6,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { AuthMonoShell } from "@/components/auth/auth-mono-shell";
+import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
+import {
+  type DownloadProgressStage,
+  downloadFromApi,
+} from "@/lib/client-download";
 import {
   type CheckoutStatusResponse,
   getCheckoutStatusClient,
@@ -24,6 +29,9 @@ function ConcluidoContent() {
 
   const [state, setState] = useState<UIState>("polling");
   const [result, setResult] = useState<CheckoutStatusResponse | null>(null);
+  const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
+  const [downloadStage, setDownloadStage] =
+    useState<DownloadProgressStage | null>(null);
   const pollCount = useRef(0);
 
   useEffect(() => {
@@ -64,6 +72,24 @@ function ConcluidoContent() {
 
     poll();
   }, [checkoutId]);
+
+  const handleDownload = async (
+    format: "pdf" | "docx",
+    targetAdaptationId: string,
+  ) => {
+    if (downloading) return;
+    setDownloading(format);
+    try {
+      await downloadFromApi({
+        url: `/api/cv-adaptation/${targetAdaptationId}/download?format=${format}`,
+        fallbackFilename: `cv-adaptado.${format}`,
+        onStageChange: setDownloadStage,
+      });
+    } finally {
+      setDownloading(null);
+      setDownloadStage(null);
+    }
+  };
 
   return (
     <AuthMonoShell>
@@ -119,6 +145,10 @@ function ConcluidoContent() {
               <>
                 <a
                   href={`/api/cv-adaptation/${result.originAdaptationId}/download?format=pdf`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void handleDownload("pdf", result.originAdaptationId);
+                  }}
                   style={{ color: "#ffffff" }}
                   className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222] mb-3"
                 >
@@ -126,6 +156,10 @@ function ConcluidoContent() {
                 </a>
                 <a
                   href={`/api/cv-adaptation/${result.originAdaptationId}/download?format=docx`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void handleDownload("docx", result.originAdaptationId);
+                  }}
                   className="block w-full rounded-[14px] border border-[#D0D0D0] bg-white py-[14px] text-base font-medium leading-none text-center text-[#111111] transition-colors hover:bg-[#F5F5F5] mb-3"
                 >
                   Baixar DOCX
@@ -267,6 +301,11 @@ function ConcluidoContent() {
           </Link>
         </div>
       )}
+      <DownloadProgressOverlay
+        open={downloadStage !== null}
+        stage={downloadStage}
+        format={downloading}
+      />
     </AuthMonoShell>
   );
 }
