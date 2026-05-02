@@ -35,4 +35,8 @@ test("sitemap includes /blog and published blog posts", () => {
     urls.some((url) => url.endsWith("/modelo-curriculo-ats")),
     true,
   );
+  assert.equal(
+    urls.some((url) => url.endsWith("/palavras-chave-curriculo")),
+    true,
+  );
 });

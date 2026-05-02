@@ -5,6 +5,7 @@ export const curriculoGupyPage: SeoPageDefinition = {
   path: "/curriculo-gupy",
   published: true,
   updatedAt: "2026-05-02",
+  pageType: "transactional",
   category: "plataformas",
   seo: {
     title: "Curriculo para Gupy: como melhorar sua aderencia a vaga | EarlyCV",

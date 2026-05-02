@@ -5,6 +5,7 @@ export const modeloCurriculoAtsPage: SeoPageDefinition = {
   path: "/modelo-curriculo-ats",
   published: true,
   updatedAt: "2026-05-02",
+  pageType: "transactional",
   category: "modelo",
   seo: {
     title: "Modelo de curriculo ATS simples e facil de ler | EarlyCV",
@@ -117,6 +118,10 @@ export const modeloCurriculoAtsPage: SeoPageDefinition = {
     {
       href: "/blog/palavras-chave-curriculo",
       label: "Blog: palavras-chave no curriculo",
+    },
+    {
+      href: "/palavras-chave-curriculo",
+      label: "Hub: palavras-chave para curriculo",
     },
   ],
   cta: {

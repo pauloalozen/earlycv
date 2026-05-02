@@ -956,6 +956,12 @@ export default function Home() {
             Adaptar curriculo
           </Link>
           <Link
+            href="/palavras-chave-curriculo"
+            style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
+          >
+            Palavras-chave
+          </Link>
+          <Link
             href="/termos-de-uso"
             style={{ fontSize: 12, color: "#6a6a66", textDecoration: "none" }}
           >

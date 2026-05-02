@@ -21,11 +21,30 @@ test("seo registry keeps unique slugs and canonical paths", () => {
 
 test("seo registry returns only published pages for static generation", () => {
   const published = getPublishedSeoPages();
-  assert.equal(published.length, 4);
+  assert.equal(published.length, 5);
   assert.equal(
     published.every((page) => page.published),
     true,
   );
+});
+
+test("keyword hub keeps minimum quantitative structure", () => {
+  const hub = getSeoPageBySlug("palavras-chave-curriculo");
+  assert.ok(hub);
+  assert.equal(hub.pageType, "hub");
+  assert.ok(hub.keywordGroups);
+
+  for (const group of hub.keywordGroups ?? []) {
+    assert.ok(group.roles.length >= 2);
+    for (const role of group.roles) {
+      assert.ok(role.keywords.length >= 8);
+      for (const keyword of role.keywords) {
+        assert.ok(keyword.term.length > 0);
+        assert.ok(keyword.whereToUse.length > 0);
+        assert.ok(keyword.whenItMakesSense.length > 0);
+      }
+    }
+  }
 });
 
 test("seo slug guard blocks unknown values", () => {

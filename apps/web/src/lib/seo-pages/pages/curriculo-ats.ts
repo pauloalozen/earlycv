@@ -5,6 +5,7 @@ export const curriculoAtsPage: SeoPageDefinition = {
   path: "/curriculo-ats",
   published: true,
   updatedAt: "2026-05-02",
+  pageType: "transactional",
   category: "ats",
   seo: {
     title: "Curriculo ATS: como criar um curriculo compativel | EarlyCV",
@@ -98,6 +99,10 @@ export const curriculoAtsPage: SeoPageDefinition = {
     {
       href: "/blog/palavras-chave-curriculo",
       label: "Blog: palavras-chave no curriculo",
+    },
+    {
+      href: "/palavras-chave-curriculo",
+      label: "Hub: palavras-chave para curriculo",
     },
   ],
   cta: {

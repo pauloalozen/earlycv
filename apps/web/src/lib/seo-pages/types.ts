@@ -3,6 +3,7 @@ export const SEO_PAGE_SLUGS = [
   "adaptar-curriculo-para-vaga",
   "curriculo-gupy",
   "modelo-curriculo-ats",
+  "palavras-chave-curriculo",
 ] as const;
 
 export type SeoPageSlug = (typeof SEO_PAGE_SLUGS)[number];
@@ -35,6 +36,26 @@ export type SeoPageCta = {
   title: string;
 };
 
+export type SeoPageType = "hub" | "profession" | "transactional";
+
+export type SeoKeywordItem = {
+  term: string;
+  whenItMakesSense: string;
+  whereToUse: string;
+};
+
+export type SeoKeywordRole = {
+  keywords: SeoKeywordItem[];
+  seniority?: "geral" | "junior" | "pleno" | "senior";
+  title: string;
+};
+
+export type SeoKeywordGroup = {
+  area: string;
+  description: string;
+  roles: SeoKeywordRole[];
+};
+
 export type SeoPageDefinition = {
   category: string;
   cta: SeoPageCta;
@@ -43,6 +64,9 @@ export type SeoPageDefinition = {
     description: string;
     title: string;
   };
+  keywordGroups?: SeoKeywordGroup[];
+  pageType: SeoPageType;
+  alertMessage?: string;
   path: `/${SeoPageSlug}`;
   published: boolean;
   relatedLinks: SeoRelatedLink[];

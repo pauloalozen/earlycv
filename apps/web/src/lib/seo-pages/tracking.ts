@@ -2,12 +2,16 @@ import { emitBusinessFunnelEvent } from "@/lib/cv-adaptation-api";
 
 type CtaLocation = "bottom" | "hero" | "middle";
 
-export function trackSeoPageViewed(input: { path: string; slug: string }) {
+export function trackSeoPageViewed(input: {
+  pageType: "hub" | "profession" | "transactional";
+  path: string;
+  slug: string;
+}) {
   try {
     return emitBusinessFunnelEvent({
       eventName: "seo_page_viewed",
       metadata: {
-        page_type: "transactional_seo",
+        page_type: input.pageType,
         path: input.path,
         slug: input.slug,
         source: "seo_page",
@@ -20,6 +24,7 @@ export function trackSeoPageViewed(input: { path: string; slug: string }) {
 
 export function trackSeoPageCtaClicked(input: {
   location: CtaLocation;
+  pageType: "hub" | "profession" | "transactional";
   path: string;
   slug: string;
   target: string;
@@ -29,7 +34,7 @@ export function trackSeoPageCtaClicked(input: {
       eventName: "seo_page_cta_clicked",
       metadata: {
         location: input.location,
-        page_type: "transactional_seo",
+        page_type: input.pageType,
         path: input.path,
         slug: input.slug,
         source: "seo_page",

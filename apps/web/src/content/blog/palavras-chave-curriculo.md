@@ -40,6 +40,6 @@ Evite lista solta de buzzwords. Prefira frases curtas conectando ferramenta e im
 - fraco: "Conhecimento em dados e dashboards";
 - forte: "Construi dashboards em Power BI para acompanhamento semanal de funil comercial".
 
-Se quiser estruturar o documento para leitura automatica e humana, complemente com o guia de [curriculo ATS](/blog/curriculo-ats). Depois, aplique a adaptacao completa com o passo a passo de [curriculo por vaga](/blog/como-adaptar-curriculo-para-vaga).
+Se quiser consultar listas por area e cargo, veja o hub utilitario de [palavras-chave para curriculo](/palavras-chave-curriculo). Para estruturar o documento, complemente com o guia de [curriculo ATS](/blog/curriculo-ats). Depois, aplique a adaptacao completa com o passo a passo de [curriculo por vaga](/blog/como-adaptar-curriculo-para-vaga).
 
 Quando quiser validar aderencia de forma mais objetiva, use [/adaptar](/adaptar).

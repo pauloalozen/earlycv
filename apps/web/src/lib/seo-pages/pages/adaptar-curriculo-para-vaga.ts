@@ -5,6 +5,7 @@ export const adaptarCurriculoParaVagaPage: SeoPageDefinition = {
   path: "/adaptar-curriculo-para-vaga",
   published: true,
   updatedAt: "2026-05-02",
+  pageType: "transactional",
   category: "adaptacao",
   seo: {
     title: "Adaptar curriculo para vaga: como melhorar sua aderencia | EarlyCV",
@@ -98,6 +99,10 @@ export const adaptarCurriculoParaVagaPage: SeoPageDefinition = {
     {
       href: "/blog/como-adaptar-curriculo-para-vaga",
       label: "Blog: como adaptar curriculo",
+    },
+    {
+      href: "/palavras-chave-curriculo",
+      label: "Hub: palavras-chave para curriculo",
     },
   ],
   cta: {

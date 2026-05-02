@@ -2,6 +2,7 @@ import { adaptarCurriculoParaVagaPage } from "./pages/adaptar-curriculo-para-vag
 import { curriculoAtsPage } from "./pages/curriculo-ats";
 import { curriculoGupyPage } from "./pages/curriculo-gupy";
 import { modeloCurriculoAtsPage } from "./pages/modelo-curriculo-ats";
+import { palavrasChaveCurriculoHubPage } from "./pages/palavras-chave-curriculo";
 import type { SeoPageDefinition, SeoPageSlug } from "./types";
 
 const SEO_PAGES: SeoPageDefinition[] = [
@@ -9,6 +10,7 @@ const SEO_PAGES: SeoPageDefinition[] = [
   adaptarCurriculoParaVagaPage,
   curriculoGupyPage,
   modeloCurriculoAtsPage,
+  palavrasChaveCurriculoHubPage,
 ];
 
 const SEO_PAGES_BY_SLUG = new Map<SeoPageSlug, SeoPageDefinition>(

@@ -8,6 +8,7 @@ export function SeoAnalysisCta({
   buttonLabel,
   description,
   location,
+  pageType,
   path,
   slug,
   target,
@@ -16,6 +17,7 @@ export function SeoAnalysisCta({
   buttonLabel: string;
   description: string;
   location: "bottom" | "hero" | "middle";
+  pageType: "hub" | "profession" | "transactional";
   path: string;
   slug: string;
   target: string;
@@ -35,6 +37,7 @@ export function SeoAnalysisCta({
           queueMicrotask(() => {
             void trackSeoPageCtaClicked({
               location,
+              pageType,
               path,
               slug,
               target,

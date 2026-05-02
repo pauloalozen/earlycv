@@ -10,14 +10,18 @@ import { trackSeoPageCtaClicked, trackSeoPageViewed } from "./tracking";
 
 describe("seo pages tracking", () => {
   it("emits seo_page_viewed payload", async () => {
-    await trackSeoPageViewed({ path: "/curriculo-ats", slug: "curriculo-ats" });
+    await trackSeoPageViewed({
+      pageType: "hub",
+      path: "/palavras-chave-curriculo",
+      slug: "palavras-chave-curriculo",
+    });
 
     expect(emitBusinessFunnelEventMock).toHaveBeenCalledWith({
       eventName: "seo_page_viewed",
       metadata: {
-        page_type: "transactional_seo",
-        path: "/curriculo-ats",
-        slug: "curriculo-ats",
+        page_type: "hub",
+        path: "/palavras-chave-curriculo",
+        slug: "palavras-chave-curriculo",
         source: "seo_page",
       },
     });
@@ -26,8 +30,9 @@ describe("seo pages tracking", () => {
   it("emits seo_page_cta_clicked payload", async () => {
     await trackSeoPageCtaClicked({
       location: "hero",
-      path: "/curriculo-ats",
-      slug: "curriculo-ats",
+      pageType: "hub",
+      path: "/palavras-chave-curriculo",
+      slug: "palavras-chave-curriculo",
       target: "/adaptar",
     });
 
@@ -35,9 +40,9 @@ describe("seo pages tracking", () => {
       eventName: "seo_page_cta_clicked",
       metadata: {
         location: "hero",
-        page_type: "transactional_seo",
-        path: "/curriculo-ats",
-        slug: "curriculo-ats",
+        page_type: "hub",
+        path: "/palavras-chave-curriculo",
+        slug: "palavras-chave-curriculo",
         source: "seo_page",
         target: "/adaptar",
       },
