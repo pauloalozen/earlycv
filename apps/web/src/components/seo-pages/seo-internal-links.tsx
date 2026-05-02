@@ -2,21 +2,47 @@ import Link from "next/link";
 
 import type { SeoRelatedLink } from "@/lib/seo-pages/types";
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+
 export function SeoInternalLinks({ links }: { links: SeoRelatedLink[] }) {
   return (
-    <section className="rounded-2xl border border-stone-200 bg-white p-6">
-      <h2 className="text-xl font-semibold tracking-tight">
+    <div
+      style={{
+        paddingTop: 28,
+        borderTop: "1px solid rgba(10,10,10,0.07)",
+      }}
+    >
+      <h2
+        style={{
+          fontSize: 22,
+          fontWeight: 500,
+          letterSpacing: -0.7,
+          margin: "0 0 16px",
+          color: "#0a0a0a",
+          fontFamily: GEIST,
+        }}
+      >
         Leituras relacionadas
       </h2>
-      <ul className="mt-3 space-y-2 text-stone-700">
+      <div>
         {links.map((link) => (
-          <li key={link.href}>
-            <Link className="underline decoration-stone-400" href={link.href}>
-              {link.label}
-            </Link>
-          </li>
+          <Link
+            key={link.href}
+            href={link.href}
+            style={{
+              display: "block",
+              fontSize: 13.5,
+              color: "#a0a098",
+              marginBottom: 10,
+              textDecoration: "underline",
+              textUnderlineOffset: 2,
+              fontFamily: GEIST,
+            }}
+          >
+            {link.label}
+          </Link>
         ))}
-      </ul>
-    </section>
+      </div>
+    </div>
   );
 }

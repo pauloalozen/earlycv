@@ -4,33 +4,84 @@ import Link from "next/link";
 
 import { trackBlogCtaClicked } from "@/lib/blog/tracking";
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
+
 export function BlogAnalysisCta({
   location,
   slug,
+  title = "Compare seu CV com a vaga em minutos",
+  sub = "Veja lacunas, pontos fortes e ajustes possíveis sem inventar informações.",
+  kicker = "ANÁLISE GRATUITA",
 }: {
   location: "top" | "middle" | "bottom" | "index";
   slug?: string;
+  title?: string;
+  sub?: string;
+  kicker?: string;
 }) {
   return (
-    <div className="rounded-2xl bg-stone-900 p-6 text-stone-50">
-      <p className="text-sm uppercase tracking-[0.14em] text-stone-300">
-        analise gratuita
-      </p>
-      <h3 className="mt-2 text-2xl font-semibold tracking-tight">
-        Compare seu CV com a vaga em minutos
-      </h3>
-      <p className="mt-2 text-sm text-stone-300">
-        Veja lacunas, pontos fortes e ajustes possiveis sem inventar
-        informacoes.
-      </p>
+    <div
+      style={{
+        background: "#0a0a0a",
+        borderRadius: 14,
+        padding: "28px 32px",
+        margin: "48px 0",
+        fontFamily: GEIST,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 10,
+          letterSpacing: 1.2,
+          color: "#7a7a74",
+          marginBottom: 12,
+          fontWeight: 500,
+        }}
+      >
+        {kicker}
+      </div>
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 500,
+          color: "#fafaf6",
+          letterSpacing: -0.8,
+          marginBottom: 8,
+        }}
+      >
+        {title}
+      </div>
+      <div
+        style={{
+          fontSize: 14,
+          color: "#a0a098",
+          marginBottom: 20,
+          lineHeight: 1.5,
+        }}
+      >
+        {sub}
+      </div>
       <Link
-        className="mt-5 inline-flex rounded-xl bg-white px-4 py-3 text-sm font-semibold text-stone-900"
         href="/adaptar"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          background: "#c6ff3a",
+          color: "#0a0a0a",
+          borderRadius: 8,
+          padding: "11px 18px",
+          fontSize: 13.5,
+          fontWeight: 600,
+          textDecoration: "none",
+          fontFamily: GEIST,
+        }}
         onClick={() => {
           void trackBlogCtaClicked(location, slug);
         }}
       >
-        Adaptar meu curriculo
+        Adaptar meu CV →
       </Link>
     </div>
   );

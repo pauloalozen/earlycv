@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { BlogAnalysisCta } from "@/components/blog/blog-analysis-cta";
 import { BlogCard } from "@/components/blog/blog-card";
 import { BlogIndexViewTracker } from "@/components/blog/blog-view-trackers";
 import { PublicFooter } from "@/components/public-footer";
+import { PublicNavBar } from "@/components/public-nav-bar";
 import {
   getAllPublishedBlogPosts,
   getFeaturedBlogPost,
@@ -33,42 +35,186 @@ export const metadata: Metadata = {
   },
 };
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
+const GRAIN = `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`;
+
 export default function BlogIndexPage() {
   const posts = getAllPublishedBlogPosts();
   const featured = getFeaturedBlogPost();
 
   return (
-    <main className="min-h-screen bg-stone-50 text-stone-900">
+    <main
+      style={{
+        minHeight: "100vh",
+        background:
+          "radial-gradient(ellipse 80% 40% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+        fontFamily: GEIST,
+        color: "#0a0a0a",
+        position: "relative",
+      }}
+    >
+      {/* Grain */}
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: 0.5,
+          mixBlendMode: "multiply",
+          zIndex: 0,
+          backgroundImage: GRAIN,
+        }}
+      />
+
       <BlogIndexViewTracker />
-      <div className="mx-auto max-w-6xl space-y-10 px-6 py-10 md:px-10">
-        <header className="space-y-3">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-stone-500">
-            blog
-          </p>
-          <h1 className="text-4xl font-medium tracking-tight md:text-5xl">
-            Conteudo pratico para melhorar suas candidaturas
+      <PublicNavBar />
+
+      <div
+        style={{
+          maxWidth: 860,
+          margin: "0 auto",
+          padding: "56px 40px 0",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        {/* Header */}
+        <header style={{ marginBottom: 40 }}>
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 10.5,
+              letterSpacing: 1.2,
+              color: "#8a8a85",
+              fontWeight: 500,
+              marginBottom: 16,
+            }}
+          >
+            BLOG
+          </div>
+          <h1
+            style={{
+              fontSize: 52,
+              fontWeight: 500,
+              letterSpacing: -2,
+              lineHeight: 1.04,
+              margin: "0 0 14px",
+            }}
+          >
+            Conteúdo prático para melhorar
+            <br />
+            suas candidaturas.
           </h1>
-          <p className="max-w-3xl text-base text-stone-600">
-            Tutoriais diretos para adaptar curriculo com base real no seu
-            historico.
+          <p
+            style={{
+              fontSize: 16,
+              color: "#45443e",
+              lineHeight: 1.55,
+              margin: 0,
+            }}
+          >
+            Tutoriais diretos para adaptar currículo com base real no seu
+            histórico.
           </p>
         </header>
 
+        {/* Featured */}
         {featured ? (
-          <section className="rounded-2xl border border-stone-200 bg-white p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
-              destaque
-            </p>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight">
+          <Link
+            href={`/blog/${featured.slug}`}
+            style={{
+              display: "block",
+              textDecoration: "none",
+              color: "inherit",
+              background: "#fafaf6",
+              border: "1px solid rgba(10,10,10,0.08)",
+              borderRadius: 14,
+              padding: "28px 32px",
+              marginBottom: 24,
+              boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                fontFamily: MONO,
+                fontSize: 10,
+                letterSpacing: 1.2,
+                color: "#8a8a85",
+                fontWeight: 500,
+                marginBottom: 14,
+              }}
+            >
+              <span
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: "50%",
+                  background: "#c6ff3a",
+                  boxShadow: "0 0 5px #c6ff3a",
+                  display: "inline-block",
+                }}
+              />
+              DESTAQUE
+            </div>
+            <h2
+              style={{
+                fontSize: 28,
+                fontWeight: 500,
+                letterSpacing: -1,
+                lineHeight: 1.2,
+                margin: "0 0 10px",
+              }}
+            >
               {featured.title}
             </h2>
-            <p className="mt-3 max-w-3xl text-stone-600">
+            <p
+              style={{
+                fontSize: 15,
+                color: "#45443e",
+                lineHeight: 1.6,
+                margin: "0 0 18px",
+              }}
+            >
               {featured.description}
             </p>
-          </section>
+            <div style={{ display: "flex", gap: 20 }}>
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#a0a098",
+                  letterSpacing: 0.2,
+                }}
+              >
+                {`/blog/${featured.slug}`}
+              </span>
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#a0a098",
+                  letterSpacing: 0.2,
+                }}
+              >
+                {featured.publishedAt}
+              </span>
+            </div>
+          </Link>
         ) : null}
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {/* Posts grid */}
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 16,
+          }}
+        >
           {posts.map((post) => (
             <BlogCard key={post.slug} post={post} />
           ))}

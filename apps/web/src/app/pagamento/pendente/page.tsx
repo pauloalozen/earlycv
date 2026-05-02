@@ -160,21 +160,40 @@ function PendenteContent() {
     <AuthMonoShell>
       {state === "waiting" && (
         <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-yellow-50 flex items-center justify-center mx-auto mb-6">
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: "50%",
+              background: "rgba(245,197,24,0.12)",
+              border: "1px solid rgba(245,197,24,0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px",
+            }}
+          >
             <svg
               aria-hidden="true"
-              width="32"
-              height="32"
+              width="28"
+              height="28"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-yellow-500"
             >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v6l4 2" />
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="#f5c518"
+                strokeWidth="1.5"
+              />
+              <path
+                d="M12 7v5l3 3"
+                stroke="#f5c518"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </div>
 
@@ -189,19 +208,58 @@ function PendenteContent() {
             Pagamento pendente. Se você ainda não concluiu o Pix, pode abrir o
             pagamento novamente.
           </p>
-          <p className="text-gray-400 text-xs mb-8">
+          <p
+            style={{
+              fontFamily: "var(--font-geist-mono), monospace",
+              fontSize: 11,
+              color: "#a0a098",
+              letterSpacing: 0.2,
+              marginBottom: 20,
+              lineHeight: 1.5,
+              maxWidth: 320,
+              margin: "0 auto 20px",
+            }}
+          >
             Para pagamentos via PIX ou boleto, isso pode levar alguns minutos.
           </p>
 
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <div className="h-2 w-2 rounded-full bg-yellow-400 animate-bounce" />
-            <div
-              className="h-2 w-2 rounded-full bg-yellow-400 animate-bounce"
-              style={{ animationDelay: "0.15s" }}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              marginBottom: 28,
+            }}
+          >
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: "#f5c518",
+                display: "inline-block",
+              }}
             />
-            <div
-              className="h-2 w-2 rounded-full bg-yellow-400 animate-bounce"
-              style={{ animationDelay: "0.3s" }}
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: "#f5c518",
+                opacity: 0.5,
+                display: "inline-block",
+              }}
+            />
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: "#f5c518",
+                opacity: 0.25,
+                display: "inline-block",
+              }}
             />
           </div>
 
@@ -209,7 +267,7 @@ function PendenteContent() {
             type="button"
             onClick={() => void handleResumeCheckout()}
             disabled={isResuming}
-            className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center text-white transition-colors hover:bg-[#222222] mb-3 disabled:opacity-60"
+            className="block w-full rounded-[10px] bg-[#0a0a0a] py-[14px] text-[14.5px] font-medium leading-none text-center text-white transition-colors hover:bg-[#222222] mb-3 disabled:opacity-60"
           >
             {isResuming ? "Abrindo Pix..." : "Abrir Pix novamente"}
           </button>
@@ -218,7 +276,14 @@ function PendenteContent() {
           )}
           <Link
             href="/compras"
-            className="text-sm text-gray-400 hover:text-gray-600"
+            style={{
+              background: "transparent",
+              color: "#6a6560",
+              fontSize: 13,
+              textDecoration: "underline",
+              textUnderlineOffset: 3,
+              textDecorationColor: "rgba(10,10,10,0.2)",
+            }}
           >
             Voltar para minhas compras
           </Link>
@@ -227,29 +292,60 @@ function PendenteContent() {
 
       {state === "approved" && (
         <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-lime-100 flex items-center justify-center mx-auto mb-6">
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: "50%",
+              background: "rgba(198,255,58,0.18)",
+              border: "1px solid rgba(110,150,20,0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px",
+            }}
+          >
             <svg
               aria-hidden="true"
-              width="32"
-              height="32"
+              width="22"
+              height="22"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-lime-600"
             >
-              <path d="M5 13l4 4L19 7" />
+              <path
+                d="M5 12l5 5L20 7"
+                stroke="#405410"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </div>
 
           <h1 className="text-2xl font-semibold text-gray-900 mb-2">
             Pagamento confirmado!
           </h1>
-          <p className="text-gray-500 text-sm mb-8">
-            Seus créditos já estão disponíveis e seu cv já está liberado.
+          <p
+            style={{
+              fontSize: 14,
+              color: "#45443e",
+              lineHeight: 1.6,
+              marginBottom: 8,
+              maxWidth: 340,
+              margin: "0 auto 8px",
+            }}
+          >
+            Seus créditos já estão disponíveis e seu CV já está liberado.
           </p>
+
+          <div
+            style={{
+              width: "100%",
+              height: 1,
+              background: "rgba(10,10,10,0.06)",
+              margin: "20px 0",
+            }}
+          />
 
           {adaptationId ? (
             <>
@@ -260,7 +356,7 @@ function PendenteContent() {
                   void handleDownload("pdf", adaptationId);
                 }}
                 style={{ color: "#ffffff" }}
-                className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222] mb-3"
+                className="block w-full rounded-[10px] bg-[#0a0a0a] py-[14px] text-[14.5px] font-medium leading-none text-center transition-colors hover:bg-[#222222] mb-3"
               >
                 Baixar PDF
               </a>
@@ -270,13 +366,20 @@ function PendenteContent() {
                   event.preventDefault();
                   void handleDownload("docx", adaptationId);
                 }}
-                className="block w-full rounded-[14px] border border-[#D0D0D0] bg-white py-[14px] text-base font-medium leading-none text-center text-[#111111] transition-colors hover:bg-[#F5F5F5] mb-3"
+                className="block w-full rounded-[10px] border border-[rgba(10,10,10,0.15)] bg-white py-[13px] text-[14.5px] font-medium leading-none text-center text-[#0a0a0a] transition-colors hover:bg-[#F5F5F5] mb-3"
               >
                 Baixar DOCX
               </a>
               <Link
                 href={`/adaptar/resultado?adaptationId=${adaptationId}`}
-                className="text-sm text-gray-500 hover:text-gray-700"
+                style={{
+                  background: "transparent",
+                  color: "#6a6560",
+                  fontSize: 13,
+                  textDecoration: "underline",
+                  textUnderlineOffset: 3,
+                  textDecorationColor: "rgba(10,10,10,0.2)",
+                }}
               >
                 Voltar para análise e baixar depois
               </Link>
@@ -285,7 +388,7 @@ function PendenteContent() {
             <Link
               href="/adaptar"
               style={{ color: "#ffffff" }}
-              className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222]"
+              className="block w-full rounded-[10px] bg-[#0a0a0a] py-[14px] text-[14.5px] font-medium leading-none text-center transition-colors hover:bg-[#222222]"
             >
               Adaptar meu CV agora
             </Link>
@@ -295,21 +398,40 @@ function PendenteContent() {
 
       {state === "timeout" && (
         <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-yellow-50 flex items-center justify-center mx-auto mb-6">
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: "50%",
+              background: "rgba(245,197,24,0.12)",
+              border: "1px solid rgba(245,197,24,0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px",
+            }}
+          >
             <svg
               aria-hidden="true"
-              width="32"
-              height="32"
+              width="28"
+              height="28"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-yellow-500"
             >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v6l4 2" />
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="#f5c518"
+                strokeWidth="1.5"
+              />
+              <path
+                d="M12 7v5l3 3"
+                stroke="#f5c518"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </div>
 
@@ -330,13 +452,19 @@ function PendenteContent() {
               setState("waiting");
               startPolling();
             }}
-            className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center text-white transition-colors hover:bg-[#222222] mb-3"
+            className="block w-full rounded-[10px] bg-[#0a0a0a] py-[14px] text-[14.5px] font-medium leading-none text-center text-white transition-colors hover:bg-[#222222] mb-3"
           >
             Verificar novamente
           </button>
           <Link
             href="/adaptar"
-            className="text-sm text-gray-500 hover:text-gray-700"
+            style={{
+              color: "#6a6560",
+              fontSize: 13,
+              textDecoration: "underline",
+              textUnderlineOffset: 3,
+              textDecorationColor: "rgba(10,10,10,0.2)",
+            }}
           >
             Voltar para análise e tentar depois
           </Link>
@@ -345,21 +473,40 @@ function PendenteContent() {
 
       {state === "failed" && (
         <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-6">
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: "50%",
+              background: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px",
+            }}
+          >
             <svg
               aria-hidden="true"
-              width="32"
-              height="32"
+              width="22"
+              height="22"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-red-500"
             >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M15 9l-6 6M9 9l6 6" />
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="#ef4444"
+                strokeWidth="1.5"
+              />
+              <path
+                d="M15 9l-6 6M9 9l6 6"
+                stroke="#ef4444"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </div>
 
@@ -373,13 +520,21 @@ function PendenteContent() {
           <Link
             href="/planos"
             style={{ color: "#ffffff" }}
-            className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222]"
+            className="block w-full rounded-[10px] bg-[#0a0a0a] py-[14px] text-[14.5px] font-medium leading-none text-center transition-colors hover:bg-[#222222]"
           >
             Tentar novamente
           </Link>
           <Link
             href="/adaptar"
-            className="mt-4 inline-block text-sm text-gray-500 hover:text-gray-700"
+            style={{
+              display: "inline-block",
+              marginTop: 16,
+              color: "#6a6560",
+              fontSize: 13,
+              textDecoration: "underline",
+              textUnderlineOffset: 3,
+              textDecorationColor: "rgba(10,10,10,0.2)",
+            }}
           >
             Voltar para análise e tentar depois
           </Link>

@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
-
 import { trackSeoPageCtaClicked } from "@/lib/seo-pages/tracking";
+
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
 
 export function SeoAnalysisCta({
   buttonLabel,
@@ -24,14 +25,49 @@ export function SeoAnalysisCta({
   title: string;
 }) {
   return (
-    <div className="rounded-2xl bg-stone-900 p-6 text-stone-50">
-      <p className="text-sm uppercase tracking-[0.14em] text-stone-300">
-        analise gratuita
-      </p>
-      <h3 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h3>
-      <p className="mt-2 text-sm text-stone-300">{description}</p>
-      <Link
-        className="mt-5 inline-flex rounded-xl bg-white px-4 py-3 text-sm font-semibold text-stone-900"
+    <div
+      style={{
+        background: "#0a0a0a",
+        borderRadius: 14,
+        padding: "28px 32px",
+        margin: "48px 0",
+        fontFamily: GEIST,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 10,
+          letterSpacing: 1.2,
+          color: "#7a7a74",
+          marginBottom: 12,
+          fontWeight: 500,
+        }}
+      >
+        ANÁLISE GRATUITA
+      </div>
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 500,
+          color: "#fafaf6",
+          letterSpacing: -0.8,
+          marginBottom: 8,
+        }}
+      >
+        {title}
+      </div>
+      <div
+        style={{
+          fontSize: 14,
+          color: "#a0a098",
+          marginBottom: 20,
+          lineHeight: 1.5,
+        }}
+      >
+        {description}
+      </div>
+      <a
         href={target}
         onClick={() => {
           queueMicrotask(() => {
@@ -44,9 +80,21 @@ export function SeoAnalysisCta({
             });
           });
         }}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          background: "#c6ff3a",
+          color: "#0a0a0a",
+          borderRadius: 8,
+          padding: "11px 18px",
+          fontSize: 13.5,
+          fontWeight: 600,
+          textDecoration: "none",
+          fontFamily: GEIST,
+        }}
       >
         {buttonLabel}
-      </Link>
+      </a>
     </div>
   );
 }

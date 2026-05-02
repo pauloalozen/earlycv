@@ -102,27 +102,48 @@ function ConcluidoContent() {
 
       {state === "approved" && (
         <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-lime-100 flex items-center justify-center mx-auto mb-6">
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: "50%",
+              background: "rgba(198,255,58,0.18)",
+              border: "1px solid rgba(110,150,20,0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px",
+            }}
+          >
             <svg
               aria-hidden="true"
-              width="32"
-              height="32"
+              width="22"
+              height="22"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-lime-600"
             >
-              <path d="M5 13l4 4L19 7" />
+              <path
+                d="M5 12l5 5L20 7"
+                stroke="#405410"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </div>
 
           <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-            Pagamento aprovado!
+            Pagamento confirmado!
           </h1>
-          <p className="text-gray-500 text-sm mb-8">
+          <p
+            style={{
+              fontSize: 14,
+              color: "#45443e",
+              lineHeight: 1.6,
+              maxWidth: 340,
+              margin: "0 auto 8px",
+            }}
+          >
             {result?.message ??
               (result?.type === "plan"
                 ? "Seus créditos estão disponíveis no painel."
@@ -136,6 +157,15 @@ function ConcluidoContent() {
               liberá-lo manualmente.
             </p>
           )}
+
+          <div
+            style={{
+              width: "100%",
+              height: 1,
+              background: "rgba(10,10,10,0.06)",
+              margin: "20px 0",
+            }}
+          />
 
           {result?.originAction === "unlock_cv" &&
             result.originAdaptationId &&
@@ -153,7 +183,7 @@ function ConcluidoContent() {
                     void handleDownload("pdf", result.originAdaptationId);
                   }}
                   style={{ color: "#ffffff" }}
-                  className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222] mb-3"
+                  className="block w-full rounded-[10px] bg-[#0a0a0a] py-[14px] text-[14.5px] font-medium leading-none text-center transition-colors hover:bg-[#222222] mb-3"
                 >
                   Baixar PDF
                 </a>
@@ -166,13 +196,13 @@ function ConcluidoContent() {
                     }
                     void handleDownload("docx", result.originAdaptationId);
                   }}
-                  className="block w-full rounded-[14px] border border-[#D0D0D0] bg-white py-[14px] text-base font-medium leading-none text-center text-[#111111] transition-colors hover:bg-[#F5F5F5] mb-3"
+                  className="block w-full rounded-[10px] border border-[rgba(10,10,10,0.15)] bg-white py-[13px] text-[14.5px] font-medium leading-none text-center text-[#0a0a0a] transition-colors hover:bg-[#F5F5F5] mb-3"
                 >
                   Baixar DOCX
                 </a>
                 <Link
                   href={`/adaptar/resultado?adaptationId=${result.originAdaptationId}`}
-                  className="block w-full rounded-[14px] border border-[#D0D0D0] bg-white py-[14px] text-base font-medium leading-none text-center text-[#111111] transition-colors hover:bg-[#F5F5F5]"
+                  className="block w-full rounded-[10px] border border-[rgba(10,10,10,0.15)] bg-white py-[13px] text-[14.5px] font-medium leading-none text-center text-[#0a0a0a] transition-colors hover:bg-[#F5F5F5]"
                 >
                   Ver análise do CV
                 </Link>
@@ -188,7 +218,7 @@ function ConcluidoContent() {
                 )
               }
               style={{ color: "#ffffff" }}
-              className="w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none transition-colors hover:bg-[#222222]"
+              className="w-full rounded-[10px] bg-[#0a0a0a] py-[14px] text-[14.5px] font-medium leading-none transition-colors hover:bg-[#222222]"
             >
               Ver e baixar meu CV
             </button>
@@ -196,7 +226,7 @@ function ConcluidoContent() {
             <Link
               href="/adaptar"
               style={{ color: "#ffffff" }}
-              className="block w-full rounded-[14px] bg-[#111111] py-[16px] text-base font-medium leading-none text-center transition-colors hover:bg-[#222222]"
+              className="block w-full rounded-[10px] bg-[#0a0a0a] py-[14px] text-[14.5px] font-medium leading-none text-center transition-colors hover:bg-[#222222]"
             >
               Adaptar meu CV agora
             </Link>
@@ -204,7 +234,15 @@ function ConcluidoContent() {
 
           <Link
             href="/dashboard"
-            className="mt-4 block text-sm text-gray-400 hover:text-gray-600"
+            style={{
+              display: "block",
+              marginTop: 16,
+              color: "#6a6560",
+              fontSize: 13,
+              textDecoration: "underline",
+              textUnderlineOffset: 3,
+              textDecorationColor: "rgba(10,10,10,0.2)",
+            }}
           >
             Ir para o painel
           </Link>

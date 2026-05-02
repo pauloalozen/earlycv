@@ -149,9 +149,18 @@ export default async function SeoPage({ params }: SeoPageProps) {
         />
 
         {page.alertMessage ? (
-          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div
+            style={{
+              background: "rgba(245,197,24,0.06)",
+              border: "1px solid rgba(245,197,24,0.2)",
+              borderRadius: 10,
+              padding: "12px 16px",
+              fontSize: 13.5,
+              color: "#5a4a10",
+            }}
+          >
             {page.alertMessage}
-          </section>
+          </div>
         ) : null}
 
         {page.sections.map((section) => (
@@ -160,16 +169,39 @@ export default async function SeoPage({ params }: SeoPageProps) {
 
         {page.pageType === "hub" && page.keywordGroups?.length ? (
           <>
-            <section className="rounded-2xl border border-stone-200 bg-white p-6">
-              <h2 className="text-2xl font-semibold tracking-tight">
-                Lista por area e cargo
+            <div
+              style={{
+                paddingTop: 28,
+                borderTop: "1px solid rgba(10,10,10,0.07)",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: 21,
+                  fontWeight: 500,
+                  letterSpacing: -0.6,
+                  margin: "0 0 8px",
+                  color: "#0a0a0a",
+                  fontFamily:
+                    "var(--font-geist), -apple-system, system-ui, sans-serif",
+                }}
+              >
+                Lista por área e cargo
               </h2>
-              <p className="mt-2 text-sm text-stone-600">
-                Este hub utilitario organiza termos por area e cargo. Diferente
-                do artigo do blog, aqui o foco e consulta rapida para montagem
-                de curriculo.
+              <p
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1.75,
+                  color: "#2a2a28",
+                  margin: 0,
+                  fontFamily:
+                    "var(--font-geist), -apple-system, system-ui, sans-serif",
+                }}
+              >
+                Este hub organiza termos por área e cargo. O foco é consulta
+                rápida para montagem de currículo.
               </p>
-            </section>
+            </div>
             <SeoKeywordAreaNav groups={page.keywordGroups} />
             <SeoKeywordHub groups={page.keywordGroups} />
             <SeoBackToAreasFab />

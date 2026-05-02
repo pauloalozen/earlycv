@@ -43,7 +43,7 @@ describe("SeoKeyword area navigation", () => {
   it("renders area picker block and links", () => {
     render(<SeoKeywordAreaNav groups={[...groups]} />);
 
-    expect(screen.getByText("Escolha sua area")).toBeTruthy();
+    expect(screen.getByText("Escolha sua área")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Tecnologia" }).getAttribute("href"),
     ).toBe("#tecnologia");
@@ -59,7 +59,7 @@ describe("SeoKeyword area navigation", () => {
     expect(document.getElementById("vendas")).not.toBeNull();
     expect(screen.getByText("APIs REST")).toBeTruthy();
     expect(screen.getByText("Prospeccao")).toBeTruthy();
-    expect(screen.getAllByText("Voltar para areas").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Voltar para áreas").length).toBeGreaterThan(0);
   });
 
   it("renders floating shortcut back to #areas", () => {

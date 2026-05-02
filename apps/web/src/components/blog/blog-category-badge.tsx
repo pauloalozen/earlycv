@@ -1,11 +1,27 @@
+const MONO = "var(--font-geist-mono), monospace";
+
 type BlogCategoryBadgeProps = {
   category: string;
 };
 
 export function BlogCategoryBadge({ category }: BlogCategoryBadgeProps) {
   return (
-    <span className="inline-flex rounded-full border border-stone-300 bg-stone-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-700">
-      {category}
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        fontFamily: MONO,
+        fontSize: 9.5,
+        letterSpacing: 1,
+        color: "#5a5a55",
+        fontWeight: 500,
+        background: "rgba(10,10,10,0.05)",
+        border: "1px solid rgba(10,10,10,0.08)",
+        padding: "3px 8px",
+        borderRadius: 4,
+      }}
+    >
+      {category.toUpperCase()}
     </span>
   );
 }

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<title>earlyCV — Telas 12–17 · Handoff Preview</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #ecebe5; font-family: 'Geist', sans-serif; }
+.screen-label {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px; letter-spacing: 1.2px; color: #8a8a85;
+  text-align: center; padding: 40px 0 12px;
+  text-transform: uppercase;
+}
+.screen-title {
+  font-size: 13px; font-weight: 600; color: #3a3a38;
+  text-align: center; margin-bottom: 16px;
+}
+.screen-wrap {
+  display: block; margin: 0 auto;
+  box-shadow: 0 20px 60px -20px rgba(0,0,0,0.2);
+  overflow: hidden;
+}
+.divider {
+  height: 1px; background: rgba(10,10,10,0.06);
+  margin: 48px 80px;
+}
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<div class="screen-label">TELA 12</div>
+<div class="screen-title">Pagamento Pendente</div>
+<div class="screen-wrap" id="s12" style="width:1440px"></div>
+
+<div class="divider"></div>
+
+<div class="screen-label">TELA 13</div>
+<div class="screen-title">Pagamento Confirmado</div>
+<div class="screen-wrap" id="s13" style="width:1440px"></div>
+
+<div class="divider"></div>
+
+<div class="screen-label">TELA 14</div>
+<div class="screen-title">Blog Index</div>
+<div class="screen-wrap" id="s14" style="width:1440px"></div>
+
+<div class="divider"></div>
+
+<div class="screen-label">TELA 15</div>
+<div class="screen-title">Blog Artigo</div>
+<div class="screen-wrap" id="s15" style="width:1440px"></div>
+
+<div class="divider"></div>
+
+<div class="screen-label">TELA 16</div>
+<div class="screen-title">Palavras-chave (artigo longo)</div>
+<div class="screen-wrap" id="s16" style="width:1440px"></div>
+
+<div class="divider"></div>
+
+<div class="screen-label">TELA 17</div>
+<div class="screen-title">Footer</div>
+<div class="screen-wrap" id="s17" style="width:1440px"></div>
+
+<div style="height:60px"></div>
+
+<script type="text/babel" src="shared-components.jsx"></script>
+<script type="text/babel" src="pagamento.jsx"></script>
+<script type="text/babel" src="footer-page.jsx"></script>
+<script type="text/babel" src="blog.jsx"></script>
+<script type="text/babel" src="palavras-chave.jsx"></script>
+<script type="text/babel">
+  ReactDOM.createRoot(document.getElementById('s12')).render(<PagamentoPendente />);
+  ReactDOM.createRoot(document.getElementById('s13')).render(<PagamentoConfirmado />);
+  ReactDOM.createRoot(document.getElementById('s14')).render(<BlogIndex />);
+  ReactDOM.createRoot(document.getElementById('s15')).render(<BlogPage1 />);
+  ReactDOM.createRoot(document.getElementById('s16')).render(<PalavrasChave />);
+  ReactDOM.createRoot(document.getElementById('s17')).render(<FooterPage />);
+</script>
+</body>
+</html>

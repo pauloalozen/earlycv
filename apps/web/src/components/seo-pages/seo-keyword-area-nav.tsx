@@ -1,33 +1,56 @@
 import { toAreaAnchorId } from "@/lib/seo-pages/anchors";
 import type { SeoKeywordGroup } from "@/lib/seo-pages/types";
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
+
 export function SeoKeywordAreaNav({ groups }: { groups: SeoKeywordGroup[] }) {
   return (
-    <section
+    <div
       id="areas"
-      className="rounded-2xl border border-stone-200 bg-white p-6 scroll-mt-24"
+      style={{
+        paddingTop: 28,
+        borderTop: "1px solid rgba(10,10,10,0.07)",
+        scrollMarginTop: 96,
+      }}
     >
-      <h2 className="text-2xl font-semibold tracking-tight">
-        Escolha sua area
+      <h2
+        style={{
+          fontSize: 21,
+          fontWeight: 500,
+          letterSpacing: -0.6,
+          margin: "0 0 12px",
+          color: "#0a0a0a",
+          fontFamily: GEIST,
+        }}
+      >
+        Escolha sua área
       </h2>
-      <p className="mt-2 text-sm text-stone-600">
-        Va direto para as palavras-chave mais proximas do seu objetivo
-        profissional.
-      </p>
-      <div className="mt-4 flex gap-2 overflow-x-auto pb-1 md:flex-wrap">
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         {groups.map((group) => {
           const anchor = toAreaAnchorId(group.area);
           return (
             <a
-              className="inline-flex shrink-0 rounded-full border border-stone-300 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-100"
-              href={`#${anchor}`}
               key={group.area}
+              href={`#${anchor}`}
+              style={{
+                fontFamily: MONO,
+                fontSize: 11,
+                letterSpacing: 0.5,
+                background: "#fff",
+                border: "1px solid rgba(10,10,10,0.12)",
+                borderRadius: 6,
+                padding: "5px 10px",
+                color: "#0a0a0a",
+                fontWeight: 500,
+                textDecoration: "none",
+              }}
             >
               {group.area}
             </a>
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }

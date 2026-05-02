@@ -7,6 +7,7 @@ import { BlogPostViewTracker } from "@/components/blog/blog-view-trackers";
 import { FaqBlock } from "@/components/blog/faq-block";
 import { RelatedPosts } from "@/components/blog/related-posts";
 import { PublicFooter } from "@/components/public-footer";
+import { PublicNavBar } from "@/components/public-nav-bar";
 import {
   getBlogPostBySlug,
   getBlogPostHtmlBySlug,
@@ -58,6 +59,8 @@ export async function generateMetadata({
   };
 }
 
+const GRAIN = `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`;
+
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { slug } = await params;
   const payload = await getBlogPostHtmlBySlug(slug);
@@ -101,7 +104,29 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
     : null;
 
   return (
-    <main className="min-h-screen bg-stone-50 text-stone-900">
+    <main
+      style={{
+        minHeight: "100vh",
+        background:
+          "radial-gradient(ellipse 80% 40% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+        color: "#0a0a0a",
+        position: "relative",
+      }}
+    >
+      {/* Grain */}
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: 0.5,
+          mixBlendMode: "multiply",
+          zIndex: 0,
+          backgroundImage: GRAIN,
+        }}
+      />
+
       <BlogPostViewTracker
         category={post.category}
         slug={post.slug}
@@ -115,9 +140,25 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         <script type="application/ld+json">{JSON.stringify(faqJsonLd)}</script>
       ) : null}
 
-      <div className="mx-auto max-w-4xl space-y-8 px-6 py-10 md:px-10">
+      <PublicNavBar />
+
+      <div
+        style={{
+          maxWidth: 660,
+          margin: "0 auto",
+          padding: "56px 40px 0",
+          position: "relative",
+          zIndex: 1,
+          display: "flex",
+          flexDirection: "column",
+          gap: 0,
+        }}
+      >
         <BlogPostLayout post={post}>
-          <div className="prose prose-stone max-w-none prose-a:text-stone-900 prose-a:underline">
+          <div
+            className="prose prose-stone max-w-none prose-a:text-stone-900 prose-a:underline"
+            style={{ marginTop: 32 }}
+          >
             {leadHtml ? (
               <div
                 data-testid="blog-post-lead"
@@ -136,7 +177,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
           />
         </BlogPostLayout>
 
-        <div data-testid="blog-post-related">
+        <div data-testid="blog-post-related" style={{ marginTop: 32 }}>
           <RelatedPosts posts={related} />
         </div>
         <BlogAnalysisCta location="bottom" slug={post.slug} />

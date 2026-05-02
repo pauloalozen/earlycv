@@ -2,7 +2,7 @@ export function SeoBackToAreasFab() {
   return (
     <a
       aria-label="Voltar para escolha de area"
-      className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full border border-black bg-black px-4 py-2 text-xs font-semibold text-white shadow-lg hover:bg-stone-900 md:bottom-6 md:right-6"
+      className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full border border-black bg-black px-4 py-2 text-xs font-semibold text-white shadow-lg hover:bg-[#222222] md:bottom-6 md:right-6"
       href="#areas"
       style={{ color: "#ffffff" }}
     >

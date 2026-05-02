@@ -1,55 +1,154 @@
 import { toAreaAnchorId } from "@/lib/seo-pages/anchors";
 import type { SeoKeywordGroup } from "@/lib/seo-pages/types";
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
+
 export function SeoKeywordHub({ groups }: { groups: SeoKeywordGroup[] }) {
   return (
-    <div className="space-y-6">
+    <div>
       {groups.map((group) => (
-        <section
-          id={toAreaAnchorId(group.area)}
+        <div
           key={group.area}
-          className="rounded-2xl border border-stone-200 bg-white p-6 scroll-mt-24"
+          id={toAreaAnchorId(group.area)}
+          style={{
+            paddingTop: 28,
+            borderTop: "1px solid rgba(10,10,10,0.07)",
+            scrollMarginTop: 96,
+          }}
         >
-          <h2 className="text-2xl font-semibold tracking-tight">
+          <h2
+            style={{
+              fontSize: 20,
+              fontWeight: 500,
+              letterSpacing: -0.6,
+              margin: "0 0 4px",
+              color: "#0a0a0a",
+              fontFamily: GEIST,
+            }}
+          >
             {group.area}
           </h2>
-          <p className="mt-2 text-sm text-stone-600">{group.description}</p>
-          <p className="mt-2">
-            <a className="text-xs underline text-stone-600" href="#areas">
-              Voltar para areas
-            </a>
+          <p
+            style={{
+              fontSize: 13.5,
+              color: "#5a5a55",
+              marginBottom: 12,
+              fontFamily: GEIST,
+            }}
+          >
+            {group.description}
           </p>
+          <a
+            href="#areas"
+            style={{
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: "#a0a098",
+              textDecoration: "underline",
+              textUnderlineOffset: 2,
+              display: "inline-block",
+              marginBottom: 16,
+            }}
+          >
+            Voltar para áreas
+          </a>
 
-          <div className="mt-4 space-y-4">
+          <div>
             {group.roles.map((role) => (
-              <article
+              <div
                 key={`${group.area}-${role.title}`}
-                className="rounded-xl border border-stone-200 p-4"
+                style={{
+                  background: "#fafaf6",
+                  border: "1px solid rgba(10,10,10,0.08)",
+                  borderRadius: 12,
+                  padding: "16px 18px",
+                  marginBottom: 10,
+                }}
               >
-                <h3 className="text-lg font-semibold">{role.title}</h3>
-                <div className="mt-3 grid gap-2">
+                <div
+                  style={{
+                    fontSize: 14.5,
+                    fontWeight: 600,
+                    marginBottom: 12,
+                    letterSpacing: -0.2,
+                    color: "#0a0a0a",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  {role.title}
+                </div>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
                   {role.keywords.map((keyword) => (
                     <div
                       key={`${role.title}-${keyword.term}`}
-                      className="rounded-lg border border-stone-200 bg-stone-50 p-3"
+                      style={{
+                        background: "#fff",
+                        border: "1px solid rgba(10,10,10,0.07)",
+                        borderRadius: 8,
+                        padding: "10px 12px",
+                      }}
                     >
-                      <p className="text-sm font-semibold text-stone-900">
+                      <div
+                        style={{
+                          fontSize: 13.5,
+                          fontWeight: 600,
+                          color: "#0a0a0a",
+                          marginBottom: 4,
+                          fontFamily: GEIST,
+                        }}
+                      >
                         {keyword.term}
-                      </p>
-                      <p className="text-xs text-stone-700">
-                        <strong>Onde usar:</strong> {keyword.whereToUse}
-                      </p>
-                      <p className="text-xs text-stone-700">
-                        <strong>Quando faz sentido:</strong>{" "}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "#5a5a55",
+                          lineHeight: 1.5,
+                          fontFamily: GEIST,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 10,
+                            color: "#8a8a85",
+                            letterSpacing: 0.3,
+                          }}
+                        >
+                          Onde usar:{" "}
+                        </span>
+                        {keyword.whereToUse}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "#5a5a55",
+                          lineHeight: 1.5,
+                          fontFamily: GEIST,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 10,
+                            color: "#8a8a85",
+                            letterSpacing: 0.3,
+                          }}
+                        >
+                          Quando faz sentido:{" "}
+                        </span>
                         {keyword.whenItMakesSense}
-                      </p>
+                      </div>
                     </div>
                   ))}
                 </div>
-              </article>
+              </div>
             ))}
           </div>
-        </section>
+        </div>
       ))}
     </div>
   );

@@ -36,10 +36,11 @@ describe("BlogCard", () => {
     );
 
     expect(screen.getByText("Guia pratico")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("link", { name: "/blog/como-adaptar-curriculo-para-vaga" })
-        .getAttribute("href"),
-    ).toBe("/blog/como-adaptar-curriculo-para-vaga");
+    const links = screen.getAllByRole("link");
+    const cardLink = links.find(
+      (el) =>
+        el.getAttribute("href") === "/blog/como-adaptar-curriculo-para-vaga",
+    );
+    expect(cardLink).toBeTruthy();
   });
 });

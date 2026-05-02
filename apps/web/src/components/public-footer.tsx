@@ -1,44 +1,46 @@
 import Link from "next/link";
 
-const footerSections = [
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
+
+const GRAIN = `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`;
+
+const footerColumns = [
   {
-    title: "Produto",
+    label: "PRODUTO",
     links: [
-      { href: "/adaptar", label: "Analise gratuita" },
-      { href: "/adaptar-curriculo-para-vaga", label: "Adaptar curriculo" },
-      { href: "/curriculo-ats", label: "Curriculo ATS" },
-      {
-        href: "/palavras-chave-curriculo",
-        label: "Palavras-chave para curriculo",
-      },
-      { href: "/modelo-curriculo-ats", label: "Modelo de curriculo ATS" },
+      { href: "/adaptar", label: "Análise gratuita" },
+      { href: "/adaptar-curriculo-para-vaga", label: "Adaptar currículo" },
+      { href: "/curriculo-ats", label: "Currículo ATS" },
+      { href: "/palavras-chave-curriculo", label: "Palavras-chave" },
     ],
   },
   {
-    title: "Aprender",
+    label: "APRENDER",
     links: [
       { href: "/blog", label: "Blog" },
       {
         href: "/blog/como-adaptar-curriculo-para-vaga",
-        label: "Como adaptar curriculo para uma vaga",
+        label: "Como adaptar currículo",
       },
-      { href: "/blog/curriculo-ats", label: "Guia de curriculo ATS" },
+      { href: "/blog/curriculo-ats", label: "Currículo ATS (artigo)" },
       {
         href: "/blog/palavras-chave-curriculo",
-        label: "Palavras-chave no curriculo",
+        label: "Palavras-chave (artigo)",
       },
-      { href: "/curriculo-gupy", label: "Curriculo para Gupy" },
     ],
   },
   {
-    title: "Recursos",
+    label: "RECURSOS",
     links: [
-      { href: "/demo-resultado", label: "Exemplo de analise" },
+      { href: "/modelo-curriculo-ats", label: "Modelo de currículo ATS" },
+      { href: "/curriculo-gupy", label: "Currículo para Gupy" },
       { href: "/contato", label: "Contato" },
+      { href: "/demo-resultado", label: "Demo de resultado" },
     ],
   },
   {
-    title: "Legal",
+    label: "LEGAL",
     links: [
       { href: "/privacidade", label: "Privacidade" },
       { href: "/termos-de-uso", label: "Termos de uso" },
@@ -48,47 +50,146 @@ const footerSections = [
 
 export function PublicFooter() {
   return (
-    <footer className="mt-16 bg-[#0f0f10] text-stone-100">
-      <div className="mx-auto max-w-6xl px-6 py-10 md:px-10">
-        <div className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
-          <p className="text-xl font-semibold tracking-tight">
-            Pronto para melhorar seu curriculo?
-          </p>
-          <p className="mx-auto mt-2 max-w-2xl text-sm text-stone-300">
-            Compare seu curriculo com uma vaga e veja uma analise gratuita de
-            compatibilidade em poucos minutos.
-          </p>
-          <Link
-            href="/adaptar"
-            className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-[#111111] sm:w-auto"
-          >
-            Analisar meu curriculo gratis
-          </Link>
-        </div>
+    <footer
+      style={{
+        background: "#0a0a0a",
+        color: "#fafaf6",
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: GEIST,
+        marginTop: 0,
+      }}
+    >
+      {/* Grain */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: 0.5,
+          mixBlendMode: "multiply",
+          backgroundImage: GRAIN,
+        }}
+      />
 
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          {footerSections.map((section) => (
-            <div key={section.title}>
-              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-stone-300">
-                {section.title}
-              </h3>
-              <ul className="mt-3 space-y-2 text-sm text-stone-200">
-                {section.links.map((item) => (
-                  <li key={item.href}>
-                    <Link href={item.href} className="hover:text-white">
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+      {/* CTA strip */}
+      <div
+        style={{
+          borderBottom: "1px solid rgba(250,250,246,0.06)",
+          padding: "40px 10%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 22,
+            fontWeight: 500,
+            letterSpacing: -0.7,
+            color: "#fafaf6",
+          }}
+        >
+          Pronto para melhorar seu currículo?
+        </div>
+        <Link
+          href="/adaptar"
+          style={{
+            background: "#fafaf6",
+            color: "#0a0a0a",
+            borderRadius: 8,
+            padding: "11px 18px",
+            fontSize: 13.5,
+            fontWeight: 600,
+            textDecoration: "none",
+            display: "inline-flex",
+            alignItems: "center",
+            flexShrink: 0,
+          }}
+        >
+          Adaptar meu CV →
+        </Link>
+      </div>
+
+      {/* Links grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 40,
+          padding: "40px 10% 32px",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        {footerColumns.map((col) => (
+          <div key={col.label}>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                letterSpacing: 1.2,
+                color: "#5a5a55",
+                fontWeight: 500,
+                marginBottom: 14,
+              }}
+            >
+              {col.label}
             </div>
-          ))}
-        </div>
+            {col.links.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                style={{
+                  display: "block",
+                  fontSize: 13.5,
+                  color: "#a0a098",
+                  textDecoration: "none",
+                  marginBottom: 10,
+                  lineHeight: 1.4,
+                }}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        ))}
+      </div>
 
-        <div className="mt-8 flex flex-col gap-2 border-t border-white/10 pt-4 text-xs text-stone-400 sm:flex-row sm:items-center sm:justify-between">
-          <span>Dados protegidos conforme LGPD.</span>
-          <span>EarlyCV © 2026</span>
-        </div>
+      {/* Bottom bar */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          padding: "16px 10%",
+          borderTop: "1px solid rgba(250,250,246,0.06)",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 11,
+            color: "#4a4a48",
+            letterSpacing: 0.3,
+          }}
+        >
+          Dados protegidos conforme LGPD
+        </span>
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 11,
+            color: "#4a4a48",
+            letterSpacing: 0.3,
+          }}
+        >
+          EarlyCV © 2026
+        </span>
       </div>
     </footer>
   );
