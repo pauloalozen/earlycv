@@ -32,11 +32,13 @@ export function SeoAnalysisCta({
         className="mt-5 inline-flex rounded-xl bg-white px-4 py-3 text-sm font-semibold text-stone-900"
         href={target}
         onClick={() => {
-          void trackSeoPageCtaClicked({
-            location,
-            path,
-            slug,
-            target,
+          queueMicrotask(() => {
+            void trackSeoPageCtaClicked({
+              location,
+              path,
+              slug,
+              target,
+            });
           });
         }}
       >

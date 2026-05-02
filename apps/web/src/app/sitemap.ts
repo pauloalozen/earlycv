@@ -22,6 +22,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.7,
     },
     {
+      url: getAbsoluteUrl("/adaptar"),
+      lastModified,
+      changeFrequency: "weekly",
+      priority: 0.4,
+    },
+    {
       url: getAbsoluteUrl("/privacidade"),
       lastModified,
       changeFrequency: "yearly",

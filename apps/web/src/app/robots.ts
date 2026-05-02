@@ -11,7 +11,6 @@ export default function robots(): MetadataRoute.Robots {
         allow: "/",
         disallow: [
           "/dashboard",
-          "/adaptar",
           "/cv-base",
           "/admin",
           "/superadmin",
@@ -21,7 +20,6 @@ export default function robots(): MetadataRoute.Robots {
           "/esqueceu-senha",
           "/redefinir-senha",
           "/pagamento",
-          "/plans/",
           "/api/",
           "/auth/",
         ],

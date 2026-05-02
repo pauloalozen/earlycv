@@ -3,15 +3,19 @@ import { emitBusinessFunnelEvent } from "@/lib/cv-adaptation-api";
 type CtaLocation = "bottom" | "hero" | "middle";
 
 export function trackSeoPageViewed(input: { path: string; slug: string }) {
-  return emitBusinessFunnelEvent({
-    eventName: "seo_page_viewed",
-    metadata: {
-      page_type: "transactional_seo",
-      path: input.path,
-      slug: input.slug,
-      source: "seo_page",
-    },
-  });
+  try {
+    return emitBusinessFunnelEvent({
+      eventName: "seo_page_viewed",
+      metadata: {
+        page_type: "transactional_seo",
+        path: input.path,
+        slug: input.slug,
+        source: "seo_page",
+      },
+    }).catch(() => undefined);
+  } catch {
+    return Promise.resolve();
+  }
 }
 
 export function trackSeoPageCtaClicked(input: {
@@ -20,15 +24,19 @@ export function trackSeoPageCtaClicked(input: {
   slug: string;
   target: string;
 }) {
-  return emitBusinessFunnelEvent({
-    eventName: "seo_page_cta_clicked",
-    metadata: {
-      location: input.location,
-      page_type: "transactional_seo",
-      path: input.path,
-      slug: input.slug,
-      source: "seo_page",
-      target: input.target,
-    },
-  });
+  try {
+    return emitBusinessFunnelEvent({
+      eventName: "seo_page_cta_clicked",
+      metadata: {
+        location: input.location,
+        page_type: "transactional_seo",
+        path: input.path,
+        slug: input.slug,
+        source: "seo_page",
+        target: input.target,
+      },
+    }).catch(() => undefined);
+  } catch {
+    return Promise.resolve();
+  }
 }

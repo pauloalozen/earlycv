@@ -26,8 +26,12 @@ export async function getMasterResumeFromList(
 }
 
 export async function getMyMasterResume(): Promise<ResumeDto | null> {
-  const resumes = await listMyResumes();
-  return getMasterResumeFromList(resumes);
+  try {
+    const resumes = await listMyResumes();
+    return getMasterResumeFromList(resumes);
+  } catch {
+    return null;
+  }
 }
 
 export async function uploadMasterResume(

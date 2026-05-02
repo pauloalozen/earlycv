@@ -250,8 +250,13 @@ export async function emitBusinessFunnelEvent(
     },
   );
 
-  if (!response.ok) {
-    throw new Error("Failed to emit business funnel event.");
+  if (!response.ok && process.env.NODE_ENV !== "production") {
+    const body = await response.text().catch(() => "");
+    console.debug(
+      "[analytics] failed to emit business funnel event",
+      response.status,
+      body,
+    );
   }
 }
 
