@@ -5,6 +5,10 @@ export const adaptarCurriculoParaVagaPage: SeoPageDefinition = {
   path: "/adaptar-curriculo-para-vaga",
   published: true,
   updatedAt: "2026-05-02",
+  sitemap: {
+    changeFrequency: "weekly",
+    priority: 0.85,
+  },
   pageType: "transactional",
   category: "adaptacao",
   seo: {

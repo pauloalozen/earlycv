@@ -77,4 +77,8 @@ export type SeoPageDefinition = {
   };
   slug: SeoPageSlug;
   updatedAt: string;
+  sitemap: {
+    changeFrequency: "weekly" | "monthly";
+    priority: number;
+  };
 };

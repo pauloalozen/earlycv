@@ -103,6 +103,9 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       }
     : null;
 
+  const articleContentClassName =
+    "blog-content text-[1rem] leading-[1.7] text-stone-900 md:text-[1.0625rem] md:leading-[1.75] [&_p]:my-4 [&_h2]:mt-10 [&_h2]:mb-4 [&_h2]:text-2xl [&_h2]:leading-tight [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h3]:mt-8 [&_h3]:mb-3 [&_h3]:text-xl [&_h3]:leading-[1.3] [&_h3]:font-bold [&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1.5 [&_a]:font-semibold [&_a]:underline [&_a]:underline-offset-[3px] [&_blockquote]:my-6 [&_blockquote]:border-l-[3px] [&_blockquote]:border-current [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:opacity-90 [&_strong]:font-bold";
+
   return (
     <main
       style={{
@@ -155,10 +158,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         }}
       >
         <BlogPostLayout post={post}>
-          <div
-            className="prose prose-stone max-w-none prose-a:text-stone-900 prose-a:underline"
-            style={{ marginTop: 32 }}
-          >
+          <div className={articleContentClassName} style={{ marginTop: 32 }}>
             {leadHtml ? (
               <div
                 data-testid="blog-post-lead"
@@ -171,7 +171,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             <BlogAnalysisCta location="middle" slug={post.slug} />
           </div>
           <div
-            className="prose prose-stone max-w-none prose-a:text-stone-900 prose-a:underline"
+            className={articleContentClassName}
             // biome-ignore lint/security/noDangerouslySetInnerHtml: content comes from local reviewed markdown files
             dangerouslySetInnerHTML={{ __html: leadHtml ? restHtml : html }}
           />

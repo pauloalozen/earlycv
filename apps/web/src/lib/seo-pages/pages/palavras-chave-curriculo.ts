@@ -61,6 +61,10 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
   published: true,
   pageType: "hub",
   updatedAt: "2026-05-02",
+  sitemap: {
+    changeFrequency: "weekly",
+    priority: 0.8,
+  },
   category: "palavras-chave",
   seo: {
     title: "Palavras-chave para currículo: lista por área e cargo | EarlyCV",

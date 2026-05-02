@@ -1,50 +1,44 @@
 import type { MetadataRoute } from "next";
 
 import { getBlogSitemapEntries } from "@/lib/blog/posts";
-import { jobs } from "@/lib/jobs";
 import { getSeoSitemapEntries } from "@/lib/seo-pages/pages";
 import { getAbsoluteUrl } from "@/lib/site";
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
+const PRIMARY_PAGES_LAST_MODIFIED = new Date("2026-05-02");
+const LEGAL_PAGES_LAST_MODIFIED = new Date("2026-04-14");
 
+export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
       url: getAbsoluteUrl("/"),
-      lastModified,
+      lastModified: PRIMARY_PAGES_LAST_MODIFIED,
       changeFrequency: "weekly",
       priority: 1,
     },
     {
       url: getAbsoluteUrl("/blog"),
-      lastModified,
+      lastModified: PRIMARY_PAGES_LAST_MODIFIED,
       changeFrequency: "weekly",
       priority: 0.7,
     },
     {
       url: getAbsoluteUrl("/adaptar"),
-      lastModified,
+      lastModified: PRIMARY_PAGES_LAST_MODIFIED,
       changeFrequency: "weekly",
-      priority: 0.4,
+      priority: 0.8,
     },
     {
       url: getAbsoluteUrl("/privacidade"),
-      lastModified,
+      lastModified: LEGAL_PAGES_LAST_MODIFIED,
       changeFrequency: "yearly",
-      priority: 0.4,
+      priority: 0.2,
     },
     {
       url: getAbsoluteUrl("/termos-de-uso"),
-      lastModified,
+      lastModified: LEGAL_PAGES_LAST_MODIFIED,
       changeFrequency: "yearly",
-      priority: 0.4,
+      priority: 0.2,
     },
-    ...jobs.map((job) => ({
-      url: getAbsoluteUrl(`/vagas/${job.slug}`),
-      lastModified,
-      changeFrequency: "daily" as const,
-      priority: 0.9,
-    })),
     ...getBlogSitemapEntries().map((entry) => ({
       url: getAbsoluteUrl(`/blog/${entry.slug}`),
       lastModified: entry.lastModified,

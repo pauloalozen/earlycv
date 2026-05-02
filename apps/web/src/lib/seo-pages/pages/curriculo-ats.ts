@@ -5,6 +5,10 @@ export const curriculoAtsPage: SeoPageDefinition = {
   path: "/curriculo-ats",
   published: true,
   updatedAt: "2026-05-02",
+  sitemap: {
+    changeFrequency: "weekly",
+    priority: 0.8,
+  },
   pageType: "transactional",
   category: "ats",
   seo: {

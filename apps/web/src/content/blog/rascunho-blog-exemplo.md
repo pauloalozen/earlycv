@@ -8,7 +8,7 @@ category: Curriculo
 tags:
   - rascunho
 featured: false
-readingTime: 3 min
+readingTime: "3 min"
 status: draft
 seoTitle: Rascunho interno de exemplo
 seoDescription: Rascunho nao publicado para validar pipeline.

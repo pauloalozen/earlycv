@@ -103,7 +103,7 @@ export function getBlogSitemapEntries() {
   return getAllPublishedBlogPosts().map((post) => ({
     changeFrequency: "weekly" as const,
     lastModified: new Date(post.updatedAt || post.publishedAt),
-    priority: 0.7,
+    priority: 0.65,
     slug: post.slug,
   }));
 }

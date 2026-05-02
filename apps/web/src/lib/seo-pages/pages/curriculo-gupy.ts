@@ -5,6 +5,10 @@ export const curriculoGupyPage: SeoPageDefinition = {
   path: "/curriculo-gupy",
   published: true,
   updatedAt: "2026-05-02",
+  sitemap: {
+    changeFrequency: "weekly",
+    priority: 0.75,
+  },
   pageType: "transactional",
   category: "plataformas",
   seo: {
@@ -82,7 +86,8 @@ export const curriculoGupyPage: SeoPageDefinition = {
     },
     {
       question: "Existe currículo perfeito para Gupy?",
-      answer: "Não. O melhor é um currículo claro e aderente à vaga específica.",
+      answer:
+        "Não. O melhor é um currículo claro e aderente à vaga específica.",
     },
     {
       question: "Devo fazer um currículo diferente para cada vaga?",

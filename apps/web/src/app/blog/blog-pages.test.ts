@@ -64,4 +64,17 @@ describe("blog pages", () => {
     expect(blogPostingIndex).toBeGreaterThanOrEqual(0);
     expect(faqSchemaIndex).toBeGreaterThanOrEqual(0);
   });
+
+  it("renders markdown semantics and scoped blog content class", async () => {
+    const page = await BlogPostPage({
+      params: Promise.resolve({ slug: "como-adaptar-curriculo-para-vaga" }),
+    });
+    const html = renderToStaticMarkup(page);
+
+    expect(html).toContain('class="blog-content');
+    expect(html).toContain("<h2>Passo 1: Leia a vaga com critério</h2>");
+    expect(html).toContain("<ul>");
+    expect(html).toContain("<li>responsabilidades mais repetidas;</li>");
+    expect(html).toContain('<a href="/blog/palavras-chave-curriculo">');
+  });
 });

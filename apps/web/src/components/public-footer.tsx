@@ -79,6 +79,8 @@ export function PublicFooter() {
           borderBottom: "1px solid rgba(250,250,246,0.06)",
           padding: "40px 10%",
           display: "flex",
+          flexWrap: "wrap",
+          gap: 16,
           alignItems: "center",
           justifyContent: "space-between",
           position: "relative",
@@ -107,7 +109,10 @@ export function PublicFooter() {
             textDecoration: "none",
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
             flexShrink: 0,
+            maxWidth: "100%",
+            whiteSpace: "normal",
           }}
         >
           Começar análise grátis agora →
@@ -118,7 +123,7 @@ export function PublicFooter() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
           gap: 40,
           padding: "40px 10% 32px",
           position: "relative",
@@ -163,6 +168,8 @@ export function PublicFooter() {
       <div
         style={{
           display: "flex",
+          flexWrap: "wrap",
+          gap: 10,
           justifyContent: "space-between",
           padding: "16px 10%",
           borderTop: "1px solid rgba(250,250,246,0.06)",

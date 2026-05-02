@@ -39,9 +39,9 @@ export function getSeoPageBySlug(slug: string) {
 
 export function getSeoSitemapEntries() {
   return getPublishedSeoPages().map((page) => ({
-    changeFrequency: "weekly" as const,
+    changeFrequency: page.sitemap.changeFrequency,
     lastModified: new Date(page.updatedAt),
     path: page.path,
-    priority: 0.75,
+    priority: page.sitemap.priority,
   }));
 }
