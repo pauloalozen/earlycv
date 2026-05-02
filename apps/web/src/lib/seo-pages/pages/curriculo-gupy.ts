@@ -8,24 +8,24 @@ export const curriculoGupyPage: SeoPageDefinition = {
   pageType: "transactional",
   category: "plataformas",
   seo: {
-    title: "Curriculo para Gupy: como melhorar sua aderencia a vaga | EarlyCV",
+    title: "Currículo para Gupy: como melhorar sua aderência à vaga | EarlyCV",
     description:
-      "Veja como estruturar seu curriculo, usar palavras-chave e evitar erros que podem prejudicar sua candidatura em plataformas como a Gupy.",
+      "Veja como estruturar seu currículo, usar palavras-chave e evitar erros que podem prejudicar sua candidatura em plataformas como a Gupy.",
   },
   hero: {
-    title: "Curriculo para Gupy: como aumentar a aderencia com a vaga",
+    title: "Currículo para Gupy: como aumentar a aderência com a vaga",
     description:
-      "Veja como estruturar seu curriculo, usar palavras-chave e evitar erros que prejudicam a clareza da sua candidatura em plataformas de recrutamento.",
+      "Veja como estruturar seu currículo, usar palavras-chave e evitar erros que prejudicam a clareza da sua candidatura em plataformas de recrutamento.",
   },
   sections: [
     {
-      heading: "Por que seu curriculo pode nao avancar",
+      heading: "Por que seu currículo pode não avançar",
       bullets: [
-        "Alta concorrencia",
+        "Alta concorrência",
         "Vaga com muitos candidatos",
-        "Curriculo generico",
-        "Baixa aderencia textual",
-        "Experiencias pouco claras",
+        "Currículo genérico",
+        "Baixa aderência textual",
+        "Experiências pouco claras",
         "Falta de requisitos importantes",
       ],
     },
@@ -34,20 +34,20 @@ export const curriculoGupyPage: SeoPageDefinition = {
       bullets: [
         "Clareza",
         "Palavras-chave relevantes",
-        "Experiencias conectadas a vaga",
+        "Experiências conectadas à vaga",
         "Resultados",
         "Estrutura simples",
         "Dados completos",
       ],
     },
     {
-      heading: "Como adaptar curriculo antes de se candidatar",
+      heading: "Como adaptar currículo antes de se candidatar",
       bullets: [
         "Ler a vaga",
         "Mapear requisitos",
         "Revisar resumo",
-        "Ajustar competencias",
-        "Destacar experiencias relacionadas",
+        "Ajustar competências",
+        "Destacar experiências relacionadas",
         "Evitar exageros",
       ],
     },
@@ -55,10 +55,10 @@ export const curriculoGupyPage: SeoPageDefinition = {
       heading: "Erros comuns",
       bullets: [
         "Copiar a vaga inteira",
-        "Colocar termos que nao domina",
-        "Usar curriculo visual demais",
+        "Colocar termos que não domina",
+        "Usar currículo visual demais",
         "Enviar sempre o mesmo CV",
-        "Deixar experiencias vagas",
+        "Deixar experiências vagas",
       ],
     },
     {
@@ -67,51 +67,50 @@ export const curriculoGupyPage: SeoPageDefinition = {
         "Compara CV com a vaga antes da candidatura",
         "Mostra lacunas",
         "Sugere melhorias",
-        "Ajuda a gerar uma versao adaptada",
+        "Ajuda a gerar uma versão adaptada",
       ],
       paragraphs: [
-        "Plataformas como a Gupy podem usar informacoes estruturadas, dados preenchidos e aderencia textual para apoiar recrutadores e empresas.",
+        "Plataformas como a Gupy podem usar informações estruturadas, dados preenchidos e aderência textual para apoiar recrutadores e empresas.",
       ],
     },
   ],
   faq: [
     {
-      question: "A Gupy reprova curriculo automaticamente?",
+      question: "A Gupy reprova currículo automaticamente?",
       answer:
-        "Nao existe uma regra unica publica. Ha diferentes criterios de triagem e avaliacao.",
+        "Não existe uma regra única pública. Há diferentes critérios de triagem e avaliação.",
     },
     {
-      question: "Existe curriculo perfeito para Gupy?",
-      answer:
-        "Nao. O melhor e um curriculo claro e aderente a vaga especifica.",
+      question: "Existe currículo perfeito para Gupy?",
+      answer: "Não. O melhor é um currículo claro e aderente à vaga específica.",
     },
     {
-      question: "Devo fazer um curriculo diferente para cada vaga?",
-      answer: "Em geral sim, com adaptacoes por contexto e requisitos.",
+      question: "Devo fazer um currículo diferente para cada vaga?",
+      answer: "Em geral sim, com adaptações por contexto e requisitos.",
     },
     {
-      question: "Posso usar curriculo em PDF?",
+      question: "Posso usar currículo em PDF?",
       answer: "Sim, desde que tenha estrutura simples e leitura clara.",
     },
     {
       question: "O que mais pesa em uma candidatura?",
       answer:
-        "A combinacao entre aderencia tecnica, clareza, contexto e evidencia real de resultados.",
+        "A combinação entre aderência técnica, clareza, contexto e evidência real de resultados.",
     },
   ],
   relatedLinks: [
     {
       href: "/adaptar-curriculo-para-vaga",
-      label: "Adaptar curriculo para vaga",
+      label: "Adaptar currículo para vaga",
     },
-    { href: "/curriculo-ats", label: "Curriculo ATS" },
-    { href: "/blog/curriculo-ats", label: "Blog: curriculo ATS" },
+    { href: "/curriculo-ats", label: "Currículo ATS" },
+    { href: "/blog/curriculo-ats", label: "Blog: currículo ATS" },
   ],
   cta: {
-    title: "Descubra se seu curriculo combina com a vaga",
+    title: "Descubra se seu currículo combina com a vaga",
     description:
-      "Cole a descricao da vaga, envie seu curriculo e receba uma analise gratuita de compatibilidade em poucos minutos.",
-    buttonLabel: "Analisar meu curriculo gratis",
+      "Cole a descrição da vaga, envie seu currículo e receba uma análise gratuita de compatibilidade em poucos minutos.",
+    buttonLabel: "Analisar meu currículo grátis",
     target: "/adaptar",
   },
 };

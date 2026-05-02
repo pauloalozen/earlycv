@@ -93,7 +93,7 @@ export function PublicFooter() {
             color: "#fafaf6",
           }}
         >
-          Pronto para melhorar seu currículo?
+          Se a vaga importa, seu currículo não pode ser genérico.
         </div>
         <Link
           href="/adaptar"
@@ -110,7 +110,7 @@ export function PublicFooter() {
             flexShrink: 0,
           }}
         >
-          Adaptar meu CV →
+          Começar análise grátis agora →
         </Link>
       </div>
 

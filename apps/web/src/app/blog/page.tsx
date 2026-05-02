@@ -17,10 +17,10 @@ export const metadata: Metadata = {
     canonical: getAbsoluteUrl("/blog"),
   },
   description:
-    "Guias praticos sobre curriculo, ATS e adaptacao para vagas no Brasil.",
+    "Guias práticos sobre currículo, ATS e adaptação para vagas no Brasil.",
   openGraph: {
     description:
-      "Guias praticos sobre curriculo, ATS e adaptacao para vagas no Brasil.",
+      "Guias práticos sobre currículo, ATS e adaptação para vagas no Brasil.",
     title: "Blog EarlyCV",
     type: "website",
     url: getAbsoluteUrl("/blog"),
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     description:
-      "Guias praticos sobre curriculo, ATS e adaptacao para vagas no Brasil.",
+      "Guias práticos sobre currículo, ATS e adaptação para vagas no Brasil.",
     title: "Blog EarlyCV",
   },
 };

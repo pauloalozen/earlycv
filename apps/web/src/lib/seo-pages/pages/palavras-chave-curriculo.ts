@@ -3,44 +3,44 @@ import type { SeoKeywordRole, SeoPageDefinition } from "../types";
 const BASE_KEYWORDS: SeoKeywordRole["keywords"] = [
   {
     term: "Planejamento",
-    whereToUse: "Resumo / Experiencia",
-    whenItMakesSense: "Quando voce definiu prioridades, escopo ou cronogramas.",
+    whereToUse: "Resumo / Experiência",
+    whenItMakesSense: "Quando você definiu prioridades, escopo ou cronogramas.",
   },
   {
-    term: "Execucao",
-    whereToUse: "Experiencia",
-    whenItMakesSense: "Quando voce conduziu entregas de ponta a ponta.",
+    term: "Execução",
+    whereToUse: "Experiência",
+    whenItMakesSense: "Quando você conduziu entregas de ponta a ponta.",
   },
   {
     term: "Indicadores",
-    whereToUse: "Experiencia / Resultados",
-    whenItMakesSense: "Quando voce acompanhou metas e mediu performance.",
+    whereToUse: "Experiência / Resultados",
+    whenItMakesSense: "Quando você acompanhou metas e mediu performance.",
   },
   {
-    term: "Melhoria continua",
-    whereToUse: "Experiencia / Projetos",
-    whenItMakesSense: "Quando voce revisou processos e reduziu gargalos.",
+    term: "Melhoria contínua",
+    whereToUse: "Experiência / Projetos",
+    whenItMakesSense: "Quando você revisou processos e reduziu gargalos.",
   },
   {
-    term: "Comunicacao",
-    whereToUse: "Resumo / Competencias",
+    term: "Comunicação",
+    whereToUse: "Resumo / Competências",
     whenItMakesSense: "Quando atuou com times e stakeholders diferentes.",
   },
   {
-    term: "Colaboracao",
-    whereToUse: "Experiencia",
+    term: "Colaboração",
+    whereToUse: "Experiência",
     whenItMakesSense: "Quando trabalhou com equipes multidisciplinares.",
   },
   {
-    term: "Priorizacao",
-    whereToUse: "Experiencia / Competencias",
+    term: "Priorização",
+    whereToUse: "Experiência / Competências",
     whenItMakesSense: "Quando precisou decidir entre demandas concorrentes.",
   },
   {
     term: "Qualidade",
-    whereToUse: "Experiencia / Projetos",
+    whereToUse: "Experiência / Projetos",
     whenItMakesSense:
-      "Quando definiu criterios, revisoes ou controles de qualidade.",
+      "Quando definiu critérios, revisões ou controles de qualidade.",
   },
 ];
 
@@ -63,53 +63,53 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
   updatedAt: "2026-05-02",
   category: "palavras-chave",
   seo: {
-    title: "Palavras-chave para curriculo: lista por area e cargo | EarlyCV",
+    title: "Palavras-chave para currículo: lista por área e cargo | EarlyCV",
     description:
-      "Veja exemplos de palavras-chave para curriculo por area, cargo e senioridade. Aprenda como usar termos da vaga sem exagerar e compare seu CV com a vaga no EarlyCV.",
+      "Veja exemplos de palavras-chave para currículo por área, cargo e senioridade. Aprenda como usar termos da vaga sem exagerar e compare seu CV com a vaga no EarlyCV.",
   },
   hero: {
-    title: "Palavras-chave para curriculo: lista por area, cargo e senioridade",
+    title: "Palavras-chave para currículo: lista por área, cargo e senioridade",
     description:
-      "Veja exemplos de termos que aparecem em vagas e entenda como usar palavras-chave no curriculo sem exagerar ou inventar experiencia.",
+      "Veja exemplos de termos que aparecem em vagas e entenda como usar palavras-chave no currículo sem exagerar ou inventar experiência.",
   },
   alertMessage:
-    "Nao copie palavras-chave aleatorias. O ideal e usar apenas termos que facam sentido para sua experiencia e para a vaga desejada.",
+    "Não copie palavras-chave aleatórias. O ideal é usar apenas termos que façam sentido para sua experiência e para a vaga desejada.",
   sections: [
     {
-      heading: "O que sao palavras-chave no curriculo",
+      heading: "O que são palavras-chave no currículo",
       paragraphs: [
-        "Sao termos que descrevem competencias, ferramentas, responsabilidades e contextos comuns nas vagas da sua area.",
+        "São termos que descrevem competências, ferramentas, responsabilidades e contextos comuns nas vagas da sua área.",
       ],
     },
     {
       heading: "Como usar palavras-chave sem exagerar",
       bullets: [
-        "Use contexto real nas experiencias",
-        "Nao inclua termos que voce nao domina",
+        "Use contexto real nas experiências",
+        "Não inclua termos que você não domina",
         "Adapte para cada vaga",
-        "Evite listas soltas sem evidencia",
+        "Evite listas soltas sem evidência",
       ],
     },
     {
       heading: "Onde colocar palavras-chave",
       bullets: [
         "Resumo profissional",
-        "Experiencia",
-        "Competencias",
+        "Experiência",
+        "Competências",
         "Projetos",
-        "Certificacoes",
-        "Formacao",
+        "Certificações",
+        "Formação",
       ],
     },
     {
       heading: "Erros comuns",
       bullets: [
-        "Copiar a descricao da vaga inteira",
-        "Colocar ferramentas que nao domina",
+        "Copiar a descrição da vaga inteira",
+        "Colocar ferramentas que não domina",
         "Repetir palavra-chave sem contexto",
-        "Criar secao de competencias gigante",
-        "Ignorar experiencias reais mais relevantes",
-        "Usar o mesmo curriculo para todas as vagas",
+        "Criar seção de competências gigante",
+        "Ignorar experiências reais mais relevantes",
+        "Usar o mesmo currículo para todas as vagas",
       ],
     },
   ],
@@ -122,148 +122,148 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
         role("Desenvolvedor Backend", [
           {
             term: "APIs REST",
-            whereToUse: "Experiencia / Competencias",
+            whereToUse: "Experiência / Competências",
             whenItMakesSense: "Quando desenvolveu ou integrou APIs.",
           },
           {
             term: "Node.js",
-            whereToUse: "Experiencia",
-            whenItMakesSense: "Quando construiu servicos backend com Node.",
+            whereToUse: "Experiência",
+            whenItMakesSense: "Quando construiu serviços backend com Node.",
           },
         ]),
         role("Desenvolvedor Frontend", [
           {
             term: "React",
-            whereToUse: "Experiencia / Projetos",
+            whereToUse: "Experiência / Projetos",
             whenItMakesSense: "Quando desenvolveu interfaces com React.",
           },
           {
             term: "TypeScript",
-            whereToUse: "Competencias",
-            whenItMakesSense: "Quando tipou codigo e melhorou manutencao.",
+            whereToUse: "Competências",
+            whenItMakesSense: "Quando tipou código e melhorou manutenção.",
           },
         ]),
       ],
     },
     {
       area: "Dados e BI",
-      description: "Termos para analise, modelagem e visualizacao de dados.",
+      description: "Termos para análise, modelagem e visualização de dados.",
       roles: [
         role("Analista de Dados", [
           {
             term: "SQL",
-            whereToUse: "Competencias / Experiencia",
+            whereToUse: "Competências / Experiência",
             whenItMakesSense: "Quando extraiu e analisou dados.",
           },
           {
             term: "Power BI",
-            whereToUse: "Experiencia / Projetos",
-            whenItMakesSense: "Quando montou dashboards e relatorios.",
+            whereToUse: "Experiência / Projetos",
+            whenItMakesSense: "Quando montou dashboards e relatórios.",
           },
         ]),
         role("Analista de BI", [
           {
             term: "Modelagem dimensional",
-            whereToUse: "Experiencia",
-            whenItMakesSense: "Quando estruturou fatos e dimensoes.",
+            whereToUse: "Experiência",
+            whenItMakesSense: "Quando estruturou fatos e dimensões.",
           },
           {
             term: "ETL",
-            whereToUse: "Experiencia / Competencias",
+            whereToUse: "Experiência / Competências",
             whenItMakesSense:
-              "Quando automatizou carga e transformacao de dados.",
+              "Quando automatizou carga e transformação de dados.",
           },
         ]),
       ],
     },
     {
       area: "Produto",
-      description: "Termos para descoberta, priorizacao e execucao de produto.",
+      description: "Termos para descoberta, priorização e execução de produto.",
       roles: [
         role("Product Manager", [
           {
             term: "Roadmap",
-            whereToUse: "Experiencia",
-            whenItMakesSense: "Quando definiu plano de evolucao do produto.",
+            whereToUse: "Experiência",
+            whenItMakesSense: "Quando definiu plano de evolução do produto.",
           },
           {
             term: "Descoberta",
-            whereToUse: "Experiencia / Projetos",
+            whereToUse: "Experiência / Projetos",
             whenItMakesSense:
-              "Quando validou problemas e oportunidades com usuarios.",
+              "Quando validou problemas e oportunidades com usuários.",
           },
         ]),
         role("Product Analyst", [
           {
             term: "Funil",
-            whereToUse: "Experiencia / Resultados",
-            whenItMakesSense: "Quando analisou conversao por etapas.",
+            whereToUse: "Experiência / Resultados",
+            whenItMakesSense: "Quando analisou conversão por etapas.",
           },
           {
-            term: "Experimentacao",
-            whereToUse: "Experiencia",
+            term: "Experimentação",
+            whereToUse: "Experiência",
             whenItMakesSense:
-              "Quando participou de testes e analises de impacto.",
+              "Quando participou de testes e análises de impacto.",
           },
         ]),
       ],
     },
     {
       area: "Marketing",
-      description: "Termos para aquisicao, conteudo e performance.",
+      description: "Termos para aquisição, conteúdo e performance.",
       roles: [
         role("Analista de Marketing", [
           {
-            term: "Midia paga",
-            whereToUse: "Experiencia",
-            whenItMakesSense: "Quando geriu campanhas de aquisicao.",
+            term: "Mídia paga",
+            whereToUse: "Experiência",
+            whenItMakesSense: "Quando geriu campanhas de aquisição.",
           },
           {
             term: "SEO",
-            whereToUse: "Competencias / Projetos",
+            whereToUse: "Competências / Projetos",
             whenItMakesSense:
-              "Quando trabalhou com conteudo e ranking organico.",
+              "Quando trabalhou com conteúdo e ranking orgânico.",
           },
         ]),
         role("Social Media", [
           {
-            term: "Calendario editorial",
-            whereToUse: "Experiencia",
-            whenItMakesSense: "Quando planejou publicacoes por canal.",
+            term: "Calendário editorial",
+            whereToUse: "Experiência",
+            whenItMakesSense: "Quando planejou publicações por canal.",
           },
           {
             term: "Engajamento",
             whereToUse: "Resultados",
-            whenItMakesSense: "Quando mediu crescimento e interacoes.",
+            whenItMakesSense: "Quando mediu crescimento e interações.",
           },
         ]),
       ],
     },
     {
       area: "Vendas",
-      description: "Termos para prospeccao, negociacao e fechamento.",
+      description: "Termos para prospecção, negociação e fechamento.",
       roles: [
         role("SDR", [
           {
-            term: "Prospeccao ativa",
-            whereToUse: "Experiencia",
+            term: "Prospecção ativa",
+            whereToUse: "Experiência",
             whenItMakesSense: "Quando gerou oportunidades outbound.",
           },
           {
-            term: "Qualificacao",
-            whereToUse: "Experiencia / Competencias",
-            whenItMakesSense: "Quando aplicou criterios para leads.",
+            term: "Qualificação",
+            whereToUse: "Experiência / Competências",
+            whenItMakesSense: "Quando aplicou critérios para leads.",
           },
         ]),
         role("Executivo de Vendas", [
           {
             term: "Pipeline",
-            whereToUse: "Experiencia",
+            whereToUse: "Experiência",
             whenItMakesSense: "Quando geriu etapas de oportunidades.",
           },
           {
-            term: "Negociacao",
-            whereToUse: "Experiencia / Competencias",
+            term: "Negociação",
+            whereToUse: "Experiência / Competências",
             whenItMakesSense: "Quando conduziu propostas comerciais.",
           },
         ]),
@@ -271,30 +271,30 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
     },
     {
       area: "Financeiro",
-      description: "Termos para controle, analise e fechamento financeiro.",
+      description: "Termos para controle, análise e fechamento financeiro.",
       roles: [
         role("Analista Financeiro", [
           {
             term: "Fluxo de caixa",
-            whereToUse: "Experiencia",
-            whenItMakesSense: "Quando monitorou entradas e saidas.",
+            whereToUse: "Experiência",
+            whenItMakesSense: "Quando monitorou entradas e saídas.",
           },
           {
-            term: "Orcamento",
-            whereToUse: "Experiencia / Competencias",
+            term: "Orçamento",
+            whereToUse: "Experiência / Competências",
             whenItMakesSense: "Quando participou de planejamento financeiro.",
           },
         ]),
         role("Assistente Financeiro", [
           {
             term: "Contas a pagar",
-            whereToUse: "Experiencia",
+            whereToUse: "Experiência",
             whenItMakesSense: "Quando processou e conciliou pagamentos.",
           },
           {
-            term: "Conciliacao bancaria",
-            whereToUse: "Experiencia / Competencias",
-            whenItMakesSense: "Quando conferiu movimentos e lancamentos.",
+            term: "Conciliação bancária",
+            whereToUse: "Experiência / Competências",
+            whenItMakesSense: "Quando conferiu movimentos e lançamentos.",
           },
         ]),
       ],
@@ -302,27 +302,27 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
     {
       area: "RH",
       description:
-        "Termos para recrutamento, desenvolvimento e operacoes de pessoas.",
+        "Termos para recrutamento, desenvolvimento e operações de pessoas.",
       roles: [
         role("Analista de RH", [
           {
-            term: "Recrutamento e selecao",
-            whereToUse: "Experiencia",
+            term: "Recrutamento e seleção",
+            whereToUse: "Experiência",
             whenItMakesSense: "Quando conduziu processos seletivos.",
           },
           {
             term: "Onboarding",
-            whereToUse: "Experiencia",
+            whereToUse: "Experiência",
             whenItMakesSense:
               "Quando estruturou entrada de novos colaboradores.",
           },
         ]),
         role("Business Partner", [
           {
-            term: "Gestao de desempenho",
-            whereToUse: "Experiencia",
+            term: "Gestão de desempenho",
+            whereToUse: "Experiência",
             whenItMakesSense:
-              "Quando apoiou liderancas em ciclos de avaliacao.",
+              "Quando apoiou lideranças em ciclos de avaliação.",
           },
           {
             term: "Clima organizacional",
@@ -339,25 +339,25 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
         role("Assistente Administrativo", [
           {
             term: "Controle de documentos",
-            whereToUse: "Experiencia",
+            whereToUse: "Experiência",
             whenItMakesSense: "Quando organizou contratos e registros.",
           },
           {
             term: "Atendimento interno",
-            whereToUse: "Experiencia",
-            whenItMakesSense: "Quando apoiou times e areas da empresa.",
+            whereToUse: "Experiência",
+            whenItMakesSense: "Quando apoiou times e áreas da empresa.",
           },
         ]),
         role("Analista Administrativo", [
           {
             term: "Processos internos",
-            whereToUse: "Experiencia",
+            whereToUse: "Experiência",
             whenItMakesSense: "Quando mapeou e padronizou rotinas.",
           },
           {
-            term: "Relatorios gerenciais",
-            whereToUse: "Experiencia / Resultados",
-            whenItMakesSense: "Quando consolidou informacoes para decisao.",
+            term: "Relatórios gerenciais",
+            whereToUse: "Experiência / Resultados",
+            whenItMakesSense: "Quando consolidou informações para decisão.",
           },
         ]),
       ],
@@ -365,30 +365,30 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
     {
       area: "Engenharia",
       description:
-        "Termos para planejamento tecnico e execucao de projetos de engenharia.",
+        "Termos para planejamento técnico e execução de projetos de engenharia.",
       roles: [
         role("Engenheiro de Processos", [
           {
             term: "Mapeamento de processos",
-            whereToUse: "Experiencia",
+            whereToUse: "Experiência",
             whenItMakesSense:
-              "Quando analisou fluxos e eficiencia operacional.",
+              "Quando analisou fluxos e eficiência operacional.",
           },
           {
             term: "Lean",
-            whereToUse: "Competencias / Experiencia",
-            whenItMakesSense: "Quando aplicou melhoria continua em operacoes.",
+            whereToUse: "Competências / Experiência",
+            whenItMakesSense: "Quando aplicou melhoria contínua em operações.",
           },
         ]),
         role("Engenheiro de Projetos", [
           {
             term: "Cronograma",
-            whereToUse: "Experiencia",
-            whenItMakesSense: "Quando planejou etapas e entregas tecnicas.",
+            whereToUse: "Experiência",
+            whenItMakesSense: "Quando planejou etapas e entregas técnicas.",
           },
           {
-            term: "Gestao de riscos",
-            whereToUse: "Experiencia / Competencias",
+            term: "Gestão de riscos",
+            whereToUse: "Experiência / Competências",
             whenItMakesSense: "Quando tratou riscos de prazo, custo ou escopo.",
           },
         ]),
@@ -396,18 +396,18 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
     },
     {
       area: "Atendimento ao cliente",
-      description: "Termos para suporte, experiencia e retencao de clientes.",
+      description: "Termos para suporte, experiência e retenção de clientes.",
       roles: [
         role("Analista de Suporte", [
           {
-            term: "Resolucao de chamados",
-            whereToUse: "Experiencia",
+            term: "Resolução de chamados",
+            whereToUse: "Experiência",
             whenItMakesSense:
-              "Quando atuou em atendimento tecnico ou funcional.",
+              "Quando atuou em atendimento técnico ou funcional.",
           },
           {
             term: "SLA",
-            whereToUse: "Experiencia / Resultados",
+            whereToUse: "Experiência / Resultados",
             whenItMakesSense:
               "Quando acompanhou tempo e qualidade de resposta.",
           },
@@ -415,11 +415,11 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
         role("Customer Success", [
           {
             term: "Onboarding de clientes",
-            whereToUse: "Experiencia",
-            whenItMakesSense: "Quando guiou ativacao inicial de contas.",
+            whereToUse: "Experiência",
+            whenItMakesSense: "Quando guiou ativação inicial de contas.",
           },
           {
-            term: "Retencao",
+            term: "Retenção",
             whereToUse: "Resultados",
             whenItMakesSense:
               "Quando atuou para reduzir churn e ampliar valor entregue.",
@@ -428,14 +428,14 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
       ],
     },
     {
-      area: "Gestao/Lideranca",
+      area: "Gestão/Liderança",
       description:
-        "Termos para lideranca de times, planejamento e entrega de resultados.",
+        "Termos para liderança de times, planejamento e entrega de resultados.",
       roles: [
         role("Coordenador", [
           {
-            term: "Gestao de equipe",
-            whereToUse: "Experiencia",
+            term: "Gestão de equipe",
+            whereToUse: "Experiência",
             whenItMakesSense: "Quando liderou pessoas e rotina operacional.",
           },
           {
@@ -446,13 +446,13 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
         ]),
         role("Gerente", [
           {
-            term: "Estrategia",
-            whereToUse: "Experiencia",
-            whenItMakesSense: "Quando definiu direcao e prioridades da area.",
+            term: "Estratégia",
+            whereToUse: "Experiência",
+            whenItMakesSense: "Quando definiu direção e prioridades da área.",
           },
           {
-            term: "Gestao orcamentaria",
-            whereToUse: "Experiencia / Competencias",
+            term: "Gestão orçamentária",
+            whereToUse: "Experiência / Competências",
             whenItMakesSense: "Quando planejou e controlou recursos.",
           },
         ]),
@@ -461,24 +461,24 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
   ],
   faq: [
     {
-      question: "Quantas palavras-chave devo colocar no curriculo?",
+      question: "Quantas palavras-chave devo colocar no currículo?",
       answer:
-        "Nao existe numero fixo. Priorize termos relevantes para sua experiencia e para a vaga.",
+        "Não existe número fixo. Priorize termos relevantes para sua experiência e para a vaga.",
     },
     {
-      question: "Posso colocar palavras-chave que nao domino?",
+      question: "Posso colocar palavras-chave que não domino?",
       answer:
-        "Nao e recomendado. Use apenas termos que voce realmente consegue sustentar.",
+        "Não é recomendado. Use apenas termos que você realmente consegue sustentar.",
     },
     {
-      question: "Onde colocar competencias tecnicas?",
+      question: "Onde colocar competências técnicas?",
       answer:
-        "Em competencias, experiencias e projetos, sempre com contexto de uso.",
+        "Em competências, experiências e projetos, sempre com contexto de uso.",
     },
     {
-      question: "Palavras-chave garantem aprovacao em ATS?",
+      question: "Palavras-chave garantem aprovação em ATS?",
       answer:
-        "Nao. Elas ajudam aderencia, mas nao garantem aprovacao ou contratacao.",
+        "Não. Elas ajudam aderência, mas não garantem aprovação ou contratação.",
     },
     {
       question: "Devo adaptar palavras-chave para cada vaga?",
@@ -487,32 +487,32 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
     {
       question: "O que fazer quando a vaga tem muitos requisitos?",
       answer:
-        "Priorize os requisitos centrais da vaga e conecte com evidencias reais do seu historico.",
+        "Priorize os requisitos centrais da vaga e conecte com evidências reais do seu histórico.",
     },
   ],
   relatedLinks: [
-    { href: "/curriculo-ats", label: "Curriculo ATS" },
+    { href: "/curriculo-ats", label: "Currículo ATS" },
     {
       href: "/adaptar-curriculo-para-vaga",
-      label: "Adaptar curriculo para vaga",
+      label: "Adaptar currículo para vaga",
     },
-    { href: "/curriculo-gupy", label: "Curriculo para Gupy" },
-    { href: "/modelo-curriculo-ats", label: "Modelo de curriculo ATS" },
+    { href: "/curriculo-gupy", label: "Currículo para Gupy" },
+    { href: "/modelo-curriculo-ats", label: "Modelo de currículo ATS" },
     {
       href: "/blog/palavras-chave-curriculo",
-      label: "Blog: como usar palavras-chave no curriculo",
+      label: "Blog: como usar palavras-chave no currículo",
     },
-    { href: "/blog/curriculo-ats", label: "Blog: curriculo ATS" },
+    { href: "/blog/curriculo-ats", label: "Blog: currículo ATS" },
     {
       href: "/blog/como-adaptar-curriculo-para-vaga",
-      label: "Blog: adaptar curriculo para vaga",
+      label: "Blog: adaptar currículo para vaga",
     },
   ],
   cta: {
-    title: "Descubra se seu curriculo combina com a vaga",
+    title: "Descubra se seu currículo combina com a vaga",
     description:
-      "Cole a descricao da vaga, envie seu curriculo e receba uma analise gratuita de compatibilidade em poucos minutos.",
-    buttonLabel: "Analisar meu curriculo gratis",
+      "Cole a descrição da vaga, envie seu currículo e receba uma análise gratuita de compatibilidade em poucos minutos.",
+    buttonLabel: "Analisar meu currículo grátis",
     target: "/adaptar",
   },
 };

@@ -8,7 +8,6 @@ export function SeoPageLayout({ children }: { children: ReactNode }) {
   return (
     <main
       style={{
-        minHeight: "100vh",
         background:
           "radial-gradient(ellipse 80% 40% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
         fontFamily: "var(--font-geist), -apple-system, system-ui, sans-serif",
@@ -34,6 +33,7 @@ export function SeoPageLayout({ children }: { children: ReactNode }) {
           maxWidth: 720,
           margin: "0 auto",
           padding: "56px 40px 0",
+          display: "flow-root",
           position: "relative",
           zIndex: 1,
         }}

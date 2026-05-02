@@ -8,44 +8,44 @@ export const adaptarCurriculoParaVagaPage: SeoPageDefinition = {
   pageType: "transactional",
   category: "adaptacao",
   seo: {
-    title: "Adaptar curriculo para vaga: como melhorar sua aderencia | EarlyCV",
+    title: "Adaptar currículo para vaga: como melhorar sua aderência | EarlyCV",
     description:
-      "Compare seu curriculo com a descricao da vaga, encontre lacunas e gere uma versao mais alinhada ao que a empresa procura.",
+      "Compare seu currículo com a descrição da vaga, encontre lacunas e gere uma versão mais alinhada ao que a empresa procura.",
   },
   hero: {
-    title: "Adapte seu curriculo para cada vaga sem inventar experiencia",
+    title: "Adapte seu currículo para cada vaga sem inventar experiência",
     description:
-      "Compare seu curriculo com a descricao da vaga, identifique lacunas e gere uma versao mais alinhada ao que a empresa procura.",
+      "Compare seu currículo com a descrição da vaga, identifique lacunas e gere uma versão mais alinhada ao que a empresa procura.",
   },
   sections: [
     {
-      heading: "Por que adaptar o curriculo para cada vaga",
+      heading: "Por que adaptar o currículo para cada vaga",
       paragraphs: [
-        "Vagas parecidas podem priorizar competencias diferentes. Ajustar foco e linguagem melhora a aderencia da candidatura.",
+        "Vagas parecidas podem priorizar competências diferentes. Ajustar foco e linguagem melhora a aderência da candidatura.",
       ],
     },
     {
-      heading: "O que deve mudar no curriculo",
+      heading: "O que deve mudar no currículo",
       bullets: [
         "Resumo profissional",
-        "Ordem e destaque das experiencias",
-        "Competencias",
+        "Ordem e destaque das experiências",
+        "Competências",
         "Palavras-chave",
         "Projetos",
         "Resultados mais relevantes",
       ],
     },
     {
-      heading: "O que nao deve ser inventado",
+      heading: "O que não deve ser inventado",
       paragraphs: [
-        "Adaptar nao e mentir. O foco e reorganizar, detalhar e destacar experiencias reais com rastreabilidade.",
+        "Adaptar não é mentir. O foco é reorganizar, detalhar e destacar experiências reais com rastreabilidade.",
       ],
     },
     {
-      heading: "Como usar a descricao da vaga",
+      heading: "Como usar a descrição da vaga",
       bullets: [
         "Identificar responsabilidades",
-        "Separar requisitos obrigatorios e desejaveis",
+        "Separar requisitos obrigatórios e desejáveis",
         "Observar ferramentas e metodologias",
         "Usar palavras-chave com contexto",
       ],
@@ -53,63 +53,63 @@ export const adaptarCurriculoParaVagaPage: SeoPageDefinition = {
     {
       heading: "Exemplo simples antes/depois",
       example: {
-        before: "Responsavel por relatorios e indicadores.",
+        before: "Responsável por relatórios e indicadores.",
         after:
-          "Desenvolveu dashboards em Power BI para acompanhamento de indicadores comerciais, apoiando decisoes de vendas e priorizacao de oportunidades.",
+          "Desenvolveu dashboards em Power BI para acompanhamento de indicadores comerciais, apoiando decisões de vendas e priorização de oportunidades.",
       },
     },
     {
       heading: "Como o EarlyCV ajuda",
       bullets: [
-        "Analisa curriculo + vaga",
+        "Analisa currículo + vaga",
         "Calcula compatibilidade",
         "Mostra palavras importantes",
         "Aponta lacunas",
-        "Gera curriculo adaptado",
+        "Gera currículo adaptado",
       ],
     },
   ],
   faq: [
     {
-      question: "Posso adaptar o mesmo curriculo para varias vagas?",
-      answer: "Sim. O ideal e criar variacoes alinhadas a cada vaga.",
+      question: "Posso adaptar o mesmo currículo para várias vagas?",
+      answer: "Sim. O ideal é criar variações alinhadas a cada vaga.",
     },
     {
-      question: "Adaptar curriculo e mentir?",
+      question: "Adaptar currículo é mentir?",
       answer:
-        "Nao. Adaptar e destacar fatos reais de forma relevante para a vaga.",
+        "Não. Adaptar é destacar fatos reais de forma relevante para a vaga.",
     },
     {
-      question: "O que muda entre uma versao e outra?",
+      question: "O que muda entre uma versão e outra?",
       answer:
-        "Resumo, enfase das experiencias, competencias e linguagem de aderencia.",
+        "Resumo, ênfase das experiências, competências e linguagem de aderência.",
     },
     {
-      question: "Preciso mudar o curriculo inteiro?",
-      answer: "Nem sempre. Mudancas pontuais podem gerar melhor alinhamento.",
+      question: "Preciso mudar o currículo inteiro?",
+      answer: "Nem sempre. Mudanças pontuais podem gerar melhor alinhamento.",
     },
     {
       question: "Como saber quais palavras-chave usar?",
-      answer: "Use os termos da vaga com contexto real nas suas experiencias.",
+      answer: "Use os termos da vaga com contexto real nas suas experiências.",
     },
   ],
   relatedLinks: [
-    { href: "/curriculo-ats", label: "Curriculo ATS" },
-    { href: "/curriculo-gupy", label: "Curriculo para Gupy" },
+    { href: "/curriculo-ats", label: "Currículo ATS" },
+    { href: "/curriculo-gupy", label: "Currículo para Gupy" },
     {
       href: "/blog/como-adaptar-curriculo-para-vaga",
-      label: "Blog: como adaptar curriculo",
+      label: "Blog: como adaptar currículo",
     },
     {
       href: "/palavras-chave-curriculo",
-      label: "Hub: palavras-chave para curriculo",
+      label: "Hub: palavras-chave para currículo",
     },
   ],
   cta: {
-    title: "Descubra se seu curriculo combina com a vaga",
+    title: "Descubra se seu currículo combina com a vaga",
     description:
-      "Cole a descricao da vaga, envie seu curriculo e receba uma analise gratuita de compatibilidade em poucos minutos.",
-    buttonLabel: "Analisar meu curriculo gratis",
+      "Cole a descrição da vaga, envie seu currículo e receba uma análise gratuita de compatibilidade em poucos minutos.",
+    buttonLabel: "Analisar meu currículo grátis",
     target: "/adaptar",
   },
 };

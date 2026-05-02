@@ -1,6 +1,6 @@
 ---
-title: "Palavras-chave no curriculo: como usar sem parecer texto generico"
-description: "Aprenda a escolher palavras-chave relevantes para sua vaga-alvo e incorporar termos de forma natural no seu curriculo."
+title: "Palavras-chave no currículo: como usar sem parecer texto genérico"
+description: "Aprenda a escolher palavras-chave relevantes para sua vaga-alvo e incorporar termos de forma natural no seu currículo."
 slug: palavras-chave-curriculo
 publishedAt: "2026-04-29"
 updatedAt: "2026-05-01"
@@ -12,22 +12,22 @@ tags:
 featured: false
 readingTime: 5 min
 status: published
-seoTitle: Palavras-chave no curriculo com estrategia pratica
-seoDescription: Veja como selecionar e aplicar palavras-chave no curriculo com contexto real, evitando exageros e termos vazios.
+seoTitle: Palavras-chave no currículo com estratégia prática
+seoDescription: Veja como selecionar e aplicar palavras-chave no currículo com contexto real, evitando exageros e termos vazios.
 mainTag: Keywords
 ---
 
-Palavra-chave sem contexto vira ruido. Palavra-chave com evidencia vira sinal.
+Palavra-chave sem contexto vira ruído. Palavra-chave com evidência vira sinal.
 
 ## Como selecionar termos
 
 - extraia de 3 a 5 vagas semelhantes;
-- marque termos obrigatorios e recorrentes;
-- separe por competencias tecnicas e resultados de negocio.
+- marque termos obrigatórios e recorrentes;
+- separe por competências técnicas e resultados de negócio.
 
-## Como aplicar no curriculo
+## Como aplicar no currículo
 
-Inclua os termos em pontos onde voce consegue provar experiencia:
+Inclua os termos em pontos onde você consegue provar experiência:
 
 - tecnologias usadas em projetos reais;
 - responsabilidades executadas;
@@ -38,8 +38,8 @@ Evite lista solta de buzzwords. Prefira frases curtas conectando ferramenta e im
 ## Exemplo de ajuste
 
 - fraco: "Conhecimento em dados e dashboards";
-- forte: "Construi dashboards em Power BI para acompanhamento semanal de funil comercial".
+- forte: "Construí dashboards em Power BI para acompanhamento semanal de funil comercial".
 
-Se quiser consultar listas por area e cargo, veja o hub utilitario de [palavras-chave para curriculo](/palavras-chave-curriculo). Para estruturar o documento, complemente com o guia de [curriculo ATS](/blog/curriculo-ats). Depois, aplique a adaptacao completa com o passo a passo de [curriculo por vaga](/blog/como-adaptar-curriculo-para-vaga).
+Se quiser consultar listas por área e cargo, veja o hub utilitário de [palavras-chave para currículo](/palavras-chave-curriculo). Para estruturar o documento, complemente com o guia de [currículo ATS](/blog/curriculo-ats). Depois, aplique a adaptação completa com o passo a passo de [currículo por vaga](/blog/como-adaptar-curriculo-para-vaga).
 
-Quando quiser validar aderencia de forma mais objetiva, use [/adaptar](/adaptar).
+Quando quiser validar aderência de forma mais objetiva, use [/adaptar](/adaptar).

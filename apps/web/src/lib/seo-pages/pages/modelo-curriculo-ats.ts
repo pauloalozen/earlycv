@@ -8,14 +8,14 @@ export const modeloCurriculoAtsPage: SeoPageDefinition = {
   pageType: "transactional",
   category: "modelo",
   seo: {
-    title: "Modelo de curriculo ATS simples e facil de ler | EarlyCV",
+    title: "Modelo de currículo ATS simples e fácil de ler | EarlyCV",
     description:
-      "Veja uma estrutura simples de curriculo ATS, com secoes claras para resumo, experiencia, competencias, formacao e projetos.",
+      "Veja uma estrutura simples de currículo ATS, com seções claras para resumo, experiência, competências, formação e projetos.",
   },
   hero: {
-    title: "Modelo de curriculo ATS simples, limpo e facil de ler",
+    title: "Modelo de currículo ATS simples, limpo e fácil de ler",
     description:
-      "Veja uma estrutura recomendada para criar um curriculo objetivo, compativel com triagens automatizadas e facil para recrutadores analisarem.",
+      "Veja uma estrutura recomendada para criar um currículo objetivo, compatível com triagens automatizadas e fácil para recrutadores analisarem.",
   },
   sections: [
     {
@@ -23,34 +23,34 @@ export const modeloCurriculoAtsPage: SeoPageDefinition = {
       bullets: [
         "Dados de contato",
         "Resumo profissional",
-        "Experiencias",
-        "Competencias",
-        "Formacao",
-        "Certificacoes",
+        "Experiências",
+        "Competências",
+        "Formação",
+        "Certificações",
         "Projetos, se fizer sentido",
       ],
     },
     {
-      heading: "Cabecalho",
+      heading: "Cabeçalho",
       paragraphs: [
-        "Inclua nome, cidade/estado, telefone, e-mail e links profissionais relevantes. Evite excesso de informacoes pessoais.",
+        "Inclua nome, cidade/estado, telefone, e-mail e links profissionais relevantes. Evite excesso de informações pessoais.",
       ],
     },
     {
       heading: "Resumo profissional",
       paragraphs: [
-        "Exemplo: Analista de dados com experiencia em BI, SQL e dashboards para suporte a decisoes comerciais.",
+        "Exemplo: Analista de dados com experiência em BI, SQL e dashboards para suporte a decisões comerciais.",
       ],
     },
     {
-      heading: "Experiencia profissional",
-      paragraphs: ["Estrutura sugerida: Cargo | Empresa | Periodo."],
-      bullets: ["Bullets com acao + contexto + resultado"],
+      heading: "Experiência profissional",
+      paragraphs: ["Estrutura sugerida: Cargo | Empresa | Período."],
+      bullets: ["Bullets com ação + contexto + resultado"],
     },
     {
-      heading: "Competencias",
+      heading: "Competências",
       bullets: [
-        "Tecnicas",
+        "Técnicas",
         "Ferramentas",
         "Metodologias",
         "Idiomas",
@@ -61,38 +61,38 @@ export const modeloCurriculoAtsPage: SeoPageDefinition = {
       heading: "O que evitar",
       bullets: [
         "Foto, salvo quando fizer sentido",
-        "Excesso de icones",
-        "Graficos",
+        "Excesso de ícones",
+        "Gráficos",
         "Tabelas complexas",
-        "Colunas dificeis de ler",
-        "Informacoes pessoais desnecessarias",
+        "Colunas difíceis de ler",
+        "Informações pessoais desnecessárias",
       ],
     },
     {
       heading: "Exemplo de modelo em texto",
       paragraphs: [
         "Nome Completo | Cidade - UF | email@dominio.com | (11) 90000-0000",
-        "Resumo: Profissional de produto com foco em analytics e melhoria de conversao.",
-        "Experiencia: Product Analyst | Empresa X | 2022-atual. Implementou analises em funil e apoiou priorizacao com ganho de eficiencia no time.",
-        "Competencias: SQL, Power BI, Excel, Analise de funil, Experimentacao.",
+        "Resumo: Profissional de produto com foco em analytics e melhoria de conversão.",
+        "Experiência: Product Analyst | Empresa X | 2022-atual. Implementou análises em funil e apoiou priorização com ganho de eficiência no time.",
+        "Competências: SQL, Power BI, Excel, Análise de funil, Experimentação.",
       ],
     },
     {
-      heading: "Como adaptar o modelo a vaga",
+      heading: "Como adaptar o modelo à vaga",
       paragraphs: [
-        "Use a descricao da vaga para ajustar palavras-chave, enfase das experiencias e competencias em cada candidatura.",
+        "Use a descrição da vaga para ajustar palavras-chave, ênfase das experiências e competências em cada candidatura.",
       ],
     },
   ],
   faq: [
     {
-      question: "Qual melhor formato para curriculo ATS?",
+      question: "Qual melhor formato para currículo ATS?",
       answer:
-        "Em geral, formato simples, com secoes claras e leitura objetiva.",
+        "Em geral, formato simples, com seções claras e leitura objetiva.",
     },
     {
-      question: "Curriculo ATS precisa ser feio?",
-      answer: "Nao. Ele precisa ser claro e facil de ler.",
+      question: "Currículo ATS precisa ser feio?",
+      answer: "Não. Ele precisa ser claro e fácil de ler.",
     },
     {
       question: "Posso usar duas colunas?",
@@ -101,34 +101,34 @@ export const modeloCurriculoAtsPage: SeoPageDefinition = {
     },
     {
       question: "Devo colocar foto?",
-      answer: "Depende do contexto. Em muitos casos nao e necessario.",
+      answer: "Depende do contexto. Em muitos casos não é necessário.",
     },
     {
       question: "Posso baixar um modelo pronto?",
       answer:
-        "Pode usar modelos como base, mas sempre adapte ao seu historico e a vaga.",
+        "Pode usar modelos como base, mas sempre adapte ao seu histórico e à vaga.",
     },
   ],
   relatedLinks: [
-    { href: "/curriculo-ats", label: "Curriculo ATS" },
+    { href: "/curriculo-ats", label: "Currículo ATS" },
     {
       href: "/adaptar-curriculo-para-vaga",
-      label: "Adaptar curriculo para vaga",
+      label: "Adaptar currículo para vaga",
     },
     {
       href: "/blog/palavras-chave-curriculo",
-      label: "Blog: palavras-chave no curriculo",
+      label: "Blog: palavras-chave no currículo",
     },
     {
       href: "/palavras-chave-curriculo",
-      label: "Hub: palavras-chave para curriculo",
+      label: "Hub: palavras-chave para currículo",
     },
   ],
   cta: {
-    title: "Descubra se seu curriculo combina com a vaga",
+    title: "Descubra se seu currículo combina com a vaga",
     description:
-      "Cole a descricao da vaga, envie seu curriculo e receba uma analise gratuita de compatibilidade em poucos minutos.",
-    buttonLabel: "Analisar meu curriculo gratis",
+      "Cole a descrição da vaga, envie seu currículo e receba uma análise gratuita de compatibilidade em poucos minutos.",
+    buttonLabel: "Analisar meu currículo grátis",
     target: "/adaptar",
   },
 };

@@ -33,7 +33,7 @@ export async function generateMetadata({
   if (!post) {
     return {
       robots: { follow: false, index: false },
-      title: "Artigo nao encontrado",
+      title: "Artigo não encontrado",
     };
   }
 

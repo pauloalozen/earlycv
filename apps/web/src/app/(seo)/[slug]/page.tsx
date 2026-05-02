@@ -35,7 +35,7 @@ export async function generateMetadata({
   if (!isSeoPageSlug(slug)) {
     return {
       robots: { follow: false, index: false },
-      title: "Pagina nao encontrada",
+      title: "Página não encontrada",
     };
   }
 
@@ -43,7 +43,7 @@ export async function generateMetadata({
   if (!page?.published) {
     return {
       robots: { follow: false, index: false },
-      title: "Pagina nao encontrada",
+      title: "Página não encontrada",
     };
   }
 
@@ -211,12 +211,12 @@ export default async function SeoPage({ params }: SeoPageProps) {
         <SeoAnalysisCta
           buttonLabel={
             page.pageType === "hub"
-              ? "Analisar meu curriculo gratis"
+              ? "Analisar meu currículo grátis"
               : page.cta.buttonLabel
           }
           description={
             page.pageType === "hub"
-              ? "O EarlyCV compara seu curriculo com a vaga e mostra lacunas, pontos fortes e termos relevantes para melhorar sua aderencia."
+              ? "O EarlyCV compara seu currículo com a vaga e mostra lacunas, pontos fortes e termos relevantes para melhorar sua aderência."
               : page.cta.description
           }
           location="middle"
@@ -226,7 +226,7 @@ export default async function SeoPage({ params }: SeoPageProps) {
           target={page.cta.target}
           title={
             page.pageType === "hub"
-              ? "Quer saber quais palavras da vaga faltam no seu curriculo?"
+              ? "Quer saber quais palavras da vaga faltam no seu currículo?"
               : page.cta.title
           }
         />
