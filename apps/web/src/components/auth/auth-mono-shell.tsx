@@ -7,7 +7,10 @@ type AuthMonoShellProps = {
   cardMaxWidth?: number;
 };
 
-export function AuthMonoShell({ children, cardMaxWidth = 460 }: AuthMonoShellProps) {
+export function AuthMonoShell({
+  children,
+  cardMaxWidth = 460,
+}: AuthMonoShellProps) {
   return (
     <PageShell>
       <div

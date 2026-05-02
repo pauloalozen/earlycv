@@ -39,7 +39,14 @@ describe("normalizeData", () => {
       },
       formato_cv: {
         resumo: "ok",
-        problemas: [{ tipo: "atencao", titulo: "Resumo longo", descricao: "", impacto: 4 }],
+        problemas: [
+          {
+            tipo: "atencao",
+            titulo: "Resumo longo",
+            descricao: "",
+            impacto: 4,
+          },
+        ],
         campos: [
           { nome: "Telefone", presente: false },
           { nome: "LinkedIn", presente: false },
@@ -81,7 +88,9 @@ describe("normalizeData", () => {
         subheadline: "subheadline",
       },
       positivos: [{ texto: "A", pontos: 39 }],
-      ajustes_conteudo: [{ id: "a1", titulo: "B", descricao: "", pontos: 1, dica: "" }],
+      ajustes_conteudo: [
+        { id: "a1", titulo: "B", descricao: "", pontos: 1, dica: "" },
+      ],
       ajustes_indisponiveis: [],
       keywords: {
         presentes: [{ kw: "SQL", pontos: 40 }],
@@ -133,7 +142,12 @@ describe("normalizeData", () => {
       formato_cv: {
         resumo: "ok",
         problemas: [
-          { tipo: "atencao", titulo: "Resumo longo", descricao: "", impacto: -4 },
+          {
+            tipo: "atencao",
+            titulo: "Resumo longo",
+            descricao: "",
+            impacto: -4,
+          },
           { tipo: "critico", titulo: "Tabela", descricao: "", impacto: -3 },
           { tipo: "ok", titulo: "Datas", descricao: "", impacto: 0 },
         ],
@@ -209,10 +223,30 @@ describe("normalizeData", () => {
         ats_score: 70,
         campos: [],
         problemas: [
-          { titulo: "Datas e instituições presentes", descricao: "", tipo: "ok", impacto: 0 },
-          { titulo: "Resumo longo e pouco escaneável", descricao: "", tipo: "atencao", impacto: -4 },
-          { titulo: "Formato compatível ATS", descricao: "", tipo: "ok", impacto: 0 },
-          { titulo: "Objetivo genérico e pouco direcionado", descricao: "", tipo: "atencao", impacto: -4 },
+          {
+            titulo: "Datas e instituições presentes",
+            descricao: "",
+            tipo: "ok",
+            impacto: 0,
+          },
+          {
+            titulo: "Resumo longo e pouco escaneável",
+            descricao: "",
+            tipo: "atencao",
+            impacto: -4,
+          },
+          {
+            titulo: "Formato compatível ATS",
+            descricao: "",
+            tipo: "ok",
+            impacto: 0,
+          },
+          {
+            titulo: "Objetivo genérico e pouco direcionado",
+            descricao: "",
+            tipo: "atencao",
+            impacto: -4,
+          },
         ],
         resumo: "ok",
       },

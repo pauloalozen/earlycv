@@ -23,13 +23,19 @@ export async function GET(
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const apiResponse = await fetch(`${getApiBaseUrl()}/cv-adaptation/${id}/base-cv`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const apiResponse = await fetch(
+    `${getApiBaseUrl()}/cv-adaptation/${id}/base-cv`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
 
   if (!apiResponse.ok) {
     const error = await apiResponse.text();
-    return NextResponse.json({ message: error }, { status: apiResponse.status });
+    return NextResponse.json(
+      { message: error },
+      { status: apiResponse.status },
+    );
   }
 
   const buffer = await apiResponse.arrayBuffer();

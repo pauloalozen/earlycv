@@ -1072,7 +1072,10 @@ export default function ResultadoTeste2Page() {
                       Seu score após liberar
                     </p>
                     <p className="mt-1 text-4xl font-extrabold tabular-nums text-lime-400">
-                      {Math.min(data.fit.score_pos_ajustes + ptsKwSelecionadas, 100)}
+                      {Math.min(
+                        data.fit.score_pos_ajustes + ptsKwSelecionadas,
+                        100,
+                      )}
                     </p>
                     <p className="mt-0.5 text-xs text-white/40">
                       acima do score recomendado de{" "}

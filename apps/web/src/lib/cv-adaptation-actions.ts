@@ -42,8 +42,6 @@ export function getHistoryActions(
       item.status !== "analyzing" &&
       item.status !== "failed",
     isProcessing: item.status === "analyzing",
-    ...(selectedMissingKeywords.length > 0
-      ? { selectedMissingKeywords }
-      : {}),
+    ...(selectedMissingKeywords.length > 0 ? { selectedMissingKeywords } : {}),
   };
 }

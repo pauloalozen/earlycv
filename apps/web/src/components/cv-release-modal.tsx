@@ -277,7 +277,6 @@ export function CvReleaseModal({
                 gap: 8,
               }}
             >
-              {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
               <svg
                 aria-hidden="true"
                 width="15"
@@ -317,7 +316,6 @@ export function CvReleaseModal({
                 gap: 8,
               }}
             >
-              {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
               <svg
                 aria-hidden="true"
                 width="15"

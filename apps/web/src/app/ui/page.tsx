@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DeltaBadge, KeywordTable } from "@/components/ui";
+import { DeltaBadge } from "@/components/ui";
 import { MetricBar } from "@/components/ui/metric-bar";
 
 export const metadata: Metadata = {

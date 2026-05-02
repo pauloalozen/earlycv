@@ -75,12 +75,35 @@ export default async function AdminCvUnlocksPage({
         </p>
       </div>
 
-      <form method="GET" action="/admin/liberacoes-cv" className="flex flex-wrap gap-3 mb-6">
-        <input name="email" defaultValue={sp.email ?? ""} placeholder="Email" className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700 w-56" />
-        <input name="userId" defaultValue={sp.userId ?? ""} placeholder="User ID" className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700 w-56" />
-        <input name="cvAdaptationId" defaultValue={sp.cvAdaptationId ?? ""} placeholder="CV Adaptation ID" className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700 w-64" />
+      <form
+        method="GET"
+        action="/admin/liberacoes-cv"
+        className="flex flex-wrap gap-3 mb-6"
+      >
+        <input
+          name="email"
+          defaultValue={sp.email ?? ""}
+          placeholder="Email"
+          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700 w-56"
+        />
+        <input
+          name="userId"
+          defaultValue={sp.userId ?? ""}
+          placeholder="User ID"
+          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700 w-56"
+        />
+        <input
+          name="cvAdaptationId"
+          defaultValue={sp.cvAdaptationId ?? ""}
+          placeholder="CV Adaptation ID"
+          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700 w-64"
+        />
 
-        <select name="source" defaultValue={sp.source ?? ""} className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700">
+        <select
+          name="source"
+          defaultValue={sp.source ?? ""}
+          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700"
+        >
           <option value="">Todas as origens</option>
           <option value="CREDIT">Crédito</option>
           <option value="PLAN_ENTITLEMENT">Plano</option>
@@ -88,17 +111,41 @@ export default async function AdminCvUnlocksPage({
           <option value="LEGACY">Legado</option>
         </select>
 
-        <select name="status" defaultValue={sp.status ?? ""} className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700">
+        <select
+          name="status"
+          defaultValue={sp.status ?? ""}
+          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700"
+        >
           <option value="">Todos os status</option>
           <option value="UNLOCKED">Liberado</option>
           <option value="REVOKED">Revogado</option>
         </select>
 
-        <input name="dateFrom" type="date" defaultValue={sp.dateFrom ?? ""} className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700" />
-        <input name="dateTo" type="date" defaultValue={sp.dateTo ?? ""} className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700" />
+        <input
+          name="dateFrom"
+          type="date"
+          defaultValue={sp.dateFrom ?? ""}
+          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700"
+        />
+        <input
+          name="dateTo"
+          type="date"
+          defaultValue={sp.dateTo ?? ""}
+          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700"
+        />
 
-        <button type="submit" className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">Filtrar</button>
-        <Link href="/admin/liberacoes-cv" className="rounded-lg border border-stone-200 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100">Limpar</Link>
+        <button
+          type="submit"
+          className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
+        >
+          Filtrar
+        </button>
+        <Link
+          href="/admin/liberacoes-cv"
+          className="rounded-lg border border-stone-200 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100"
+        >
+          Limpar
+        </Link>
       </form>
 
       <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
@@ -119,18 +166,38 @@ export default async function AdminCvUnlocksPage({
           <tbody className="divide-y divide-stone-50">
             {response.items.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-stone-400">Nenhuma liberação encontrada.</td>
+                <td
+                  colSpan={9}
+                  className="px-4 py-8 text-center text-stone-400"
+                >
+                  Nenhuma liberação encontrada.
+                </td>
               </tr>
             ) : null}
             {response.items.map((item) => (
               <tr key={item.id} className="hover:bg-stone-50">
-                <td className="px-4 py-3 text-stone-600 whitespace-nowrap">{formatDate(item.unlockedAt)}</td>
-                <td className="px-4 py-3 text-stone-800">{item.userName ?? item.userId}</td>
-                <td className="px-4 py-3 text-stone-600">{item.userEmail ?? "—"}</td>
-                <td className="px-4 py-3 font-mono text-xs text-stone-500">{item.cvAdaptationId}</td>
-                <td className="px-4 py-3 text-stone-600">{item.jobTitle ?? "—"}{item.companyName ? ` @ ${item.companyName}` : ""}</td>
-                <td className="px-4 py-3 text-stone-600">{item.score ?? "—"}</td>
-                <td className="px-4 py-3 text-stone-700">{item.creditsConsumed}</td>
+                <td className="px-4 py-3 text-stone-600 whitespace-nowrap">
+                  {formatDate(item.unlockedAt)}
+                </td>
+                <td className="px-4 py-3 text-stone-800">
+                  {item.userName ?? item.userId}
+                </td>
+                <td className="px-4 py-3 text-stone-600">
+                  {item.userEmail ?? "—"}
+                </td>
+                <td className="px-4 py-3 font-mono text-xs text-stone-500">
+                  {item.cvAdaptationId}
+                </td>
+                <td className="px-4 py-3 text-stone-600">
+                  {item.jobTitle ?? "—"}
+                  {item.companyName ? ` @ ${item.companyName}` : ""}
+                </td>
+                <td className="px-4 py-3 text-stone-600">
+                  {item.score ?? "—"}
+                </td>
+                <td className="px-4 py-3 text-stone-700">
+                  {item.creditsConsumed}
+                </td>
                 <td className="px-4 py-3 text-stone-600">{item.source}</td>
                 <td className="px-4 py-3 text-stone-600">{item.status}</td>
               </tr>
@@ -140,13 +207,25 @@ export default async function AdminCvUnlocksPage({
       </div>
 
       <div className="mt-4 flex items-center justify-between text-sm text-stone-500">
-        <span>Página {response.page} de {response.totalPages}</span>
+        <span>
+          Página {response.page} de {response.totalPages}
+        </span>
         <div className="flex gap-2">
           {response.page > 1 ? (
-            <Link href={buildUrl({ page: String(response.page - 1) })} className="rounded-lg border border-stone-200 px-3 py-1.5 hover:bg-stone-100">← Anterior</Link>
+            <Link
+              href={buildUrl({ page: String(response.page - 1) })}
+              className="rounded-lg border border-stone-200 px-3 py-1.5 hover:bg-stone-100"
+            >
+              ← Anterior
+            </Link>
           ) : null}
           {response.page < response.totalPages ? (
-            <Link href={buildUrl({ page: String(response.page + 1) })} className="rounded-lg border border-stone-200 px-3 py-1.5 hover:bg-stone-100">Próxima →</Link>
+            <Link
+              href={buildUrl({ page: String(response.page + 1) })}
+              className="rounded-lg border border-stone-200 px-3 py-1.5 hover:bg-stone-100"
+            >
+              Próxima →
+            </Link>
           ) : null}
         </div>
       </div>

@@ -55,7 +55,9 @@ export function DownloadProgressOverlay({
         className="w-full max-w-[420px] rounded-2xl bg-white p-6 shadow-2xl transition-all duration-[260ms] ease-out"
         style={{
           opacity: visible ? 1 : 0,
-          transform: visible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.98)",
+          transform: visible
+            ? "translateY(0) scale(1)"
+            : "translateY(8px) scale(0.98)",
         }}
       >
         <div className="flex items-center gap-3">

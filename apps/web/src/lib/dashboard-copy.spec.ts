@@ -9,7 +9,7 @@ import {
 test("DASHBOARD_METRIC_LABELS keeps approved metric labels", () => {
   assert.deepEqual(DASHBOARD_METRIC_LABELS, {
     averageScore: "Seu score médio",
-    matchCount: "Vagas que combinam com você",
+    matchCount: "Vagas analisadas",
     recentImprovement: "Melhoria recente",
   });
 });

@@ -221,7 +221,6 @@ export function AppHeader({
                   >
                     {userName.split(" ")[0]}
                   </span>
-                  {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
                   <svg
                     aria-hidden="true"
                     width="11"
@@ -308,7 +307,6 @@ export function AppHeader({
                           textDecoration: "none",
                         }}
                       >
-                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
                         <svg
                           aria-hidden="true"
                           width="13"
@@ -339,7 +337,6 @@ export function AppHeader({
                         textDecoration: "none",
                       }}
                     >
-                      {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
                       <svg
                         aria-hidden="true"
                         width="13"
@@ -381,7 +378,6 @@ export function AppHeader({
                           textAlign: "left",
                         }}
                       >
-                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
                         <svg
                           aria-hidden="true"
                           width="13"
@@ -427,7 +423,6 @@ export function AppHeader({
             aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
           >
             {mobileOpen ? (
-              // biome-ignore lint/a11y/noSvgWithoutTitle: decorative
               <svg
                 aria-hidden="true"
                 width="22"
@@ -442,7 +437,6 @@ export function AppHeader({
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             ) : (
-              // biome-ignore lint/a11y/noSvgWithoutTitle: decorative
               <svg
                 aria-hidden="true"
                 width="22"

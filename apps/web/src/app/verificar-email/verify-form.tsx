@@ -155,7 +155,6 @@ export function VerifyForm({
               padding: "5px 12px",
             }}
           >
-            {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
             <svg
               aria-hidden="true"
               width="13"
@@ -258,7 +257,6 @@ export function VerifyForm({
         >
           {isResultFlow ? (
             <>
-              {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
               <svg
                 aria-hidden="true"
                 width="15"
@@ -277,7 +275,6 @@ export function VerifyForm({
             </>
           ) : (
             <>
-              {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
               <svg
                 aria-hidden="true"
                 width="15"
@@ -352,7 +349,6 @@ export function VerifyForm({
             opacity: resendReady ? 1 : 0.55,
           }}
         >
-          {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
           <svg
             aria-hidden="true"
             width="14"

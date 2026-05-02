@@ -1,8 +1,8 @@
 "use client";
 
-import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 
 const MOCK_DATA: CvAnalysisData = {
   vaga: {
@@ -24,11 +24,28 @@ const MOCK_DATA: CvAnalysisData = {
     formatacao: { score: 8, max: 20 },
   },
   positivos: [
-    { texto: "Experiência sólida com pipelines de dados em Python e Airflow", pontos: 12 },
-    { texto: "Histórico comprovado com métricas de impacto (30% redução de latência)", pontos: 9 },
-    { texto: "Familiaridade com ambiente de alto volume — dados bancários/fintech", pontos: 8 },
-    { texto: "Formação em Ciência da Computação diretamente alinhada à vaga", pontos: 6 },
-    { texto: "Experiência com AWS S3 e arquitetura cloud citada na descrição", pontos: 5 },
+    {
+      texto: "Experiência sólida com pipelines de dados em Python e Airflow",
+      pontos: 12,
+    },
+    {
+      texto:
+        "Histórico comprovado com métricas de impacto (30% redução de latência)",
+      pontos: 9,
+    },
+    {
+      texto:
+        "Familiaridade com ambiente de alto volume — dados bancários/fintech",
+      pontos: 8,
+    },
+    {
+      texto: "Formação em Ciência da Computação diretamente alinhada à vaga",
+      pontos: 6,
+    },
+    {
+      texto: "Experiência com AWS S3 e arquitetura cloud citada na descrição",
+      pontos: 5,
+    },
   ],
   ajustes_conteudo: [
     {
@@ -49,7 +66,8 @@ const MOCK_DATA: CvAnalysisData = {
     },
     {
       id: "a2",
-      titulo: "Databricks listado só nas competências — precisa aparecer nas experiências",
+      titulo:
+        "Databricks listado só nas competências — precisa aparecer nas experiências",
       descricao:
         "A vaga exige uso prático de Databricks. Apenas listar na seção de habilidades tem peso menor no ATS.",
       pontos: 9,
@@ -184,11 +202,13 @@ Engenheira de Dados — Banco ABC (mar/2018–dez/2019)
   projecao_melhoria: {
     score_atual: 42,
     score_pos_otimizacao: 87,
-    explicacao_curta: "Ajustes de keywords e conteúdo aumentam compatibilidade de 42 para 87.",
+    explicacao_curta:
+      "Ajustes de keywords e conteúdo aumentam compatibilidade de 42 para 87.",
   },
   mensagem_venda: {
     titulo: "Seu CV otimizado está pronto",
-    subtexto: "Baixe o PDF/DOCX ajustado para esta vaga e aumente suas chances de entrevista.",
+    subtexto:
+      "Baixe o PDF/DOCX ajustado para esta vaga e aumente suas chances de entrevista.",
   },
 };
 
@@ -217,7 +237,8 @@ export default function DemoResultadoPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+        background:
+          "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
       }}
     >
       <div

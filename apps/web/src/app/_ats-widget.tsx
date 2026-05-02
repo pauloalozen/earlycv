@@ -110,8 +110,13 @@ export function AtsWidget() {
         if (phaseRef.current === "counting") {
           if (t < COUNT_DUR) {
             const p = t / COUNT_DUR;
-            const eased = 1 - Math.pow(1 - p, 3);
-            setScore(Math.round(preset.scoreStart + (preset.scoreEnd - preset.scoreStart) * eased));
+            const eased = 1 - (1 - p) ** 3;
+            setScore(
+              Math.round(
+                preset.scoreStart +
+                  (preset.scoreEnd - preset.scoreStart) * eased,
+              ),
+            );
             frameRef.current = requestAnimationFrame(tick);
           } else {
             setScore(preset.scoreEnd);
@@ -128,7 +133,9 @@ export function AtsWidget() {
                 setScore(PRESETS[next].scoreStart);
                 // fade in
                 setOpacity(1);
-                frameRef.current = requestAnimationFrame((ts2) => startCounting(ts2));
+                frameRef.current = requestAnimationFrame((ts2) =>
+                  startCounting(ts2),
+                );
               }, FADE_DUR);
             }, PAUSE_DUR);
           }
@@ -162,7 +169,8 @@ export function AtsWidget() {
         background: "#fafaf6",
         borderRadius: 14,
         border: "1px solid rgba(10,10,10,0.08)",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 24px 60px -20px rgba(10,10,10,0.18)",
+        boxShadow:
+          "0 1px 2px rgba(0,0,0,0.04), 0 24px 60px -20px rgba(10,10,10,0.18)",
         overflow: "hidden",
         fontFamily: "var(--font-geist), -apple-system, sans-serif",
       }}
@@ -179,9 +187,33 @@ export function AtsWidget() {
           position: "relative",
         }}
       >
-        <span style={{ width: 11, height: 11, borderRadius: "50%", background: "#ff5f57", display: "inline-block" }} />
-        <span style={{ width: 11, height: 11, borderRadius: "50%", background: "#febc2e", display: "inline-block" }} />
-        <span style={{ width: 11, height: 11, borderRadius: "50%", background: "#28c840", display: "inline-block" }} />
+        <span
+          style={{
+            width: 11,
+            height: 11,
+            borderRadius: "50%",
+            background: "#ff5f57",
+            display: "inline-block",
+          }}
+        />
+        <span
+          style={{
+            width: 11,
+            height: 11,
+            borderRadius: "50%",
+            background: "#febc2e",
+            display: "inline-block",
+          }}
+        />
+        <span
+          style={{
+            width: 11,
+            height: 11,
+            borderRadius: "50%",
+            background: "#28c840",
+            display: "inline-block",
+          }}
+        />
         <span
           style={{
             position: "absolute",
@@ -235,12 +267,28 @@ export function AtsWidget() {
         </div>
 
         {/* Gauge */}
-        <div style={{ position: "relative", width: 180, height: 180, margin: "0 auto 20px" }}>
+        <div
+          style={{
+            position: "relative",
+            width: 180,
+            height: 180,
+            margin: "0 auto 20px",
+          }}
+        >
           {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
           <svg width="180" height="180" viewBox="0 0 180 180" aria-hidden>
-            <circle cx="90" cy="90" r={R} stroke="#1a1a1a" strokeWidth="10" fill="none" />
             <circle
-              cx="90" cy="90" r={R}
+              cx="90"
+              cy="90"
+              r={R}
+              stroke="#1a1a1a"
+              strokeWidth="10"
+              fill="none"
+            />
+            <circle
+              cx="90"
+              cy="90"
+              r={R}
               stroke={strokeColor}
               strokeWidth="10"
               fill="none"
@@ -248,7 +296,9 @@ export function AtsWidget() {
               strokeDashoffset={0}
               transform="rotate(-90 90 90)"
               strokeLinecap="round"
-              style={{ transition: "stroke-dasharray 80ms linear, stroke 300ms" }}
+              style={{
+                transition: "stroke-dasharray 80ms linear, stroke 300ms",
+              }}
             />
           </svg>
           <div
@@ -273,17 +323,41 @@ export function AtsWidget() {
             >
               {score}
             </span>
-            <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: 1.5, color: "#7a7a74", marginTop: 4 }}>
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 9.5,
+                letterSpacing: 1.5,
+                color: "#7a7a74",
+                marginTop: 4,
+              }}
+            >
               ATS SCORE
             </span>
           </div>
         </div>
 
         {/* Keywords */}
-        <p style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 0.8, color: "#7a7a74", marginBottom: 10, fontWeight: 500 }}>
+        <p
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            letterSpacing: 0.8,
+            color: "#7a7a74",
+            marginBottom: 10,
+            fontWeight: 500,
+          }}
+        >
           Palavras-chave detectadas
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 18 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: 6,
+            marginBottom: 18,
+          }}
+        >
           {preset.keywords.map((k) => {
             const hit = score >= k.threshold;
             return (
@@ -298,10 +372,19 @@ export function AtsWidget() {
                   display: "flex",
                   alignItems: "center",
                   gap: 5,
-                  transition: "background 300ms, color 300ms, border-color 300ms",
+                  transition:
+                    "background 300ms, color 300ms, border-color 300ms",
                   ...(hit
-                    ? { background: "rgba(198,255,58,0.25)", color: "#405410", border: "1px solid rgba(110,150,20,0.2)" }
-                    : { background: "rgba(10,10,10,0.04)", color: "#8a8a85", border: "1px solid rgba(10,10,10,0.06)" }),
+                    ? {
+                        background: "rgba(198,255,58,0.25)",
+                        color: "#405410",
+                        border: "1px solid rgba(110,150,20,0.2)",
+                      }
+                    : {
+                        background: "rgba(10,10,10,0.04)",
+                        color: "#8a8a85",
+                        border: "1px solid rgba(10,10,10,0.06)",
+                      }),
                 }}
               >
                 {hit ? "✓" : "○"} {k.word}
@@ -311,7 +394,9 @@ export function AtsWidget() {
         </div>
 
         {/* Progress bar */}
-        <div style={{ borderTop: "1px solid rgba(10,10,10,0.06)", paddingTop: 14 }}>
+        <div
+          style={{ borderTop: "1px solid rgba(10,10,10,0.06)", paddingTop: 14 }}
+        >
           <div
             style={{
               display: "flex",
@@ -326,7 +411,14 @@ export function AtsWidget() {
             <span>Ajustando seções</span>
             <span style={{ color: "#0a0a0a" }}>{Math.round(pct * 100)}%</span>
           </div>
-          <div style={{ height: 4, background: "rgba(10,10,10,0.08)", borderRadius: 99, overflow: "hidden" }}>
+          <div
+            style={{
+              height: 4,
+              background: "rgba(10,10,10,0.08)",
+              borderRadius: 99,
+              overflow: "hidden",
+            }}
+          >
             <div
               style={{
                 height: "100%",

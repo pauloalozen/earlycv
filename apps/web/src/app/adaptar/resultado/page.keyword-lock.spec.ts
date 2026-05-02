@@ -7,10 +7,7 @@ test("resultado locks missing keyword checkboxes when adaptation is already rele
   const pagePath = resolve(process.cwd(), "src/app/adaptar/resultado/page.tsx");
   const content = readFileSync(pagePath, "utf8");
 
-  assert.match(
-    content,
-    /disabled=\{isKeywordSelectionLocked\}/,
-  );
+  assert.match(content, /disabled=\{isKeywordSelectionLocked\}/);
   assert.match(
     content,
     /reviewAdaptationId !== null && reviewPaymentStatus === "completed"/,

@@ -498,7 +498,8 @@ export function HistoryActionLinks({
                   ? {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        selectedMissingKeywords: actions.selectedMissingKeywords,
+                        selectedMissingKeywords:
+                          actions.selectedMissingKeywords,
                       }),
                     }
                   : {}),

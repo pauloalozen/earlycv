@@ -11,11 +11,11 @@ import {
   emitBusinessFunnelEvent,
   saveGuestPreview,
 } from "@/lib/cv-adaptation-api";
-import { setGuestAnalysisRaw } from "@/lib/guest-analysis-storage";
 import {
   appendTurnstileTokenToAnalyzeFormData,
   buildFunnelEventIdempotencyKey,
 } from "@/lib/cv-adaptation-flow-helpers";
+import { setGuestAnalysisRaw } from "@/lib/guest-analysis-storage";
 import type { ResumeDto } from "@/lib/resumes-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAuthStatus } from "@/lib/session-actions";

@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-
+import { normalizeData } from "@/app/adaptar/resultado/normalize-data";
+import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 import {
   buildDashboardTestHistoryView,
   buildDashboardTestMetrics,
   extractDashboardAnalysisSignal,
   getDashboardScoreColor,
 } from "./dashboard-test-metrics";
-import { normalizeData } from "@/app/adaptar/resultado/normalize-data";
-import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 
 const INPUT = [
   { id: "a1", score: 80, improvement: 14 },
@@ -137,7 +136,10 @@ test("extractDashboardAnalysisSignal exposes adjustments popup payload", () => {
   const signal = extractDashboardAnalysisSignal(payload);
 
   assert.equal(signal.adjustments.scoreBefore, normalized.score.scoreAtualBase);
-  assert.equal(signal.adjustments.scoreFinal, normalized.score.scoreAposLiberarBase);
+  assert.equal(
+    signal.adjustments.scoreFinal,
+    normalized.score.scoreAposLiberarBase,
+  );
   assert.equal(signal.adjustments.notes, "Ajustes aplicados no CV");
 });
 

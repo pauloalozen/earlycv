@@ -7,7 +7,7 @@ import {
   getRouteAccessRedirectPath,
 } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
-import { type PurchaseItem, listMyPurchases } from "@/lib/plans-api";
+import { listMyPurchases, type PurchaseItem } from "@/lib/plans-api";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },

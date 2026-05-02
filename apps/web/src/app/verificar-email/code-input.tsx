@@ -77,7 +77,8 @@ export function CodeInput({ name }: { name: string }) {
               textAlign: "center",
               color: "#0a0a0a",
               outline: "none",
-              transition: "border-color 150ms, background 150ms, box-shadow 150ms",
+              transition:
+                "border-color 150ms, background 150ms, box-shadow 150ms",
               boxShadow: digit ? "0 2px 8px rgba(10,10,10,0.06)" : "none",
             }}
             onFocus={(e) => {

@@ -753,7 +753,9 @@ export default function ResultadoPage() {
       };
       if (payload.id) setReviewAdaptationId(payload.id);
       setReviewPaymentStatus(
-        payload.isUnlocked ? "completed" : (payload.paymentStatus ?? "completed"),
+        payload.isUnlocked
+          ? "completed"
+          : (payload.paymentStatus ?? "completed"),
       );
       setHasCredits(false);
       await waitForMinimumDuration(startedAt, RELEASE_MIN_LOADING_MS);
@@ -3609,7 +3611,6 @@ export default function ResultadoPage() {
                           gap: 8,
                         }}
                       >
-                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
                         <svg
                           aria-hidden="true"
                           width="15"
@@ -3650,7 +3651,6 @@ export default function ResultadoPage() {
                           gap: 8,
                         }}
                       >
-                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
                         <svg
                           aria-hidden="true"
                           width="15"
@@ -3691,7 +3691,10 @@ export default function ResultadoPage() {
                         gap: 8,
                       }}
                     >
-                      <span className="hidden sm:inline-flex" aria-hidden="true">
+                      <span
+                        className="hidden sm:inline-flex"
+                        aria-hidden="true"
+                      >
                         {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
                         <svg
                           width="15"
@@ -3703,7 +3706,14 @@ export default function ResultadoPage() {
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         >
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                          <rect
+                            x="3"
+                            y="11"
+                            width="18"
+                            height="11"
+                            rx="2"
+                            ry="2"
+                          />
                           <path d="M7 11V7a5 5 0 0 1 9.5-2.2" />
                         </svg>
                       </span>
@@ -3821,7 +3831,10 @@ export default function ResultadoPage() {
                           gap: 8,
                         }}
                       >
-                        <span className="hidden sm:inline-flex" aria-hidden="true">
+                        <span
+                          className="hidden sm:inline-flex"
+                          aria-hidden="true"
+                        >
                           {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
                           <svg
                             width="15"
@@ -3833,7 +3846,14 @@ export default function ResultadoPage() {
                             strokeLinecap="round"
                             strokeLinejoin="round"
                           >
-                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <rect
+                              x="3"
+                              y="11"
+                              width="18"
+                              height="11"
+                              rx="2"
+                              ry="2"
+                            />
                             <path d="M7 11V7a5 5 0 0 1 9.5-2.2" />
                           </svg>
                         </span>

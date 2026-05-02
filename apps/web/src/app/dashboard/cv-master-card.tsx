@@ -176,6 +176,7 @@ export function CvMasterCard({ initialResume }: Props) {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
+                  <title>Salvar</title>
                   <path d="M12 3v12" />
                   <path d="m7 10 5 5 5-5" />
                   <path d="M5 21h14" />
@@ -319,9 +320,9 @@ export function CvMasterCard({ initialResume }: Props) {
                 whiteSpace: "nowrap",
               }}
             >
-              {resume!.title}
+              {resume?.title}
             </p>
-            {resume!.sourceFileName && (
+            {resume?.sourceFileName && (
               <p
                 style={{
                   fontFamily: MONO,
@@ -333,7 +334,7 @@ export function CvMasterCard({ initialResume }: Props) {
                   whiteSpace: "nowrap",
                 }}
               >
-                {resume!.sourceFileName}
+                {resume?.sourceFileName}
               </p>
             )}
             <p
@@ -344,7 +345,8 @@ export function CvMasterCard({ initialResume }: Props) {
                 margin: "2px 0 0",
               }}
             >
-              Atualizado em {formatDate(resume!.updatedAt)}
+              Atualizado em{" "}
+              {resume?.updatedAt ? formatDate(resume.updatedAt) : "-"}
             </p>
           </div>
 
@@ -379,6 +381,7 @@ export function CvMasterCard({ initialResume }: Props) {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
+                  <title>Atualizar</title>
                   <path d="M12 20h9" />
                   <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
                 </svg>
@@ -386,7 +389,7 @@ export function CvMasterCard({ initialResume }: Props) {
               Atualizar CV
             </button>
             <a
-              href={`/api/resumes/${resume!.id}/download`}
+              href={`/api/resumes/${resume?.id}/download`}
               target="_blank"
               rel="noreferrer"
               style={{
@@ -416,6 +419,7 @@ export function CvMasterCard({ initialResume }: Props) {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
+                  <title>Visualizar</title>
                   <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
                   <circle cx="12" cy="12" r="3" />
                 </svg>
@@ -451,6 +455,7 @@ export function CvMasterCard({ initialResume }: Props) {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
+                  <title>Eliminar</title>
                   <path d="M3 6h18" />
                   <path d="M8 6V4h8v2" />
                   <path d="M19 6l-1 14H6L5 6" />

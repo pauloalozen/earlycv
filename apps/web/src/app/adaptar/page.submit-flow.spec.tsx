@@ -481,27 +481,33 @@ describe("AdaptarPage submit analytics flow", () => {
 
       expect(focusCalls).toHaveLength(1);
       expect(pasteCalls).toHaveLength(1);
+    });
+
+    it("shows upload/text selector for authenticated user without master CV", async () => {
+      getAuthStatusMock.mockResolvedValueOnce({ userName: "Ana" });
+
+      render(<AdaptarPage />);
+
+      expect(
+        await screen.findByRole("button", { name: "Upload" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Digitar texto" }),
+      ).toBeInTheDocument();
+    });
+
+    it("defaults guest selector to upload mode", async () => {
+      getAuthStatusMock.mockResolvedValueOnce({ userName: null });
+
+      render(<AdaptarPage />);
+
+      const uploadButton = await screen.findByRole("button", {
+        name: "Upload",
+      });
+      expect(uploadButton).toBeInTheDocument();
+      expect(uploadButton).toHaveStyle({ background: "#0a0a0a" });
+    });
   });
-
-  it("shows upload/text selector for authenticated user without master CV", async () => {
-    getAuthStatusMock.mockResolvedValueOnce({ userName: "Ana" });
-
-    render(<AdaptarPage />);
-
-    expect(await screen.findByRole("button", { name: "Upload" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Digitar texto" })).toBeInTheDocument();
-  });
-
-  it("defaults guest selector to upload mode", async () => {
-    getAuthStatusMock.mockResolvedValueOnce({ userName: null });
-
-    render(<AdaptarPage />);
-
-    const uploadButton = await screen.findByRole("button", { name: "Upload" });
-    expect(uploadButton).toBeInTheDocument();
-    expect(uploadButton).toHaveStyle({ background: "#0a0a0a" });
-  });
-});
 
   it("persists authenticated analysis before navigating to resultado", async () => {
     getAuthStatusMock.mockResolvedValue({ userName: "Claudio" });

@@ -160,7 +160,7 @@ export default async function AdminPagamentosPage({
             {items.length === 0 && (
               <tr>
                 <td
-                   colSpan={6}
+                  colSpan={6}
                   className="px-4 py-8 text-center text-stone-400"
                 >
                   Nenhum pagamento encontrado.
@@ -185,7 +185,7 @@ export default async function AdminPagamentosPage({
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusClass(item.status)}`}
                   >
-                      {statusLabel(item.status)}
+                    {statusLabel(item.status)}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-stone-700">

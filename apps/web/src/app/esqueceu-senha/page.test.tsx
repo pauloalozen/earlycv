@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import EsqueceuSenhaPage from "./page";
 
@@ -39,7 +45,9 @@ describe("EsqueceuSenhaPage", () => {
     fireEvent.change(screen.getByLabelText("Email"), {
       target: { value: "user@earlycv.dev" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Enviar link de redefinição" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enviar link de redefinição" }),
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Email enviado")).toBeTruthy();

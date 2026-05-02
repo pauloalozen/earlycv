@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 
+import { getBlogSitemapEntries } from "@/lib/blog/posts";
 import { jobs } from "@/lib/jobs";
 import { getAbsoluteUrl } from "@/lib/site";
 
@@ -12,6 +13,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified,
       changeFrequency: "weekly",
       priority: 1,
+    },
+    {
+      url: getAbsoluteUrl("/blog"),
+      lastModified,
+      changeFrequency: "weekly",
+      priority: 0.7,
     },
     {
       url: getAbsoluteUrl("/privacidade"),
@@ -30,6 +37,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified,
       changeFrequency: "daily" as const,
       priority: 0.9,
+    })),
+    ...getBlogSitemapEntries().map((entry) => ({
+      url: getAbsoluteUrl(`/blog/${entry.slug}`),
+      lastModified: entry.lastModified,
+      changeFrequency: entry.changeFrequency,
+      priority: entry.priority,
     })),
   ];
 }

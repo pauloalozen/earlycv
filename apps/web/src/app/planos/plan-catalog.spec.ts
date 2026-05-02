@@ -53,6 +53,9 @@ test("buildPlanCatalog hides free plan for authenticated users", () => {
     { isAuthenticated: true },
   );
 
-  assert.equal(plans.some((plan) => plan.id === "free"), false);
+  assert.equal(
+    plans.some((plan) => plan.id === "free"),
+    false,
+  );
   assert.equal(plans.length, 3);
 });

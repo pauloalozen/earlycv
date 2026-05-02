@@ -23,6 +23,12 @@ type EventCatalogEntry = {
   eventVersion: number;
 };
 
+const BLOG_EVENT_NAMES = [
+  "blog_index_viewed",
+  "blog_post_viewed",
+  "blog_cta_clicked",
+] as const;
+
 type EventResultsState = {
   error?: string;
   failed: number;
@@ -374,6 +380,56 @@ async function AdminEventsLogsPageBody({
                 group="business"
                 title="Eventos de business"
               />
+              <Card className="space-y-3" variant="ghost">
+                <h2 className="text-xl font-bold tracking-tight text-stone-900">
+                  Eventos de Blog
+                </h2>
+                <p className="text-sm text-stone-600">
+                  Eventos client-side emitidos nas rotas publicas de blog.
+                </p>
+                <div className="grid gap-3">
+                  {BLOG_EVENT_NAMES.map((eventName) => {
+                    const matched = catalog.business.find(
+                      (entry) => entry.eventName === eventName,
+                    );
+
+                    return (
+                      <div
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white px-4 py-3"
+                        key={eventName}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-mono text-xs uppercase tracking-[0.14em] text-stone-600">
+                            {eventName}
+                          </p>
+                          <Badge variant="neutral">
+                            {matched
+                              ? `catalogado v${matched.eventVersion}`
+                              : "nao catalogado"}
+                          </Badge>
+                        </div>
+                        <form action={emitEventsAction}>
+                          <input
+                            name="eventName"
+                            type="hidden"
+                            value={eventName}
+                          />
+                          <input name="mode" type="hidden" value="single" />
+                          <button
+                            className={buttonVariants({
+                              size: "sm",
+                              variant: "outline",
+                            })}
+                            type="submit"
+                          >
+                            Disparar synthetic
+                          </button>
+                        </form>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
             </div>
           )}
         </div>

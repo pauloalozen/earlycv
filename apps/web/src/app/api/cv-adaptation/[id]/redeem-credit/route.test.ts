@@ -11,11 +11,14 @@ describe("POST /api/cv-adaptation/[id]/redeem-credit", () => {
     getCurrentAppSessionMock.mockResolvedValueOnce(null);
 
     const { POST } = await import("./route");
-    const request = new Request("http://localhost/api/cv-adaptation/a/redeem-credit", {
-      method: "POST",
-      body: JSON.stringify({ selectedMissingKeywords: ["Python"] }),
-      headers: { "Content-Type": "application/json" },
-    });
+    const request = new Request(
+      "http://localhost/api/cv-adaptation/a/redeem-credit",
+      {
+        method: "POST",
+        body: JSON.stringify({ selectedMissingKeywords: ["Python"] }),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
 
     const response = await POST(request as never, {
       params: Promise.resolve({ id: "adapt-1" }),
@@ -25,19 +28,26 @@ describe("POST /api/cv-adaptation/[id]/redeem-credit", () => {
   });
 
   it("forwards selectedMissingKeywords payload to API", async () => {
-    getCurrentAppSessionMock.mockResolvedValueOnce({ accessToken: "token-123" });
+    getCurrentAppSessionMock.mockResolvedValueOnce({
+      accessToken: "token-123",
+    });
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     const { POST } = await import("./route");
     const body = { selectedMissingKeywords: ["Python", "SQL"] };
-    const request = new Request("http://localhost/api/cv-adaptation/a/redeem-credit", {
-      method: "POST",
-      body: JSON.stringify(body),
-      headers: { "Content-Type": "application/json" },
-    });
+    const request = new Request(
+      "http://localhost/api/cv-adaptation/a/redeem-credit",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
 
     await POST(request as never, {
       params: Promise.resolve({ id: "adapt-1" }),

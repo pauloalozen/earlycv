@@ -41,7 +41,9 @@ export function extractDashboardAnalysisSignal(
 
   try {
     const normalized = normalizeData(parsed as CvAnalysisData);
-    const selectedMissingKeywords = Array.isArray(parsed.selectedMissingKeywords)
+    const selectedMissingKeywords = Array.isArray(
+      parsed.selectedMissingKeywords,
+    )
       ? parsed.selectedMissingKeywords.filter(
           (value): value is string =>
             typeof value === "string" && value.trim().length > 0,
@@ -156,5 +158,6 @@ export function getDashboardScoreColor(score: number): string {
 
   return `rgb(${r}, ${g}, ${b})`;
 }
-import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
+
 import { normalizeData } from "@/app/adaptar/resultado/normalize-data";
+import type { CvAnalysisData } from "@/lib/cv-adaptation-api";

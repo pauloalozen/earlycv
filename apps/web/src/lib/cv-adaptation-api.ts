@@ -1,9 +1,16 @@
 "use server";
 
-type CvAdaptationStatus = "pending" | "analyzing" | "awaiting_payment" | "paid" | "delivered" | "failed";
+type CvAdaptationStatus =
+  | "pending"
+  | "analyzing"
+  | "awaiting_payment"
+  | "paid"
+  | "delivered"
+  | "failed";
 type PaymentStatus = "none" | "pending" | "completed" | "failed" | "refunded";
-import { apiRequest } from "./api-request";
+
 import { getFrontendAnalyticsContext } from "./analytics-context";
+import { apiRequest } from "./api-request";
 import { extractApiErrorMessage } from "./cv-adaptation-api-errors";
 
 export type CvAdaptationDto = {
@@ -116,9 +123,7 @@ export async function deleteCvAdaptation(id: string): Promise<void> {
   }
 }
 
-export async function getCvAdaptationContent(
-  id: string,
-): Promise<{
+export async function getCvAdaptationContent(id: string): Promise<{
   adaptedContentJson: Record<string, unknown>;
   paymentStatus?: PaymentStatus;
   isUnlocked?: boolean;
@@ -262,10 +267,13 @@ export async function analyzeGuestCv(
     const raw = await response.text();
     return {
       ok: false,
-      error: extractApiErrorMessage(raw, "Falha ao analisar CV. Tente novamente."),
+      error: extractApiErrorMessage(
+        raw,
+        "Falha ao analisar CV. Tente novamente.",
+      ),
     };
   }
-  return { ok: true, ...(await response.json() as GuestAnalysisResult) };
+  return { ok: true, ...((await response.json()) as GuestAnalysisResult) };
 }
 
 export async function claimGuestAnalysis(payload: {
@@ -312,11 +320,16 @@ export async function saveGuestPreview(payload: {
     formData.append("masterCvText", payload.masterCvText);
     formData.append("analysisCvSnapshotId", payload.analysisCvSnapshotId);
     if (payload.file) formData.append("file", payload.file);
-    if (payload.previewText) formData.append("previewText", payload.previewText);
+    if (payload.previewText)
+      formData.append("previewText", payload.previewText);
     if (payload.jobTitle) formData.append("jobTitle", payload.jobTitle);
-    if (payload.companyName) formData.append("companyName", payload.companyName);
+    if (payload.companyName)
+      formData.append("companyName", payload.companyName);
     if (payload.guestSessionPublicToken)
-      formData.append("guestSessionPublicToken", payload.guestSessionPublicToken);
+      formData.append(
+        "guestSessionPublicToken",
+        payload.guestSessionPublicToken,
+      );
     if (payload.saveAsMaster)
       formData.append("saveAsMaster", String(payload.saveAsMaster));
     return formData;
@@ -342,10 +355,13 @@ export async function analyzeAuthenticatedCv(
     const raw = await response.text();
     return {
       ok: false,
-      error: extractApiErrorMessage(raw, "Falha ao analisar CV. Tente novamente."),
+      error: extractApiErrorMessage(
+        raw,
+        "Falha ao analisar CV. Tente novamente.",
+      ),
     };
   }
-  return { ok: true, ...(await response.json() as GuestAnalysisResult) };
+  return { ok: true, ...((await response.json()) as GuestAnalysisResult) };
 }
 
 export async function downloadCvAdaptationPdf(id: string): Promise<Blob> {

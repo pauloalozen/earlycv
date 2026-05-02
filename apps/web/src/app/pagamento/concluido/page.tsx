@@ -147,6 +147,9 @@ function ConcluidoContent() {
                   href={`/api/cv-adaptation/${result.originAdaptationId}/download?format=pdf`}
                   onClick={(event) => {
                     event.preventDefault();
+                    if (!result.originAdaptationId) {
+                      return;
+                    }
                     void handleDownload("pdf", result.originAdaptationId);
                   }}
                   style={{ color: "#ffffff" }}
@@ -158,6 +161,9 @@ function ConcluidoContent() {
                   href={`/api/cv-adaptation/${result.originAdaptationId}/download?format=docx`}
                   onClick={(event) => {
                     event.preventDefault();
+                    if (!result.originAdaptationId) {
+                      return;
+                    }
                     void handleDownload("docx", result.originAdaptationId);
                   }}
                   className="block w-full rounded-[14px] border border-[#D0D0D0] bg-white py-[14px] text-base font-medium leading-none text-center text-[#111111] transition-colors hover:bg-[#F5F5F5] mb-3"

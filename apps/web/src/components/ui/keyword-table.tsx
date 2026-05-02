@@ -32,8 +32,8 @@ export function KeywordTable({
           </tr>
         </thead>
         <tbody>
-          {keywords.map((k, i) => (
-            <tr key={i}>
+          {keywords.map((k) => (
+            <tr key={`${k.name}:${k.delta}:${k.presente ? "1" : "0"}`}>
               <td>{k.name}</td>
               <td>
                 <span

@@ -332,6 +332,7 @@ export default async function DashboardPage({
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
+                  <title>Creditos</title>
                   <path d="M12 1v22" />
                   <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14.5a3.5 3.5 0 0 1 0 7H7" />
                 </svg>
@@ -453,6 +454,7 @@ export default async function DashboardPage({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
+                    <title>Adaptar</title>
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                     <path d="M16 3h5v5" />
                     <path d="M10 14 21 3" />
@@ -781,7 +783,8 @@ export default async function DashboardPage({
                             analysisContext={{
                               jobTitle: item.jobTitle,
                               masterResumeTitle:
-                                resumeTitleById.get(item.masterResumeId) ?? null,
+                                resumeTitleById.get(item.masterResumeId) ??
+                                null,
                             }}
                             hideBaseCvAction
                             removeTopMargin
@@ -794,7 +797,10 @@ export default async function DashboardPage({
                               className="inline-flex h-8 w-full appearance-none items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border border-[#DADADA] bg-white px-3 [font-family:var(--font-sans)] text-xs leading-none font-semibold text-[#757570] transition-colors hover:border-[#BEBEBE] sm:w-auto"
                               style={{ color: "#757570" }}
                             >
-                              <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                              <span
+                                aria-hidden="true"
+                                style={{ display: "inline-flex" }}
+                              >
                                 <svg
                                   width="12"
                                   height="12"
@@ -805,6 +811,7 @@ export default async function DashboardPage({
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                 >
+                                  <title>Download</title>
                                   <path d="M12 3v12" />
                                   <path d="m7 10 5 5 5-5" />
                                   <path d="M5 21h14" />

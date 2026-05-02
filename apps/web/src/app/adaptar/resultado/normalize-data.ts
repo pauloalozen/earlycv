@@ -63,16 +63,23 @@ export function normalizeData(raw: CvAnalysisData) {
     descricao: string;
     pontos: number;
     dica: string;
-  }> = Array.isArray((raw as CvAnalysisData & { ajustes_indisponiveis?: unknown }).ajustes_indisponiveis)
-    ? ((raw as CvAnalysisData & {
-        ajustes_indisponiveis: Array<{
-          id?: string;
-          titulo: string;
-          descricao?: string;
-          pontos: number;
-          dica?: string;
-        }>;
-      }).ajustes_indisponiveis ?? []).map((a, i) => ({
+  }> = Array.isArray(
+    (raw as CvAnalysisData & { ajustes_indisponiveis?: unknown })
+      .ajustes_indisponiveis,
+  )
+    ? (
+        (
+          raw as CvAnalysisData & {
+            ajustes_indisponiveis: Array<{
+              id?: string;
+              titulo: string;
+              descricao?: string;
+              pontos: number;
+              dica?: string;
+            }>;
+          }
+        ).ajustes_indisponiveis ?? []
+      ).map((a, i) => ({
         id: a.id ?? `i${i}`,
         titulo: a.titulo,
         descricao: a.descricao ?? "",
@@ -130,7 +137,7 @@ export function normalizeData(raw: CvAnalysisData) {
     "Nome completo": 2,
     "E-mail": 2,
     Telefone: 2,
-    "Localização": 2,
+    Localização: 2,
     Localizacao: 2,
     "Formação acadêmica": 2,
     "Formacao academica": 2,
@@ -206,7 +213,10 @@ export function normalizeData(raw: CvAnalysisData) {
   );
 
   const pontosFortesSecao1 = positivos.reduce((s, p) => s + p.pontos, 0);
-  const ajustesConteudoSecao1 = ajustesConteudo.reduce((s, a) => s + a.pontos, 0);
+  const ajustesConteudoSecao1 = ajustesConteudo.reduce(
+    (s, a) => s + a.pontos,
+    0,
+  );
   const ajustesIndisponiveisSecao1 = ajustesIndisponiveis.reduce(
     (s, a) => s + a.pontos,
     0,

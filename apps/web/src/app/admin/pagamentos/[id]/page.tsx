@@ -119,10 +119,7 @@ export default async function AdminPagamentoDetailPage({
         </h2>
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Checkout ID" value={checkout.checkoutId} />
-          <Field
-            label="Tipo"
-            value="Plano"
-          />
+          <Field label="Tipo" value="Plano" />
           <Field label="User ID" value={checkout.userId} />
           <Field label="E-mail" value={checkout.userEmail} />
           <Field label="Status interno" value={checkout.status} />

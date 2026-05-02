@@ -6,12 +6,12 @@ import { fileURLToPath } from "node:url";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
-test("planos page does not wrap content with PageShell", () => {
+test("planos page wraps content with PageShell", () => {
   const filePath = resolve(currentDir, "../app/planos/page.tsx");
   const content = readFileSync(filePath, "utf8");
 
-  assert.doesNotMatch(content, /import\s+\{\s*PageShell\s*\}/);
-  assert.doesNotMatch(content, /<PageShell>/);
+  assert.match(content, /import\s+\{\s*PageShell\s*\}/);
+  assert.match(content, /<PageShell>/);
 });
 
 test("planos page renders score indicator and plan catalog", () => {
@@ -19,5 +19,5 @@ test("planos page renders score indicator and plan catalog", () => {
   const content = readFileSync(filePath, "utf8");
 
   assert.match(content, /buildPlanCatalog/);
-  assert.match(content, /<ScoreIndicator\s*\/?>/);
+  assert.match(content, /<ScoreIndicator\b/);
 });

@@ -51,11 +51,17 @@ export function RegisterForm({ next }: { next: string }) {
   };
 
   return (
-    <form action="/auth/register-user" method="post" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <form
+      action="/auth/register-user"
+      method="post"
+      style={{ display: "flex", flexDirection: "column", gap: 16 }}
+    >
       {next && <input type="hidden" name="next" value={next} />}
 
       <div>
-        <label htmlFor="register-name" style={labelStyle}>Nome completo</label>
+        <label htmlFor="register-name" style={labelStyle}>
+          Nome completo
+        </label>
         <input
           id="register-name"
           name="name"
@@ -68,7 +74,9 @@ export function RegisterForm({ next }: { next: string }) {
       </div>
 
       <div>
-        <label htmlFor="register-email" style={labelStyle}>Email</label>
+        <label htmlFor="register-email" style={labelStyle}>
+          Email
+        </label>
         <input
           id="register-email"
           name="email"
@@ -83,12 +91,23 @@ export function RegisterForm({ next }: { next: string }) {
           className="entrar-input"
         />
         {showEmailError && (
-          <p style={{ fontFamily: MONO, fontSize: 10.5, color: "#dc2626", marginTop: 4 }}>Digite um email válido.</p>
+          <p
+            style={{
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: "#dc2626",
+              marginTop: 4,
+            }}
+          >
+            Digite um email válido.
+          </p>
         )}
       </div>
 
       <div>
-        <label htmlFor="register-password" style={labelStyle}>Senha</label>
+        <label htmlFor="register-password" style={labelStyle}>
+          Senha
+        </label>
         <PasswordInput
           id="register-password"
           name="password"
@@ -99,13 +118,33 @@ export function RegisterForm({ next }: { next: string }) {
           onBlur={() => setTouched((t) => ({ ...t, password: true }))}
         />
         {showPasswordRules && (
-          <ul style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+          <ul
+            style={{
+              marginTop: 8,
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+            }}
+          >
             {SIGNUP_PASSWORD_RULES.map((rule) => {
               const ok = rule.test(password);
               return (
-                <li key={rule.label} style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: MONO, fontSize: 10.5 }}>
-                  <span style={{ color: ok ? "#4d7c0f" : "#ef4444" }}>{ok ? "✓" : "✗"}</span>
-                  <span style={{ color: ok ? "#4d7c0f" : "#8a8a85" }}>{rule.label}</span>
+                <li
+                  key={rule.label}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                  }}
+                >
+                  <span style={{ color: ok ? "#4d7c0f" : "#ef4444" }}>
+                    {ok ? "✓" : "✗"}
+                  </span>
+                  <span style={{ color: ok ? "#4d7c0f" : "#8a8a85" }}>
+                    {rule.label}
+                  </span>
                 </li>
               );
             })}
@@ -129,7 +168,7 @@ export function RegisterForm({ next }: { next: string }) {
           cursor: "pointer",
           letterSpacing: -0.2,
           transition: "opacity 150ms",
-          opacity: (!emailValid || !passwordAllValid) ? 0.45 : 1,
+          opacity: !emailValid || !passwordAllValid ? 0.45 : 1,
         }}
         className="entrar-submit-btn"
       >

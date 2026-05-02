@@ -47,11 +47,17 @@ export function LoginForm({ next }: { next: string }) {
   };
 
   return (
-    <form action="/auth/login-user" method="post" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <form
+      action="/auth/login-user"
+      method="post"
+      style={{ display: "flex", flexDirection: "column", gap: 16 }}
+    >
       {next && <input type="hidden" name="next" value={next} />}
 
       <div>
-        <label htmlFor="login-email" style={labelStyle}>Email</label>
+        <label htmlFor="login-email" style={labelStyle}>
+          Email
+        </label>
         <input
           id="login-email"
           name="email"
@@ -66,14 +72,44 @@ export function LoginForm({ next }: { next: string }) {
           className="entrar-input"
         />
         {showEmailError && (
-          <p style={{ fontFamily: MONO, fontSize: 10.5, color: "#dc2626", marginTop: 4 }}>Digite um email válido.</p>
+          <p
+            style={{
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: "#dc2626",
+              marginTop: 4,
+            }}
+          >
+            Digite um email válido.
+          </p>
         )}
       </div>
 
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <label htmlFor="login-password" style={{ ...labelStyle, marginBottom: 0 }}>Senha</label>
-          <a href="/esqueceu-senha" style={{ fontFamily: MONO, fontSize: 10, color: "#8a8a85", textDecoration: "none", letterSpacing: 0.3 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 6,
+          }}
+        >
+          <label
+            htmlFor="login-password"
+            style={{ ...labelStyle, marginBottom: 0 }}
+          >
+            Senha
+          </label>
+          <a
+            href="/esqueceu-senha"
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              color: "#8a8a85",
+              textDecoration: "none",
+              letterSpacing: 0.3,
+            }}
+          >
             Esqueceu?
           </a>
         </div>
@@ -87,7 +123,16 @@ export function LoginForm({ next }: { next: string }) {
           onBlur={() => setTouched((t) => ({ ...t, password: true }))}
         />
         {showPasswordError && (
-          <p style={{ fontFamily: MONO, fontSize: 10.5, color: "#dc2626", marginTop: 4 }}>Digite sua senha.</p>
+          <p
+            style={{
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: "#dc2626",
+              marginTop: 4,
+            }}
+          >
+            Digite sua senha.
+          </p>
         )}
       </div>
 
@@ -107,7 +152,7 @@ export function LoginForm({ next }: { next: string }) {
           cursor: "pointer",
           letterSpacing: -0.2,
           transition: "opacity 150ms",
-          opacity: (!emailValid || !passwordValid) ? 0.45 : 1,
+          opacity: !emailValid || !passwordValid ? 0.45 : 1,
         }}
         className="entrar-submit-btn"
       >

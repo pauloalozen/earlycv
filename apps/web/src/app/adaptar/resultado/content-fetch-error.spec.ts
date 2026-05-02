@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 
 import { buildContentFetchErrorMessage } from "./content-fetch-error";
 
@@ -18,5 +18,8 @@ test("includes HTTP status and upstream message when available", () => {
 test("falls back to status code only when body is empty", () => {
   const message = buildContentFetchErrorMessage(500, "");
 
-  assert.equal(message, "Não foi possível carregar essa análise agora. [HTTP 500]");
+  assert.equal(
+    message,
+    "Não foi possível carregar essa análise agora. [HTTP 500]",
+  );
 });
