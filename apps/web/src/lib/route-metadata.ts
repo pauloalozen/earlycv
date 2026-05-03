@@ -15,11 +15,11 @@ function buildInternalMetadata(
 export function buildAdminMetadata(
   page: string,
 ): Pick<Metadata, "title" | "robots"> {
-  return buildInternalMetadata(page);
+  return buildInternalMetadata(`Admin • ${page} | EarlyCV`);
 }
 
 export function buildSuperadminMetadata(
   page: string,
 ): Pick<Metadata, "title" | "robots"> {
-  return buildInternalMetadata(page);
+  return buildInternalMetadata(`Superadmin • ${page} | EarlyCV`);
 }

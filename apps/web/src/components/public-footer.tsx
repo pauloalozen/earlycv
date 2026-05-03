@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";

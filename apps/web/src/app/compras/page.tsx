@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/app-header";
+import { PublicFooter } from "@/components/public-footer";
 import {
   getDefaultAppRedirectPath,
   getRouteAccessRedirectPath,
@@ -571,6 +572,8 @@ export default async function ComprasPage() {
           </div>
         </div>
       </main>
+
+      <PublicFooter />
 
       <style>{`
         .compras-btn-dark:hover { opacity: 0.82; }

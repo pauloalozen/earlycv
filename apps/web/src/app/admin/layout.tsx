@@ -12,10 +12,7 @@ export const metadata: Metadata = {
     follow: false,
     index: false,
   },
-  title: {
-    default: "Admin | EarlyCV",
-    template: "%s | Admin | EarlyCV",
-  },
+  title: "Admin | EarlyCV",
 };
 
 type AdminLayoutProps = {
