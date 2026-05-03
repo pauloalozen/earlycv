@@ -72,9 +72,11 @@ describe("blog pages", () => {
     const html = renderToStaticMarkup(page);
 
     expect(html).toContain('class="blog-content');
-    expect(html).toContain("<h2>Passo 1: Leia a vaga com critério</h2>");
+    expect(html).toContain(
+      "<h2>Passo 1: Leia a vaga como um documento analítico</h2>",
+    );
     expect(html).toContain("<ul>");
-    expect(html).toContain("<li>responsabilidades mais repetidas;</li>");
+    expect(html).toContain("<li><strong>O que a vaga pede</strong></li>");
     expect(html).toContain('<a href="/blog/palavras-chave-curriculo">');
   });
 });

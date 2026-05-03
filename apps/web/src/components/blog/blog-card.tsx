@@ -94,6 +94,7 @@ export function BlogCard({ post }: { post: BlogPost }) {
             color: "#a0a098",
             letterSpacing: 0.2,
             margin: 0,
+            overflowWrap: "anywhere",
           }}
         >
           {`/blog/${post.slug}`}

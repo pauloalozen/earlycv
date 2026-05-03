@@ -75,7 +75,7 @@ export default function BlogIndexPage() {
         style={{
           maxWidth: 860,
           margin: "0 auto",
-          padding: "56px 40px 0",
+          padding: "56px clamp(16px, 4vw, 40px) 0",
           position: "relative",
           zIndex: 1,
         }}
@@ -96,7 +96,7 @@ export default function BlogIndexPage() {
           </div>
           <h1
             style={{
-              fontSize: 52,
+              fontSize: "clamp(2rem, 7vw, 3.25rem)",
               fontWeight: 500,
               letterSpacing: -2,
               lineHeight: 1.04,
@@ -131,7 +131,7 @@ export default function BlogIndexPage() {
               background: "#fafaf6",
               border: "1px solid rgba(10,10,10,0.08)",
               borderRadius: 14,
-              padding: "28px 32px",
+              padding: "clamp(20px, 4vw, 28px) clamp(16px, 4vw, 32px)",
               marginBottom: 24,
               boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
             }}
@@ -163,7 +163,7 @@ export default function BlogIndexPage() {
             </div>
             <h2
               style={{
-                fontSize: 28,
+                fontSize: "clamp(1.35rem, 4.8vw, 1.75rem)",
                 fontWeight: 500,
                 letterSpacing: -1,
                 lineHeight: 1.2,
@@ -182,13 +182,14 @@ export default function BlogIndexPage() {
             >
               {featured.description}
             </p>
-            <div style={{ display: "flex", gap: 20 }}>
+            <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
               <span
                 style={{
                   fontFamily: MONO,
                   fontSize: 10.5,
                   color: "#a0a098",
                   letterSpacing: 0.2,
+                  overflowWrap: "anywhere",
                 }}
               >
                 {`/blog/${featured.slug}`}
@@ -211,7 +212,7 @@ export default function BlogIndexPage() {
         <section
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
             gap: 16,
           }}
         >
