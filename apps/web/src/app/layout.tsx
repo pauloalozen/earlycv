@@ -68,7 +68,7 @@ const instrumentSerif = Instrument_Serif({
 });
 
 const isProduction = process.env.NODE_ENV === "production";
-const GTM_ID = "GTM-K3PZK9FJ";
+const GA_MEASUREMENT_ID = "G-FGMKXL50XR";
 
 export const viewport: Viewport = {
   colorScheme: "light",
@@ -157,29 +157,21 @@ export default function RootLayout({
     >
       <head>
         {isProduction ? (
-          <Script id="gtm" strategy="beforeInteractive">
-            {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-})(window,document,'script','dataLayer','${GTM_ID}');`}
-          </Script>
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+              strategy="beforeInteractive"
+            />
+            <Script id="gtag-init" strategy="beforeInteractive">
+              {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${GA_MEASUREMENT_ID}');`}
+            </Script>
+          </>
         ) : null}
       </head>
-      <body className="font-sans antialiased">
-        {isProduction ? (
-          <noscript>
-            <iframe
-              src={`https://www.googletagmanager.com/ns.html?id=${GTM_ID}`}
-              height="0"
-              width="0"
-              style={{ display: "none", visibility: "hidden" }}
-              title="gtm"
-            />
-          </noscript>
-        ) : null}
-        {children}
-      </body>
+      <body className="font-sans antialiased">{children}</body>
     </html>
   );
 }
