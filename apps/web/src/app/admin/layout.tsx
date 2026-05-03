@@ -40,7 +40,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
         <AdminSidebar />
       </Suspense>
       <div className="lg:pl-72">
-        <div className="min-h-screen">{children}</div>
+        <div className="min-h-screen py-1">{children}</div>
       </div>
     </div>
   );

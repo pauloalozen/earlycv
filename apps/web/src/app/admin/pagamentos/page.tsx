@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
 import { listAdminPayments } from "@/lib/admin-payments-api";
+import { buildAdminMetadata } from "@/lib/route-metadata";
 
-export const metadata: Metadata = { title: "Pagamentos" };
+export const metadata = buildAdminMetadata("Pagamentos");
 
 function statusLabel(status: string) {
   const map: Record<string, string> = {
@@ -197,7 +197,7 @@ export default async function AdminPagamentosPage({
                 <td className="px-4 py-3">
                   <Link
                     href={`/admin/pagamentos/${item.checkoutId}`}
-                    className="text-xs font-medium text-orange-700 hover:underline"
+                    className="text-xs font-medium text-stone-700 hover:underline"
                   >
                     Ver detalhes
                   </Link>

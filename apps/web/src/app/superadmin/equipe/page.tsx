@@ -2,11 +2,13 @@ import Link from "next/link";
 
 import { buttonVariants, Card, EmptyState, StatCard } from "@/components/ui";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
+import { buildSuperadminMetadata } from "@/lib/route-metadata";
 import { listStaffUsers } from "@/lib/superadmin-api";
 import { getSuperadminDataErrorKind } from "@/lib/superadmin-errors";
-
 import { SuperadminShellHeader } from "../_components/superadmin-shell-header";
 import { SuperadminState } from "../_components/superadmin-state";
+
+export const metadata = buildSuperadminMetadata("Equipe");
 
 type SuperadminTeamPageProps = {
   searchParams: Promise<{ token?: string }>;
@@ -95,7 +97,7 @@ export default async function SuperadminTeamPage({
 
                   <div className="flex flex-wrap gap-3">
                     <Link
-                      className={buttonVariants({ variant: "dark" })}
+                      className={buttonVariants({ variant: "outline" })}
                       href={`/superadmin/equipe/${user.id}`}
                     >
                       Abrir detalhe

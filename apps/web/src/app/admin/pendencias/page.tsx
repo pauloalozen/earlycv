@@ -8,9 +8,11 @@ import {
 import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
+
+export const metadata = buildAdminMetadata("Pendencias");
 
 type PendingPageProps = {
   searchParams: Promise<{ query?: string; token?: string; type?: string }>;

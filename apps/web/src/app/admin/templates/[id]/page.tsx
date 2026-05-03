@@ -12,9 +12,12 @@ import {
 } from "@/lib/admin-resume-templates-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminTokenState } from "../../_components/admin-token-state";
 import { TemplateFileUpload } from "./_components/template-file-upload";
+
+export const metadata = buildAdminMetadata("Detalhe do template");
 
 type AdminEditTemplatePageProps = {
   params: Promise<{ id: string }>;

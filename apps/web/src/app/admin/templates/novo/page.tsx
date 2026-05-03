@@ -4,9 +4,11 @@ import { buttonVariants, Card, Input } from "@/components/ui";
 import { adminCreateResumeTemplate } from "@/lib/admin-resume-templates-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminTokenState } from "../../_components/admin-token-state";
+
+export const metadata = buildAdminMetadata("Novo template");
 
 export default async function AdminNewTemplatePage() {
   const token = await getBackofficeSessionToken();

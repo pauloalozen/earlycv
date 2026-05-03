@@ -8,10 +8,12 @@ import {
   filterAdminUsers,
 } from "@/lib/admin-users-operations";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminStatusBadge } from "../_components/admin-status-badge";
 import { AdminTokenState } from "../_components/admin-token-state";
+
+export const metadata = buildAdminMetadata("Perfis");
 
 type AdminProfilesPageProps = {
   searchParams: Promise<{ query?: string; status?: string; token?: string }>;

@@ -16,7 +16,13 @@ export function AdminTokenState({
   title,
 }: AdminTokenStateProps) {
   return (
-    <Card className="mx-auto max-w-2xl space-y-4" padding="lg">
+    <Card
+      className="mx-auto max-w-2xl space-y-4 border-stone-200 bg-white"
+      padding="lg"
+    >
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+        admin / acesso interno
+      </p>
       <h1 className="text-2xl font-bold tracking-tight text-stone-950">
         {title}
       </h1>

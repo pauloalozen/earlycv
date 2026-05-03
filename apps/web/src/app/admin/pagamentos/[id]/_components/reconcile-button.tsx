@@ -29,7 +29,7 @@ export function ReconcileButton({ checkoutId }: { checkoutId: string }) {
         type="button"
         onClick={handleReconcile}
         disabled={loading}
-        className="rounded-lg bg-orange-700 px-4 py-2 text-sm font-medium text-white hover:bg-orange-800 disabled:opacity-50"
+        className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-50"
       >
         {loading ? "Verificando MP..." : "Forçar reconciliação"}
       </button>

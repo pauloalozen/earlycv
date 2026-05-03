@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
 import { listAdminCvUnlocks } from "@/lib/admin-cv-unlocks-api";
+import { buildAdminMetadata } from "@/lib/route-metadata";
 
-export const metadata: Metadata = { title: "Liberações de CV" };
+export const metadata = buildAdminMetadata("Liberacoes de CV");
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString("pt-BR", {

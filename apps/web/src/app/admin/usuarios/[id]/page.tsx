@@ -11,12 +11,15 @@ import {
   getResumeDisplayKind,
 } from "@/lib/admin-users-operations";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminStatusBadge } from "../../_components/admin-status-badge";
 import { AdminTokenState } from "../../_components/admin-token-state";
 import { setUserAnalysisCreditsAction, setUserCreditsAction } from "./actions";
 import { SetAnalysisCreditsForm } from "./set-analysis-credits-form";
 import { SetCreditsForm } from "./set-credits-form";
+
+export const metadata = buildAdminMetadata("Detalhe do usuario");
 
 type AdminUserDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -157,10 +160,10 @@ export default async function AdminUserDetailPage({
         </Card>
 
         {assistedSession?.mode === "assisted" ? (
-          <Card className="border-orange-200 bg-orange-50/80" padding="lg">
+          <Card className="border-stone-200 bg-stone-50/80" padding="lg">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div className="space-y-2">
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-orange-700">
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-700">
                   sessao assistida ativa
                 </p>
                 <h2 className="text-xl font-bold tracking-tight text-stone-950">

@@ -8,9 +8,11 @@ import {
 } from "@/lib/admin-analysis-config-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
+
+export const metadata = buildAdminMetadata("Configuracoes");
 
 const formatDefaultValue = (entry: AdminAnalysisConfigEntry) => {
   if (Array.isArray(entry.defaultValue)) {
@@ -178,7 +180,7 @@ async function AdminSettingsPageBody({
                     />
                   )}
                   <button
-                    className="h-12 rounded-lg bg-orange-500 px-4 text-sm font-semibold text-white transition hover:bg-orange-600"
+                    className="h-12 rounded-lg bg-stone-500 px-4 text-sm font-semibold text-white transition hover:bg-stone-800"
                     type="submit"
                   >
                     Salvar

@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
 import { buttonVariants, Card } from "@/components/ui";
@@ -6,20 +5,14 @@ import { getJobSource, listIngestionRuns } from "@/lib/admin-ingestion-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { runJobSourceAction } from "../actions";
+
+export const metadata = buildAdminMetadata("Detalhe da ingestion");
 
 type JobSourcePageProps = {
   params: Promise<{ jobSourceId: string }>;
   searchParams: Promise<{ message?: string; status?: string; token?: string }>;
-};
-
-export const metadata: Metadata = {
-  title: "Auditoria da fonte",
-  robots: {
-    index: false,
-    follow: false,
-  },
 };
 
 export default async function JobSourceAdminPage({
@@ -66,7 +59,7 @@ export default async function JobSourceAdminPage({
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-2">
-              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-orange-700">
+              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-700">
                 {source.company.name}
               </p>
               <h1 className="text-3xl font-bold tracking-tight">
@@ -98,7 +91,7 @@ export default async function JobSourceAdminPage({
               className={
                 status === "success"
                   ? "rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"
-                  : "rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-medium text-orange-900"
+                  : "rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-medium text-stone-900"
               }
             >
               {message}

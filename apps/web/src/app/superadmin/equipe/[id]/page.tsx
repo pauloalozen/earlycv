@@ -3,14 +3,16 @@ import { notFound } from "next/navigation";
 
 import { buttonVariants, Card, InfoField } from "@/components/ui";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
+import { buildSuperadminMetadata } from "@/lib/route-metadata";
 import { listStaffUsers, type StaffUserRecord } from "@/lib/superadmin-api";
 import {
   getSuperadminDataErrorKind,
   isNextNotFoundError,
 } from "@/lib/superadmin-errors";
-
 import { SuperadminShellHeader } from "../../_components/superadmin-shell-header";
 import { SuperadminState } from "../../_components/superadmin-state";
+
+export const metadata = buildSuperadminMetadata("Detalhe do membro");
 
 type SuperadminTeamDetailPageProps = {
   params: Promise<{ id: string }>;

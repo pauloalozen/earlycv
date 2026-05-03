@@ -1,12 +1,13 @@
 import Link from "next/link";
-
 import { buttonVariants, Card, StatCard } from "@/components/ui";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
+import { buildSuperadminMetadata } from "@/lib/route-metadata";
 import { listStaffUsers } from "@/lib/superadmin-api";
 import { getSuperadminDataErrorKind } from "@/lib/superadmin-errors";
-
 import { SuperadminShellHeader } from "./_components/superadmin-shell-header";
 import { SuperadminState } from "./_components/superadmin-state";
+
+export const metadata = buildSuperadminMetadata("Visao geral");
 
 type SuperadminOverviewPageProps = {
   searchParams: Promise<{ token?: string }>;
@@ -44,10 +45,7 @@ export default async function SuperadminOverviewPage({
           <SuperadminShellHeader
             actions={
               <>
-                <Link
-                  className={buttonVariants({ variant: "dark" })}
-                  href={`/superadmin/equipe`}
-                >
+                <Link className={buttonVariants()} href={`/superadmin/equipe`}>
                   Abrir equipe
                 </Link>
                 <Link
@@ -64,24 +62,24 @@ export default async function SuperadminOverviewPage({
           />
 
           <Card
-            className="overflow-hidden border-slate-200 bg-linear-to-r from-slate-950 via-slate-900 to-teal-900 text-white"
+            className="overflow-hidden border-slate-300 bg-white"
             padding="lg"
           >
             <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
               <div className="space-y-3">
-                <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-teal-100/80">
+                <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">
                   governanca inicial
                 </p>
-                <h2 className="text-3xl font-bold tracking-tight">
+                <h2 className="text-3xl font-bold tracking-tight text-slate-950">
                   Superadmin separado do backoffice operacional.
                 </h2>
-                <p className="max-w-3xl text-sm leading-7 text-slate-200">
+                <p className="max-w-3xl text-sm leading-7 text-slate-600">
                   Esta area concentra equipe interna, templates e frentes de
                   acompanhamento que pedem mais controle institucional que o
                   shell de admin.
                 </p>
               </div>
-              <div className="grid gap-3 rounded-[24px] border border-white/10 bg-white/8 p-5 text-sm text-slate-100">
+              <div className="grid gap-3 rounded-[24px] border border-slate-300 bg-slate-50 p-5 text-sm text-slate-700">
                 <p>Equipe interna ativa: {activeCount}</p>
                 <p>Responsaveis com escopo superadmin: {superadminCount}</p>
                 <p>Operadores administrativos: {adminCount}</p>

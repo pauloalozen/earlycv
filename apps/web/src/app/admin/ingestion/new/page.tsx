@@ -1,11 +1,12 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
 import { buttonVariants, Card, Input } from "@/components/ui";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { cn } from "@/lib/cn";
-
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { createCompanyAction, createJobSourceAction } from "../actions";
+
+export const metadata = buildAdminMetadata("Nova execucao de ingestion");
 
 type SearchParams = Promise<{
   companyId?: string;
@@ -20,16 +21,8 @@ type NewAdminSourcePageProps = {
   searchParams: SearchParams;
 };
 
-export const metadata: Metadata = {
-  title: "Adicionar empresa e fonte",
-  robots: {
-    follow: false,
-    index: false,
-  },
-};
-
 const fieldClassName =
-  "h-12 w-full rounded-lg border border-stone-200 bg-white px-4 py-3 text-sm font-medium text-stone-950 outline-none transition-colors duration-200 placeholder:text-stone-400 focus-visible:border-orange-500";
+  "h-12 w-full rounded-lg border border-stone-200 bg-white px-4 py-3 text-sm font-medium text-stone-950 outline-none transition-colors duration-200 placeholder:text-stone-400 focus-visible:border-stone-500";
 
 function StatusBanner({
   message,
@@ -48,7 +41,7 @@ function StatusBanner({
         "rounded-2xl border px-4 py-3 text-sm font-medium",
         status === "success"
           ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-          : "border-orange-200 bg-orange-50 text-orange-900",
+          : "border-stone-200 bg-stone-50 text-stone-900",
       )}
     >
       {message}
@@ -67,9 +60,7 @@ function StepBadge({
     <div
       className={cn(
         "rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em]",
-        active
-          ? "bg-orange-100 text-orange-800"
-          : "bg-stone-200 text-stone-500",
+        active ? "bg-stone-100 text-stone-700" : "bg-stone-200 text-stone-500",
       )}
     >
       {children}
@@ -105,11 +96,11 @@ export default async function NewAdminSourcePage({
   const redirectPath = `/admin/ingestion/new`;
 
   return (
-    <main className="min-h-screen bg-linear-to-b from-stone-50 via-orange-50/25 to-stone-100 px-6 py-10 text-stone-900 md:px-10">
+    <main className="min-h-screen bg-linear-to-b from-stone-50 via-stone-50 to-stone-100 px-6 py-10 text-stone-900 md:px-10">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-2">
-            <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-orange-700">
+            <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-700">
               admin / onboarding de fonte
             </p>
             <h1 className="text-4xl font-bold tracking-tight">
@@ -336,7 +327,7 @@ export default async function NewAdminSourcePage({
 
                   <label className="flex items-center gap-3 md:col-span-2">
                     <input
-                      className="size-4 accent-orange-600"
+                      className="size-4 accent-stone-700"
                       defaultChecked
                       name="isActive"
                       type="checkbox"

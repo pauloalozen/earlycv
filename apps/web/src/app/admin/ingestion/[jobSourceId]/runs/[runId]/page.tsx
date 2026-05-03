@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
 import { buttonVariants, Card } from "@/components/ui";
@@ -6,18 +5,13 @@ import { getIngestionRun, getJobSource } from "@/lib/admin-ingestion-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
+import { buildAdminMetadata } from "@/lib/route-metadata";
+
+export const metadata = buildAdminMetadata("Detalhe do run de ingestion");
 
 type RunDetailPageProps = {
   params: Promise<{ jobSourceId: string; runId: string }>;
   searchParams: Promise<{ token?: string }>;
-};
-
-export const metadata: Metadata = {
-  title: "Detalhe do run",
-  robots: {
-    index: false,
-    follow: false,
-  },
 };
 
 export default async function IngestionRunDetailPage({
@@ -58,11 +52,11 @@ export default async function IngestionRunDetailPage({
       getIngestionRun(jobSourceId, runId),
     ]);
     return (
-      <main className="min-h-screen bg-linear-to-b from-stone-50 to-orange-50/30 px-6 py-10 text-stone-900 md:px-10">
+      <main className="min-h-screen bg-linear-to-b from-stone-50 to-stone-50 px-6 py-10 text-stone-900 md:px-10">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-2">
-              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-orange-700">
+              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-700">
                 {jobSource.company.name}
               </p>
               <h1 className="text-3xl font-bold tracking-tight">
@@ -136,7 +130,7 @@ export default async function IngestionRunDetailPage({
                       <p className="text-sm font-semibold text-stone-900">
                         {item.title}
                       </p>
-                      <span className="rounded-full bg-white px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-orange-800">
+                      <span className="rounded-full bg-white px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-stone-700">
                         {item.action}
                       </span>
                     </div>

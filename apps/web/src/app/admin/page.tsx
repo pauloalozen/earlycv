@@ -5,10 +5,12 @@ import { buildPendingTypeLabel } from "@/lib/admin-operations";
 import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "./_components/admin-shell-header";
 import { AdminStatusBadge } from "./_components/admin-status-badge";
 import { AdminTokenState } from "./_components/admin-token-state";
+
+export const metadata = buildAdminMetadata("Visao geral");
 
 type AdminOverviewPageProps = {
   searchParams: Promise<{ token?: string }>;

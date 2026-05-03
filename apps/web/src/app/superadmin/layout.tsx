@@ -33,16 +33,16 @@ export default async function SuperadminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-stone-100 via-white to-slate-100 text-stone-900">
+    <div className="min-h-screen bg-stone-100 text-stone-900">
       <Suspense
         fallback={
-          <div className="border-b border-slate-200 bg-white/90 px-5 py-4 lg:fixed lg:inset-y-0 lg:w-80 lg:border-b-0 lg:border-r" />
+          <div className="border-b border-slate-300 bg-white/90 px-5 py-4 lg:fixed lg:inset-y-0 lg:w-80 lg:border-b-0 lg:border-r" />
         }
       >
         <SuperadminSidebar />
       </Suspense>
       <div className="lg:pl-80">
-        <div className="min-h-screen">{children}</div>
+        <div className="min-h-screen py-1">{children}</div>
       </div>
     </div>
   );

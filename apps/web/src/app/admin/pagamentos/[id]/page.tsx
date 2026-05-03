@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -7,9 +6,10 @@ import type {
   PaymentDetailRecord,
 } from "@/lib/admin-payments-api";
 import { getAdminPaymentDetail } from "@/lib/admin-payments-api";
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { ReconcileButton } from "./_components/reconcile-button";
 
-export const metadata: Metadata = { title: "Detalhe do Pagamento" };
+export const metadata = buildAdminMetadata("Detalhe do pagamento");
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString("pt-BR", {
@@ -144,11 +144,11 @@ export default async function AdminPagamentoDetailPage({
 
       {/* Reconciliação */}
       {!isCompleted && (
-        <section className="mb-8 rounded-xl border border-orange-100 bg-orange-50 p-6">
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-orange-700">
+        <section className="mb-8 rounded-xl border border-stone-200 bg-stone-50 p-6">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-700">
             Reconciliação manual
           </h2>
-          <p className="mb-4 text-sm text-orange-800">
+          <p className="mb-4 text-sm text-stone-700">
             Consulta o Mercado Pago e libera os créditos da compra se o
             pagamento estiver aprovado.{" "}
             {isPending

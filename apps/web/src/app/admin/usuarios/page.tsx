@@ -8,11 +8,13 @@ import {
 } from "@/lib/admin-users-operations";
 
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
 import { UsersList } from "./_components/users-list";
 import { deleteUserAction } from "./[id]/actions";
+
+export const metadata = buildAdminMetadata("Usuarios");
 
 type AdminUsersPageProps = {
   searchParams: Promise<{

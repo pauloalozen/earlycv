@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
 import { buttonVariants, Card, Input } from "@/components/ui";
@@ -8,8 +7,10 @@ import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { cn } from "@/lib/cn";
-
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { runJobSourceAction } from "./actions";
+
+export const metadata = buildAdminMetadata("Ingestion");
 
 type SearchParams = Promise<{
   message?: string;
@@ -21,14 +22,6 @@ type SearchParams = Promise<{
 
 type AdminIngestionPageProps = {
   searchParams: SearchParams;
-};
-
-export const metadata: Metadata = {
-  title: "Admin de ingestao",
-  robots: {
-    index: false,
-    follow: false,
-  },
 };
 
 function StatusBanner({
@@ -48,7 +41,7 @@ function StatusBanner({
         "rounded-2xl border px-4 py-3 text-sm font-medium",
         status === "success"
           ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-          : "border-orange-200 bg-orange-50 text-orange-900",
+          : "border-stone-200 bg-stone-50 text-stone-900",
       )}
     >
       {message}
@@ -62,7 +55,7 @@ function TokenForm() {
   return (
     <Card className="mx-auto max-w-2xl space-y-4" padding="lg">
       <div className="space-y-2">
-        <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-orange-700">
+        <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-700">
           acesso interno
         </p>
         <h1 className="text-3xl font-bold tracking-tight text-stone-900">
@@ -109,10 +102,10 @@ export default async function AdminIngestionPage({
     const filteredSources = filterSources(sourceViews, { query, status, type });
 
     return (
-      <main className="min-h-screen bg-linear-to-b from-stone-50 via-orange-50/30 to-stone-100 px-6 py-10 text-stone-900 md:px-10">
+      <main className="min-h-screen bg-linear-to-b from-stone-50 via-stone-50 to-stone-100 px-6 py-10 text-stone-900 md:px-10">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
           <div className="space-y-3">
-            <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-orange-700">
+            <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-700">
               admin / ingestion
             </p>
             <h1 className="text-4xl font-bold tracking-tight">
@@ -193,7 +186,7 @@ export default async function AdminIngestionPage({
                           {source.sourceName}
                         </h2>
                       </div>
-                      <span className="rounded-full bg-orange-100 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-orange-800">
+                      <span className="rounded-full bg-stone-100 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-stone-700">
                         {source.sourceType}
                       </span>
                     </div>
@@ -278,7 +271,7 @@ export default async function AdminIngestionPage({
     return (
       <main className="min-h-screen bg-stone-50 px-6 py-10 text-stone-900 md:px-10">
         <Card className="mx-auto max-w-3xl space-y-4" padding="lg">
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-orange-700">
+          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-700">
             admin / ingestion
           </p>
           <h1 className="text-3xl font-bold tracking-tight">{state.title}</h1>

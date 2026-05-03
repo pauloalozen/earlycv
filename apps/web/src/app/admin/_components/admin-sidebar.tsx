@@ -14,10 +14,10 @@ export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="border-b border-stone-200 bg-white/85 backdrop-blur-sm lg:fixed lg:inset-y-0 lg:w-72 lg:border-b-0 lg:border-r">
+    <aside className="border-b border-stone-200 bg-white/90 backdrop-blur-sm lg:fixed lg:inset-y-0 lg:w-72 lg:border-b-0 lg:border-r">
       <div className="flex h-full flex-col gap-6 px-5 py-6 lg:px-6">
         <div className="space-y-2">
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-orange-700">
+          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-stone-500">
             earlycv admin
           </p>
           <h2 className="text-2xl font-bold tracking-tight text-stone-950">
@@ -39,7 +39,7 @@ export function AdminSidebar() {
                 className={cn(
                   "flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold transition-colors duration-200",
                   active
-                    ? "bg-orange-100 text-orange-900"
+                    ? "bg-stone-900 text-white"
                     : "text-stone-600 hover:bg-stone-100 hover:text-stone-900",
                 )}
                 href={buildBackofficeHref(item.href)}

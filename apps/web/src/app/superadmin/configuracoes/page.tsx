@@ -14,9 +14,11 @@ import {
   updateAnalysisProtectionConfig,
 } from "@/lib/admin-analysis-config-api";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-
+import { buildSuperadminMetadata } from "@/lib/route-metadata";
 import { SuperadminShellHeader } from "../_components/superadmin-shell-header";
 import { SuperadminState } from "../_components/superadmin-state";
+
+export const metadata = buildSuperadminMetadata("Configuracoes");
 
 type SuperadminSettingsPageProps = {
   searchParams: Promise<{ token?: string }>;

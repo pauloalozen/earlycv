@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { Badge, buttonVariants, Card, EmptyState } from "@/components/ui";
@@ -10,9 +9,11 @@ import {
 import { resolveEmitPayload } from "@/lib/admin-events-emit-payload";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
+
+export const metadata = buildAdminMetadata("Eventos e logs");
 
 type AdminEventsLogsPageProps = {
   searchParams: Promise<{ result?: string }>;
@@ -35,14 +36,6 @@ type EventResultsState = {
   requested: number;
   results: EmitAdminAnalysisEventsResponse["results"];
   sent: number;
-};
-
-export const metadata: Metadata = {
-  robots: {
-    follow: false,
-    index: false,
-  },
-  title: "Eventos e logs",
 };
 
 function encodeResult(result: EventResultsState) {
@@ -206,7 +199,7 @@ function EventResults({ result }: { result: EventResultsState | null }) {
           Resultado da operacao
         </h2>
         {result.error ? (
-          <p className="text-sm text-orange-700">{result.error}</p>
+          <p className="text-sm text-stone-700">{result.error}</p>
         ) : null}
       </div>
 

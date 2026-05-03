@@ -16,14 +16,14 @@ export function AdminShellHeader({
   title,
 }: AdminShellHeaderProps) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
+    <header className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-6 md:p-8">
       <div className="space-y-2">
         {eyebrow ? (
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-orange-700">
+          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-500">
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="text-4xl font-bold tracking-tight text-stone-950">
+        <h1 className="text-3xl font-semibold tracking-tight text-stone-950 md:text-4xl">
           {title}
         </h1>
         {subtitle ? (
@@ -44,6 +44,6 @@ export function AdminShellHeader({
           </button>
         </form>
       </div>
-    </div>
+    </header>
   );
 }
