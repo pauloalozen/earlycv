@@ -83,7 +83,7 @@ describe("CvReleaseModal", () => {
       />,
     );
 
-    expect((await screen.findAllByText("Falha ao liberar CV")).length).toBe(2);
+    expect((await screen.findAllByText("Falha ao liberar CV")).length).toBe(3);
     expect(screen.queryByRole("button", { name: "Baixar em PDF" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Baixar em DOCX" })).toBeNull();
   });

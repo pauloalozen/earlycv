@@ -69,13 +69,13 @@ export default function BlogIndexPage() {
       />
 
       <BlogIndexViewTracker />
-      <PublicNavBar />
+      <PublicNavBar hideHowItWorksLink fixed />
 
       <div
         style={{
           maxWidth: 860,
           margin: "0 auto",
-          padding: "56px clamp(16px, 4vw, 40px) 0",
+          padding: "124px clamp(16px, 4vw, 40px) 0",
           position: "relative",
           zIndex: 1,
         }}

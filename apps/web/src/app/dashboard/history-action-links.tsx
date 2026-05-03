@@ -50,6 +50,8 @@ const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const GEIST_MONO = "var(--font-geist-mono), monospace";
 
 const MIN_RELEASE_LOADING_MS = 3000;
+const REDEEM_REQUEST_TIMEOUT_MS = 15_000;
+const CREDIT_REDEEMED_EVENT = "dashboard:credit-redeemed";
 
 const buildRedeemSessionKey = (redeemHref: string) =>
   `dashboard-cv-redeemed:${redeemHref}`;
@@ -487,10 +489,10 @@ export function HistoryActionLinks({
             redeemAbortControllerRef.current?.abort();
             const controller = new AbortController();
             redeemAbortControllerRef.current = controller;
-            const timeoutId = setTimeout(() => controller.abort(), 15_000);
+            const timeoutId = setTimeout(() => controller.abort(), REDEEM_REQUEST_TIMEOUT_MS);
 
             try {
-              const response = await fetch(actions.redeemHref, {
+              const redeemRequest = fetch(actions.redeemHref, {
                 method: "POST",
                 cache: "no-store",
                 signal: controller.signal,
@@ -504,6 +506,20 @@ export function HistoryActionLinks({
                     }
                   : {}),
               });
+
+              const response = (await Promise.race([
+                redeemRequest,
+                new Promise<Response>((_, reject) => {
+                  setTimeout(() => {
+                    reject(
+                      new DOMException(
+                        "Redeem request timeout",
+                        "AbortError",
+                      ),
+                    );
+                  }, REDEEM_REQUEST_TIMEOUT_MS + 500);
+                }),
+              ])) as Response;
               if (!response.ok) {
                 let apiMessage = "Falha ao liberar CV";
                 try {
@@ -529,6 +545,7 @@ export function HistoryActionLinks({
                 // no-op
               }
               setReleaseStatus("success");
+              window.dispatchEvent(new Event(CREDIT_REDEEMED_EVENT));
             } catch (error) {
               if (!isMountedRef.current) return;
               const message = (() => {
@@ -605,14 +622,11 @@ export function HistoryActionLinks({
         isAdjustmentsOpen &&
         createPortal(
           <div
-            className="overflow-y-auto p-4 sm:p-6"
+            className="flex items-start justify-center overflow-y-auto p-4 sm:p-6 lg:items-center"
             style={{
               position: "fixed",
               inset: 0,
               zIndex: 120,
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "center",
               background: "rgba(10,10,10,0.5)",
               padding: "16px",
               transition: "opacity 240ms ease-out",

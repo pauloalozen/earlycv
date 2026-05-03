@@ -27,7 +27,7 @@ export function SeoPageLayout({ children }: { children: ReactNode }) {
           backgroundImage: GRAIN,
         }}
       />
-      <PublicNavBar />
+      <PublicNavBar hideHowItWorksLink />
       <div
         style={{
           maxWidth: 720,

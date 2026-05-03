@@ -7,7 +7,8 @@ import {
   getRouteAccessRedirectPath,
 } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
-import { listMyPurchases, type PurchaseItem } from "@/lib/plans-api";
+import { toHeaderAvailableCredits } from "@/lib/header-credits";
+import { getMyPlan, listMyPurchases, type PurchaseItem } from "@/lib/plans-api";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -102,13 +103,18 @@ export default async function ComprasPage() {
   if (redirectPath) redirect(redirectPath);
   if (!user) redirect(getDefaultAppRedirectPath(null));
 
-  let purchases: PurchaseItem[] = [];
-  let fetchError = false;
-  try {
-    purchases = await listMyPurchases();
-  } catch {
-    fetchError = true;
-  }
+  const [purchasesResult, planResult] = await Promise.allSettled([
+    listMyPurchases(),
+    getMyPlan(),
+  ]);
+
+  const purchases: PurchaseItem[] =
+    purchasesResult.status === "fulfilled" ? purchasesResult.value : [];
+  const fetchError = purchasesResult.status === "rejected";
+  const availableCredits =
+    planResult.status === "fulfilled"
+      ? toHeaderAvailableCredits(planResult.value)
+      : "—";
 
   const completed = purchases.filter((p) => p.status === "completed").length;
   const pending = purchases.filter(
@@ -140,7 +146,7 @@ export default async function ComprasPage() {
           position: "relative",
         }}
       >
-        <AppHeader userName={user.name} />
+        <AppHeader userName={user.name} availableCredits={availableCredits} />
 
         <div
           className="compras-content"

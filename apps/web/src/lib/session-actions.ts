@@ -1,6 +1,7 @@
 "use server";
 
 import { getCurrentAppUserFromCookies } from "./app-session.server";
+import { toHeaderAvailableCredits } from "./header-credits";
 import { hasAvailableCredits } from "./plan-credits";
 import { getMyPlan } from "./plans-api";
 import { getMyMasterResume } from "./resumes-api";
@@ -10,6 +11,7 @@ export async function getAuthStatus(): Promise<{
   userName: string | null;
   hasCredits: boolean | null;
   internalRole: "none" | "admin" | "superadmin" | null;
+  availableCreditsDisplay?: number | "∞" | "—";
 }> {
   const user = await getCurrentAppUserFromCookies();
 
@@ -19,6 +21,7 @@ export async function getAuthStatus(): Promise<{
       userName: null,
       hasCredits: null,
       internalRole: null,
+      availableCreditsDisplay: undefined,
     };
   }
 
@@ -31,6 +34,7 @@ export async function getAuthStatus(): Promise<{
         creditsRemaining: plan.creditsRemaining,
       }),
       internalRole: user.internalRole,
+      availableCreditsDisplay: toHeaderAvailableCredits(plan),
     };
   } catch {
     return {
@@ -38,6 +42,7 @@ export async function getAuthStatus(): Promise<{
       userName: user.name ?? null,
       hasCredits: null,
       internalRole: user.internalRole,
+      availableCreditsDisplay: "—",
     };
   }
 }

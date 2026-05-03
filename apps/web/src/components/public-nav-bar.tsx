@@ -7,7 +7,15 @@ import { Logo } from "./logo";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 
-export function PublicNavBar({ dark = false }: { dark?: boolean }) {
+export function PublicNavBar({
+  dark = false,
+  hideHowItWorksLink = false,
+  fixed = false,
+}: {
+  dark?: boolean;
+  hideHowItWorksLink?: boolean;
+  fixed?: boolean;
+}) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const bg = dark ? "#0a0a0a" : "transparent";
   const borderColor = dark ? "rgba(250,250,246,0.06)" : "rgba(0,0,0,0.04)";
@@ -15,6 +23,7 @@ export function PublicNavBar({ dark = false }: { dark?: boolean }) {
   const logoVariant = dark ? "dark" : "light";
   const mobileMenuBg = dark ? "#0f0f0f" : "#f3f2ed";
   const mobileMenuButtonColor = dark ? "#fafaf6" : "#0a0a0a";
+  const fixedBg = dark ? "#0a0a0a" : "#f3f2ed";
 
   useEffect(() => {
     document.body.style.overflow = isMenuOpen ? "hidden" : "";
@@ -26,10 +35,13 @@ export function PublicNavBar({ dark = false }: { dark?: boolean }) {
   return (
     <nav
       style={{
-        borderBottom: `1px solid ${borderColor}`,
-        background: bg,
-        position: "relative",
-        zIndex: 2,
+        borderBottom: fixed ? "none" : `1px solid ${borderColor}`,
+        background: fixed ? fixedBg : bg,
+        position: fixed ? "fixed" : "relative",
+        top: fixed ? 0 : undefined,
+        left: fixed ? 0 : undefined,
+        right: fixed ? 0 : undefined,
+        zIndex: fixed ? 20 : 2,
         fontFamily: GEIST,
       }}
       className="px-4 py-[18px] md:px-10"
@@ -133,17 +145,19 @@ export function PublicNavBar({ dark = false }: { dark?: boolean }) {
           >
             Blog
           </Link>
-          <Link
-            href="/#como-funciona"
-            style={{
-              fontSize: 13,
-              color: linkColor,
-              fontWeight: 400,
-              textDecoration: "none",
-            }}
-          >
-            Como funciona
-          </Link>
+          {hideHowItWorksLink ? null : (
+            <Link
+              href="/#como-funciona"
+              style={{
+                fontSize: 13,
+                color: linkColor,
+                fontWeight: 400,
+                textDecoration: "none",
+              }}
+            >
+              Como funciona
+            </Link>
+          )}
           <Link
             href="/adaptar"
             style={{
@@ -214,13 +228,15 @@ export function PublicNavBar({ dark = false }: { dark?: boolean }) {
         >
           Blog
         </Link>
-        <Link
-          href="/#como-funciona"
-          onClick={() => setIsMenuOpen(false)}
-          className="public-mob-nav-item"
-        >
-          Como funciona
-        </Link>
+        {hideHowItWorksLink ? null : (
+          <Link
+            href="/#como-funciona"
+            onClick={() => setIsMenuOpen(false)}
+            className="public-mob-nav-item"
+          >
+            Como funciona
+          </Link>
+        )}
         <Link
           href="/adaptar"
           onClick={() => setIsMenuOpen(false)}

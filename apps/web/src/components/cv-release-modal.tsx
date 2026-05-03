@@ -210,7 +210,11 @@ export function CvReleaseModal({
                 margin: "0 0 4px",
               }}
             >
-              {isLoading ? "Liberando seu CV..." : "CV liberado para download"}
+              {isLoading
+                ? "Liberando seu CV..."
+                : isSuccess
+                  ? "CV liberado para download"
+                  : "Falha ao liberar CV"}
             </p>
             <p
               id={descriptionId}

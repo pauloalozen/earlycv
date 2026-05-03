@@ -20,9 +20,11 @@ import {
   extractDashboardAnalysisSignal,
   getDashboardScoreColor,
 } from "@/lib/dashboard-test-metrics";
+import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMasterResumeFromList, listMyResumes } from "@/lib/resumes-api";
+import { AvailableDownloadCredits } from "./available-download-credits";
 import { CvMasterCard } from "./cv-master-card";
 import { DeleteAccountDangerZone } from "./delete-account-danger-zone";
 import { GuestAnalysisClaimer } from "./guest-analysis-claimer";
@@ -121,12 +123,7 @@ export default async function DashboardPage({
     resumeList.map((resume) => [resume.id, resume.title]),
   );
 
-  const isPlanInfoUnavailable = !planInfo;
-  const availableDownloadCredits = isPlanInfoUnavailable
-    ? "—"
-    : planInfo.creditsRemaining === null
-      ? "∞"
-      : planInfo.creditsRemaining;
+  const availableDownloadCredits = toHeaderAvailableCredits(planInfo);
 
   const analysisSignalsById = new Map<
     string,
@@ -190,7 +187,10 @@ export default async function DashboardPage({
           position: "relative",
         }}
       >
-        <AppHeader userName={user.name} />
+        <AppHeader
+          userName={user.name}
+          availableCredits={availableDownloadCredits}
+        />
 
         <div
           className="dashboard-content"
@@ -299,7 +299,14 @@ export default async function DashboardPage({
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  {availableDownloadCredits}
+                  <AvailableDownloadCredits
+                    initialDisplay={availableDownloadCredits}
+                    initialCreditsRemaining={
+                      typeof planInfo?.creditsRemaining === "number"
+                        ? Math.max(0, planInfo.creditsRemaining)
+                        : null
+                    }
+                  />
                 </span>
               </div>
             </div>

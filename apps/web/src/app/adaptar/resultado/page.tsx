@@ -24,6 +24,7 @@ import {
   getGuestAnalysisRaw,
 } from "@/lib/guest-analysis-storage";
 import { getAuthStatus } from "@/lib/session-actions";
+import { getAtsScoreColors } from "./ats-score-colors";
 import { buildContentFetchErrorMessage } from "./content-fetch-error";
 import { shouldPersistGuestAnalysis } from "./guest-analysis-persistence";
 import { normalizeData } from "./normalize-data";
@@ -453,6 +454,9 @@ export default function ResultadoPage() {
   >(null);
   const [hasCredits, setHasCredits] = useState<boolean | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+  const [availableCreditsDisplay, setAvailableCreditsDisplay] = useState<
+    number | "∞" | "—" | undefined
+  >(undefined);
   const [reviewAdaptationId, setReviewAdaptationId] = useState<string | null>(
     null,
   );
@@ -528,12 +532,19 @@ export default function ResultadoPage() {
     const adaptationId = params.get("adaptationId");
 
     getAuthStatus().then(
-      ({ isAuthenticated: auth, userName: name, hasCredits, internalRole }) => {
+      ({
+        isAuthenticated: auth,
+        userName: name,
+        hasCredits,
+        internalRole,
+        availableCreditsDisplay,
+      }) => {
         if (!active) return;
         setIsAuthenticated(auth);
         setUserName(name);
         setHasCredits(hasCredits);
         setInternalRole(internalRole);
+        setAvailableCreditsDisplay(availableCreditsDisplay);
       },
     );
 
@@ -1071,6 +1082,8 @@ export default function ResultadoPage() {
   );
   const totalAjustes =
     data.ajustes_conteudo.length + data.keywords.ausentes.length;
+  const totalAjustesAplicados =
+    data.ajustes_conteudo.length + effectiveSelected.size;
 
   const scoreProjetado = Math.min(
     100,
@@ -1110,6 +1123,7 @@ export default function ResultadoPage() {
   const C_GAUGE = 2 * Math.PI * R_GAUGE;
   const dashScore = C_GAUGE * (data.score.scoreAtualBase / 100);
   const dashProjected = C_GAUGE * (scoreMaxPossivel / 100);
+  const gaugeColors = getAtsScoreColors(data.score.scoreAtualBase);
   const ptsPositivos = data.positivos.reduce((s, p) => s + p.pontos, 0);
 
   return (
@@ -1138,7 +1152,10 @@ export default function ResultadoPage() {
           color: "#0a0a0a",
         }}
       >
-        <AppHeader userName={userName} />
+        <AppHeader
+          userName={userName}
+          availableCredits={availableCreditsDisplay}
+        />
 
         <div
           className="resultado-content"
@@ -1255,13 +1272,14 @@ export default function ResultadoPage() {
                     label: "pts\ndisponíveis",
                   },
                   {
-                    num: String(totalAjustes),
+                    num: String(totalAjustesAplicados),
                     label: "ajustes\nidentificados",
                   },
                 ].map((item, i) => (
                   <React.Fragment key={`${item.num}-${item.label}`}>
                     {i > 0 && (
                       <div
+                        className="res-meta-divider"
                         style={{
                           width: 1,
                           height: 38,
@@ -1341,7 +1359,7 @@ export default function ResultadoPage() {
                     width: 6,
                     height: 6,
                     borderRadius: "50%",
-                    background: "#c6ff3a",
+                    background: gaugeColors.primary,
                     display: "inline-block",
                     animation: "res-pulse 1.4s infinite",
                   }}
@@ -1360,7 +1378,13 @@ export default function ResultadoPage() {
                 }}
               >
                 {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
-                <svg width="200" height="200" viewBox="0 0 200 200" aria-hidden>
+                <svg
+                  width="100%"
+                  height="100%"
+                  viewBox="0 0 200 200"
+                  aria-hidden
+                  style={{ display: "block" }}
+                >
                   <circle
                     cx="100"
                     cy="100"
@@ -1373,7 +1397,7 @@ export default function ResultadoPage() {
                     cx="100"
                     cy="100"
                     r={R_GAUGE}
-                    stroke="#c6ff3a"
+                    stroke={gaugeColors.primary}
                     strokeWidth="10"
                     fill="none"
                     strokeDasharray={`${dashScore} ${C_GAUGE}`}
@@ -1389,7 +1413,7 @@ export default function ResultadoPage() {
                     cx="100"
                     cy="100"
                     r={R_GAUGE}
-                    stroke="rgba(198,255,58,0.15)"
+                    stroke={gaugeColors.projected}
                     strokeWidth="10"
                     fill="none"
                     strokeDasharray={`${dashProjected} ${C_GAUGE}`}
@@ -3424,12 +3448,8 @@ export default function ResultadoPage() {
                           position: "absolute",
                           inset: "0 auto 0 0",
                           width: `${data.score.scoreAtualBase}%`,
-                          background:
-                            data.score.scoreAtualBase >= 70
-                              ? "#c6ff3a"
-                              : data.score.scoreAtualBase >= 40
-                                ? "#f59e0b"
-                                : "#ef4444",
+                          background: gaugeColors.primary,
+                          boxShadow: `0 0 10px ${gaugeColors.projected}, 0 0 22px ${gaugeColors.projected}`,
                           borderRadius: 99,
                         }}
                       />
@@ -3456,10 +3476,8 @@ export default function ResultadoPage() {
                         style={{
                           fontSize: 18,
                           fontWeight: 500,
-                          color:
-                            data.score.scoreAtualBase >= 70
-                              ? "#c6ff3a"
-                              : "#f59e0b",
+                          color: gaugeColors.primary,
+                          textShadow: `0 0 10px ${gaugeColors.projected}, 0 0 18px ${gaugeColors.projected}`,
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
@@ -3492,15 +3510,31 @@ export default function ResultadoPage() {
                     }}
                   >
                     {[
-                      `${data.ajustes_conteudo.length} ajustes de conteúdo prontos para aplicar`,
-                      `${effectiveSelected.size > 0 ? effectiveSelected.size : data.keywords.ausentes.length} palavras-chave da vaga inseridas no contexto certo`,
-                      "Formato validado para sistemas ATS — sem colunas, sem tabelas",
-                      "Download em PDF e DOCX prontos para enviar hoje",
+                      {
+                        key: "content-adjustments",
+                        text: `${data.ajustes_conteudo.length} ajustes de conteúdo prontos para aplicar`,
+                        visible: true,
+                      },
+                      {
+                        key: "selected-keywords",
+                        text: `${effectiveSelected.size} palavra${effectiveSelected.size > 1 ? "s" : ""}-chave da vaga inserida${effectiveSelected.size > 1 ? "s" : ""} no contexto certo`,
+                        visible: effectiveSelected.size > 0,
+                      },
+                      {
+                        key: "ats-format",
+                        text: "Formato validado para sistemas ATS — sem colunas, sem tabelas",
+                        visible: true,
+                      },
+                      {
+                        key: "ready-download",
+                        text: "Download em PDF e DOCX prontos para enviar hoje",
+                        visible: true,
+                      },
                     ].map((item) => (
                       <li
-                        key={item}
+                        key={item.key}
                         style={{
-                          display: "flex",
+                          display: item.visible ? "flex" : "none",
                           alignItems: "flex-start",
                           gap: 10,
                           fontSize: 13.5,
@@ -3517,7 +3551,7 @@ export default function ResultadoPage() {
                         >
                           ✓
                         </span>
-                        {item}
+                        {item.text}
                       </li>
                     ))}
                   </ul>
@@ -3881,7 +3915,7 @@ export default function ResultadoPage() {
                           fontFamily: GEIST,
                         }}
                       >
-                        Comprar créditos
+                        Liberar meu CV agora.
                       </a>
                     )
                   ) : hasCredits === false ? (
@@ -3945,11 +3979,23 @@ export default function ResultadoPage() {
                       margin: 0,
                     }}
                   >
-                    Após liberar, os{" "}
-                    <span style={{ color: "#c6ff3a" }}>
-                      {totalAjustes} ajustes
-                    </span>{" "}
-                    são aplicados automaticamente.
+                    {isDownloadReady ? (
+                      <>
+                        Os{" "}
+                        <span style={{ color: "#c6ff3a" }}>
+                          {totalAjustesAplicados} ajustes
+                        </span>{" "}
+                        já foram aplicados automaticamente.
+                      </>
+                    ) : (
+                      <>
+                        Após liberar, os{" "}
+                        <span style={{ color: "#c6ff3a" }}>
+                          {totalAjustesAplicados} ajustes
+                        </span>{" "}
+                        são aplicados automaticamente.
+                      </>
+                    )}
                   </p>
 
                   {claimError && (
@@ -4026,11 +4072,14 @@ export default function ResultadoPage() {
           .resultado-content { padding: 12px 16px 60px !important; }
         }
         @media (max-width: 540px) {
-          .res-meta-row { gap: 12px !important; padding-top: 14px !important; }
+          .res-meta-row { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; align-items: start !important; column-gap: 10px !important; row-gap: 8px !important; padding-top: 14px !important; }
+          .res-meta-divider { display: none !important; }
+          .res-meta-item { min-width: 0 !important; }
           .res-meta-num { font-size: 24px !important; }
           .res-gauge-card { padding: 18px 14px !important; border-radius: 16px !important; }
-          .res-gauge-wrap { width: 170px !important; height: 170px !important; margin-bottom: 8px !important; }
-          .res-gauge-value { font-size: 52px !important; letter-spacing: -2px !important; }
+          .res-gauge-wrap { width: 150px !important; height: 150px !important; margin-bottom: 8px !important; }
+          .res-gauge-wrap .res-preview-chrome { justify-content: center !important; flex-wrap: nowrap !important; row-gap: 0 !important; }
+          .res-gauge-value { font-size: 40px !important; letter-spacing: -1.2px !important; }
           .res-gauge-delta { flex-wrap: wrap; row-gap: 4px; }
           .res-gauge-vs { flex-wrap: wrap; row-gap: 4px; }
           .res-campos-grid { grid-template-columns: 1fr !important; }

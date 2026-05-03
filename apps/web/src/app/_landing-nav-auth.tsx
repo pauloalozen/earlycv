@@ -10,7 +10,7 @@ const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const LINK_STYLE = {
   fontSize: 13,
   color: "#3a3a38",
-  fontWeight: 450,
+  fontWeight: 400,
   letterSpacing: -0.1,
   textDecoration: "none",
 } as const;
@@ -19,7 +19,9 @@ const BTN_PRIMARY = {
   background: "#0a0a0a",
   color: "#fff",
   borderRadius: 8,
-  padding: "9px 14px",
+  height: 34,
+  padding: "0 14px",
+  lineHeight: "34px",
   fontSize: 12.5,
   fontWeight: 500,
   letterSpacing: -0.1,
@@ -28,14 +30,22 @@ const BTN_PRIMARY = {
   boxShadow: "0 1px 2px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.08)",
 } as const;
 
+const AUTH_CTA_WIDTH = 176;
+
 export function LandingNavAuth() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authState, setAuthState] = useState<
+    "loading" | "authenticated" | "unauthenticated"
+  >("loading");
 
   useEffect(() => {
     fetch("/api/session")
       .then((r) => (r.ok ? r.json() : { authenticated: false }))
-      .then((data) => setIsLoggedIn(Boolean(data?.authenticated)))
-      .catch(() => {});
+      .then((data) => {
+        setAuthState(data?.authenticated ? "authenticated" : "unauthenticated");
+      })
+      .catch(() => {
+        setAuthState("unauthenticated");
+      });
   }, []);
 
   return (
@@ -51,13 +61,35 @@ export function LandingNavAuth() {
         <a href="#precos" style={LINK_STYLE}>
           Preços
         </a>
-        {isLoggedIn ? (
+        <Link href="/blog" style={LINK_STYLE}>
+          Blog
+        </Link>
+        {authState === "loading" ? (
+          <div
+            data-testid="landing-auth-placeholder"
+            aria-hidden="true"
+            style={{
+              width: AUTH_CTA_WIDTH,
+              height: 34,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              borderRadius: 8,
+              background: "rgba(10,10,10,0.08)",
+              animation: "lp-auth-pulse 1.2s ease-in-out infinite",
+            }}
+          />
+        ) : authState === "authenticated" ? (
           <Link
             href="/dashboard"
             style={{
               ...BTN_PRIMARY,
               display: "inline-flex",
               alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              width: AUTH_CTA_WIDTH,
               gap: 6,
             }}
           >
@@ -86,21 +118,12 @@ export function LandingNavAuth() {
             <Link
               href="/entrar?tab=entrar"
               style={{
-                fontSize: 13,
-                fontWeight: 500,
-                color: "#0a0a0a",
-                textDecoration: "none",
-                padding: "8px 4px",
-              }}
-            >
-              Entrar
-            </Link>
-            <Link
-              href="/entrar?tab=cadastrar"
-              style={{
                 ...BTN_PRIMARY,
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                width: AUTH_CTA_WIDTH,
                 gap: 6,
               }}
             >
@@ -115,19 +138,28 @@ export function LandingNavAuth() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
-                  <title>Seta</title>
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                  <title>Login</title>
+                  <path d="M14 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                  <path d="M10 17l5-5-5-5" />
+                  <path d="M15 12H3" />
                 </svg>
               </span>
-              Começar grátis →
+              Entrar
             </Link>
           </>
         )}
       </div>
 
+      <style>{`
+        @keyframes lp-auth-pulse {
+          0% { opacity: 0.45; }
+          50% { opacity: 0.8; }
+          100% { opacity: 0.45; }
+        }
+      `}</style>
+
       {/* Mobile hamburger */}
-      <LandingMobileMenu isLoggedIn={isLoggedIn} />
+      <LandingMobileMenu authState={authState} />
     </>
   );
 }

@@ -5,10 +5,10 @@ import { useEffect, useState } from "react";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 
 type Props = {
-  isLoggedIn: boolean;
+  authState: "loading" | "authenticated" | "unauthenticated";
 };
 
-export function LandingMobileMenu({ isLoggedIn }: Props) {
+export function LandingMobileMenu({ authState }: Props) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -141,7 +141,22 @@ export function LandingMobileMenu({ isLoggedIn }: Props) {
         >
           Preços
         </a>
-        {isLoggedIn ? (
+        <a
+          href="/blog"
+          className="lp-mob-nav-item"
+          onClick={() => setOpen(false)}
+        >
+          Blog
+        </a>
+        {authState === "loading" ? (
+          <div
+            aria-hidden="true"
+            className="lp-mob-nav-item"
+            style={{ opacity: 0.5, pointerEvents: "none" }}
+          >
+            Carregando...
+          </div>
+        ) : authState === "authenticated" ? (
           <a
             href="/dashboard"
             className="lp-mob-nav-item lp-mob-nav-item--cta"
@@ -153,17 +168,10 @@ export function LandingMobileMenu({ isLoggedIn }: Props) {
           <>
             <a
               href="/entrar?tab=entrar"
-              className="lp-mob-nav-item"
-              onClick={() => setOpen(false)}
-            >
-              Entrar
-            </a>
-            <a
-              href="/entrar?tab=cadastrar"
               className="lp-mob-nav-item lp-mob-nav-item--cta"
               onClick={() => setOpen(false)}
             >
-              Começar grátis →
+              Entrar
             </a>
           </>
         )}

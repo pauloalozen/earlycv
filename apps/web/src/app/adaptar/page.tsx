@@ -124,6 +124,9 @@ export default function AdaptarPage() {
   const [userName, setUserName] = useState<string | null | undefined>(
     undefined,
   );
+  const [availableCredits, setAvailableCredits] = useState<
+    number | "∞" | "—" | undefined
+  >(undefined);
   const [masterResume, setMasterResume] = useState<
     ResumeDto | null | undefined
   >(undefined);
@@ -302,6 +305,7 @@ export default function AdaptarPage() {
       getMyMasterResume().catch(() => null as ResumeDto | null),
     ]).then(([status, resume]) => {
       setUserName(status.userName ?? null);
+      setAvailableCredits(status.availableCreditsDisplay);
       setMasterResume(resume ?? null);
       if (status.userName && resume) {
         setCvMode("master");
@@ -615,7 +619,7 @@ export default function AdaptarPage() {
           }}
         />
 
-        <AppHeader userName={userName} />
+        <AppHeader userName={userName} availableCredits={availableCredits} />
         <div
           ref={turnstileContainerRef}
           aria-hidden

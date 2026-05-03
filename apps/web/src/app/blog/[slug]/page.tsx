@@ -143,13 +143,13 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         <script type="application/ld+json">{JSON.stringify(faqJsonLd)}</script>
       ) : null}
 
-      <PublicNavBar />
+      <PublicNavBar hideHowItWorksLink fixed />
 
       <div
         style={{
           maxWidth: 660,
           margin: "0 auto",
-          padding: "56px 40px 0",
+          padding: "124px 40px 0",
           position: "relative",
           zIndex: 1,
           display: "flex",

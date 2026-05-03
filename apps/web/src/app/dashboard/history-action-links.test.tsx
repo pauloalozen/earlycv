@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryActionLinks } from "./history-action-links";
 
 const pushMock = vi.fn();
@@ -46,6 +46,10 @@ describe("HistoryActionLinks redeem persistence", () => {
         json: async () => ({}),
       })) as unknown as typeof fetch,
     );
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("switches card actions right after successful redeem", async () => {
@@ -97,5 +101,26 @@ describe("HistoryActionLinks redeem persistence", () => {
 
     expect(screen.getAllByText("Baixar PDF").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Baixar DOCX").length).toBeGreaterThan(0);
+  });
+
+  it("shows timeout error and allows close when redeem request hangs", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})) as unknown as typeof fetch,
+    );
+
+    render(<HistoryActionLinks {...baseProps} />);
+
+    fireEvent.click(screen.getByText("Liberar CV · 1 Crédito"));
+
+    await vi.advanceTimersByTimeAsync(20_100);
+
+    expect(
+      screen.getByText(
+        "A liberacao demorou mais do que o esperado. Verifique sua conexao e tente novamente.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryAllByText("Liberando seu CV...").length).toBe(0);
+    expect(screen.getByRole("button", { name: "Fechar aviso" })).toBeTruthy();
   });
 });

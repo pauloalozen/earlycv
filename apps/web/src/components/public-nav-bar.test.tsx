@@ -46,4 +46,27 @@ describe("PublicNavBar", () => {
       screen.getAllByLabelText("Abrir menu", { selector: "button" }).length,
     ).toBe(1);
   });
+
+  it("hides 'Como funciona' links when configured", () => {
+    render(<PublicNavBar hideHowItWorksLink />);
+
+    const button = screen.getAllByLabelText("Abrir menu", {
+      selector: "button",
+    })[0];
+    fireEvent.click(button);
+
+    expect(screen.queryByRole("link", { name: "Como funciona" })).toBeNull();
+  });
+
+  it("uses fixed header when configured", () => {
+    const { container } = render(<PublicNavBar fixed />);
+    const nav = container.querySelector("nav");
+
+    expect(nav?.getAttribute("style")).toContain("position: fixed");
+    expect(nav?.getAttribute("style")).toContain("top: 0px");
+    expect(nav?.getAttribute("style")).toContain("left: 0px");
+    expect(nav?.getAttribute("style")).toContain("right: 0px");
+    expect(nav?.getAttribute("style")).toContain("background: rgb(243, 242, 237)");
+    expect(nav?.getAttribute("style")).not.toContain("border-bottom: 1px solid");
+  });
 });
