@@ -21,3 +21,13 @@ test("resultado hides CTA download buttons while release popup is open", () => {
 
   assert.match(content, /\{isDownloadReady && !releaseModalOpen \? \(/);
 });
+
+test("resultado computes totalAjustesAplicados including content, missing keywords, and formatting issues", () => {
+  const pagePath = resolve(process.cwd(), "src/app/adaptar/resultado/page.tsx");
+  const content = readFileSync(pagePath, "utf8");
+
+  assert.match(
+    content,
+    /const totalAjustesAplicados\s*=\s*data\.ajustes_conteudo\.length\s*\+\s*data\.keywords\.ausentes\.length\s*\+\s*problemasPontuacao\.length/,
+  );
+});

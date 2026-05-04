@@ -1082,8 +1082,6 @@ export default function ResultadoPage() {
   );
   const totalAjustes =
     data.ajustes_conteudo.length + data.keywords.ausentes.length;
-  const totalAjustesAplicados =
-    data.ajustes_conteudo.length + effectiveSelected.size;
 
   const scoreProjetado = Math.min(
     100,
@@ -1097,6 +1095,10 @@ export default function ResultadoPage() {
     data.formato_cv?.problemas.filter((p) => p.tipo === "atencao") ?? [];
   const oks = data.formato_cv?.problemas.filter((p) => p.tipo === "ok") ?? [];
   const problemasPontuacao = [...criticos, ...atencoes];
+  const totalAjustesAplicados =
+    data.ajustes_conteudo.length +
+    data.keywords.ausentes.length +
+    problemasPontuacao.length;
   const pontosPerdidosApresentacao = problemasPontuacao.reduce(
     (total, problema) => total + Math.abs(problema.impacto),
     0,
@@ -3981,18 +3983,12 @@ export default function ResultadoPage() {
                   >
                     {isDownloadReady ? (
                       <>
-                        Os{" "}
-                        <span style={{ color: "#c6ff3a" }}>
-                          {totalAjustesAplicados} ajustes
-                        </span>{" "}
+                        Os <span style={{ color: "#c6ff3a" }}>ajustes</span>{" "}
                         já foram aplicados automaticamente.
                       </>
                     ) : (
                       <>
-                        Após liberar, os{" "}
-                        <span style={{ color: "#c6ff3a" }}>
-                          {totalAjustesAplicados} ajustes
-                        </span>{" "}
+                        Após liberar, os <span style={{ color: "#c6ff3a" }}>ajustes</span>{" "}
                         são aplicados automaticamente.
                       </>
                     )}
