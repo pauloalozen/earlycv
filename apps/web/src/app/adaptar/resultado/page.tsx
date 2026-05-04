@@ -9,15 +9,13 @@ import {
 } from "@/components/cv-release-modal";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
+import { trackEvent } from "@/lib/analytics-tracking";
 import {
   type DownloadProgressStage,
   downloadFromApi,
 } from "@/lib/client-download";
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
-import {
-  emitBusinessFunnelEvent,
-  saveGuestPreview,
-} from "@/lib/cv-adaptation-api";
+import { saveGuestPreview } from "@/lib/cv-adaptation-api";
 import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
 import {
   clearGuestAnalysisRaw,
@@ -944,11 +942,11 @@ export default function ResultadoPage() {
       sessionStorage.getItem("journey_current_route_visit_id") ??
       `${window.location.pathname}:${Date.now()}`;
     const previousRoute = sessionStorage.getItem("journey_previous_route");
-    void emitBusinessFunnelEvent({
+    void trackEvent({
       eventName,
       eventVersion: 1,
       idempotencyKey: `${routeVisitId}:${eventName}`,
-      metadata: {
+      properties: {
         occurredAt: new Date().toISOString(),
         previous_route: previousRoute,
         route: window.location.pathname,
@@ -1025,7 +1023,8 @@ export default function ResultadoPage() {
 
   // ── Loading ────────────────────────────────────────────────
 
-  const isResultReady = rawData !== null && (isDemo || isAuthenticated !== null);
+  const isResultReady =
+    rawData !== null && (isDemo || isAuthenticated !== null);
 
   if (!isResultReady) {
     return (

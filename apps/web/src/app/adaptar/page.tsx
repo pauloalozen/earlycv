@@ -5,10 +5,10 @@ import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
+import { trackEvent } from "@/lib/analytics-tracking";
 import {
   analyzeAuthenticatedCv,
   analyzeGuestCv,
-  emitBusinessFunnelEvent,
   saveGuestPreview,
 } from "@/lib/cv-adaptation-api";
 import {
@@ -280,11 +280,11 @@ export default function AdaptarPage() {
           ? sessionStorage.getItem("journey_session_internal_id")
           : null;
 
-      void emitBusinessFunnelEvent({
+      void trackEvent({
         eventName,
         eventVersion: 1,
         idempotencyKey,
-        metadata: {
+        properties: {
           occurredAt: new Date().toISOString(),
           previous_route: previousRoute,
           route,

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-const emitBusinessFunnelEventMock = vi.hoisted(() => vi.fn());
+const trackEventMock = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/cv-adaptation-api", () => ({
-  emitBusinessFunnelEvent: emitBusinessFunnelEventMock,
+vi.mock("@/lib/analytics-tracking", () => ({
+  trackEvent: trackEventMock,
 }));
 
 import { trackSeoPageCtaClicked, trackSeoPageViewed } from "./tracking";
@@ -16,9 +16,9 @@ describe("seo pages tracking", () => {
       slug: "palavras-chave-curriculo",
     });
 
-    expect(emitBusinessFunnelEventMock).toHaveBeenCalledWith({
+    expect(trackEventMock).toHaveBeenCalledWith({
       eventName: "seo_page_viewed",
-      metadata: {
+      properties: {
         page_type: "hub",
         path: "/palavras-chave-curriculo",
         slug: "palavras-chave-curriculo",
@@ -36,9 +36,9 @@ describe("seo pages tracking", () => {
       target: "/adaptar",
     });
 
-    expect(emitBusinessFunnelEventMock).toHaveBeenCalledWith({
+    expect(trackEventMock).toHaveBeenCalledWith({
       eventName: "seo_page_cta_clicked",
-      metadata: {
+      properties: {
         location: "hero",
         page_type: "hub",
         path: "/palavras-chave-curriculo",

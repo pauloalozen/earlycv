@@ -2,23 +2,23 @@ import { cleanup, render, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const emitBusinessFunnelEventMock = vi.hoisted(() => vi.fn());
+const trackEventMock = vi.hoisted(() => vi.fn());
 const usePathnameMock = vi.hoisted(() => vi.fn(() => "/"));
 
 vi.mock("next/navigation", () => ({
   usePathname: usePathnameMock,
 }));
 
-vi.mock("@/lib/cv-adaptation-api", () => ({
-  emitBusinessFunnelEvent: emitBusinessFunnelEventMock,
+vi.mock("@/lib/analytics-tracking", () => ({
+  trackEvent: trackEventMock,
 }));
 
 import Template from "./template";
 
 describe("Template journey tracking strict mode", () => {
   beforeEach(() => {
-    emitBusinessFunnelEventMock.mockReset();
-    emitBusinessFunnelEventMock.mockResolvedValue(undefined);
+    trackEventMock.mockReset();
+    trackEventMock.mockResolvedValue(undefined);
     usePathnameMock.mockReset();
     usePathnameMock.mockReturnValue("/");
     sessionStorage.clear();
@@ -38,7 +38,7 @@ describe("Template journey tracking strict mode", () => {
     );
 
     await waitFor(() => {
-      const navEvents = emitBusinessFunnelEventMock.mock.calls
+      const navEvents = trackEventMock.mock.calls
         .map(([payload]) => payload.eventName)
         .filter((name) => name === "page_view" || name === "page_leave");
 
@@ -56,12 +56,12 @@ describe("Template journey tracking strict mode", () => {
     );
 
     await waitFor(() => {
-      const views = emitBusinessFunnelEventMock.mock.calls.filter(
+      const views = trackEventMock.mock.calls.filter(
         ([payload]) => payload.eventName === "page_view",
       );
 
       expect(views.length).toBeGreaterThan(0);
-      expect(views[0]?.[0]?.metadata?.route).toBe("/");
+      expect(views[0]?.[0]?.properties?.route).toBe("/");
     });
 
     firstRender.unmount();
@@ -74,20 +74,20 @@ describe("Template journey tracking strict mode", () => {
     );
 
     await waitFor(() => {
-      const leaves = emitBusinessFunnelEventMock.mock.calls.filter(
+      const leaves = trackEventMock.mock.calls.filter(
         ([payload]) => payload.eventName === "page_leave",
       );
-      const views = emitBusinessFunnelEventMock.mock.calls.filter(
+      const views = trackEventMock.mock.calls.filter(
         ([payload]) => payload.eventName === "page_view",
       );
 
-      expect(leaves.some(([payload]) => payload.metadata?.route === "/")).toBe(
-        true,
-      );
       expect(
-        views.some(([payload]) => payload.metadata?.route === "/adaptar"),
+        leaves.some(([payload]) => payload.properties?.route === "/"),
       ).toBe(true);
-      const exitEvents = emitBusinessFunnelEventMock.mock.calls.filter(
+      expect(
+        views.some(([payload]) => payload.properties?.route === "/adaptar"),
+      ).toBe(true);
+      const exitEvents = trackEventMock.mock.calls.filter(
         ([payload]) => payload.eventName === "site_exit",
       );
       expect(exitEvents).toHaveLength(0);
@@ -104,12 +104,12 @@ describe("Template journey tracking strict mode", () => {
     window.dispatchEvent(new Event("pagehide"));
 
     await waitFor(() => {
-      const exits = emitBusinessFunnelEventMock.mock.calls.filter(
+      const exits = trackEventMock.mock.calls.filter(
         ([payload]) => payload.eventName === "site_exit",
       );
 
       expect(exits.length).toBeGreaterThan(0);
-      expect(exits[0]?.[0]?.metadata?.route).toBe("/");
+      expect(exits[0]?.[0]?.properties?.route).toBe("/");
     });
   });
 
@@ -124,7 +124,7 @@ describe("Template journey tracking strict mode", () => {
     window.dispatchEvent(new Event("pagehide"));
 
     await waitFor(() => {
-      const exits = emitBusinessFunnelEventMock.mock.calls.filter(
+      const exits = trackEventMock.mock.calls.filter(
         ([payload]) => payload.eventName === "site_exit",
       );
 

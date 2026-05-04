@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { emitBusinessFunnelEvent } from "@/lib/cv-adaptation-api";
+import { trackEvent } from "@/lib/analytics-tracking";
 import {
   consumeSessionEngagedOnce,
   consumeSessionStartedOnce,
@@ -63,7 +63,12 @@ function emitInBackground(payload: {
   idempotencyKey: string;
   metadata: Record<string, unknown>;
 }) {
-  void emitBusinessFunnelEvent(payload).catch((error) => {
+  void trackEvent({
+    eventName: payload.eventName,
+    eventVersion: payload.eventVersion,
+    idempotencyKey: payload.idempotencyKey,
+    properties: payload.metadata,
+  }).catch((error) => {
     if (process.env.NODE_ENV !== "production") {
       console.debug("[journey-tracking] failed to emit event", error);
     }
@@ -80,11 +85,6 @@ function tryEmitWithBeacon(payload: {
     return false;
   }
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (!apiBase) {
-    return false;
-  }
-
   const body = JSON.stringify({
     eventName: payload.eventName,
     eventVersion: payload.eventVersion,
@@ -93,7 +93,7 @@ function tryEmitWithBeacon(payload: {
   });
 
   return navigator.sendBeacon(
-    `${apiBase.replace(/\/$/, "")}/analysis-observability/business-funnel-events`,
+    "/api/analysis-observability/business-funnel-events",
     new Blob([body], { type: "application/json" }),
   );
 }

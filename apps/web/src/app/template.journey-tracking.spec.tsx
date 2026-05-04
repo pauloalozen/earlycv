@@ -2,23 +2,23 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const emitBusinessFunnelEventMock = vi.hoisted(() => vi.fn());
+const trackEventMock = vi.hoisted(() => vi.fn());
 const usePathnameMock = vi.hoisted(() => vi.fn(() => "/adaptar"));
 
 vi.mock("next/navigation", () => ({
   usePathname: usePathnameMock,
 }));
 
-vi.mock("@/lib/cv-adaptation-api", () => ({
-  emitBusinessFunnelEvent: emitBusinessFunnelEventMock,
+vi.mock("@/lib/analytics-tracking", () => ({
+  trackEvent: trackEventMock,
 }));
 
 import Template from "./template";
 
 describe("Template journey tracking", () => {
   beforeEach(() => {
-    emitBusinessFunnelEventMock.mockReset();
-    emitBusinessFunnelEventMock.mockResolvedValue(undefined);
+    trackEventMock.mockReset();
+    trackEventMock.mockResolvedValue(undefined);
     usePathnameMock.mockReset();
     usePathnameMock.mockReturnValue("/adaptar");
     sessionStorage.clear();
@@ -37,7 +37,7 @@ describe("Template journey tracking", () => {
     );
 
     await waitFor(() => {
-      const names = emitBusinessFunnelEventMock.mock.calls.map(
+      const names = trackEventMock.mock.calls.map(
         ([payload]) => payload.eventName,
       );
       expect(names).toContain("page_view");
@@ -55,7 +55,7 @@ describe("Template journey tracking", () => {
     );
 
     await waitFor(() => {
-      expect(emitBusinessFunnelEventMock).not.toHaveBeenCalled();
+      expect(trackEventMock).not.toHaveBeenCalled();
     });
   });
 
@@ -70,7 +70,7 @@ describe("Template journey tracking", () => {
     window.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     await waitFor(() => {
-      const engagedCalls = emitBusinessFunnelEventMock.mock.calls.filter(
+      const engagedCalls = trackEventMock.mock.calls.filter(
         ([payload]) => payload.eventName === "session_engaged",
       );
       expect(engagedCalls).toHaveLength(1);
@@ -87,7 +87,7 @@ describe("Template journey tracking", () => {
     window.dispatchEvent(new Event("pagehide"));
 
     await waitFor(() => {
-      const names = emitBusinessFunnelEventMock.mock.calls.map(
+      const names = trackEventMock.mock.calls.map(
         ([payload]) => payload.eventName,
       );
       expect(names).toContain("page_leave");
@@ -106,7 +106,7 @@ describe("Template journey tracking", () => {
     );
 
     await waitFor(() => {
-      const navEvents = emitBusinessFunnelEventMock.mock.calls
+      const navEvents = trackEventMock.mock.calls
         .map(([payload]) => payload.eventName)
         .filter((name) => name === "page_view" || name === "page_leave");
 
@@ -145,7 +145,7 @@ describe("Template journey tracking", () => {
 
     await Promise.resolve();
 
-    const abandonedCalls = emitBusinessFunnelEventMock.mock.calls.filter(
+    const abandonedCalls = trackEventMock.mock.calls.filter(
       ([payload]) => payload.eventName === "checkout_abandoned",
     );
     expect(abandonedCalls).toHaveLength(1);
@@ -182,7 +182,7 @@ describe("Template journey tracking", () => {
 
     await Promise.resolve();
 
-    const abandonedCalls = emitBusinessFunnelEventMock.mock.calls.filter(
+    const abandonedCalls = trackEventMock.mock.calls.filter(
       ([payload]) => payload.eventName === "checkout_abandoned",
     );
     expect(abandonedCalls).toHaveLength(0);

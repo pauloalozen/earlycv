@@ -1,11 +1,11 @@
-import { emitBusinessFunnelEvent } from "@/lib/cv-adaptation-api";
+import { trackEvent } from "@/lib/analytics-tracking";
 
 type BlogCtaLocation = "top" | "middle" | "bottom" | "index";
 
 export function trackBlogIndexViewed() {
-  return emitBusinessFunnelEvent({
+  return trackEvent({
     eventName: "blog_index_viewed",
-    metadata: {
+    properties: {
       page: "/blog",
       source: "blog",
     },
@@ -18,9 +18,9 @@ export function trackBlogPostViewed(input: {
   tags: string[];
   title: string;
 }) {
-  return emitBusinessFunnelEvent({
+  return trackEvent({
     eventName: "blog_post_viewed",
-    metadata: {
+    properties: {
       ...input,
       source: "blog",
     },
@@ -28,9 +28,9 @@ export function trackBlogPostViewed(input: {
 }
 
 export function trackBlogCtaClicked(location: BlogCtaLocation, slug?: string) {
-  return emitBusinessFunnelEvent({
+  return trackEvent({
     eventName: "blog_cta_clicked",
-    metadata: {
+    properties: {
       location,
       slug,
       source: "blog",
