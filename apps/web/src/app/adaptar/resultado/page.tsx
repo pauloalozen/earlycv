@@ -1025,7 +1025,9 @@ export default function ResultadoPage() {
 
   // ── Loading ────────────────────────────────────────────────
 
-  if (!rawData) {
+  const isResultReady = rawData !== null && (isDemo || isAuthenticated !== null);
+
+  if (!isResultReady) {
     return (
       <div
         style={{
@@ -3983,13 +3985,14 @@ export default function ResultadoPage() {
                   >
                     {isDownloadReady ? (
                       <>
-                        Os <span style={{ color: "#c6ff3a" }}>ajustes</span>{" "}
-                        já foram aplicados automaticamente.
+                        Os <span style={{ color: "#c6ff3a" }}>ajustes</span> já
+                        foram aplicados automaticamente.
                       </>
                     ) : (
                       <>
-                        Após liberar, os <span style={{ color: "#c6ff3a" }}>ajustes</span>{" "}
-                        são aplicados automaticamente.
+                        Após liberar, os{" "}
+                        <span style={{ color: "#c6ff3a" }}>ajustes</span> são
+                        aplicados automaticamente.
                       </>
                     )}
                   </p>

@@ -31,3 +31,14 @@ test("resultado computes totalAjustesAplicados including content, missing keywor
     /const totalAjustesAplicados\s*=\s*data\.ajustes_conteudo\.length\s*\+\s*data\.keywords\.ausentes\.length\s*\+\s*problemasPontuacao\.length/,
   );
 });
+
+test("resultado keeps loading until auth state is resolved to avoid guest-view flicker", () => {
+  const pagePath = resolve(process.cwd(), "src/app/adaptar/resultado/page.tsx");
+  const content = readFileSync(pagePath, "utf8");
+
+  assert.match(
+    content,
+    /const isResultReady = rawData !== null && \(isDemo \|\| isAuthenticated !== null\);/,
+  );
+  assert.match(content, /if \(!isResultReady\) \{/);
+});
