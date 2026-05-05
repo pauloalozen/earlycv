@@ -175,6 +175,7 @@ export function PosthogAuthProvider({
           autocapture: false,
           capture_pageview: false,
           capture_pageleave: false,
+          capture_performance: false,
           person_profiles: "identified_only",
         });
         initializedRef.current = true;

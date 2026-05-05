@@ -60,6 +60,16 @@ describe("PosthogAuthProvider", () => {
 
     await waitFor(() => {
       expect(initMock).toHaveBeenCalledTimes(1);
+      expect(initMock).toHaveBeenCalledWith(
+        "phc_test_key",
+        expect.objectContaining({
+          api_host: "https://us.i.posthog.com",
+          autocapture: false,
+          capture_pageview: false,
+          capture_pageleave: false,
+          capture_performance: false,
+        }),
+      );
       expect(identifyMock).toHaveBeenCalledTimes(1);
       expect(trackEventMock).toHaveBeenCalledTimes(1);
       expect(identifyMock).toHaveBeenCalledWith("user-1", {

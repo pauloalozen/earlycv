@@ -26,7 +26,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self'",
-      "connect-src 'self' https://app.posthog.com https://eu.posthog.com https://*.mercadopago.com",
+      "connect-src 'self' https://app.posthog.com https://eu.posthog.com https://us.i.posthog.com https://eu.i.posthog.com https://*.mercadopago.com",
       "frame-src https://challenges.cloudflare.com",
       "object-src 'none'",
       "base-uri 'self'",
