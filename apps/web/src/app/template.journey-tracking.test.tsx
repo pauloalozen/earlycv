@@ -4,9 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const trackEventMock = vi.hoisted(() => vi.fn());
 const usePathnameMock = vi.hoisted(() => vi.fn(() => "/"));
+const useSearchParamsMock = vi.hoisted(
+  () => vi.fn(() => new URLSearchParams()),
+);
 
 vi.mock("next/navigation", () => ({
   usePathname: usePathnameMock,
+  useSearchParams: useSearchParamsMock,
 }));
 
 vi.mock("@/lib/analytics-tracking", () => ({
@@ -21,6 +25,8 @@ describe("Template journey tracking strict mode", () => {
     trackEventMock.mockResolvedValue(undefined);
     usePathnameMock.mockReset();
     usePathnameMock.mockReturnValue("/");
+    useSearchParamsMock.mockReset();
+    useSearchParamsMock.mockReturnValue(new URLSearchParams());
     sessionStorage.clear();
   });
 
@@ -91,10 +97,14 @@ describe("Template journey tracking strict mode", () => {
         ([payload]) => payload.eventName === "site_exit",
       );
       expect(exitEvents).toHaveLength(0);
+      const exitCandidateEvents = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "site_exit_candidate",
+      );
+      expect(exitCandidateEvents).toHaveLength(0);
     });
   });
 
-  it("emits site_exit on pagehide", async () => {
+  it("emits site_exit_candidate on pagehide", async () => {
     render(
       <Template>
         <div>home</div>
@@ -105,7 +115,7 @@ describe("Template journey tracking strict mode", () => {
 
     await waitFor(() => {
       const exits = trackEventMock.mock.calls.filter(
-        ([payload]) => payload.eventName === "site_exit",
+        ([payload]) => payload.eventName === "site_exit_candidate",
       );
 
       expect(exits.length).toBeGreaterThan(0);
@@ -113,7 +123,7 @@ describe("Template journey tracking strict mode", () => {
     });
   });
 
-  it("emits only one site_exit per session", async () => {
+  it("emits only one site_exit_candidate per session", async () => {
     render(
       <Template>
         <div>home</div>
@@ -125,10 +135,59 @@ describe("Template journey tracking strict mode", () => {
 
     await waitFor(() => {
       const exits = trackEventMock.mock.calls.filter(
-        ([payload]) => payload.eventName === "site_exit",
+        ([payload]) => payload.eventName === "site_exit_candidate",
       );
 
       expect(exits).toHaveLength(1);
+    });
+  });
+
+  it("emits page_leave with origin url and next destination url", async () => {
+    window.history.replaceState({}, "", "/?utm_source=linkedin");
+    usePathnameMock.mockReturnValue("/");
+    useSearchParamsMock.mockReturnValue(new URLSearchParams("utm_source=linkedin"));
+
+    const first = render(
+      <Template>
+        <div>home</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const view = trackEventMock.mock.calls.find(
+        ([payload]) => payload.eventName === "page_view",
+      );
+      expect(view?.[0]?.properties?.route).toBe("/");
+    });
+
+    first.unmount();
+    window.history.replaceState({}, "", "/entrar?tab=entrar");
+    usePathnameMock.mockReturnValue("/entrar");
+    useSearchParamsMock.mockReturnValue(new URLSearchParams("tab=entrar"));
+
+    render(
+      <Template>
+        <div>login</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const leave = trackEventMock.mock.calls.find(
+        ([payload]) => payload.eventName === "page_leave",
+      )?.[0];
+
+      expect(leave?.properties?.route).toBe("/");
+      expect(leave?.properties?.url).toBe(
+        `${window.location.origin}/?utm_source=linkedin`,
+      );
+      expect(leave?.properties?.search).toBe("?utm_source=linkedin");
+      expect(leave?.properties?.next_route).toBe("/entrar");
+      expect(leave?.properties?.next_url).toBe(
+        `${window.location.origin}/entrar?tab=entrar`,
+      );
+      expect(leave?.properties?.next_search).toBe("?tab=entrar");
+      expect(leave?.properties?.leave_reason).toBe("route_change");
+      expect(leave?.properties?.route).not.toBe("/entrar");
     });
   });
 });

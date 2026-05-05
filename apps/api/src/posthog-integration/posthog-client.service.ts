@@ -117,8 +117,10 @@ export class PosthogClientService {
       });
       const message: EventMessage = {
         distinctId:
-          (properties?.session_internal_id as string) ??
           (properties?.user_id as string) ??
+          (properties?.userId as string) ??
+          (properties?.distinct_id as string) ??
+          (properties?.session_internal_id as string) ??
           "anonymous",
         event,
         properties: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics-tracking";
 import {
@@ -19,7 +19,8 @@ const CHECKOUT_ABANDON_MIN_MS = 60_000;
 const CURRENT_ROUTE_VISIT_KEY = "journey_current_route_visit_id";
 const CURRENT_ROUTE_VISIT_SNAPSHOT_KEY = "journey_current_route_visit_snapshot";
 const PREVIOUS_ROUTE_KEY = "journey_previous_route";
-const SITE_EXIT_EMITTED_SESSION_KEY = "journey_site_exit_emitted_session";
+const SITE_EXIT_CANDIDATE_EMITTED_SESSION_KEY =
+  "journey_site_exit_candidate_emitted_session";
 
 type CheckoutIntentMarker = {
   planId: string;
@@ -29,10 +30,39 @@ type CheckoutIntentMarker = {
 };
 
 type RouteVisitSnapshot = {
-  pathname: string;
+  entryPathname: string;
+  entryRoute: string;
+  entrySearch: string;
+  entryUrl: string;
+  referrer: string;
+  previousRoute: string | null;
   routeVisitId: string;
   startedAtMs: number;
 };
+
+type LeaveReason =
+  | "route_change"
+  | "pagehide"
+  | "visibility_hidden"
+  | "beforeunload"
+  | "unknown";
+
+function resolveAnalyticsEnv(): "production" | "staging" | "development" {
+  const candidate =
+    process.env.NEXT_PUBLIC_APP_ENV?.trim().toLowerCase() ??
+    process.env.NODE_ENV?.trim().toLowerCase() ??
+    "development";
+
+  if (candidate === "production") {
+    return "production";
+  }
+
+  if (candidate === "staging" || candidate === "preview") {
+    return "staging";
+  }
+
+  return "development";
+}
 
 function buildSessionInternalId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -102,16 +132,37 @@ function buildMetadata(input: {
   occurredAt: string;
   previousRoute: string | null;
   route: string;
+  url: string;
+  pathname: string;
+  search: string;
+  referrer: string;
   routeVisitId: string;
   sessionInternalId: string;
+  nextRoute?: string;
+  nextUrl?: string;
+  nextPathname?: string;
+  nextSearch?: string;
+  leaveReason?: LeaveReason;
   timeOnPageMs?: number;
 }) {
   return {
+    app: "earlycv",
+    env: resolveAnalyticsEnv(),
     occurredAt: input.occurredAt,
     previous_route: input.previousRoute,
+    source: "frontend",
     route: input.route,
+    url: input.url,
+    pathname: input.pathname,
+    search: input.search,
+    referrer: input.referrer,
     routeVisitId: input.routeVisitId,
     sessionInternalId: input.sessionInternalId,
+    next_route: input.nextRoute,
+    next_url: input.nextUrl,
+    next_pathname: input.nextPathname,
+    next_search: input.nextSearch,
+    leave_reason: input.leaveReason,
     time_on_page_ms: input.timeOnPageMs,
     userId: null,
   };
@@ -192,7 +243,11 @@ function readCurrentRouteVisitSnapshot(): RouteVisitSnapshot | null {
   try {
     const parsed = JSON.parse(raw) as Partial<RouteVisitSnapshot>;
     if (
-      typeof parsed.pathname !== "string" ||
+      typeof parsed.entryPathname !== "string" ||
+      typeof parsed.entryRoute !== "string" ||
+      typeof parsed.entrySearch !== "string" ||
+      typeof parsed.entryUrl !== "string" ||
+      typeof parsed.referrer !== "string" ||
       typeof parsed.routeVisitId !== "string" ||
       typeof parsed.startedAtMs !== "number"
     ) {
@@ -200,7 +255,13 @@ function readCurrentRouteVisitSnapshot(): RouteVisitSnapshot | null {
     }
 
     return {
-      pathname: parsed.pathname,
+      entryPathname: parsed.entryPathname,
+      entryRoute: parsed.entryRoute,
+      entrySearch: parsed.entrySearch,
+      entryUrl: parsed.entryUrl,
+      referrer: parsed.referrer,
+      previousRoute:
+        typeof parsed.previousRoute === "string" ? parsed.previousRoute : null,
       routeVisitId: parsed.routeVisitId,
       startedAtMs: parsed.startedAtMs,
     };
@@ -226,32 +287,99 @@ function setPreviousRoute(pathname: string) {
   sessionStorage.setItem(PREVIOUS_ROUTE_KEY, pathname);
 }
 
-function hasSiteExitBeenEmittedForSession(sessionInternalId: string): boolean {
+function hasSiteExitCandidateBeenEmittedForSession(
+  sessionInternalId: string,
+): boolean {
   if (typeof sessionStorage === "undefined") {
     return false;
   }
 
   return (
-    sessionStorage.getItem(SITE_EXIT_EMITTED_SESSION_KEY) === sessionInternalId
+    sessionStorage.getItem(SITE_EXIT_CANDIDATE_EMITTED_SESSION_KEY) ===
+    sessionInternalId
   );
 }
 
-function markSiteExitEmittedForSession(sessionInternalId: string) {
+function markSiteExitCandidateEmittedForSession(sessionInternalId: string) {
   if (typeof sessionStorage === "undefined") {
     return;
   }
 
-  sessionStorage.setItem(SITE_EXIT_EMITTED_SESSION_KEY, sessionInternalId);
+  sessionStorage.setItem(
+    SITE_EXIT_CANDIDATE_EMITTED_SESSION_KEY,
+    sessionInternalId,
+  );
 }
 
 export function JourneyTrackerProvider({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
   const stateRef = useRef<JourneyState | null>(null);
   const previousRouteRef = useRef<string | null>(null);
   const pathnameRef = useRef<string>(pathname);
   const emittedLeaveVisitIdsRef = useRef<Set<string>>(new Set<string>());
+  const internalNavigationInProgressRef = useRef<boolean>(false);
+  const internalNavigationResetTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const markInternalNavigation = () => {
+      internalNavigationInProgressRef.current = true;
+
+      if (internalNavigationResetTimeoutRef.current !== null) {
+        window.clearTimeout(internalNavigationResetTimeoutRef.current);
+      }
+
+      internalNavigationResetTimeoutRef.current = window.setTimeout(() => {
+        internalNavigationInProgressRef.current = false;
+        internalNavigationResetTimeoutRef.current = null;
+      }, 1200);
+    };
+
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const anchor = target.closest("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+
+      if (anchor.target && anchor.target !== "_self") {
+        return;
+      }
+
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#")) {
+        return;
+      }
+
+      const nextUrl = new URL(anchor.href, window.location.href);
+      if (nextUrl.origin !== window.location.origin) {
+        return;
+      }
+
+      markInternalNavigation();
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+
+    return () => {
+      document.removeEventListener("click", handleDocumentClick, true);
+
+      if (internalNavigationResetTimeoutRef.current !== null) {
+        window.clearTimeout(internalNavigationResetTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const handleCheckoutIntentSubmit = (event: Event) => {
@@ -270,15 +398,73 @@ export function JourneyTrackerProvider({
         return;
       }
 
+      const planNameRaw = formData.get("planName");
+      const planCreditsRaw = formData.get("planCredits");
+      const planPriceRaw = formData.get("planPrice");
+      const planCurrencyRaw = formData.get("planCurrency");
+      const adaptationIdRaw = formData.get("adaptationId");
+
       const routeVisitId = stateRef.current?.activeRouteVisit?.routeVisitId;
       if (!routeVisitId) {
         return;
       }
 
+      const occurredAt = new Date().toISOString();
+      const route = pathnameRef.current;
+      const sessionInternalId = getSessionInternalId();
+
+      emitInBackground({
+        eventName: "plan_selected",
+        eventVersion: 1,
+        idempotencyKey: `${sessionInternalId}:${routeVisitId}:plan_selected:${String(planIdRaw).trim()}`,
+        metadata: buildMetadata({
+          occurredAt,
+          previousRoute: previousRouteRef.current,
+          route,
+          url: window.location.href,
+          pathname: window.location.pathname,
+          search: window.location.search,
+          referrer: document.referrer,
+          routeVisitId,
+          sessionInternalId,
+        }),
+      });
+
+      emitInBackground({
+        eventName: "checkout_started",
+        eventVersion: 1,
+        idempotencyKey: `${sessionInternalId}:${routeVisitId}:checkout_started:${String(planIdRaw).trim()}`,
+        metadata: {
+          ...buildMetadata({
+            occurredAt,
+            previousRoute: previousRouteRef.current,
+            route,
+            url: window.location.href,
+            pathname: window.location.pathname,
+            search: window.location.search,
+            referrer: document.referrer,
+            routeVisitId,
+            sessionInternalId,
+          }),
+          amount: typeof planPriceRaw === "string" ? planPriceRaw : undefined,
+          credits:
+            typeof planCreditsRaw === "string" ? planCreditsRaw : undefined,
+          currency:
+            typeof planCurrencyRaw === "string" ? planCurrencyRaw : "BRL",
+          external_reference:
+            typeof adaptationIdRaw === "string" ? adaptationIdRaw : undefined,
+          payment_method: "unknown",
+          planId: String(planIdRaw).trim(),
+          planName:
+            typeof planNameRaw === "string" ? planNameRaw : undefined,
+          provider: "mercado_pago",
+        },
+      });
+
       writeCheckoutIntent({
         planId: planIdRaw.trim(),
         routeVisitId,
-        sessionInternalId: getSessionInternalId(),
+        sessionInternalId,
         startedAtMs: Date.now(),
       });
     };
@@ -308,7 +494,17 @@ export function JourneyTrackerProvider({
 
   useEffect(() => {
     const sessionInternalId = getSessionInternalId();
-    const emitLeaveFromCurrentVisit = (shouldResetVisit: boolean) => {
+    const currentSearch = search ? `?${search}` : "";
+    const currentUrl = `${window.location.origin}${pathname}${currentSearch}`;
+
+    const emitLeaveFromCurrentVisit = (input: {
+      leaveReason: LeaveReason;
+      nextPathname?: string;
+      nextRoute?: string;
+      nextSearch?: string;
+      nextUrl?: string;
+      shouldResetVisit: boolean;
+    }) => {
       const finished = finishRouteVisitAndReset(
         stateRef.current ?? createJourneyState(),
         {
@@ -316,7 +512,7 @@ export function JourneyTrackerProvider({
         },
       );
 
-      if (shouldResetVisit) {
+      if (input.shouldResetVisit) {
         stateRef.current = finished.state;
       }
 
@@ -330,16 +526,41 @@ export function JourneyTrackerProvider({
 
       emittedLeaveVisitIdsRef.current.add(finished.event.routeVisitId);
 
+      const snapshot = readCurrentRouteVisitSnapshot();
+      const routeVisitSnapshot =
+        snapshot && snapshot.routeVisitId === finished.event.routeVisitId
+          ? snapshot
+          : null;
+
+      const entryRoute = routeVisitSnapshot?.entryRoute ?? finished.event.pathname;
+      const entryPathname =
+        routeVisitSnapshot?.entryPathname ?? finished.event.pathname;
+      const entrySearch = routeVisitSnapshot?.entrySearch ?? "";
+      const entryUrl =
+        routeVisitSnapshot?.entryUrl ??
+        `${window.location.origin}${entryPathname}${entrySearch}`;
+      const entryReferrer = routeVisitSnapshot?.referrer ?? document.referrer;
+
       const leavePayload = {
         eventName: "page_leave",
         eventVersion: 1,
         idempotencyKey: `${sessionInternalId}:${finished.event.routeVisitId}:page_leave`,
         metadata: buildMetadata({
           occurredAt: new Date().toISOString(),
-          previousRoute: previousRouteRef.current,
-          route: finished.event.pathname,
+          previousRoute:
+            routeVisitSnapshot?.previousRoute ?? previousRouteRef.current,
+          route: entryRoute,
+          url: entryUrl,
+          pathname: entryPathname,
+          search: entrySearch,
+          referrer: entryReferrer,
           routeVisitId: finished.event.routeVisitId,
           sessionInternalId,
+          nextPathname: input.nextPathname,
+          nextRoute: input.nextRoute,
+          nextSearch: input.nextSearch,
+          nextUrl: input.nextUrl,
+          leaveReason: input.leaveReason,
           timeOnPageMs: finished.event.timeOnPageMs,
         }),
       };
@@ -347,7 +568,7 @@ export function JourneyTrackerProvider({
       tryEmitWithBeacon(leavePayload);
       emitInBackground(leavePayload);
 
-      if (shouldResetVisit) {
+      if (input.shouldResetVisit) {
         previousRouteRef.current = finished.event.pathname;
         setPreviousRoute(finished.event.pathname);
         clearCurrentRouteVisitId();
@@ -356,22 +577,41 @@ export function JourneyTrackerProvider({
 
     const previousActiveVisit = stateRef.current?.activeRouteVisit;
     if (previousActiveVisit && previousActiveVisit.pathname !== pathname) {
-      emitLeaveFromCurrentVisit(true);
+      internalNavigationInProgressRef.current = true;
+      emitLeaveFromCurrentVisit({
+        leaveReason: "route_change",
+        nextPathname: pathname,
+        nextRoute: pathname,
+        nextSearch: currentSearch,
+        nextUrl: currentUrl,
+        shouldResetVisit: true,
+      });
     }
 
     if (!previousActiveVisit) {
       const snapshotVisit = readCurrentRouteVisitSnapshot();
-      if (snapshotVisit && snapshotVisit.pathname !== pathname) {
+      if (snapshotVisit && snapshotVisit.entryPathname !== pathname) {
+        emittedLeaveVisitIdsRef.current.add(snapshotVisit.routeVisitId);
+
         const leavePayload = {
           eventName: "page_leave",
           eventVersion: 1,
           idempotencyKey: `${sessionInternalId}:${snapshotVisit.routeVisitId}:page_leave`,
           metadata: buildMetadata({
             occurredAt: new Date().toISOString(),
-            previousRoute: previousRouteRef.current,
-            route: snapshotVisit.pathname,
+            previousRoute: snapshotVisit.previousRoute,
+            route: snapshotVisit.entryRoute,
+            url: snapshotVisit.entryUrl,
+            pathname: snapshotVisit.entryPathname,
+            search: snapshotVisit.entrySearch,
+            referrer: snapshotVisit.referrer,
             routeVisitId: snapshotVisit.routeVisitId,
             sessionInternalId,
+            nextPathname: pathname,
+            nextRoute: pathname,
+            nextSearch: currentSearch,
+            nextUrl: currentUrl,
+            leaveReason: "route_change",
             timeOnPageMs: Math.max(0, Date.now() - snapshotVisit.startedAtMs),
           }),
         };
@@ -379,8 +619,8 @@ export function JourneyTrackerProvider({
         tryEmitWithBeacon(leavePayload);
         emitInBackground(leavePayload);
 
-        previousRouteRef.current = snapshotVisit.pathname;
-        setPreviousRoute(snapshotVisit.pathname);
+        previousRouteRef.current = snapshotVisit.entryPathname;
+        setPreviousRoute(snapshotVisit.entryPathname);
         clearCurrentRouteVisitId();
       }
     }
@@ -389,15 +629,15 @@ export function JourneyTrackerProvider({
       return;
     }
 
-    const searchParams = new URLSearchParams(window.location.search);
+    const currentSearchParams = new URLSearchParams(window.location.search);
 
     if (previousRouteRef.current === null) {
       previousRouteRef.current = sessionStorage.getItem(PREVIOUS_ROUTE_KEY);
     }
 
     if (
-      searchParams.get("plan") === "activated" ||
-      searchParams.get("error") === "payment_failed"
+      currentSearchParams.get("plan") === "activated" ||
+      currentSearchParams.get("error") === "payment_failed"
     ) {
       clearCheckoutIntent();
     }
@@ -422,7 +662,12 @@ export function JourneyTrackerProvider({
 
     setCurrentRouteVisitId(activeVisit.routeVisitId);
     setCurrentRouteVisitSnapshot({
-      pathname,
+      entryPathname: pathname,
+      entryRoute: pathname,
+      entrySearch: window.location.search,
+      entryUrl: window.location.href,
+      referrer: document.referrer,
+      previousRoute: previousRouteRef.current,
       routeVisitId: activeVisit.routeVisitId,
       startedAtMs: activeVisit.startedAtMs,
     });
@@ -433,6 +678,10 @@ export function JourneyTrackerProvider({
         occurredAt,
         previousRoute: previousRouteRef.current,
         route: pathname,
+        url: window.location.href,
+        pathname,
+        search: window.location.search,
+        referrer: document.referrer,
         routeVisitId: activeVisit.routeVisitId,
         sessionInternalId,
       });
@@ -498,6 +747,10 @@ export function JourneyTrackerProvider({
           occurredAt: new Date().toISOString(),
           previousRoute: previousRouteRef.current,
           route: pathnameRef.current,
+          url: window.location.href,
+          pathname: pathnameRef.current,
+          search: window.location.search,
+          referrer: document.referrer,
           routeVisitId:
             stateRef.current.activeRouteVisit?.routeVisitId ??
             activeVisit.routeVisitId,
@@ -506,41 +759,84 @@ export function JourneyTrackerProvider({
       });
     };
 
-    const handlePageHide = () => {
-      const activeVisit = stateRef.current?.activeRouteVisit;
-      if (activeVisit && !hasSiteExitBeenEmittedForSession(sessionInternalId)) {
-        const siteExitPayload = {
-          eventName: "site_exit",
-          eventVersion: 1,
-          idempotencyKey: `${sessionInternalId}:${activeVisit.routeVisitId}:site_exit`,
-          metadata: buildMetadata({
-            occurredAt: new Date().toISOString(),
-            previousRoute: previousRouteRef.current,
-            route: activeVisit.pathname,
-            routeVisitId: activeVisit.routeVisitId,
-            sessionInternalId,
-            timeOnPageMs: Math.max(0, Date.now() - activeVisit.startedAtMs),
-          }),
-        };
-
-        tryEmitWithBeacon(siteExitPayload);
-        emitInBackground(siteExitPayload);
-        markSiteExitEmittedForSession(sessionInternalId);
+    const emitSiteExitCandidate = (leaveReason: LeaveReason) => {
+      const activeRouteVisit = stateRef.current?.activeRouteVisit;
+      if (
+        internalNavigationInProgressRef.current ||
+        !activeRouteVisit ||
+        hasSiteExitCandidateBeenEmittedForSession(sessionInternalId)
+      ) {
+        return;
       }
 
-      emitLeaveFromCurrentVisit(true);
+      const snapshot = readCurrentRouteVisitSnapshot();
+      const routeVisitSnapshot =
+        snapshot && snapshot.routeVisitId === activeRouteVisit.routeVisitId
+          ? snapshot
+          : null;
+
+      const siteExitPayload = {
+        eventName: "site_exit_candidate",
+        eventVersion: 1,
+        idempotencyKey: `${sessionInternalId}:${activeRouteVisit.routeVisitId}:site_exit_candidate`,
+        metadata: buildMetadata({
+          occurredAt: new Date().toISOString(),
+          previousRoute:
+            routeVisitSnapshot?.previousRoute ?? previousRouteRef.current,
+          route: routeVisitSnapshot?.entryRoute ?? activeRouteVisit.pathname,
+          url:
+            routeVisitSnapshot?.entryUrl ??
+            `${window.location.origin}${activeRouteVisit.pathname}`,
+          pathname:
+            routeVisitSnapshot?.entryPathname ?? activeRouteVisit.pathname,
+          search: routeVisitSnapshot?.entrySearch ?? "",
+          referrer: routeVisitSnapshot?.referrer ?? document.referrer,
+          routeVisitId: activeRouteVisit.routeVisitId,
+          sessionInternalId,
+          leaveReason,
+          timeOnPageMs: Math.max(0, Date.now() - activeRouteVisit.startedAtMs),
+        }),
+      };
+
+      tryEmitWithBeacon(siteExitPayload);
+      emitInBackground(siteExitPayload);
+      markSiteExitCandidateEmittedForSession(sessionInternalId);
+    };
+
+    const handlePageHide = () => {
+      emitSiteExitCandidate("pagehide");
+      emitLeaveFromCurrentVisit({
+        leaveReason: "pagehide",
+        shouldResetVisit: true,
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "hidden") {
+        return;
+      }
+
+      emitSiteExitCandidate("visibility_hidden");
+    };
+
+    const handleBeforeUnload = () => {
+      emitSiteExitCandidate("beforeunload");
     };
 
     window.addEventListener("pagehide", handlePageHide);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", handleBeforeUnload);
     window.addEventListener("click", handleEngagement, { once: true });
     window.addEventListener("keydown", handleEngagement, { once: true });
 
     return () => {
       window.removeEventListener("pagehide", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("click", handleEngagement);
       window.removeEventListener("keydown", handleEngagement);
     };
-  }, [pathname]);
+  }, [pathname, search]);
 
   return children;
 }

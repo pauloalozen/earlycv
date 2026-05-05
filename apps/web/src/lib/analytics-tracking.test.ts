@@ -35,6 +35,10 @@ describe("analytics tracking", () => {
     fetchMock.mockResolvedValue({ ok: true, text: async () => "" });
     vi.stubGlobal("fetch", fetchMock);
     window.localStorage.removeItem("analytics_first_touch_utm");
+    sessionStorage.removeItem("analytics_auth_context");
+    sessionStorage.removeItem("journey_session_internal_id");
+    sessionStorage.removeItem("journey_current_route_visit_id");
+    sessionStorage.removeItem("journey_previous_route");
     window.history.replaceState({}, "", "/");
   });
 
@@ -119,8 +123,34 @@ describe("analytics tracking", () => {
       route: "/adaptar",
       url: `${window.location.origin}/adaptar`,
       search: "",
-      source: "web",
+      source: "frontend",
       app: "earlycv",
+    });
+    expect(base).toHaveProperty("sessionInternalId");
+    expect(base).toHaveProperty("routeVisitId");
+  });
+
+  it("includes authenticated user context and enforces it on event metadata", async () => {
+    sessionStorage.setItem(
+      "analytics_auth_context",
+      JSON.stringify({ isAuthenticated: true, userId: "user-123" }),
+    );
+
+    await trackEvent({
+      eventName: "analyze_submit_clicked",
+      properties: {
+        isAuthenticated: false,
+        userId: null,
+      },
+    });
+
+    const [, options] = fetchMock.mock.calls[0] ?? [];
+    const payload = JSON.parse(String(options?.body ?? "{}"));
+    expect(payload.metadata).toMatchObject({
+      isAuthenticated: true,
+      userId: "user-123",
+      user_id: "user-123",
+      event_version: 1,
     });
   });
 });

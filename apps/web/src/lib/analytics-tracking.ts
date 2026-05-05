@@ -4,6 +4,9 @@ import { emitBusinessFunnelEvent } from "@/lib/cv-adaptation-api";
 const UTM_STORAGE_KEY = "analytics_first_touch_utm";
 const BUSINESS_FUNNEL_EVENTS_PATH =
   "/api/analysis-observability/business-funnel-events";
+const JOURNEY_SESSION_KEY = "journey_session_internal_id";
+const JOURNEY_ROUTE_VISIT_KEY = "journey_current_route_visit_id";
+const JOURNEY_PREVIOUS_ROUTE_KEY = "journey_previous_route";
 
 type UtmParams = {
   utm_source?: string;
@@ -12,6 +15,90 @@ type UtmParams = {
   utm_content?: string;
   utm_term?: string;
 };
+
+type AuthAnalyticsContext = {
+  isAuthenticated: boolean;
+  userId: string | null;
+};
+
+const AUTH_ANALYTICS_STORAGE_KEY = "analytics_auth_context";
+
+function getAuthAnalyticsContext(): AuthAnalyticsContext {
+  if (typeof window === "undefined") {
+    return { isAuthenticated: false, userId: null };
+  }
+
+  const raw = window.sessionStorage.getItem(AUTH_ANALYTICS_STORAGE_KEY);
+  if (!raw) {
+    return { isAuthenticated: false, userId: null };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<AuthAnalyticsContext>;
+    const userId = typeof parsed.userId === "string" ? parsed.userId : null;
+    return {
+      isAuthenticated: Boolean(parsed.isAuthenticated && userId),
+      userId,
+    };
+  } catch {
+    return { isAuthenticated: false, userId: null };
+  }
+}
+
+function buildSessionInternalId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `journey-${Date.now()}`;
+}
+
+function getJourneyContext() {
+  if (typeof window === "undefined") {
+    return {
+      previousRoute: null,
+      routeVisitId: null,
+      sessionInternalId: null,
+    };
+  }
+
+  const storage = window.sessionStorage;
+  if (!storage) {
+    return {
+      previousRoute: null,
+      routeVisitId: null,
+      sessionInternalId: null,
+    };
+  }
+
+  const existingSessionInternalId = storage.getItem(JOURNEY_SESSION_KEY);
+  const sessionInternalId =
+    existingSessionInternalId && existingSessionInternalId.trim().length > 0
+      ? existingSessionInternalId
+      : buildSessionInternalId();
+
+  if (!existingSessionInternalId) {
+    storage.setItem(JOURNEY_SESSION_KEY, sessionInternalId);
+  }
+
+  const existingRouteVisitId = storage.getItem(JOURNEY_ROUTE_VISIT_KEY);
+  const routeVisitId =
+    existingRouteVisitId && existingRouteVisitId.trim().length > 0
+      ? existingRouteVisitId
+      : `${window.location.pathname}::${Date.now()}::manual`;
+
+  if (!existingRouteVisitId) {
+    storage.setItem(JOURNEY_ROUTE_VISIT_KEY, routeVisitId);
+  }
+
+  const previousRoute = storage.getItem(JOURNEY_PREVIOUS_ROUTE_KEY);
+
+  return {
+    previousRoute,
+    routeVisitId,
+    sessionInternalId,
+  };
+}
 
 type TrackEventInput = {
   eventName: string;
@@ -117,15 +204,26 @@ export function getAnalyticsBaseProperties(): Record<string, unknown> {
 
   const route = typeof window !== "undefined" ? window.location.pathname : null;
   const url = typeof window !== "undefined" ? window.location.href : null;
+  const pathname =
+    typeof window !== "undefined" ? window.location.pathname : null;
   const search = typeof window !== "undefined" ? window.location.search : null;
   const referrer = typeof document !== "undefined" ? document.referrer : null;
+  const authContext = getAuthAnalyticsContext();
+  const journeyContext = getJourneyContext();
 
   return {
     route,
     url,
+    pathname,
     search,
     referrer,
-    source: "web",
+    previous_route: journeyContext.previousRoute,
+    routeVisitId: journeyContext.routeVisitId,
+    sessionInternalId: journeyContext.sessionInternalId,
+    isAuthenticated: authContext.isAuthenticated,
+    userId: authContext.userId,
+    user_id: authContext.userId,
+    source: "frontend",
     ...analyticsContext,
     ...utm,
   };
@@ -193,8 +291,18 @@ export async function trackEvent(input: TrackEventInput): Promise<void> {
   const baseProperties = getAnalyticsBaseProperties();
   const metadata = {
     ...baseProperties,
+    event_version: input.eventVersion ?? 1,
     ...input.properties,
   };
+
+  metadata.source = "frontend";
+
+  const authContext = getAuthAnalyticsContext();
+  if (authContext.userId) {
+    metadata.userId = authContext.userId;
+    metadata.user_id = authContext.userId;
+    metadata.isAuthenticated = true;
+  }
 
   await postBusinessFunnelEvent({
     eventName: input.eventName,

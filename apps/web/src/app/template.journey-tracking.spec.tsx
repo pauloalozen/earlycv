@@ -4,9 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const trackEventMock = vi.hoisted(() => vi.fn());
 const usePathnameMock = vi.hoisted(() => vi.fn(() => "/adaptar"));
+const useSearchParamsMock = vi.hoisted(
+  () => vi.fn(() => new URLSearchParams()),
+);
 
 vi.mock("next/navigation", () => ({
   usePathname: usePathnameMock,
+  useSearchParams: useSearchParamsMock,
 }));
 
 vi.mock("@/lib/analytics-tracking", () => ({
@@ -21,6 +25,8 @@ describe("Template journey tracking", () => {
     trackEventMock.mockResolvedValue(undefined);
     usePathnameMock.mockReset();
     usePathnameMock.mockReturnValue("/adaptar");
+    useSearchParamsMock.mockReset();
+    useSearchParamsMock.mockReturnValue(new URLSearchParams());
     sessionStorage.clear();
   });
 
@@ -91,7 +97,120 @@ describe("Template journey tracking", () => {
         ([payload]) => payload.eventName,
       );
       expect(names).toContain("page_leave");
+      expect(names).toContain("site_exit_candidate");
     });
+  });
+
+  it("does not emit site_exit_candidate on internal route change", async () => {
+    usePathnameMock.mockReturnValue("/entrar");
+
+    const first = render(
+      <Template>
+        <div>entrar</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const names = trackEventMock.mock.calls.map(
+        ([payload]) => payload.eventName,
+      );
+      expect(names).toContain("page_view");
+    });
+
+    first.unmount();
+    usePathnameMock.mockReturnValue("/dashboard");
+
+    render(
+      <Template>
+        <div>dashboard</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const names = trackEventMock.mock.calls.map(
+        ([payload]) => payload.eventName,
+      );
+      expect(names).toContain("page_leave");
+      expect(names).not.toContain("site_exit");
+      expect(names).not.toContain("site_exit_candidate");
+    });
+  });
+
+  it("emits a single page_leave per route change", async () => {
+    usePathnameMock.mockReturnValue("/");
+    const first = render(
+      <Template>
+        <div>home</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const pageViews = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "page_view",
+      );
+      expect(pageViews.length).toBeGreaterThan(0);
+    });
+
+    first.unmount();
+    usePathnameMock.mockReturnValue("/entrar");
+    render(
+      <Template>
+        <div>entrar</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const leaves = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "page_leave",
+      );
+      expect(leaves).toHaveLength(1);
+    });
+  });
+
+  it("uses different routeVisitId per route while keeping sessionInternalId", async () => {
+    usePathnameMock.mockReturnValue("/");
+    const first = render(
+      <Template>
+        <div>home</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const pageViews = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "page_view",
+      );
+      expect(pageViews.length).toBeGreaterThan(0);
+    });
+
+    const firstView = trackEventMock.mock.calls.find(
+      ([payload]) => payload.eventName === "page_view",
+    )?.[0];
+
+    first.unmount();
+    usePathnameMock.mockReturnValue("/entrar");
+    render(
+      <Template>
+        <div>entrar</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const pageViews = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "page_view",
+      );
+      expect(pageViews.length).toBeGreaterThan(1);
+    });
+
+    const secondView = trackEventMock.mock.calls
+      .filter(([payload]) => payload.eventName === "page_view")
+      .at(-1)?.[0];
+
+    expect(firstView?.properties?.routeVisitId).not.toBe(
+      secondView?.properties?.routeVisitId,
+    );
+    expect(firstView?.properties?.sessionInternalId).toBe(
+      secondView?.properties?.sessionInternalId,
+    );
   });
 
   it("does not duplicate navigation events in strict mode mount cycle", async () => {
@@ -133,6 +252,26 @@ describe("Template journey tracking", () => {
 
     const checkoutForm = first.getByTestId("checkout-form");
     fireEvent.submit(checkoutForm);
+
+    expect(
+      trackEventMock.mock.calls.some(
+        ([payload]) => payload.eventName === "plan_selected",
+      ),
+    ).toBe(true);
+    expect(
+      trackEventMock.mock.calls.some(
+        ([payload]) => payload.eventName === "checkout_started",
+      ),
+    ).toBe(true);
+
+    const planSelectedCalls = trackEventMock.mock.calls.filter(
+      ([payload]) => payload.eventName === "plan_selected",
+    );
+    const checkoutStartedCalls = trackEventMock.mock.calls.filter(
+      ([payload]) => payload.eventName === "checkout_started",
+    );
+    expect(planSelectedCalls).toHaveLength(1);
+    expect(checkoutStartedCalls).toHaveLength(1);
 
     first.unmount();
     vi.advanceTimersByTime(61_000);

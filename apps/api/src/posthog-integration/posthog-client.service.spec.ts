@@ -57,3 +57,52 @@ test("capture appends analytics env and app properties", () => {
   process.env.RAILWAY_ENVIRONMENT_NAME = previousRailwayEnv;
   process.env.NODE_ENV = previousNodeEnv;
 });
+
+test("capture prioritizes authenticated user_id as distinctId", () => {
+  const captured: Array<Record<string, unknown>> = [];
+  const service = new PosthogClientService({
+    apiKey: "phc_test_key",
+    enabled: true,
+    flushIntervalMs: 5000,
+    maxBatchSize: 50,
+    projectId: "",
+  });
+
+  (service as any).client = {
+    capture: (message: Record<string, unknown>) => captured.push(message),
+    flush: async () => {},
+    shutdown: () => {},
+  };
+  (service as any).isConfigured = true;
+
+  service.capture("page_view", {
+    session_internal_id: "session-1",
+    user_id: "user-99",
+  });
+
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0].distinctId, "user-99");
+});
+
+test("capture keeps anonymous fallback without user_id", () => {
+  const captured: Array<Record<string, unknown>> = [];
+  const service = new PosthogClientService({
+    apiKey: "phc_test_key",
+    enabled: true,
+    flushIntervalMs: 5000,
+    maxBatchSize: 50,
+    projectId: "",
+  });
+
+  (service as any).client = {
+    capture: (message: Record<string, unknown>) => captured.push(message),
+    flush: async () => {},
+    shutdown: () => {},
+  };
+  (service as any).isConfigured = true;
+
+  service.capture("page_view", {});
+
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0].distinctId, "anonymous");
+});
