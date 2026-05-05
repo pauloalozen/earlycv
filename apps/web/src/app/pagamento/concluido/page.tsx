@@ -16,6 +16,7 @@ import {
   type CheckoutStatusResponse,
   getCheckoutStatusClient,
 } from "@/lib/payments-browser-api";
+import { trackEvent } from "@/lib/analytics-tracking";
 
 type UIState = "polling" | "approved" | "pending-long" | "failed" | "error";
 
@@ -26,6 +27,10 @@ function ConcluidoContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const checkoutId = searchParams.get("checkoutId");
+  const mpPaymentId =
+    searchParams.get("payment_id") ?? searchParams.get("collection_id");
+  const mpCollectionStatus = searchParams.get("collection_status");
+  const mpStatus = searchParams.get("status") ?? mpCollectionStatus;
 
   const [state, setState] = useState<UIState>("polling");
   const [result, setResult] = useState<CheckoutStatusResponse | null>(null);
@@ -33,6 +38,23 @@ function ConcluidoContent() {
   const [downloadStage, setDownloadStage] =
     useState<DownloadProgressStage | null>(null);
   const pollCount = useRef(0);
+
+  useEffect(() => {
+    if (!checkoutId) {
+      return;
+    }
+
+    void trackEvent({
+      eventName: "payment_return_viewed",
+      properties: {
+        checkoutId,
+        collection_status: mpCollectionStatus,
+        paymentId: mpPaymentId,
+        source_detail: "pagamento_concluido",
+        status: mpStatus,
+      },
+    });
+  }, [checkoutId, mpCollectionStatus, mpPaymentId, mpStatus]);
 
   useEffect(() => {
     if (!checkoutId) {

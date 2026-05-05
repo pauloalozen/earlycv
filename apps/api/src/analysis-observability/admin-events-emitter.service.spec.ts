@@ -80,6 +80,31 @@ test("buildCatalog returns all protection and business events from registries", 
       eventVersion: 1,
     },
   );
+  assert.deepEqual(
+    catalog.business.find(
+      (event) => event.eventName === "buy_credits_clicked",
+    ),
+    {
+      eventName: "buy_credits_clicked",
+      eventVersion: 1,
+    },
+  );
+  assert.deepEqual(
+    catalog.business.find((event) => event.eventName === "plan_selected"),
+    {
+      eventName: "plan_selected",
+      eventVersion: 1,
+    },
+  );
+  assert.deepEqual(
+    catalog.business.find(
+      (event) => event.eventName === "cv_unlock_completed",
+    ),
+    {
+      eventName: "cv_unlock_completed",
+      eventVersion: 1,
+    },
+  );
 });
 
 test("emit single business event sends synthetic metadata with ownership source", async () => {

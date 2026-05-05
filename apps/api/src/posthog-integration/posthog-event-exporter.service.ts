@@ -28,6 +28,7 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   teaser_viewed: "teaser_viewed",
   signup_started: "signup_started",
   cta_signup_click: "cta_signup_click",
+  buy_credits_clicked: "buy_credits_clicked",
   signup_completed: "signup_completed",
   login_completed: "login_completed",
   full_analysis_viewed: "full_analysis_viewed",
@@ -35,8 +36,13 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   unlock_cv_click: "unlock_cv_click",
   checkout_abandoned: "checkout_abandoned",
   checkout_started: "checkout_started",
+  cv_unlock_completed: "cv_unlock_completed",
+  cv_unlock_started: "cv_unlock_started",
   payment_approved: "payment_approved",
   payment_failed: "payment_failed",
+  payment_return_viewed: "payment_return_viewed",
+  plan_selected: "plan_selected",
+  site_exit_candidate: "site_exit_candidate",
   dashboard_viewed: "dashboard_viewed",
 };
 

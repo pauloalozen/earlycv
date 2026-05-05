@@ -675,6 +675,11 @@ export default function ResultadoPage() {
 
   const handleUseCredit = async () => {
     if (!hasCredits || claiming) return;
+    emitResultadoEvent("cv_unlock_started", {
+      adaptationId: reviewAdaptationId,
+      source_detail: "resultado",
+      unlockMethod: "credit",
+    });
     const startedAt = Date.now();
     setReleaseError(null);
     setReleaseStatus("loading");
@@ -770,6 +775,12 @@ export default function ResultadoPage() {
       await waitForMinimumDuration(startedAt, RELEASE_MIN_LOADING_MS);
       setReleaseStatus("success");
       setClaiming(false);
+      emitResultadoEvent("cv_unlock_completed", {
+        adaptationId: payload.id ?? reviewAdaptationId,
+        source_detail: "resultado",
+        unlockMethod: "credit",
+        remainingCredits: 0,
+      });
       clearGuestAnalysisRaw();
     } catch (err) {
       const message =
@@ -884,6 +895,11 @@ export default function ResultadoPage() {
 
   const handleRedeemReview = async () => {
     if (!reviewAdaptationId || hasCredits !== true || claiming) return;
+    emitResultadoEvent("cv_unlock_started", {
+      adaptationId: reviewAdaptationId,
+      source_detail: "resultado",
+      unlockMethod: "review_redeem",
+    });
     const startedAt = Date.now();
     setReleaseError(null);
     setReleaseStatus("loading");
@@ -921,6 +937,12 @@ export default function ResultadoPage() {
       await waitForMinimumDuration(startedAt, RELEASE_MIN_LOADING_MS);
       setReleaseStatus("success");
       setClaiming(false);
+      emitResultadoEvent("cv_unlock_completed", {
+        adaptationId: reviewAdaptationId,
+        source_detail: "resultado",
+        unlockMethod: "review_redeem",
+        remainingCredits: 0,
+      });
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
@@ -3905,6 +3927,14 @@ export default function ResultadoPage() {
                             ? `/planos?aid=${reviewAdaptationId}&source=resultado-buy-credits`
                             : "/planos"
                         }
+                        onClick={() => {
+                          emitResultadoEvent("buy_credits_clicked", {
+                            adaptationId: reviewAdaptationId,
+                            currentCredits: hasCredits,
+                            requiredCredits: 1,
+                            source_detail: "resultado",
+                          });
+                        }}
                         style={{
                           display: "block",
                           background: "#fafaf6",
@@ -3928,6 +3958,14 @@ export default function ResultadoPage() {
                           ? `/planos?aid=${reviewAdaptationId}&source=resultado-buy-credits`
                           : "/planos"
                       }
+                      onClick={() => {
+                        emitResultadoEvent("buy_credits_clicked", {
+                          adaptationId: reviewAdaptationId,
+                          currentCredits: hasCredits,
+                          requiredCredits: 1,
+                          source_detail: "resultado",
+                        });
+                      }}
                       style={{
                         display: "block",
                         background: "#fafaf6",

@@ -16,6 +16,7 @@ import {
   getCheckoutStatusClient,
   resumeCheckoutClient,
 } from "@/lib/payments-browser-api";
+import { trackEvent } from "@/lib/analytics-tracking";
 
 type UIState = "waiting" | "approved" | "failed" | "timeout";
 
@@ -148,13 +149,23 @@ function PendenteContent() {
   useEffect(() => {
     if (!checkoutId) return;
     if (!mpPaymentId && !mpPreferenceId && !mpStatus) return;
+    void trackEvent({
+      eventName: "payment_return_viewed",
+      properties: {
+        checkoutId,
+        collection_status: mpCollectionStatus,
+        paymentId: mpPaymentId,
+        source_detail: "pagamento_pendente",
+        status: mpStatus,
+      },
+    });
     console.info("[payment-pending:return]", {
       checkoutId,
       payment_id: mpPaymentId,
       preference_id: mpPreferenceId,
       status: mpStatus,
     });
-  }, [checkoutId, mpPaymentId, mpPreferenceId, mpStatus]);
+  }, [checkoutId, mpCollectionStatus, mpPaymentId, mpPreferenceId, mpStatus]);
 
   return (
     <AuthMonoShell>

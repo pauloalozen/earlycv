@@ -310,6 +310,22 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                             name="planId"
                             value={plan.checkoutPlanId}
                           />
+                          <input type="hidden" name="planName" value={plan.label} />
+                          <input
+                            type="hidden"
+                            name="planCredits"
+                            value={
+                              plan.features.find((feature) =>
+                                feature.toLowerCase().includes("créditos"),
+                              ) ?? ""
+                            }
+                          />
+                          <input
+                            type="hidden"
+                            name="planPrice"
+                            value={`${plan.price}${plan.cents}`}
+                          />
+                          <input type="hidden" name="planCurrency" value="BRL" />
                           {adaptationId && (
                             <input
                               type="hidden"
