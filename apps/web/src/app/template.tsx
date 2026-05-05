@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { JourneyTrackerProvider } from "./_components/journey-tracker-provider";
 import { PosthogAuthProvider } from "./_components/posthog-auth-provider";
 
@@ -22,24 +22,26 @@ export default function Template({
 
   return (
     <PosthogAuthProvider>
-      <JourneyTrackerProvider>
-        {loading && (
+      <Suspense fallback={null}>
+        <JourneyTrackerProvider>
+          {loading && (
+            <div
+              className="route-transition-overlay"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <div className="route-transition-spinner" aria-hidden="true" />
+              <span className="sr-only">Loading page content</span>
+            </div>
+          )}
           <div
-            className="route-transition-overlay"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
+            className={`route-transition-content ${loading ? "--loading" : "--ready"}`}
           >
-            <div className="route-transition-spinner" aria-hidden="true" />
-            <span className="sr-only">Loading page content</span>
+            {children}
           </div>
-        )}
-        <div
-          className={`route-transition-content ${loading ? "--loading" : "--ready"}`}
-        >
-          {children}
-        </div>
-      </JourneyTrackerProvider>
+        </JourneyTrackerProvider>
+      </Suspense>
     </PosthogAuthProvider>
   );
 }

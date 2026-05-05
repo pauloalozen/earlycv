@@ -289,7 +289,7 @@ async function postBusinessFunnelEvent(payload: {
 
 export async function trackEvent(input: TrackEventInput): Promise<void> {
   const baseProperties = getAnalyticsBaseProperties();
-  const metadata = {
+  const metadata: Record<string, unknown> = {
     ...baseProperties,
     event_version: input.eventVersion ?? 1,
     ...input.properties,

@@ -1029,32 +1029,42 @@ export function JourneyTrackerProvider({
         return;
       }
 
+      const activeRouteVisitSafe =
+        activeRouteVisit as NonNullable<typeof activeRouteVisit>;
+
+      const {
+        pathname: activeRouteVisitPathname,
+        routeVisitId: activeRouteVisitId,
+        startedAtMs: activeRouteVisitStartedAtMs,
+      } = activeRouteVisitSafe;
+
       const snapshot = readCurrentRouteVisitSnapshot();
+      const snapshotRouteVisitId = snapshot?.routeVisitId;
       const routeVisitSnapshot =
-        snapshot && snapshot.routeVisitId === activeRouteVisit.routeVisitId
+        snapshotRouteVisitId === activeRouteVisitId
           ? snapshot
           : null;
 
       const siteExitPayload = {
         eventName: "site_exit_candidate",
         eventVersion: 1,
-        idempotencyKey: `${sessionInternalId}:${activeRouteVisit.routeVisitId}:site_exit_candidate`,
+        idempotencyKey: `${sessionInternalId}:${activeRouteVisitId}:site_exit_candidate`,
         metadata: buildMetadata({
           occurredAt: new Date().toISOString(),
           previousRoute:
             routeVisitSnapshot?.previousRoute ?? previousRouteRef.current,
-          route: routeVisitSnapshot?.entryRoute ?? activeRouteVisit.pathname,
+          route: routeVisitSnapshot?.entryRoute ?? activeRouteVisitPathname,
           url:
             routeVisitSnapshot?.entryUrl ??
-            `${window.location.origin}${activeRouteVisit.pathname}`,
+            `${window.location.origin}${activeRouteVisitPathname}`,
           pathname:
-            routeVisitSnapshot?.entryPathname ?? activeRouteVisit.pathname,
+            routeVisitSnapshot?.entryPathname ?? activeRouteVisitPathname,
           search: routeVisitSnapshot?.entrySearch ?? "",
           referrer: routeVisitSnapshot?.referrer ?? document.referrer,
-          routeVisitId: activeRouteVisit.routeVisitId,
+          routeVisitId: activeRouteVisitId,
           sessionInternalId,
           leaveReason,
-          timeOnPageMs: Math.max(0, Date.now() - activeRouteVisit.startedAtMs),
+          timeOnPageMs: Math.max(0, Date.now() - activeRouteVisitStartedAtMs),
         }),
       };
 
