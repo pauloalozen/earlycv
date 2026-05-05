@@ -7,6 +7,7 @@ const AUTH_ANALYTICS_STORAGE_KEY = "analytics_auth_context";
 const IDENTIFIED_USER_STORAGE_KEY = "posthog_identified_user_id";
 const AUTH_SESSION_IDENTIFIED_STORAGE_KEY =
   "analytics_auth_session_identified_user_id";
+const JOURNEY_SESSION_KEY = "journey_session_internal_id";
 
 type SessionPayload = {
   authenticated: boolean;
@@ -70,6 +71,14 @@ function getPosthogConfig() {
   return { apiHost, apiKey };
 }
 
+function getJourneySessionInternalId() {
+  if (typeof sessionStorage === "undefined") {
+    return "unknown-session";
+  }
+
+  return sessionStorage.getItem(JOURNEY_SESSION_KEY) ?? "unknown-session";
+}
+
 export function PosthogAuthProvider({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -125,6 +134,31 @@ export function PosthogAuthProvider({
         userId,
       });
 
+      if (userId) {
+        const shouldEmitAuthSessionIdentified =
+          previousAuthState === "anonymous" || previousAuthState === "unknown";
+
+        if (shouldEmitAuthSessionIdentified) {
+          const journeySessionInternalId = getJourneySessionInternalId();
+          void trackEvent({
+            eventName: "auth_session_identified",
+            eventVersion: 1,
+            idempotencyKey: `auth_session_identified:${journeySessionInternalId}:${userId}:${Date.now()}`,
+            properties: {
+              isAuthenticated: true,
+              userId,
+              user_id: userId,
+              identified_user_id: userId,
+              auth_provider: undefined,
+              auth_flow: undefined,
+              previous_auth_state: previousAuthState,
+              source_detail: "posthog_auth_provider",
+            },
+          });
+          sessionStorage.setItem(AUTH_SESSION_IDENTIFIED_STORAGE_KEY, userId);
+        }
+      }
+
       const posthogConfig = getPosthogConfig();
       if (!posthogConfig) {
         return;
@@ -178,30 +212,6 @@ export function PosthogAuthProvider({
             ? { name: payload.user.name }
             : {}),
         });
-      }
-
-      const shouldEmitAuthSessionIdentified =
-        (previousAuthState === "anonymous" ||
-          previousAuthState === "unknown") &&
-        storedAuthIdentifiedUserId !== userId;
-
-      if (shouldEmitAuthSessionIdentified) {
-        void trackEvent({
-          eventName: "auth_session_identified",
-          eventVersion: 1,
-          idempotencyKey: `auth_session_identified:${userId}`,
-          properties: {
-            isAuthenticated: true,
-            userId,
-            user_id: userId,
-            identified_user_id: userId,
-            auth_provider: undefined,
-            auth_flow: undefined,
-            previous_auth_state: previousAuthState,
-            source_detail: "posthog_auth_provider",
-          },
-        });
-        sessionStorage.setItem(AUTH_SESSION_IDENTIFIED_STORAGE_KEY, userId);
       }
 
       lastIdentifiedUserIdRef.current = userId;

@@ -10,7 +10,10 @@ vi.mock("@/lib/blog/tracking", () => ({
   trackBlogPostViewed: trackBlogPostViewedMock,
 }));
 
-import { BlogIndexViewTracker, BlogPostViewTracker } from "./blog-view-trackers";
+import {
+  BlogIndexViewTracker,
+  BlogPostViewTracker,
+} from "./blog-view-trackers";
 
 describe("blog view trackers", () => {
   beforeEach(() => {

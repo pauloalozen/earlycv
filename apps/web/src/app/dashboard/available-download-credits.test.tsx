@@ -5,7 +5,10 @@ import { AvailableDownloadCredits } from "./available-download-credits";
 describe("AvailableDownloadCredits", () => {
   it("decrements credits after redeem event", async () => {
     render(
-      <AvailableDownloadCredits initialDisplay={3} initialCreditsRemaining={3} />,
+      <AvailableDownloadCredits
+        initialDisplay={3}
+        initialCreditsRemaining={3}
+      />,
     );
 
     expect(screen.getByText("3")).toBeTruthy();

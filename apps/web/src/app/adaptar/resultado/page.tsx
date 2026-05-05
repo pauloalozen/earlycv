@@ -1103,7 +1103,7 @@ export default function ResultadoPage() {
     (s, a) => s + a.pontos,
     0,
   );
-  const totalAjustes =
+  const _totalAjustes =
     data.ajustes_conteudo.length + data.keywords.ausentes.length;
 
   const scoreProjetado = Math.min(
@@ -3930,8 +3930,9 @@ export default function ResultadoPage() {
                         onClick={() => {
                           emitResultadoEvent("buy_credits_clicked", {
                             adaptationId: reviewAdaptationId,
-                            currentCredits: hasCredits,
+                            currentCredits: availableCreditsDisplay,
                             requiredCredits: 1,
+                            cta_location: "resultado_locked_cv_primary",
                             source_detail: "resultado",
                           });
                         }}
@@ -3961,8 +3962,9 @@ export default function ResultadoPage() {
                       onClick={() => {
                         emitResultadoEvent("buy_credits_clicked", {
                           adaptationId: reviewAdaptationId,
-                          currentCredits: hasCredits,
+                          currentCredits: availableCreditsDisplay,
                           requiredCredits: 1,
+                          cta_location: "resultado_buy_credits_card",
                           source_detail: "resultado",
                         });
                       }}

@@ -6,7 +6,7 @@ vi.mock("@/lib/app-session.server", () => ({
   getCurrentAppUserFromCookies: getCurrentAppUserFromCookiesMock,
 }));
 
-import { GET, dynamic } from "./route";
+import { dynamic, GET } from "./route";
 
 describe("/api/session route", () => {
   it("returns anonymous payload for unauthenticated users", async () => {

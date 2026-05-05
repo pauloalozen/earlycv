@@ -8,6 +8,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AuthMonoShell } from "@/components/auth/auth-mono-shell";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
+import { trackEvent } from "@/lib/analytics-tracking";
 import {
   type DownloadProgressStage,
   downloadFromApi,
@@ -16,7 +17,6 @@ import {
   getCheckoutStatusClient,
   resumeCheckoutClient,
 } from "@/lib/payments-browser-api";
-import { trackEvent } from "@/lib/analytics-tracking";
 
 type UIState = "waiting" | "approved" | "failed" | "timeout";
 

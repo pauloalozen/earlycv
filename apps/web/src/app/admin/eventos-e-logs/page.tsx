@@ -30,6 +30,11 @@ const BLOG_EVENT_NAMES = [
   "blog_cta_clicked",
 ] as const;
 
+const AUTH_EVENT_NAMES = [
+  "auth_oauth_redirect_started",
+  "auth_session_identified",
+] as const;
+
 type EventResultsState = {
   error?: string;
   failed: number;
@@ -347,6 +352,22 @@ async function AdminEventsLogsPageBody({
             </p>
           </Card>
 
+          <Card className="space-y-3" variant="ghost">
+            <h2 className="text-lg font-bold tracking-tight text-stone-900">
+              Auth highlights
+            </h2>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-stone-700">
+              <li>
+                <strong>auth_oauth_redirect_started</strong>: valida o inicio do
+                redirecionamento OAuth no clique do provedor.
+              </li>
+              <li>
+                <strong>auth_session_identified</strong>: valida a identificacao
+                de sessao apos confirmacao de autenticacao no frontend.
+              </li>
+            </ul>
+          </Card>
+
           <form action={emitEventsAction}>
             <input name="mode" type="hidden" value="all" />
             <button className={buttonVariants()} type="submit">
@@ -382,6 +403,57 @@ async function AdminEventsLogsPageBody({
                 </p>
                 <div className="grid gap-3">
                   {BLOG_EVENT_NAMES.map((eventName) => {
+                    const matched = catalog.business.find(
+                      (entry) => entry.eventName === eventName,
+                    );
+
+                    return (
+                      <div
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white px-4 py-3"
+                        key={eventName}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-mono text-xs uppercase tracking-[0.14em] text-stone-600">
+                            {eventName}
+                          </p>
+                          <Badge variant="neutral">
+                            {matched
+                              ? `catalogado v${matched.eventVersion}`
+                              : "nao catalogado"}
+                          </Badge>
+                        </div>
+                        <form action={emitEventsAction}>
+                          <input
+                            name="eventName"
+                            type="hidden"
+                            value={eventName}
+                          />
+                          <input name="mode" type="hidden" value="single" />
+                          <button
+                            className={buttonVariants({
+                              size: "sm",
+                              variant: "outline",
+                            })}
+                            type="submit"
+                          >
+                            Disparar synthetic
+                          </button>
+                        </form>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+              <Card className="space-y-3" variant="ghost">
+                <h2 className="text-xl font-bold tracking-tight text-stone-900">
+                  Eventos de Auth
+                </h2>
+                <p className="text-sm text-stone-600">
+                  Eventos de autenticacao client-side para validar jornada pre e
+                  pos identify.
+                </p>
+                <div className="grid gap-3">
+                  {AUTH_EVENT_NAMES.map((eventName) => {
                     const matched = catalog.business.find(
                       (entry) => entry.eventName === eventName,
                     );

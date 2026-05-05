@@ -142,7 +142,7 @@ test("AuthService registers a user and stores a hashed refresh token", async () 
 
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0]?.to, email);
-  assert.equal(sentMessages[0]?.subject.includes("codigo"), true);
+  assert.match(sentMessages[0]?.subject ?? "", /c[oó]digo/i);
 
   const storedUser = await (database.user as UserDelegate).findUnique({
     where: { email },

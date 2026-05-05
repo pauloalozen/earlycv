@@ -97,7 +97,7 @@ describe("Template journey tracking", () => {
         ([payload]) => payload.eventName,
       );
       expect(names).toContain("page_leave");
-      expect(names).toContain("site_exit_candidate");
+      expect(names).not.toContain("site_exit_candidate");
     });
   });
 
@@ -502,5 +502,56 @@ describe("Template journey tracking", () => {
       ([payload]) => payload.eventName === "checkout_abandoned",
     );
     expect(abandonedCalls).toHaveLength(0);
+  });
+
+  it("does not emit site_exit_candidate on checkout submit and emits checkout_redirect leave", async () => {
+    usePathnameMock.mockReturnValue("/planos");
+    window.history.replaceState({}, "", "/planos");
+    sessionStorage.setItem(
+      "analytics_auth_context",
+      JSON.stringify({ isAuthenticated: true, userId: "user-checkout-1" }),
+    );
+
+    render(
+      <Template>
+        <form action="/plans/checkout" method="post" data-testid="checkout-redirect-form">
+          <input type="hidden" name="planId" value="starter" />
+          <input type="hidden" name="planName" value="Starter" />
+          <input type="hidden" name="planCredits" value="3" />
+          <input type="hidden" name="planPrice" value="11.90" />
+          <input type="hidden" name="planCurrency" value="BRL" />
+          <button type="submit">Checkout</button>
+        </form>
+      </Template>,
+    );
+
+    const checkoutForm = document.querySelector(
+      '[data-testid="checkout-redirect-form"]',
+    ) as HTMLFormElement;
+    fireEvent.submit(checkoutForm);
+    window.dispatchEvent(new Event("beforeunload"));
+    window.dispatchEvent(new Event("pagehide"));
+
+    await waitFor(() => {
+      const names = trackEventMock.mock.calls.map(
+        ([payload]) => payload.eventName,
+      );
+
+      expect(names).toContain("checkout_started");
+      expect(names).toContain("page_leave");
+      expect(names).not.toContain("site_exit_candidate");
+    });
+
+    const leave = trackEventMock.mock.calls.find(
+      ([payload]) => payload.eventName === "page_leave",
+    )?.[0];
+
+    expect(leave?.properties?.leave_reason).toBe("checkout_redirect");
+    expect(leave?.properties?.planId).toBe("starter");
+    expect(leave?.properties?.planName).toBe("Starter");
+    expect(leave?.properties?.amount).toBe(11.9);
+    expect(leave?.properties?.credits).toBe(3);
+    expect(leave?.properties?.currency).toBe("BRL");
+    expect(leave?.properties?.provider).toBe("mercado_pago");
   });
 });

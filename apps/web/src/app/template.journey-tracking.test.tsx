@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const trackEventMock = vi.hoisted(() => vi.fn());
 const usePathnameMock = vi.hoisted(() => vi.fn(() => "/"));
-const useSearchParamsMock = vi.hoisted(
-  () => vi.fn(() => new URLSearchParams()),
+const useSearchParamsMock = vi.hoisted(() =>
+  vi.fn(() => new URLSearchParams()),
 );
 
 vi.mock("next/navigation", () => ({
@@ -145,7 +145,9 @@ describe("Template journey tracking strict mode", () => {
   it("emits page_leave with origin url and next destination url", async () => {
     window.history.replaceState({}, "", "/?utm_source=linkedin");
     usePathnameMock.mockReturnValue("/");
-    useSearchParamsMock.mockReturnValue(new URLSearchParams("utm_source=linkedin"));
+    useSearchParamsMock.mockReturnValue(
+      new URLSearchParams("utm_source=linkedin"),
+    );
 
     const first = render(
       <Template>

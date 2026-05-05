@@ -32,6 +32,9 @@ const LOADING_STEPS = [
 ];
 
 const CV_INPUT_BOX_MIN_HEIGHT = 154;
+const IS_TEST_ENV = process.env.NODE_ENV === "test";
+const ANALYSIS_MIN_LOADING_MS = IS_TEST_ENV ? 0 : 10000;
+const RESULT_TRANSITION_DELAY_MS = IS_TEST_ENV ? 0 : 2000;
 
 const EXAMPLE_JOB = `Analista de Dados Sênior — Nubank
 
@@ -435,7 +438,7 @@ export default function AdaptarPage() {
         });
         const [result] = await Promise.all([
           analyzeAuthenticatedCv(formData),
-          new Promise((r) => setTimeout(r, 10000)),
+          new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
         ]);
         analyzeResult = result;
       } else if (isAuthenticated && cvMode === "upload" && file) {
@@ -450,7 +453,7 @@ export default function AdaptarPage() {
         });
         const [result] = await Promise.all([
           analyzeAuthenticatedCv(formData),
-          new Promise((r) => setTimeout(r, 10000)),
+          new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
         ]);
         analyzeResult = result;
       } else if (isAuthenticated && cvMode === "text") {
@@ -463,7 +466,7 @@ export default function AdaptarPage() {
         });
         const [result] = await Promise.all([
           analyzeAuthenticatedCv(formData),
-          new Promise((r) => setTimeout(r, 10000)),
+          new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
         ]);
         analyzeResult = result;
       } else {
@@ -477,7 +480,7 @@ export default function AdaptarPage() {
           });
           const [result] = await Promise.all([
             analyzeGuestCv(formData),
-            new Promise((r) => setTimeout(r, 10000)),
+            new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
           ]);
           analyzeResult = result;
           if (!analyzeResult.ok) {
@@ -486,7 +489,7 @@ export default function AdaptarPage() {
             return;
           }
           setLoadingStep(3);
-          await new Promise((r) => setTimeout(r, 2000));
+          await new Promise((r) => setTimeout(r, RESULT_TRANSITION_DELAY_MS));
           setGuestAnalysisRaw(
             JSON.stringify({
               ...analyzeResult,
@@ -513,7 +516,7 @@ export default function AdaptarPage() {
         });
         const [result] = await Promise.all([
           analyzeGuestCv(formData),
-          new Promise((r) => setTimeout(r, 10000)),
+          new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
         ]);
         analyzeResult = result;
       }
@@ -523,7 +526,7 @@ export default function AdaptarPage() {
         return;
       }
       setLoadingStep(3);
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, RESULT_TRANSITION_DELAY_MS));
 
       if (isAuthenticated) {
         try {

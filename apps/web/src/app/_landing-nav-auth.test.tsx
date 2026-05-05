@@ -31,7 +31,9 @@ describe("LandingNavAuth", () => {
     expect(screen.getByRole("link", { name: "Blog" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Entrar" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Entrar →" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Ir para o painel →" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Ir para o painel →" }),
+    ).toBeNull();
     expect(
       screen.getByTestId("landing-auth-placeholder").getAttribute("style"),
     ).toContain("width: 176px");
@@ -46,18 +48,22 @@ describe("LandingNavAuth", () => {
     render(<LandingNavAuth />);
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: "Ir para o painel →" })).toBeTruthy();
+      expect(
+        screen.getByRole("link", { name: "Ir para o painel →" }),
+      ).toBeTruthy();
     });
 
     expect(screen.queryByRole("link", { name: "Entrar" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Entrar →" })).toBeNull();
     expect(screen.getByRole("link", { name: "Blog" })).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Ir para o painel →" }).getAttribute("style"),
+      screen
+        .getByRole("link", { name: "Ir para o painel →" })
+        .getAttribute("style"),
     ).toContain("width: 176px");
   });
 
-  it("shows blog link instead of entrar when unauthenticated", async () => {
+  it("shows blog link and entrar when unauthenticated", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({ authenticated: false }),
@@ -66,13 +72,12 @@ describe("LandingNavAuth", () => {
     render(<LandingNavAuth />);
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: "Entrar →" })).toBeTruthy();
+      expect(screen.getByRole("link", { name: "Entrar" })).toBeTruthy();
     });
 
-    expect(screen.queryByRole("link", { name: "Entrar" })).toBeNull();
     expect(screen.getByRole("link", { name: "Blog" })).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Entrar →" }).getAttribute("style"),
+      screen.getByRole("link", { name: "Entrar" }).getAttribute("style"),
     ).toContain("width: 176px");
   });
 });

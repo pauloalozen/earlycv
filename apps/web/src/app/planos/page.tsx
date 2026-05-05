@@ -180,6 +180,16 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
             {PLANS.map((plan) => {
               const dark = plan.featured;
               const priceNum = plan.price.replace("R$", "");
+              const creditsFeature = plan.features.find((feature) =>
+                feature.toLowerCase().includes("créditos"),
+              );
+              const credits = creditsFeature
+                ? Number.parseInt(creditsFeature, 10)
+                : null;
+              const cents = plan.cents.replace(/[^\d]/g, "").padStart(2, "0");
+              const amount = Number.parseFloat(
+                `${priceNum.replace(/[^\d]/g, "")}.${cents}`,
+              );
               return (
                 <div
                   key={plan.id}
@@ -310,22 +320,33 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                             name="planId"
                             value={plan.checkoutPlanId}
                           />
-                          <input type="hidden" name="planName" value={plan.label} />
+                          <input
+                            type="hidden"
+                            name="planName"
+                            value={plan.label}
+                          />
                           <input
                             type="hidden"
                             name="planCredits"
-                            value={
-                              plan.features.find((feature) =>
-                                feature.toLowerCase().includes("créditos"),
-                              ) ?? ""
-                            }
+                            value={credits ?? ""}
                           />
                           <input
                             type="hidden"
                             name="planPrice"
-                            value={`${plan.price}${plan.cents}`}
+                            value={
+                              Number.isFinite(amount) ? amount.toFixed(2) : ""
+                            }
                           />
-                          <input type="hidden" name="planCurrency" value="BRL" />
+                          <input
+                            type="hidden"
+                            name="planCurrency"
+                            value="BRL"
+                          />
+                          <input
+                            type="hidden"
+                            name="sourceDetail"
+                            value="planos_card_cta"
+                          />
                           {adaptationId && (
                             <input
                               type="hidden"

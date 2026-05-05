@@ -8,6 +8,8 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
 > = {
   analysis_started: "backend",
   analyze_submit_clicked: "frontend",
+  auth_session_identified: "frontend",
+  auth_oauth_redirect_started: "frontend",
   blog_cta_clicked: "frontend",
   blog_index_viewed: "frontend",
   blog_post_viewed: "frontend",

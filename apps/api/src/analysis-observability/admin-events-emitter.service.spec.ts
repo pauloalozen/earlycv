@@ -98,6 +98,24 @@ test("buildCatalog returns all protection and business events from registries", 
   );
   assert.deepEqual(
     catalog.business.find(
+      (event) => event.eventName === "auth_oauth_redirect_started",
+    ),
+    {
+      eventName: "auth_oauth_redirect_started",
+      eventVersion: 1,
+    },
+  );
+  assert.deepEqual(
+    catalog.business.find(
+      (event) => event.eventName === "auth_session_identified",
+    ),
+    {
+      eventName: "auth_session_identified",
+      eventVersion: 1,
+    },
+  );
+  assert.deepEqual(
+    catalog.business.find(
       (event) => event.eventName === "cv_unlock_completed",
     ),
     {

@@ -489,7 +489,10 @@ export function HistoryActionLinks({
             redeemAbortControllerRef.current?.abort();
             const controller = new AbortController();
             redeemAbortControllerRef.current = controller;
-            const timeoutId = setTimeout(() => controller.abort(), REDEEM_REQUEST_TIMEOUT_MS);
+            const timeoutId = setTimeout(
+              () => controller.abort(),
+              REDEEM_REQUEST_TIMEOUT_MS,
+            );
 
             try {
               const redeemRequest = fetch(actions.redeemHref, {
@@ -512,10 +515,7 @@ export function HistoryActionLinks({
                 new Promise<Response>((_, reject) => {
                   setTimeout(() => {
                     reject(
-                      new DOMException(
-                        "Redeem request timeout",
-                        "AbortError",
-                      ),
+                      new DOMException("Redeem request timeout", "AbortError"),
                     );
                   }, REDEEM_REQUEST_TIMEOUT_MS + 500);
                 }),

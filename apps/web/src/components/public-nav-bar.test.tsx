@@ -66,7 +66,11 @@ describe("PublicNavBar", () => {
     expect(nav?.getAttribute("style")).toContain("top: 0px");
     expect(nav?.getAttribute("style")).toContain("left: 0px");
     expect(nav?.getAttribute("style")).toContain("right: 0px");
-    expect(nav?.getAttribute("style")).toContain("background: rgb(243, 242, 237)");
-    expect(nav?.getAttribute("style")).not.toContain("border-bottom: 1px solid");
+    expect(nav?.getAttribute("style")).toContain(
+      "background: rgb(243, 242, 237)",
+    );
+    expect(nav?.getAttribute("style")).not.toContain(
+      "border-bottom: 1px solid",
+    );
   });
 });

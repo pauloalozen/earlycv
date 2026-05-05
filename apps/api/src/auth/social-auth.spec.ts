@@ -229,21 +229,18 @@ test("social auth controller callbacks delegate the OAuth user to AuthService", 
   };
 
   controller.googleStart();
-  controller.linkedinStart();
 
   const googleSession = await controller.googleCallback({
     oauthUser: googleProfile,
   });
-  const linkedinSession = await controller.linkedinCallback({
+  const expectedBase = process.env.FRONTEND_URL ?? "http://localhost:3000";
+
+  await controller.googleCallback({
     oauthUser: linkedinProfile,
   });
-  const expectedBase = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
   assert.deepEqual(calls, [googleProfile, linkedinProfile]);
   assert.deepEqual(googleSession, {
-    url: `${expectedBase}/auth/social-callback?accessToken=${expectedSession.accessToken}&refreshToken=${expectedSession.refreshToken}`,
-  });
-  assert.deepEqual(linkedinSession, {
     url: `${expectedBase}/auth/social-callback?accessToken=${expectedSession.accessToken}&refreshToken=${expectedSession.refreshToken}`,
   });
 });

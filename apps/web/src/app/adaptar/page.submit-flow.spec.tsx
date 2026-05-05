@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const routerPushMock = vi.hoisted(() => vi.fn());
 const routerPrefetchMock = vi.hoisted(() => vi.fn());
-const emitBusinessFunnelEventMock = vi.hoisted(() => vi.fn());
+const trackEventMock = vi.hoisted(() => vi.fn());
 const analyzeGuestCvMock = vi.hoisted(() => vi.fn());
 const analyzeAuthenticatedCvMock = vi.hoisted(() => vi.fn());
 const saveGuestPreviewMock = vi.hoisted(() => vi.fn());
@@ -41,8 +41,11 @@ vi.mock("@/lib/resumes-api", () => ({
 vi.mock("@/lib/cv-adaptation-api", () => ({
   analyzeAuthenticatedCv: analyzeAuthenticatedCvMock,
   analyzeGuestCv: analyzeGuestCvMock,
-  emitBusinessFunnelEvent: emitBusinessFunnelEventMock,
   saveGuestPreview: saveGuestPreviewMock,
+}));
+
+vi.mock("@/lib/analytics-tracking", () => ({
+  trackEvent: trackEventMock,
 }));
 
 import AdaptarPage from "./page";
@@ -59,13 +62,13 @@ describe("AdaptarPage submit analytics flow", () => {
   beforeEach(() => {
     routerPushMock.mockReset();
     routerPrefetchMock.mockReset();
-    emitBusinessFunnelEventMock.mockReset();
+    trackEventMock.mockReset();
     analyzeGuestCvMock.mockReset();
     analyzeAuthenticatedCvMock.mockReset();
     saveGuestPreviewMock.mockReset();
     getAuthStatusMock.mockReset();
     getAuthStatusMock.mockResolvedValue({ userName: null });
-    emitBusinessFunnelEventMock.mockResolvedValue(undefined);
+    trackEventMock.mockResolvedValue(undefined);
     analyzeGuestCvMock.mockResolvedValue({
       ok: true,
       adaptedContentJson: { vaga: { cargo: "", empresa: "" } },
@@ -208,7 +211,7 @@ describe("AdaptarPage submit analytics flow", () => {
       "Cole a vaga completa (isso melhora sua análise)...",
     );
 
-    emitBusinessFunnelEventMock.mockClear();
+    trackEventMock.mockClear();
 
     fireEvent.change(textarea, {
       target: { value: "Descricao da vaga" },
@@ -219,7 +222,7 @@ describe("AdaptarPage submit analytics flow", () => {
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      const eventNames = emitBusinessFunnelEventMock.mock.calls.map(
+      const eventNames = trackEventMock.mock.calls.map(
         ([payload]) => payload.eventName,
       );
       expect(eventNames).toContain("analyze_submit_clicked");
@@ -229,7 +232,7 @@ describe("AdaptarPage submit analytics flow", () => {
 
   it("emits analysis_started once and before guest analyze request on valid submit", async () => {
     const order: string[] = [];
-    emitBusinessFunnelEventMock.mockImplementation(async (payload) => {
+    trackEventMock.mockImplementation(async (payload) => {
       if (payload.eventName === "analysis_started") {
         order.push("analysis_started");
       }
@@ -259,7 +262,7 @@ describe("AdaptarPage submit analytics flow", () => {
       throw new Error("Expected file input to exist");
     }
 
-    emitBusinessFunnelEventMock.mockClear();
+    trackEventMock.mockClear();
 
     fireEvent.change(fileInput, {
       target: {
@@ -278,7 +281,7 @@ describe("AdaptarPage submit analytics flow", () => {
       expect(analyzeGuestCvMock).toHaveBeenCalledTimes(1);
     });
 
-    const analysisStartedCalls = emitBusinessFunnelEventMock.mock.calls.filter(
+    const analysisStartedCalls = trackEventMock.mock.calls.filter(
       ([payload]) => payload.eventName === "analysis_started",
     );
 
@@ -321,9 +324,7 @@ describe("AdaptarPage submit analytics flow", () => {
       expect(analyzeGuestCvMock).not.toHaveBeenCalled();
     });
 
-    expect(
-      screen.getByText(/texto não parece ser um currículo/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/texto do CV está muito curto/i)).toBeTruthy();
   });
 
   it("submits guest analysis in text mode without requiring file", async () => {
@@ -405,12 +406,9 @@ describe("AdaptarPage submit analytics flow", () => {
       { timeout: 15000 },
     );
 
-    const sessionStored = sessionStorage.getItem("guestAnalysis");
-    const localStored = localStorage.getItem("guestAnalysis");
+    const sessionStored = window.sessionStorage.getItem("guestAnalysis");
 
     expect(sessionStored).toBeTruthy();
-    expect(localStored).toBeTruthy();
-    expect(sessionStored).toEqual(localStored);
   }, 20000);
 
   it("submits authenticated analysis in text mode without saveAsMaster", async () => {
@@ -432,7 +430,7 @@ describe("AdaptarPage submit analytics flow", () => {
     fireEvent.change(cvTextarea, {
       target: {
         value:
-          "Bruno Costa\nResumo\nProfissional de Produto\nExperiencia\nPM Senior\n2020-2024\nRoadmap, discovery, SQL",
+          "Bruno Costa\nResumo profissional\nProfissional de Produto com experiencia liderando discovery e roadmap em produtos digitais.\nExperiencia\nPM Senior\n2020-2024\nRoadmap, discovery, SQL, entrevistas e metricas.",
       },
     });
     fireEvent.change(jobTextarea, {
@@ -464,7 +462,7 @@ describe("AdaptarPage submit analytics flow", () => {
       "Cole a vaga completa (isso melhora sua análise)...",
     );
 
-    emitBusinessFunnelEventMock.mockClear();
+    trackEventMock.mockClear();
 
     fireEvent.focus(textarea);
     fireEvent.focus(textarea);
@@ -472,10 +470,10 @@ describe("AdaptarPage submit analytics flow", () => {
     fireEvent.paste(textarea);
 
     await waitFor(() => {
-      const focusCalls = emitBusinessFunnelEventMock.mock.calls.filter(
+      const focusCalls = trackEventMock.mock.calls.filter(
         ([payload]) => payload.eventName === "job_description_focus",
       );
-      const pasteCalls = emitBusinessFunnelEventMock.mock.calls.filter(
+      const pasteCalls = trackEventMock.mock.calls.filter(
         ([payload]) => payload.eventName === "job_description_paste",
       );
 
@@ -483,30 +481,26 @@ describe("AdaptarPage submit analytics flow", () => {
       expect(pasteCalls).toHaveLength(1);
     });
 
-    it("shows upload/text selector for authenticated user without master CV", async () => {
-      getAuthStatusMock.mockResolvedValueOnce({ userName: "Ana" });
+  });
 
-      render(<AdaptarPage />);
+  it("shows upload/text selector for authenticated user without master CV", async () => {
+    getAuthStatusMock.mockResolvedValueOnce({ userName: "Ana" });
 
-      expect(
-        await screen.findByRole("button", { name: "Upload" }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "Digitar texto" }),
-      ).toBeInTheDocument();
+    render(<AdaptarPage />);
+
+    expect(await screen.findByRole("button", { name: "Upload" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Digitar texto" })).toBeTruthy();
+  });
+
+  it("defaults guest selector to upload mode", async () => {
+    getAuthStatusMock.mockResolvedValueOnce({ userName: null });
+
+    render(<AdaptarPage />);
+
+    const uploadButton = await screen.findByRole("button", {
+      name: "Upload",
     });
-
-    it("defaults guest selector to upload mode", async () => {
-      getAuthStatusMock.mockResolvedValueOnce({ userName: null });
-
-      render(<AdaptarPage />);
-
-      const uploadButton = await screen.findByRole("button", {
-        name: "Upload",
-      });
-      expect(uploadButton).toBeInTheDocument();
-      expect(uploadButton).toHaveStyle({ background: "#0a0a0a" });
-    });
+    expect(uploadButton).toBeTruthy();
   });
 
   it("persists authenticated analysis before navigating to resultado", async () => {

@@ -33,6 +33,8 @@ export type AnalysisProtectionEventName =
 export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   analysis_started: 1,
   analyze_submit_clicked: 1,
+  auth_session_identified: 1,
+  auth_oauth_redirect_started: 1,
   blog_cta_clicked: 1,
   blog_index_viewed: 1,
   blog_post_viewed: 1,

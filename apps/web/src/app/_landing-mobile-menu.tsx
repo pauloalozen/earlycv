@@ -165,15 +165,13 @@ export function LandingMobileMenu({ authState }: Props) {
             Ir para o painel →
           </a>
         ) : (
-          <>
-            <a
-              href="/entrar?tab=entrar"
-              className="lp-mob-nav-item lp-mob-nav-item--cta"
-              onClick={() => setOpen(false)}
-            >
-              Entrar
-            </a>
-          </>
+          <a
+            href="/entrar?tab=entrar"
+            className="lp-mob-nav-item lp-mob-nav-item--cta"
+            onClick={() => setOpen(false)}
+          >
+            Entrar
+          </a>
         )}
       </div>
     </>

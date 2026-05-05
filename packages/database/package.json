@@ -24,7 +24,7 @@
   },
   "scripts": {
     "build": "prisma generate --schema prisma/schema.prisma && rm -rf dist && tsc -p tsconfig.json",
-    "generate": "sh -c 'if [ -z \"${DATABASE_URL:-}\" ]; then if [ -f ../../.env ]; then set -a && . ../../.env && set +a; elif [ -f ../../.env.example ]; then set -a && . ../../.env.example && set +a; fi; fi; prisma generate --schema prisma/schema.prisma'",
+    "generate": "sh -c 'if [ -z \"${DATABASE_URL:-}\" ]; then if [ -f ../../.env ]; then DATABASE_URL=$(grep -E \"^DATABASE_URL=\" ../../.env | tail -n 1 | cut -d\"=\" -f2-); fi; if [ -z \"${DATABASE_URL:-}\" ] && [ -f ../../.env.example ]; then DATABASE_URL=$(grep -E \"^DATABASE_URL=\" ../../.env.example | tail -n 1 | cut -d\"=\" -f2-); fi; export DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/earlycv_test}; fi; prisma generate --schema prisma/schema.prisma'",
     "migrate": "sh -c 'if [ -z \"${DATABASE_URL:-}\" ]; then if [ -f ../../.env ]; then set -a && . ../../.env && set +a; fi; : \"${DATABASE_URL:?DATABASE_URL is required for database migrations}\"; fi; prisma migrate dev --schema prisma/schema.prisma'",
     "deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "seed": "sh -c 'if [ -z \"${DATABASE_URL:-}\" ]; then if [ -f ../../.env ]; then set -a && . ../../.env && set +a; fi; : \"${DATABASE_URL:?DATABASE_URL is required for database seeds}\"; fi; tsx prisma/seed.ts'",

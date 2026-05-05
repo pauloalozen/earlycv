@@ -18,6 +18,8 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   job_description_paste: "job_description_paste",
   job_description_filled: "job_description_filled",
   analyze_submit_clicked: "analyze_submit_clicked",
+  auth_session_identified: "auth_session_identified",
+  auth_oauth_redirect_started: "auth_oauth_redirect_started",
   analysis_started: "analysis_started",
   blog_cta_clicked: "blog_cta_clicked",
   blog_index_viewed: "blog_index_viewed",

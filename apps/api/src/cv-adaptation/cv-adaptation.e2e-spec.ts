@@ -11,6 +11,7 @@ import request from "supertest";
 
 import { AppModule } from "../app.module";
 import { DatabaseService } from "../database/database.service";
+import { StorageService } from "../storage/storage.service";
 
 import { PlansService } from "../plans/plans.service";
 
@@ -27,7 +28,20 @@ type RegisterResult = {
 async function createApp() {
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
-  }).compile();
+  })
+    .overrideProvider(StorageService)
+    .useValue({
+      async deleteObject() {
+        return;
+      },
+      async getObject() {
+        return Buffer.from("mock-storage-object");
+      },
+      async putObject(key: string) {
+        return `https://mock-storage.local/${key}`;
+      },
+    })
+    .compile();
 
   const app: INestApplication = moduleRef.createNestApplication();
   app.setGlobalPrefix("api");

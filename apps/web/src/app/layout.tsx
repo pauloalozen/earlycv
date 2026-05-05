@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import {
   Dancing_Script,
   DM_Sans,
@@ -11,6 +10,7 @@ import {
   Playfair_Display,
   Syne,
 } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";

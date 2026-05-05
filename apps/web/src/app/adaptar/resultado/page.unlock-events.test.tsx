@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const routerReplaceMock = vi.fn();
@@ -70,7 +76,8 @@ vi.mock("@/lib/session-actions", () => ({
 }));
 
 vi.mock("@/lib/guest-analysis-storage", () => ({
-  clearGuestAnalysisRaw: (...args: unknown[]) => clearGuestAnalysisRawMock(...args),
+  clearGuestAnalysisRaw: (...args: unknown[]) =>
+    clearGuestAnalysisRawMock(...args),
   getGuestAnalysisRaw: (...args: unknown[]) => getGuestAnalysisRawMock(...args),
 }));
 
@@ -137,7 +144,11 @@ describe("resultado unlock tracking", () => {
   });
 
   it("emits cv_unlock_started on real review redeem click", async () => {
-    window.history.replaceState({}, "", "/adaptar/resultado?adaptationId=adp-1");
+    window.history.replaceState(
+      {},
+      "",
+      "/adaptar/resultado?adaptationId=adp-1",
+    );
 
     getAuthStatusMock.mockResolvedValue({
       isAuthenticated: true,
@@ -174,7 +185,11 @@ describe("resultado unlock tracking", () => {
   });
 
   it("does not emit cv_unlock_completed when redeem fails", async () => {
-    window.history.replaceState({}, "", "/adaptar/resultado?adaptationId=adp-2");
+    window.history.replaceState(
+      {},
+      "",
+      "/adaptar/resultado?adaptationId=adp-2",
+    );
 
     getAuthStatusMock.mockResolvedValue({
       isAuthenticated: true,
@@ -204,6 +219,48 @@ describe("resultado unlock tracking", () => {
 
       expect(started).toHaveLength(1);
       expect(completed).toHaveLength(0);
+    });
+  });
+
+  it("emits buy_credits_clicked with adaptation and cta_location", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/adaptar/resultado?adaptationId=adp-3",
+    );
+
+    getAuthStatusMock.mockResolvedValue({
+      isAuthenticated: true,
+      userName: "User",
+      hasCredits: false,
+      internalRole: "none",
+      availableCreditsDisplay: 0,
+    });
+
+    mockResultadoFetch({ redeemOk: true });
+
+    render(<ResultadoPage />);
+
+    await waitFor(() => {
+      expect(document.querySelector('a[href*="/planos"]')).not.toBeNull();
+    });
+
+    const buyLink = document.querySelector('a[href*="/planos"]');
+    expect(buyLink).not.toBeNull();
+
+    fireEvent.click(buyLink as HTMLAnchorElement);
+
+    await waitFor(() => {
+      const buyCredits = trackEventMock.mock.calls.find(
+        ([payload]) => payload.eventName === "buy_credits_clicked",
+      )?.[0];
+
+      expect(buyCredits?.properties).toMatchObject({
+        adaptationId: "adp-3",
+        currentCredits: 0,
+        requiredCredits: 1,
+        cta_location: "resultado_locked_cv_primary",
+      });
     });
   });
 });

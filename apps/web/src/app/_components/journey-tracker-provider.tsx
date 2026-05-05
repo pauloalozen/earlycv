@@ -52,6 +52,7 @@ type LeaveReason =
   | "route_change"
   | "auth_redirect"
   | "auth_submit"
+  | "checkout_redirect"
   | "pagehide"
   | "visibility_hidden"
   | "beforeunload"
@@ -61,7 +62,15 @@ type PendingNavigation = {
   authFlow?: "signin" | "signup" | "unknown";
   authMethod?: "email_password" | "oauth";
   isAuthSubmit?: boolean;
+  isCheckoutRedirect?: boolean;
   isAuthRedirect: boolean;
+  checkoutAmount?: number;
+  checkoutCredits?: number;
+  checkoutCurrency?: string;
+  checkoutPlanId?: string;
+  checkoutPlanName?: string;
+  checkoutProvider?: string;
+  nextExternalDomain?: string;
   nextPathname?: string;
   nextRoute?: string;
   nextSearch?: string;
@@ -230,6 +239,13 @@ function buildMetadata(input: {
   nextSearch?: string;
   leaveReason?: LeaveReason;
   timeOnPageMs?: number;
+  checkoutAmount?: number;
+  checkoutCredits?: number;
+  checkoutCurrency?: string;
+  checkoutPlanId?: string;
+  checkoutPlanName?: string;
+  checkoutProvider?: string;
+  nextExternalDomain?: string;
 }) {
   const auth = getAuthContext();
 
@@ -251,6 +267,13 @@ function buildMetadata(input: {
     next_pathname: input.nextPathname,
     next_search: input.nextSearch,
     leave_reason: input.leaveReason,
+    planId: input.checkoutPlanId,
+    planName: input.checkoutPlanName,
+    amount: input.checkoutAmount,
+    credits: input.checkoutCredits,
+    currency: input.checkoutCurrency,
+    provider: input.checkoutProvider,
+    next_external_domain: input.nextExternalDomain,
     time_on_page_ms: input.timeOnPageMs,
     isAuthenticated: auth.isAuthenticated,
     userId: auth.userId,
@@ -633,6 +656,17 @@ export function JourneyTrackerProvider({
         startedAtMs: Date.now(),
         url: window.location.href,
       });
+
+      pendingNavigationRef.current = {
+        isAuthRedirect: false,
+        isCheckoutRedirect: true,
+        checkoutAmount: amount,
+        checkoutCredits: credits,
+        checkoutCurrency: currency,
+        checkoutPlanId: planId,
+        checkoutPlanName: planName,
+        checkoutProvider: "mercado_pago",
+      };
     };
 
     const handleAuthSubmit = (event: Event) => {
@@ -769,6 +803,13 @@ export function JourneyTrackerProvider({
           nextSearch: input.nextSearch,
           nextUrl: input.nextUrl,
           leaveReason: input.leaveReason,
+          checkoutAmount: pendingNavigationRef.current?.checkoutAmount,
+          checkoutCredits: pendingNavigationRef.current?.checkoutCredits,
+          checkoutCurrency: pendingNavigationRef.current?.checkoutCurrency,
+          checkoutPlanId: pendingNavigationRef.current?.checkoutPlanId,
+          checkoutPlanName: pendingNavigationRef.current?.checkoutPlanName,
+          checkoutProvider: pendingNavigationRef.current?.checkoutProvider,
+          nextExternalDomain: pendingNavigationRef.current?.nextExternalDomain,
           timeOnPageMs: finished.event.timeOnPageMs,
         }),
       };
@@ -975,6 +1016,9 @@ export function JourneyTrackerProvider({
     };
 
     const emitSiteExitCandidate = (leaveReason: LeaveReason) => {
+      void leaveReason;
+      return;
+
       const activeRouteVisit = stateRef.current?.activeRouteVisit;
       if (
         internalNavigationInProgressRef.current ||
@@ -1021,12 +1065,18 @@ export function JourneyTrackerProvider({
 
     const handlePageHide = () => {
       const pendingNavigation = pendingNavigationRef.current;
-      if (!pendingNavigation?.isAuthRedirect && !pendingNavigation?.isAuthSubmit) {
+      if (
+        !pendingNavigation?.isAuthRedirect &&
+        !pendingNavigation?.isAuthSubmit &&
+        !pendingNavigation?.isCheckoutRedirect
+      ) {
         emitSiteExitCandidate("pagehide");
       }
 
       const leaveReason: LeaveReason = pendingNavigation?.isAuthSubmit
         ? "auth_submit"
+        : pendingNavigation?.isCheckoutRedirect
+          ? "checkout_redirect"
         : pendingNavigation?.isAuthRedirect
           ? "auth_redirect"
           : pendingNavigation?.nextPathname
@@ -1048,7 +1098,10 @@ export function JourneyTrackerProvider({
         return;
       }
 
-      if (pendingNavigationRef.current?.isAuthSubmit) {
+      if (
+        pendingNavigationRef.current?.isAuthSubmit ||
+        pendingNavigationRef.current?.isCheckoutRedirect
+      ) {
         return;
       }
 
@@ -1057,7 +1110,11 @@ export function JourneyTrackerProvider({
 
     const handleBeforeUnload = () => {
       const pendingNavigation = pendingNavigationRef.current;
-      if (pendingNavigation?.isAuthRedirect || pendingNavigation?.isAuthSubmit) {
+      if (
+        pendingNavigation?.isAuthRedirect ||
+        pendingNavigation?.isAuthSubmit ||
+        pendingNavigation?.isCheckoutRedirect
+      ) {
         return;
       }
 

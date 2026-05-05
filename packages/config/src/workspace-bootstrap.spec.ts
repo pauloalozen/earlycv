@@ -44,7 +44,10 @@ const aiPackageJson = JSON.parse(
 };
 
 test("root workspace bootstraps shared package builds after install", () => {
-  assert.equal(rootPackageJson.scripts?.postinstall, "npm run build:packages");
+  assert.equal(
+    rootPackageJson.scripts?.postinstall,
+    'if [ "${VERCEL:-}" = "1" ]; then npm run build --workspace @earlycv/config; else npm run build:packages; fi',
+  );
   assert.equal(rootPackageJson.scripts?.predev, undefined);
   assert.equal(rootPackageJson.scripts?.["predev:api"], undefined);
   assert.equal(rootPackageJson.scripts?.precheck, undefined);

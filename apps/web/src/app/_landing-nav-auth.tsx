@@ -114,39 +114,37 @@ export function LandingNavAuth() {
             Ir para o painel →
           </Link>
         ) : (
-          <>
-            <Link
-              href="/entrar?tab=entrar"
-              style={{
-                ...BTN_PRIMARY,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                width: AUTH_CTA_WIDTH,
-                gap: 6,
-              }}
-            >
-              <span aria-hidden="true" style={{ display: "inline-flex" }}>
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <title>Login</title>
-                  <path d="M14 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-                  <path d="M10 17l5-5-5-5" />
-                  <path d="M15 12H3" />
-                </svg>
-              </span>
-              Entrar
-            </Link>
-          </>
+          <Link
+            href="/entrar?tab=entrar"
+            style={{
+              ...BTN_PRIMARY,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              width: AUTH_CTA_WIDTH,
+              gap: 6,
+            }}
+          >
+            <span aria-hidden="true" style={{ display: "inline-flex" }}>
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <title>Login</title>
+                <path d="M14 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                <path d="M10 17l5-5-5-5" />
+                <path d="M15 12H3" />
+              </svg>
+            </span>
+            Entrar
+          </Link>
         )}
       </div>
 
