@@ -172,6 +172,9 @@ export function PosthogAuthProvider({
       if (!initializedRef.current) {
         posthog.init(posthogConfig.apiKey, {
           api_host: posthogConfig.apiHost,
+          autocapture: false,
+          capture_pageview: false,
+          capture_pageleave: false,
           person_profiles: "identified_only",
         });
         initializedRef.current = true;
