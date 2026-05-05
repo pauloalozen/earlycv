@@ -19,10 +19,10 @@ describe("seo pages tracking", () => {
     expect(trackEventMock).toHaveBeenCalledWith({
       eventName: "seo_page_viewed",
       properties: {
+        content_source: "seo_page",
         page_type: "hub",
         path: "/palavras-chave-curriculo",
         slug: "palavras-chave-curriculo",
-        source: "seo_page",
       },
     });
   });
@@ -39,11 +39,11 @@ describe("seo pages tracking", () => {
     expect(trackEventMock).toHaveBeenCalledWith({
       eventName: "seo_page_cta_clicked",
       properties: {
+        content_source: "seo_page",
         location: "hero",
         page_type: "hub",
         path: "/palavras-chave-curriculo",
         slug: "palavras-chave-curriculo",
-        source: "seo_page",
         target: "/adaptar",
       },
     });

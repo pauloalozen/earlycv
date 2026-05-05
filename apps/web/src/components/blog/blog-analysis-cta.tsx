@@ -78,7 +78,16 @@ export function BlogAnalysisCta({
           fontFamily: GEIST,
         }}
         onClick={() => {
-          void trackBlogCtaClicked(location, slug);
+          void trackBlogCtaClicked({
+            cta_id: "blog_analysis_cta_adaptar",
+            cta_label: "Adaptar meu CV",
+            cta_location: location,
+            cta_text: "Adaptar meu CV →",
+            href: "/adaptar",
+            slug,
+            target_url: "/adaptar",
+            title,
+          });
         }}
       >
         Adaptar meu CV →
