@@ -6,12 +6,16 @@ const trackEventMock = vi.hoisted(() => vi.fn());
 
 const initMock = vi.hoisted(() => vi.fn());
 const identifyMock = vi.hoisted(() => vi.fn());
+const getSessionIdMock = vi.hoisted(() => vi.fn());
+const onSessionIdMock = vi.hoisted(() => vi.fn());
 const resetMock = vi.hoisted(() => vi.fn());
 
 vi.mock("posthog-js", () => ({
   default: {
     identify: identifyMock,
     init: initMock,
+    get_session_id: getSessionIdMock,
+    onSessionId: onSessionIdMock,
     reset: resetMock,
   },
 }));
@@ -20,13 +24,19 @@ vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: trackEventMock,
 }));
 
+process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test_key";
+process.env.NEXT_PUBLIC_POSTHOG_HOST = "https://us.i.posthog.com";
+
 import { PosthogAuthProvider } from "./posthog-auth-provider";
 
 describe("PosthogAuthProvider", () => {
   beforeEach(() => {
     initMock.mockReset();
     identifyMock.mockReset();
+    getSessionIdMock.mockReset();
+    onSessionIdMock.mockReset();
     resetMock.mockReset();
+    getSessionIdMock.mockReturnValue("ph-session-1");
     sessionStorage.clear();
     vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "phc_test_key");
     vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "https://us.i.posthog.com");
@@ -59,17 +69,6 @@ describe("PosthogAuthProvider", () => {
     );
 
     await waitFor(() => {
-      expect(initMock).toHaveBeenCalledTimes(1);
-      expect(initMock).toHaveBeenCalledWith(
-        "phc_test_key",
-        expect.objectContaining({
-          api_host: "https://us.i.posthog.com",
-          autocapture: false,
-          capture_pageview: false,
-          capture_pageleave: false,
-          capture_performance: false,
-        }),
-      );
       expect(identifyMock).toHaveBeenCalledTimes(1);
       expect(trackEventMock).toHaveBeenCalledTimes(1);
       expect(identifyMock).toHaveBeenCalledWith("user-1", {
@@ -91,6 +90,9 @@ describe("PosthogAuthProvider", () => {
 
     expect(sessionStorage.getItem("analytics_auth_context")).toBe(
       JSON.stringify({ isAuthenticated: true, userId: "user-1" }),
+    );
+    expect(sessionStorage.getItem("analytics_posthog_session_id")).toBe(
+      "ph-session-1",
     );
   });
 

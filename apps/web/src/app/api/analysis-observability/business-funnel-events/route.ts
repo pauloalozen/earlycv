@@ -10,6 +10,26 @@ function getApiBaseUrl() {
 
 export async function POST(request: Request) {
   const body = await request.text();
+  const forwardedPosthogSessionId = request.headers
+    .get("x-posthog-session-id")
+    ?.trim();
+
+  let bodySessionId: string | null = null;
+  if (forwardedPosthogSessionId) {
+    bodySessionId = forwardedPosthogSessionId;
+  } else {
+    try {
+      const parsed = JSON.parse(body) as {
+        metadata?: { $session_id?: unknown };
+      };
+      const candidate = parsed.metadata?.$session_id;
+      if (typeof candidate === "string" && candidate.trim().length > 0) {
+        bodySessionId = candidate.trim();
+      }
+    } catch {
+      bodySessionId = null;
+    }
+  }
 
   const apiResponse = await fetch(
     `${getApiBaseUrl()}/analysis-observability/business-funnel-events`,
@@ -17,6 +37,9 @@ export async function POST(request: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(bodySessionId
+          ? { "x-posthog-session-id": bodySessionId }
+          : {}),
       },
       body,
       cache: "no-store",

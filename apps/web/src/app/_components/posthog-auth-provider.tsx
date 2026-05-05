@@ -5,6 +5,7 @@ import { trackEvent } from "@/lib/analytics-tracking";
 
 const AUTH_ANALYTICS_STORAGE_KEY = "analytics_auth_context";
 const IDENTIFIED_USER_STORAGE_KEY = "posthog_identified_user_id";
+const POSTHOG_SESSION_ID_STORAGE_KEY = "analytics_posthog_session_id";
 const AUTH_SESSION_IDENTIFIED_STORAGE_KEY =
   "analytics_auth_session_identified_user_id";
 const JOURNEY_SESSION_KEY = "journey_session_internal_id";
@@ -21,6 +22,28 @@ type SessionPayload = {
 async function loadPosthogClient() {
   const module = await import("posthog-js");
   return module.default;
+}
+
+type PosthogSessionClient = {
+  get_session_id?: () => string | null | undefined;
+  onSessionId?: (callback: (sessionId: string) => void) => void;
+};
+
+function persistPosthogSessionId(raw: unknown) {
+  if (typeof sessionStorage === "undefined") {
+    return;
+  }
+
+  if (typeof raw !== "string") {
+    return;
+  }
+
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return;
+  }
+
+  sessionStorage.setItem(POSTHOG_SESSION_ID_STORAGE_KEY, trimmed);
 }
 
 function writeAuthAnalyticsContext(input: {
@@ -89,6 +112,33 @@ export function PosthogAuthProvider({
     let cancelled = false;
 
     const bootstrap = async () => {
+      const posthogConfig = getPosthogConfig();
+      let posthog: Awaited<ReturnType<typeof loadPosthogClient>> | null = null;
+      if (posthogConfig) {
+        posthog = await loadPosthogClient();
+        if (cancelled) {
+          return;
+        }
+
+        if (!initializedRef.current) {
+          posthog.init(posthogConfig.apiKey, {
+            api_host: posthogConfig.apiHost,
+            autocapture: false,
+            capture_pageview: false,
+            capture_pageleave: false,
+            capture_performance: false,
+            person_profiles: "identified_only",
+          });
+          initializedRef.current = true;
+        }
+
+        const posthogSessionClient = posthog as unknown as PosthogSessionClient;
+        persistPosthogSessionId(posthogSessionClient.get_session_id?.());
+        posthogSessionClient.onSessionId?.((sessionId) => {
+          persistPosthogSessionId(sessionId);
+        });
+      }
+
       if (typeof fetch !== "function") {
         writeAuthAnalyticsContext({
           isAuthenticated: false,
@@ -159,28 +209,6 @@ export function PosthogAuthProvider({
         }
       }
 
-      const posthogConfig = getPosthogConfig();
-      if (!posthogConfig) {
-        return;
-      }
-
-      const posthog = await loadPosthogClient();
-      if (cancelled) {
-        return;
-      }
-
-      if (!initializedRef.current) {
-        posthog.init(posthogConfig.apiKey, {
-          api_host: posthogConfig.apiHost,
-          autocapture: false,
-          capture_pageview: false,
-          capture_pageleave: false,
-          capture_performance: false,
-          person_profiles: "identified_only",
-        });
-        initializedRef.current = true;
-      }
-
       const storedIdentifiedUserId = sessionStorage.getItem(
         IDENTIFIED_USER_STORAGE_KEY,
       );
@@ -195,7 +223,7 @@ export function PosthogAuthProvider({
           lastIdentifiedUserIdRef.current ||
           previousAuthState === "authenticated"
         ) {
-          posthog.reset();
+          posthog?.reset();
           clearAuthAnalyticsContext();
           writeAuthAnalyticsContext({ isAuthenticated: false, userId: null });
           lastIdentifiedUserIdRef.current = null;
@@ -207,7 +235,7 @@ export function PosthogAuthProvider({
         lastIdentifiedUserIdRef.current === userId ||
         storedIdentifiedUserId === userId;
 
-      if (!alreadyIdentified) {
+      if (!alreadyIdentified && posthog) {
         posthog.identify(userId, {
           ...(typeof payload.user?.email === "string"
             ? { email: payload.user.email }

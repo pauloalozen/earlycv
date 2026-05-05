@@ -106,3 +106,28 @@ test("capture keeps anonymous fallback without user_id", () => {
   assert.equal(captured.length, 1);
   assert.equal(captured[0].distinctId, "anonymous");
 });
+
+test("capture uses $session_id as distinctId fallback", () => {
+  const captured: Array<Record<string, unknown>> = [];
+  const service = new PosthogClientService({
+    apiKey: "phc_test_key",
+    enabled: true,
+    flushIntervalMs: 5000,
+    maxBatchSize: 50,
+    projectId: "",
+  });
+
+  (service as any).client = {
+    capture: (message: Record<string, unknown>) => captured.push(message),
+    flush: async () => {},
+    shutdown: () => {},
+  };
+  (service as any).isConfigured = true;
+
+  service.capture("page_view", {
+    $session_id: "ph-session-2",
+  });
+
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0].distinctId, "ph-session-2");
+});

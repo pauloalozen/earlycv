@@ -13,6 +13,7 @@ const APP_ACCESS_TOKEN_COOKIE_KEYS = ["earlycv-access-token"] as const;
 
 const MAX_CORRELATION_ID_LENGTH = 128;
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
+const MAX_POSTHOG_SESSION_ID_LENGTH = 256;
 
 function parseBooleanLikeValue(value: string): boolean | null {
   const normalized = value.trim().toLowerCase();
@@ -283,6 +284,19 @@ function resolveRoutePath(req: Request): string | null {
   return path;
 }
 
+function resolvePosthogSessionId(req: Request): string | null {
+  const value = pickFirstHeaderValue(req.headers["x-posthog-session-id"]);
+  if (!value) {
+    return null;
+  }
+
+  if (value.length > MAX_POSTHOG_SESSION_ID_LENGTH) {
+    return null;
+  }
+
+  return value;
+}
+
 function resolveUserAgentHash(req: Request): string | null {
   const userAgent = pickFirstHeaderValue(req.headers["user-agent"]);
 
@@ -305,6 +319,7 @@ export function requestContextMiddleware(
     correlationId: correlationId ?? randomUUID(),
     sessionPublicToken: resolveSessionPublicToken(req),
     sessionInternalId: null,
+    posthogSessionId: resolvePosthogSessionId(req),
     userId: resolveUserId(req),
     ip: resolveIp(req),
     routePath: resolveRoutePath(req),

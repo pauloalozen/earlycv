@@ -21,6 +21,7 @@ const CURRENT_ROUTE_VISIT_SNAPSHOT_KEY = "journey_current_route_visit_snapshot";
 const PREVIOUS_ROUTE_KEY = "journey_previous_route";
 const SITE_EXIT_CANDIDATE_EMITTED_SESSION_KEY =
   "journey_site_exit_candidate_emitted_session";
+const POSTHOG_SESSION_ID_STORAGE_KEY = "analytics_posthog_session_id";
 
 type CheckoutIntentMarker = {
   amount?: number;
@@ -223,6 +224,20 @@ function getAuthContext() {
   }
 }
 
+function getPosthogSessionId() {
+  if (typeof sessionStorage === "undefined") {
+    return null;
+  }
+
+  const value = sessionStorage.getItem(POSTHOG_SESSION_ID_STORAGE_KEY);
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 function buildMetadata(input: {
   occurredAt: string;
   previousRoute: string | null;
@@ -248,6 +263,7 @@ function buildMetadata(input: {
   nextExternalDomain?: string;
 }) {
   const auth = getAuthContext();
+  const posthogSessionId = getPosthogSessionId();
 
   return {
     app: "earlycv",
@@ -262,6 +278,7 @@ function buildMetadata(input: {
     referrer: input.referrer,
     routeVisitId: input.routeVisitId,
     sessionInternalId: input.sessionInternalId,
+    $session_id: posthogSessionId,
     next_route: input.nextRoute,
     next_url: input.nextUrl,
     next_pathname: input.nextPathname,

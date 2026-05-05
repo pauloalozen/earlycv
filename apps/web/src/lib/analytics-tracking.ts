@@ -7,6 +7,14 @@ const BUSINESS_FUNNEL_EVENTS_PATH =
 const JOURNEY_SESSION_KEY = "journey_session_internal_id";
 const JOURNEY_ROUTE_VISIT_KEY = "journey_current_route_visit_id";
 const JOURNEY_PREVIOUS_ROUTE_KEY = "journey_previous_route";
+const POSTHOG_SESSION_ID_STORAGE_KEY = "analytics_posthog_session_id";
+const POSTHOG_SESSION_WAIT_MS = 1200;
+const POSTHOG_SESSION_POLL_MS = 50;
+
+function isPosthogSessionRequired() {
+  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
+  return typeof key === "string" && key.length > 0;
+}
 
 type UtmParams = {
   utm_source?: string;
@@ -98,6 +106,48 @@ function getJourneyContext() {
     routeVisitId,
     sessionInternalId,
   };
+}
+
+function getPosthogSessionId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const value = window.sessionStorage.getItem(POSTHOG_SESSION_ID_STORAGE_KEY);
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function ensurePosthogSessionIdForEvent(
+  _eventName: string,
+): Promise<string | null> {
+  const available = getPosthogSessionId();
+  if (available) {
+    return available;
+  }
+
+  if (!isPosthogSessionRequired()) {
+    return null;
+  }
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < POSTHOG_SESSION_WAIT_MS) {
+    await wait(POSTHOG_SESSION_POLL_MS);
+    const current = getPosthogSessionId();
+    if (current) {
+      return current;
+    }
+  }
+
+  return null;
 }
 
 type TrackEventInput = {
@@ -220,6 +270,7 @@ export function getAnalyticsBaseProperties(): Record<string, unknown> {
     previous_route: journeyContext.previousRoute,
     routeVisitId: journeyContext.routeVisitId,
     sessionInternalId: journeyContext.sessionInternalId,
+    ...(getPosthogSessionId() ? { $session_id: getPosthogSessionId() } : {}),
     isAuthenticated: authContext.isAuthenticated,
     userId: authContext.userId,
     user_id: authContext.userId,
@@ -262,6 +313,7 @@ async function postBusinessFunnelEvent(payload: {
   eventVersion: number;
   idempotencyKey?: string;
   metadata: Record<string, unknown>;
+  posthogSessionId?: string | null;
 }): Promise<void> {
   if (typeof window === "undefined") {
     await emitBusinessFunnelEvent(payload);
@@ -272,6 +324,9 @@ async function postBusinessFunnelEvent(payload: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...(payload.posthogSessionId
+        ? { "x-posthog-session-id": payload.posthogSessionId }
+        : {}),
     },
     body: JSON.stringify(payload),
     keepalive: true,
@@ -288,12 +343,19 @@ async function postBusinessFunnelEvent(payload: {
 }
 
 export async function trackEvent(input: TrackEventInput): Promise<void> {
+  const resolvedPosthogSessionId = await ensurePosthogSessionIdForEvent(
+    input.eventName,
+  );
   const baseProperties = getAnalyticsBaseProperties();
   const metadata: Record<string, unknown> = {
     ...baseProperties,
     event_version: input.eventVersion ?? 1,
     ...input.properties,
   };
+
+  if (resolvedPosthogSessionId) {
+    metadata.$session_id = resolvedPosthogSessionId;
+  }
 
   metadata.source = "frontend";
 
@@ -309,6 +371,7 @@ export async function trackEvent(input: TrackEventInput): Promise<void> {
     eventVersion: input.eventVersion ?? 1,
     idempotencyKey: input.idempotencyKey,
     metadata,
+    posthogSessionId: resolvedPosthogSessionId,
   });
 
   emitGa4Event(input.eventName, metadata);

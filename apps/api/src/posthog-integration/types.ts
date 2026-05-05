@@ -15,6 +15,8 @@ export interface PostHogEventProperties {
   event_version?: number;
   request_id?: string;
   correlation_id?: string;
+  $session_id?: string;
+  sessionInternalId?: string | null;
   session_internal_id?: string | null;
   user_id?: string | null;
   route_key?: string | null;

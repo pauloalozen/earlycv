@@ -34,11 +34,13 @@ describe("analytics tracking", () => {
     fetchMock.mockReset();
     fetchMock.mockResolvedValue({ ok: true, text: async () => "" });
     vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "phc_test_key");
     window.localStorage.removeItem("analytics_first_touch_utm");
     sessionStorage.removeItem("analytics_auth_context");
     sessionStorage.removeItem("journey_session_internal_id");
     sessionStorage.removeItem("journey_current_route_visit_id");
     sessionStorage.removeItem("journey_previous_route");
+    sessionStorage.removeItem("analytics_posthog_session_id");
     window.history.replaceState({}, "", "/");
   });
 
@@ -90,6 +92,7 @@ describe("analytics tracking", () => {
       utm_campaign: "validacao_open_to_work",
       utm_content: "v1",
     });
+    expect(options?.headers?.["x-posthog-session-id"]).toBeUndefined();
   });
 
   it("sends event to GA4 when gtag is available", async () => {
@@ -117,6 +120,7 @@ describe("analytics tracking", () => {
 
   it("builds analytics base properties with current route context", () => {
     window.history.replaceState({}, "", "/adaptar");
+    sessionStorage.setItem("analytics_posthog_session_id", "ph-session-123");
 
     const base = getAnalyticsBaseProperties();
     expect(base).toMatchObject({
@@ -128,6 +132,34 @@ describe("analytics tracking", () => {
     });
     expect(base).toHaveProperty("sessionInternalId");
     expect(base).toHaveProperty("routeVisitId");
+    expect(base).toHaveProperty("$session_id", "ph-session-123");
+  });
+
+  it("sends x-posthog-session-id header when available", async () => {
+    sessionStorage.setItem("analytics_posthog_session_id", "ph-session-777");
+
+    await trackEvent({ eventName: "session_started" });
+
+    const [, options] = fetchMock.mock.calls[0] ?? [];
+    expect(options?.headers).toMatchObject({
+      "x-posthog-session-id": "ph-session-777",
+    });
+  });
+
+  it("waits briefly for PostHog session id on priority events", async () => {
+    setTimeout(() => {
+      sessionStorage.setItem("analytics_posthog_session_id", "ph-session-late");
+    }, 20);
+
+    await trackEvent({ eventName: "session_started" });
+
+    const [, options] = fetchMock.mock.calls[0] ?? [];
+    const payload = JSON.parse(String(options?.body ?? "{}"));
+
+    expect(options?.headers).toMatchObject({
+      "x-posthog-session-id": "ph-session-late",
+    });
+    expect(payload.metadata.$session_id).toBe("ph-session-late");
   });
 
   it("includes authenticated user context and enforces it on event metadata", async () => {

@@ -148,6 +148,21 @@ test("request context middleware stores route path and user-agent hash", () => {
   assert.equal(req.analysisContext.userAgentHash.length > 0, true);
 });
 
+test("request context middleware captures PostHog session id from header", () => {
+  const req = {
+    app: { get: () => false },
+    cookies: {},
+    headers: {
+      "x-posthog-session-id": "ph-session-abc",
+    },
+    socket: { remoteAddress: "127.0.0.1" },
+  } as any;
+
+  requestContextMiddleware(req, {} as any, () => {});
+
+  assert.equal(req.analysisContext.posthogSessionId, "ph-session-abc");
+});
+
 test("request context middleware resolves userId from bearer token", () => {
   process.env.JWT_ACCESS_SECRET = "test-access-secret";
   const token = sign(

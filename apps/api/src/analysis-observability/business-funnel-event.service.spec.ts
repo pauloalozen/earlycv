@@ -24,6 +24,7 @@ const baseContext = {
   ip: "203.0.113.10",
   requestId: "req-1",
   routePath: "/api/cv-adaptation/analyze",
+  posthogSessionId: "ph-session-1",
   sessionInternalId: "session-1",
   sessionPublicToken: null,
   userAgentHash: "ua-1",
@@ -260,6 +261,69 @@ test("exports event to PostHog when ingestion succeeds", async () => {
   assert.equal(exported[0].eventName, "analyze_submit_clicked");
   assert.equal(exported[0].source, "frontend");
   assert.equal(exported[0].properties.request_id, baseContext.requestId);
+  assert.equal(exported[0].properties.$session_id, "ph-session-1");
+  assert.equal(exported[0].properties.sessionInternalId, "session-1");
+});
+
+test("keeps context $session_id when metadata sends null", async () => {
+  const exported: Array<{ properties: Record<string, unknown> }> = [];
+
+  const service = new BusinessFunnelEventService(
+    {
+      $transaction: async (
+        callback: (tx: {
+          businessFunnelEvent: {
+            create: (args: {
+              data: Record<string, unknown>;
+            }) => Promise<StoredBusinessFunnelEvent>;
+            findUnique: (args: {
+              where: { idempotencyKey: string };
+            }) => Promise<StoredBusinessFunnelEvent | null>;
+          };
+        }) => Promise<unknown>,
+      ) => {
+        return callback({
+          businessFunnelEvent: {
+            create: async ({ data }: { data: Record<string, unknown> }) => {
+              return {
+                id: "event-2",
+                createdAt: new Date("2026-04-21T15:30:00.000Z"),
+                ...data,
+              } as StoredBusinessFunnelEvent;
+            },
+            findUnique: async () => null,
+          },
+        });
+      },
+    } as any,
+    {
+      applyEvent: async () => {},
+    } as BusinessFunnelProjectionService,
+    {
+      exportBusinessFunnelEvent: (
+        _eventName: string,
+        properties: Record<string, unknown>,
+      ) => {
+        exported.push({ properties });
+      },
+      shouldExportBusinessFunnelEvent: () => true,
+    } as any,
+  );
+
+  await service.record(
+    {
+      eventName: "session_started",
+      eventVersion: 1,
+      metadata: {
+        $session_id: null,
+      },
+    },
+    baseContext,
+    "frontend",
+  );
+
+  assert.equal(exported.length, 1);
+  assert.equal(exported[0].properties.$session_id, "ph-session-1");
 });
 
 test("canonicalizes eventName before persisting and projecting", async () => {

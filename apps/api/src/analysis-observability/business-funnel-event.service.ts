@@ -342,11 +342,14 @@ export class BusinessFunnelEventService {
       event_version: input.eventVersion,
       request_id: input.requestId ?? context.requestId,
       correlation_id: input.correlationId ?? context.correlationId,
-      session_internal_id: context.sessionInternalId,
+      sessionInternalId: context.sessionInternalId,
       user_id: context.userId,
       route_key: input.routeKey,
       source: source === "frontend" ? "frontend" : "backend",
       ...input.metadata,
+      ...(context.posthogSessionId
+        ? { $session_id: context.posthogSessionId }
+        : {}),
     };
 
     this.posthogExporter.exportBusinessFunnelEvent(

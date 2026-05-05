@@ -5,6 +5,7 @@ export type AnalysisRequestContext = {
   correlationId: string;
   sessionPublicToken: string | null;
   sessionInternalId: string | null;
+  posthogSessionId?: string | null;
   userId: string | null;
   ip: string | null;
   routePath: string | null;

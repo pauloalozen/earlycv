@@ -120,6 +120,8 @@ export class PosthogClientService {
           (properties?.user_id as string) ??
           (properties?.userId as string) ??
           (properties?.distinct_id as string) ??
+          (properties?.$session_id as string) ??
+          (properties?.sessionInternalId as string) ??
           (properties?.session_internal_id as string) ??
           "anonymous",
         event,
