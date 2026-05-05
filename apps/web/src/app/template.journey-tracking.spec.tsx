@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const trackEventMock = vi.hoisted(() => vi.fn());
 const usePathnameMock = vi.hoisted(() => vi.fn(() => "/adaptar"));
-const useSearchParamsMock = vi.hoisted(
-  () => vi.fn(() => new URLSearchParams()),
+const useSearchParamsMock = vi.hoisted(() =>
+  vi.fn(() => new URLSearchParams()),
 );
 
 vi.mock("next/navigation", () => ({
@@ -98,6 +98,152 @@ describe("Template journey tracking", () => {
       );
       expect(names).toContain("page_leave");
       expect(names).toContain("site_exit_candidate");
+    });
+  });
+
+  it("does not emit site_exit_candidate for auth redirect and emits auth_oauth_redirect_started", async () => {
+    window.history.replaceState({}, "", "/entrar?tab=entrar");
+    usePathnameMock.mockReturnValue("/entrar");
+    useSearchParamsMock.mockReturnValue(new URLSearchParams("tab=entrar"));
+
+    render(
+      <Template>
+        <a
+          href="https://api.earlycv.local/auth/google/start?next=%2Fadaptar"
+          data-testid="google-oauth"
+        >
+          Entrar com Google
+        </a>
+      </Template>,
+    );
+
+    const oauthLink = document.querySelector(
+      '[data-testid="google-oauth"]',
+    ) as HTMLAnchorElement;
+    fireEvent.click(oauthLink);
+    window.dispatchEvent(new Event("beforeunload"));
+    window.dispatchEvent(new Event("pagehide"));
+
+    await waitFor(() => {
+      const names = trackEventMock.mock.calls.map(
+        ([payload]) => payload.eventName,
+      );
+
+      expect(names).toContain("auth_oauth_redirect_started");
+      expect(names).toContain("page_leave");
+      expect(names).not.toContain("site_exit_candidate");
+    });
+
+    const authRedirectStarted = trackEventMock.mock.calls.find(
+      ([payload]) => payload.eventName === "auth_oauth_redirect_started",
+    )?.[0];
+    const leave = trackEventMock.mock.calls.find(
+      ([payload]) => payload.eventName === "page_leave",
+    )?.[0];
+
+    expect(authRedirectStarted?.properties?.provider).toBe("google");
+    expect(authRedirectStarted?.properties?.source).toBe("frontend");
+    expect(authRedirectStarted?.properties?.source_detail).toBe("login_google");
+    expect(authRedirectStarted?.properties?.auth_flow).toBe("signin");
+    expect(leave?.properties?.leave_reason).toBe("auth_redirect");
+  });
+
+  it("does not emit site_exit_candidate on email/password login submit and emits page_leave auth_submit", async () => {
+    window.history.replaceState({}, "", "/entrar?tab=entrar&next=%2Fadaptar%2Fresultado");
+    usePathnameMock.mockReturnValue("/entrar");
+    useSearchParamsMock.mockReturnValue(
+      new URLSearchParams("tab=entrar&next=%2Fadaptar%2Fresultado"),
+    );
+
+    render(
+      <Template>
+        <form action="/auth/login-user" method="post" data-testid="login-form">
+          <input type="hidden" name="next" value="/adaptar/resultado" />
+          <button type="submit">Entrar</button>
+        </form>
+      </Template>,
+    );
+
+    const loginForm = document.querySelector(
+      '[data-testid="login-form"]',
+    ) as HTMLFormElement;
+    fireEvent.submit(loginForm);
+    window.dispatchEvent(new Event("beforeunload"));
+    window.dispatchEvent(new Event("pagehide"));
+
+    await waitFor(() => {
+      const names = trackEventMock.mock.calls.map(
+        ([payload]) => payload.eventName,
+      );
+
+      expect(names).toContain("page_leave");
+      expect(names).not.toContain("site_exit_candidate");
+    });
+
+    const leave = trackEventMock.mock.calls.find(
+      ([payload]) => payload.eventName === "page_leave",
+    )?.[0];
+
+    expect(leave?.properties?.leave_reason).toBe("auth_submit");
+    expect(leave?.properties?.next_route).toBe("/adaptar/resultado");
+  });
+
+  it("uses route_change with next route on internal navigation followed by pagehide", async () => {
+    window.history.replaceState({}, "", "/adaptar/resultado");
+    usePathnameMock.mockReturnValue("/adaptar/resultado");
+
+    render(
+      <Template>
+        <a href="/planos" data-testid="go-planos">
+          Ver planos
+        </a>
+      </Template>,
+    );
+
+    const planosLink = document.querySelector(
+      '[data-testid="go-planos"]',
+    ) as HTMLAnchorElement;
+    fireEvent.click(planosLink);
+    window.dispatchEvent(new Event("pagehide"));
+
+    await waitFor(() => {
+      const leave = trackEventMock.mock.calls.find(
+        ([payload]) => payload.eventName === "page_leave",
+      )?.[0];
+
+      expect(leave?.properties?.leave_reason).toBe("route_change");
+      expect(leave?.properties?.next_route).toBe("/planos");
+      expect(leave?.properties?.next_pathname).toBe("/planos");
+      expect(leave?.properties?.next_url).toBe(
+        `${window.location.origin}/planos`,
+      );
+    });
+  });
+
+  it("emits page_leave with current auth context and immutable route snapshot", async () => {
+    usePathnameMock.mockReturnValue("/entrar");
+    render(
+      <Template>
+        <div>entrar</div>
+      </Template>,
+    );
+
+    sessionStorage.setItem(
+      "analytics_auth_context",
+      JSON.stringify({ isAuthenticated: true, userId: "user-auth-1" }),
+    );
+
+    window.dispatchEvent(new Event("pagehide"));
+
+    await waitFor(() => {
+      const leave = trackEventMock.mock.calls.find(
+        ([payload]) => payload.eventName === "page_leave",
+      )?.[0];
+      expect(leave?.properties?.route).toBe("/entrar");
+      expect(leave?.properties?.pathname).toBe("/entrar");
+      expect(leave?.properties?.isAuthenticated).toBe(true);
+      expect(leave?.properties?.userId).toBe("user-auth-1");
+      expect(leave?.properties?.user_id).toBe("user-auth-1");
     });
   });
 
@@ -245,6 +391,10 @@ describe("Template journey tracking", () => {
           data-testid="checkout-form"
         >
           <input type="hidden" name="planId" value="pro" />
+          <input type="hidden" name="planName" value="Pro" />
+          <input type="hidden" name="planCredits" value="9" />
+          <input type="hidden" name="planPrice" value="29.90" />
+          <input type="hidden" name="planCurrency" value="BRL" />
           <button type="submit">Comprar</button>
         </form>
       </Template>,
@@ -272,6 +422,22 @@ describe("Template journey tracking", () => {
     );
     expect(planSelectedCalls).toHaveLength(1);
     expect(checkoutStartedCalls).toHaveLength(1);
+    expect(planSelectedCalls[0]?.[0]?.properties).toMatchObject({
+      planId: "pro",
+      amount: 29.9,
+      credits: 9,
+      currency: "BRL",
+      provider: "mercado_pago",
+      source: "frontend",
+    });
+    expect(checkoutStartedCalls[0]?.[0]?.properties).toMatchObject({
+      planId: "pro",
+      amount: 29.9,
+      credits: 9,
+      currency: "BRL",
+      provider: "mercado_pago",
+      source: "frontend",
+    });
 
     first.unmount();
     vi.advanceTimersByTime(61_000);
@@ -288,6 +454,13 @@ describe("Template journey tracking", () => {
       ([payload]) => payload.eventName === "checkout_abandoned",
     );
     expect(abandonedCalls).toHaveLength(1);
+    expect(abandonedCalls[0]?.[0]?.properties).toMatchObject({
+      route: "/adaptar",
+      checkoutOriginRoute: "/adaptar",
+      checkoutOriginPathname: expect.stringContaining("/adaptar"),
+      checkoutOriginRouteVisitId: expect.stringMatching(/^\/adaptar::/),
+      routeVisitId: expect.stringMatching(/^\/adaptar::/),
+    });
   });
 
   it("does not emit checkout_abandoned before stabilization window", async () => {
@@ -302,6 +475,10 @@ describe("Template journey tracking", () => {
           data-testid="checkout-form-fast"
         >
           <input type="hidden" name="planId" value="pro" />
+          <input type="hidden" name="planName" value="Pro" />
+          <input type="hidden" name="planCredits" value="9" />
+          <input type="hidden" name="planPrice" value="29.90" />
+          <input type="hidden" name="planCurrency" value="BRL" />
           <button type="submit">Comprar</button>
         </form>
       </Template>,

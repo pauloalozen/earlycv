@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { trackEvent } from "@/lib/analytics-tracking";
 
 const AUTH_ANALYTICS_STORAGE_KEY = "analytics_auth_context";
 const IDENTIFIED_USER_STORAGE_KEY = "posthog_identified_user_id";
+const AUTH_SESSION_IDENTIFIED_STORAGE_KEY =
+  "analytics_auth_session_identified_user_id";
 
 type SessionPayload = {
   authenticated: boolean;
@@ -29,6 +32,30 @@ function writeAuthAnalyticsContext(input: {
 function clearAuthAnalyticsContext() {
   sessionStorage.removeItem(AUTH_ANALYTICS_STORAGE_KEY);
   sessionStorage.removeItem(IDENTIFIED_USER_STORAGE_KEY);
+  sessionStorage.removeItem(AUTH_SESSION_IDENTIFIED_STORAGE_KEY);
+}
+
+type AuthState = "anonymous" | "authenticated" | "unknown";
+
+function readAuthState(): AuthState {
+  const raw = sessionStorage.getItem(AUTH_ANALYTICS_STORAGE_KEY);
+  if (!raw) {
+    return "unknown";
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      isAuthenticated?: boolean;
+      userId?: string | null;
+    };
+    if (parsed.isAuthenticated && typeof parsed.userId === "string") {
+      return "authenticated";
+    }
+
+    return "anonymous";
+  } catch {
+    return "unknown";
+  }
 }
 
 function getPosthogConfig() {
@@ -66,7 +93,7 @@ export function PosthogAuthProvider({
         credentials: "same-origin",
       }).catch(() => null);
 
-      if (!response || !response.ok) {
+      if (!response?.ok) {
         if (!cancelled) {
           writeAuthAnalyticsContext({
             isAuthenticated: false,
@@ -76,18 +103,22 @@ export function PosthogAuthProvider({
         return;
       }
 
-      const payload = (await response.json().catch(() => null)) as
-        | SessionPayload
-        | null;
+      const payload = (await response
+        .json()
+        .catch(() => null)) as SessionPayload | null;
 
       if (cancelled || !payload) {
         return;
       }
 
       const userId =
-        payload.authenticated && payload.user && typeof payload.user.id === "string"
+        payload.authenticated &&
+        payload.user &&
+        typeof payload.user.id === "string"
           ? payload.user.id
           : null;
+
+      const previousAuthState = readAuthState();
 
       writeAuthAnalyticsContext({
         isAuthenticated: Boolean(userId),
@@ -115,9 +146,17 @@ export function PosthogAuthProvider({
       const storedIdentifiedUserId = sessionStorage.getItem(
         IDENTIFIED_USER_STORAGE_KEY,
       );
+      const storedAuthIdentifiedUserId = sessionStorage.getItem(
+        AUTH_SESSION_IDENTIFIED_STORAGE_KEY,
+      );
 
       if (!userId) {
-        if (storedIdentifiedUserId || lastIdentifiedUserIdRef.current) {
+        if (
+          storedIdentifiedUserId ||
+          storedAuthIdentifiedUserId ||
+          lastIdentifiedUserIdRef.current ||
+          previousAuthState === "authenticated"
+        ) {
           posthog.reset();
           clearAuthAnalyticsContext();
           writeAuthAnalyticsContext({ isAuthenticated: false, userId: null });
@@ -127,7 +166,8 @@ export function PosthogAuthProvider({
       }
 
       const alreadyIdentified =
-        lastIdentifiedUserIdRef.current === userId || storedIdentifiedUserId === userId;
+        lastIdentifiedUserIdRef.current === userId ||
+        storedIdentifiedUserId === userId;
 
       if (!alreadyIdentified) {
         posthog.identify(userId, {
@@ -138,6 +178,30 @@ export function PosthogAuthProvider({
             ? { name: payload.user.name }
             : {}),
         });
+      }
+
+      const shouldEmitAuthSessionIdentified =
+        (previousAuthState === "anonymous" ||
+          previousAuthState === "unknown") &&
+        storedAuthIdentifiedUserId !== userId;
+
+      if (shouldEmitAuthSessionIdentified) {
+        void trackEvent({
+          eventName: "auth_session_identified",
+          eventVersion: 1,
+          idempotencyKey: `auth_session_identified:${userId}`,
+          properties: {
+            isAuthenticated: true,
+            userId,
+            user_id: userId,
+            identified_user_id: userId,
+            auth_provider: undefined,
+            auth_flow: undefined,
+            previous_auth_state: previousAuthState,
+            source_detail: "posthog_auth_provider",
+          },
+        });
+        sessionStorage.setItem(AUTH_SESSION_IDENTIFIED_STORAGE_KEY, userId);
       }
 
       lastIdentifiedUserIdRef.current = userId;

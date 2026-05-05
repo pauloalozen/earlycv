@@ -23,10 +23,18 @@ const SITE_EXIT_CANDIDATE_EMITTED_SESSION_KEY =
   "journey_site_exit_candidate_emitted_session";
 
 type CheckoutIntentMarker = {
+  amount?: number;
+  credits?: number;
+  currency?: string;
+  pathname: string;
+  planName?: string;
   planId: string;
+  route: string;
   routeVisitId: string;
+  search: string;
   sessionInternalId: string;
   startedAtMs: number;
+  url: string;
 };
 
 type RouteVisitSnapshot = {
@@ -42,10 +50,63 @@ type RouteVisitSnapshot = {
 
 type LeaveReason =
   | "route_change"
+  | "auth_redirect"
+  | "auth_submit"
   | "pagehide"
   | "visibility_hidden"
   | "beforeunload"
   | "unknown";
+
+type PendingNavigation = {
+  authFlow?: "signin" | "signup" | "unknown";
+  authMethod?: "email_password" | "oauth";
+  isAuthSubmit?: boolean;
+  isAuthRedirect: boolean;
+  nextPathname?: string;
+  nextRoute?: string;
+  nextSearch?: string;
+  nextUrl?: string;
+};
+
+function parseCurrencyAmount(input: unknown): number | undefined {
+  if (typeof input !== "string") {
+    return undefined;
+  }
+
+  const compact = input.trim().replace(/\s+/g, "").replace("R$", "");
+  const normalized = compact.includes(",")
+    ? compact.replace(/\./g, "").replace(",", ".")
+    : compact;
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  const amount = Number.parseFloat(normalized);
+  if (!Number.isFinite(amount)) {
+    return undefined;
+  }
+
+  return amount;
+}
+
+function parseCredits(input: unknown): number | undefined {
+  if (typeof input === "number" && Number.isFinite(input)) {
+    return input;
+  }
+
+  if (typeof input !== "string") {
+    return undefined;
+  }
+
+  const match = input.match(/\d+/);
+  if (!match) {
+    return undefined;
+  }
+
+  const credits = Number.parseInt(match[0], 10);
+  return Number.isFinite(credits) ? credits : undefined;
+}
 
 function resolveAnalyticsEnv(): "production" | "staging" | "development" {
   const candidate =
@@ -128,6 +189,31 @@ function tryEmitWithBeacon(payload: {
   );
 }
 
+function getAuthContext() {
+  if (typeof sessionStorage === "undefined") {
+    return { isAuthenticated: false, userId: null as string | null };
+  }
+
+  const raw = sessionStorage.getItem("analytics_auth_context");
+  if (!raw) {
+    return { isAuthenticated: false, userId: null as string | null };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      isAuthenticated?: boolean;
+      userId?: string | null;
+    };
+    const userId = typeof parsed.userId === "string" ? parsed.userId : null;
+    return {
+      isAuthenticated: Boolean(parsed.isAuthenticated && userId),
+      userId,
+    };
+  } catch {
+    return { isAuthenticated: false, userId: null as string | null };
+  }
+}
+
 function buildMetadata(input: {
   occurredAt: string;
   previousRoute: string | null;
@@ -145,6 +231,8 @@ function buildMetadata(input: {
   leaveReason?: LeaveReason;
   timeOnPageMs?: number;
 }) {
+  const auth = getAuthContext();
+
   return {
     app: "earlycv",
     env: resolveAnalyticsEnv(),
@@ -164,7 +252,9 @@ function buildMetadata(input: {
     next_search: input.nextSearch,
     leave_reason: input.leaveReason,
     time_on_page_ms: input.timeOnPageMs,
-    userId: null,
+    isAuthenticated: auth.isAuthenticated,
+    userId: auth.userId,
+    user_id: auth.userId,
   };
 }
 
@@ -182,10 +272,14 @@ function readCheckoutIntent(): CheckoutIntentMarker | null {
     const parsed = JSON.parse(raw) as CheckoutIntentMarker;
     if (
       !parsed ||
+      typeof parsed.pathname !== "string" ||
       typeof parsed.planId !== "string" ||
+      typeof parsed.route !== "string" ||
       typeof parsed.routeVisitId !== "string" ||
+      typeof parsed.search !== "string" ||
       typeof parsed.sessionInternalId !== "string" ||
-      typeof parsed.startedAtMs !== "number"
+      typeof parsed.startedAtMs !== "number" ||
+      typeof parsed.url !== "string"
     ) {
       return null;
     }
@@ -323,6 +417,7 @@ export function JourneyTrackerProvider({
   const emittedLeaveVisitIdsRef = useRef<Set<string>>(new Set<string>());
   const internalNavigationInProgressRef = useRef<boolean>(false);
   const internalNavigationResetTimeoutRef = useRef<number | null>(null);
+  const pendingNavigationRef = useRef<PendingNavigation | null>(null);
 
   useEffect(() => {
     const markInternalNavigation = () => {
@@ -363,11 +458,66 @@ export function JourneyTrackerProvider({
       }
 
       const nextUrl = new URL(anchor.href, window.location.href);
+      const route = pathnameRef.current;
+      const authFlow =
+        route === "/entrar"
+          ? new URLSearchParams(window.location.search).get("tab") ===
+            "cadastro"
+            ? "signup"
+            : "signin"
+          : "unknown";
+      const isGoogleOauthLink =
+        nextUrl.pathname.includes("/auth/google/start") ||
+        nextUrl.pathname.includes("/oauth/google");
+
+      if (isGoogleOauthLink) {
+        const sessionInternalId = getSessionInternalId();
+        const routeVisitId = stateRef.current?.activeRouteVisit?.routeVisitId;
+
+        pendingNavigationRef.current = {
+          isAuthRedirect: true,
+          nextUrl: nextUrl.href,
+        };
+
+        emitInBackground({
+          eventName: "auth_oauth_redirect_started",
+          eventVersion: 1,
+          idempotencyKey: `${sessionInternalId}:${routeVisitId ?? "unknown"}:auth_oauth_redirect_started:google`,
+          metadata: {
+            ...buildMetadata({
+              occurredAt: new Date().toISOString(),
+              previousRoute: previousRouteRef.current,
+              route,
+              url: window.location.href,
+              pathname: window.location.pathname,
+              search: window.location.search,
+              referrer: document.referrer,
+              routeVisitId: routeVisitId ?? "unknown",
+              sessionInternalId,
+            }),
+            provider: "google",
+            auth_provider_domain: "accounts.google.com",
+            source_detail: "login_google",
+            auth_flow: authFlow,
+            next_external_domain: nextUrl.hostname || undefined,
+          },
+        });
+
+        return;
+      }
+
       if (nextUrl.origin !== window.location.origin) {
         return;
       }
 
       markInternalNavigation();
+      pendingNavigationRef.current = {
+        isAuthRedirect: false,
+        nextPathname: nextUrl.pathname,
+        nextRoute: nextUrl.pathname,
+        nextSearch: nextUrl.search,
+        nextUrl: nextUrl.href,
+      };
     };
 
     document.addEventListener("click", handleDocumentClick, true);
@@ -403,6 +553,7 @@ export function JourneyTrackerProvider({
       const planPriceRaw = formData.get("planPrice");
       const planCurrencyRaw = formData.get("planCurrency");
       const adaptationIdRaw = formData.get("adaptationId");
+      const sourceDetailRaw = formData.get("sourceDetail");
 
       const routeVisitId = stateRef.current?.activeRouteVisit?.routeVisitId;
       if (!routeVisitId) {
@@ -412,12 +563,24 @@ export function JourneyTrackerProvider({
       const occurredAt = new Date().toISOString();
       const route = pathnameRef.current;
       const sessionInternalId = getSessionInternalId();
+      const amount = parseCurrencyAmount(planPriceRaw);
+      const credits = parseCredits(planCreditsRaw);
+      const planId = String(planIdRaw).trim();
+      const planName =
+        typeof planNameRaw === "string" && planNameRaw.trim().length > 0
+          ? planNameRaw.trim()
+          : undefined;
+      const sourceDetail =
+        typeof sourceDetailRaw === "string" && sourceDetailRaw.trim().length > 0
+          ? sourceDetailRaw.trim()
+          : undefined;
+      const currency =
+        typeof planCurrencyRaw === "string" && planCurrencyRaw.trim().length > 0
+          ? planCurrencyRaw.trim().toUpperCase()
+          : "BRL";
 
-      emitInBackground({
-        eventName: "plan_selected",
-        eventVersion: 1,
-        idempotencyKey: `${sessionInternalId}:${routeVisitId}:plan_selected:${String(planIdRaw).trim()}`,
-        metadata: buildMetadata({
+      const planEventMetadata = {
+        ...buildMetadata({
           occurredAt,
           previousRoute: previousRouteRef.current,
           route,
@@ -428,51 +591,95 @@ export function JourneyTrackerProvider({
           routeVisitId,
           sessionInternalId,
         }),
+        amount,
+        credits,
+        currency,
+        planId,
+        planName,
+        provider: "mercado_pago",
+        source_detail: sourceDetail,
+      };
+
+      emitInBackground({
+        eventName: "plan_selected",
+        eventVersion: 1,
+        idempotencyKey: `${sessionInternalId}:${routeVisitId}:plan_selected:${planId}`,
+        metadata: planEventMetadata,
       });
 
       emitInBackground({
         eventName: "checkout_started",
         eventVersion: 1,
-        idempotencyKey: `${sessionInternalId}:${routeVisitId}:checkout_started:${String(planIdRaw).trim()}`,
+        idempotencyKey: `${sessionInternalId}:${routeVisitId}:checkout_started:${planId}`,
         metadata: {
-          ...buildMetadata({
-            occurredAt,
-            previousRoute: previousRouteRef.current,
-            route,
-            url: window.location.href,
-            pathname: window.location.pathname,
-            search: window.location.search,
-            referrer: document.referrer,
-            routeVisitId,
-            sessionInternalId,
-          }),
-          amount: typeof planPriceRaw === "string" ? planPriceRaw : undefined,
-          credits:
-            typeof planCreditsRaw === "string" ? planCreditsRaw : undefined,
-          currency:
-            typeof planCurrencyRaw === "string" ? planCurrencyRaw : "BRL",
+          ...planEventMetadata,
           external_reference:
             typeof adaptationIdRaw === "string" ? adaptationIdRaw : undefined,
           payment_method: "unknown",
-          planId: String(planIdRaw).trim(),
-          planName:
-            typeof planNameRaw === "string" ? planNameRaw : undefined,
-          provider: "mercado_pago",
         },
       });
 
       writeCheckoutIntent({
+        amount,
+        credits,
+        currency,
+        pathname: window.location.pathname,
+        planName,
         planId: planIdRaw.trim(),
+        route,
         routeVisitId,
+        search: window.location.search,
         sessionInternalId,
         startedAtMs: Date.now(),
+        url: window.location.href,
       });
     };
 
+    const handleAuthSubmit = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLFormElement)) {
+        return;
+      }
+
+      const action = target.getAttribute("action") ?? "";
+      if (action !== "/auth/login-user" && action !== "/auth/login") {
+        return;
+      }
+
+      const formData = new FormData(target);
+      const nextRaw = formData.get("next");
+      const next =
+        typeof nextRaw === "string" &&
+        nextRaw.startsWith("/") &&
+        !nextRaw.startsWith("//")
+          ? nextRaw
+          : undefined;
+      const nextUrl = next ? `${window.location.origin}${next}` : undefined;
+      const nextSearch = nextUrl ? new URL(nextUrl).search : undefined;
+      const authFlow =
+        new URLSearchParams(window.location.search).get("tab") === "cadastro"
+          ? "signup"
+          : "signin";
+
+      internalNavigationInProgressRef.current = true;
+      pendingNavigationRef.current = {
+        authFlow,
+        authMethod: "email_password",
+        isAuthRedirect: false,
+        isAuthSubmit: true,
+        nextPathname: next,
+        nextRoute: next,
+        nextSearch,
+        nextUrl,
+      };
+    };
+
     document.addEventListener("submit", handleCheckoutIntentSubmit, true);
+    document.addEventListener("submit", handleAuthSubmit, true);
 
     return () => {
       document.removeEventListener("submit", handleCheckoutIntentSubmit, true);
+      document.removeEventListener("submit", handleAuthSubmit, true);
     };
   }, []);
 
@@ -532,7 +739,8 @@ export function JourneyTrackerProvider({
           ? snapshot
           : null;
 
-      const entryRoute = routeVisitSnapshot?.entryRoute ?? finished.event.pathname;
+      const entryRoute =
+        routeVisitSnapshot?.entryRoute ?? finished.event.pathname;
       const entryPathname =
         routeVisitSnapshot?.entryPathname ?? finished.event.pathname;
       const entrySearch = routeVisitSnapshot?.entrySearch ?? "";
@@ -705,12 +913,19 @@ export function JourneyTrackerProvider({
           idempotencyKey: `${checkoutIntent.sessionInternalId}:${checkoutIntent.planId}:checkout_abandoned`,
           metadata: {
             ...baseMetadata,
-            routeVisitId: checkoutIntent.routeVisitId,
+            amount: checkoutIntent.amount,
+            checkoutOriginPathname: checkoutIntent.pathname,
+            checkoutOriginRoute: checkoutIntent.route,
             checkoutOriginRouteVisitId: checkoutIntent.routeVisitId,
+            checkoutOriginSearch: checkoutIntent.search,
+            checkoutOriginUrl: checkoutIntent.url,
             checkoutStartedAt: new Date(
               checkoutIntent.startedAtMs,
             ).toISOString(),
+            credits: checkoutIntent.credits,
+            currency: checkoutIntent.currency,
             planId: checkoutIntent.planId,
+            planName: checkoutIntent.planName,
           },
         });
         clearCheckoutIntent();
@@ -763,6 +978,7 @@ export function JourneyTrackerProvider({
       const activeRouteVisit = stateRef.current?.activeRouteVisit;
       if (
         internalNavigationInProgressRef.current ||
+        pendingNavigationRef.current?.isAuthSubmit ||
         !activeRouteVisit ||
         hasSiteExitCandidateBeenEmittedForSession(sessionInternalId)
       ) {
@@ -804,9 +1020,25 @@ export function JourneyTrackerProvider({
     };
 
     const handlePageHide = () => {
-      emitSiteExitCandidate("pagehide");
+      const pendingNavigation = pendingNavigationRef.current;
+      if (!pendingNavigation?.isAuthRedirect && !pendingNavigation?.isAuthSubmit) {
+        emitSiteExitCandidate("pagehide");
+      }
+
+      const leaveReason: LeaveReason = pendingNavigation?.isAuthSubmit
+        ? "auth_submit"
+        : pendingNavigation?.isAuthRedirect
+          ? "auth_redirect"
+          : pendingNavigation?.nextPathname
+            ? "route_change"
+            : "pagehide";
+
       emitLeaveFromCurrentVisit({
-        leaveReason: "pagehide",
+        leaveReason,
+        nextPathname: pendingNavigation?.nextPathname,
+        nextRoute: pendingNavigation?.nextRoute,
+        nextSearch: pendingNavigation?.nextSearch,
+        nextUrl: pendingNavigation?.nextUrl,
         shouldResetVisit: true,
       });
     };
@@ -816,10 +1048,19 @@ export function JourneyTrackerProvider({
         return;
       }
 
+      if (pendingNavigationRef.current?.isAuthSubmit) {
+        return;
+      }
+
       emitSiteExitCandidate("visibility_hidden");
     };
 
     const handleBeforeUnload = () => {
+      const pendingNavigation = pendingNavigationRef.current;
+      if (pendingNavigation?.isAuthRedirect || pendingNavigation?.isAuthSubmit) {
+        return;
+      }
+
       emitSiteExitCandidate("beforeunload");
     };
 

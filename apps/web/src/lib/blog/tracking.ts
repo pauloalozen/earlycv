@@ -41,10 +41,37 @@ function getCurrentRouteVisitId() {
   );
 }
 
-export function trackBlogIndexViewed() {
-  const dedupKey = `blog_index_viewed:${getCurrentRouteVisitId()}`;
+async function waitForConsistentJourneyContext(expectedPathname: string) {
+  const maxAttempts = 8;
+  const waitMs = 25;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const pathname =
+      typeof window !== "undefined" ? window.location.pathname : "";
+    const routeVisitId = getCurrentRouteVisitId();
+
+    if (
+      pathname === expectedPathname &&
+      routeVisitId.startsWith(`${expectedPathname}::`)
+    ) {
+      return routeVisitId;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+
+  return null;
+}
+
+export async function trackBlogIndexViewed() {
+  const routeVisitId = await waitForConsistentJourneyContext("/blog");
+  if (!routeVisitId) {
+    return;
+  }
+
+  const dedupKey = `blog_index_viewed:${routeVisitId}`;
   if (shouldSkipDuplicatedBlogEvent(dedupKey)) {
-    return Promise.resolve();
+    return;
   }
 
   return trackEvent({
@@ -56,15 +83,21 @@ export function trackBlogIndexViewed() {
   });
 }
 
-export function trackBlogPostViewed(input: {
+export async function trackBlogPostViewed(input: {
   category: string;
   slug: string;
   tags: string[];
   title: string;
 }) {
-  const dedupKey = `blog_post_viewed:${input.slug}:${getCurrentRouteVisitId()}`;
+  const expectedPathname = `/blog/${input.slug}`;
+  const routeVisitId = await waitForConsistentJourneyContext(expectedPathname);
+  if (!routeVisitId) {
+    return;
+  }
+
+  const dedupKey = `blog_post_viewed:${input.slug}:${routeVisitId}`;
   if (shouldSkipDuplicatedBlogEvent(dedupKey)) {
-    return Promise.resolve();
+    return;
   }
 
   return trackEvent({

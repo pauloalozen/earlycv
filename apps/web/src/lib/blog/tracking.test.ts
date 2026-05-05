@@ -25,7 +25,7 @@ describe("blog tracking", () => {
 
   it("emits blog_index_viewed", async () => {
     sessionStorage.setItem("journey_session_internal_id", "session-blog");
-    sessionStorage.setItem("journey_current_route_visit_id", "visit-blog");
+    sessionStorage.setItem("journey_current_route_visit_id", "/blog::visit-blog");
 
     await trackBlogIndexViewed();
     const metadata = getLatestMetadata();
@@ -35,13 +35,19 @@ describe("blog tracking", () => {
       page: "/blog",
       route: "/blog",
       pathname: "/blog",
-      routeVisitId: "visit-blog",
+      routeVisitId: "/blog::visit-blog",
       sessionInternalId: "session-blog",
       source: "frontend",
     });
   });
 
   it("emits blog_post_viewed", async () => {
+    window.history.replaceState({}, "", "/blog/curriculo-ats");
+    sessionStorage.setItem(
+      "journey_current_route_visit_id",
+      "/blog/curriculo-ats::visit-post",
+    );
+
     await trackBlogPostViewed({
       category: "Curriculo",
       slug: "curriculo-ats",
@@ -113,6 +119,12 @@ describe("blog tracking", () => {
   });
 
   it("adds auth context for authenticated blog events", async () => {
+    window.history.replaceState({}, "", "/blog/analista-bi");
+    sessionStorage.setItem(
+      "journey_current_route_visit_id",
+      "/blog/analista-bi::visit-post",
+    );
+
     sessionStorage.setItem(
       "analytics_auth_context",
       JSON.stringify({ isAuthenticated: true, userId: "user-blog-1" }),
@@ -134,11 +146,55 @@ describe("blog tracking", () => {
   });
 
   it("does not duplicate blog_index_viewed for same routeVisitId", async () => {
-    sessionStorage.setItem("journey_current_route_visit_id", "visit-blog-once");
+    sessionStorage.setItem(
+      "journey_current_route_visit_id",
+      "/blog::visit-blog-once",
+    );
 
     await trackBlogIndexViewed();
     await trackBlogIndexViewed();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for /blog routeVisitId before emitting blog_index_viewed", async () => {
+    vi.useFakeTimers();
+    sessionStorage.setItem("journey_current_route_visit_id", "/::old");
+
+    const pending = trackBlogIndexViewed();
+    vi.advanceTimersByTime(50);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    sessionStorage.setItem("journey_current_route_visit_id", "/blog::new");
+    vi.advanceTimersByTime(50);
+    await pending;
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("waits for /blog/<slug> routeVisitId before emitting blog_post_viewed", async () => {
+    vi.useFakeTimers();
+    window.history.replaceState({}, "", "/blog/curriculo-ats");
+    sessionStorage.setItem("journey_current_route_visit_id", "/blog::list");
+
+    const pending = trackBlogPostViewed({
+      category: "Curriculo",
+      slug: "curriculo-ats",
+      tags: ["ats"],
+      title: "Curriculo ATS",
+    });
+    vi.advanceTimersByTime(50);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    sessionStorage.setItem(
+      "journey_current_route_visit_id",
+      "/blog/curriculo-ats::post",
+    );
+    vi.advanceTimersByTime(50);
+    await pending;
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });
