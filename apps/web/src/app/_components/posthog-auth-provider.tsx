@@ -90,8 +90,9 @@ function getPosthogConfig() {
 
   const apiHost =
     process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() || "https://us.i.posthog.com";
+  const uiHost = process.env.NEXT_PUBLIC_POSTHOG_UIHOST?.trim() || undefined;
 
-  return { apiHost, apiKey };
+  return { apiHost, apiKey, uiHost };
 }
 
 function getJourneySessionInternalId() {
@@ -123,6 +124,7 @@ export function PosthogAuthProvider({
         if (!initializedRef.current) {
           posthog.init(posthogConfig.apiKey, {
             api_host: posthogConfig.apiHost,
+            ui_host: posthogConfig.uiHost,
             autocapture: false,
             capture_pageview: false,
             capture_pageleave: false,
