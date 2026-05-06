@@ -4,6 +4,11 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics-tracking";
 import {
+  beginSessionStartedEmission,
+  markSessionStartedEmitted,
+  markSessionStartedFailed,
+} from "@/lib/session-started-guard";
+import {
   getPosthogSessionId,
   waitForPosthogSessionId,
 } from "@/lib/posthog-session";
@@ -101,6 +106,11 @@ function parseCurrencyAmount(input: unknown): number | undefined {
   }
 
   return amount;
+}
+
+function isPosthogSessionRequired() {
+  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
+  return typeof key === "string" && key.length > 0;
 }
 
 function parseCredits(input: unknown): number | undefined {
@@ -991,18 +1001,57 @@ export function JourneyTrackerProvider({
           clearCheckoutIntent();
         }
 
+        if (isPosthogSessionRequired()) {
+          const posthogSessionId = await waitForPosthogSessionId();
+          if (!posthogSessionId) {
+            return;
+          }
+
+          const shouldEmitSessionStarted = beginSessionStartedEmission(
+            posthogSessionId,
+          );
+          if (!shouldEmitSessionStarted) {
+            return;
+          }
+
+          try {
+            emitInBackground({
+              eventName: "session_started",
+              eventVersion: 1,
+              idempotencyKey: `${posthogSessionId}:session_started`,
+              metadata: buildMetadata({
+                occurredAt,
+                previousRoute: previousRouteRef.current,
+                route: pathname,
+                url: window.location.href,
+                pathname,
+                search: window.location.search,
+                referrer: document.referrer,
+                routeVisitId,
+                sessionInternalId,
+              }),
+            });
+            markSessionStartedEmitted(posthogSessionId);
+          } catch {
+            markSessionStartedFailed(posthogSessionId);
+          }
+          return;
+        }
+
         const startedResult = consumeSessionStartedOnce(
           stateRef.current ?? createJourneyState(),
         );
         stateRef.current = startedResult.state;
-        if (startedResult.shouldEmit) {
-          emitInBackground({
-            eventName: "session_started",
-            eventVersion: 1,
-            idempotencyKey: `${sessionInternalId}:session_started`,
-            metadata: baseMetadata,
-          });
+        if (!startedResult.shouldEmit) {
+          return;
         }
+
+        emitInBackground({
+          eventName: "session_started",
+          eventVersion: 1,
+          idempotencyKey: `${sessionInternalId}:session_started`,
+          metadata: baseMetadata,
+        });
       })();
     }
 

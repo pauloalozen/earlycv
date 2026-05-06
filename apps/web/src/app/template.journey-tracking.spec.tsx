@@ -7,6 +7,8 @@ const usePathnameMock = vi.hoisted(() => vi.fn(() => "/adaptar"));
 const useSearchParamsMock = vi.hoisted(() =>
   vi.fn(() => new URLSearchParams()),
 );
+const waitForPosthogSessionIdMock = vi.hoisted(() => vi.fn());
+const getPosthogSessionIdMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   usePathname: usePathnameMock,
@@ -17,16 +19,29 @@ vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: trackEventMock,
 }));
 
+vi.mock("@/lib/posthog-session", () => ({
+  waitForPosthogSessionId: waitForPosthogSessionIdMock,
+  getPosthogSessionId: getPosthogSessionIdMock,
+  persistPosthogSessionId: vi.fn(),
+}));
+
 import Template from "./template";
+import { __resetSessionStartedEmissionGuardForTests } from "@/lib/session-started-guard";
 
 describe("Template journey tracking", () => {
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = "ph-test-key";
     trackEventMock.mockReset();
     trackEventMock.mockResolvedValue(undefined);
+    waitForPosthogSessionIdMock.mockReset();
+    waitForPosthogSessionIdMock.mockResolvedValue("ph-session-1");
+    getPosthogSessionIdMock.mockReset();
+    getPosthogSessionIdMock.mockReturnValue("ph-session-1");
     usePathnameMock.mockReset();
     usePathnameMock.mockReturnValue("/adaptar");
     useSearchParamsMock.mockReset();
     useSearchParamsMock.mockReturnValue(new URLSearchParams());
+    __resetSessionStartedEmissionGuardForTests();
     sessionStorage.clear();
   });
 
@@ -357,6 +372,117 @@ describe("Template journey tracking", () => {
     expect(firstView?.properties?.sessionInternalId).toBe(
       secondView?.properties?.sessionInternalId,
     );
+  });
+
+  it("emits session_started only once for same posthog session across routes", async () => {
+    usePathnameMock.mockReturnValue("/demo-resultado");
+    const first = render(
+      <Template>
+        <div>demo</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const startedCalls = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "session_started",
+      );
+      expect(startedCalls).toHaveLength(1);
+    });
+
+    first.unmount();
+
+    usePathnameMock.mockReturnValue("/entrar");
+    const second = render(
+      <Template>
+        <div>entrar</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const startedCalls = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "session_started",
+      );
+      expect(startedCalls).toHaveLength(1);
+    });
+
+    second.unmount();
+    usePathnameMock.mockReturnValue("/adaptar");
+    render(
+      <Template>
+        <div>adaptar</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const startedCalls = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "session_started",
+      );
+      expect(startedCalls).toHaveLength(1);
+    });
+  });
+
+  it("emits new session_started when posthog session id changes", async () => {
+    const { rerender } = render(
+      <Template>
+        <div>child</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const startedCalls = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "session_started",
+      );
+      expect(startedCalls).toHaveLength(1);
+    });
+
+    waitForPosthogSessionIdMock.mockResolvedValue("ph-session-2");
+    getPosthogSessionIdMock.mockReturnValue("ph-session-2");
+    usePathnameMock.mockReturnValue("/adaptar/resultado");
+
+    rerender(
+      <Template>
+        <div>child</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const startedCalls = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "session_started",
+      );
+      expect(startedCalls).toHaveLength(2);
+    });
+  });
+
+  it("does not emit new session_started when sessionInternalId changes but posthog session id is same", async () => {
+    const first = render(
+      <Template>
+        <div>child</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const startedCalls = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "session_started",
+      );
+      expect(startedCalls).toHaveLength(1);
+    });
+
+    first.unmount();
+    sessionStorage.removeItem("journey_session_internal_id");
+    usePathnameMock.mockReturnValue("/adaptar");
+
+    render(
+      <Template>
+        <div>child-2</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      const startedCalls = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "session_started",
+      );
+      expect(startedCalls).toHaveLength(1);
+    });
   });
 
   it("does not duplicate navigation events in strict mode mount cycle", async () => {
