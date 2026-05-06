@@ -191,6 +191,11 @@ export function PosthogAuthProvider({
           previousAuthState === "anonymous" || previousAuthState === "unknown";
 
         if (shouldEmitAuthSessionIdentified) {
+          const posthogSessionClient = posthog as
+            | PosthogSessionClient
+            | null;
+          persistPosthogSessionId(posthogSessionClient?.get_session_id?.());
+
           const journeySessionInternalId = getJourneySessionInternalId();
           void trackEvent({
             eventName: "auth_session_identified",

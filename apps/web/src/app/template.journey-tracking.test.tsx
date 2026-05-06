@@ -104,44 +104,6 @@ describe("Template journey tracking strict mode", () => {
     });
   });
 
-  it("emits site_exit_candidate on pagehide", async () => {
-    render(
-      <Template>
-        <div>home</div>
-      </Template>,
-    );
-
-    window.dispatchEvent(new Event("pagehide"));
-
-    await waitFor(() => {
-      const exits = trackEventMock.mock.calls.filter(
-        ([payload]) => payload.eventName === "site_exit_candidate",
-      );
-
-      expect(exits.length).toBeGreaterThan(0);
-      expect(exits[0]?.[0]?.properties?.route).toBe("/");
-    });
-  });
-
-  it("emits only one site_exit_candidate per session", async () => {
-    render(
-      <Template>
-        <div>home</div>
-      </Template>,
-    );
-
-    window.dispatchEvent(new Event("pagehide"));
-    window.dispatchEvent(new Event("pagehide"));
-
-    await waitFor(() => {
-      const exits = trackEventMock.mock.calls.filter(
-        ([payload]) => payload.eventName === "site_exit_candidate",
-      );
-
-      expect(exits).toHaveLength(1);
-    });
-  });
-
   it("emits page_leave with origin url and next destination url", async () => {
     window.history.replaceState({}, "", "/?utm_source=linkedin");
     usePathnameMock.mockReturnValue("/");

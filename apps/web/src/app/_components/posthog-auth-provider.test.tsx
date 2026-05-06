@@ -1,5 +1,4 @@
 import { render, waitFor } from "@testing-library/react";
-import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const trackEventMock = vi.hoisted(() => vi.fn());
@@ -48,7 +47,7 @@ describe("PosthogAuthProvider", () => {
     sessionStorage.setItem("journey_previous_route", "/");
   });
 
-  it("identifies authenticated user once across strict mode remounts", async () => {
+  it("identifies authenticated user once across remounts", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -60,12 +59,22 @@ describe("PosthogAuthProvider", () => {
       }),
     );
 
+    const first = render(
+      <PosthogAuthProvider>
+        <div>child</div>
+      </PosthogAuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(identifyMock).toHaveBeenCalledTimes(1);
+    });
+
+    first.unmount();
+
     render(
-      <StrictMode>
-        <PosthogAuthProvider>
-          <div>child</div>
-        </PosthogAuthProvider>
-      </StrictMode>,
+      <PosthogAuthProvider>
+        <div>child-2</div>
+      </PosthogAuthProvider>,
     );
 
     await waitFor(() => {
@@ -243,5 +252,41 @@ describe("PosthogAuthProvider", () => {
         }),
       );
     });
+  });
+
+  it("persists posthog session id before auth_session_identified emission", async () => {
+    getSessionIdMock
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce("ph-session-after-identify");
+
+    const sessionIdAtTrackCall: Array<string | null> = [];
+    trackEventMock.mockImplementation(async () => {
+      sessionIdAtTrackCall.push(
+        sessionStorage.getItem("analytics_posthog_session_id"),
+      );
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        json: async () => ({
+          authenticated: true,
+          user: { id: "user-99", name: "User 99" },
+        }),
+        ok: true,
+      }),
+    );
+
+    render(
+      <PosthogAuthProvider>
+        <div>child</div>
+      </PosthogAuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(trackEventMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(sessionIdAtTrackCall).toEqual(["ph-session-after-identify"]);
   });
 });
