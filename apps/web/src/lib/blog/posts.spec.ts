@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   getAllPublishedBlogPosts,
   getBlogPostBySlug,
+  getBlogPostCategories,
   getFeaturedBlogPost,
   getPublishedBlogSlugs,
 } from "./posts";
@@ -47,6 +48,23 @@ test("blog loader returns a featured post", () => {
   const featured = getFeaturedBlogPost();
   assert.ok(featured);
   assert.equal(featured.featured, true);
+});
+
+test("blog loader returns unique published categories preserving first appearance", () => {
+  const posts = getAllPublishedBlogPosts();
+  const categories = getBlogPostCategories(posts);
+
+  assert.ok(categories.length >= 1);
+  assert.equal(new Set(categories).size, categories.length);
+
+  const expectedOrder: string[] = [];
+  for (const post of posts) {
+    if (!expectedOrder.includes(post.category)) {
+      expectedOrder.push(post.category);
+    }
+  }
+
+  assert.deepEqual(categories, expectedOrder);
 });
 
 test("blog frontmatter parser validates required fields", () => {

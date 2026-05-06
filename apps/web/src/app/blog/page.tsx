@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { BlogAnalysisCta } from "@/components/blog/blog-analysis-cta";
+import { BlogCategoryFilter } from "@/components/blog/blog-category-filter";
 import { BlogCard } from "@/components/blog/blog-card";
 import { BlogIndexViewTracker } from "@/components/blog/blog-view-trackers";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import {
   getAllPublishedBlogPosts,
+  getBlogPostCategories,
   getFeaturedBlogPost,
 } from "@/lib/blog/posts";
 import { getAbsoluteUrl } from "@/lib/site";
@@ -39,9 +41,23 @@ const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 const GRAIN = `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`;
 
-export default function BlogIndexPage() {
+type BlogIndexPageProps = {
+  searchParams: Promise<{ category?: string }>;
+};
+
+export default async function BlogIndexPage({ searchParams }: BlogIndexPageProps) {
+  const { category } = await searchParams;
   const posts = getAllPublishedBlogPosts();
+  const categories = getBlogPostCategories(posts);
   const featured = getFeaturedBlogPost();
+  const activeCategory =
+    typeof category === "string" && categories.includes(category)
+      ? category
+      : "Todos";
+  const filteredPosts =
+    activeCategory === "Todos"
+      ? posts
+      : posts.filter((post) => post.category === activeCategory);
 
   return (
     <main
@@ -208,7 +224,11 @@ export default function BlogIndexPage() {
           </Link>
         ) : null}
 
-        {/* Posts grid */}
+        <BlogCategoryFilter
+          activeCategory={activeCategory}
+          categories={categories}
+        />
+
         <section
           style={{
             display: "grid",
@@ -216,7 +236,7 @@ export default function BlogIndexPage() {
             gap: 16,
           }}
         >
-          {posts.map((post) => (
+          {filteredPosts.map((post) => (
             <BlogCard key={post.slug} post={post} />
           ))}
         </section>

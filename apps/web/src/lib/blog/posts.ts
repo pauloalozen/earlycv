@@ -59,6 +59,20 @@ export function getFeaturedBlogPost() {
   return getAllPublishedBlogPosts().find((post) => post.featured) ?? null;
 }
 
+export function getBlogPostCategories(posts: BlogPost[]) {
+  const categories = new Set<string>();
+
+  for (const post of posts) {
+    const normalized = post.category.trim();
+    if (!normalized) {
+      continue;
+    }
+    categories.add(normalized);
+  }
+
+  return [...categories];
+}
+
 export function getRelatedBlogPosts(slug: string, limit = 3) {
   const current = getBlogPostBySlug(slug);
   if (!current) {
