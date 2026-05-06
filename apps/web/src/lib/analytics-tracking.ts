@@ -1,5 +1,9 @@
 import { getFrontendAnalyticsContext } from "@/lib/analytics-context";
 import { emitBusinessFunnelEvent } from "@/lib/cv-adaptation-api";
+import {
+  getPosthogSessionId,
+  waitForPosthogSessionId,
+} from "@/lib/posthog-session";
 
 const UTM_STORAGE_KEY = "analytics_first_touch_utm";
 const BUSINESS_FUNNEL_EVENTS_PATH =
@@ -7,9 +11,6 @@ const BUSINESS_FUNNEL_EVENTS_PATH =
 const JOURNEY_SESSION_KEY = "journey_session_internal_id";
 const JOURNEY_ROUTE_VISIT_KEY = "journey_current_route_visit_id";
 const JOURNEY_PREVIOUS_ROUTE_KEY = "journey_previous_route";
-const POSTHOG_SESSION_ID_STORAGE_KEY = "analytics_posthog_session_id";
-const POSTHOG_SESSION_WAIT_MS = 1200;
-const POSTHOG_SESSION_POLL_MS = 50;
 
 function isPosthogSessionRequired() {
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
@@ -108,24 +109,6 @@ function getJourneyContext() {
   };
 }
 
-function getPosthogSessionId(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const value = window.sessionStorage.getItem(POSTHOG_SESSION_ID_STORAGE_KEY);
-  if (!value) {
-    return null;
-  }
-
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : null;
-}
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function ensurePosthogSessionIdForEvent(
   _eventName: string,
 ): Promise<string | null> {
@@ -138,16 +121,7 @@ async function ensurePosthogSessionIdForEvent(
     return null;
   }
 
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < POSTHOG_SESSION_WAIT_MS) {
-    await wait(POSTHOG_SESSION_POLL_MS);
-    const current = getPosthogSessionId();
-    if (current) {
-      return current;
-    }
-  }
-
-  return null;
+  return waitForPosthogSessionId();
 }
 
 type TrackEventInput = {

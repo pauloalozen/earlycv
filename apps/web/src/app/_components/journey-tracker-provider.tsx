@@ -4,6 +4,10 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics-tracking";
 import {
+  getPosthogSessionId,
+  waitForPosthogSessionId,
+} from "@/lib/posthog-session";
+import {
   consumeSessionEngagedOnce,
   consumeSessionStartedOnce,
   createJourneyState,
@@ -21,7 +25,6 @@ const CURRENT_ROUTE_VISIT_SNAPSHOT_KEY = "journey_current_route_visit_snapshot";
 const PREVIOUS_ROUTE_KEY = "journey_previous_route";
 const SITE_EXIT_CANDIDATE_EMITTED_SESSION_KEY =
   "journey_site_exit_candidate_emitted_session";
-const POSTHOG_SESSION_ID_STORAGE_KEY = "analytics_posthog_session_id";
 
 type CheckoutIntentMarker = {
   amount?: number;
@@ -222,20 +225,6 @@ function getAuthContext() {
   } catch {
     return { isAuthenticated: false, userId: null as string | null };
   }
-}
-
-function getPosthogSessionId() {
-  if (typeof sessionStorage === "undefined") {
-    return null;
-  }
-
-  const value = sessionStorage.getItem(POSTHOG_SESSION_ID_STORAGE_KEY);
-  if (!value) {
-    return null;
-  }
-
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : null;
 }
 
 function buildMetadata(input: {
@@ -939,68 +928,82 @@ export function JourneyTrackerProvider({
     });
 
     if (!hasActiveVisitForPath) {
-      const occurredAt = new Date().toISOString();
-      const baseMetadata = buildMetadata({
-        occurredAt,
-        previousRoute: previousRouteRef.current,
-        route: pathname,
-        url: window.location.href,
-        pathname,
-        search: window.location.search,
-        referrer: document.referrer,
-        routeVisitId: activeVisit.routeVisitId,
-        sessionInternalId,
-      });
+      const routeVisitId = activeVisit.routeVisitId;
+      void (async () => {
+        await waitForPosthogSessionId();
 
-      emitInBackground({
-        eventName: "page_view",
-        eventVersion: 1,
-        idempotencyKey: `${sessionInternalId}:${activeVisit.routeVisitId}:page_view`,
-        metadata: baseMetadata,
-      });
+        if (pathnameRef.current !== pathname) {
+          return;
+        }
 
-      const checkoutIntent = readCheckoutIntent();
-      if (
-        checkoutIntent &&
-        checkoutIntent.sessionInternalId === sessionInternalId &&
-        Date.now() - checkoutIntent.startedAtMs >= CHECKOUT_ABANDON_MIN_MS
-      ) {
-        emitInBackground({
-          eventName: "checkout_abandoned",
-          eventVersion: 1,
-          idempotencyKey: `${checkoutIntent.sessionInternalId}:${checkoutIntent.planId}:checkout_abandoned`,
-          metadata: {
-            ...baseMetadata,
-            amount: checkoutIntent.amount,
-            checkoutOriginPathname: checkoutIntent.pathname,
-            checkoutOriginRoute: checkoutIntent.route,
-            checkoutOriginRouteVisitId: checkoutIntent.routeVisitId,
-            checkoutOriginSearch: checkoutIntent.search,
-            checkoutOriginUrl: checkoutIntent.url,
-            checkoutStartedAt: new Date(
-              checkoutIntent.startedAtMs,
-            ).toISOString(),
-            credits: checkoutIntent.credits,
-            currency: checkoutIntent.currency,
-            planId: checkoutIntent.planId,
-            planName: checkoutIntent.planName,
-          },
+        const currentActiveVisit = stateRef.current?.activeRouteVisit;
+        if (!currentActiveVisit || currentActiveVisit.routeVisitId !== routeVisitId) {
+          return;
+        }
+
+        const occurredAt = new Date().toISOString();
+        const baseMetadata = buildMetadata({
+          occurredAt,
+          previousRoute: previousRouteRef.current,
+          route: pathname,
+          url: window.location.href,
+          pathname,
+          search: window.location.search,
+          referrer: document.referrer,
+          routeVisitId,
+          sessionInternalId,
         });
-        clearCheckoutIntent();
-      }
 
-      const startedResult = consumeSessionStartedOnce(
-        stateRef.current ?? createJourneyState(),
-      );
-      stateRef.current = startedResult.state;
-      if (startedResult.shouldEmit) {
         emitInBackground({
-          eventName: "session_started",
+          eventName: "page_view",
           eventVersion: 1,
-          idempotencyKey: `${sessionInternalId}:session_started`,
+          idempotencyKey: `${sessionInternalId}:${routeVisitId}:page_view`,
           metadata: baseMetadata,
         });
-      }
+
+        const checkoutIntent = readCheckoutIntent();
+        if (
+          checkoutIntent &&
+          checkoutIntent.sessionInternalId === sessionInternalId &&
+          Date.now() - checkoutIntent.startedAtMs >= CHECKOUT_ABANDON_MIN_MS
+        ) {
+          emitInBackground({
+            eventName: "checkout_abandoned",
+            eventVersion: 1,
+            idempotencyKey: `${checkoutIntent.sessionInternalId}:${checkoutIntent.planId}:checkout_abandoned`,
+            metadata: {
+              ...baseMetadata,
+              amount: checkoutIntent.amount,
+              checkoutOriginPathname: checkoutIntent.pathname,
+              checkoutOriginRoute: checkoutIntent.route,
+              checkoutOriginRouteVisitId: checkoutIntent.routeVisitId,
+              checkoutOriginSearch: checkoutIntent.search,
+              checkoutOriginUrl: checkoutIntent.url,
+              checkoutStartedAt: new Date(
+                checkoutIntent.startedAtMs,
+              ).toISOString(),
+              credits: checkoutIntent.credits,
+              currency: checkoutIntent.currency,
+              planId: checkoutIntent.planId,
+              planName: checkoutIntent.planName,
+            },
+          });
+          clearCheckoutIntent();
+        }
+
+        const startedResult = consumeSessionStartedOnce(
+          stateRef.current ?? createJourneyState(),
+        );
+        stateRef.current = startedResult.state;
+        if (startedResult.shouldEmit) {
+          emitInBackground({
+            eventName: "session_started",
+            eventVersion: 1,
+            idempotencyKey: `${sessionInternalId}:session_started`,
+            metadata: baseMetadata,
+          });
+        }
+      })();
     }
 
     const handleEngagement = () => {
@@ -1012,24 +1015,27 @@ export function JourneyTrackerProvider({
         return;
       }
 
-      emitInBackground({
-        eventName: "session_engaged",
-        eventVersion: 1,
-        idempotencyKey: `${sessionInternalId}:session_engaged`,
-        metadata: buildMetadata({
-          occurredAt: new Date().toISOString(),
-          previousRoute: previousRouteRef.current,
-          route: pathnameRef.current,
-          url: window.location.href,
-          pathname: pathnameRef.current,
-          search: window.location.search,
-          referrer: document.referrer,
-          routeVisitId:
-            stateRef.current.activeRouteVisit?.routeVisitId ??
-            activeVisit.routeVisitId,
-          sessionInternalId,
-        }),
-      });
+      void (async () => {
+        await waitForPosthogSessionId();
+        emitInBackground({
+          eventName: "session_engaged",
+          eventVersion: 1,
+          idempotencyKey: `${sessionInternalId}:session_engaged`,
+          metadata: buildMetadata({
+            occurredAt: new Date().toISOString(),
+            previousRoute: previousRouteRef.current,
+            route: pathnameRef.current,
+            url: window.location.href,
+            pathname: pathnameRef.current,
+            search: window.location.search,
+            referrer: document.referrer,
+            routeVisitId:
+              stateRef.current?.activeRouteVisit?.routeVisitId ??
+              activeVisit.routeVisitId,
+            sessionInternalId,
+          }),
+        });
+      })();
     };
 
     const emitSiteExitCandidate = (leaveReason: LeaveReason) => {

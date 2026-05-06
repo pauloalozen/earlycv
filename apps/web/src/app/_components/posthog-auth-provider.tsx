@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics-tracking";
+import { persistPosthogSessionId } from "@/lib/posthog-session";
 
 const AUTH_ANALYTICS_STORAGE_KEY = "analytics_auth_context";
 const IDENTIFIED_USER_STORAGE_KEY = "posthog_identified_user_id";
-const POSTHOG_SESSION_ID_STORAGE_KEY = "analytics_posthog_session_id";
 const AUTH_SESSION_IDENTIFIED_STORAGE_KEY =
   "analytics_auth_session_identified_user_id";
 const JOURNEY_SESSION_KEY = "journey_session_internal_id";
@@ -28,23 +28,6 @@ type PosthogSessionClient = {
   get_session_id?: () => string | null | undefined;
   onSessionId?: (callback: (sessionId: string) => void) => void;
 };
-
-function persistPosthogSessionId(raw: unknown) {
-  if (typeof sessionStorage === "undefined") {
-    return;
-  }
-
-  if (typeof raw !== "string") {
-    return;
-  }
-
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return;
-  }
-
-  sessionStorage.setItem(POSTHOG_SESSION_ID_STORAGE_KEY, trimmed);
-}
 
 function writeAuthAnalyticsContext(input: {
   isAuthenticated: boolean;
