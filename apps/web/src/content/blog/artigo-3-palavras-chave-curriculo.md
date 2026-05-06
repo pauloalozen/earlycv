@@ -2,7 +2,7 @@
 title: "Palavras-chave no currículo: como usar sem parecer texto genérico"
 description: "Aprenda a identificar as palavras-chave certas para cada vaga, incorporar termos de forma natural e aumentar aderência sem transformar seu currículo em uma lista de buzzwords."
 slug: palavras-chave-curriculo
-publishedAt: "2026-04-29"
+publishedAt: "2026-05-01"
 updatedAt: "2026-05-01"
 category: Curriculo
 tags:
@@ -16,7 +16,7 @@ tags:
   - tech-jobs
 featured: false
 readingTime: "8 min"
-status: draft
+status: published
 seoTitle: "Palavras-chave no currículo: guia prático para profissionais de tech e dados"
 seoDescription: "Como identificar, selecionar e aplicar palavras-chave no currículo com contexto real, evitando exageros e termos vazios. Guia com exemplos para profissionais de tecnologia, dados e produto."
 mainTag: Keywords

@@ -16,7 +16,7 @@ tags:
   - mercado-de-trabalho
 featured: false
 readingTime: "9 min"
-status: published
+status: draft
 seoTitle: "Currículo ATS: guia completo com checklist para triagem automática"
 seoDescription: "Entenda como sistemas ATS funcionam de verdade, o que eles leem no seu currículo e como estruturar seu documento para passar da triagem automática para a leitura humana."
 mainTag: ATS

@@ -18,7 +18,7 @@ tags:
   - produto
 featured: true
 readingTime: "10 min"
-status: published
+status: draft
 seoTitle: "Como adaptar currículo para vaga sem inventar experiência: passo a passo"
 seoDescription: "Guia prático e completo para adaptar seu currículo a cada vaga com honestidade, destacando aderência real, palavras-chave e resultados comprováveis. Para profissionais de tech, dados e produto."
 mainTag: Guia pratico

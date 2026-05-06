@@ -1,3 +1,3 @@
 # TASK A FAZER - ORDEM DE PRIORIDADE.
 
-Testar minuciaosamente Observabilidade se tiver ok em dev, fazer o git push para prod
+Arrumar os icones para o novo modelo
