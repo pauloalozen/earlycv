@@ -2,13 +2,21 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PlansService } from "./plans.service";
 
-test("records payment_failed when webhook resolution marks failed", async () => {
-  const recordedEvents: Array<{ eventName: string; source: string }> = [];
+test("records enriched payment_failed with purchase_not_found when webhook resolution marks failed", async () => {
+  const recordedEvents: Array<{
+    eventName: string;
+    source: string;
+    metadata: Record<string, unknown>;
+  }> = [];
   let findUniqueCalls = 0;
 
   const service = new PlansService(
     {
+      paymentAuditLog: {
+        create: async () => ({ id: "audit-1" }),
+      },
       planPurchase: {
+        findFirst: async () => null,
         findUnique: async () => {
           findUniqueCalls += 1;
           return null;
@@ -25,12 +33,13 @@ test("records payment_failed when webhook resolution marks failed", async () => 
     } as never,
     {
       record: async (
-        input: { eventName: string },
+        input: { eventName: string; metadata?: Record<string, unknown> },
         _context: unknown,
         source: string,
       ) => {
         recordedEvents.push({
           eventName: input.eventName,
+          metadata: input.metadata ?? {},
           source,
         });
         return {
@@ -46,7 +55,11 @@ test("records payment_failed when webhook resolution marks failed", async () => 
       resolveMercadoPagoPayment: (body: unknown) => Promise<unknown>;
     }
   ).resolveMercadoPagoPayment = async () => ({
+    merchantOrderId: "ord-1",
+    paymentId: "mp-1",
     paymentReference: "pay-ref-1",
+    preferenceId: "pref-1",
+    rawStatus: "rejected",
     status: "failed",
   });
 
@@ -57,22 +70,43 @@ test("records payment_failed when webhook resolution marks failed", async () => 
 
   assert.equal(findUniqueCalls, 1);
   assert.equal(recordedEvents.length, 1);
-  assert.deepEqual(recordedEvents[0], {
-    eventName: "payment_failed",
-    source: "backend",
-  });
+  assert.equal(recordedEvents[0]?.eventName, "payment_failed");
+  assert.equal(recordedEvents[0]?.source, "backend");
+  assert.equal(recordedEvents[0]?.metadata.purchaseResolved, false);
+  assert.equal(
+    recordedEvents[0]?.metadata.enrichmentStatus,
+    "purchase_not_found",
+  );
+  assert.equal(recordedEvents[0]?.metadata.paymentReference, "pay-ref-1");
+  assert.equal(recordedEvents[0]?.metadata.paymentId, "mp-1");
+  assert.equal(recordedEvents[0]?.metadata.preferenceId, "pref-1");
+  assert.equal(recordedEvents[0]?.metadata.merchantOrderId, "ord-1");
+  assert.equal(recordedEvents[0]?.metadata.distinct_id, "pay-ref-1");
 });
 
-test("marks purchase as failed before recording payment_failed", async () => {
+test("marks purchase as failed before recording enriched payment_failed", async () => {
   const updatedStatuses: string[] = [];
-  const recordedEvents: string[] = [];
+  const recordedEvents: Array<Record<string, unknown>> = [];
 
   const service = new PlansService(
     {
+      paymentAuditLog: {
+        create: async () => ({ id: "audit-2" }),
+      },
       planPurchase: {
+        findFirst: async () => null,
         findUnique: async () => ({
+          amountInCents: 2990,
+          analysisCreditsGranted: 9,
+          creditsGranted: 3,
+          currency: "BRL",
           id: "purchase-failed-1",
+          originAction: "unlock_cv",
+          originAdaptationId: "adapt-1",
+          paymentProvider: "mercadopago",
+          planType: "pro",
           status: "pending",
+          userId: "user-123",
         }),
         update: async ({ data }: { data: { status: string } }) => {
           updatedStatuses.push(data.status);
@@ -84,8 +118,14 @@ test("marks purchase as failed before recording payment_failed", async () => {
       },
     } as never,
     {
-      record: async (input: { eventName: string }) => {
-        recordedEvents.push(input.eventName);
+      record: async (input: {
+        eventName: string;
+        metadata?: Record<string, unknown>;
+      }) => {
+        recordedEvents.push({
+          eventName: input.eventName,
+          ...(input.metadata ?? {}),
+        });
         return {
           event: { id: "evt-failed-1" },
           ingested: true,
@@ -99,7 +139,11 @@ test("marks purchase as failed before recording payment_failed", async () => {
       resolveMercadoPagoPayment: (body: unknown) => Promise<unknown>;
     }
   ).resolveMercadoPagoPayment = async () => ({
+    merchantOrderId: "ord-failed-1",
+    paymentId: "mp-failed-1",
     paymentReference: "pay-ref-failed-1",
+    preferenceId: "pref-failed-1",
+    rawStatus: "rejected",
     status: "failed",
   });
 
@@ -109,7 +153,26 @@ test("marks purchase as failed before recording payment_failed", async () => {
   });
 
   assert.deepEqual(updatedStatuses, ["failed"]);
-  assert.deepEqual(recordedEvents, ["payment_failed"]);
+  assert.equal(recordedEvents.length, 1);
+  assert.equal(recordedEvents[0]?.eventName, "payment_failed");
+  assert.equal(recordedEvents[0]?.purchaseResolved, true);
+  assert.equal(
+    recordedEvents[0]?.enrichmentStatus,
+    "enriched_from_purchase",
+  );
+  assert.equal(recordedEvents[0]?.purchaseId, "purchase-failed-1");
+  assert.equal(recordedEvents[0]?.userId, "user-123");
+  assert.equal(recordedEvents[0]?.user_id, "user-123");
+  assert.equal(recordedEvents[0]?.planId, "pro");
+  assert.equal(recordedEvents[0]?.planName, "Pro");
+  assert.equal(recordedEvents[0]?.amount, 2990);
+  assert.equal(recordedEvents[0]?.credits, 3);
+  assert.equal(recordedEvents[0]?.provider, "mercadopago");
+  assert.equal(recordedEvents[0]?.paymentStatus, "failed");
+  assert.equal(recordedEvents[0]?.statusDetail, "rejected");
+  assert.equal(recordedEvents[0]?.originAction, "unlock_cv");
+  assert.equal(recordedEvents[0]?.originAdaptationId, "adapt-1");
+  assert.equal(recordedEvents[0]?.distinct_id, "user-123");
 });
 
 test("does not record payment_failed when webhook resolution is approved", async () => {
@@ -117,6 +180,27 @@ test("does not record payment_failed when webhook resolution is approved", async
 
   const service = new PlansService(
     {
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          planPurchase: {
+            findUnique: async () => ({
+              analysisCreditsGranted: 9,
+              creditsGranted: 3,
+              id: "purchase-1",
+              paymentReference: "pay-ref-2",
+              planType: "pro",
+              status: "pending",
+              userId: "user-1",
+            }),
+            update: async () => ({ ok: true }),
+          },
+          user: {
+            update: async () => ({ ok: true }),
+          },
+        }),
+      paymentAuditLog: {
+        create: async () => ({ id: "audit-3" }),
+      },
       planPurchase: {
         findUnique: async () => ({
           analysisCreditsGranted: 9,

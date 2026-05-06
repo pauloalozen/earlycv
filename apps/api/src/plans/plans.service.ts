@@ -26,6 +26,14 @@ type MercadoPagoPaymentResolution = {
   rawStatus: string | null;
 };
 
+type PaymentFailureEnrichmentInput = {
+  paymentReference: string;
+  paymentId: string | null;
+  merchantOrderId: string | null;
+  preferenceId: string | null;
+  rawStatus: string | null;
+};
+
 type AuditEntry = {
   eventType: string;
   actionTaken: string;
@@ -467,7 +475,16 @@ export class PlansService {
         );
       }
 
-      await this.recordPaymentFailed(resolution.paymentReference);
+      await this.recordPaymentFailed(
+        {
+          paymentId: resolution.paymentId,
+          paymentReference: resolution.paymentReference,
+          preferenceId: resolution.preferenceId,
+          merchantOrderId: resolution.merchantOrderId,
+          rawStatus: resolution.rawStatus,
+        },
+        purchase,
+      );
       this.logAuditEvent({
         ...auditBase,
         eventType: "payment_rejected",
@@ -583,16 +600,80 @@ export class PlansService {
     return true;
   }
 
-  private async recordPaymentFailed(paymentReference: string) {
+  private async recordPaymentFailed(
+    resolution: PaymentFailureEnrichmentInput,
+    purchase?: {
+      id: string;
+      userId: string;
+      planType: string;
+      amountInCents: number;
+      currency: string;
+      paymentProvider: string;
+      status: string;
+      creditsGranted: number;
+      mpPaymentId: string | null;
+      mpMerchantOrderId: string | null;
+      mpPreferenceId: string | null;
+      originAction: PurchaseOriginAction;
+      originAdaptationId: string | null;
+    } | null,
+  ) {
+    const resolvedPurchase = purchase ?? (await this.findPurchaseForFailedPayment(resolution));
+    const purchaseResolved = Boolean(resolvedPurchase);
+    const enrichmentStatus = purchaseResolved
+      ? "enriched_from_purchase"
+      : "purchase_not_found";
+
+    this.logger.log(
+      `[webhook:plans] payment_failed enrichment paymentReference=${resolution.paymentReference} purchaseResolved=${purchaseResolved} purchaseId=${resolvedPurchase?.id ?? "null"} userId=${resolvedPurchase?.userId ?? "null"} enrichmentStatus=${enrichmentStatus}`,
+    );
+
+    const distinctId =
+      resolvedPurchase?.userId ??
+      resolution.paymentReference ??
+      resolvedPurchase?.id ??
+      null;
+
+    const metadata: Record<string, unknown> = {
+      purchaseResolved,
+      enrichmentStatus,
+      paymentReference: resolution.paymentReference,
+      paymentId: resolution.paymentId,
+      merchantOrderId: resolution.merchantOrderId,
+      preferenceId: resolution.preferenceId,
+      provider: "mercadopago",
+      paymentStatus: "failed",
+      statusDetail: resolution.rawStatus,
+      failureReason: resolution.rawStatus,
+      ...(!resolvedPurchase && resolution.rawStatus
+        ? { failureCode: resolution.rawStatus }
+        : {}),
+      ...(distinctId ? { distinct_id: distinctId } : {}),
+    };
+
+    if (resolvedPurchase) {
+      metadata.userId = resolvedPurchase.userId;
+      metadata.user_id = resolvedPurchase.userId;
+      metadata.purchaseId = resolvedPurchase.id;
+      metadata.planId = resolvedPurchase.planType;
+      metadata.planName = planTypeToDisplayName(resolvedPurchase.planType);
+      metadata.amount = resolvedPurchase.amountInCents;
+      metadata.credits = resolvedPurchase.creditsGranted;
+      metadata.currency = resolvedPurchase.currency;
+      metadata.originAction = resolvedPurchase.originAction;
+      metadata.originAdaptationId = resolvedPurchase.originAdaptationId;
+      metadata.paymentMethod = "pix";
+    }
+
     const context: AnalysisRequestContext = {
-      correlationId: `plans-webhook:${paymentReference}`,
+      correlationId: `plans-webhook:${resolution.paymentReference}`,
       ip: null,
-      requestId: `plans-webhook:${paymentReference}`,
+      requestId: `plans-webhook:${resolution.paymentReference}`,
       routePath: "/api/plans/webhook/mercadopago",
       sessionInternalId: null,
       sessionPublicToken: null,
       userAgentHash: null,
-      userId: null,
+      userId: resolvedPurchase?.userId ?? null,
     };
 
     await this.businessFunnelEventService
@@ -600,11 +681,8 @@ export class PlansService {
         {
           eventName: "payment_failed",
           eventVersion: 1,
-          idempotencyKey: `plans:${paymentReference}:payment_failed`,
-          metadata: {
-            paymentReference,
-            provider: "mercadopago",
-          },
+          idempotencyKey: `plans:${resolution.paymentReference}:payment_failed`,
+          metadata,
           routeKey: "api/plans/webhook/mercadopago",
         },
         context,
@@ -615,6 +693,34 @@ export class PlansService {
           `Failed to record payment_failed funnel event: ${error}`,
         );
       });
+  }
+
+  private async findPurchaseForFailedPayment(
+    resolution: PaymentFailureEnrichmentInput,
+  ) {
+    const whereCandidates: Array<Record<string, string>> = [];
+
+    if (resolution.paymentReference) {
+      whereCandidates.push({ paymentReference: resolution.paymentReference });
+    }
+    if (resolution.paymentId) {
+      whereCandidates.push({ mpPaymentId: resolution.paymentId });
+    }
+    if (resolution.merchantOrderId) {
+      whereCandidates.push({ mpMerchantOrderId: resolution.merchantOrderId });
+    }
+    if (resolution.preferenceId) {
+      whereCandidates.push({ mpPreferenceId: resolution.preferenceId });
+    }
+
+    for (const where of whereCandidates) {
+      const purchase = await this.database.planPurchase.findFirst({ where });
+      if (purchase) {
+        return purchase;
+      }
+    }
+
+    return null;
   }
 
   private async applyApprovedPurchaseInsideTransaction(
