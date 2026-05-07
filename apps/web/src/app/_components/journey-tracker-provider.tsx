@@ -861,22 +861,24 @@ export function JourneyTrackerProvider({
         return;
       }
 
-      if (emittedLeaveVisitIdsRef.current.has(finished.event.routeVisitId)) {
+      const finishedEvent = finished.event;
+
+      if (emittedLeaveVisitIdsRef.current.has(finishedEvent.routeVisitId)) {
         return;
       }
 
-      emittedLeaveVisitIdsRef.current.add(finished.event.routeVisitId);
+      emittedLeaveVisitIdsRef.current.add(finishedEvent.routeVisitId);
 
       const snapshot = readCurrentRouteVisitSnapshot();
       const routeVisitSnapshot =
-        snapshot && snapshot.routeVisitId === finished.event.routeVisitId
+        snapshot && snapshot.routeVisitId === finishedEvent.routeVisitId
           ? snapshot
           : null;
 
       const entryRoute =
-        routeVisitSnapshot?.entryRoute ?? finished.event.pathname;
+        routeVisitSnapshot?.entryRoute ?? finishedEvent.pathname;
       const entryPathname =
-        routeVisitSnapshot?.entryPathname ?? finished.event.pathname;
+        routeVisitSnapshot?.entryPathname ?? finishedEvent.pathname;
       const entrySearch = routeVisitSnapshot?.entrySearch ?? "";
       const entryUrl =
         routeVisitSnapshot?.entryUrl ??
@@ -892,7 +894,7 @@ export function JourneyTrackerProvider({
         pathname: entryPathname,
         search: entrySearch,
         referrer: entryReferrer,
-        routeVisitId: finished.event.routeVisitId,
+        routeVisitId: finishedEvent.routeVisitId,
         sessionInternalId,
         nextPathname: input.nextPathname,
         nextRoute: input.nextRoute,
@@ -906,7 +908,7 @@ export function JourneyTrackerProvider({
         checkoutPlanName: pendingNavigationRef.current?.checkoutPlanName,
         checkoutProvider: pendingNavigationRef.current?.checkoutProvider,
         nextExternalDomain: pendingNavigationRef.current?.nextExternalDomain,
-        timeOnPageMs: finished.event.timeOnPageMs,
+        timeOnPageMs: finishedEvent.timeOnPageMs,
       });
 
       void (async () => {
@@ -917,7 +919,7 @@ export function JourneyTrackerProvider({
         const leavePayload = {
           eventName: "page_leave",
           eventVersion: 1,
-          idempotencyKey: `${sessionInternalId}:${finished.event.routeVisitId}:page_leave`,
+          idempotencyKey: `${sessionInternalId}:${finishedEvent.routeVisitId}:page_leave`,
           metadata,
         };
 
@@ -926,8 +928,8 @@ export function JourneyTrackerProvider({
       })();
 
       if (input.shouldResetVisit) {
-        previousRouteRef.current = finished.event.pathname;
-        setPreviousRoute(finished.event.pathname);
+        previousRouteRef.current = finishedEvent.pathname;
+        setPreviousRoute(finishedEvent.pathname);
         clearCurrentRouteVisitId();
       }
     };
