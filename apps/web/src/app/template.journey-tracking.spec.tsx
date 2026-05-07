@@ -150,6 +150,7 @@ describe("Template journey tracking", () => {
         ([payload]) => payload.eventName === "page_leave",
       )?.[0];
       expect(leave).toBeDefined();
+      expect(leave?.properties?.$session_id).toBe("ph-session-1");
       expect(leave?.properties?.utm_source).toBe("smoke");
       expect(leave?.properties?.utm_medium).toBe("manual");
       expect(leave?.properties?.utm_campaign).toBe("session_started_fix");
@@ -159,6 +160,36 @@ describe("Template journey tracking", () => {
       const names = trackEventMock.mock.calls.map(([payload]) => payload.eventName);
       expect(names).not.toContain("site_exit_candidate");
     });
+  });
+
+  it("sends page_leave beacon body with $session_id when available", async () => {
+    const sendBeaconMock = vi.fn(() => true);
+    Object.defineProperty(window.navigator, "sendBeacon", {
+      configurable: true,
+      value: sendBeaconMock,
+    });
+
+    render(
+      <Template>
+        <div>child</div>
+      </Template>,
+    );
+
+    window.dispatchEvent(new Event("pagehide"));
+
+    await waitFor(() => {
+      expect(sendBeaconMock).toHaveBeenCalled();
+    });
+
+    const bodyBlob = sendBeaconMock.mock.calls[0]?.[1] as Blob;
+    const bodyText = await bodyBlob.text();
+    const payload = JSON.parse(bodyText) as {
+      metadata?: { $session_id?: string };
+      eventName?: string;
+    };
+
+    expect(payload.eventName).toBe("page_leave");
+    expect(payload.metadata?.$session_id).toBe("ph-session-1");
   });
 
   it("does not emit site_exit_candidate for auth redirect and emits auth_oauth_redirect_started", async () => {
@@ -285,6 +316,7 @@ describe("Template journey tracking", () => {
       expect(leave?.properties?.next_url).toBe(
         `${window.location.origin}/planos`,
       );
+      expect(leave?.properties?.$session_id).toBe("ph-session-1");
       expect(leave?.properties?.utm_source).toBe("smoke");
       expect(leave?.properties?.utm_medium).toBe("manual");
       expect(leave?.properties?.utm_campaign).toBe("session_started_fix");
@@ -314,9 +346,33 @@ describe("Template journey tracking", () => {
       )?.[0];
       expect(leave?.properties?.route).toBe("/entrar");
       expect(leave?.properties?.pathname).toBe("/entrar");
+      expect(leave?.properties?.$session_id).toBe("ph-session-1");
       expect(leave?.properties?.isAuthenticated).toBe(true);
       expect(leave?.properties?.userId).toBe("user-auth-1");
       expect(leave?.properties?.user_id).toBe("user-auth-1");
+    });
+  });
+
+  it("marks page_leave as unusable when posthog session id is unavailable", async () => {
+    getPosthogSessionIdMock.mockReturnValue(null);
+    waitForPosthogSessionIdMock.mockResolvedValue(null);
+
+    render(
+      <Template>
+        <div>child</div>
+      </Template>,
+    );
+
+    window.dispatchEvent(new Event("pagehide"));
+
+    await waitFor(() => {
+      const leave = trackEventMock.mock.calls.find(
+        ([payload]) => payload.eventName === "page_leave",
+      )?.[0];
+      expect(leave).toBeDefined();
+      expect(leave?.properties?.$session_id ?? null).toBeNull();
+      expect(leave?.properties?.missingPosthogSessionId).toBe(true);
+      expect(leave?.properties?.unusableForSessionFunnel).toBe(true);
     });
   });
 
@@ -353,6 +409,108 @@ describe("Template journey tracking", () => {
       expect(names).not.toContain("site_exit");
       expect(names).not.toContain("site_exit_candidate");
     });
+  });
+
+  it("waits auth loading before emitting private dashboard page_view", async () => {
+    usePathnameMock.mockReturnValue("/dashboard");
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    sessionStorage.setItem(
+      "analytics_auth_context",
+      JSON.stringify({
+        authStatus: "loading",
+        isAuthenticated: false,
+        userId: null,
+      }),
+    );
+
+    render(
+      <Template>
+        <div>dashboard</div>
+      </Template>,
+    );
+
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 60);
+    });
+
+    expect(
+      trackEventMock.mock.calls.some(
+        ([payload]) => payload.eventName === "page_view",
+      ),
+    ).toBe(false);
+
+    sessionStorage.setItem(
+      "analytics_auth_context",
+      JSON.stringify({
+        authStatus: "authenticated",
+        isAuthenticated: true,
+        userId: "user-dashboard-1",
+      }),
+    );
+
+    await waitFor(() => {
+      const pageViews = trackEventMock.mock.calls.filter(
+        ([payload]) => payload.eventName === "page_view",
+      );
+
+      expect(pageViews).toHaveLength(1);
+      expect(pageViews[0]?.[0]?.properties?.isAuthenticated).toBe(true);
+      expect(pageViews[0]?.[0]?.properties?.userId).toBe("user-dashboard-1");
+      expect(pageViews[0]?.[0]?.properties?.user_id).toBe("user-dashboard-1");
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("uses bounded wait on public route and emits authenticated page_view when auth resolves quickly", async () => {
+    usePathnameMock.mockReturnValue("/");
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    sessionStorage.setItem(
+      "analytics_auth_context",
+      JSON.stringify({
+        authStatus: "loading",
+        isAuthenticated: false,
+        userId: null,
+      }),
+    );
+
+    render(
+      <Template>
+        <div>home</div>
+      </Template>,
+    );
+
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 80);
+    });
+
+    expect(
+      trackEventMock.mock.calls.some(
+        ([payload]) => payload.eventName === "page_view",
+      ),
+    ).toBe(false);
+
+    sessionStorage.setItem(
+      "analytics_auth_context",
+      JSON.stringify({
+        authStatus: "authenticated",
+        isAuthenticated: true,
+        userId: "user-home-1",
+      }),
+    );
+
+    await waitFor(() => {
+      const pageView = trackEventMock.mock.calls.find(
+        ([payload]) => payload.eventName === "page_view",
+      )?.[0];
+
+      expect(pageView?.properties?.route).toBe("/");
+      expect(pageView?.properties?.isAuthenticated).toBe(true);
+      expect(pageView?.properties?.userId).toBe("user-home-1");
+      expect(pageView?.properties?.user_id).toBe("user-home-1");
+    });
+
+    vi.unstubAllGlobals();
   });
 
   it("emits a single page_leave per route change", async () => {
@@ -632,7 +790,7 @@ describe("Template journey tracking", () => {
       </Template>,
     );
 
-    await Promise.resolve();
+    await vi.runAllTimersAsync();
 
     const abandonedCalls = trackEventMock.mock.calls.filter(
       ([payload]) => payload.eventName === "checkout_abandoned",
@@ -680,7 +838,7 @@ describe("Template journey tracking", () => {
       </Template>,
     );
 
-    await Promise.resolve();
+    await vi.runAllTimersAsync();
 
     const abandonedCalls = trackEventMock.mock.calls.filter(
       ([payload]) => payload.eventName === "checkout_abandoned",

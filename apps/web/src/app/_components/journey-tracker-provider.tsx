@@ -33,6 +33,7 @@ const CURRENT_ROUTE_VISIT_SNAPSHOT_KEY = "journey_current_route_visit_snapshot";
 const PREVIOUS_ROUTE_KEY = "journey_previous_route";
 const SITE_EXIT_CANDIDATE_EMITTED_SESSION_KEY =
   "journey_site_exit_candidate_emitted_session";
+const AUTH_RESET_ALLOWED_STORAGE_KEY = "analytics_auth_reset_allowed";
 
 type CheckoutIntentMarker = {
   amount?: number;
@@ -217,26 +218,71 @@ function tryEmitWithBeacon(payload: {
 
 function getAuthContext() {
   if (typeof sessionStorage === "undefined") {
-    return { isAuthenticated: false, userId: null as string | null };
+    return {
+      authStatus: "anonymous",
+      isAuthenticated: false,
+      userId: null as string | null,
+    };
   }
 
   const raw = sessionStorage.getItem("analytics_auth_context");
   if (!raw) {
-    return { isAuthenticated: false, userId: null as string | null };
+    return {
+      authStatus: "anonymous",
+      isAuthenticated: false,
+      userId: null as string | null,
+    };
   }
 
   try {
     const parsed = JSON.parse(raw) as {
+      authStatus?: "loading" | "anonymous" | "authenticated";
       isAuthenticated?: boolean;
       userId?: string | null;
     };
     const userId = typeof parsed.userId === "string" ? parsed.userId : null;
+    const authStatus =
+      parsed.authStatus === "loading" ||
+      parsed.authStatus === "anonymous" ||
+      parsed.authStatus === "authenticated"
+        ? parsed.authStatus
+        : "anonymous";
     return {
+      authStatus,
       isAuthenticated: Boolean(parsed.isAuthenticated && userId),
       userId,
     };
   } catch {
-    return { isAuthenticated: false, userId: null as string | null };
+    return {
+      authStatus: "anonymous",
+      isAuthenticated: false,
+      userId: null as string | null,
+    };
+  }
+}
+
+function isPrivateAuthenticatedRoute(pathname: string): boolean {
+  return (
+    pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/") ||
+    pathname === "/compras" ||
+    pathname.startsWith("/compras/")
+  );
+}
+
+async function waitForAuthStatusResolution(pathname: string): Promise<void> {
+  const timeoutMs = isPrivateAuthenticatedRoute(pathname) ? 2_000 : 200;
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const authContext = getAuthContext();
+    if (authContext.authStatus !== "loading") {
+      return;
+    }
+
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 25);
+    });
   }
 }
 
@@ -299,6 +345,36 @@ function buildMetadata(input: {
     userId: auth.userId,
     user_id: auth.userId,
     ...firstTouchUtm,
+  };
+}
+
+async function enrichLeaveMetadataWithSession(input: {
+  metadata: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  const currentSessionId = getPosthogSessionId();
+  if (currentSessionId) {
+    return {
+      ...input.metadata,
+      $session_id: currentSessionId,
+    };
+  }
+
+  if (!isPosthogSessionRequired()) {
+    return input.metadata;
+  }
+
+  const resolvedSessionId = await waitForPosthogSessionId(200);
+  if (resolvedSessionId) {
+    return {
+      ...input.metadata,
+      $session_id: resolvedSessionId,
+    };
+  }
+
+  return {
+    ...input.metadata,
+    missingPosthogSessionId: true,
+    unusableForSessionFunnel: true,
   };
 }
 
@@ -698,6 +774,9 @@ export function JourneyTrackerProvider({
 
       const action = target.getAttribute("action") ?? "";
       if (action !== "/auth/login-user" && action !== "/auth/login") {
+        if (action === "/auth/logout") {
+          sessionStorage.setItem(AUTH_RESET_ALLOWED_STORAGE_KEY, "1");
+        }
         return;
       }
 
@@ -804,39 +883,47 @@ export function JourneyTrackerProvider({
         `${window.location.origin}${entryPathname}${entrySearch}`;
       const entryReferrer = routeVisitSnapshot?.referrer ?? document.referrer;
 
-      const leavePayload = {
-        eventName: "page_leave",
-        eventVersion: 1,
-        idempotencyKey: `${sessionInternalId}:${finished.event.routeVisitId}:page_leave`,
-        metadata: buildMetadata({
-          occurredAt: new Date().toISOString(),
-          previousRoute:
-            routeVisitSnapshot?.previousRoute ?? previousRouteRef.current,
-          route: entryRoute,
-          url: entryUrl,
-          pathname: entryPathname,
-          search: entrySearch,
-          referrer: entryReferrer,
-          routeVisitId: finished.event.routeVisitId,
-          sessionInternalId,
-          nextPathname: input.nextPathname,
-          nextRoute: input.nextRoute,
-          nextSearch: input.nextSearch,
-          nextUrl: input.nextUrl,
-          leaveReason: input.leaveReason,
-          checkoutAmount: pendingNavigationRef.current?.checkoutAmount,
-          checkoutCredits: pendingNavigationRef.current?.checkoutCredits,
-          checkoutCurrency: pendingNavigationRef.current?.checkoutCurrency,
-          checkoutPlanId: pendingNavigationRef.current?.checkoutPlanId,
-          checkoutPlanName: pendingNavigationRef.current?.checkoutPlanName,
-          checkoutProvider: pendingNavigationRef.current?.checkoutProvider,
-          nextExternalDomain: pendingNavigationRef.current?.nextExternalDomain,
-          timeOnPageMs: finished.event.timeOnPageMs,
-        }),
-      };
+      const baseLeaveMetadata = buildMetadata({
+        occurredAt: new Date().toISOString(),
+        previousRoute:
+          routeVisitSnapshot?.previousRoute ?? previousRouteRef.current,
+        route: entryRoute,
+        url: entryUrl,
+        pathname: entryPathname,
+        search: entrySearch,
+        referrer: entryReferrer,
+        routeVisitId: finished.event.routeVisitId,
+        sessionInternalId,
+        nextPathname: input.nextPathname,
+        nextRoute: input.nextRoute,
+        nextSearch: input.nextSearch,
+        nextUrl: input.nextUrl,
+        leaveReason: input.leaveReason,
+        checkoutAmount: pendingNavigationRef.current?.checkoutAmount,
+        checkoutCredits: pendingNavigationRef.current?.checkoutCredits,
+        checkoutCurrency: pendingNavigationRef.current?.checkoutCurrency,
+        checkoutPlanId: pendingNavigationRef.current?.checkoutPlanId,
+        checkoutPlanName: pendingNavigationRef.current?.checkoutPlanName,
+        checkoutProvider: pendingNavigationRef.current?.checkoutProvider,
+        nextExternalDomain: pendingNavigationRef.current?.nextExternalDomain,
+        timeOnPageMs: finished.event.timeOnPageMs,
+      });
 
-      tryEmitWithBeacon(leavePayload);
-      emitInBackground(leavePayload);
+      void (async () => {
+        const metadata = await enrichLeaveMetadataWithSession({
+          metadata: baseLeaveMetadata,
+        });
+
+        const leavePayload = {
+          eventName: "page_leave",
+          eventVersion: 1,
+          idempotencyKey: `${sessionInternalId}:${finished.event.routeVisitId}:page_leave`,
+          metadata,
+        };
+
+        tryEmitWithBeacon(leavePayload);
+        emitInBackground(leavePayload);
+      })();
 
       if (input.shouldResetVisit) {
         previousRouteRef.current = finished.event.pathname;
@@ -863,31 +950,39 @@ export function JourneyTrackerProvider({
       if (snapshotVisit && snapshotVisit.entryPathname !== pathname) {
         emittedLeaveVisitIdsRef.current.add(snapshotVisit.routeVisitId);
 
-        const leavePayload = {
-          eventName: "page_leave",
-          eventVersion: 1,
-          idempotencyKey: `${sessionInternalId}:${snapshotVisit.routeVisitId}:page_leave`,
-          metadata: buildMetadata({
-            occurredAt: new Date().toISOString(),
-            previousRoute: snapshotVisit.previousRoute,
-            route: snapshotVisit.entryRoute,
-            url: snapshotVisit.entryUrl,
-            pathname: snapshotVisit.entryPathname,
-            search: snapshotVisit.entrySearch,
-            referrer: snapshotVisit.referrer,
-            routeVisitId: snapshotVisit.routeVisitId,
-            sessionInternalId,
-            nextPathname: pathname,
-            nextRoute: pathname,
-            nextSearch: currentSearch,
-            nextUrl: currentUrl,
-            leaveReason: "route_change",
-            timeOnPageMs: Math.max(0, Date.now() - snapshotVisit.startedAtMs),
-          }),
-        };
+        const baseLeaveMetadata = buildMetadata({
+          occurredAt: new Date().toISOString(),
+          previousRoute: snapshotVisit.previousRoute,
+          route: snapshotVisit.entryRoute,
+          url: snapshotVisit.entryUrl,
+          pathname: snapshotVisit.entryPathname,
+          search: snapshotVisit.entrySearch,
+          referrer: snapshotVisit.referrer,
+          routeVisitId: snapshotVisit.routeVisitId,
+          sessionInternalId,
+          nextPathname: pathname,
+          nextRoute: pathname,
+          nextSearch: currentSearch,
+          nextUrl: currentUrl,
+          leaveReason: "route_change",
+          timeOnPageMs: Math.max(0, Date.now() - snapshotVisit.startedAtMs),
+        });
 
-        tryEmitWithBeacon(leavePayload);
-        emitInBackground(leavePayload);
+        void (async () => {
+          const metadata = await enrichLeaveMetadataWithSession({
+            metadata: baseLeaveMetadata,
+          });
+
+          const leavePayload = {
+            eventName: "page_leave",
+            eventVersion: 1,
+            idempotencyKey: `${sessionInternalId}:${snapshotVisit.routeVisitId}:page_leave`,
+            metadata,
+          };
+
+          tryEmitWithBeacon(leavePayload);
+          emitInBackground(leavePayload);
+        })();
 
         previousRouteRef.current = snapshotVisit.entryPathname;
         setPreviousRoute(snapshotVisit.entryPathname);
@@ -946,6 +1041,7 @@ export function JourneyTrackerProvider({
       const routeVisitId = activeVisit.routeVisitId;
       void (async () => {
         await waitForPosthogSessionId();
+        await waitForAuthStatusResolution(pathname);
 
         if (pathnameRef.current !== pathname) {
           return;

@@ -7,6 +7,7 @@ const usePathnameMock = vi.hoisted(() => vi.fn(() => "/"));
 const useSearchParamsMock = vi.hoisted(() =>
   vi.fn(() => new URLSearchParams()),
 );
+const captureAndPersistUtmParamsMock = vi.hoisted(() => vi.fn(() => ({})));
 
 vi.mock("next/navigation", () => ({
   usePathname: usePathnameMock,
@@ -15,6 +16,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: trackEventMock,
+  captureAndPersistUtmParams: captureAndPersistUtmParamsMock,
 }));
 
 import Template from "./template";
@@ -24,6 +26,8 @@ describe("Template journey tracking strict mode", () => {
     trackEventMock.mockReset();
     trackEventMock.mockResolvedValue(undefined);
     usePathnameMock.mockReset();
+    captureAndPersistUtmParamsMock.mockReset();
+    captureAndPersistUtmParamsMock.mockReturnValue({});
     usePathnameMock.mockReturnValue("/");
     useSearchParamsMock.mockReset();
     useSearchParamsMock.mockReturnValue(new URLSearchParams());

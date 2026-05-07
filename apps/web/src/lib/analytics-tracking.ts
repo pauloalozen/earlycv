@@ -26,6 +26,7 @@ type UtmParams = {
 };
 
 type AuthAnalyticsContext = {
+  authStatus?: "loading" | "anonymous" | "authenticated";
   isAuthenticated: boolean;
   userId: string | null;
 };

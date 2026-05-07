@@ -8,6 +8,7 @@ const AUTH_ANALYTICS_STORAGE_KEY = "analytics_auth_context";
 const IDENTIFIED_USER_STORAGE_KEY = "posthog_identified_user_id";
 const AUTH_SESSION_IDENTIFIED_STORAGE_KEY =
   "analytics_auth_session_identified_user_id";
+const AUTH_RESET_ALLOWED_STORAGE_KEY = "analytics_auth_reset_allowed";
 const JOURNEY_SESSION_KEY = "journey_session_internal_id";
 
 type SessionPayload = {
@@ -30,6 +31,7 @@ type PosthogSessionClient = {
 };
 
 function writeAuthAnalyticsContext(input: {
+  authStatus: "loading" | "anonymous" | "authenticated";
   isAuthenticated: boolean;
   userId: string | null;
 }) {
@@ -42,6 +44,16 @@ function clearAuthAnalyticsContext() {
   sessionStorage.removeItem(AUTH_SESSION_IDENTIFIED_STORAGE_KEY);
 }
 
+function consumeAuthResetAllowedFlag(): boolean {
+  const value = sessionStorage.getItem(AUTH_RESET_ALLOWED_STORAGE_KEY);
+  if (value !== "1") {
+    return false;
+  }
+
+  sessionStorage.removeItem(AUTH_RESET_ALLOWED_STORAGE_KEY);
+  return true;
+}
+
 type AuthState = "anonymous" | "authenticated" | "unknown";
 
 function readAuthState(): AuthState {
@@ -52,9 +64,13 @@ function readAuthState(): AuthState {
 
   try {
     const parsed = JSON.parse(raw) as {
+      authStatus?: "loading" | "anonymous" | "authenticated";
       isAuthenticated?: boolean;
       userId?: string | null;
     };
+    if (parsed.authStatus === "loading") {
+      return "unknown";
+    }
     if (parsed.isAuthenticated && typeof parsed.userId === "string") {
       return "authenticated";
     }
@@ -96,6 +112,14 @@ export function PosthogAuthProvider({
     let cancelled = false;
 
     const bootstrap = async () => {
+      if (!sessionStorage.getItem(AUTH_ANALYTICS_STORAGE_KEY)) {
+        writeAuthAnalyticsContext({
+          authStatus: "loading",
+          isAuthenticated: false,
+          userId: null,
+        });
+      }
+
       const posthogConfig = getPosthogConfig();
       let posthog: Awaited<ReturnType<typeof loadPosthogClient>> | null = null;
       if (posthogConfig) {
@@ -126,6 +150,7 @@ export function PosthogAuthProvider({
 
       if (typeof fetch !== "function") {
         writeAuthAnalyticsContext({
+          authStatus: "anonymous",
           isAuthenticated: false,
           userId: null,
         });
@@ -140,6 +165,7 @@ export function PosthogAuthProvider({
       if (!response?.ok) {
         if (!cancelled) {
           writeAuthAnalyticsContext({
+            authStatus: "anonymous",
             isAuthenticated: false,
             userId: null,
           });
@@ -163,11 +189,6 @@ export function PosthogAuthProvider({
           : null;
 
       const previousAuthState = readAuthState();
-
-      writeAuthAnalyticsContext({
-        isAuthenticated: Boolean(userId),
-        userId,
-      });
 
       if (userId) {
         const shouldEmitAuthSessionIdentified =
@@ -207,15 +228,21 @@ export function PosthogAuthProvider({
       );
 
       if (!userId) {
+        const canResetIdentity = consumeAuthResetAllowedFlag();
         if (
-          storedIdentifiedUserId ||
-          storedAuthIdentifiedUserId ||
-          lastIdentifiedUserIdRef.current ||
-          previousAuthState === "authenticated"
+          canResetIdentity &&
+          (Boolean(storedIdentifiedUserId) ||
+            Boolean(storedAuthIdentifiedUserId) ||
+            Boolean(lastIdentifiedUserIdRef.current) ||
+            previousAuthState === "authenticated")
         ) {
           posthog?.reset();
           clearAuthAnalyticsContext();
-          writeAuthAnalyticsContext({ isAuthenticated: false, userId: null });
+          writeAuthAnalyticsContext({
+            authStatus: "anonymous",
+            isAuthenticated: false,
+            userId: null,
+          });
           lastIdentifiedUserIdRef.current = null;
         }
         return;
@@ -235,6 +262,13 @@ export function PosthogAuthProvider({
             : {}),
         });
       }
+
+      writeAuthAnalyticsContext({
+        authStatus: "authenticated",
+        isAuthenticated: true,
+        userId,
+      });
+      sessionStorage.removeItem(AUTH_RESET_ALLOWED_STORAGE_KEY);
 
       lastIdentifiedUserIdRef.current = userId;
       sessionStorage.setItem(IDENTIFIED_USER_STORAGE_KEY, userId);

@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const trackEventMock = vi.hoisted(() => vi.fn());
@@ -30,6 +30,7 @@ import { PosthogAuthProvider } from "./posthog-auth-provider";
 
 describe("PosthogAuthProvider", () => {
   beforeEach(() => {
+    cleanup();
     initMock.mockReset();
     identifyMock.mockReset();
     getSessionIdMock.mockReset();
@@ -98,38 +99,35 @@ describe("PosthogAuthProvider", () => {
     );
 
     expect(sessionStorage.getItem("analytics_auth_context")).toBe(
-      JSON.stringify({ isAuthenticated: true, userId: "user-1" }),
+      JSON.stringify({
+        authStatus: "authenticated",
+        isAuthenticated: true,
+        userId: "user-1",
+      }),
     );
     expect(sessionStorage.getItem("analytics_posthog_session_id")).toBe(
       "ph-session-1",
     );
   });
 
-  it("resets posthog when session becomes anonymous after identified user", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ authenticated: true, user: { id: "user-2" } }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ authenticated: false, user: null }),
-      });
-
-    vi.stubGlobal("fetch", fetchMock);
-
-    const first = render(
-      <PosthogAuthProvider>
-        <div>first</div>
-      </PosthogAuthProvider>,
+  it("does not reset posthog on transient anonymous response without explicit logout signal", async () => {
+    sessionStorage.setItem("posthog_identified_user_id", "user-2");
+    sessionStorage.setItem(
+      "analytics_auth_context",
+      JSON.stringify({
+        authStatus: "authenticated",
+        isAuthenticated: true,
+        userId: "user-2",
+      }),
     );
 
-    await waitFor(() => {
-      expect(identifyMock).toHaveBeenCalledWith("user-2", {});
-    });
-
-    first.unmount();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ authenticated: false, user: null }),
+      }),
+    );
 
     render(
       <PosthogAuthProvider>
@@ -138,13 +136,50 @@ describe("PosthogAuthProvider", () => {
     );
 
     await waitFor(() => {
+      expect(sessionStorage.getItem("analytics_auth_context")).toBe(
+        JSON.stringify({
+          authStatus: "authenticated",
+          isAuthenticated: true,
+          userId: "user-2",
+        }),
+      );
+    });
+
+    expect(sessionStorage.getItem("posthog_identified_user_id")).toBe("user-2");
+    expect(resetMock).toHaveBeenCalledTimes(0);
+  });
+
+  it("resets posthog only when explicit logout signal is present", async () => {
+    sessionStorage.setItem("analytics_auth_reset_allowed", "1");
+    sessionStorage.setItem("posthog_identified_user_id", "user-2");
+    sessionStorage.setItem(
+      "analytics_auth_context",
+      JSON.stringify({
+        authStatus: "authenticated",
+        isAuthenticated: true,
+        userId: "user-2",
+      }),
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ authenticated: false, user: null }),
+      }),
+    );
+
+    render(
+      <PosthogAuthProvider>
+        <div>logout</div>
+      </PosthogAuthProvider>,
+    );
+
+    await waitFor(() => {
       expect(resetMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(sessionStorage.getItem("posthog_identified_user_id")).toBeNull();
-    expect(sessionStorage.getItem("analytics_auth_context")).toBe(
-      JSON.stringify({ isAuthenticated: false, userId: null }),
-    );
+    expect(sessionStorage.getItem("analytics_auth_reset_allowed")).toBeNull();
   });
 
   it("emits auth_session_identified again after logout then next login", async () => {
@@ -178,6 +213,8 @@ describe("PosthogAuthProvider", () => {
 
     first.unmount();
 
+    sessionStorage.setItem("analytics_auth_reset_allowed", "1");
+
     const second = render(
       <PosthogAuthProvider>
         <div>second</div>
@@ -203,11 +240,16 @@ describe("PosthogAuthProvider", () => {
   });
 
   it("clears stale dedupe on anonymous session and emits again for same user", async () => {
+    sessionStorage.setItem("analytics_auth_reset_allowed", "1");
     sessionStorage.setItem("posthog_identified_user_id", "user-1");
     sessionStorage.setItem("analytics_auth_session_identified_user_id", "user-1");
     sessionStorage.setItem(
       "analytics_auth_context",
-      JSON.stringify({ isAuthenticated: true, userId: "user-1" }),
+      JSON.stringify({
+        authStatus: "authenticated",
+        isAuthenticated: true,
+        userId: "user-1",
+      }),
     );
 
     const fetchMock = vi
