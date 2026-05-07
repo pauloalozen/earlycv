@@ -2,7 +2,10 @@
 
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { trackEvent } from "@/lib/analytics-tracking";
+import {
+  captureAndPersistUtmParams,
+  trackEvent,
+} from "@/lib/analytics-tracking";
 import {
   beginSessionStartedEmission,
   markSessionStartedEmitted,
@@ -263,6 +266,7 @@ function buildMetadata(input: {
 }) {
   const auth = getAuthContext();
   const posthogSessionId = getPosthogSessionId();
+  const firstTouchUtm = captureAndPersistUtmParams();
 
   return {
     app: "earlycv",
@@ -294,6 +298,7 @@ function buildMetadata(input: {
     isAuthenticated: auth.isAuthenticated,
     userId: auth.userId,
     user_id: auth.userId,
+    ...firstTouchUtm,
   };
 }
 

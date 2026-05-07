@@ -7,6 +7,10 @@ const usePathnameMock = vi.hoisted(() => vi.fn(() => "/adaptar"));
 const useSearchParamsMock = vi.hoisted(() =>
   vi.fn(() => new URLSearchParams()),
 );
+const firstTouchUtmState = vi.hoisted(() => ({
+  value: {} as Record<string, string | undefined>,
+}));
+const captureAndPersistUtmParamsMock = vi.hoisted(() => vi.fn());
 const waitForPosthogSessionIdMock = vi.hoisted(() => vi.fn());
 const getPosthogSessionIdMock = vi.hoisted(() => vi.fn());
 
@@ -17,6 +21,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: trackEventMock,
+  captureAndPersistUtmParams: captureAndPersistUtmParamsMock,
 }));
 
 vi.mock("@/lib/posthog-session", () => ({
@@ -33,6 +38,9 @@ describe("Template journey tracking", () => {
     process.env.NEXT_PUBLIC_POSTHOG_KEY = "ph-test-key";
     trackEventMock.mockReset();
     trackEventMock.mockResolvedValue(undefined);
+    captureAndPersistUtmParamsMock.mockReset();
+    firstTouchUtmState.value = {};
+    captureAndPersistUtmParamsMock.mockImplementation(() => firstTouchUtmState.value);
     waitForPosthogSessionIdMock.mockReset();
     waitForPosthogSessionIdMock.mockResolvedValue("ph-session-1");
     getPosthogSessionIdMock.mockReset();
@@ -80,6 +88,28 @@ describe("Template journey tracking", () => {
     });
   });
 
+  it("does not invent utm fields on page_leave when first-touch utm is missing", async () => {
+    render(
+      <Template>
+        <div>child</div>
+      </Template>,
+    );
+
+    window.dispatchEvent(new Event("pagehide"));
+
+    await waitFor(() => {
+      const leave = trackEventMock.mock.calls.find(
+        ([payload]) => payload.eventName === "page_leave",
+      )?.[0];
+      expect(leave).toBeDefined();
+      expect(leave?.properties?.utm_source).toBeUndefined();
+      expect(leave?.properties?.utm_medium).toBeUndefined();
+      expect(leave?.properties?.utm_campaign).toBeUndefined();
+      expect(leave?.properties?.utm_content).toBeUndefined();
+      expect(leave?.properties?.utm_term).toBeUndefined();
+    });
+  });
+
   it("emits session_engaged once on first interaction", async () => {
     render(
       <Template>
@@ -99,6 +129,14 @@ describe("Template journey tracking", () => {
   });
 
   it("emits page_leave when pagehide fires", async () => {
+    firstTouchUtmState.value = {
+      utm_source: "smoke",
+      utm_medium: "manual",
+      utm_campaign: "session_started_fix",
+      utm_content: "v1",
+      utm_term: "validacao",
+    };
+
     render(
       <Template>
         <div>child</div>
@@ -108,10 +146,17 @@ describe("Template journey tracking", () => {
     window.dispatchEvent(new Event("pagehide"));
 
     await waitFor(() => {
-      const names = trackEventMock.mock.calls.map(
-        ([payload]) => payload.eventName,
-      );
-      expect(names).toContain("page_leave");
+      const leave = trackEventMock.mock.calls.find(
+        ([payload]) => payload.eventName === "page_leave",
+      )?.[0];
+      expect(leave).toBeDefined();
+      expect(leave?.properties?.utm_source).toBe("smoke");
+      expect(leave?.properties?.utm_medium).toBe("manual");
+      expect(leave?.properties?.utm_campaign).toBe("session_started_fix");
+      expect(leave?.properties?.utm_content).toBe("v1");
+      expect(leave?.properties?.utm_term).toBe("validacao");
+
+      const names = trackEventMock.mock.calls.map(([payload]) => payload.eventName);
       expect(names).not.toContain("site_exit_candidate");
     });
   });
@@ -204,6 +249,14 @@ describe("Template journey tracking", () => {
   });
 
   it("uses route_change with next route on internal navigation followed by pagehide", async () => {
+    firstTouchUtmState.value = {
+      utm_source: "smoke",
+      utm_medium: "manual",
+      utm_campaign: "session_started_fix",
+      utm_content: "v1",
+      utm_term: "validacao",
+    };
+
     window.history.replaceState({}, "", "/adaptar/resultado");
     usePathnameMock.mockReturnValue("/adaptar/resultado");
 
@@ -232,6 +285,11 @@ describe("Template journey tracking", () => {
       expect(leave?.properties?.next_url).toBe(
         `${window.location.origin}/planos`,
       );
+      expect(leave?.properties?.utm_source).toBe("smoke");
+      expect(leave?.properties?.utm_medium).toBe("manual");
+      expect(leave?.properties?.utm_campaign).toBe("session_started_fix");
+      expect(leave?.properties?.utm_content).toBe("v1");
+      expect(leave?.properties?.utm_term).toBe("validacao");
     });
   });
 
