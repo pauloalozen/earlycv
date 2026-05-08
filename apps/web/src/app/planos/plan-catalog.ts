@@ -81,7 +81,7 @@ export function buildPlanCatalog(
       checkoutPlanId: "starter",
       features: [
         `${qntStarterDownloads} créditos de download de CV`,
-        "Análises de vaga ilimitadas",
+        "Análises gratuitas incluídas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
         "Download em PDF e DOCX",
@@ -102,7 +102,7 @@ export function buildPlanCatalog(
       checkoutPlanId: "pro",
       features: [
         `${qntProDownloads} créditos de download de CV`,
-        "Análises de vaga ilimitadas",
+        "Análises gratuitas incluídas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
         "Download em PDF e DOCX",
@@ -124,7 +124,7 @@ export function buildPlanCatalog(
       checkoutPlanId: "turbo",
       features: [
         `${qntTurboDownloads} créditos de download de CV`,
-        "Análises de vaga ilimitadas",
+        "Análises gratuitas incluídas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
         "Download em PDF e DOCX",

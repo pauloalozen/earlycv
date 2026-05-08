@@ -1,12 +1,12 @@
-import React from "react";
 import Link from "next/link";
+import React from "react";
 import { Logo } from "@/components/logo";
 import { PublicFooter } from "@/components/public-footer";
+import { siteConfig } from "@/lib/site";
 import { AtsWidget } from "../_ats-widget";
 import { LandingNavAuth } from "../_landing-nav-auth";
 import { LandingScrollAnimations } from "../_landing-scroll-animations";
 import { buildPlanCatalog } from "../planos/plan-catalog";
-import { siteConfig } from "@/lib/site";
 import { BeforeAfterCarousel } from "./variant-b-carousel";
 import { HeroEyebrow } from "./variant-b-eyebrow";
 import { AnimatedFaq } from "./variant-b-faq";
@@ -143,14 +143,15 @@ export function LandingVariantB() {
                 fontWeight: 400,
               }}
             >
-              A vaga foi para quem se encaixou no descritivo — não para quem
-              era mais qualificado. Ajustamos seu CV para a vaga em segundos.
+              A vaga foi para quem se encaixou no descritivo — não para quem era
+              mais qualificado. Ajustamos seu CV para a vaga em segundos.
             </p>
 
             {/* CTA row */}
             <div
               style={{
                 display: "flex",
+                flexWrap: "wrap",
                 gap: 12,
                 alignItems: "center",
                 marginBottom: 48,
@@ -158,7 +159,7 @@ export function LandingVariantB() {
             >
               <Link
                 href="/adaptar"
-                className="lp-cta-primary"
+                className="lp-cta-primary lp-hero-cta"
                 style={{
                   background: "#0a0a0a",
                   color: "#fff",
@@ -178,13 +179,26 @@ export function LandingVariantB() {
                 Adaptar meu CV agora
                 <span className="lp-cta-arrow">→</span>
               </Link>
-              <span style={{ fontSize: 13, color: "#8a8a85" }}>
-                Primeira análise grátis
-              </span>
+              <Link
+                href="/demo-resultado"
+                className="lp-demo-link"
+                style={{
+                  color: "#0a0a0a",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  padding: "14px 0",
+                  textDecoration: "underline",
+                  textDecorationColor: "rgba(10,10,10,0.2)",
+                  textUnderlineOffset: 4,
+                }}
+              >
+                Ver uma análise
+              </Link>
             </div>
 
             {/* Meta row — same as variant-A */}
             <div
+              className="lp-meta-row"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -261,56 +275,58 @@ export function LandingVariantB() {
           background: "#f0efe9",
           borderTop: "1px solid rgba(10,10,10,0.06)",
           borderBottom: "1px solid rgba(10,10,10,0.06)",
+          padding: "80px 32px",
         }}
       >
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "80px 32px" }}>
-        <p
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: 1.8,
-            color: "#8a8a85",
-            marginBottom: 12,
-            textTransform: "uppercase",
-          }}
-        >
-          O que muda
-        </p>
-        <h2
-          style={{
-            fontSize: "clamp(28px, 4vw, 42px)",
-            fontWeight: 500,
-            letterSpacing: -1.2,
-            margin: "0 0 12px",
-            lineHeight: 1.15,
-          }}
-        >
-          O mesmo profissional.
-          <br />
-          <em
+        <div style={{ maxWidth: 1100, margin: "0 auto", width: "100%" }}>
+          <p
             style={{
-              fontFamily: SERIF_ITALIC,
-              fontStyle: "italic",
-              fontWeight: 400,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 1.8,
+              color: "#8a8a85",
+              marginBottom: 12,
+              textTransform: "uppercase",
             }}
           >
-            Um CV que fala a língua da vaga.
-          </em>
-        </h2>
-        <p
-          style={{
-            fontSize: 15,
-            color: "#5a5a55",
-            marginBottom: 40,
-            maxWidth: 520,
-          }}
-        >
-          O EarlyCV não inventa nada. Ele reorganiza, destaca e adapta o que
-          você já tem — para que o recrutador (e o ATS) encontre o que procura.
-        </p>
+            O que muda
+          </p>
+          <h2
+            style={{
+              fontSize: "clamp(28px, 4vw, 42px)",
+              fontWeight: 500,
+              letterSpacing: -1.2,
+              margin: "0 0 12px",
+              lineHeight: 1.15,
+            }}
+          >
+            O mesmo profissional.
+            <br />
+            <em
+              style={{
+                fontFamily: SERIF_ITALIC,
+                fontStyle: "italic",
+                fontWeight: 400,
+              }}
+            >
+              Um CV que fala a língua da vaga.
+            </em>
+          </h2>
+          <p
+            style={{
+              fontSize: 15,
+              color: "#5a5a55",
+              marginBottom: 40,
+              maxWidth: 520,
+            }}
+          >
+            O EarlyCV não inventa nada. Ele reorganiza, destaca e adapta o que
+            você já tem — para que o recrutador (e o ATS) encontre o que
+            procura.
+          </p>
 
-        <BeforeAfterCarousel />
-      </div>
+          <BeforeAfterCarousel />
+        </div>
       </section>
 
       {/* ── Como funciona ── */}
@@ -994,26 +1010,19 @@ export function LandingVariantB() {
             backdropFilter: "blur(6px)",
           }}
         >
-          {/* Avatar — substitua por <img src="/paulo-alozen.jpg"> quando tiver a foto */}
-          <div
+          <img
+            src="/paulo-alozen.jpg"
+            alt="Paulo Alozen"
+            width={52}
+            height={52}
             style={{
               width: 52,
               height: 52,
               borderRadius: "50%",
-              background: "#0a0a0a",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontFamily: SERIF_ITALIC,
-              fontStyle: "italic",
-              fontSize: 20,
-              fontWeight: 400,
-              color: "#c6ff3a",
+              objectFit: "cover",
               flexShrink: 0,
             }}
-          >
-            P
-          </div>
+          />
           <div>
             <div
               style={{
@@ -1025,8 +1034,17 @@ export function LandingVariantB() {
             >
               Paulo Alozen
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "#8a8a85", marginBottom: 10 }}>
-              Fundador, EarlyCV
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                fontSize: 12,
+                color: "#8a8a85",
+                marginBottom: 10,
+              }}
+            >
+              Criador do EarlyCV
               <Link
                 href="https://www.linkedin.com/in/pauloalozen/"
                 target="_blank"
@@ -1056,10 +1074,10 @@ export function LandingVariantB() {
                 margin: 0,
               }}
             >
-              "Construí o EarlyCV depois de mandar dezenas de CVs iguais para
-              vagas completamente diferentes e não passar em triagem nenhuma.
-              Hoje uso a mesma ferramenta que você está prestes a usar — para
-              cada vaga que me interessa."
+              "Criei o EarlyCV depois de mandar o mesmo currículo para vagas
+              diferentes e não passar em nenhuma triagem. Hoje uso essa mesma
+              ferramenta para adaptar meu CV a cada vaga que realmente me
+              interessa."
             </p>
           </div>
         </div>
@@ -1105,7 +1123,7 @@ export function LandingVariantB() {
             lineHeight: 1.6,
           }}
         >
-          Adaptar seu CV para ela leva 60 segundos. A primeira é grátis.
+          Adaptar seu CV para ela leva 60 segundos. Análise é grátis.
         </p>
         <div
           style={{
@@ -1242,8 +1260,12 @@ export function LandingVariantB() {
         }
         @media (max-width: 768px) {
           .lp-nav { padding: 14px 20px !important; background: #f3f2ed !important; }
+          .lp-nav-links { display: none !important; }
           .lp-hero-h1 { letter-spacing: -1.8px !important; }
           .lp-ats-wrap { display: none !important; }
+          .lp-hero-cta { width: 100%; justify-content: center !important; }
+          .lp-demo-link { margin-left: 10px !important; margin-top: -4px !important; padding: 6px 0 !important; }
+          .lp-meta-row { align-items: flex-start !important; gap: 14px !important; }
           section, footer { padding-left: 20px !important; padding-right: 20px !important; }
         }
         @media (max-width: 580px) {

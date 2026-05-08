@@ -326,13 +326,19 @@ export function AtsWidget() {
             <span
               style={{
                 fontFamily: MONO,
-                fontSize: 9.5,
-                letterSpacing: 1.5,
+                fontSize: 8.5,
+                letterSpacing: 1.2,
                 color: "#7a7a74",
                 marginTop: 4,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                lineHeight: 1.4,
+                textAlign: "center",
               }}
             >
-              ATS SCORE
+              <span>SCORE</span>
+              <span>ADERÊNCIA</span>
             </span>
           </div>
         </div>

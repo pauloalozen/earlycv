@@ -3865,6 +3865,39 @@ export default function ResultadoPage() {
                         animation: "res-pulse-bg 1.5s ease infinite",
                       }}
                     />
+                  ) : isDemo ? (
+                    <>
+                      <a
+                        href="/adaptar"
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          background: "#c6ff3a",
+                          color: "#0a0a0a",
+                          borderRadius: 12,
+                          padding: "15px",
+                          fontSize: 14.5,
+                          fontWeight: 600,
+                          textDecoration: "none",
+                          textAlign: "center",
+                          fontFamily: GEIST,
+                          boxSizing: "border-box",
+                        }}
+                      >
+                        Analisar meu CV agora →
+                      </a>
+                      <p
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "rgba(255,255,255,0.25)",
+                          textAlign: "center",
+                          margin: 0,
+                        }}
+                      >
+                        Este é um exemplo. Envie seu CV e veja o resultado real.
+                      </p>
+                    </>
                   ) : reviewAdaptationId &&
                     reviewPaymentStatus !== "completed" ? (
                     hasCredits === true ? (

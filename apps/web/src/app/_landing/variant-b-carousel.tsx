@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const MONO = "var(--font-geist-mono), monospace";
-const SERIF_ITALIC = "var(--font-instrument-serif), serif";
 
 type CVExample = {
   id: string;
@@ -169,6 +168,7 @@ export function BeforeAfterCarousel() {
   const [visible, setVisible] = useState(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [progressKey, setProgressKey] = useState(0);
+  const touchStartX = useRef<number | null>(null);
 
   const goTo = useCallback((idx: number) => {
     setVisible(false);
@@ -187,6 +187,22 @@ export function BeforeAfterCarousel() {
   const next = useCallback(() => {
     goTo((current + 1) % EXAMPLES.length);
   }, [current, goTo]);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (touchStartX.current === null) return;
+      const delta = e.changedTouches[0].clientX - touchStartX.current;
+      touchStartX.current = null;
+      if (Math.abs(delta) < 40) return;
+      if (delta < 0) next();
+      else prev();
+    },
+    [next, prev],
+  );
 
   // Auto-advance
   useEffect(() => {
@@ -228,25 +244,24 @@ export function BeforeAfterCarousel() {
           gap: 12,
         }}
       >
-        {/* Area label + dots */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span
-            style={{
-              fontFamily: MONO,
-              fontSize: 10.5,
-              fontWeight: 600,
-              letterSpacing: 1.2,
-              color: "#555",
-              background: "rgba(10,10,10,0.05)",
-              border: "1px solid rgba(10,10,10,0.08)",
-              borderRadius: 999,
-              padding: "3px 10px",
-              textTransform: "uppercase",
-            }}
-          >
-            {ex.area} · {ex.targetRole}
-          </span>
-        </div>
+        {/* Area label */}
+        <span
+          className="ba-area-label"
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            fontWeight: 600,
+            letterSpacing: 1.2,
+            color: "#555",
+            background: "rgba(10,10,10,0.05)",
+            border: "1px solid rgba(10,10,10,0.08)",
+            borderRadius: 999,
+            padding: "3px 10px",
+            textTransform: "uppercase",
+          }}
+        >
+          {ex.area}
+        </span>
 
         {/* Dots + arrows */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -261,8 +276,7 @@ export function BeforeAfterCarousel() {
                   width: i === current ? 18 : 6,
                   height: 6,
                   borderRadius: 3,
-                  background:
-                    i === current ? "#0a0a0a" : "rgba(10,10,10,0.18)",
+                  background: i === current ? "#0a0a0a" : "rgba(10,10,10,0.18)",
                   border: "none",
                   cursor: "pointer",
                   padding: 0,
@@ -271,10 +285,22 @@ export function BeforeAfterCarousel() {
               />
             ))}
           </div>
-          <button type="button" onClick={prev} style={arrowBtn} aria-label="Anterior">
+          <button
+            type="button"
+            onClick={prev}
+            className="ba-arrow-btn"
+            style={arrowBtn}
+            aria-label="Anterior"
+          >
             ←
           </button>
-          <button type="button" onClick={next} style={arrowBtn} aria-label="Próximo">
+          <button
+            type="button"
+            onClick={next}
+            className="ba-arrow-btn"
+            style={arrowBtn}
+            aria-label="Próximo"
+          >
             →
           </button>
         </div>
@@ -307,6 +333,8 @@ export function BeforeAfterCarousel() {
           opacity: visible ? 1 : 0,
           transition: "opacity 0.22s ease",
         }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
       >
         <div
           className="ba-grid-b"
@@ -319,6 +347,7 @@ export function BeforeAfterCarousel() {
           {/* Before */}
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div
+              className="ba-label ba-label-bad"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -336,9 +365,11 @@ export function BeforeAfterCarousel() {
                 alignSelf: "flex-start",
               }}
             >
-              ✗ Antes — CV genérico
+              <span className="ba-label-full">✗ Antes — CV genérico</span>
+              <span className="ba-label-short">✗ Antes</span>
             </div>
             <div
+              className="ba-card"
               style={{
                 background: "#fff",
                 border: "1px solid rgba(10,10,10,0.07)",
@@ -359,43 +390,99 @@ export function BeforeAfterCarousel() {
                 }}
               >
                 <div
-                  style={{ fontSize: 14, fontWeight: 600, color: "#0a0a0a", marginBottom: 2 }}
+                  className="ba-name"
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#0a0a0a",
+                    marginBottom: 2,
+                  }}
                 >
                   {ex.person.name}
                 </div>
-                <div style={{ color: "#8a8a85", fontSize: 12 }}>
+                <div
+                  className="ba-title"
+                  style={{ color: "#8a8a85", fontSize: 12 }}
+                >
                   {ex.person.titleBefore}
                 </div>
               </div>
 
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, textTransform: "uppercase", color: "#bbb", margin: "10px 0 6px" }}>
+              <div
+                className="ba-section-label"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: 1.2,
+                  textTransform: "uppercase",
+                  color: "#bbb",
+                  margin: "10px 0 6px",
+                }}
+              >
                 {ex.before.sectionLabel}
               </div>
-              <div className="cv-highlight-bad" style={{ paddingRight: 76, marginBottom: 10 }}>
+              <div
+                className="cv-highlight-bad"
+                style={{ paddingRight: 76, marginBottom: 10 }}
+              >
                 {ex.before.summaryBad}
                 <span className="cv-tag-bad">✗ genérico</span>
               </div>
 
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, textTransform: "uppercase", color: "#bbb", margin: "10px 0 6px" }}>
-                Experiência
-              </div>
-              <div style={{ color: "#0a0a0a", fontWeight: 500, marginBottom: 6, fontSize: 12 }}>
-                {ex.before.company}
-              </div>
-              {ex.before.bulletsBad.map((b) => (
-                <div key={b} className="cv-highlight-bad" style={{ paddingRight: 76, marginBottom: 5 }}>
-                  {b}
-                  <span className="cv-tag-bad">✗ genérico</span>
+              <div className="ba-exp-section">
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    color: "#bbb",
+                    margin: "10px 0 6px",
+                  }}
+                >
+                  Experiência
                 </div>
-              ))}
+                <div
+                  style={{
+                    color: "#0a0a0a",
+                    fontWeight: 500,
+                    marginBottom: 6,
+                    fontSize: 12,
+                  }}
+                >
+                  {ex.before.company}
+                </div>
+                {ex.before.bulletsBad.map((b) => (
+                  <div
+                    key={b}
+                    className="cv-highlight-bad"
+                    style={{ paddingRight: 76, marginBottom: 5 }}
+                  >
+                    {b}
+                    <span className="cv-tag-bad">✗ genérico</span>
+                  </div>
+                ))}
+              </div>
 
               <div style={{ marginTop: "auto", paddingTop: 14 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, textTransform: "uppercase", color: "#bbb", marginBottom: 8 }}>
+                <div
+                  className="ba-section-label"
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    color: "#bbb",
+                    marginBottom: 8,
+                  }}
+                >
                   Skills
                 </div>
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                   {ex.before.skills.map((s) => (
-                    <span key={s} className="cv-tag-neutral">{s}</span>
+                    <span key={s} className="cv-tag-neutral">
+                      {s}
+                    </span>
                   ))}
                 </div>
               </div>
@@ -404,6 +491,7 @@ export function BeforeAfterCarousel() {
 
           {/* Arrow divider */}
           <div
+            className="ba-middle-divider"
             style={{
               display: "flex",
               alignItems: "center",
@@ -432,6 +520,7 @@ export function BeforeAfterCarousel() {
           {/* After */}
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div
+              className="ba-label ba-label-good"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -449,9 +538,13 @@ export function BeforeAfterCarousel() {
                 alignSelf: "flex-start",
               }}
             >
-              ✓ Depois — Ajustado para a vaga
+              <span className="ba-label-full">
+                ✓ Depois — Ajustado para a vaga
+              </span>
+              <span className="ba-label-short">✓ Depois</span>
             </div>
             <div
+              className="ba-card"
               style={{
                 background: "#fff",
                 border: "1px solid rgba(10,10,10,0.07)",
@@ -472,46 +565,107 @@ export function BeforeAfterCarousel() {
                 }}
               >
                 <div
-                  style={{ fontSize: 14, fontWeight: 600, color: "#0a0a0a", marginBottom: 2 }}
+                  className="ba-name"
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#0a0a0a",
+                    marginBottom: 2,
+                  }}
                 >
                   {ex.person.name}
                 </div>
-                <div style={{ color: "#8a8a85", fontSize: 12 }}>
+                <div
+                  className="ba-title"
+                  style={{ color: "#8a8a85", fontSize: 12 }}
+                >
                   {ex.person.titleAfter}
                 </div>
               </div>
 
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, textTransform: "uppercase", color: "#bbb", margin: "10px 0 6px" }}>
+              <div
+                className="ba-section-label"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: 1.2,
+                  textTransform: "uppercase",
+                  color: "#bbb",
+                  margin: "10px 0 6px",
+                }}
+              >
                 {ex.after.sectionLabel}
               </div>
-              <div className="cv-highlight-good" style={{ paddingRight: 76, marginBottom: 10 }}>
+              <div
+                className="cv-highlight-good"
+                style={{ paddingRight: 76, marginBottom: 10 }}
+              >
                 {ex.after.summaryGood}
                 <span className="cv-tag-good">✓ alinhado</span>
               </div>
 
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, textTransform: "uppercase", color: "#bbb", margin: "10px 0 6px" }}>
-                Experiência
-              </div>
-              <div style={{ color: "#0a0a0a", fontWeight: 500, marginBottom: 6, fontSize: 12 }}>
-                {ex.after.company}
-              </div>
-              {ex.after.bulletsGood.map((b) => (
-                <div key={b} className="cv-highlight-good" style={{ paddingRight: 76, marginBottom: 5 }}>
-                  {b}
-                  <span className="cv-tag-good">✓ alinhado</span>
+              <div className="ba-exp-section">
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    color: "#bbb",
+                    margin: "10px 0 6px",
+                  }}
+                >
+                  Experiência
                 </div>
-              ))}
+                <div
+                  style={{
+                    color: "#0a0a0a",
+                    fontWeight: 500,
+                    marginBottom: 6,
+                    fontSize: 12,
+                  }}
+                >
+                  {ex.after.company}
+                </div>
+                {ex.after.bulletsGood.map((b) => (
+                  <div
+                    key={b}
+                    className="cv-highlight-good"
+                    style={{ paddingRight: 76, marginBottom: 5 }}
+                  >
+                    {b}
+                    <span className="cv-tag-good">✓ alinhado</span>
+                  </div>
+                ))}
+              </div>
 
               <div style={{ marginTop: "auto", paddingTop: 14 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, textTransform: "uppercase", color: "#bbb", marginBottom: 8 }}>
-                  Skills relevantes para essa vaga
+                <div
+                  className="ba-section-label"
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    color: "#bbb",
+                    marginBottom: 8,
+                  }}
+                >
+                  <span className="ba-skills-full">
+                    Skills relevantes para essa vaga
+                  </span>
+                  <span className="ba-skills-short">Skills</span>
                 </div>
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                   {ex.after.relevantSkills.map((s) => (
-                    <span key={s} className="cv-tag-active">{s}</span>
+                    <span key={s} className="cv-tag-active">
+                      {s}
+                    </span>
                   ))}
                   {ex.after.neutralSkills.map((s) => (
-                    <span key={s} className="cv-tag-neutral">{s}</span>
+                    <span key={s} className="cv-tag-neutral">
+                      {s}
+                    </span>
                   ))}
                 </div>
               </div>
@@ -525,6 +679,8 @@ export function BeforeAfterCarousel() {
           from { width: 0%; }
           to   { width: 100%; }
         }
+        .ba-label-short { display: none; }
+        .ba-skills-short { display: none; }
         .cv-section-label {
           font-size: 10px; font-weight: 600;
           letter-spacing: 1.2px; text-transform: uppercase;
@@ -567,7 +723,33 @@ export function BeforeAfterCarousel() {
           color: #4a7a10;
         }
         @media (max-width: 768px) {
-          .ba-grid-b { grid-template-columns: 1fr !important; }
+          .ba-arrow-btn { display: none !important; }
+          .ba-area-label { font-size: 9.5px !important; letter-spacing: 0.8px !important; }
+          .ba-grid-b { grid-template-columns: 1fr !important; gap: 8px !important; }
+          .ba-middle-divider { display: none !important; }
+          .ba-exp-section { display: none !important; }
+          .ba-label-full { display: none !important; }
+          .ba-label-short { display: inline !important; }
+          .ba-skills-full { display: none !important; }
+          .ba-skills-short { display: inline !important; }
+          .ba-label { margin-bottom: 6px !important; padding: 3px 10px !important; }
+          .ba-card {
+            padding: 12px 14px !important;
+            border-radius: 12px !important;
+          }
+          .ba-card > div:first-child { padding-bottom: 8px !important; margin-bottom: 8px !important; }
+          .ba-name { font-size: 13px !important; }
+          .ba-title { font-size: 11px !important; }
+          .ba-section-label { margin: 6px 0 4px !important; font-size: 9px !important; }
+          .cv-highlight-bad, .cv-highlight-good {
+            padding-right: 8px !important;
+            font-size: 11px !important;
+            line-height: 1.4 !important;
+            margin-bottom: 0 !important;
+          }
+          .cv-tag-bad, .cv-tag-good { display: none !important; }
+          .ba-card > div:last-child { padding-top: 8px !important; }
+          .cv-tag-neutral, .cv-tag-active { font-size: 10px !important; }
         }
       `}</style>
     </div>

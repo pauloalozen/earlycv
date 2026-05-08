@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 
@@ -10,6 +11,11 @@ type Props = {
 
 export function LandingMobileMenu({ authState }: Props) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -123,57 +129,61 @@ export function LandingMobileMenu({ authState }: Props) {
         )}
       </button>
 
-      {/* Mobile nav overlay */}
-      <div className={`lp-mob-nav${open ? " lp-mob-nav--open" : ""}`}>
-        {/* biome-ignore lint/a11y/useValidAnchor: anchor link to page section with close-menu side effect */}
-        <a
-          href="#como-funciona"
-          className="lp-mob-nav-item"
-          onClick={() => setOpen(false)}
-        >
-          Como funciona
-        </a>
-        {/* biome-ignore lint/a11y/useValidAnchor: anchor link to page section with close-menu side effect */}
-        <a
-          href="#precos"
-          className="lp-mob-nav-item"
-          onClick={() => setOpen(false)}
-        >
-          Preços
-        </a>
-        <a
-          href="/blog"
-          className="lp-mob-nav-item"
-          onClick={() => setOpen(false)}
-        >
-          Blog
-        </a>
-        {authState === "loading" ? (
-          <div
-            aria-hidden="true"
-            className="lp-mob-nav-item"
-            style={{ opacity: 0.5, pointerEvents: "none" }}
-          >
-            Carregando...
-          </div>
-        ) : authState === "authenticated" ? (
-          <a
-            href="/dashboard"
-            className="lp-mob-nav-item lp-mob-nav-item--cta"
-            onClick={() => setOpen(false)}
-          >
-            Ir para o painel →
-          </a>
-        ) : (
-          <a
-            href="/entrar?tab=entrar"
-            className="lp-mob-nav-item lp-mob-nav-item--cta"
-            onClick={() => setOpen(false)}
-          >
-            Entrar
-          </a>
+      {/* Mobile nav overlay — rendered via portal to escape backdropFilter containing block */}
+      {mounted &&
+        createPortal(
+          <div className={`lp-mob-nav${open ? " lp-mob-nav--open" : ""}`}>
+            {/* biome-ignore lint/a11y/useValidAnchor: anchor link to page section with close-menu side effect */}
+            <a
+              href="#como-funciona"
+              className="lp-mob-nav-item"
+              onClick={() => setOpen(false)}
+            >
+              Como funciona
+            </a>
+            {/* biome-ignore lint/a11y/useValidAnchor: anchor link to page section with close-menu side effect */}
+            <a
+              href="#precos"
+              className="lp-mob-nav-item"
+              onClick={() => setOpen(false)}
+            >
+              Preços
+            </a>
+            <a
+              href="/blog"
+              className="lp-mob-nav-item"
+              onClick={() => setOpen(false)}
+            >
+              Blog
+            </a>
+            {authState === "loading" ? (
+              <div
+                aria-hidden="true"
+                className="lp-mob-nav-item"
+                style={{ opacity: 0.5, pointerEvents: "none" }}
+              >
+                Carregando...
+              </div>
+            ) : authState === "authenticated" ? (
+              <a
+                href="/dashboard"
+                className="lp-mob-nav-item lp-mob-nav-item--cta"
+                onClick={() => setOpen(false)}
+              >
+                Ir para o painel →
+              </a>
+            ) : (
+              <a
+                href="/entrar?tab=entrar"
+                className="lp-mob-nav-item lp-mob-nav-item--cta"
+                onClick={() => setOpen(false)}
+              >
+                Entrar
+              </a>
+            )}
+          </div>,
+          document.body,
         )}
-      </div>
     </>
   );
 }

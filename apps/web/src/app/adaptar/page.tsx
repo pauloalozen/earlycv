@@ -137,6 +137,7 @@ export default function AdaptarPage() {
   const [saveMasterCv, setSaveMasterCv] = useState(false);
   const [fileHover, setFileHover] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   const [authReady, setAuthReady] = useState(false);
   const jobDescriptionFilledTrackedRef = useRef(false);
   const jobDescriptionFocusTrackedRef = useRef(false);
@@ -330,6 +331,12 @@ export default function AdaptarPage() {
     );
     return () => timers.forEach(clearTimeout);
   }, [loading]);
+
+  useEffect(() => {
+    if (error) {
+      errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [error]);
 
   useEffect(() => {
     if (window.turnstile) {
@@ -725,6 +732,7 @@ export default function AdaptarPage() {
                 {/* Error */}
                 {error && (
                   <div
+                    ref={errorRef}
                     style={{
                       marginBottom: 16,
                       padding: "10px 14px",
@@ -792,93 +800,97 @@ export default function AdaptarPage() {
                     </div>
                     {/* Mode toggle */}
                     {isAuthenticated && (
-                      <div
-                        className="adaptar-cv-mode-toggle"
-                        style={{
-                          display: "flex",
-                          gap: 4,
-                          background: "rgba(10,10,10,0.05)",
-                          borderRadius: 8,
-                          padding: 3,
-                        }}
-                      >
-                        {(hasMaster
-                          ? (["master", "upload", "text"] as CvMode[])
-                          : (["upload", "text"] as CvMode[])
-                        ).map((mode) => (
-                          <button
-                            key={mode}
-                            type="button"
-                            onClick={() => {
-                              setCvMode(mode);
-                              if (mode === "master") setFile(null);
-                              if (mode === "text") setFile(null);
-                              setError(null);
-                            }}
-                            style={{
-                              fontFamily: MONO,
-                              fontSize: 10,
-                              fontWeight: 500,
-                              letterSpacing: 0.3,
-                              padding: "4px 10px",
-                              borderRadius: 6,
-                              border: "none",
-                              cursor: "pointer",
-                              background:
-                                cvMode === mode ? "#0a0a0a" : "transparent",
-                              color: cvMode === mode ? "#fafaf6" : "#7a7a74",
-                              transition: "all 120ms",
-                            }}
-                          >
-                            {mode === "master"
-                              ? "CV base"
-                              : mode === "upload"
-                                ? hasMaster
-                                  ? "Outro CV"
-                                  : "Upload"
-                                : "Digitar texto"}
-                          </button>
-                        ))}
+                      <div className="adaptar-cv-toggle-row">
+                        <div
+                          className="adaptar-cv-mode-toggle"
+                          style={{
+                            display: "flex",
+                            gap: 4,
+                            background: "rgba(10,10,10,0.05)",
+                            borderRadius: 8,
+                            padding: 3,
+                          }}
+                        >
+                          {(hasMaster
+                            ? (["master", "upload", "text"] as CvMode[])
+                            : (["upload", "text"] as CvMode[])
+                          ).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => {
+                                setCvMode(mode);
+                                if (mode === "master") setFile(null);
+                                if (mode === "text") setFile(null);
+                                setError(null);
+                              }}
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: 10,
+                                fontWeight: 500,
+                                letterSpacing: 0.3,
+                                padding: "4px 10px",
+                                borderRadius: 6,
+                                border: "none",
+                                cursor: "pointer",
+                                background:
+                                  cvMode === mode ? "#0a0a0a" : "transparent",
+                                color: cvMode === mode ? "#fafaf6" : "#7a7a74",
+                                transition: "all 120ms",
+                              }}
+                            >
+                              {mode === "master"
+                                ? "CV base"
+                                : mode === "upload"
+                                  ? hasMaster
+                                    ? "Outro CV"
+                                    : "Upload"
+                                  : "Digitar texto"}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                     {!isAuthenticated && (
-                      <div
-                        className="adaptar-cv-mode-toggle"
-                        style={{
-                          display: "flex",
-                          gap: 4,
-                          background: "rgba(10,10,10,0.05)",
-                          borderRadius: 8,
-                          padding: 3,
-                        }}
-                      >
-                        {(["upload", "text"] as CvMode[]).map((mode) => (
-                          <button
-                            key={mode}
-                            type="button"
-                            onClick={() => {
-                              setCvMode(mode);
-                              if (mode === "text") setFile(null);
-                              setError(null);
-                            }}
-                            style={{
-                              fontFamily: MONO,
-                              fontSize: 10,
-                              fontWeight: 500,
-                              letterSpacing: 0.3,
-                              padding: "4px 10px",
-                              borderRadius: 6,
-                              border: "none",
-                              cursor: "pointer",
-                              background:
-                                cvMode === mode ? "#0a0a0a" : "transparent",
-                              color: cvMode === mode ? "#fafaf6" : "#7a7a74",
-                              transition: "all 120ms",
-                            }}
-                          >
-                            {mode === "upload" ? "Upload" : "Digitar texto"}
-                          </button>
-                        ))}
+                      <div className="adaptar-cv-toggle-row">
+                        <div
+                          className="adaptar-cv-mode-toggle"
+                          style={{
+                            display: "flex",
+                            gap: 4,
+                            background: "rgba(10,10,10,0.05)",
+                            borderRadius: 8,
+                            padding: 3,
+                          }}
+                        >
+                          {(["upload", "text"] as CvMode[]).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => {
+                                setCvMode(mode);
+                                if (mode === "text") setFile(null);
+                                setError(null);
+                              }}
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: 10,
+                                fontWeight: 500,
+                                letterSpacing: 0.3,
+                                padding: "4px 10px",
+                                borderRadius: 6,
+                                border: "none",
+                                cursor: "pointer",
+                                background:
+                                  cvMode === mode ? "#0a0a0a" : "transparent",
+                                color: cvMode === mode ? "#fafaf6" : "#7a7a74",
+                                transition: "all 120ms",
+                              }}
+                            >
+                              {mode === "upload" ? "Upload" : "Digitar texto"}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1005,6 +1017,39 @@ export default function AdaptarPage() {
                         }}
                         onMouseEnter={() => setFileHover(true)}
                         onMouseLeave={() => setFileHover(false)}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "copy";
+                          setFileHover(true);
+                        }}
+                        onDragLeave={() => setFileHover(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setFileHover(false);
+                          const droppedFile = e.dataTransfer.files?.[0] ?? null;
+                          if (!droppedFile) return;
+                          const ext =
+                            droppedFile.name.split(".").pop()?.toLowerCase() ??
+                            "";
+                          if (!["pdf", "doc", "docx", "odt"].includes(ext)) {
+                            setError(
+                              "Formato inválido. Envie um arquivo PDF, DOC, DOCX ou ODT.",
+                            );
+                            return;
+                          }
+                          setFile(droppedFile);
+                          setCvMode("upload");
+                          emitUiFunnelEvent("cv_upload_completed", {
+                            attemptId: buildClientAttemptId(),
+                            metadata: {
+                              fileExtension:
+                                droppedFile.name
+                                  .split(".")
+                                  .pop()
+                                  ?.toLowerCase() ?? null,
+                            },
+                          });
+                        }}
                         style={{
                           width: "100%",
                           border: `1.5px dashed ${fileHover || file ? "#0a0a0a" : "#d0ceC6"}`,
@@ -1133,7 +1178,7 @@ export default function AdaptarPage() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.doc,.docx"
+                    accept=".pdf,.doc,.docx,.odt"
                     className="hidden"
                     onChange={(e) => {
                       const nextFile = e.target.files?.[0] ?? null;
@@ -1562,9 +1607,10 @@ export default function AdaptarPage() {
               align-items: flex-start !important;
               gap: 10px !important;
             }
-            .adaptar-cv-mode-toggle {
+            .adaptar-cv-toggle-row {
               width: 100%;
-              margin-left: 46px;
+              display: flex;
+              justify-content: flex-end;
             }
           }
         `}</style>
