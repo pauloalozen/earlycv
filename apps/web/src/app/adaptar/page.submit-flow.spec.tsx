@@ -480,7 +480,6 @@ describe("AdaptarPage submit analytics flow", () => {
       expect(focusCalls).toHaveLength(1);
       expect(pasteCalls).toHaveLength(1);
     });
-
   });
 
   it("shows upload/text selector for authenticated user without master CV", async () => {

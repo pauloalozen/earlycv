@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import React from "react";
 import { Logo } from "@/components/logo";
@@ -1010,14 +1011,12 @@ export function LandingVariantB() {
             backdropFilter: "blur(6px)",
           }}
         >
-          <img
+          <Image
             src="/paulo-alozen.jpg"
             alt="Paulo Alozen"
             width={52}
             height={52}
             style={{
-              width: 52,
-              height: 52,
               borderRadius: "50%",
               objectFit: "cover",
               flexShrink: 0,

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-const MONO = "var(--font-geist-mono), monospace";
+const _MONO = "var(--font-geist-mono), monospace";
 
 const FAQ_ITEMS = [
   {
