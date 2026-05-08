@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { PostHog, type EventMessage } from "posthog-node";
-import { POSTHOG_INTEGRATION_CONFIG } from "./types";
+import { type EventMessage, PostHog } from "posthog-node";
 import type { PosthogIntegrationConfig } from "./types";
+import { POSTHOG_INTEGRATION_CONFIG } from "./types";
 
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 const ANALYTICS_APP = "earlycv" as const;

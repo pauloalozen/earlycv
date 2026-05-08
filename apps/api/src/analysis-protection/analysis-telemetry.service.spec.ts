@@ -23,16 +23,21 @@ const posthogExporterStub = {
 test("creates telemetry event with scrubbed metadata and route key", async () => {
   let createPayload: Record<string, unknown> | null = null;
 
-  const service = new AnalysisTelemetryService({
-    analysisProtectionEvent: {
-      create: async (args: Record<string, unknown>) => {
-        createPayload = args;
+  const service = new AnalysisTelemetryService(
+    {
+      analysisProtectionEvent: {
+        create: async (args: Record<string, unknown>) => {
+          createPayload = args;
+        },
+        upsert: async () => {
+          throw new Error("upsert should not be called");
+        },
       },
-      upsert: async () => {
-        throw new Error("upsert should not be called");
-      },
-    },
-  } as any, posthogExporterStub as any);
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    posthogExporterStub as any,
+  );
 
   await service.emit("payload_valid", context, {
     metadata: {
@@ -61,16 +66,21 @@ test("creates telemetry event with scrubbed metadata and route key", async () =>
 test("uses idempotent upsert when idempotency key is provided", async () => {
   let upsertPayload: Record<string, unknown> | null = null;
 
-  const service = new AnalysisTelemetryService({
-    analysisProtectionEvent: {
-      create: async () => {
-        throw new Error("create should not be called");
+  const service = new AnalysisTelemetryService(
+    {
+      analysisProtectionEvent: {
+        create: async () => {
+          throw new Error("create should not be called");
+        },
+        upsert: async (args: Record<string, unknown>) => {
+          upsertPayload = args;
+        },
       },
-      upsert: async (args: Record<string, unknown>) => {
-        upsertPayload = args;
-      },
-    },
-  } as any, posthogExporterStub as any);
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    posthogExporterStub as any,
+  );
 
   await service.emit("cache_miss", context, {
     idempotencyKey: "idem-1",
@@ -89,16 +99,21 @@ test("uses idempotent upsert when idempotency key is provided", async () => {
 });
 
 test("swallows persistence errors and does not throw", async () => {
-  const service = new AnalysisTelemetryService({
-    analysisProtectionEvent: {
-      create: async () => {
-        throw new Error("database unavailable");
+  const service = new AnalysisTelemetryService(
+    {
+      analysisProtectionEvent: {
+        create: async () => {
+          throw new Error("database unavailable");
+        },
+        upsert: async () => {
+          throw new Error("database unavailable");
+        },
       },
-      upsert: async () => {
-        throw new Error("database unavailable");
-      },
-    },
-  } as any, posthogExporterStub as any);
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    posthogExporterStub as any,
+  );
 
   await assert.doesNotReject(async () => {
     await service.emit("openai_request_failed", context, {
@@ -110,16 +125,21 @@ test("swallows persistence errors and does not throw", async () => {
 test("redacts sessionPublicToken keys nested inside metadata objects", async () => {
   let createPayload: Record<string, unknown> | null = null;
 
-  const service = new AnalysisTelemetryService({
-    analysisProtectionEvent: {
-      create: async (args: Record<string, unknown>) => {
-        createPayload = args;
+  const service = new AnalysisTelemetryService(
+    {
+      analysisProtectionEvent: {
+        create: async (args: Record<string, unknown>) => {
+          createPayload = args;
+        },
+        upsert: async () => {
+          throw new Error("upsert should not be called");
+        },
       },
-      upsert: async () => {
-        throw new Error("upsert should not be called");
-      },
-    },
-  } as any, posthogExporterStub as any);
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    posthogExporterStub as any,
+  );
 
   await service.emit("payload_valid", context, {
     metadata: {
@@ -154,16 +174,21 @@ test("redacts sessionPublicToken keys nested inside metadata objects", async () 
 });
 
 test("throws controlled error when event is missing version registry entry", async () => {
-  const service = new AnalysisTelemetryService({
-    analysisProtectionEvent: {
-      create: async () => {
-        throw new Error("create should not be called");
+  const service = new AnalysisTelemetryService(
+    {
+      analysisProtectionEvent: {
+        create: async () => {
+          throw new Error("create should not be called");
+        },
+        upsert: async () => {
+          throw new Error("upsert should not be called");
+        },
       },
-      upsert: async () => {
-        throw new Error("upsert should not be called");
-      },
-    },
-  } as any, posthogExporterStub as any);
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    posthogExporterStub as any,
+  );
 
   await assert.rejects(
     service.emit(

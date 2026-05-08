@@ -23,7 +23,12 @@ export type {
   CvSectionItem,
 } from "./cv-adaptation.js";
 export { adaptCv, analyzeAndAdaptCv } from "./cv-adaptation.js";
-export { extractTextFromPdf, NotACvError, PasswordProtectedPdfError, ScannedPdfError } from "./pdf-parser.js";
+export {
+  extractTextFromPdf,
+  NotACvError,
+  PasswordProtectedPdfError,
+  ScannedPdfError,
+} from "./pdf-parser.js";
 export type {
   AIAuditRecord,
   AIGenerationRequest,

@@ -1,16 +1,16 @@
 import { Controller, Get, Inject, Query, UseGuards } from "@nestjs/common";
 import type { CvUnlockSource, CvUnlockStatus } from "@prisma/client";
-
+import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
-import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { CvUnlocksService } from "./cv-unlocks.service";
 
 @Controller("cv-unlocks")
 @UseGuards(JwtAuthGuard)
 export class CvUnlocksController {
   constructor(
-    @Inject(CvUnlocksService) private readonly cvUnlocksService: CvUnlocksService,
+    @Inject(CvUnlocksService)
+    private readonly cvUnlocksService: CvUnlocksService,
   ) {}
 
   @Get("admin/list")

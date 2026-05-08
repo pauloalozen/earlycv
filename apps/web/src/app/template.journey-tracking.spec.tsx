@@ -30,8 +30,8 @@ vi.mock("@/lib/posthog-session", () => ({
   persistPosthogSessionId: vi.fn(),
 }));
 
-import Template from "./template";
 import { __resetSessionStartedEmissionGuardForTests } from "@/lib/session-started-guard";
+import Template from "./template";
 
 describe("Template journey tracking", () => {
   beforeEach(() => {
@@ -40,7 +40,9 @@ describe("Template journey tracking", () => {
     trackEventMock.mockResolvedValue(undefined);
     captureAndPersistUtmParamsMock.mockReset();
     firstTouchUtmState.value = {};
-    captureAndPersistUtmParamsMock.mockImplementation(() => firstTouchUtmState.value);
+    captureAndPersistUtmParamsMock.mockImplementation(
+      () => firstTouchUtmState.value,
+    );
     waitForPosthogSessionIdMock.mockReset();
     waitForPosthogSessionIdMock.mockResolvedValue("ph-session-1");
     getPosthogSessionIdMock.mockReset();
@@ -157,7 +159,9 @@ describe("Template journey tracking", () => {
       expect(leave?.properties?.utm_content).toBe("v1");
       expect(leave?.properties?.utm_term).toBe("validacao");
 
-      const names = trackEventMock.mock.calls.map(([payload]) => payload.eventName);
+      const names = trackEventMock.mock.calls.map(
+        ([payload]) => payload.eventName,
+      );
       expect(names).not.toContain("site_exit_candidate");
     });
   });
@@ -240,7 +244,11 @@ describe("Template journey tracking", () => {
   });
 
   it("does not emit site_exit_candidate on email/password login submit and emits page_leave auth_submit", async () => {
-    window.history.replaceState({}, "", "/entrar?tab=entrar&next=%2Fadaptar%2Fresultado");
+    window.history.replaceState(
+      {},
+      "",
+      "/entrar?tab=entrar&next=%2Fadaptar%2Fresultado",
+    );
     usePathnameMock.mockReturnValue("/entrar");
     useSearchParamsMock.mockReturnValue(
       new URLSearchParams("tab=entrar&next=%2Fadaptar%2Fresultado"),
@@ -413,7 +421,10 @@ describe("Template journey tracking", () => {
 
   it("waits auth loading before emitting private dashboard page_view", async () => {
     usePathnameMock.mockReturnValue("/dashboard");
-    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
     sessionStorage.setItem(
       "analytics_auth_context",
       JSON.stringify({
@@ -464,7 +475,10 @@ describe("Template journey tracking", () => {
 
   it("uses bounded wait on public route and emits authenticated page_view when auth resolves quickly", async () => {
     usePathnameMock.mockReturnValue("/");
-    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
     sessionStorage.setItem(
       "analytics_auth_context",
       JSON.stringify({
@@ -856,7 +870,11 @@ describe("Template journey tracking", () => {
 
     render(
       <Template>
-        <form action="/plans/checkout" method="post" data-testid="checkout-redirect-form">
+        <form
+          action="/plans/checkout"
+          method="post"
+          data-testid="checkout-redirect-form"
+        >
           <input type="hidden" name="planId" value="starter" />
           <input type="hidden" name="planName" value="Starter" />
           <input type="hidden" name="planCredits" value="3" />

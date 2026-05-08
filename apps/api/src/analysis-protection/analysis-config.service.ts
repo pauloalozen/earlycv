@@ -156,6 +156,7 @@ export class AnalysisConfigService {
     );
     const valueType = this.expectedDatabaseType(definition.type);
 
+    // biome-ignore lint/suspicious/noExplicitAny: Prisma TransactionClient type not exported for $transaction callback
     await this.database.$transaction(async (tx: any) => {
       const existing = await tx.analysisProtectionConfig.findUnique({
         where: { key: input.key },
@@ -167,6 +168,7 @@ export class AnalysisConfigService {
           isActive: true,
           riskLevel: definition.risk,
           valueJson,
+          // biome-ignore lint/suspicious/noExplicitAny: valueType is a validated string, Prisma enum coercion needed
           valueType: valueType as any,
         },
         create: {
@@ -174,6 +176,7 @@ export class AnalysisConfigService {
           key: input.key,
           riskLevel: definition.risk,
           valueJson,
+          // biome-ignore lint/suspicious/noExplicitAny: valueType is a validated string, Prisma enum coercion needed
           valueType: valueType as any,
         },
       });
@@ -188,6 +191,7 @@ export class AnalysisConfigService {
           riskLevel: definition.risk,
           source,
           technicalContextJson: input.context ?? null,
+          // biome-ignore lint/suspicious/noExplicitAny: valueType is a validated string, Prisma enum coercion needed
           valueType: valueType as any,
         },
       });

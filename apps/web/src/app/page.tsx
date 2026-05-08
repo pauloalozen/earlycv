@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
+import { resolveLandingVariant } from "./_landing/variant";
 import { LandingVariantA } from "./_landing/variant-a";
 import { LandingVariantB } from "./_landing/variant-b";
-import { resolveLandingVariant } from "./_landing/variant";
 
 export const metadata: Metadata = {
   title: "Seu CV ajustado para cada vaga",

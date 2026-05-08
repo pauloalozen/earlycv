@@ -1,9 +1,8 @@
 import { Global, Module } from "@nestjs/common";
-import { PostHogConfigService } from "./posthog-config.service";
 import { PosthogClientService } from "./posthog-client.service";
+import { PostHogConfigService } from "./posthog-config.service";
 import { PosthogEventExporter } from "./posthog-event-exporter.service";
 import { POSTHOG_INTEGRATION_CONFIG } from "./types";
-import type { PosthogIntegrationConfig } from "./types";
 
 @Global()
 @Module({

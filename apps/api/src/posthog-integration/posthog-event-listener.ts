@@ -1,7 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
-import type { BusinessFunnelEventName } from "../analysis-observability/analysis-event-version.registry";
-import type { AnalysisProtectionEventName } from "../analysis-observability/analysis-event-version.registry";
+import type {
+  AnalysisProtectionEventName,
+  BusinessFunnelEventName,
+} from "../analysis-observability/analysis-event-version.registry";
 import type { PostHogEventSource } from "./types";
 
 const BUSINESS_FUNNEL_EVENT_EMITTED = "posthog:business-funnel-event-emitted";
@@ -33,9 +35,7 @@ export class PosthogEventListener {
       return;
     }
 
-    this.logger.debug(
-      `Received business funnel event: ${payload.eventName}`,
-    );
+    this.logger.debug(`Received business funnel event: ${payload.eventName}`);
   }
 
   @OnEvent(PROTECTION_EVENT_EMITTED)

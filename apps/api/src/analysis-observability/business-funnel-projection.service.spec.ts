@@ -75,6 +75,7 @@ test("derives conversion, drop-off, and transition latency metrics by day", asyn
     businessFunnelEvent: {
       findMany: async () => events,
     },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any);
 
   const day = await projection.deriveDailyProjection(
@@ -157,6 +158,7 @@ test("rebuilds projection from source events deterministically", async () => {
         metricRows = data.map((row) => ({ ...row }));
       },
     },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any);
 
   const first = await projection.rebuildFromSource({
@@ -227,6 +229,7 @@ test("rebuildFromSource normalizes reversed date ranges for source and delete wi
         );
       },
     },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any);
 
   await projection.rebuildFromSource({

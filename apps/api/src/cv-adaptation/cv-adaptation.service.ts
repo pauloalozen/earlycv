@@ -61,8 +61,7 @@ export class CvAdaptationService {
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(CvAdaptationAiService)
-    private readonly aiService: CvAdaptationAiService,
+    @Inject(CvAdaptationAiService) readonly _aiService: CvAdaptationAiService,
     @Inject(CvAdaptationPaymentService)
     private readonly paymentService: CvAdaptationPaymentService,
     @Inject(CvAdaptationPdfService)
@@ -470,7 +469,8 @@ export class CvAdaptationService {
     }
 
     const finalMasterCvText =
-      resolvedMasterCvText ?? this.normalizeSnapshotText(protectionResult.result.masterCvText);
+      resolvedMasterCvText ??
+      this.normalizeSnapshotText(protectionResult.result.masterCvText);
     const snapshot = await this.createAnalysisCvSnapshot({
       sourceType: hasTextInput ? "text_input" : "uploaded_file",
       text: finalMasterCvText,
@@ -612,7 +612,8 @@ export class CvAdaptationService {
     }
 
     const finalMasterCvText =
-      resolvedMasterCvText ?? this.normalizeSnapshotText(protectionResult.result.masterCvText);
+      resolvedMasterCvText ??
+      this.normalizeSnapshotText(protectionResult.result.masterCvText);
     const snapshot = await this.createAnalysisCvSnapshot({
       sourceType,
       text: finalMasterCvText,
@@ -828,7 +829,9 @@ export class CvAdaptationService {
     });
 
     for (const snapshot of expired) {
-      await this.storage.deleteObject(snapshot.textStorageKey).catch(() => null);
+      await this.storage
+        .deleteObject(snapshot.textStorageKey)
+        .catch(() => null);
       if (snapshot.originalFileStorageKey) {
         await this.storage
           .deleteObject(snapshot.originalFileStorageKey)
@@ -1449,7 +1452,9 @@ export class CvAdaptationService {
       throw new NotFoundException("adaptation not found");
     }
 
-    if (!this.isAdaptationUnlocked(adaptation.isUnlocked, adaptation.cvUnlock)) {
+    if (
+      !this.isAdaptationUnlocked(adaptation.isUnlocked, adaptation.cvUnlock)
+    ) {
       throw new BadRequestException(
         `Adaptation must be paid to download. Status: ${adaptation.paymentStatus}`,
       );
@@ -1525,7 +1530,9 @@ export class CvAdaptationService {
       throw new NotFoundException("adaptation not found");
     }
 
-    if (!this.isAdaptationUnlocked(adaptation.isUnlocked, adaptation.cvUnlock)) {
+    if (
+      !this.isAdaptationUnlocked(adaptation.isUnlocked, adaptation.cvUnlock)
+    ) {
       throw new BadRequestException(
         `Adaptation must be paid to download. Status: ${adaptation.paymentStatus}`,
       );
@@ -1563,7 +1570,11 @@ export class CvAdaptationService {
     res.send(docxBuffer);
   }
 
-  async downloadBaseCv(userId: string, id: string, res: Response): Promise<void> {
+  async downloadBaseCv(
+    userId: string,
+    id: string,
+    res: Response,
+  ): Promise<void> {
     const adaptation = await this.database.cvAdaptation.findFirst({
       where: { id, userId },
       select: {
@@ -1601,7 +1612,9 @@ export class CvAdaptationService {
     }
 
     if (snapshot.originalFileStorageKey) {
-      const fileBuffer = await this.storage.getObject(snapshot.originalFileStorageKey);
+      const fileBuffer = await this.storage.getObject(
+        snapshot.originalFileStorageKey,
+      );
       const filename = snapshot.originalFileName || "cv-base";
       const mimeType = snapshot.originalMimeType || "application/octet-stream";
       res.setHeader("Content-Type", mimeType);
@@ -1610,9 +1623,14 @@ export class CvAdaptationService {
       return;
     }
 
-    const markdownBuffer = await this.storage.getObject(snapshot.textStorageKey);
+    const markdownBuffer = await this.storage.getObject(
+      snapshot.textStorageKey,
+    );
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");
-    res.setHeader("Content-Disposition", "attachment; filename=cv-base-analise.md");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=cv-base-analise.md",
+    );
     res.send(markdownBuffer);
   }
 
@@ -2051,7 +2069,10 @@ export class CvAdaptationService {
   }
 
   private normalizeSnapshotText(input: string): string {
-    return input.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").trim();
+    return input
+      .replace(/^\uFEFF/, "")
+      .replace(/\r\n?/g, "\n")
+      .trim();
   }
 
   private hashGuestSessionToken(sessionPublicToken: string | null | undefined) {
@@ -2171,7 +2192,10 @@ export class CvAdaptationService {
         }
       }
 
-      if (snapshot.claimedByUserId && snapshot.claimedByUserId !== input.userId) {
+      if (
+        snapshot.claimedByUserId &&
+        snapshot.claimedByUserId !== input.userId
+      ) {
         throw new BadRequestException("Analysis snapshot already claimed.");
       }
 
@@ -2200,7 +2224,9 @@ export class CvAdaptationService {
         select: { textStorageKey: true },
       });
       if (!snapshot) {
-        throw new BadRequestException("Analysis snapshot not found for adaptation.");
+        throw new BadRequestException(
+          "Analysis snapshot not found for adaptation.",
+        );
       }
       const buffer = await this.storage.getObject(snapshot.textStorageKey);
       return this.normalizeSnapshotText(buffer.toString("utf8"));
@@ -2214,7 +2240,9 @@ export class CvAdaptationService {
 
     return (
       adaptation.masterResume.rawText?.trim() ||
-      this.synthesizeMasterCvTextFromGuestAnalysis(adaptation.adaptedContentJson)
+      this.synthesizeMasterCvTextFromGuestAnalysis(
+        adaptation.adaptedContentJson,
+      )
     );
   }
 

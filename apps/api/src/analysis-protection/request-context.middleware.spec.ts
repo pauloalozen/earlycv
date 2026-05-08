@@ -13,9 +13,11 @@ test("request context middleware assigns request and correlation ids", () => {
     cookies: {},
     headers: {},
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
   let called = false;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {
     called = true;
   });
@@ -32,8 +34,10 @@ test("request context middleware does not trust forwarded ip without trusted pro
     cookies: {},
     headers: { "x-forwarded-for": "203.0.113.10" },
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.equal(req.analysisContext.ip, "127.0.0.1");
@@ -45,8 +49,10 @@ test("request context middleware accepts forwarded ip when trusted proxy is enab
     cookies: {},
     headers: { "x-forwarded-for": "203.0.113.10, 198.51.100.5" },
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.equal(req.analysisContext.ip, "203.0.113.10");
@@ -58,8 +64,10 @@ test("request context middleware does not trust forwarded ip when trust proxy is
     cookies: {},
     headers: { "x-forwarded-for": "203.0.113.10" },
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.equal(req.analysisContext.ip, "127.0.0.1");
@@ -71,8 +79,10 @@ test("request context middleware falls back to UUID correlation id when incoming
     cookies: {},
     headers: { "x-correlation-id": "\tbad\nvalue\t" },
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.match(req.analysisContext.correlationId, UUID_V4_REGEX);
@@ -86,8 +96,10 @@ test("request context middleware falls back to UUID correlation id when incoming
     cookies: {},
     headers: { "x-correlation-id": oversizedCorrelationId },
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.match(req.analysisContext.correlationId, UUID_V4_REGEX);
@@ -100,8 +112,10 @@ test("request context middleware keeps public session token separate from intern
     cookies: { analysis_session_token: "public-session-token" },
     headers: {},
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.equal(req.analysisContext.sessionPublicToken, "public-session-token");
@@ -116,8 +130,10 @@ test("request context middleware reads public session token from cookie header w
         "other_cookie=value; analysis_session_token=public-session-token-from-header",
     },
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.equal(
@@ -136,8 +152,10 @@ test("request context middleware stores route path and user-agent hash", () => {
     },
     originalUrl: "/api/cv-adaptation/analyze-guest?foo=bar",
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.equal(
@@ -156,8 +174,10 @@ test("request context middleware captures PostHog session id from header", () =>
       "x-posthog-session-id": "ph-session-abc",
     },
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.equal(req.analysisContext.posthogSessionId, "ph-session-abc");
@@ -180,8 +200,10 @@ test("request context middleware resolves userId from bearer token", () => {
       authorization: `Bearer ${token}`,
     },
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.equal(req.analysisContext.userId, "user-123");
@@ -203,8 +225,10 @@ test("request context middleware resolves userId from access token cookie", () =
       cookie: `earlycv-access-token=${token}`,
     },
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.equal(req.analysisContext.userId, "user-cookie-123");
@@ -227,8 +251,10 @@ test("request context middleware keeps userId null for invalid token", () => {
       authorization: `Bearer ${token}`,
     },
     socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   requestContextMiddleware(req, {} as any, () => {});
 
   assert.equal(req.analysisContext.userId, null);

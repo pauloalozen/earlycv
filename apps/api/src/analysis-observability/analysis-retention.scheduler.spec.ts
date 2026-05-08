@@ -37,6 +37,7 @@ test("daily retention scheduler executes purge with env policy", async () => {
         deletedStageMetricCount: 1,
       };
     },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any);
 
   const result = await scheduler.runDailyRetention();

@@ -81,9 +81,7 @@ test("buildCatalog returns all protection and business events from registries", 
     },
   );
   assert.deepEqual(
-    catalog.business.find(
-      (event) => event.eventName === "buy_credits_clicked",
-    ),
+    catalog.business.find((event) => event.eventName === "buy_credits_clicked"),
     {
       eventName: "buy_credits_clicked",
       eventVersion: 1,
@@ -115,9 +113,7 @@ test("buildCatalog returns all protection and business events from registries", 
     },
   );
   assert.deepEqual(
-    catalog.business.find(
-      (event) => event.eventName === "cv_unlock_completed",
-    ),
+    catalog.business.find((event) => event.eventName === "cv_unlock_completed"),
     {
       eventName: "cv_unlock_completed",
       eventVersion: 1,

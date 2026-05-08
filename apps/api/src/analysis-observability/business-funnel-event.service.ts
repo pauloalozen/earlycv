@@ -2,13 +2,13 @@ import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { DatabaseService } from "../database/database.service";
+import { PosthogEventExporter } from "../posthog-integration/posthog-event-exporter.service";
 import { resolveBusinessFunnelEventVersion } from "./analysis-event-version.registry";
 import {
   type BusinessFunnelEventSource,
   FUNNEL_EVENT_OWNERSHIP,
 } from "./business-funnel-event-ownership";
 import { BusinessFunnelProjectionService } from "./business-funnel-projection.service";
-import { PosthogEventExporter } from "../posthog-integration/posthog-event-exporter.service";
 
 export type RecordBusinessFunnelEventInput = {
   correlationId?: string;
@@ -72,8 +72,7 @@ export class BusinessFunnelEventService {
     @Inject(BusinessFunnelProjectionService)
     private readonly projection: BusinessFunnelProjectionService,
     @Inject(PosthogEventExporter)
-    private readonly posthogExporter: BusinessFunnelPosthogExporter =
-      NOOP_POSTHOG_EXPORTER,
+    private readonly posthogExporter: BusinessFunnelPosthogExporter = NOOP_POSTHOG_EXPORTER,
   ) {}
 
   async record(
@@ -101,10 +100,9 @@ export class BusinessFunnelEventService {
     if (normalizedKey) {
       return await this.database.$transaction(async (tx) => {
         const writeClient = tx as unknown as BusinessFunnelEventWriteClient;
-        const result = await this.createManyWithUserFallback(
-          writeClient,
-          [{ ...eventData, idempotencyKey: normalizedKey }],
-        );
+        const result = await this.createManyWithUserFallback(writeClient, [
+          { ...eventData, idempotencyKey: normalizedKey },
+        ]);
 
         const ingested = result.count === 1;
         const event = await writeClient.businessFunnelEvent.findUnique({
@@ -116,6 +114,7 @@ export class BusinessFunnelEventService {
         }
 
         if (ingested) {
+          // biome-ignore lint/suspicious/noExplicitAny: Prisma tx and event types don't match projection interface
           await this.projection.applyEvent(event as any, tx as any);
           this.exportToPostHog(normalizedEventName, input, context, source);
         }
@@ -131,6 +130,7 @@ export class BusinessFunnelEventService {
         idempotencyKey: null,
       });
 
+      // biome-ignore lint/suspicious/noExplicitAny: Prisma tx and event types don't match projection interface
       await this.projection.applyEvent(created as any, tx as any);
       this.exportToPostHog(normalizedEventName, input, context, source);
 
@@ -353,6 +353,7 @@ export class BusinessFunnelEventService {
     };
 
     this.posthogExporter.exportBusinessFunnelEvent(
+      // biome-ignore lint/suspicious/noExplicitAny: eventName union doesn't satisfy PostHog exporter signature
       eventName as any,
       properties,
       source === "frontend" ? "frontend" : "backend",

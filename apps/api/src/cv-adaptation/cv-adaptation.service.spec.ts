@@ -903,6 +903,7 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
     },
   );
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   const output = await (service as any).ensureLegacyStructuredOutput({
     adaptedContentJson: { fit: { headline: "headline" } },
     aiAuditJson: null,
@@ -986,6 +987,7 @@ test("ensureLegacyStructuredOutput returns null when protected boundary blocks",
     },
   );
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   const output = await (service as any).ensureLegacyStructuredOutput({
     adaptedContentJson: { fit: { headline: "headline" } },
     aiAuditJson: null,
@@ -1069,16 +1071,10 @@ test("analyzeGuest persists snapshot hash from stored markdown content", async (
 });
 
 test("validateAndClaimSnapshot rejects guest session mismatch", async () => {
-  const service = new CvAdaptationServiceCtor(
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-  );
+  const service = new CvAdaptationServiceCtor({}, {}, {}, {}, {}, {});
 
   await assert.rejects(
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     (service as any).validateAndClaimSnapshot({
       tx: {
         analysisCvSnapshot: {
@@ -1102,16 +1098,10 @@ test("validateAndClaimSnapshot rejects guest session mismatch", async () => {
 });
 
 test("validateAndClaimSnapshot rejects expired snapshot", async () => {
-  const service = new CvAdaptationServiceCtor(
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-  );
+  const service = new CvAdaptationServiceCtor({}, {}, {}, {}, {}, {});
 
   await assert.rejects(
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     (service as any).validateAndClaimSnapshot({
       tx: {
         analysisCvSnapshot: {
@@ -1135,16 +1125,10 @@ test("validateAndClaimSnapshot rejects expired snapshot", async () => {
 });
 
 test("validateAndClaimSnapshot rejects claim by another user", async () => {
-  const service = new CvAdaptationServiceCtor(
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-  );
+  const service = new CvAdaptationServiceCtor({}, {}, {}, {}, {}, {});
 
   await assert.rejects(
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     (service as any).validateAndClaimSnapshot({
       tx: {
         analysisCvSnapshot: {
@@ -1168,15 +1152,9 @@ test("validateAndClaimSnapshot rejects claim by another user", async () => {
 });
 
 test("validateAndClaimSnapshot allows guest snapshot without session hash", async () => {
-  const service = new CvAdaptationServiceCtor(
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-  );
+  const service = new CvAdaptationServiceCtor({}, {}, {}, {}, {}, {});
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   const result = await (service as any).validateAndClaimSnapshot({
     tx: {
       analysisCvSnapshot: {
@@ -1210,6 +1188,7 @@ test("resolveGenerationMasterCvText rejects new adaptations without snapshot", a
   );
 
   await assert.rejects(
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     (service as any).resolveGenerationMasterCvText({
       id: "adapt-1",
       adaptedContentJson: {},
@@ -1240,6 +1219,7 @@ test("resolveGenerationMasterCvText uses snapshot text instead of current master
     },
   );
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   const text = await (service as any).resolveGenerationMasterCvText({
     id: "adapt-1",
     adaptedContentJson: {},
@@ -1267,14 +1247,24 @@ test("analyzeAuthenticated uses the same normalized text for AI load and snapsho
     },
     {
       analyzeAndAdapt: async () => {},
-      analyzeAndAdaptDirect: async () => ({ adaptedContentJson: {}, previewText: "preview" }),
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
       buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
     },
     { createIntent: async () => ({}) },
     { generatePdf: async () => Buffer.from("pdf") },
-    { generateDocx: async () => Buffer.from("docx"), toPdf: async () => Buffer.from("pdf") },
     {
-      executeProtectedAnalyze: async ({ loadMasterCvText }: { loadMasterCvText: () => Promise<string> }) => {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async ({
+        loadMasterCvText,
+      }: {
+        loadMasterCvText: () => Promise<string>;
+      }) => {
         aiLoadedText = await loadMasterCvText();
         return {
           ok: true,
@@ -1311,7 +1301,9 @@ test("analyzeAuthenticated uses the same normalized text for AI load and snapsho
   assert.equal(result.masterCvText, "Linha 1\nLinha 2");
   assert.equal(
     storedSha,
-    createHash("sha256").update(Buffer.from("Linha 1\nLinha 2", "utf8")).digest("hex"),
+    createHash("sha256")
+      .update(Buffer.from("Linha 1\nLinha 2", "utf8"))
+      .digest("hex"),
   );
 });
 
@@ -1333,6 +1325,7 @@ test("downloadBaseCv denies access when adaptation does not belong to user", asy
     service.downloadBaseCv("user-b", "adapt-1", {
       setHeader: () => {},
       send: () => {},
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any),
     /adaptation not found/,
   );
@@ -1381,6 +1374,7 @@ test("downloadBaseCv returns original file when available", async () => {
     send: (value: Buffer) => {
       sentBuffer = value;
     },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any);
 
   assert.equal(contentType, "application/pdf");
@@ -1431,6 +1425,7 @@ test("downloadBaseCv falls back to markdown snapshot when original file is absen
     send: (value: Buffer) => {
       sentBuffer = value;
     },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any);
 
   assert.equal(contentType, "text/markdown; charset=utf-8");

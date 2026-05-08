@@ -75,6 +75,7 @@ const createFacadeHarness = (
         ...defaultConfig,
         ...configOverride,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       checkRawLimit: async () => {
@@ -85,6 +86,7 @@ const createFacadeHarness = (
         stageCalls.push("checkContextualLimit");
         return { allowed: true, count: 1, reason: null };
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       buildCanonicalHash: () => {
@@ -109,6 +111,7 @@ const createFacadeHarness = (
         stageCalls.push("tryAcquireLock");
         return { acquired: true, key: "dedupe-key" };
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       consumeIfNeeded: async () => {
@@ -120,18 +123,21 @@ const createFacadeHarness = (
           reason: null,
         };
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       verifyToken: async () => {
         stageCalls.push("verifyToken");
         return { valid: true, reason: null };
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       execute: async (runProvider: () => Promise<unknown>) => {
         stageCalls.push("gatewayExecute");
         return runProvider();
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       emit: async (
@@ -141,6 +147,7 @@ const createFacadeHarness = (
       ) => {
         telemetryCalls.push({ context, eventName, input });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cooldownMs: 0,
@@ -173,6 +180,7 @@ const createRolloutHarness = (
         ...defaultConfig,
         ...configOverride,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       checkRawLimit: async () => ({
@@ -189,6 +197,7 @@ const createRolloutHarness = (
             ? null
             : "rate_limit_block_contextual",
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       buildCanonicalHash: () => "hash-1",
@@ -203,6 +212,7 @@ const createRolloutHarness = (
         acquired: decisions.dedupeLockAcquired ?? true,
         key: "dedupe-key",
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       consumeIfNeeded: async () => ({
@@ -212,15 +222,18 @@ const createRolloutHarness = (
         reason:
           (decisions.usageAllowed ?? true) ? null : "daily_limit_exceeded",
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       verifyToken: async () => ({
         valid: decisions.turnstileValid ?? true,
         reason: (decisions.turnstileValid ?? true) ? null : "turnstile_invalid",
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       emit: async (
@@ -230,6 +243,7 @@ const createRolloutHarness = (
       ) => {
         telemetryCalls.push({ context, eventName, input });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cooldownMs: 0,
@@ -361,6 +375,7 @@ test("pipeline stops on invalid turnstile and never calls provider", async () =>
   let providerCallCount = 0;
 
   const facade = new AnalysisProtectionFacade(
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     { getAll: async () => defaultConfig } as any,
     {
       checkRawLimit: async () => {
@@ -371,6 +386,7 @@ test("pipeline stops on invalid turnstile and never calls provider", async () =>
         stageCalls.push("checkContextualLimit");
         return { allowed: true, count: 1, reason: null };
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       buildCanonicalHash: () => "hash-1",
@@ -381,6 +397,7 @@ test("pipeline stops on invalid turnstile and never calls provider", async () =>
       getCachedResult: async () => null,
       releaseLock: async () => {},
       tryAcquireLock: async () => ({ acquired: true, key: "dedupe-key" }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       consumeIfNeeded: async () => ({
@@ -389,18 +406,22 @@ test("pipeline stops on invalid turnstile and never calls provider", async () =>
         dailyCount: 0,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       verifyToken: async () => {
         stageCalls.push("verifyToken");
         return { valid: false, reason: "turnstile_invalid" };
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       emit: async () => {},
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cooldownMs: 0,
@@ -436,6 +457,7 @@ test("pipeline fail-fast blocks provider when raw rate limit is denied", async (
   let providerCallCount = 0;
 
   const facade = new AnalysisProtectionFacade(
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     { getAll: async () => defaultConfig } as any,
     {
       checkRawLimit: async () => ({
@@ -448,6 +470,7 @@ test("pipeline fail-fast blocks provider when raw rate limit is denied", async (
         count: 1,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       buildCanonicalHash: () => "hash-1",
@@ -455,6 +478,7 @@ test("pipeline fail-fast blocks provider when raw rate limit is denied", async (
       getCachedResult: async () => null,
       releaseLock: async () => {},
       tryAcquireLock: async () => ({ acquired: true, key: "dedupe-key" }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       consumeIfNeeded: async () => ({
@@ -463,15 +487,19 @@ test("pipeline fail-fast blocks provider when raw rate limit is denied", async (
         dailyCount: 0,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       verifyToken: async () => ({ valid: true, reason: null }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       emit: async () => {},
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cooldownMs: 0,
@@ -511,6 +539,7 @@ test("pipeline fail-fast blocks when kill switch or auth emergency is enabled", 
           ...defaultConfig,
           ...flags,
         }),
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         checkRawLimit: async () => ({ allowed: true, count: 1, reason: null }),
@@ -519,6 +548,7 @@ test("pipeline fail-fast blocks when kill switch or auth emergency is enabled", 
           count: 1,
           reason: null,
         }),
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         buildCanonicalHash: () => "hash-1",
@@ -526,6 +556,7 @@ test("pipeline fail-fast blocks when kill switch or auth emergency is enabled", 
         getCachedResult: async () => null,
         releaseLock: async () => {},
         tryAcquireLock: async () => ({ acquired: true, key: "dedupe-key" }),
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         consumeIfNeeded: async () => ({
@@ -534,15 +565,19 @@ test("pipeline fail-fast blocks when kill switch or auth emergency is enabled", 
           dailyCount: 0,
           reason: null,
         }),
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         verifyToken: async () => ({ valid: true, reason: null }),
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         emit: async () => {},
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         cooldownMs: 0,
@@ -574,6 +609,7 @@ test("pipeline fail-fast blocks provider when contextual rate limit is denied", 
   let providerCallCount = 0;
 
   const facade = new AnalysisProtectionFacade(
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     { getAll: async () => defaultConfig } as any,
     {
       checkRawLimit: async () => ({ allowed: true, count: 1, reason: null }),
@@ -582,6 +618,7 @@ test("pipeline fail-fast blocks provider when contextual rate limit is denied", 
         count: 11,
         reason: "rate_limit_block_contextual",
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       buildCanonicalHash: () => "hash-1",
@@ -589,6 +626,7 @@ test("pipeline fail-fast blocks provider when contextual rate limit is denied", 
       getCachedResult: async () => null,
       releaseLock: async () => {},
       tryAcquireLock: async () => ({ acquired: true, key: "dedupe-key" }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       consumeIfNeeded: async () => ({
@@ -597,15 +635,19 @@ test("pipeline fail-fast blocks provider when contextual rate limit is denied", 
         dailyCount: 0,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       verifyToken: async () => ({ valid: true, reason: null }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       emit: async () => {},
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cooldownMs: 0,
@@ -636,6 +678,7 @@ test("pipeline fail-fast blocks provider when dedupe lock cannot be acquired", a
   let providerCallCount = 0;
 
   const facade = new AnalysisProtectionFacade(
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     { getAll: async () => defaultConfig } as any,
     {
       checkRawLimit: async () => ({ allowed: true, count: 1, reason: null }),
@@ -644,6 +687,7 @@ test("pipeline fail-fast blocks provider when dedupe lock cannot be acquired", a
         count: 1,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       buildCanonicalHash: () => "hash-1",
@@ -651,6 +695,7 @@ test("pipeline fail-fast blocks provider when dedupe lock cannot be acquired", a
       getCachedResult: async () => null,
       releaseLock: async () => {},
       tryAcquireLock: async () => ({ acquired: false, key: "dedupe-key" }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       consumeIfNeeded: async () => ({
@@ -659,15 +704,19 @@ test("pipeline fail-fast blocks provider when dedupe lock cannot be acquired", a
         dailyCount: 0,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       verifyToken: async () => ({ valid: true, reason: null }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       emit: async () => {},
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cooldownMs: 0,
@@ -704,6 +753,7 @@ test("pipeline fail-fast blocks provider for cooldown and daily limit", async ()
     let providerCallCount = 0;
 
     const facade = new AnalysisProtectionFacade(
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       { getAll: async () => defaultConfig } as any,
       {
         checkRawLimit: async () => ({ allowed: true, count: 1, reason: null }),
@@ -712,6 +762,7 @@ test("pipeline fail-fast blocks provider for cooldown and daily limit", async ()
           count: 1,
           reason: null,
         }),
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         buildCanonicalHash: () => "hash-1",
@@ -719,6 +770,7 @@ test("pipeline fail-fast blocks provider for cooldown and daily limit", async ()
         getCachedResult: async () => null,
         releaseLock: async () => {},
         tryAcquireLock: async () => ({ acquired: true, key: "dedupe-key" }),
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         consumeIfNeeded: async () => ({
@@ -727,15 +779,19 @@ test("pipeline fail-fast blocks provider for cooldown and daily limit", async ()
           dailyCount: 3,
           reason: decision.reason,
         }),
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         verifyToken: async () => ({ valid: true, reason: null }),
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         emit: async () => {},
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       {
         cooldownMs: 0,
@@ -767,6 +823,7 @@ test("provider failures are translated into controlled block result", async () =
   const stageCalls: string[] = [];
 
   const facade = new AnalysisProtectionFacade(
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     { getAll: async () => defaultConfig } as any,
     {
       checkRawLimit: async () => ({ allowed: true, count: 1, reason: null }),
@@ -775,6 +832,7 @@ test("provider failures are translated into controlled block result", async () =
         count: 1,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       buildCanonicalHash: () => "hash-1",
@@ -784,6 +842,7 @@ test("provider failures are translated into controlled block result", async () =
         stageCalls.push("releaseLock");
       },
       tryAcquireLock: async () => ({ acquired: true, key: "dedupe-key" }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       consumeIfNeeded: async () => ({
@@ -792,17 +851,21 @@ test("provider failures are translated into controlled block result", async () =
         dailyCount: 0,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       verifyToken: async () => ({ valid: true, reason: null }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       execute: async () => {
         throw new Error("provider timeout");
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       emit: async () => {},
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cooldownMs: 0,
@@ -886,6 +949,7 @@ test("concurrent same hash requests allow only one provider execution", async ()
         ...defaultConfig,
         dedupe_lock_ttl: 20_000,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       checkRawLimit: async () => ({ allowed: true, count: 1, reason: null }),
@@ -894,6 +958,7 @@ test("concurrent same hash requests allow only one provider execution", async ()
         count: 1,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     dedupe,
     {
@@ -903,17 +968,21 @@ test("concurrent same hash requests allow only one provider execution", async ()
         dailyCount: 1,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       verifyToken: async () => ({ valid: true, reason: null }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       emit: async (eventName: string) => {
         telemetryEvents.push(eventName);
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cooldownMs: 0,
@@ -999,6 +1068,7 @@ test("observe-only failed dedupe lock does not emit acquired event or release lo
         ...defaultConfig,
         rollout_mode: "observe-only",
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       checkRawLimit: async () => ({ allowed: true, count: 1, reason: null }),
@@ -1007,6 +1077,7 @@ test("observe-only failed dedupe lock does not emit acquired event or release lo
         count: 1,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       buildCanonicalHash: () => "hash-1",
@@ -1017,6 +1088,7 @@ test("observe-only failed dedupe lock does not emit acquired event or release lo
       },
       setCachedResult: async () => {},
       tryAcquireLock: async () => ({ acquired: false, key: "dedupe-key" }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       consumeIfNeeded: async () => ({
@@ -1025,17 +1097,21 @@ test("observe-only failed dedupe lock does not emit acquired event or release lo
         dailyCount: 1,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       verifyToken: async () => ({ valid: true, reason: null }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       emit: async (eventName: string) => {
         telemetryEvents.push(eventName);
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cooldownMs: 0,
@@ -1163,6 +1239,7 @@ test("skipTurnstile allows internal route execution without deadlock", async () 
   const telemetryCalls: TelemetryCall[] = [];
 
   const facade = new AnalysisProtectionFacade(
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     { getAll: async () => defaultConfig } as any,
     {
       checkRawLimit: async () => {
@@ -1173,6 +1250,7 @@ test("skipTurnstile allows internal route execution without deadlock", async () 
         stageCalls.push("checkContextualLimit");
         return { allowed: true, count: 1, reason: null };
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       buildCanonicalHash: () => "hash-1",
@@ -1184,6 +1262,7 @@ test("skipTurnstile allows internal route execution without deadlock", async () 
       releaseLock: async () => {},
       setCachedResult: async () => {},
       tryAcquireLock: async () => ({ acquired: true, key: "dedupe-key" }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       consumeIfNeeded: async () => ({
@@ -1192,15 +1271,18 @@ test("skipTurnstile allows internal route execution without deadlock", async () 
         dailyCount: 0,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       verifyToken: async () => {
         stageCalls.push("verifyToken");
         return { valid: true, reason: null };
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       emit: async (
@@ -1210,6 +1292,7 @@ test("skipTurnstile allows internal route execution without deadlock", async () 
       ) => {
         telemetryCalls.push({ context, eventName, input });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cooldownMs: 0,
@@ -1224,6 +1307,7 @@ test("skipTurnstile allows internal route execution without deadlock", async () 
       payload: { cv: "resume", job: "description" },
       skipTurnstile: true,
       turnstileToken: null,
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     makeContext({ routeKey: "cv-adaptation/internal-paid-output" }),
     async () => ({ adapted: true }),
@@ -1400,6 +1484,7 @@ test("idempotency keys remain stable across retry and concurrency", async () => 
       getAll: async () => ({
         ...defaultConfig,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       checkRawLimit: async () => ({ allowed: true, count: 1, reason: null }),
@@ -1408,6 +1493,7 @@ test("idempotency keys remain stable across retry and concurrency", async () => 
         count: 1,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       buildCanonicalHash: () => "hash-1",
@@ -1416,6 +1502,7 @@ test("idempotency keys remain stable across retry and concurrency", async () => 
       releaseLock: async () => {},
       setCachedResult: async () => {},
       tryAcquireLock: async () => ({ acquired: true, key: "dedupe-key" }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       consumeIfNeeded: async () => ({
@@ -1424,12 +1511,15 @@ test("idempotency keys remain stable across retry and concurrency", async () => 
         dailyCount: 1,
         reason: null,
       }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       verifyToken: async () => ({ valid: true, reason: null }),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       execute: async (runProvider: () => Promise<unknown>) => runProvider(),
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       emit: async (
@@ -1441,6 +1531,7 @@ test("idempotency keys remain stable across retry and concurrency", async () => 
           idempotencyKeys.add(input.idempotencyKey);
         }
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cooldownMs: 0,

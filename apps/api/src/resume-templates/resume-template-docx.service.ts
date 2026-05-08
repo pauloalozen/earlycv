@@ -10,7 +10,7 @@ import {
   Inject,
   Injectable,
   Logger,
-  OnModuleInit,
+  type OnModuleInit,
 } from "@nestjs/common";
 import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";
@@ -38,7 +38,8 @@ function hasDisplayError(output: {
   stderr?: string;
   stdout?: string;
 }): boolean {
-  const combined = `${output.message ?? ""}\n${output.stderr ?? ""}\n${output.stdout ?? ""}`.toLowerCase();
+  const combined =
+    `${output.message ?? ""}\n${output.stderr ?? ""}\n${output.stdout ?? ""}`.toLowerCase();
   return (
     combined.includes("can't open display") ||
     combined.includes("x11 error") ||
@@ -287,7 +288,10 @@ export class ResumeTemplateDocxService implements OnModuleInit {
       try {
         await access(pdfPath);
       } catch {
-        if (hasDisplayError(conversion) && !conversion.binary.startsWith("xvfb-run ")) {
+        if (
+          hasDisplayError(conversion) &&
+          !conversion.binary.startsWith("xvfb-run ")
+        ) {
           conversion = await this.runWithXvfb(conversion.binary, docxPath);
           try {
             await access(pdfPath);
@@ -343,7 +347,10 @@ export class ResumeTemplateDocxService implements OnModuleInit {
       try {
         await access(pdfPath);
       } catch {
-        if (hasDisplayError(conversion) && !conversion.binary.startsWith("xvfb-run ")) {
+        if (
+          hasDisplayError(conversion) &&
+          !conversion.binary.startsWith("xvfb-run ")
+        ) {
           conversion = await this.runWithXvfb(conversion.binary, docxPath);
           try {
             await access(pdfPath);
@@ -488,9 +495,7 @@ export class ResumeTemplateDocxService implements OnModuleInit {
           }
         }
 
-        attempts.push(
-          `${binary}: ${err.code ?? "UNKNOWN"} ${err.message}`,
-        );
+        attempts.push(`${binary}: ${err.code ?? "UNKNOWN"} ${err.message}`);
         lastError = error;
 
         if (err.code !== "ENOENT") {

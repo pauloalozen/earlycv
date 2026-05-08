@@ -61,7 +61,11 @@ test("records business event and updates projection for first ingestion", async 
       ) => {
         return callback({
           businessFunnelEvent: {
-            createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
+            createMany: async ({
+              data,
+            }: {
+              data: Record<string, unknown>[];
+            }) => {
               const record = data[0];
               const event = {
                 id: `event-${storedByKey.size + 1}`,
@@ -85,6 +89,7 @@ test("records business event and updates projection for first ingestion", async 
           },
         });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async (
@@ -135,7 +140,11 @@ test("falls back to null userId when persistence hits user foreign key violation
       ) => {
         return callback({
           businessFunnelEvent: {
-            createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
+            createMany: async ({
+              data,
+            }: {
+              data: Record<string, unknown>[];
+            }) => {
               createManyAttempts += 1;
               const record = data[0];
 
@@ -171,6 +180,7 @@ test("falls back to null userId when persistence hits user foreign key violation
           },
         });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async (
@@ -230,6 +240,7 @@ test("exports event to PostHog when ingestion succeeds", async () => {
           },
         });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {},
@@ -243,6 +254,7 @@ test("exports event to PostHog when ingestion succeeds", async () => {
         exported.push({ eventName, properties, source });
       },
       shouldExportBusinessFunnelEvent: () => true,
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
   );
 
@@ -295,6 +307,7 @@ test("keeps context $session_id when metadata sends null", async () => {
           },
         });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {},
@@ -307,6 +320,7 @@ test("keeps context $session_id when metadata sends null", async () => {
         exported.push({ properties });
       },
       shouldExportBusinessFunnelEvent: () => true,
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
   );
 
@@ -363,6 +377,7 @@ test("canonicalizes eventName before persisting and projecting", async () => {
           },
         });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async (
@@ -407,11 +422,21 @@ test("drops duplicate business event by idempotency key", async () => {
       ) => {
         return callback({
           businessFunnelEvent: {
-            createMany: async ({ data, skipDuplicates }: { data: Record<string, unknown>[]; skipDuplicates?: boolean }) => {
+            createMany: async ({
+              data,
+              skipDuplicates,
+            }: {
+              data: Record<string, unknown>[];
+              skipDuplicates?: boolean;
+            }) => {
               createManyAttempts += 1;
               const record = data[0];
 
-              if (skipDuplicates && typeof record.idempotencyKey === "string" && storedByKey.has(record.idempotencyKey)) {
+              if (
+                skipDuplicates &&
+                typeof record.idempotencyKey === "string" &&
+                storedByKey.has(record.idempotencyKey)
+              ) {
                 return { count: 0 };
               }
 
@@ -437,6 +462,7 @@ test("drops duplicate business event by idempotency key", async () => {
           },
         });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async (
@@ -487,11 +513,21 @@ test("deduplicates concurrent idempotent ingestions without race", async () => {
       ) => {
         return callback({
           businessFunnelEvent: {
-            createMany: async ({ data, skipDuplicates }: { data: Record<string, unknown>[]; skipDuplicates?: boolean }) => {
+            createMany: async ({
+              data,
+              skipDuplicates,
+            }: {
+              data: Record<string, unknown>[];
+              skipDuplicates?: boolean;
+            }) => {
               createManyAttempts += 1;
               const record = data[0];
 
-              if (skipDuplicates && typeof record.idempotencyKey === "string" && storedByKey.has(record.idempotencyKey)) {
+              if (
+                skipDuplicates &&
+                typeof record.idempotencyKey === "string" &&
+                storedByKey.has(record.idempotencyKey)
+              ) {
                 return { count: 0 };
               }
 
@@ -517,6 +553,7 @@ test("deduplicates concurrent idempotent ingestions without race", async () => {
           },
         });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async (
@@ -565,6 +602,7 @@ test("throws if findUnique returns null after createMany skip", async () => {
           },
         });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {},
@@ -622,6 +660,7 @@ test("rolls back event write when projection application fails", async () => {
         committedEvents.push(...stagedEvents);
         return result;
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {
@@ -650,6 +689,7 @@ test("rejects protection decision semantic event names", async () => {
       $transaction: async () => {
         throw new Error("transaction should not be called");
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {
@@ -676,6 +716,7 @@ test("rejects case-variant reserved event names after normalization", async () =
       $transaction: async () => {
         throw new Error("transaction should not be called");
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {
@@ -702,6 +743,7 @@ test("rejects missing eventName with bad request exception", async () => {
       $transaction: async () => {
         throw new Error("transaction should not be called");
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {
@@ -714,6 +756,7 @@ test("rejects missing eventName with bad request exception", async () => {
     service.record(
       {
         eventVersion: 1,
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
       } as any,
       baseContext,
     ),
@@ -760,6 +803,7 @@ test("uses canonical context correlation and request IDs over payload", async ()
           },
         });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {},
@@ -791,6 +835,7 @@ test("projection updates counters based on stage and outcome", async () => {
         upsertPayload = args;
       },
     },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any);
 
   await projection.applyEvent({
@@ -836,6 +881,7 @@ test("rejects business funnel event missing version registry entry", async () =>
       $transaction: async () => {
         throw new Error("transaction should not be called");
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {
@@ -870,6 +916,7 @@ test("rejects eventVersion mismatch against registry", async () => {
       $transaction: async () => {
         throw new Error("transaction should not be called");
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {
@@ -901,6 +948,7 @@ test("rejects frontend emission of backend-owned funnel events", async () => {
       $transaction: async () => {
         throw new Error("transaction should not be called");
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {
@@ -946,7 +994,11 @@ test("accepts frontend page_view event from journey tracking", async () => {
       ) => {
         return callback({
           businessFunnelEvent: {
-            createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
+            createMany: async ({
+              data,
+            }: {
+              data: Record<string, unknown>[];
+            }) => {
               const record = data[0];
               const event = {
                 id: "event-page-view",
@@ -960,12 +1012,17 @@ test("accepts frontend page_view event from journey tracking", async () => {
 
               return { count: 1 };
             },
-            findUnique: async ({ where }: { where: { idempotencyKey: string } }) => {
+            findUnique: async ({
+              where,
+            }: {
+              where: { idempotencyKey: string };
+            }) => {
               return storedByKey.get(where.idempotencyKey) ?? null;
             },
           },
         });
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {},
@@ -996,6 +1053,7 @@ test("rejects frontend emission of payment_failed", async () => {
       $transaction: async () => {
         throw new Error("transaction should not be called");
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       applyEvent: async () => {

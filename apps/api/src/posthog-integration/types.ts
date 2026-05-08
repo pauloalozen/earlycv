@@ -67,4 +67,5 @@ export const POSTHOG_INTEGRATION_SCHEMA = {
   },
 } as const;
 
-export type PostHogIntegrationConfigKey = keyof typeof POSTHOG_INTEGRATION_SCHEMA;
+export type PostHogIntegrationConfigKey =
+  keyof typeof POSTHOG_INTEGRATION_SCHEMA;

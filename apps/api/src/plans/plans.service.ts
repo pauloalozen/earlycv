@@ -618,7 +618,8 @@ export class PlansService {
       originAdaptationId: string | null;
     } | null,
   ) {
-    const resolvedPurchase = purchase ?? (await this.findPurchaseForFailedPayment(resolution));
+    const resolvedPurchase =
+      purchase ?? (await this.findPurchaseForFailedPayment(resolution));
     const purchaseResolved = Boolean(resolvedPurchase);
     const enrichmentStatus = purchaseResolved
       ? "enriched_from_purchase"

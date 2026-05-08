@@ -156,10 +156,7 @@ test("marks purchase as failed before recording enriched payment_failed", async 
   assert.equal(recordedEvents.length, 1);
   assert.equal(recordedEvents[0]?.eventName, "payment_failed");
   assert.equal(recordedEvents[0]?.purchaseResolved, true);
-  assert.equal(
-    recordedEvents[0]?.enrichmentStatus,
-    "enriched_from_purchase",
-  );
+  assert.equal(recordedEvents[0]?.enrichmentStatus, "enriched_from_purchase");
   assert.equal(recordedEvents[0]?.purchaseId, "purchase-failed-1");
   assert.equal(recordedEvents[0]?.userId, "user-123");
   assert.equal(recordedEvents[0]?.user_id, "user-123");

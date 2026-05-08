@@ -40,18 +40,26 @@ test("capture appends analytics env and app properties", () => {
     projectId: "",
   });
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   (service as any).client = {
     capture: (message: Record<string, unknown>) => captured.push(message),
     flush: async () => {},
     shutdown: () => {},
   };
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   (service as any).isConfigured = true;
 
   service.capture("analysis_started", { source: "backend" });
 
   assert.equal(captured.length, 1);
-  assert.equal((captured[0].properties as Record<string, unknown>).env, "staging");
-  assert.equal((captured[0].properties as Record<string, unknown>).app, "earlycv");
+  assert.equal(
+    (captured[0].properties as Record<string, unknown>).env,
+    "staging",
+  );
+  assert.equal(
+    (captured[0].properties as Record<string, unknown>).app,
+    "earlycv",
+  );
 
   process.env.APP_ENV = previousAppEnv;
   process.env.RAILWAY_ENVIRONMENT_NAME = previousRailwayEnv;
@@ -68,11 +76,13 @@ test("capture prioritizes authenticated user_id as distinctId", () => {
     projectId: "",
   });
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   (service as any).client = {
     capture: (message: Record<string, unknown>) => captured.push(message),
     flush: async () => {},
     shutdown: () => {},
   };
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   (service as any).isConfigured = true;
 
   service.capture("page_view", {
@@ -94,11 +104,13 @@ test("capture keeps anonymous fallback without user_id", () => {
     projectId: "",
   });
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   (service as any).client = {
     capture: (message: Record<string, unknown>) => captured.push(message),
     flush: async () => {},
     shutdown: () => {},
   };
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   (service as any).isConfigured = true;
 
   service.capture("page_view", {});
@@ -117,11 +129,13 @@ test("capture uses $session_id as distinctId fallback", () => {
     projectId: "",
   });
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   (service as any).client = {
     capture: (message: Record<string, unknown>) => captured.push(message),
     flush: async () => {},
     shutdown: () => {},
   };
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   (service as any).isConfigured = true;
 
   service.capture("page_view", {

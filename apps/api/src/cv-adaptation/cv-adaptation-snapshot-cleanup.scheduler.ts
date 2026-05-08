@@ -16,7 +16,8 @@ export class CvAdaptationSnapshotCleanupScheduler {
 
   @Cron("15 2 * * *")
   async runDailyCleanup() {
-    const result = await this.cvAdaptationService.cleanupExpiredGuestSnapshots();
+    const result =
+      await this.cvAdaptationService.cleanupExpiredGuestSnapshots();
     this.logger.log(
       `analysis snapshot cleanup complete (deleted=${result.deleted})`,
     );

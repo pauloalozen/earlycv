@@ -92,7 +92,11 @@ export class CvAdaptationController {
     @Body(claimGuestValidationPipe)
     dto: ClaimGuestAdaptationDto,
   ) {
-    return this.cvAdaptationService.claimGuest(user.id, dto, req.analysisContext);
+    return this.cvAdaptationService.claimGuest(
+      user.id,
+      dto,
+      req.analysisContext,
+    );
   }
 
   @Post("analyze")

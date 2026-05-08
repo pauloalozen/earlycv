@@ -242,7 +242,10 @@ describe("PosthogAuthProvider", () => {
   it("clears stale dedupe on anonymous session and emits again for same user", async () => {
     sessionStorage.setItem("analytics_auth_reset_allowed", "1");
     sessionStorage.setItem("posthog_identified_user_id", "user-1");
-    sessionStorage.setItem("analytics_auth_session_identified_user_id", "user-1");
+    sessionStorage.setItem(
+      "analytics_auth_session_identified_user_id",
+      "user-1",
+    );
     sessionStorage.setItem(
       "analytics_auth_context",
       JSON.stringify({

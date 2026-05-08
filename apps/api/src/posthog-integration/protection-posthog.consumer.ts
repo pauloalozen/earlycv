@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import type { AnalysisRequestContext } from "../analysis-protection/types";
 import type { AnalysisTelemetryInput } from "../analysis-protection/analysis-telemetry.service";
+import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { PosthogEventExporter } from "./posthog-event-exporter.service";
 
 @Injectable()
@@ -36,6 +36,7 @@ export class ProtectionPosthogConsumer {
       };
 
       this.exporter.exportProtectionEvent(
+        // biome-ignore lint/suspicious/noExplicitAny: eventName union doesn't satisfy PostHog exporter signature
         eventName as any,
         properties,
         "backend",

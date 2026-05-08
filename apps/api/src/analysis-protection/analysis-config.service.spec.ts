@@ -67,6 +67,7 @@ const createConfigServiceWithFindManyStub = (
       $transaction: async () => {
         throw new Error("$transaction should not be called in cache tests");
       },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any,
     {
       cacheTtlMs: 100,
@@ -82,6 +83,7 @@ test("analysis config records can be created and read from database", async () =
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const key = `turnstile_enforced_${randomUUID()}`;
   let rowId: string | null = null;
@@ -122,6 +124,7 @@ test("analysis usage counter buckets reject duplicate records", async () => {
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const counterKey = `daily_limit_${randomUUID()}`;
   const periodKey = "2026-04-21";
@@ -169,6 +172,7 @@ test("analysis request fingerprint aggregation key rejects duplicates", async ()
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const canonicalHash = `canon_${randomUUID()}`;
   const ipHash = `ip_${randomUUID()}`;
@@ -211,6 +215,7 @@ test("resolves config by precedence database > env > default", async () => {
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const service = moduleRef.get(AnalysisConfigService, {
     strict: false,
@@ -251,6 +256,7 @@ test("falls back to env and then default when database config is missing", async
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const service = moduleRef.get(AnalysisConfigService, {
     strict: false,
@@ -287,6 +293,7 @@ test("rejects invalid env values and invalid ranged values from database", async
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const service = moduleRef.get(AnalysisConfigService, {
     strict: false,
@@ -333,6 +340,7 @@ test("rejects malformed percent values from env", async () => {
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const service = moduleRef.get(AnalysisConfigService, {
     strict: false,
@@ -359,6 +367,7 @@ test("parses unit config values from env and database", async () => {
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const service = moduleRef.get(AnalysisConfigService, {
     strict: false,
@@ -404,6 +413,7 @@ test("normalizes list values consistently for env strings and database arrays", 
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const service = moduleRef.get(AnalysisConfigService, {
     strict: false,
@@ -453,6 +463,7 @@ test("rejects cross-config invalid combinations", async () => {
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const service = moduleRef.get(AnalysisConfigService, {
     strict: false,
@@ -529,6 +540,7 @@ test("writes config changes with audit record payload", async () => {
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const service = moduleRef.get(AnalysisConfigService, {
     strict: false,
@@ -585,6 +597,7 @@ test("blocks high-risk config writes from non-admin roles", async () => {
 
   const prisma = moduleRef.get(EARLYCV_DATABASE_CLIENT, {
     strict: false,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
   }) as any;
   const service = moduleRef.get(AnalysisConfigService, {
     strict: false,

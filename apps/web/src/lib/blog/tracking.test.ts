@@ -25,7 +25,10 @@ describe("blog tracking", () => {
 
   it("emits blog_index_viewed", async () => {
     sessionStorage.setItem("journey_session_internal_id", "session-blog");
-    sessionStorage.setItem("journey_current_route_visit_id", "/blog::visit-blog");
+    sessionStorage.setItem(
+      "journey_current_route_visit_id",
+      "/blog::visit-blog",
+    );
 
     await trackBlogIndexViewed();
     const metadata = getLatestMetadata();

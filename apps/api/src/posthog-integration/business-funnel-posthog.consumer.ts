@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import type { AnalysisRequestContext } from "../analysis-protection/types";
 import type { RecordBusinessFunnelEventInput } from "../analysis-observability/business-funnel-event.service";
 import type { BusinessFunnelEventSource } from "../analysis-observability/business-funnel-event-ownership";
+import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { PosthogEventExporter } from "./posthog-event-exporter.service";
 
 @Injectable()
@@ -39,6 +39,7 @@ export class BusinessFunnelPosthogConsumer {
       };
 
       this.exporter.exportBusinessFunnelEvent(
+        // biome-ignore lint/suspicious/noExplicitAny: consumer message type requires coercion
         eventName as any,
         properties,
         source === "frontend" ? "frontend" : "backend",

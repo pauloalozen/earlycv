@@ -59,7 +59,9 @@ export const createCvAdaptationResponseDto = (
   paymentStatus: adaptation.paymentStatus,
   paidAt: adaptation.paidAt ? adaptation.paidAt.toISOString() : null,
   isUnlocked: adaptation.isUnlocked,
-  unlockedAt: adaptation.unlockedAt ? adaptation.unlockedAt.toISOString() : null,
+  unlockedAt: adaptation.unlockedAt
+    ? adaptation.unlockedAt.toISOString()
+    : null,
   adaptedResumeId: adaptation.adaptedResumeId,
   analysisCvSnapshotId: adaptation.analysisCvSnapshotId,
   canDownloadBaseCv: Boolean(adaptation.analysisCvSnapshotId),

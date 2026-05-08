@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { BlogAnalysisCta } from "@/components/blog/blog-analysis-cta";
-import { BlogCategoryFilter } from "@/components/blog/blog-category-filter";
 import { BlogCard } from "@/components/blog/blog-card";
+import { BlogCategoryFilter } from "@/components/blog/blog-category-filter";
 import { BlogIndexViewTracker } from "@/components/blog/blog-view-trackers";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
@@ -45,7 +45,9 @@ type BlogIndexPageProps = {
   searchParams: Promise<{ category?: string }>;
 };
 
-export default async function BlogIndexPage({ searchParams }: BlogIndexPageProps) {
+export default async function BlogIndexPage({
+  searchParams,
+}: BlogIndexPageProps) {
   const { category } = await searchParams;
   const posts = getAllPublishedBlogPosts();
   const categories = getBlogPostCategories(posts);

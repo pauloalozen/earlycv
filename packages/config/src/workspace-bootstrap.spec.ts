@@ -46,6 +46,7 @@ const aiPackageJson = JSON.parse(
 test("root workspace bootstraps shared package builds after install", () => {
   assert.equal(
     rootPackageJson.scripts?.postinstall,
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: shell script string intentionally contains ${VAR:-} syntax
     'if [ "${VERCEL:-}" = "1" ]; then npm run build --workspace @earlycv/config; else npm run build:packages; fi',
   );
   assert.equal(rootPackageJson.scripts?.predev, undefined);

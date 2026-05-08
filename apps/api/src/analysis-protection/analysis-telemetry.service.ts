@@ -5,8 +5,8 @@ import {
   resolveAnalysisProtectionEventVersion,
 } from "../analysis-observability/analysis-event-version.registry";
 import { DatabaseService } from "../database/database.service";
-import type { AnalysisRequestContext } from "./types";
 import { PosthogEventExporter } from "../posthog-integration/posthog-event-exporter.service";
+import type { AnalysisRequestContext } from "./types";
 
 export type AnalysisTelemetryEventName = AnalysisProtectionEventName;
 
@@ -92,7 +92,11 @@ export class AnalysisTelemetryService {
       ...input.metadata,
     };
 
-    this.posthogExporter.exportProtectionEvent(eventName, properties, "backend");
+    this.posthogExporter.exportProtectionEvent(
+      eventName,
+      properties,
+      "backend",
+    );
   }
 
   private toMetadataJson(metadata: Record<string, unknown> | undefined) {

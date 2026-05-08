@@ -10,7 +10,7 @@ class TestResumeTemplateDocxService extends ResumeTemplateDocxService {
     private readonly behavior: (
       binary: string,
       args: string[],
-    ) => Promise<{ stdout?: string; stderr?: string } | void>,
+    ) => Promise<{ stdout?: string; stderr?: string } | undefined>,
   ) {
     super({} as never);
   }
@@ -39,14 +39,18 @@ describe("ResumeTemplateDocxService libreoffice lookup", () => {
       if (binary === "libreoffice") {
         return;
       }
-      const err = new Error("should not reach extra fallback") as NodeJS.ErrnoException;
+      const err = new Error(
+        "should not reach extra fallback",
+      ) as NodeJS.ErrnoException;
       err.code = "ENOENT";
       throw err;
     });
 
-    await (service as unknown as { execLibreOfficeConvert(path: string): Promise<void> }).execLibreOfficeConvert(
-      "/tmp/test.docx",
-    );
+    await (
+      service as unknown as {
+        execLibreOfficeConvert(path: string): Promise<void>;
+      }
+    ).execLibreOfficeConvert("/tmp/test.docx");
 
     assert.deepEqual(service.attempted, ["soffice", "libreoffice"]);
   });
@@ -63,9 +67,11 @@ describe("ResumeTemplateDocxService libreoffice lookup", () => {
 
     await assert.rejects(
       () =>
-        (service as unknown as { execLibreOfficeConvert(path: string): Promise<void> }).execLibreOfficeConvert(
-          "/tmp/test.docx",
-        ),
+        (
+          service as unknown as {
+            execLibreOfficeConvert(path: string): Promise<void>;
+          }
+        ).execLibreOfficeConvert("/tmp/test.docx"),
       /Falha ao converter CV para PDF no servidor/,
     );
 
@@ -124,9 +130,11 @@ describe("ResumeTemplateDocxService libreoffice lookup", () => {
       throw err;
     });
 
-    await (service as unknown as { execLibreOfficeConvert(path: string): Promise<void> }).execLibreOfficeConvert(
-      "/tmp/test.docx",
-    );
+    await (
+      service as unknown as {
+        execLibreOfficeConvert(path: string): Promise<void>;
+      }
+    ).execLibreOfficeConvert("/tmp/test.docx");
 
     assert.deepEqual(service.attempted, ["soffice", "xvfb-run"]);
   });

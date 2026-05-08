@@ -12,7 +12,13 @@ function buildCorsOrigins(): string[] {
   const extra = process.env.CORS_ORIGINS;
   const base = ["http://localhost:3000"];
   if (!extra) return base;
-  return [...base, ...extra.split(",").map((s) => s.trim()).filter(Boolean)];
+  return [
+    ...base,
+    ...extra
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ];
 }
 
 async function bootstrap() {

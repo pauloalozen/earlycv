@@ -25,7 +25,8 @@ function getStoredPosthogSessionId(): string {
 export function beginSessionStartedEmission(
   posthogSessionId: string | null | undefined,
 ): boolean {
-  const normalizedPosthogSessionId = normalizePosthogSessionId(posthogSessionId);
+  const normalizedPosthogSessionId =
+    normalizePosthogSessionId(posthogSessionId);
   if (!normalizedPosthogSessionId) {
     return false;
   }
@@ -50,7 +51,8 @@ export function beginSessionStartedEmission(
 export function markSessionStartedEmitted(
   posthogSessionId: string | null | undefined,
 ): void {
-  const normalizedPosthogSessionId = normalizePosthogSessionId(posthogSessionId);
+  const normalizedPosthogSessionId =
+    normalizePosthogSessionId(posthogSessionId);
   if (!normalizedPosthogSessionId) {
     return;
   }
@@ -69,7 +71,8 @@ export function markSessionStartedEmitted(
 export function markSessionStartedFailed(
   posthogSessionId: string | null | undefined,
 ): void {
-  const normalizedPosthogSessionId = normalizePosthogSessionId(posthogSessionId);
+  const normalizedPosthogSessionId =
+    normalizePosthogSessionId(posthogSessionId);
   if (!normalizedPosthogSessionId) {
     return;
   }

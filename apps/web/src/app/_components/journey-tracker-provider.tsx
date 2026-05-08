@@ -7,15 +7,6 @@ import {
   trackEvent,
 } from "@/lib/analytics-tracking";
 import {
-  beginSessionStartedEmission,
-  markSessionStartedEmitted,
-  markSessionStartedFailed,
-} from "@/lib/session-started-guard";
-import {
-  getPosthogSessionId,
-  waitForPosthogSessionId,
-} from "@/lib/posthog-session";
-import {
   consumeSessionEngagedOnce,
   consumeSessionStartedOnce,
   createJourneyState,
@@ -24,6 +15,15 @@ import {
   type JourneyState,
   startRouteVisit,
 } from "@/lib/journey-tracking";
+import {
+  getPosthogSessionId,
+  waitForPosthogSessionId,
+} from "@/lib/posthog-session";
+import {
+  beginSessionStartedEmission,
+  markSessionStartedEmitted,
+  markSessionStartedFailed,
+} from "@/lib/session-started-guard";
 
 const SESSION_KEY = "journey_session_internal_id";
 const CHECKOUT_INTENT_KEY = "journey_checkout_intent";
@@ -1050,7 +1050,10 @@ export function JourneyTrackerProvider({
         }
 
         const currentActiveVisit = stateRef.current?.activeRouteVisit;
-        if (!currentActiveVisit || currentActiveVisit.routeVisitId !== routeVisitId) {
+        if (
+          !currentActiveVisit ||
+          currentActiveVisit.routeVisitId !== routeVisitId
+        ) {
           return;
         }
 
@@ -1110,9 +1113,8 @@ export function JourneyTrackerProvider({
             return;
           }
 
-          const shouldEmitSessionStarted = beginSessionStartedEmission(
-            posthogSessionId,
-          );
+          const shouldEmitSessionStarted =
+            beginSessionStartedEmission(posthogSessionId);
           if (!shouldEmitSessionStarted) {
             return;
           }
@@ -1194,6 +1196,7 @@ export function JourneyTrackerProvider({
       void leaveReason;
       return;
 
+      // biome-ignore lint/correctness/noUnreachable: intentionally disabled pending investigation
       const activeRouteVisit = stateRef.current?.activeRouteVisit;
       if (
         internalNavigationInProgressRef.current ||
@@ -1204,8 +1207,9 @@ export function JourneyTrackerProvider({
         return;
       }
 
-      const activeRouteVisitSafe =
-        activeRouteVisit as NonNullable<typeof activeRouteVisit>;
+      const activeRouteVisitSafe = activeRouteVisit as NonNullable<
+        typeof activeRouteVisit
+      >;
 
       const {
         pathname: activeRouteVisitPathname,
@@ -1216,9 +1220,7 @@ export function JourneyTrackerProvider({
       const snapshot = readCurrentRouteVisitSnapshot();
       const snapshotRouteVisitId = snapshot?.routeVisitId;
       const routeVisitSnapshot =
-        snapshotRouteVisitId === activeRouteVisitId
-          ? snapshot
-          : null;
+        snapshotRouteVisitId === activeRouteVisitId ? snapshot : null;
 
       const siteExitPayload = {
         eventName: "site_exit_candidate",
@@ -1262,11 +1264,11 @@ export function JourneyTrackerProvider({
         ? "auth_submit"
         : pendingNavigation?.isCheckoutRedirect
           ? "checkout_redirect"
-        : pendingNavigation?.isAuthRedirect
-          ? "auth_redirect"
-          : pendingNavigation?.nextPathname
-            ? "route_change"
-            : "pagehide";
+          : pendingNavigation?.isAuthRedirect
+            ? "auth_redirect"
+            : pendingNavigation?.nextPathname
+              ? "route_change"
+              : "pagehide";
 
       emitLeaveFromCurrentVisit({
         leaveReason,

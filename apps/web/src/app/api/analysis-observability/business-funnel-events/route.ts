@@ -37,9 +37,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(bodySessionId
-          ? { "x-posthog-session-id": bodySessionId }
-          : {}),
+        ...(bodySessionId ? { "x-posthog-session-id": bodySessionId } : {}),
       },
       body,
       cache: "no-store",
