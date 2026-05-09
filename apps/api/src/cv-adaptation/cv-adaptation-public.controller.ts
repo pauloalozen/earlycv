@@ -12,6 +12,10 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request } from "express";
+import {
+  ALLOWED_CV_FORMATS_LABEL,
+  isAllowedCvUploadMimeType,
+} from "../common/cv-file-formats";
 
 import { CvAdaptationService } from "./cv-adaptation.service";
 import type { FileUpload } from "./dto/create-cv-adaptation.dto";
@@ -27,15 +31,13 @@ export class CvAdaptationPublicController {
   @UseInterceptors(
     FileInterceptor("file", {
       fileFilter: (_req, file, cb) => {
-        const allowed = [
-          "application/pdf",
-          "application/msword",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ];
-        if (allowed.includes(file.mimetype)) {
+        if (isAllowedCvUploadMimeType(file.mimetype)) {
           cb(null, true);
         } else {
-          cb(new Error("Only PDF, DOC or DOCX files are allowed"), false);
+          cb(
+            new Error(`Only ${ALLOWED_CV_FORMATS_LABEL} files are allowed`),
+            false,
+          );
         }
       },
       limits: { fileSize: 5 * 1024 * 1024 },

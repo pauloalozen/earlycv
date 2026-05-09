@@ -16,6 +16,7 @@ import type { Prisma } from "@prisma/client";
 import type { Response } from "express";
 import type { ProtectedAnalysisBlockedResult } from "../analysis-protection/analysis-protection.facade";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
+import { extractTextFromCvFile } from "../common/cv-text-extractor";
 import { DatabaseService } from "../database/database.service";
 import { StorageService } from "../storage/storage.service";
 
@@ -97,12 +98,9 @@ export class CvAdaptationService {
     if (file) {
       // Extract text from PDF
       try {
-        const { extractTextFromPdf } = await import("@earlycv/ai");
-        masterCvText = await extractTextFromPdf(file.buffer, {
-          validateCv: true,
-        });
+        masterCvText = await extractTextFromCvFile(file);
       } catch (error) {
-        this.mapPdfExtractionError(error);
+        this.mapFileExtractionError(error);
       }
 
       const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
@@ -443,13 +441,12 @@ export class CvAdaptationService {
           }
 
           try {
-            const { extractTextFromPdf } = await import("@earlycv/ai");
             resolvedMasterCvText = this.normalizeSnapshotText(
-              await extractTextFromPdf(file.buffer, { validateCv: true }),
+              await extractTextFromCvFile(file),
             );
             return resolvedMasterCvText;
           } catch (error) {
-            this.mapPdfExtractionError(error);
+            this.mapFileExtractionError(error);
           }
         },
         payload: {
@@ -530,12 +527,9 @@ export class CvAdaptationService {
             sourceType = "uploaded_file";
 
             try {
-              const { extractTextFromPdf } = await import("@earlycv/ai");
-              masterCvText = await extractTextFromPdf(file.buffer, {
-                validateCv: true,
-              });
+              masterCvText = await extractTextFromCvFile(file);
             } catch (error) {
-              this.mapPdfExtractionError(error);
+              this.mapFileExtractionError(error);
             }
 
             if (dto.saveAsMaster) {
@@ -2041,14 +2035,14 @@ export class CvAdaptationService {
     });
   }
 
-  private mapPdfExtractionError(error: unknown): never {
+  private mapFileExtractionError(error: unknown): never {
     if (error instanceof Error) {
       if (error.name === "NotACvError") {
         this.logger.warn(
           "[cv-validation] uploaded file does not look like a CV",
         );
         throw new BadRequestException(
-          "O arquivo enviado não parece ser um currículo. Envie um CV em PDF para análise.",
+          "O arquivo enviado não parece ser um currículo. Envie um CV em PDF, DOCX, DOC ou ODT para análise.",
         );
       }
       if (error.name === "ScannedPdfError") {
@@ -2060,11 +2054,11 @@ export class CvAdaptationService {
         );
       }
       this.logger.warn(
-        `[cv-validation] PDF extraction failed: ${error.message}`,
+        `[cv-validation] file extraction failed: ${error.message}`,
       );
     }
     throw new BadRequestException(
-      "Não foi possível ler o arquivo. Verifique se o PDF não está protegido por senha ou corrompido.",
+      "Não foi possível ler o arquivo. Verifique se ele não está protegido por senha, corrompido ou em formato inválido.",
     );
   }
 

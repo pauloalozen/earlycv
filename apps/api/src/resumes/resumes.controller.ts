@@ -21,6 +21,10 @@ import {
   type AuthenticatedRequestUser,
   AuthenticatedUser,
 } from "../common/authenticated-user.decorator";
+import {
+  ALLOWED_CV_FORMATS_LABEL,
+  isAllowedCvUploadMimeType,
+} from "../common/cv-file-formats";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import type { FileUpload } from "../cv-adaptation/dto/create-cv-adaptation.dto";
 import { CreateResumeDto } from "./dto/create-resume.dto";
@@ -38,15 +42,10 @@ const resumeFileFilter = (
   file: { mimetype: string },
   cb: (error: Error | null, acceptFile: boolean) => void,
 ) => {
-  const allowed = [
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ];
-  if (allowed.includes(file.mimetype)) {
+  if (isAllowedCvUploadMimeType(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error("Only PDF, DOC or DOCX files are allowed"), false);
+    cb(new Error(`Only ${ALLOWED_CV_FORMATS_LABEL} files are allowed`), false);
   }
 };
 

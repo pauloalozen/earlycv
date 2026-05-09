@@ -22,6 +22,10 @@ import { SkipThrottle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
 
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
+import {
+  ALLOWED_CV_FORMATS_LABEL,
+  isAllowedCvUploadMimeType,
+} from "../common/cv-file-formats";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { CvAdaptationService } from "./cv-adaptation.service";
 import { AnalyzeCvDto } from "./dto/analyze-cv.dto";
@@ -53,15 +57,13 @@ export class CvAdaptationController {
   @UseInterceptors(
     FileInterceptor("file", {
       fileFilter: (_req, file, cb) => {
-        const allowed = [
-          "application/pdf",
-          "application/msword",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ];
-        if (allowed.includes(file.mimetype)) {
+        if (isAllowedCvUploadMimeType(file.mimetype)) {
           cb(null, true);
         } else {
-          cb(new Error("Only PDF, DOC or DOCX files are allowed"), false);
+          cb(
+            new Error(`Only ${ALLOWED_CV_FORMATS_LABEL} files are allowed`),
+            false,
+          );
         }
       },
       limits: {
@@ -103,15 +105,13 @@ export class CvAdaptationController {
   @UseInterceptors(
     FileInterceptor("file", {
       fileFilter: (_req, file, cb) => {
-        const allowed = [
-          "application/pdf",
-          "application/msword",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ];
-        if (allowed.includes(file.mimetype)) {
+        if (isAllowedCvUploadMimeType(file.mimetype)) {
           cb(null, true);
         } else {
-          cb(new Error("Only PDF, DOC or DOCX files are allowed"), false);
+          cb(
+            new Error(`Only ${ALLOWED_CV_FORMATS_LABEL} files are allowed`),
+            false,
+          );
         }
       },
       limits: { fileSize: 5 * 1024 * 1024 },
@@ -142,15 +142,13 @@ export class CvAdaptationController {
   @UseInterceptors(
     FileInterceptor("file", {
       fileFilter: (_req, file, cb) => {
-        const allowed = [
-          "application/pdf",
-          "application/msword",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ];
-        if (allowed.includes(file.mimetype)) {
+        if (isAllowedCvUploadMimeType(file.mimetype)) {
           cb(null, true);
         } else {
-          cb(new Error("Only PDF, DOC or DOCX files are allowed"), false);
+          cb(
+            new Error(`Only ${ALLOWED_CV_FORMATS_LABEL} files are allowed`),
+            false,
+          );
         }
       },
       limits: { fileSize: 5 * 1024 * 1024 },

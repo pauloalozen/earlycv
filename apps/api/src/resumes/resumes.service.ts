@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { type Prisma, ResumeKind } from "@prisma/client";
 import type { Response } from "express";
+import { extractTextFromCvFile } from "../common/cv-text-extractor";
 import type { FileUpload } from "../cv-adaptation/dto/create-cv-adaptation.dto";
 import { DatabaseService } from "../database/database.service";
 import { StorageService } from "../storage/storage.service";
@@ -48,11 +49,10 @@ export class ResumesService {
 
     if (file) {
       try {
-        const { extractTextFromPdf } = await import("@earlycv/ai");
-        rawText = await extractTextFromPdf(file.buffer, { validateCv: true });
+        rawText = await extractTextFromCvFile(file);
       } catch (error) {
         throw new BadRequestException(
-          `Failed to extract text from PDF: ${error instanceof Error ? error.message : "unknown error"}`,
+          `Failed to extract text from file: ${error instanceof Error ? error.message : "unknown error"}`,
         );
       }
 

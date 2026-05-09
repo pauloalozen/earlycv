@@ -403,7 +403,7 @@ export default function AdaptarPage() {
       cvMode === "upload" || (!isAuthenticated && !isTextMode);
 
     if (requiresUploadedFile && !file) {
-      setError("Selecione seu CV em PDF.");
+      setError("Selecione seu CV em PDF, DOCX ou DOC.");
       return;
     }
     if (file && file.size > 5 * 1024 * 1024) {
@@ -509,7 +509,7 @@ export default function AdaptarPage() {
 
         const uploadedFile = file;
         if (!uploadedFile) {
-          setError("Selecione seu CV em PDF.");
+          setError("Selecione seu CV em PDF, DOCX ou DOC.");
           setLoading(false);
           return;
         }
