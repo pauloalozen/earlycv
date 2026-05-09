@@ -4,6 +4,11 @@ import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
 import type { PreferenceResponse } from "mercadopago/dist/clients/preference/commonTypes";
 
+import {
+  buildMercadoPagoItemMetadata,
+  buildMercadoPagoReturnConfig,
+} from "../payments/mercado-pago-return-config";
+
 export type PaymentIntent = {
   paymentReference: string;
   checkoutUrl: string;
@@ -88,10 +93,25 @@ export class CvAdaptationPaymentService {
     const notificationUrl = `${apiUrl}/api/cv-adaptation/webhook/mercadopago`;
 
     const isProduction = this.isMpProduction();
-    const successUrl = `${frontendUrl}/pagamento/concluido?checkoutId=${adaptationId}`;
+    const itemMetadata = buildMercadoPagoItemMetadata({
+      flow: "cv_adaptation",
+    });
+    const returnConfig = buildMercadoPagoReturnConfig({
+      frontendUrl,
+      successPath: `/pagamento/concluido?checkoutId=${adaptationId}`,
+      failurePath: `/pagamento/falhou?checkoutId=${adaptationId}`,
+      pendingPath: `/pagamento/pendente?checkoutId=${adaptationId}`,
+    });
 
-    // auto_return only works with HTTPS back_urls
-    const useAutoReturn = successUrl.startsWith("https://");
+    this.logger.log(
+      `[mp:return-config] flow=cv_adaptation adaptationId=${adaptationId} frontendHost=${returnConfig.frontendHost} successUrlIsHttps=${String(returnConfig.successUrlIsHttps)} autoReturnEnabled=${String(returnConfig.autoReturnEnabled)}`,
+    );
+
+    if (!returnConfig.successUrlIsHttps) {
+      this.logger.warn(
+        `[mp:return-config] flow=cv_adaptation adaptationId=${adaptationId} frontendHost=${returnConfig.frontendHost} successUrlIsHttps=${String(returnConfig.successUrlIsHttps)} autoReturnEnabled=${String(returnConfig.autoReturnEnabled)}`,
+      );
+    }
 
     let result: PreferenceResponse;
     try {
@@ -104,16 +124,15 @@ export class CvAdaptationPaymentService {
               quantity: 1,
               unit_price: priceInReais,
               currency_id: "BRL",
+              ...itemMetadata,
             },
           ],
           external_reference: paymentReference,
           notification_url: notificationUrl,
-          back_urls: {
-            success: successUrl,
-            failure: `${frontendUrl}/pagamento/falhou?checkoutId=${adaptationId}`,
-            pending: `${frontendUrl}/pagamento/pendente?checkoutId=${adaptationId}`,
-          },
-          ...(useAutoReturn && { auto_return: "approved" }),
+          back_urls: returnConfig.backUrls,
+          ...(returnConfig.autoReturn
+            ? { auto_return: returnConfig.autoReturn }
+            : {}),
         },
       });
     } catch (err) {

@@ -14,6 +14,10 @@ import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { DatabaseService } from "../database/database.service";
+import {
+  buildMercadoPagoItemMetadata,
+  buildMercadoPagoReturnConfig,
+} from "../payments/mercado-pago-return-config";
 
 type PlanId = "starter" | "pro" | "turbo";
 
@@ -1027,8 +1031,22 @@ export class PlansService {
       process.env.NEXT_PUBLIC_API_URL ??
       "http://localhost:4000";
     const notificationUrl = `${apiUrl}/api/plans/webhook/mercadopago`;
-    const successUrl = `${frontendUrl}/pagamento/concluido?checkoutId=${purchaseId}`;
+    const returnConfig = buildMercadoPagoReturnConfig({
+      frontendUrl,
+      successPath: `/pagamento/concluido?checkoutId=${purchaseId}`,
+      failurePath: `/pagamento/falhou?checkoutId=${purchaseId}`,
+      pendingPath: `/pagamento/pendente?checkoutId=${purchaseId}`,
+    });
+    if (!returnConfig.successUrlIsHttps) {
+      this.logger.warn(
+        `[mp:return-config] flow=plan_purchase purchaseId=${purchaseId} frontendHost=${returnConfig.frontendHost} successUrlIsHttps=${String(returnConfig.successUrlIsHttps)} autoReturnEnabled=${String(returnConfig.autoReturnEnabled)}`,
+      );
+    }
     const isProduction = this.isMpProduction();
+    const itemMetadata = buildMercadoPagoItemMetadata({
+      flow: "plan_purchase",
+      planLabel: plan.label,
+    });
 
     try {
       const result = await preference.create({
@@ -1040,20 +1058,19 @@ export class PlansService {
               quantity: 1,
               unit_price: plan.amountInCents / 100,
               currency_id: "BRL",
+              ...itemMetadata,
             },
           ],
           external_reference: paymentReference,
           ...(payer ? { payer } : {}),
           notification_url: notificationUrl,
-          back_urls: {
-            success: successUrl,
-            failure: `${frontendUrl}/pagamento/falhou?checkoutId=${purchaseId}`,
-            pending: `${frontendUrl}/pagamento/pendente?checkoutId=${purchaseId}`,
-          },
+          back_urls: returnConfig.backUrls,
           payment_methods: {
             excluded_payment_types: [{ id: "ticket" }],
           },
-          ...(successUrl.startsWith("https://") && { auto_return: "approved" }),
+          ...(returnConfig.autoReturn
+            ? { auto_return: returnConfig.autoReturn }
+            : {}),
         },
       });
 

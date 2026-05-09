@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Preference } from "mercadopago";
 import { PlansService } from "./plans.service";
 
 test("records enriched payment_failed with purchase_not_found when webhook resolution marks failed", async () => {
@@ -527,4 +528,198 @@ test("createCheckout without adaptationId reuses only buy_credits purchase", asy
 
   assert.equal(receivedWhere?.originAction, "buy_credits");
   assert.equal(receivedWhere?.originAdaptationId, null);
+});
+
+test("createMercadoPagoPreference uses shared return config and preserves checkoutId query", async () => {
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+  const originalApiUrl = process.env.API_URL;
+  process.env.FRONTEND_URL = "https://earlycv.com.br";
+  process.env.API_URL = "https://api.earlycv.com.br";
+
+  let preferenceBody: Record<string, unknown> | null = null;
+  const originalCreate = Preference.prototype.create;
+  Preference.prototype.create = async ({
+    body,
+  }: {
+    body: Record<string, unknown>;
+  }) => {
+    preferenceBody = body;
+    return {
+      id: "pref-123",
+      init_point: "https://mp.test/checkout/123",
+      sandbox_init_point: "https://sandbox.mp.test/checkout/123",
+    } as never;
+  };
+
+  const service = new PlansService(
+    {
+      planPurchase: {
+        update: async () => ({ ok: true }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-7" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      getMercadoPagoClient: () => unknown;
+      isMpProduction: () => boolean;
+    }
+  ).getMercadoPagoClient = () => ({}) as never;
+  (service as { isMpProduction: () => boolean }).isMpProduction = () => true;
+
+  try {
+    const checkoutUrl = await (
+      service as {
+        createMercadoPagoPreference: (
+          purchaseId: string,
+          paymentReference: string,
+          plan: { label: string; amountInCents: number },
+          payer?: { email: string; name?: string },
+        ) => Promise<string>;
+      }
+    ).createMercadoPagoPreference(
+      "purchase-https",
+      "pay-ref-https",
+      {
+        label: "Plano Teste",
+        amountInCents: 2990,
+      },
+      { email: "user@earlycv.com.br", name: "User" },
+    );
+
+    assert.equal(checkoutUrl, "https://mp.test/checkout/123");
+    assert.ok(preferenceBody);
+    assert.deepEqual(preferenceBody?.back_urls, {
+      success: "https://earlycv.com.br/pagamento/concluido?checkoutId=purchase-https",
+      failure: "https://earlycv.com.br/pagamento/falhou?checkoutId=purchase-https",
+      pending: "https://earlycv.com.br/pagamento/pendente?checkoutId=purchase-https",
+    });
+    assert.equal(
+      (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
+        ?.category_id,
+      "services",
+    );
+    assert.match(
+      String(
+        (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
+          ?.description,
+      ),
+      /EarlyCV|Plano/i,
+    );
+    assert.equal(preferenceBody?.auto_return, "approved");
+  } finally {
+    Preference.prototype.create = originalCreate;
+    if (originalFrontendUrl === undefined) {
+      delete process.env.FRONTEND_URL;
+    } else {
+      process.env.FRONTEND_URL = originalFrontendUrl;
+    }
+    if (originalApiUrl === undefined) {
+      delete process.env.API_URL;
+    } else {
+      process.env.API_URL = originalApiUrl;
+    }
+  }
+});
+
+test("createMercadoPagoPreference logs warning and skips auto_return on non-https", async () => {
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+  const originalApiUrl = process.env.API_URL;
+  process.env.FRONTEND_URL = "http://localhost:3000";
+  process.env.API_URL = "http://localhost:4000";
+
+  let preferenceBody: Record<string, unknown> | null = null;
+  const warnings: string[] = [];
+  const originalCreate = Preference.prototype.create;
+  Preference.prototype.create = async ({
+    body,
+  }: {
+    body: Record<string, unknown>;
+  }) => {
+    preferenceBody = body;
+    return {
+      id: "pref-456",
+      sandbox_init_point: "https://sandbox.mp.test/checkout/456",
+    } as never;
+  };
+
+  const service = new PlansService(
+    {
+      planPurchase: {
+        update: async () => ({ ok: true }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-8" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      getMercadoPagoClient: () => unknown;
+      isMpProduction: () => boolean;
+      logger: { warn: (message: string) => void };
+    }
+  ).getMercadoPagoClient = () => ({}) as never;
+  (service as { isMpProduction: () => boolean }).isMpProduction = () => false;
+  (service as { logger: { warn: (message: string) => void } }).logger = {
+    warn: (message: string) => warnings.push(message),
+  } as never;
+
+  try {
+    const checkoutUrl = await (
+      service as {
+        createMercadoPagoPreference: (
+          purchaseId: string,
+          paymentReference: string,
+          plan: { label: string; amountInCents: number },
+        ) => Promise<string>;
+      }
+    ).createMercadoPagoPreference("purchase-http", "pay-ref-http", {
+      label: "Plano Teste",
+      amountInCents: 1190,
+    });
+
+    assert.equal(checkoutUrl, "https://sandbox.mp.test/checkout/456");
+    assert.ok(preferenceBody);
+    assert.deepEqual(preferenceBody?.back_urls, {
+      success: "http://localhost:3000/pagamento/concluido?checkoutId=purchase-http",
+      failure: "http://localhost:3000/pagamento/falhou?checkoutId=purchase-http",
+      pending: "http://localhost:3000/pagamento/pendente?checkoutId=purchase-http",
+    });
+    assert.equal(
+      (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
+        ?.category_id,
+      "services",
+    );
+    assert.match(
+      String(
+        (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
+          ?.description,
+      ),
+      /EarlyCV|Plano/i,
+    );
+    assert.equal(preferenceBody?.auto_return, undefined);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0] ?? "", /flow=plan_purchase/);
+    assert.match(warnings[0] ?? "", /purchaseId=purchase-http/);
+    assert.match(warnings[0] ?? "", /frontendHost=localhost:3000/);
+    assert.match(warnings[0] ?? "", /successUrlIsHttps=false/);
+    assert.match(warnings[0] ?? "", /autoReturnEnabled=false/);
+  } finally {
+    Preference.prototype.create = originalCreate;
+    if (originalFrontendUrl === undefined) {
+      delete process.env.FRONTEND_URL;
+    } else {
+      process.env.FRONTEND_URL = originalFrontendUrl;
+    }
+    if (originalApiUrl === undefined) {
+      delete process.env.API_URL;
+    } else {
+      process.env.API_URL = originalApiUrl;
+    }
+  }
 });
