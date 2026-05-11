@@ -16,7 +16,11 @@ const normalizedDataMock = {
   ajustes_conteudo: [{ descricao: "desc", pontos: 1, titulo: "titulo" }],
   ajustes: { count: 1, top: [] },
   ats_keywords: { ausentes: [], presentes: [] },
-  comparacao: { antes: "antes", depois: "depois" },
+  comparacao: {
+    antes: "texto original integral com detalhes da experiência",
+    depois:
+      "texto final integral do CV otimizado com detalhes completos para download",
+  },
   formato_cv: { ats_score: 80, campos: [], problemas: [], resumo: "ok" },
   fit: { headline: "Fit", score: 80, subheadline: "Sub" },
   keywords: {
@@ -28,7 +32,10 @@ const normalizedDataMock = {
   mensagem_venda: { subtexto: "sub", titulo: "titulo" },
   pontos_fortes: [],
   positivos: [],
-  preview: { antes: "antes", depois: "depois" },
+  preview: {
+    antes: "preview antes resumido",
+    depois: "preview depois resumido",
+  },
   projecao_melhoria: {
     explicacao_curta: "exp",
     score_atual: 75,
@@ -88,22 +95,33 @@ vi.mock("./normalize-data", () => ({
 import ResultadoPage from "./page";
 
 describe("resultado unlock tracking", () => {
-  function mockResultadoFetch(options?: { redeemOk?: boolean }) {
+  function mockResultadoFetch(options?: {
+    redeemOk?: boolean;
+    isUnlocked?: boolean;
+    adaptedContentJson?: unknown;
+    finalCvOutput?: unknown;
+  }) {
     const redeemOk = options?.redeemOk ?? true;
+    const isUnlocked = options?.isUnlocked ?? false;
+    const adaptedContentJson =
+      (options?.adaptedContentJson as Record<string, unknown> | undefined) ??
+      {
+        selectedMissingKeywords: ["sql"],
+        vaga: { cargo: "Analista", empresa: "Empresa" },
+      };
+    const finalCvOutput = options?.finalCvOutput ?? null;
 
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
 
       if (url.includes("/api/cv-adaptation/") && url.includes("/content")) {
         return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            adaptedContentJson: {
-              selectedMissingKeywords: ["sql"],
-              vaga: { cargo: "Analista", empresa: "Empresa" },
-            },
-            isUnlocked: false,
-            paymentStatus: "none",
+            ok: true,
+            json: async () => ({
+            adaptedContentJson,
+            finalCvOutput,
+            isUnlocked,
+            paymentStatus: isUnlocked ? "completed" : "none",
           }),
         });
       }
@@ -182,6 +200,121 @@ describe("resultado unlock tracking", () => {
         unlockMethod: "review_redeem",
       });
     });
+  });
+
+  it("keeps preview blocked before unlock and shows final full text when unlocked", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/adaptar/resultado?adaptationId=adp-4-locked",
+    );
+
+    getAuthStatusMock.mockResolvedValue({
+      isAuthenticated: true,
+      userName: "User",
+      hasCredits: true,
+      internalRole: "none",
+      availableCreditsDisplay: 3,
+    });
+
+    mockResultadoFetch({ redeemOk: true, isUnlocked: false });
+
+    render(<ResultadoPage />);
+
+    expect(
+      await screen.findByText("🔒 Versão final disponível após liberar o CV"),
+    ).not.toBeNull();
+    const previewDepoisNode = screen.getByText("preview depois resumido");
+    expect(previewDepoisNode).not.toBeNull();
+    expect(previewDepoisNode.getAttribute("style") ?? "").toContain(
+      "-webkit-line-clamp: 3",
+    );
+
+    cleanup();
+
+    window.history.replaceState(
+      {},
+      "",
+      "/adaptar/resultado?adaptationId=adp-4-unlocked",
+    );
+
+    mockResultadoFetch({
+      redeemOk: true,
+      isUnlocked: true,
+      adaptedContentJson: {
+        preview: { antes: "preview antes resumido", depois: "preview depois resumido" },
+        vaga: { cargo: "Analista", empresa: "Empresa" },
+      },
+      finalCvOutput: {
+        summary: "Resumo profissional final vindo do CV liberado.",
+        sections: [
+          {
+            sectionType: "summary",
+            title: "Resumo profissional",
+            items: [
+              {
+                heading: "Resumo profissional",
+                bullets: ["Resumo profissional final vindo do CV liberado."],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    render(<ResultadoPage />);
+
+    expect(
+      await screen.findByText(
+        "Resumo profissional final vindo do CV liberado.",
+      ),
+    ).not.toBeNull();
+  });
+
+  it("shows professional summary in unlocked preview when available", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/adaptar/resultado?adaptationId=adp-5-unlocked",
+    );
+
+    getAuthStatusMock.mockResolvedValue({
+      isAuthenticated: true,
+      userName: "User",
+      hasCredits: true,
+      internalRole: "none",
+      availableCreditsDisplay: 3,
+    });
+
+    mockResultadoFetch({
+      redeemOk: true,
+      isUnlocked: true,
+      adaptedContentJson: {
+        preview: { antes: "preview antes resumido", depois: "preview depois resumido" },
+        vaga: { cargo: "Analista", empresa: "Empresa" },
+      },
+      finalCvOutput: {
+        summary: "Resumo geral da candidatura",
+        sections: [
+          {
+            sectionType: "summary",
+            title: "Resumo profissional",
+            items: [
+              {
+                heading: "Resumo profissional",
+                bullets: ["Resumo profissional final vindo do CV liberado."],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    render(<ResultadoPage />);
+
+    expect(
+      await screen.findByText("Resumo profissional final vindo do CV liberado."),
+    ).not.toBeNull();
   });
 
   it("does not emit cv_unlock_completed when redeem fails", async () => {

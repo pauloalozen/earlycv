@@ -1,4 +1,12 @@
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import MercadoPagoConfig, { Payment } from "mercadopago";
 import { DatabaseService } from "../database/database.service";
 import { PlansService } from "../plans/plans.service";
@@ -60,6 +68,26 @@ export type CheckoutStatusResponse = {
   message: string;
 };
 
+export type BrickCheckoutDataResponse = {
+  purchaseId: string;
+  amount: number;
+  currency: string;
+  description: string;
+  status: "pending";
+  originAction: "buy_credits" | "unlock_cv";
+  originAdaptationId: string | null;
+  payerEmail: string | null;
+  checkoutMode: "brick";
+};
+
+export type BrickPayDryRunResponse = {
+  dryRun: true;
+  purchaseId: string;
+  status: "validated";
+  checkoutMode: "brick";
+  message: string;
+};
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -111,6 +139,176 @@ export class PaymentsService {
     }
 
     throw new NotFoundException("Checkout não encontrado.");
+  }
+
+  async getBrickCheckoutData(
+    userId: string,
+    purchaseId: string,
+  ): Promise<BrickCheckoutDataResponse> {
+    const eligibility = await this.evaluateBrickEligibility(userId);
+    if (!eligibility.useBrick) {
+      this.logBrickCheckoutGuard("brick_not_eligible", purchaseId, userId);
+      throw new ForbiddenException({
+        errorCode: "brick_not_eligible",
+        message: "Checkout Brick não habilitado para este usuário.",
+      });
+    }
+
+    const purchase = await this.database.planPurchase.findFirst({
+      where: { id: purchaseId, userId },
+      select: {
+        id: true,
+        amountInCents: true,
+        currency: true,
+        status: true,
+        planType: true,
+        originAction: true,
+        originAdaptationId: true,
+        user: {
+          select: {
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!purchase) {
+      this.logBrickCheckoutGuard("purchase_not_found", purchaseId, userId);
+      throw new NotFoundException({
+        errorCode: "purchase_not_found",
+        message: "Checkout não encontrado.",
+      });
+    }
+
+    if (purchase.status !== "pending") {
+      this.logBrickCheckoutGuard(
+        `purchase_status_invalid:${purchase.status}`,
+        purchaseId,
+        userId,
+      );
+      throw new ConflictException({
+        errorCode: "purchase_status_invalid",
+        message: "Checkout indisponível para este status.",
+      });
+    }
+
+    if (purchase.amountInCents <= 0) {
+      this.logBrickCheckoutGuard("purchase_amount_invalid", purchaseId, userId);
+      throw new ConflictException({
+        errorCode: "purchase_amount_invalid",
+        message: "Checkout com valor inválido.",
+      });
+    }
+
+    if (
+      purchase.originAction === "unlock_cv" &&
+      !purchase.originAdaptationId?.trim()
+    ) {
+      this.logBrickCheckoutGuard("purchase_origin_invalid", purchaseId, userId);
+      throw new ConflictException({
+        errorCode: "purchase_origin_invalid",
+        message: "Checkout com origem inválida.",
+      });
+    }
+
+    return {
+      purchaseId: purchase.id,
+      amount: purchase.amountInCents / 100,
+      currency: purchase.currency,
+      description: buildBrickDescription(
+        purchase.planType,
+        purchase.originAction,
+      ),
+      status: purchase.status,
+      originAction: purchase.originAction,
+      originAdaptationId: purchase.originAdaptationId,
+      payerEmail: purchase.user?.email ?? null,
+      checkoutMode: "brick",
+    };
+  }
+
+  private logBrickCheckoutGuard(
+    reason: string,
+    purchaseId: string,
+    userId: string,
+  ): void {
+    if (process.env.NODE_ENV === "production") return;
+    this.logger.warn(
+      `[checkout:brick:get] blocked reason=${reason} purchase=${purchaseId} user=${userId}`,
+    );
+  }
+
+  async submitBrickPayment(
+    userId: string,
+    purchaseId: string,
+    payload: unknown,
+  ): Promise<BrickPayDryRunResponse> {
+    const purchase = await this.database.planPurchase.findFirst({
+      where: { id: purchaseId, userId },
+      select: {
+        id: true,
+        amountInCents: true,
+        status: true,
+        originAction: true,
+        originAdaptationId: true,
+      },
+    });
+
+    if (!purchase) {
+      throw new NotFoundException("Checkout não encontrado.");
+    }
+
+    if (purchase.status !== "pending" && purchase.status !== "none") {
+      throw new NotFoundException("Checkout não encontrado.");
+    }
+
+    if (purchase.amountInCents <= 0) {
+      throw new NotFoundException("Checkout não encontrado.");
+    }
+
+    if (
+      purchase.originAction === "unlock_cv" &&
+      !purchase.originAdaptationId?.trim()
+    ) {
+      throw new NotFoundException("Checkout não encontrado.");
+    }
+
+    const eligibility = await this.evaluateBrickEligibility(userId);
+    if (!eligibility.useBrick) {
+      throw new ForbiddenException("Checkout Brick não habilitado para este usuário.");
+    }
+
+    if (!payload || typeof payload !== "object") {
+      throw new BadRequestException("Payload de pagamento inválido.");
+    }
+
+    const dryRunEnabled =
+      (process.env.PAYMENT_BRICK_DRY_RUN ?? "true").trim().toLowerCase() ===
+      "true";
+
+    if (!dryRunEnabled) {
+      throw new BadRequestException(
+        "Real payment flow not implemented yet. Enable PAYMENT_BRICK_DRY_RUN=true.",
+      );
+    }
+
+    const payloadKeys = Object.keys(payload as Record<string, unknown>);
+    const hasAnyInput = payloadKeys.length > 0;
+    if (!hasAnyInput) {
+      throw new BadRequestException("Payload de pagamento inválido.");
+    }
+
+    this.logger.log(
+      `[checkout:brick] dry_run_validated purchase=${purchase.id} user=${userId} status=${purchase.status}`,
+    );
+
+    return {
+      dryRun: true,
+      purchaseId: purchase.id,
+      status: "validated",
+      checkoutMode: "brick",
+      message: "Brick payload validated. No Mercado Pago payment was created.",
+    };
   }
 
   async reconcilePending(limit = 50): Promise<{
@@ -323,6 +521,53 @@ export class PaymentsService {
     if (!token) return null;
     return new MercadoPagoConfig({ accessToken: token });
   }
+
+  private async evaluateBrickEligibility(userId: string): Promise<{
+    useBrick: boolean;
+    reason: string;
+  }> {
+    const mode = (process.env.PAYMENT_CHECKOUT_MODE ?? "pro").trim();
+    const enabled =
+      (process.env.PAYMENT_BRICK_ENABLED ?? "false").trim().toLowerCase() ===
+      "true";
+
+    if (mode !== "brick") {
+      return { useBrick: false, reason: "mode_not_brick" };
+    }
+
+    if (!enabled) {
+      return { useBrick: false, reason: "brick_disabled" };
+    }
+
+    const user = await this.database.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      return { useBrick: false, reason: "user_not_found" };
+    }
+
+    const allowedUserIds = parseCsvList(process.env.PAYMENT_BRICK_ALLOWED_USER_IDS);
+    const allowedEmails = parseCsvList(process.env.PAYMENT_BRICK_ALLOWED_EMAILS).map(
+      (value) => value.toLowerCase(),
+    );
+
+    if (allowedUserIds.length === 0 && allowedEmails.length === 0) {
+      return { useBrick: true, reason: "global_enabled_no_allowlist" };
+    }
+
+    const normalizedUserId = user.id.trim();
+    const normalizedEmail = user.email.trim().toLowerCase();
+    const userIdMatch = allowedUserIds.includes(normalizedUserId);
+    const emailMatch = allowedEmails.includes(normalizedEmail);
+
+    if (userIdMatch || emailMatch) {
+      return { useBrick: true, reason: "allowlist_match" };
+    }
+
+    return { useBrick: false, reason: "allowlist_miss" };
+  }
 }
 
 function mapPaymentStatus(raw: string): CheckoutStatus {
@@ -355,4 +600,26 @@ function buildMessage(status: CheckoutStatus, _type: "plan"): string {
     return "Pagamento não aprovado. Tente novamente.";
   }
   return "Aguardando confirmação do pagamento...";
+}
+
+function buildBrickDescription(
+  planType: string,
+  originAction: "buy_credits" | "unlock_cv",
+): string {
+  const planName = planTypeToName(planType);
+  if (originAction === "unlock_cv") {
+    return planName
+      ? `EarlyCV - desbloqueio de CV (${planName})`
+      : "EarlyCV - desbloqueio de CV";
+  }
+
+  return planName ? `EarlyCV - pacote ${planName}` : "EarlyCV - pacote";
+}
+
+function parseCsvList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
 }

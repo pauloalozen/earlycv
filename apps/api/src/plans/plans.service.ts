@@ -190,7 +190,11 @@ export class PlansService {
     userId: string,
     planId: PlanId,
     adaptationId?: string,
-  ): Promise<{ checkoutUrl: string; purchaseId: string }> {
+  ): Promise<{
+    checkoutUrl: string;
+    purchaseId: string;
+    checkoutMode?: "brick";
+  }> {
     const plan = PLAN_CONFIG[planId];
     const payer = await this.resolveMercadoPagoPayer(userId);
 
@@ -213,6 +217,29 @@ export class PlansService {
       this.logger.log(
         `[checkout] reusing existing purchase ${existing.id} for user ${userId}`,
       );
+
+      const brickDecision = this.evaluateBrickCheckoutEligibility({
+        userId,
+        userEmail: payer?.email ?? null,
+      });
+      this.logger.log(
+        `[checkout] mode_decision purchase=${existing.id} user=${userId} useBrick=${String(brickDecision.useBrick)} reason=${brickDecision.reason}`,
+      );
+
+      if (brickDecision.useBrick) {
+        if (existing.status === "none") {
+          await this.database.planPurchase.update({
+            where: { id: existing.id },
+            data: { status: "pending" },
+          });
+        }
+        return {
+          checkoutUrl: this.buildBrickCheckoutUrl(existing.id),
+          purchaseId: existing.id,
+          checkoutMode: "brick",
+        };
+      }
+
       const checkoutUrl = await this.createMercadoPagoPreference(
         existing.id,
         existing.paymentReference,
@@ -239,6 +266,26 @@ export class PlansService {
         originAdaptationId: adaptationId ?? null,
       },
     });
+
+    const brickDecision = this.evaluateBrickCheckoutEligibility({
+      userId,
+      userEmail: payer?.email ?? null,
+    });
+    this.logger.log(
+      `[checkout] mode_decision purchase=${purchase.id} user=${userId} useBrick=${String(brickDecision.useBrick)} reason=${brickDecision.reason}`,
+    );
+
+    if (brickDecision.useBrick) {
+      await this.database.planPurchase.update({
+        where: { id: purchase.id },
+        data: { status: "pending" },
+      });
+      return {
+        checkoutUrl: this.buildBrickCheckoutUrl(purchase.id),
+        purchaseId: purchase.id,
+        checkoutMode: "brick",
+      };
+    }
 
     const checkoutUrl = await this.createMercadoPagoPreference(
       purchase.id,
@@ -1189,6 +1236,65 @@ export class PlansService {
       rawStatus,
     };
   }
+
+  private buildBrickCheckoutUrl(purchaseId: string): string {
+    const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3000";
+    return new URL(`/pagamento/checkout/${purchaseId}`, frontendUrl).toString();
+  }
+
+  private evaluateBrickCheckoutEligibility(input: {
+    userId: string;
+    userEmail: string | null;
+  }): { useBrick: boolean; reason: string } {
+    try {
+      const mode = (process.env.PAYMENT_CHECKOUT_MODE ?? "pro").trim();
+      const enabled =
+        (process.env.PAYMENT_BRICK_ENABLED ?? "false").trim().toLowerCase() ===
+        "true";
+
+      if (mode !== "brick") {
+        return { useBrick: false, reason: "mode_not_brick" };
+      }
+
+      if (!enabled) {
+        return { useBrick: false, reason: "brick_disabled" };
+      }
+
+      const allowedUserIds = parseCsvList(process.env.PAYMENT_BRICK_ALLOWED_USER_IDS).map(
+        (value) => value.trim(),
+      );
+      const allowedEmails = parseCsvList(
+        process.env.PAYMENT_BRICK_ALLOWED_EMAILS,
+      ).map((value) => value.trim().toLowerCase());
+
+      const hasUserAllowlist = allowedUserIds.length > 0;
+      const hasEmailAllowlist = allowedEmails.length > 0;
+
+      if (!hasUserAllowlist && !hasEmailAllowlist) {
+        return { useBrick: true, reason: "global_enabled_no_allowlist" };
+      }
+
+      const normalizedUserId = input.userId.trim();
+      const normalizedEmail = (input.userEmail ?? "").trim().toLowerCase();
+      const userIdMatch =
+        normalizedUserId.length > 0 &&
+        allowedUserIds.includes(normalizedUserId);
+      const emailMatch =
+        normalizedEmail.length > 0 && allowedEmails.includes(normalizedEmail);
+
+      if (userIdMatch || emailMatch) {
+        return { useBrick: true, reason: "allowlist_match" };
+      }
+
+      return { useBrick: false, reason: "allowlist_miss" };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[checkout] brick eligibility evaluation failed; fallback=checkout_pro reason=config_error message=${message}`,
+      );
+      return { useBrick: false, reason: "config_error" };
+    }
+  }
 }
 
 function planTypeToDisplayName(planType: string): string | null {
@@ -1209,4 +1315,12 @@ function isValidEmail(value: string): boolean {
   const email = value.trim();
   if (!email) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function parseCsvList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
 }

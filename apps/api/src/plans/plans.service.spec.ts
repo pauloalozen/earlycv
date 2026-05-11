@@ -723,3 +723,313 @@ test("createMercadoPagoPreference logs warning and skips auto_return on non-http
     }
   }
 });
+
+test("createCheckout returns internal Brick URL for all users when brick mode is enabled and allowlists are empty", async () => {
+  const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
+  const originalEnabled = process.env.PAYMENT_BRICK_ENABLED;
+  const originalAllowedIds = process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
+  const originalAllowedEmails = process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+
+  process.env.PAYMENT_CHECKOUT_MODE = "brick";
+  process.env.PAYMENT_BRICK_ENABLED = "true";
+  delete process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
+  delete process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
+  process.env.FRONTEND_URL = "https://earlycv.com.br";
+
+  const service = new PlansService(
+    {
+      planPurchase: {
+        findFirst: async () => null,
+        create: async () => ({
+          id: "purchase-brick-1",
+          paymentReference: "pay-ref-brick-1",
+        }),
+        update: async () => ({ ok: true }),
+      },
+      user: {
+        findUnique: async () => ({
+          email: "user-1@earlycv.com.br",
+          name: "User One",
+        }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-brick-1" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      createMercadoPagoPreference: () => Promise<string>;
+    }
+  ).createMercadoPagoPreference = async () => {
+    throw new Error("checkout pro should not be called in brick mode");
+  };
+
+  try {
+    const result = await service.createCheckout("user-1", "starter");
+    assert.equal(
+      result.checkoutUrl,
+      "https://earlycv.com.br/pagamento/checkout/purchase-brick-1",
+    );
+  } finally {
+    if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
+    else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
+    if (originalEnabled === undefined) delete process.env.PAYMENT_BRICK_ENABLED;
+    else process.env.PAYMENT_BRICK_ENABLED = originalEnabled;
+    if (originalAllowedIds === undefined)
+      delete process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
+    else process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = originalAllowedIds;
+    if (originalAllowedEmails === undefined)
+      delete process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
+    else process.env.PAYMENT_BRICK_ALLOWED_EMAILS = originalAllowedEmails;
+    if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+    else process.env.FRONTEND_URL = originalFrontendUrl;
+  }
+});
+
+test("createCheckout falls back to Checkout Pro when brick allowlists are configured and user is not eligible", async () => {
+  const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
+  const originalEnabled = process.env.PAYMENT_BRICK_ENABLED;
+  const originalAllowedIds = process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
+  const originalAllowedEmails = process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
+
+  process.env.PAYMENT_CHECKOUT_MODE = "brick";
+  process.env.PAYMENT_BRICK_ENABLED = "true";
+  process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = "user-123";
+  process.env.PAYMENT_BRICK_ALLOWED_EMAILS = "allow@email.com";
+
+  const service = new PlansService(
+    {
+      planPurchase: {
+        findFirst: async () => null,
+        create: async () => ({
+          id: "purchase-pro-1",
+          paymentReference: "pay-ref-pro-1",
+        }),
+      },
+      user: {
+        findUnique: async () => ({
+          email: "blocked@earlycv.com.br",
+          name: "Blocked User",
+        }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-pro-1" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      createMercadoPagoPreference: () => Promise<string>;
+    }
+  ).createMercadoPagoPreference = async () => "https://mp.test/checkout/pro";
+
+  try {
+    const result = await service.createCheckout("user-999", "starter");
+    assert.equal(result.checkoutUrl, "https://mp.test/checkout/pro");
+  } finally {
+    if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
+    else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
+    if (originalEnabled === undefined) delete process.env.PAYMENT_BRICK_ENABLED;
+    else process.env.PAYMENT_BRICK_ENABLED = originalEnabled;
+    if (originalAllowedIds === undefined)
+      delete process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
+    else process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = originalAllowedIds;
+    if (originalAllowedEmails === undefined)
+      delete process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
+    else process.env.PAYMENT_BRICK_ALLOWED_EMAILS = originalAllowedEmails;
+  }
+});
+
+test("createCheckout enables Brick with OR rule when userId matches allowlist", async () => {
+  const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
+  const originalEnabled = process.env.PAYMENT_BRICK_ENABLED;
+  const originalAllowedIds = process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
+  const originalAllowedEmails = process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+
+  process.env.PAYMENT_CHECKOUT_MODE = "brick";
+  process.env.PAYMENT_BRICK_ENABLED = "true";
+  process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = " user-123 ";
+  process.env.PAYMENT_BRICK_ALLOWED_EMAILS = "other@email.com";
+  process.env.FRONTEND_URL = "https://earlycv.com.br";
+
+  const service = new PlansService(
+    {
+      planPurchase: {
+        findFirst: async () => null,
+        create: async () => ({
+          id: "purchase-brick-2",
+          paymentReference: "pay-ref-brick-2",
+        }),
+        update: async () => ({ ok: true }),
+      },
+      user: {
+        findUnique: async () => ({
+          email: "different@email.com",
+          name: "Allowed By Id",
+        }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-brick-2" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      createMercadoPagoPreference: () => Promise<string>;
+    }
+  ).createMercadoPagoPreference = async () => {
+    throw new Error("checkout pro should not be called when userId is allowed");
+  };
+
+  try {
+    const result = await service.createCheckout("user-123", "starter");
+    assert.equal(
+      result.checkoutUrl,
+      "https://earlycv.com.br/pagamento/checkout/purchase-brick-2",
+    );
+  } finally {
+    if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
+    else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
+    if (originalEnabled === undefined) delete process.env.PAYMENT_BRICK_ENABLED;
+    else process.env.PAYMENT_BRICK_ENABLED = originalEnabled;
+    if (originalAllowedIds === undefined)
+      delete process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
+    else process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = originalAllowedIds;
+    if (originalAllowedEmails === undefined)
+      delete process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
+    else process.env.PAYMENT_BRICK_ALLOWED_EMAILS = originalAllowedEmails;
+    if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+    else process.env.FRONTEND_URL = originalFrontendUrl;
+  }
+});
+
+test("createCheckout enables Brick with OR rule when email matches allowlist with normalization", async () => {
+  const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
+  const originalEnabled = process.env.PAYMENT_BRICK_ENABLED;
+  const originalAllowedIds = process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
+  const originalAllowedEmails = process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+
+  process.env.PAYMENT_CHECKOUT_MODE = "brick";
+  process.env.PAYMENT_BRICK_ENABLED = "true";
+  process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = "another-user";
+  process.env.PAYMENT_BRICK_ALLOWED_EMAILS = "  TESTE@EMAIL.COM ,,  ";
+  process.env.FRONTEND_URL = "https://earlycv.com.br";
+
+  const service = new PlansService(
+    {
+      planPurchase: {
+        findFirst: async () => null,
+        create: async () => ({
+          id: "purchase-brick-3",
+          paymentReference: "pay-ref-brick-3",
+        }),
+        update: async () => ({ ok: true }),
+      },
+      user: {
+        findUnique: async () => ({
+          email: "  teste@email.com ",
+          name: "Allowed By Email",
+        }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-brick-3" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      createMercadoPagoPreference: () => Promise<string>;
+    }
+  ).createMercadoPagoPreference = async () => {
+    throw new Error("checkout pro should not be called when email is allowed");
+  };
+
+  try {
+    const result = await service.createCheckout("not-listed", "starter");
+    assert.equal(
+      result.checkoutUrl,
+      "https://earlycv.com.br/pagamento/checkout/purchase-brick-3",
+    );
+  } finally {
+    if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
+    else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
+    if (originalEnabled === undefined) delete process.env.PAYMENT_BRICK_ENABLED;
+    else process.env.PAYMENT_BRICK_ENABLED = originalEnabled;
+    if (originalAllowedIds === undefined)
+      delete process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
+    else process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = originalAllowedIds;
+    if (originalAllowedEmails === undefined)
+      delete process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
+    else process.env.PAYMENT_BRICK_ALLOWED_EMAILS = originalAllowedEmails;
+    if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+    else process.env.FRONTEND_URL = originalFrontendUrl;
+  }
+});
+
+test("createCheckout updates existing none purchase to pending before returning Brick URL", async () => {
+  const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
+  const originalEnabled = process.env.PAYMENT_BRICK_ENABLED;
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+
+  process.env.PAYMENT_CHECKOUT_MODE = "brick";
+  process.env.PAYMENT_BRICK_ENABLED = "true";
+  process.env.FRONTEND_URL = "https://earlycv.com.br";
+
+  const updates: Array<{ id: string; status: string }> = [];
+
+  const service = new PlansService(
+    {
+      planPurchase: {
+        findFirst: async () => ({
+          id: "purchase-existing-none",
+          userId: "user-1",
+          planType: "starter",
+          status: "none",
+          paymentReference: "pay-ref-existing",
+        }),
+        update: async ({ where, data }: { where: { id: string }; data: { status: string } }) => {
+          updates.push({ id: where.id, status: data.status });
+          return { ok: true };
+        },
+      },
+      user: {
+        findUnique: async () => ({ email: "user-1@earlycv.com.br", name: "User One" }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-brick-4" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as { createMercadoPagoPreference: () => Promise<string> }
+  ).createMercadoPagoPreference = async () => {
+    throw new Error("checkout pro should not be called");
+  };
+
+  try {
+    const result = await service.createCheckout("user-1", "starter");
+    assert.equal(
+      result.checkoutUrl,
+      "https://earlycv.com.br/pagamento/checkout/purchase-existing-none",
+    );
+    assert.deepEqual(updates, [
+      { id: "purchase-existing-none", status: "pending" },
+    ]);
+  } finally {
+    if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
+    else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
+    if (originalEnabled === undefined) delete process.env.PAYMENT_BRICK_ENABLED;
+    else process.env.PAYMENT_BRICK_ENABLED = originalEnabled;
+    if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+    else process.env.FRONTEND_URL = originalFrontendUrl;
+  }
+});

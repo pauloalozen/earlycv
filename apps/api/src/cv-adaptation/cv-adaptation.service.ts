@@ -1646,9 +1646,14 @@ export class CvAdaptationService {
       typeof aiAudit?.adaptationNotes === "string"
         ? aiAudit.adaptationNotes
         : null;
+    const finalCvOutput = this.toCvAdaptationOutput(
+      adaptation.adaptedContentJson,
+      adaptation.aiAuditJson,
+    );
 
     return {
       adaptedContentJson: adaptation.adaptedContentJson,
+      finalCvOutput,
       paymentStatus: adaptation.paymentStatus,
       isUnlocked: adaptation.isUnlocked,
       status: adaptation.status,

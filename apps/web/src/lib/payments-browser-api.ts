@@ -23,6 +23,31 @@ export type CheckoutStatusResponse = {
   message: string;
 };
 
+export type BrickCheckoutResponse = {
+  purchaseId: string;
+  amount: number;
+  currency: string;
+  description: string;
+  status: "pending";
+  originAction: "buy_credits" | "unlock_cv";
+  originAdaptationId: string | null;
+  payerEmail: string | null;
+  checkoutMode: "brick";
+};
+
+export type BrickPayResponse = {
+  dryRun: true;
+  purchaseId: string;
+  status: "validated";
+  checkoutMode: "brick";
+  message: string;
+};
+
+export type CheckoutApiError = Error & {
+  status?: number;
+  errorCode?: string;
+};
+
 export async function getCheckoutStatusClient(
   checkoutId: string,
   params?: {
@@ -70,4 +95,51 @@ export async function resumeCheckoutClient(
   }
 
   return response.json() as Promise<{ checkoutUrl: string }>;
+}
+
+export async function getBrickCheckoutClient(
+  purchaseId: string,
+): Promise<BrickCheckoutResponse> {
+  const response = await fetch(`/api/payments/brick/checkout/${purchaseId}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const error = (new Error(
+      "Nao foi possivel carregar os dados do checkout.",
+    ) as CheckoutApiError);
+    error.status = response.status;
+    try {
+      const payload = (await response.json()) as {
+        errorCode?: string;
+        message?: string;
+      };
+      if (payload.errorCode) error.errorCode = payload.errorCode;
+      if (payload.message) error.message = payload.message;
+    } catch {
+      // ignore non-json error payload
+    }
+    throw error;
+  }
+
+  return response.json() as Promise<BrickCheckoutResponse>;
+}
+
+export async function submitBrickPaymentClient(
+  purchaseId: string,
+  payload: unknown,
+): Promise<BrickPayResponse> {
+  const response = await fetch(`/api/payments/brick/${purchaseId}/pay`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error("Nao foi possivel validar o pagamento.");
+  }
+
+  return response.json() as Promise<BrickPayResponse>;
 }

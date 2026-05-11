@@ -49,6 +49,26 @@ describe("PagamentoPendente", () => {
     cleanup();
   });
 
+  it("orienta concluir pagamento no Mercado Pago e reabrir checkout", async () => {
+    mockGetCheckoutStatusClient.mockResolvedValue({
+      nextAction: "continue_polling",
+    });
+
+    render(<PagamentoPendente />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/conclua o pagamento no mercado pago na aba aberta/i),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(/a confirmação pode levar alguns minutos/i),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Abrir pagamento novamente" }),
+      ).toBeTruthy();
+    });
+  });
+
   it("mostra CTA de download pdf/docx quando pagamento confirma", async () => {
     mockGetCheckoutStatusClient.mockResolvedValue({
       nextAction: "show_success",

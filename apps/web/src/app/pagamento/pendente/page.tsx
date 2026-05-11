@@ -212,12 +212,12 @@ function PendenteContent() {
             Pagamento pendente
           </h1>
           <p className="text-gray-500 text-sm mb-2">
-            Seu pagamento está aguardando confirmação. Assim que aprovado, seus
-            créditos serão liberados automaticamente.
+            Conclua o pagamento no Mercado Pago na aba aberta. Quando a
+            confirmação chegar, seus créditos serão liberados automaticamente.
           </p>
           <p className="text-gray-500 text-sm mb-2">
-            Pagamento pendente. Se você ainda não concluiu o Pix, pode abrir o
-            pagamento novamente.
+            Se a aba foi fechada ou o pagamento ainda não foi finalizado, reabra
+            o checkout para concluir.
           </p>
           <p
             style={{
@@ -231,7 +231,7 @@ function PendenteContent() {
               margin: "0 auto 20px",
             }}
           >
-            Para pagamentos via PIX ou boleto, isso pode levar alguns minutos.
+            A confirmação pode levar alguns minutos para pagamentos via PIX.
           </p>
 
           <div
@@ -280,7 +280,7 @@ function PendenteContent() {
             disabled={isResuming}
             className="block w-full rounded-[10px] bg-[#0a0a0a] py-[14px] text-[14.5px] font-medium leading-none text-center text-white transition-colors hover:bg-[#222222] mb-3 disabled:opacity-60"
           >
-            {isResuming ? "Abrindo Pix..." : "Abrir Pix novamente"}
+            {isResuming ? "Abrindo pagamento..." : "Abrir pagamento novamente"}
           </button>
           {resumeError && (
             <p className="text-xs text-red-600 mb-3">{resumeError}</p>

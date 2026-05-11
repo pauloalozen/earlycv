@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Inject,
@@ -39,6 +40,23 @@ export class PaymentsController {
       );
     }
     return this.paymentsService.getCheckoutStatus(user.id, checkoutId);
+  }
+
+  @Get("brick/checkout/:purchaseId")
+  getBrickCheckoutData(
+    @AuthenticatedUser() user: { id: string },
+    @Param("purchaseId") purchaseId: string,
+  ) {
+    return this.paymentsService.getBrickCheckoutData(user.id, purchaseId);
+  }
+
+  @Post("brick/:purchaseId/pay")
+  submitBrickPayment(
+    @AuthenticatedUser() user: { id: string },
+    @Param("purchaseId") purchaseId: string,
+    @Body() payload: unknown,
+  ) {
+    return this.paymentsService.submitBrickPayment(user.id, purchaseId, payload);
   }
 
   @Get("admin/list")

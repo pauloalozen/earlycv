@@ -390,6 +390,58 @@ type GuestAnalysisStored = {
   guestSessionPublicToken?: string | null;
 };
 
+type UnlockedOutputSectionItem = {
+  heading?: string;
+  bullets?: string[];
+};
+
+type UnlockedOutputSection = {
+  sectionType?: string;
+  title?: string;
+  items?: UnlockedOutputSectionItem[];
+};
+
+type FinalCvOutput = {
+  summary?: string;
+  sections?: UnlockedOutputSection[];
+};
+
+function extractProfessionalSummaryFromFinalOutput(output: FinalCvOutput | null): string {
+  if (!output) return "";
+  const maybeOutput = output as {
+    sections?: UnlockedOutputSection[];
+    summary?: string;
+  };
+
+  const sections = Array.isArray(maybeOutput.sections) ? maybeOutput.sections : [];
+  const summarySection = sections.find((section) => {
+    const title = (section.title ?? "").toLowerCase();
+    const type = (section.sectionType ?? "").toLowerCase();
+    return (
+      type === "summary" ||
+      title.includes("resumo profissional") ||
+      title === "resumo"
+    );
+  });
+
+  if (summarySection) {
+    const bullets = (summarySection.items ?? []).flatMap((item) =>
+      Array.isArray(item.bullets) ? item.bullets : [],
+    );
+    const text = bullets
+      .map((bullet) => (typeof bullet === "string" ? bullet.trim() : ""))
+      .filter(Boolean)
+      .join(" ");
+    if (text) return text;
+  }
+
+  if (typeof maybeOutput.summary === "string") {
+    return maybeOutput.summary.trim();
+  }
+
+  return "";
+}
+
 const CARD: React.CSSProperties = {
   background: "#fafaf6",
   border: "1px solid rgba(10,10,10,0.08)",
@@ -463,6 +515,7 @@ export default function ResultadoPage() {
   >(null);
 
   const [jobAnalysisCount, setJobAnalysisCount] = useState<number | null>(null);
+  const [finalCvOutput, setFinalCvOutput] = useState<FinalCvOutput | null>(null);
 
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [locked, setLocked] = useState(false);
@@ -561,6 +614,7 @@ export default function ResultadoPage() {
           }
           return res.json() as Promise<{
             adaptedContentJson: CvAnalysisData;
+            finalCvOutput?: FinalCvOutput | null;
             paymentStatus:
               | "none"
               | "pending"
@@ -575,6 +629,7 @@ export default function ResultadoPage() {
         .then((payload) => {
           if (!active) return;
           setRawData(payload.adaptedContentJson);
+          setFinalCvOutput(payload.finalCvOutput ?? null);
           setReviewPaymentStatus(
             payload.isUnlocked ? "completed" : payload.paymentStatus,
           );
@@ -1137,6 +1192,15 @@ export default function ResultadoPage() {
     reviewAdaptationId !== null && reviewPaymentStatus === "completed";
   const isKeywordSelectionLocked =
     locked || isKeywordsFrozen || isDownloadReady;
+  const unlockedProfessionalSummary =
+    isDownloadReady
+      ? extractProfessionalSummaryFromFinalOutput(finalCvOutput)
+      : "";
+  const previewAntesText = data.preview?.antes ?? "";
+  const previewDepoisText = isDownloadReady
+    ? unlockedProfessionalSummary
+    : data.preview?.depois ?? "";
+  const hasPreviewSection = Boolean(data.preview) || Boolean(isDownloadReady);
 
   const adaptationNotes = rawData?.adaptation_notes ?? null;
   const isAdminView =
@@ -3066,12 +3130,12 @@ export default function ResultadoPage() {
           )}
 
           {/* ── Preview ── */}
-          {data.preview && (
+          {hasPreviewSection && (
             <>
               <SectionHeader
-                label="PRÉVIA"
-                title="Como seu CV ficará depois da otimização"
-                description="Veja como o EarlyCV reescreve uma experiência para passar no ATS e chamar atenção do recrutador."
+                label="PRÉVIA DA OTIMIZAÇÃO"
+                title="Veja como seu currículo pode ficar mais aderente à vaga"
+                description="Este é um exemplo gerado pela análise. Após liberar o CV, criamos a versão final pronta para download."
               />
               {/* Diff card with window chrome */}
               <div
@@ -3135,7 +3199,7 @@ export default function ResultadoPage() {
                       pointerEvents: "none",
                     }}
                   >
-                    preview · {data.vaga.cargo}
+                    exemplo de ajuste · {data.vaga.cargo}
                   </span>
                 </div>
                 {/* Diff body */}
@@ -3168,7 +3232,7 @@ export default function ResultadoPage() {
                         marginBottom: 10,
                       }}
                     >
-                      − antes
+                      − texto atual
                     </span>
                     <p
                       style={{
@@ -3176,13 +3240,17 @@ export default function ResultadoPage() {
                         color: "#5a5a55",
                         lineHeight: 1.6,
                         margin: 0,
-                        display: "-webkit-box",
-                        WebkitLineClamp: 3,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
+                        ...(!isDownloadReady
+                          ? {
+                              display: "-webkit-box",
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                            }
+                          : {}),
                       }}
                     >
-                      {data.preview.antes}
+                      {previewAntesText}
                     </p>
                   </div>
                   {/* Depois */}
@@ -3202,19 +3270,23 @@ export default function ResultadoPage() {
                         marginBottom: 10,
                       }}
                     >
-                      + depois (otimizado)
+                      + sugestão de melhoria
                     </span>
                     <p
                       style={{
                         fontSize: 13.5,
-                        color: "#2a2a28",
+                        color: "#5a5a55",
                         lineHeight: 1.6,
                         margin: 0,
-                        display: "-webkit-box",
-                        WebkitLineClamp: 3,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                        ...(isDemo
+                        ...(!isDownloadReady
+                          ? {
+                              display: "-webkit-box",
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                            }
+                          : {}),
+                        ...(isDemo || isDownloadReady
                           ? {}
                           : {
                               maskImage:
@@ -3224,9 +3296,9 @@ export default function ResultadoPage() {
                             }),
                       }}
                     >
-                      {data.preview.depois}
+                      {previewDepoisText}
                     </p>
-                    {!isDemo && (
+                    {!isDemo && !isDownloadReady && (
                       <div
                         style={{
                           position: "absolute",
@@ -3252,7 +3324,7 @@ export default function ResultadoPage() {
                             boxShadow: "0 2px 8px rgba(10,10,10,0.08)",
                           }}
                         >
-                          🔒 Disponível após liberar o CV
+                          🔒 Versão final disponível após liberar o CV
                         </span>
                       </div>
                     )}

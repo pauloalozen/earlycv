@@ -41,7 +41,11 @@ export async function listMyPurchases(): Promise<PurchaseItem[]> {
 export async function createPlanCheckout(
   planId: "starter" | "pro" | "turbo",
   adaptationId?: string,
-): Promise<{ checkoutUrl: string; purchaseId: string }> {
+): Promise<{
+  checkoutUrl: string;
+  purchaseId: string;
+  checkoutMode?: "brick";
+}> {
   const response = await apiRequest("POST", "/plans/checkout", {
     planId,
     ...(adaptationId ? { adaptationId } : {}),
@@ -53,5 +57,6 @@ export async function createPlanCheckout(
   return response.json() as Promise<{
     checkoutUrl: string;
     purchaseId: string;
+    checkoutMode?: "brick";
   }>;
 }

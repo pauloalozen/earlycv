@@ -5,6 +5,7 @@ import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getCvAdaptationContent } from "@/lib/cv-adaptation-api";
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import { buildPlanCatalog } from "./plan-catalog";
+import { PaidPlanCheckoutForm } from "./paid-plan-checkout-form";
 import { ScoreIndicator } from "./score-indicator";
 
 export const dynamic = "force-dynamic";
@@ -307,58 +308,18 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
 
                   {/* CTA */}
                   {isAuthenticated ? (
-                    <form
-                      action={
-                        plan.checkoutPlanId ? "/plans/checkout" : "/adaptar"
-                      }
-                      method={plan.checkoutPlanId ? "post" : "get"}
-                    >
-                      {plan.checkoutPlanId && (
-                        <>
-                          <input
-                            type="hidden"
-                            name="planId"
-                            value={plan.checkoutPlanId}
-                          />
-                          <input
-                            type="hidden"
-                            name="planName"
-                            value={plan.label}
-                          />
-                          <input
-                            type="hidden"
-                            name="planCredits"
-                            value={credits ?? ""}
-                          />
-                          <input
-                            type="hidden"
-                            name="planPrice"
-                            value={
-                              Number.isFinite(amount) ? amount.toFixed(2) : ""
-                            }
-                          />
-                          <input
-                            type="hidden"
-                            name="planCurrency"
-                            value="BRL"
-                          />
-                          <input
-                            type="hidden"
-                            name="sourceDetail"
-                            value="planos_card_cta"
-                          />
-                          {adaptationId && (
-                            <input
-                              type="hidden"
-                              name="adaptationId"
-                              value={adaptationId}
-                            />
-                          )}
-                        </>
-                      )}
-                      <button
-                        type="submit"
-                        style={{
+                    plan.checkoutPlanId ? (
+                      <PaidPlanCheckoutForm
+                        planId={plan.checkoutPlanId}
+                        planLabel={plan.label}
+                        cta={plan.cta}
+                        credits={credits}
+                        planPrice={amount}
+                        adaptationId={adaptationId}
+                        buttonClassName={
+                          dark ? "planos-cta-dark" : "planos-cta-light"
+                        }
+                        buttonStyle={{
                           width: "100%",
                           background: dark ? "#c6ff3a" : "#0a0a0a",
                           color: dark ? "#0a0a0a" : "#fafaf6",
@@ -374,13 +335,35 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                             ? "0 6px 14px rgba(198,255,58,0.25)"
                             : "0 4px 12px rgba(10,10,10,0.12)",
                         }}
-                        className={
-                          dark ? "planos-cta-dark" : "planos-cta-light"
-                        }
-                      >
-                        {plan.cta}
-                      </button>
-                    </form>
+                      />
+                    ) : (
+                      <form action="/adaptar" method="get">
+                        <button
+                          type="submit"
+                          style={{
+                            width: "100%",
+                            background: dark ? "#c6ff3a" : "#0a0a0a",
+                            color: dark ? "#0a0a0a" : "#fafaf6",
+                            border: "none",
+                            borderRadius: 10,
+                            padding: "12px",
+                            fontSize: 13.5,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            fontFamily: GEIST,
+                            marginBottom: 18,
+                            boxShadow: dark
+                              ? "0 6px 14px rgba(198,255,58,0.25)"
+                              : "0 4px 12px rgba(10,10,10,0.12)",
+                          }}
+                          className={
+                            dark ? "planos-cta-dark" : "planos-cta-light"
+                          }
+                        >
+                          {plan.cta}
+                        </button>
+                      </form>
+                    )
                   ) : (
                     <a
                       href={
