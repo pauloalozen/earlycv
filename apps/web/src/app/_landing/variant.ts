@@ -1,7 +1,9 @@
-export type LandingVariant = "A" | "B";
+export type LandingVariant = "A" | "B" | "C";
 
 export function resolveLandingVariant(
   rawVariant: string | undefined,
 ): LandingVariant {
-  return rawVariant === "B" ? "B" : "A";
+  if (rawVariant === "B") return "B";
+  if (rawVariant === "C") return "C";
+  return "A";
 }
