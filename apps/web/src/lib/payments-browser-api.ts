@@ -33,6 +33,8 @@ export type BrickCheckoutResponse = {
   originAdaptationId: string | null;
   payerEmail: string | null;
   checkoutMode: "brick";
+  unitsIncluded: number | null;
+  unitPrice: number | null;
 };
 
 export type BrickPayResponse = {

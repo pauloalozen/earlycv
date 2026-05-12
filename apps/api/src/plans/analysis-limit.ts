@@ -2,15 +2,16 @@ import type { UserPlanType } from "@prisma/client";
 
 const SAO_PAULO_TZ = "America/Sao_Paulo";
 
-function toPositiveInt(raw: string | undefined, fallback: number): number {
-  const value = raw?.trim();
-
-  if (!value || !/^\d+$/.test(value)) {
-    return fallback;
+function requirePositiveInt(env: NodeJS.ProcessEnv, name: string): number {
+  const raw = env[name]?.trim();
+  if (!raw || !/^\d+$/.test(raw)) {
+    throw new Error(`Required env var ${name} is not set or is not a positive integer`);
   }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`Env var ${name} must be a positive integer, got: "${raw}"`);
+  }
+  return parsed;
 }
 
 export function resolveDailyAnalysisLimit(
@@ -22,10 +23,10 @@ export function resolveDailyAnalysisLimit(
   }
 
   const map = {
-    free: toPositiveInt(env.QNT_AN_PLAN_FREE, 3),
-    starter: toPositiveInt(env.QNT_AN_PLAN_STARTER, 6),
-    pro: toPositiveInt(env.QNT_AN_PLAN_PRO, 9),
-    turbo: toPositiveInt(env.QNT_AN_PLAN_TURBO, 30),
+    free: requirePositiveInt(env, "QNT_AN_PLAN_FREE"),
+    starter: requirePositiveInt(env, "QNT_AN_PLAN_STARTER"),
+    pro: requirePositiveInt(env, "QNT_AN_PLAN_PRO"),
+    turbo: requirePositiveInt(env, "QNT_AN_PLAN_TURBO"),
   } as const;
 
   return map[planType];

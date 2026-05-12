@@ -124,6 +124,8 @@ enum CvAdaptationStatus {
 enum PaymentStatus {
   none
   pending
+  processing_payment
+  pending_payment
   completed
   failed
   refunded

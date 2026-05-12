@@ -49,6 +49,20 @@ function getStatusConfig(status: PurchaseItem["status"]): StatusConfig {
         bg: "rgba(255,200,0,0.12)",
         border: "rgba(200,150,0,0.25)",
       };
+    case "processing_payment":
+      return {
+        label: "Processando",
+        color: "#7a5a00",
+        bg: "rgba(255,200,0,0.12)",
+        border: "rgba(200,150,0,0.25)",
+      };
+    case "pending_payment":
+      return {
+        label: "Pagamento pendente",
+        color: "#7a5a00",
+        bg: "rgba(255,200,0,0.12)",
+        border: "rgba(200,150,0,0.25)",
+      };
     case "none":
       return {
         label: "Sem pagamento",
@@ -119,7 +133,11 @@ export default async function ComprasPage() {
 
   const completed = purchases.filter((p) => p.status === "completed").length;
   const pending = purchases.filter(
-    (p) => p.status === "pending" || p.status === "none",
+    (p) =>
+      p.status === "pending" ||
+      p.status === "none" ||
+      p.status === "processing_payment" ||
+      p.status === "pending_payment",
   ).length;
 
   return (

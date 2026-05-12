@@ -52,12 +52,22 @@ export function PaidPlanCheckoutForm({
         throw new Error("checkout-failed");
       }
 
-      const payload = (await response.json()) as Partial<{ purchaseId: string }>;
+      const payload = (await response.json()) as Partial<{
+        purchaseId: string;
+        checkoutUrl: string;
+        checkoutMode: string;
+      }>;
       if (!payload.purchaseId) {
         throw new Error("invalid-checkout-payload");
       }
 
-      router.push(`/pagamento/checkout/${payload.purchaseId}`);
+      if (payload.checkoutMode === "brick") {
+        router.push(`/pagamento/checkout/${payload.purchaseId}`);
+      } else if (payload.checkoutUrl) {
+        window.location.href = payload.checkoutUrl;
+      } else {
+        throw new Error("invalid-checkout-payload");
+      }
     } catch {
       setError("Erro ao iniciar pagamento. Tente novamente.");
     } finally {

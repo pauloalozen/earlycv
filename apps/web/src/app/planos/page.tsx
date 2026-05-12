@@ -447,6 +447,34 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                       </div>
                     ))}
                   </div>
+
+                  {plan.unitPriceCents != null && (
+                    <div
+                      style={{
+                        marginTop: 14,
+                        paddingTop: 12,
+                        borderTop: dark
+                          ? "1px solid rgba(198,255,58,0.15)"
+                          : "1px solid rgba(10,10,10,0.07)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 7,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: dark ? "#c6ff3a" : "#71717a",
+                          letterSpacing: 0.1,
+                        }}
+                      >
+                        Neste pacote o download de CV sai a R${" "}
+                        {(plan.unitPriceCents / 100).toFixed(2).replace(".", ",")}
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -464,7 +492,6 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
           >
             {[
               "Compatível com ATS usados por empresas como Gupy e LinkedIn",
-              "Aumente suas chances de entrevista",
             ].map((text) => (
               <span
                 key={text}

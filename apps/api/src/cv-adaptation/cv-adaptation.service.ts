@@ -1020,20 +1020,19 @@ export class CvAdaptationService {
     }
 
     const updated = await this.database.$transaction(async (tx) => {
-      const currentUnlock = await tx.cvUnlock.findUnique({
-        where: { cvAdaptationId: adaptation.id },
+      const currentAdaptation = await tx.cvAdaptation.findFirst({
+        where: { id: adaptation.id, userId },
+        include: {
+          template: { select: { id: true, name: true, slug: true } },
+          cvUnlock: { select: { status: true } },
+        },
       });
 
-      if (currentUnlock?.status === "UNLOCKED") {
-        const currentAdaptation = await tx.cvAdaptation.findUnique({
-          where: { id: adaptation.id },
-          include: {
-            template: { select: { id: true, name: true, slug: true } },
-          },
-        });
-        if (!currentAdaptation) {
-          throw new NotFoundException("adaptation not found");
-        }
+      if (!currentAdaptation) {
+        throw new NotFoundException("adaptation not found");
+      }
+
+      if (currentAdaptation.cvUnlock?.status === "UNLOCKED") {
         return currentAdaptation;
       }
 
@@ -1045,12 +1044,12 @@ export class CvAdaptationService {
       }
 
       const updatedContent = this.withFrozenMissingKeywords(
-        adaptation.adaptedContentJson,
+        currentAdaptation.adaptedContentJson,
         dto?.selectedMissingKeywords,
       );
 
       const nextAdaptation = await tx.cvAdaptation.update({
-        where: { id: adaptation.id },
+        where: { id: currentAdaptation.id },
         data: {
           status: "paid",
           isUnlocked: true,
@@ -1063,7 +1062,7 @@ export class CvAdaptationService {
       await tx.cvUnlock.create({
         data: {
           userId,
-          cvAdaptationId: adaptation.id,
+          cvAdaptationId: currentAdaptation.id,
           creditsConsumed: hasUnlimitedClaims ? 0 : 1,
           source: hasUnlimitedClaims ? "ADMIN" : "CREDIT",
           status: "UNLOCKED",

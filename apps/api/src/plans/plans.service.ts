@@ -81,50 +81,35 @@ type MercadoPagoPayerInput = {
 
 type PurchaseOriginAction = "buy_credits" | "unlock_cv";
 
-const PLAN_CONFIG: Record<
-  PlanId,
-  {
-    label: string;
-    amountInCents: number;
-    downloadCreditsGranted: number;
-    analysisCreditsGranted: number;
-  }
-> = {
-  starter: {
-    label: `${process.env.QNT_CV_PLAN_STARTER ?? "1"} CV Otimizado — EarlyCV`,
-    amountInCents: parseInt(process.env.PRICE_PLAN_STARTER ?? "1190", 10),
-    downloadCreditsGranted: parseInt(
-      process.env.QNT_CV_PLAN_STARTER ?? "1",
-      10,
-    ),
-    analysisCreditsGranted: parseInt(
-      process.env.QNT_AN_CREDIT_PLAN_STARTER ??
-        process.env.QNT_AN_PLAN_STARTER ??
-        "6",
-      10,
-    ),
-  },
-  pro: {
-    label: `${process.env.QNT_CV_PLAN_PRO ?? "3"} CVs Otimizados — EarlyCV`,
-    amountInCents: parseInt(process.env.PRICE_PLAN_PRO ?? "2990", 10),
-    downloadCreditsGranted: parseInt(process.env.QNT_CV_PLAN_PRO ?? "3", 10),
-    analysisCreditsGranted: parseInt(
-      process.env.QNT_AN_CREDIT_PLAN_PRO ?? process.env.QNT_AN_PLAN_PRO ?? "9",
-      10,
-    ),
-  },
-  turbo: {
-    label: `${process.env.QNT_CV_PLAN_TURBO ?? "10"} CVs Otimizados — EarlyCV`,
-    amountInCents: parseInt(process.env.PRICE_PLAN_TURBO ?? "5990", 10),
-    downloadCreditsGranted: parseInt(process.env.QNT_CV_PLAN_TURBO ?? "10", 10),
-    analysisCreditsGranted: parseInt(
-      process.env.QNT_AN_CREDIT_PLAN_TURBO ??
-        process.env.QNT_AN_PLAN_TURBO ??
-        "30",
-      10,
-    ),
-  },
+type PlanConfigEntry = {
+  label: string;
+  amountInCents: number;
+  downloadCreditsGranted: number;
+  analysisCreditsGranted: number;
 };
+
+function getPlanConfig(): Record<PlanId, PlanConfigEntry> {
+  return {
+    starter: {
+      label: `${requireEnvInt("QNT_CV_PLAN_STARTER")} CV Otimizado — EarlyCV`,
+      amountInCents: requireEnvInt("PRICE_PLAN_STARTER"),
+      downloadCreditsGranted: requireEnvInt("QNT_CV_PLAN_STARTER"),
+      analysisCreditsGranted: 0,
+    },
+    pro: {
+      label: `${requireEnvInt("QNT_CV_PLAN_PRO")} CVs Otimizados — EarlyCV`,
+      amountInCents: requireEnvInt("PRICE_PLAN_PRO"),
+      downloadCreditsGranted: requireEnvInt("QNT_CV_PLAN_PRO"),
+      analysisCreditsGranted: 0,
+    },
+    turbo: {
+      label: `${requireEnvInt("QNT_CV_PLAN_TURBO")} CVs Otimizados — EarlyCV`,
+      amountInCents: requireEnvInt("PRICE_PLAN_TURBO"),
+      downloadCreditsGranted: requireEnvInt("QNT_CV_PLAN_TURBO"),
+      analysisCreditsGranted: 0,
+    },
+  };
+}
 
 @Injectable()
 export class PlansService {
@@ -217,7 +202,7 @@ export class PlansService {
     purchaseId: string;
     checkoutMode?: "brick";
   }> {
-    const plan = PLAN_CONFIG[planId];
+    const plan = getPlanConfig()[planId];
     const payer = await this.resolveMercadoPagoPayer(userId);
 
     if (adaptationId) {
@@ -245,13 +230,17 @@ export class PlansService {
         `[checkout] mode_decision purchase=${existing.id} user=${userId} useBrick=${String(brickDecision.useBrick)} reason=${brickDecision.reason}`,
       );
 
+      await this.database.planPurchase.update({
+        where: { id: existing.id },
+        data: {
+          amountInCents: plan.amountInCents,
+          creditsGranted: plan.downloadCreditsGranted,
+          analysisCreditsGranted: plan.analysisCreditsGranted,
+          ...(brickDecision.useBrick ? { status: "pending" } : {}),
+        },
+      });
+
       if (brickDecision.useBrick) {
-        if (existing.status === "none") {
-          await this.database.planPurchase.update({
-            where: { id: existing.id },
-            data: { status: "pending" },
-          });
-        }
         return {
           checkoutUrl: this.buildBrickCheckoutUrl(existing.id),
           purchaseId: existing.id,
@@ -1001,7 +990,7 @@ export class PlansService {
     }
 
     if (planType === "starter" || planType === "pro" || planType === "turbo") {
-      return PLAN_CONFIG[planType].analysisCreditsGranted;
+      return getPlanConfig()[planType].analysisCreditsGranted;
     }
 
     return 0;
@@ -1371,4 +1360,18 @@ function normalizeString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function requireEnvInt(...names: string[]): number {
+  for (const name of names) {
+    const raw = process.env[name];
+    if (raw) {
+      const value = parseInt(raw, 10);
+      if (isNaN(value)) {
+        throw new Error(`Env var ${name} must be a valid integer, got: "${raw}"`);
+      }
+      return value;
+    }
+  }
+  throw new Error(`Required env var(s) [${names.join(", ")}] are not set`);
 }

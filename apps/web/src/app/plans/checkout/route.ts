@@ -21,14 +21,15 @@ async function createCheckoutRedirect(
 ) {
   try {
     const checkout = await createPlanCheckout(planId, adaptationId);
-    if (checkout.checkoutMode !== "brick") {
-      throw new Error("invalid-checkout-mode");
+
+    if (checkout.checkoutMode === "brick") {
+      return Response.redirect(
+        new URL(`/pagamento/checkout/${checkout.purchaseId}`, requestUrl),
+        303,
+      );
     }
 
-    return Response.redirect(
-      new URL(`/pagamento/checkout/${checkout.purchaseId}`, requestUrl),
-      303,
-    );
+    return Response.redirect(checkout.checkoutUrl, 303);
   } catch {
     return createPostRedirectResponse(requestUrl, "/planos?error=checkout-failed");
   }

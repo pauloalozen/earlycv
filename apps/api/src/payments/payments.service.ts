@@ -85,6 +85,8 @@ export type BrickCheckoutDataResponse = {
   originAdaptationId: string | null;
   payerEmail: string | null;
   checkoutMode: "brick";
+  unitsIncluded: number | null;
+  unitPrice: number | null;
 };
 
 export type BrickPayResponse = {
@@ -230,9 +232,17 @@ export class PaymentsService {
       });
     }
 
+    const amount = purchase.amountInCents / 100;
+    const unitsIncluded =
+      purchase.originAction === "unlock_cv"
+        ? 1
+        : getPlanUnits(purchase.planType);
+    const unitPrice =
+      unitsIncluded && unitsIncluded > 0 ? amount / unitsIncluded : null;
+
     return {
       purchaseId: purchase.id,
-      amount: purchase.amountInCents / 100,
+      amount,
       currency: purchase.currency,
       description: buildBrickDescription(
         purchase.planType,
@@ -243,6 +253,8 @@ export class PaymentsService {
       originAdaptationId: purchase.originAdaptationId,
       payerEmail: purchase.user?.email ?? null,
       checkoutMode: "brick",
+      unitsIncluded,
+      unitPrice,
     };
   }
 
@@ -957,4 +969,25 @@ function buildBrickDescription(
   }
 
   return planName ? `EarlyCV - pacote ${planName}` : "EarlyCV - pacote";
+}
+
+function getPlanUnits(planType: string): number | null {
+  if (planType === "starter") return requireEnvInt("QNT_CV_PLAN_STARTER");
+  if (planType === "pro") return requireEnvInt("QNT_CV_PLAN_PRO");
+  if (planType === "turbo") return requireEnvInt("QNT_CV_PLAN_TURBO");
+  return null;
+}
+
+function requireEnvInt(...names: string[]): number {
+  for (const name of names) {
+    const raw = process.env[name];
+    if (raw) {
+      const value = parseInt(raw, 10);
+      if (isNaN(value)) {
+        throw new Error(`Env var ${name} must be a valid integer, got: "${raw}"`);
+      }
+      return value;
+    }
+  }
+  throw new Error(`Required env var(s) [${names.join(", ")}] are not set`);
 }
