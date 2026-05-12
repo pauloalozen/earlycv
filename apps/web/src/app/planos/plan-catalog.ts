@@ -77,7 +77,7 @@ export function buildPlanCatalog(
       badge: null,
       cta: "Ajustar meu CV agora",
       cta_lading: "Comprar e ajustar meu CV",
-      cta_link: "https://mpago.li/1zWKBAo",
+      cta_link: "/plans/checkout?plan=starter",
       checkoutPlanId: "starter",
       features: [
         `${qntStarterDownloads} créditos de download de CV`,
@@ -98,7 +98,7 @@ export function buildPlanCatalog(
       badge: "Mais escolhido",
       cta: "Aumentar as chances",
       cta_lading: "Comprar pacote Pro",
-      cta_link: "https://mpago.li/1hYLiqe",
+      cta_link: "/plans/checkout?plan=pro",
       checkoutPlanId: "pro",
       features: [
         `${qntProDownloads} créditos de download de CV`,
@@ -120,7 +120,7 @@ export function buildPlanCatalog(
       badge: null,
       cta: "Aplicar para mais vagas",
       cta_lading: "Comprar pacote Turbo",
-      cta_link: "https://mpago.li/2BQjYW9",
+      cta_link: "/plans/checkout?plan=turbo",
       checkoutPlanId: "turbo",
       features: [
         `${qntTurboDownloads} créditos de download de CV`,

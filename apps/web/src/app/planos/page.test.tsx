@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PlanosPage from "./page";
@@ -37,7 +37,7 @@ vi.mock("./score-indicator", () => ({
   ScoreIndicator: () => <div>ScoreIndicator</div>,
 }));
 
-describe("PlanosPage checkout confirmation", () => {
+describe("PlanosPage checkout", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     useRouterMock.mockReturnValue({ push: pushMock });
@@ -67,114 +67,23 @@ describe("PlanosPage checkout confirmation", () => {
     }
   }
 
-  it("shows confirmation before opening Mercado Pago", async () => {
+  it("redirects to internal checkout page for a successful checkout", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
-          checkoutUrl: "https://mp.test/checkout",
           purchaseId: "purchase-123",
+          checkoutMode: "brick",
         }),
       }),
     );
 
     render(await PlanosPage({ searchParams: Promise.resolve({}) }));
-
     submitProPlanForm();
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/voce sera redirecionado para o mercado pago/i),
-      ).toBeTruthy();
-      expect(screen.getByText(/apos pagar, volte ao earlycv/i)).toBeTruthy();
-      expect(
-        screen.getByText(
-          /pagamentos por pix podem levar alguns minutos para confirmar/i,
-        ),
-      ).toBeTruthy();
-    });
-
-    const dialog = screen.getByRole("dialog");
-    expect(dialog.getAttribute("aria-labelledby")).toBeTruthy();
-    expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
-    expect(document.activeElement?.textContent).toMatch(
-      /continuar para mercado pago/i,
-    );
-  });
-
-  it("opens checkout in a new tab and redirects current tab after confirmation", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          checkoutUrl: "https://mp.test/checkout",
-          purchaseId: "purchase-123",
-        }),
-      }),
-    );
-    const openMock = vi.spyOn(window, "open").mockImplementation(
-      () => ({ closed: false } as Window),
-    );
-
-    render(await PlanosPage({ searchParams: Promise.resolve({}) }));
-
-    submitProPlanForm();
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: /continuar para mercado pago/i }),
-      ).toBeTruthy();
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /continuar para mercado pago/i }),
-    );
-
-    await waitFor(() => {
-      expect(openMock).toHaveBeenCalledWith(
-        "https://mp.test/checkout",
-        "_blank",
-        "noopener,noreferrer",
-      );
-      expect(pushMock).toHaveBeenCalledWith(
-        "/pagamento/pendente?checkoutId=purchase-123",
-      );
-    });
-  });
-
-  it("continues to pending page even when window.open returns null", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          checkoutUrl: "https://mp.test/checkout",
-          purchaseId: "purchase-123",
-        }),
-      }),
-    );
-    vi.spyOn(window, "open").mockImplementation(() => null);
-
-    render(await PlanosPage({ searchParams: Promise.resolve({}) }));
-
-    submitProPlanForm();
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: /continuar para mercado pago/i }),
-      ).toBeTruthy();
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /continuar para mercado pago/i }),
-    );
-
-    await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith(
-        "/pagamento/pendente?checkoutId=purchase-123",
-      );
+      expect(pushMock).toHaveBeenCalledWith("/pagamento/checkout/purchase-123");
     });
   });
 
@@ -187,34 +96,31 @@ describe("PlanosPage checkout confirmation", () => {
     );
 
     render(await PlanosPage({ searchParams: Promise.resolve({}) }));
-
     submitProPlanForm();
 
     await waitFor(() => {
-      const alert = screen.getByRole("alert");
-      expect(alert.textContent).toMatch(/erro ao iniciar pagamento/i);
+      const alert = document.querySelector('[role="alert"]');
+      expect(alert?.textContent).toMatch(/erro ao iniciar pagamento/i);
     });
   });
 
-  it("redirects to internal brick checkout route when checkout mode is brick", async () => {
+  it("shows retry error when checkout payload has no purchaseId", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
-          checkoutUrl: "https://earlycv.com.br/pagamento/checkout/purchase-123",
-          purchaseId: "purchase-123",
-          checkoutMode: "brick",
+          checkoutUrl: "https://mp.test/legacy",
         }),
       }),
     );
 
     render(await PlanosPage({ searchParams: Promise.resolve({}) }));
-
     submitProPlanForm();
 
     await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith("/pagamento/checkout/purchase-123");
+      const alert = document.querySelector('[role="alert"]');
+      expect(alert?.textContent).toMatch(/erro ao iniciar pagamento/i);
     });
   });
 });
