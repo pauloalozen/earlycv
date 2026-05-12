@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AuthMonoShell } from "@/components/auth/auth-mono-shell";
 import { trackEvent } from "@/lib/analytics-tracking";
 import {
+  getCheckoutStatusClient,
   getBrickCheckoutClient,
   submitBrickPaymentClient,
   type CheckoutApiError,
+  type BrickPayResponse,
   type BrickCheckoutResponse,
 } from "@/lib/payments-browser-api";
 
@@ -23,17 +26,19 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
   const [sdkReady, setSdkReady] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [dryRunMessage, setDryRunMessage] = useState<string | null>(null);
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
+  const [pixPending, setPixPending] = useState<{
+    qrCodeBase64: string | null;
+    qrCodeText: string | null;
+  } | null>(null);
+  const [pixCopied, setPixCopied] = useState(false);
   const [brickRuntimeError, setBrickRuntimeError] = useState<string | null>(null);
-  const [showDryRunFallback, setShowDryRunFallback] = useState(false);
   const brickControlRef = useRef<{ unmount?: () => void } | null>(null);
   const brickInitializedRef = useRef(false);
   const submitAttemptedRef = useRef(false);
+  const router = useRouter();
   const isProduction =
     (process.env.NEXT_PUBLIC_APP_ENV ?? "development") === "production";
-  const isLocalHostRuntime =
-    (process.env.NEXT_PUBLIC_PAYMENT_BRICK_LOCAL_DEGRADED ?? "false") ===
-    "true";
 
   const applyUiError = useCallback(
     (technicalMessage: string) => {
@@ -79,10 +84,6 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
   }, [purchaseId, applyUiError]);
 
   useEffect(() => {
-    if (isLocalHostRuntime) {
-      setShowDryRunFallback(true);
-      return;
-    }
     if (typeof window === "undefined") return;
 
     const existing = document.getElementById("mercadopago-sdk");
@@ -98,7 +99,7 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
     script.onload = () => setSdkReady(true);
     script.onerror = () => applyUiError("Erro ao carregar SDK Mercado Pago");
     document.body.appendChild(script);
-  }, [isLocalHostRuntime, applyUiError]);
+  }, [applyUiError]);
 
   useEffect(() => {
     if (!data) return;
@@ -111,7 +112,6 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
   }, [data, applyUiError]);
 
   useEffect(() => {
-    if (isLocalHostRuntime) return;
     if (!sdkReady || !data || brickInitializedRef.current) return;
 
     const dataValidationError = getCheckoutValidationError(data);
@@ -120,7 +120,9 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
       return;
     }
 
-    const publicKey = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY;
+    const publicKey =
+      process.env.NEXT_PUBLIC_MERCADOPAGO_BRICK_PUBLIC_KEY ??
+      process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY;
     if (!publicKey?.trim()) {
       applyUiError("Public key Mercado Pago ausente");
       return;
@@ -145,6 +147,12 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
             amount: data.amount,
             ...(data.payerEmail ? { payer: { email: data.payerEmail } } : {}),
           },
+            customization: {
+              paymentMethods: {
+                creditCard: "all",
+                bankTransfer: "all",
+              },
+            },
           callbacks: {
             onReady: () => {
               void trackEvent({
@@ -158,13 +166,12 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                 },
               });
             },
-            onSubmit: async (formData: unknown) => {
+            onSubmit: async (submitPayload: unknown) => {
               submitAttemptedRef.current = true;
               setBrickRuntimeError(null);
               setSubmitLoading(true);
               setSubmitError(null);
-              setDryRunMessage(null);
-              void trackEvent({
+                void trackEvent({
                 eventName: "checkout_brick_submit_started",
                 properties: {
                   purchaseId: data.purchaseId,
@@ -175,32 +182,23 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                 },
               });
 
-              try {
-                const response = await submitBrickPaymentClient(data.purchaseId, formData);
-                if (response.dryRun) {
-                  void trackEvent({
-                    eventName: "checkout_brick_submit_validated_dry_run",
-                    properties: {
-                      purchaseId: data.purchaseId,
-                      originAction: data.originAction,
-                      originAdaptationId: data.originAdaptationId,
-                      checkoutMode: "brick",
-                      amount: data.amount,
-                      status: response.status,
-                      dryRun: true,
-                    },
-                  });
-                  const showMessage =
-                    (process.env.NEXT_PUBLIC_APP_ENV ?? "development") !==
-                    "production";
-                  if (showMessage) {
-                    setDryRunMessage(
-                      "Pagamento validado em modo dry-run. Nenhuma cobranca foi criada.",
-                    );
-                  }
-                }
-              } catch {
-                setSubmitError("Nao foi possivel validar o pagamento. Tente novamente.");
+                try {
+                  const payload = resolveBrickSubmitPayload(submitPayload, data.payerEmail);
+                  const response = await submitBrickPaymentClient(data.purchaseId, payload);
+                  handleBrickSubmitResponse(
+                    response,
+                    router,
+                    setAwaitingApproval,
+                    setPixPending,
+                    setPixCopied,
+                  );
+                } catch (error) {
+                  const checkoutError = error as CheckoutApiError;
+                  const submitMessage =
+                    !isProduction && checkoutError.message?.trim()
+                      ? checkoutError.message
+                      : "Nao foi possivel validar o pagamento. Tente novamente.";
+                  setSubmitError(submitMessage);
                 void trackEvent({
                   eventName: "checkout_brick_submit_failed",
                   properties: {
@@ -223,7 +221,9 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                 submitAttemptedRef.current === false &&
                 /No payment type was selected/i.test(detail)
               ) {
-                setShowDryRunFallback(true);
+                setSubmitError(
+                  "Nao foi possivel carregar os meios de pagamento no Mercado Pago. Tente novamente em instantes.",
+                );
                 return;
               }
               if (submitAttemptedRef.current) {
@@ -238,7 +238,9 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
         const detail = extractBrickErrorMessage(error);
         setBrickRuntimeError(detail);
         if (/No payment type was selected/i.test(detail)) {
-          setShowDryRunFallback(true);
+          setSubmitError(
+            "Nao foi possivel carregar os meios de pagamento no Mercado Pago. Tente novamente em instantes.",
+          );
           return;
         }
         applyUiError(`Erro ao inicializar Payment Brick: ${detail}`);
@@ -254,7 +256,50 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
       brickControlRef.current = null;
       brickInitializedRef.current = false;
     };
-  }, [data, sdkReady, isLocalHostRuntime, applyUiError]);
+  }, [data, sdkReady, applyUiError, router]);
+
+  useEffect(() => {
+    if (!awaitingApproval) return;
+
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      try {
+        const status = await getCheckoutStatusClient(purchaseId);
+        if (cancelled) return;
+        if (status.status === "approved") {
+          router.push(`/pagamento/concluido?checkoutId=${purchaseId}`);
+          return;
+        }
+        if (status.status === "failed") {
+          setAwaitingApproval(false);
+          setPixPending(null);
+          setSubmitError(
+            status.message?.trim()
+              ? status.message
+              : "Pagamento falhou. Tente novamente.",
+          );
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [awaitingApproval, purchaseId, router]);
+
+  async function copyPixCode() {
+    const code = pixPending?.qrCodeText;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setPixCopied(true);
+    } catch {
+      setSubmitError("Nao foi possivel copiar o codigo PIX automaticamente.");
+    }
+  }
 
   return (
     <AuthMonoShell>
@@ -290,56 +335,70 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
           <div
             id="payment-brick-container"
             data-testid="payment-brick-container"
-            className="rounded-[12px] border border-[rgba(10,10,10,0.1)] bg-white p-4 mb-4"
+            className={`rounded-[12px] border border-[rgba(10,10,10,0.1)] bg-white p-4 mb-4 ${submitLoading || awaitingApproval ? "pointer-events-none opacity-70" : ""}`}
           />
+
+          {awaitingApproval && !pixPending && (
+            <div
+              className="rounded-[12px] border border-[rgba(10,10,10,0.12)] bg-white p-4 mb-4"
+              data-testid="payment-processing-panel"
+            >
+              <p className="text-sm text-gray-900 mb-2">Pagamento em processamento</p>
+              <p className="text-xs text-gray-600">
+                Estamos aguardando a confirmacao do pagamento. Assim que aprovado, voce sera
+                redirecionado automaticamente.
+              </p>
+            </div>
+          )}
+
+          {pixPending && (
+            <div
+              className="rounded-[12px] border border-[rgba(10,10,10,0.12)] bg-white p-4 mb-4"
+              data-testid="pix-pending-panel"
+            >
+              <p className="text-sm text-gray-900 mb-2">Aguardando pagamento via PIX</p>
+              <p className="text-xs text-gray-600 mb-3">
+                Pague com o QR Code ou copie o codigo PIX. Assim que o pagamento for confirmado,
+                voce sera redirecionado automaticamente.
+              </p>
+              {pixPending.qrCodeBase64 && (
+                <img
+                  src={toImageDataUrl(pixPending.qrCodeBase64)}
+                  alt="QR Code PIX"
+                  className="w-[220px] h-[220px] mb-3 border border-[rgba(10,10,10,0.1)] rounded-[8px]"
+                />
+              )}
+              {pixPending.qrCodeText && (
+                <>
+                  <p
+                    className="text-xs text-gray-700 break-all rounded-[8px] bg-gray-50 p-3 mb-2"
+                    data-testid="pix-copy-code"
+                  >
+                    {pixPending.qrCodeText}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void copyPixCode();
+                    }}
+                    className="text-sm underline text-gray-700"
+                  >
+                    Copiar codigo PIX
+                  </button>
+                  {pixCopied && (
+                    <p className="text-xs text-emerald-700 mt-2" data-testid="pix-copy-feedback">
+                      Codigo copiado.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {submitLoading && (
             <p className="text-sm text-gray-500 mb-3" data-testid="brick-submit-loading">
               Validando pagamento...
             </p>
-          )}
-
-          {showDryRunFallback && (
-            <div className="mb-3 rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-[#fafaf6] p-3">
-              {isLocalHostRuntime ? (
-                <p className="mb-2 text-xs text-[#6a6560]">
-                  Modo local: validacao direta em dry-run habilitada. O widget visual do Mercado Pago nao sera carregado aqui.
-                </p>
-              ) : (
-                <p className="mb-2 text-xs text-[#6a6560]">
-                  Nao foi possivel carregar a selecao de meio de pagamento neste ambiente.
-                </p>
-              )}
-              <button
-                type="button"
-                data-testid="brick-dryrun-fallback-btn"
-                disabled={submitLoading}
-                onClick={async () => {
-                  if (!data) return;
-                  submitAttemptedRef.current = true;
-                  setSubmitLoading(true);
-                  setSubmitError(null);
-                  setDryRunMessage(null);
-                  try {
-                    const response = await submitBrickPaymentClient(data.purchaseId, {
-                      fallbackMode: "no_payment_type_selected",
-                    });
-                    if (response.dryRun) {
-                      setDryRunMessage(
-                        "Pagamento validado em modo dry-run. Nenhuma cobranca foi criada.",
-                      );
-                    }
-                  } catch {
-                    setSubmitError("Nao foi possivel validar o pagamento. Tente novamente.");
-                  } finally {
-                    setSubmitLoading(false);
-                  }
-                }}
-                className="rounded-[8px] border border-[rgba(10,10,10,0.2)] px-3 py-2 text-sm text-[#0a0a0a]"
-              >
-                Validar pagamento (dry-run)
-              </button>
-            </div>
           )}
 
           {submitError && (
@@ -354,13 +413,9 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
             </p>
           )}
 
-          {dryRunMessage && (
-            <p className="text-sm text-amber-700 mb-3" data-testid="brick-dryrun-message">
-              {dryRunMessage}
-            </p>
+          {!submitAttemptedRef.current && !submitLoading && !awaitingApproval && !submitError && (
+            <p className="text-sm text-gray-600 mb-6">Pagamento via Mercado Pago sera carregado aqui.</p>
           )}
-
-          <p className="text-sm text-gray-600 mb-6">Pagamento via Mercado Pago sera carregado aqui.</p>
           <Link href="/compras" className="text-sm underline text-gray-700">
             Voltar para compras
           </Link>
@@ -384,6 +439,91 @@ function extractBrickErrorMessage(error: unknown): string {
     }
   }
   return "Erro desconhecido do Payment Brick";
+}
+
+function resolveBrickSubmitPayload(
+  submitPayload: unknown,
+  fallbackPayerEmail: string | null,
+): unknown {
+  if (!submitPayload || typeof submitPayload !== "object") {
+    return submitPayload;
+  }
+
+  const candidate = submitPayload as {
+    formData?: unknown;
+    selectedPaymentMethod?: unknown;
+  };
+  const resolved =
+    candidate.formData && typeof candidate.formData === "object"
+      ? (candidate.formData as Record<string, unknown>)
+      : (submitPayload as Record<string, unknown>);
+
+  const payload: Record<string, unknown> = { ...resolved };
+
+  if (typeof payload.payment_method_id !== "string") {
+    if (typeof payload.paymentMethodId === "string") {
+      payload.payment_method_id = payload.paymentMethodId;
+    } else if (typeof candidate.selectedPaymentMethod === "string") {
+      payload.payment_method_id = candidate.selectedPaymentMethod;
+    }
+  }
+
+  if (payload.issuer_id === undefined && payload.issuerId !== undefined) {
+    payload.issuer_id = payload.issuerId;
+  }
+
+  if (
+    typeof fallbackPayerEmail === "string" &&
+    fallbackPayerEmail.trim().length > 0
+  ) {
+    const payer =
+      payload.payer && typeof payload.payer === "object"
+        ? ({ ...(payload.payer as Record<string, unknown>) } as Record<string, unknown>)
+        : {};
+    if (typeof payer.email !== "string" || payer.email.trim().length === 0) {
+      payer.email = fallbackPayerEmail;
+      payload.payer = payer;
+    }
+  }
+
+  return payload;
+}
+
+function handleBrickSubmitResponse(
+  response: BrickPayResponse,
+  router: ReturnType<typeof useRouter>,
+  setAwaitingApproval: (value: boolean) => void,
+  setPixPending: (value: { qrCodeBase64: string | null; qrCodeText: string | null } | null) => void,
+  setPixCopied: (value: boolean) => void,
+) {
+  if (response.status === "approved") {
+    setAwaitingApproval(false);
+    setPixPending(null);
+    router.push(response.redirectTo);
+    return;
+  }
+
+  setAwaitingApproval(true);
+  const hasPixData =
+    (typeof response.qrCodeBase64 === "string" && response.qrCodeBase64.trim().length > 0) ||
+    (typeof response.qrCodeText === "string" && response.qrCodeText.trim().length > 0);
+
+  if (!hasPixData) {
+    setPixPending(null);
+    return;
+  }
+
+  setPixCopied(false);
+  setPixPending({
+    qrCodeBase64: response.qrCodeBase64,
+    qrCodeText: response.qrCodeText,
+  });
+}
+
+function toImageDataUrl(rawBase64: string): string {
+  const value = rawBase64.trim();
+  if (value.startsWith("data:")) return value;
+  return `data:image/png;base64,${value}`;
 }
 
 function mapCheckoutLoadError(error: CheckoutApiError): string {
@@ -462,6 +602,16 @@ declare global {
               onReady?: () => void;
               onSubmit?: (formData: unknown) => Promise<void>;
               onError?: (error: unknown) => void;
+            };
+            customization?: {
+              paymentMethods?: {
+                creditCard?: string;
+                debitCard?: string;
+                prepaidCard?: string;
+                bankTransfer?: string;
+                ticket?: string;
+                mercadoPago?: string;
+              };
             };
           },
         ) => Promise<{ unmount?: () => void }>;

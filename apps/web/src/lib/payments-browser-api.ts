@@ -36,11 +36,12 @@ export type BrickCheckoutResponse = {
 };
 
 export type BrickPayResponse = {
-  dryRun: true;
   purchaseId: string;
-  status: "validated";
+  status: "approved" | "pending";
   checkoutMode: "brick";
-  message: string;
+  redirectTo: string;
+  qrCodeBase64: string | null;
+  qrCodeText: string | null;
 };
 
 export type CheckoutApiError = Error & {
@@ -138,7 +139,21 @@ export async function submitBrickPaymentClient(
   });
 
   if (!response.ok) {
-    throw new Error("Nao foi possivel validar o pagamento.");
+    const error = (new Error(
+      "Nao foi possivel validar o pagamento.",
+    ) as CheckoutApiError);
+    error.status = response.status;
+    try {
+      const parsed = (await response.json()) as {
+        errorCode?: string;
+        message?: string;
+      };
+      if (parsed.errorCode) error.errorCode = parsed.errorCode;
+      if (parsed.message) error.message = parsed.message;
+    } catch {
+      // ignore non-json error payload
+    }
+    throw error;
   }
 
   return response.json() as Promise<BrickPayResponse>;

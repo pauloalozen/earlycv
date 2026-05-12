@@ -195,4 +195,26 @@ describe("PlanosPage checkout confirmation", () => {
       expect(alert.textContent).toMatch(/erro ao iniciar pagamento/i);
     });
   });
+
+  it("redirects to internal brick checkout route when checkout mode is brick", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          checkoutUrl: "https://earlycv.com.br/pagamento/checkout/purchase-123",
+          purchaseId: "purchase-123",
+          checkoutMode: "brick",
+        }),
+      }),
+    );
+
+    render(await PlanosPage({ searchParams: Promise.resolve({}) }));
+
+    submitProPlanForm();
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith("/pagamento/checkout/purchase-123");
+    });
+  });
 });

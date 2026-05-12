@@ -24,6 +24,7 @@ type PaidPlanCheckoutFormProps = {
 type CheckoutDraft = {
   checkoutUrl: string;
   purchaseId: string;
+  checkoutMode?: "brick";
 };
 
 export function PaidPlanCheckoutForm({
@@ -78,6 +79,11 @@ export function PaidPlanCheckoutForm({
       const payload = (await response.json()) as Partial<CheckoutDraft>;
       if (!payload.checkoutUrl || !payload.purchaseId) {
         throw new Error("invalid-checkout-payload");
+      }
+
+      if (payload.checkoutMode === "brick") {
+        router.push(`/pagamento/checkout/${payload.purchaseId}`);
+        return;
       }
 
       setCheckoutDraft({
