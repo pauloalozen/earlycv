@@ -19,7 +19,7 @@ const CREDIT_REDEEMED_EVENT = "dashboard:credit-redeemed";
 export function AppHeader({
   userName,
   logoSize = "md",
-  backgroundColor = "transparent",
+  backgroundColor = "rgba(243,242,237,0.95)",
   variant = "dark",
   availableCredits,
 }: Props) {
