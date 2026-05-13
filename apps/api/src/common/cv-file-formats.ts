@@ -1,8 +1,8 @@
 export const ALLOWED_CV_FILE_MIME_TYPES = [
   "application/pdf",
-  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.oasis.opendocument.text",
+  "application/octet-stream",
 ] as const;
 
 export function isAllowedCvUploadMimeType(mimeType: string): boolean {
@@ -11,4 +11,4 @@ export function isAllowedCvUploadMimeType(mimeType: string): boolean {
   );
 }
 
-export const ALLOWED_CV_FORMATS_LABEL = "PDF, DOC, DOCX or ODT";
+export const ALLOWED_CV_FORMATS_LABEL = "PDF, DOCX or ODT";

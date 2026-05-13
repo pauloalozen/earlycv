@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { type ReactNode, Suspense } from "react";
 
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
@@ -26,7 +26,7 @@ export default async function SuperadminLayout({
   const redirectPath = getRouteAccessRedirectPath("/superadmin", user);
 
   if (redirectPath) {
-    redirect(redirectPath);
+    notFound();
   }
 
   return (

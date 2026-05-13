@@ -18,6 +18,7 @@ import {
   buildMercadoPagoItemMetadata,
   buildMercadoPagoReturnConfig,
 } from "../payments/mercado-pago-return-config";
+import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
 
 type PlanId = "starter" | "pro" | "turbo";
 
@@ -73,6 +74,13 @@ type AuditEntry = {
   errorMessage?: string | null;
   rawPayload?: object | null;
 };
+
+const APPROVED_PURCHASE_ELIGIBLE_STATUSES = new Set([
+  "none",
+  "pending",
+  "processing_payment",
+  "pending_payment",
+]);
 
 type MercadoPagoPayerInput = {
   email: string;
@@ -230,8 +238,8 @@ export class PlansService {
         `[checkout] mode_decision purchase=${existing.id} user=${userId} useBrick=${String(brickDecision.useBrick)} reason=${brickDecision.reason}`,
       );
 
-      await this.database.planPurchase.update({
-        where: { id: existing.id },
+      const existingUpdate = await this.database.planPurchase.updateMany({
+        where: { id: existing.id, userId },
         data: {
           amountInCents: plan.amountInCents,
           creditsGranted: plan.downloadCreditsGranted,
@@ -239,6 +247,10 @@ export class PlansService {
           ...(brickDecision.useBrick ? { status: "pending" } : {}),
         },
       });
+
+      if (existingUpdate.count !== 1) {
+        throw new NotFoundException("Compra nao encontrada.");
+      }
 
       if (brickDecision.useBrick) {
         return {
@@ -503,7 +515,8 @@ export class PlansService {
       mpPaymentId: resolution.paymentId,
       mpMerchantOrderId: resolution.merchantOrderId,
       mpPreferenceId: resolution.preferenceId,
-      externalReference: resolution.externalReference ?? resolution.paymentReference,
+      externalReference:
+        resolution.externalReference ?? resolution.paymentReference,
       internalCheckoutType: "plan",
       mpStatus: resolution.rawStatus,
       rawPayload: body as object,
@@ -603,7 +616,18 @@ export class PlansService {
       const current = await tx.planPurchase.findUnique({
         where: { id: purchase.id },
       });
-      if (!current || current.status === "completed") return;
+      if (!current) return;
+
+      if (!isEligibleStatusForApprovedPurchase(current.status)) {
+        this.logAuditEvent({
+          ...auditBase,
+          eventType: "webhook_transition_ignored",
+          actionTaken: "ignored",
+          internalCheckoutId: purchase.id,
+          errorMessage: `invalid_transition:${current.status}->approved`,
+        });
+        return;
+      }
 
       await this.applyApprovedPurchaseInsideTransaction(tx, current, {
         mpMerchantOrderId: resolution.merchantOrderId,
@@ -630,11 +654,11 @@ export class PlansService {
         where: { id: purchaseId },
       });
 
-      if (
-        !purchase ||
-        purchase.status === "completed" ||
-        purchase.status === "failed"
-      ) {
+      if (!purchase) {
+        return null;
+      }
+
+      if (!isEligibleStatusForApprovedPurchase(purchase.status)) {
         return null;
       }
 
@@ -1019,6 +1043,8 @@ export class PlansService {
   }
 
   private logAuditEvent(entry: AuditEntry): void {
+    const sanitizedPayload = sanitizePaymentAuditPayload(entry.rawPayload);
+
     this.database.paymentAuditLog
       .create({
         data: {
@@ -1033,8 +1059,8 @@ export class PlansService {
           internalCheckoutType: entry.internalCheckoutType ?? null,
           mpStatus: entry.mpStatus ?? null,
           errorMessage: entry.errorMessage ?? null,
-          ...(entry.rawPayload != null
-            ? { rawPayload: entry.rawPayload as Prisma.InputJsonValue }
+          ...(sanitizedPayload != null
+            ? { rawPayload: sanitizedPayload as Prisma.InputJsonValue }
             : {}),
         },
       })
@@ -1220,7 +1246,8 @@ export class PlansService {
     };
 
     const externalReference = payment.external_reference ?? null;
-    const paymentMetadata = (payment as unknown as { metadata?: unknown }).metadata;
+    const paymentMetadata = (payment as unknown as { metadata?: unknown })
+      .metadata;
     const metadataPurchaseId =
       typeof paymentMetadata === "object" && paymentMetadata !== null
         ? normalizeString(
@@ -1284,8 +1311,13 @@ export class PlansService {
     return new URL(`/pagamento/checkout/${purchaseId}`, frontendUrl).toString();
   }
 
-  private evaluateBrickCheckoutEligibility(): { useBrick: boolean; reason: string } {
-    const mode = (process.env.PAYMENT_CHECKOUT_MODE ?? "pro").trim().toLowerCase();
+  private evaluateBrickCheckoutEligibility(): {
+    useBrick: boolean;
+    reason: string;
+  } {
+    const mode = (process.env.PAYMENT_CHECKOUT_MODE ?? "pro")
+      .trim()
+      .toLowerCase();
     if (mode !== "brick") {
       return { useBrick: false, reason: "mode_not_brick" };
     }
@@ -1336,6 +1368,10 @@ export class PlansService {
   }
 }
 
+function isEligibleStatusForApprovedPurchase(status: string): boolean {
+  return APPROVED_PURCHASE_ELIGIBLE_STATUSES.has(status);
+}
+
 function planTypeToDisplayName(planType: string): string | null {
   const names: Record<string, string> = {
     starter: "Starter",
@@ -1368,7 +1404,9 @@ function requireEnvInt(...names: string[]): number {
     if (raw) {
       const value = parseInt(raw, 10);
       if (isNaN(value)) {
-        throw new Error(`Env var ${name} must be a valid integer, got: "${raw}"`);
+        throw new Error(
+          `Env var ${name} must be a valid integer, got: "${raw}"`,
+        );
       }
       return value;
     }

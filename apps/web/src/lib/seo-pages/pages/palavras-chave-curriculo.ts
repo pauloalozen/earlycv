@@ -69,51 +69,90 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
   seo: {
     title: "Palavras-chave para currículo: lista por área e cargo | EarlyCV",
     description:
-      "Veja exemplos de palavras-chave para currículo por área, cargo e senioridade. Aprenda como usar termos da vaga sem exagerar e compare seu CV com a vaga no EarlyCV.",
+      "Veja quais palavras-chave usar no currículo por área e cargo. Compare seu CV com a vaga e gere uma versão alinhada gratuitamente.",
+    keywords: [
+      "palavras chave para curriculo",
+      "palavras chaves para curriculo",
+      "palavras-chave currículo ats",
+      "palavras chave currículo",
+      "termos para currículo",
+    ],
   },
   hero: {
     title: "Palavras-chave para currículo: lista por área, cargo e senioridade",
     description:
-      "Veja exemplos de termos que aparecem em vagas e entenda como usar palavras-chave no currículo sem exagerar ou inventar experiência.",
+      "Palavras-chave para currículo funcionam quando refletem o vocabulário da vaga e da sua experiência. Aqui você aprende como encontrar, priorizar e aplicar esses termos.",
   },
   alertMessage:
     "Não copie palavras-chave aleatórias. O ideal é usar apenas termos que façam sentido para sua experiência e para a vaga desejada.",
   sections: [
     {
-      heading: "O que são palavras-chave no currículo",
+      heading: "Por que palavras-chave importam no currículo",
       paragraphs: [
-        "São termos que descrevem competências, ferramentas, responsabilidades e contextos comuns nas vagas da sua área.",
+        "Em processos com ATS, o currículo vira busca por texto. Recrutadores e sistemas filtram por termos específicos, e quem não usa o vocabulário esperado pode nem aparecer na triagem inicial.",
+        "Por isso, palavras-chave para currículo não são enfeite. Elas conectam sua experiência real aos critérios usados para decidir quem avança.",
+        'Existe diferença entre habilidade genérica e termo de vaga. "Comunicação" é amplo demais. Já "gestão de stakeholders" ou "comunicação com times cross-funcionais" aponta contexto profissional concreto.',
+        "Quando você usa termos específicos com exemplos reais, melhora leitura para o ATS e para pessoas recrutadoras. Você fica mais encontrável e mais convincente ao mesmo tempo.",
       ],
     },
     {
-      heading: "Como usar palavras-chave sem exagerar",
+      heading: "Como encontrar as palavras-chave certas para cada vaga",
+      paragraphs: [
+        "A forma mais segura de escolher palavras-chave é começar pela descrição da vaga. Você não precisa adivinhar: a empresa já mostra os termos que considera essenciais.",
+        "Primeiro, leia a vaga inteira, sem pular seções. Depois, sublinhe palavras que aparecem mais de uma vez. Se um termo surge duas vezes ou mais, ele tende a ser prioridade no filtro.",
+        "Em seguida, separe ferramentas, tecnologias e metodologias citadas. Esses itens costumam ser usados como critérios objetivos de triagem.",
+        'Confira também o título exato do cargo. Muitas vezes você escreve "Analista de Dados" no CV, mas a vaga está como "Analytics Engineer" ou "Business Intelligence Analyst".',
+        "Por fim, revise os requisitos desejáveis. Eles também entram no radar do ATS e podem ser o diferencial quando a base de candidatos é forte.",
+      ],
       bullets: [
-        "Use contexto real nas experiências",
-        "Não inclua termos que você não domina",
-        "Adapte para cada vaga",
-        "Evite listas soltas sem evidência",
+        "1) Ler a descrição completa da vaga",
+        "2) Marcar termos repetidos (2x+)",
+        "3) Extrair ferramentas e tecnologias",
+        "4) Validar título exato do cargo",
+        "5) Incluir requisitos desejáveis relevantes",
       ],
     },
     {
-      heading: "Onde colocar palavras-chave",
-      bullets: [
-        "Resumo profissional",
-        "Experiência",
-        "Competências",
-        "Projetos",
-        "Certificações",
-        "Formação",
+      heading: "Palavras-chave por área — exemplos práticos",
+      paragraphs: [
+        'Cada área tem um vocabulário próprio. Recrutadores não procuram só "profissional bom"; eles procuram sinais específicos de execução. Use os exemplos abaixo como referência e adapte ao seu contexto.',
+        "Tecnologia e Engenharia de Software: normalmente buscam termos ligados a entrega técnica, arquitetura e colaboração em time. Exemplos: Python, React, Node.js, APIs REST, CI/CD, microsserviços, cloud (AWS/GCP/Azure), metodologias ágeis, code review e arquitetura de sistemas.",
+        "Dados e Analytics: recrutadores valorizam domínio de extração, modelagem e comunicação de análise. Exemplos: SQL, Python, Power BI, Tableau, ETL, dbt, BigQuery, análise exploratória, modelagem preditiva, A/B testing e data storytelling.",
+        "Produto (Product Management): o foco costuma estar em decisão, descoberta e impacto. Exemplos: roadmap, discovery, OKRs, métricas de produto, entrevistas com usuários, priorização, go-to-market, backlog, product-led growth e NPS.",
+        "Marketing Digital: aqui o peso está em aquisição, performance e retenção. Exemplos: SEO, SEM, Google Ads, Meta Ads, CRO, funil de conversão, email marketing, automação, CRM, analytics e ROAS.",
+        "Gestão de Projetos: geralmente procuram estrutura de execução e governança. Exemplos: Scrum, Kanban, PMP, gestão de escopo, cronograma, gestão de riscos, PMO, stakeholders, budget e PMBOK.",
+        "Não use todos os termos de uma vez. Escolha os que você realmente aplica no dia a dia e comprove com resultados, projetos ou responsabilidades específicas.",
       ],
     },
     {
-      heading: "Erros comuns",
+      heading: "Onde colocar as palavras-chave no currículo",
+      paragraphs: [
+        "O lugar das palavras-chave importa tanto quanto a escolha dos termos. Distribuir bem evita currículo artificial e melhora leitura global.",
+        "No resumo profissional, use de 3 a 5 termos centrais da vaga de forma natural. A ideia é mostrar foco logo no começo, sem parecer uma colagem de buzzwords.",
+        "Nas experiências, inclua os termos dentro das descrições de responsabilidades e conquistas. É aqui que o ATS e o recrutador entendem se você realmente aplicou aquela habilidade.",
+        "Na seção de habilidades, mantenha uma lista curta e clara. Entre 10 e 15 termos costuma ser suficiente para cobrir stack principal sem virar poluição.",
+        "Em formação, certificações e cursos, use o nome exato da trilha ou ferramenta quando for relevante para a vaga. Isso ajuda na busca por credenciais específicas.",
+      ],
       bullets: [
-        "Copiar a descrição da vaga inteira",
-        "Colocar ferramentas que não domina",
-        "Repetir palavra-chave sem contexto",
-        "Criar seção de competências gigante",
-        "Ignorar experiências reais mais relevantes",
-        "Usar o mesmo currículo para todas as vagas",
+        "Resumo profissional: 3 a 5 termos prioritários",
+        "Experiências: termos dentro de bullets com contexto real",
+        "Habilidades: lista objetiva, sem excesso",
+        "Formação e cursos: nomes oficiais quando fizer sentido",
+      ],
+    },
+    {
+      heading: "O que NÃO fazer com palavras-chave",
+      paragraphs: [
+        "Keyword stuffing é um dos erros mais comuns. Colocar 30 ou 40 termos em bloco sem contexto pode ser ignorado por recrutadores e perder força em ATS mais modernos.",
+        "Copiar a vaga inteira para dentro do currículo também não resolve. Além de soar artificial, isso não prova experiência real e pode gerar inconsistências em entrevistas.",
+        'Outro ponto é trocar termos padrão por sinônimos pouco usados no mercado. Em muitas buscas, "machine learning" tende a ser mais reconhecido do que "aprendizado de máquina".',
+        "A melhor prática é simples: linguagem da vaga + fatos da sua trajetória. Se não aconteceu no seu histórico, não entra. Se aconteceu, descreva com clareza.",
+      ],
+    },
+    {
+      heading: "Como o EarlyCV identifica as palavras-chave da vaga",
+      paragraphs: [
+        "Você cola a descrição da vaga no EarlyCV e a análise mapeia os termos mais relevantes do anúncio. Depois, a plataforma mostra o que já aparece no currículo e o que ainda está ausente, para você ajustar com precisão e sem inventar experiência.",
       ],
     },
   ],
@@ -465,51 +504,26 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
   ],
   faq: [
     {
-      question: "Quantas palavras-chave devo colocar no currículo?",
+      question: "Quais palavras-chave colocar no currículo?",
       answer:
-        "Não existe número fixo. Priorize termos relevantes para sua experiência e para a vaga.",
+        "As melhores palavras-chave vêm da própria descrição da vaga. Termos de hard skills, cargos mencionados e ferramentas específicas têm maior peso nos filtros ATS.",
     },
     {
-      question: "Posso colocar palavras-chave que não domino?",
+      question: "Posso colocar muitas palavras-chave no currículo?",
       answer:
-        "Não é recomendado. Use apenas termos que você realmente consegue sustentar.",
+        "Não. Keyword stuffing é detectado tanto por ATS modernos quanto por recrutadores. Use os termos de forma natural dentro de frases que descrevem suas experiências reais.",
     },
     {
-      question: "Onde colocar competências técnicas?",
+      question: "Como o EarlyCV ajuda com palavras-chave?",
       answer:
-        "Em competências, experiências e projetos, sempre com contexto de uso.",
-    },
-    {
-      question: "Palavras-chave garantem aprovação em ATS?",
-      answer:
-        "Não. Elas ajudam aderência, mas não garantem aprovação ou contratação.",
-    },
-    {
-      question: "Devo adaptar palavras-chave para cada vaga?",
-      answer: "Sim. Cada vaga prioriza termos e responsabilidades diferentes.",
-    },
-    {
-      question: "O que fazer quando a vaga tem muitos requisitos?",
-      answer:
-        "Priorize os requisitos centrais da vaga e conecte com evidências reais do seu histórico.",
+        "O EarlyCV analisa a descrição da vaga e identifica os termos mais relevantes que estão faltando no seu currículo, sugerindo onde e como incluí-los.",
     },
   ],
   relatedLinks: [
-    { href: "/curriculo-ats", label: "Currículo ATS" },
+    { href: "/curriculo-ats", label: "currículo compatível com ATS" },
     {
       href: "/adaptar-curriculo-para-vaga",
-      label: "Adaptar currículo para vaga",
-    },
-    { href: "/curriculo-gupy", label: "Currículo para Gupy" },
-    { href: "/modelo-curriculo-ats", label: "Modelo de currículo ATS" },
-    {
-      href: "/blog/palavras-chave-curriculo",
-      label: "Blog: como usar palavras-chave no currículo",
-    },
-    { href: "/blog/curriculo-ats", label: "Blog: currículo ATS" },
-    {
-      href: "/blog/como-adaptar-curriculo-para-vaga",
-      label: "Blog: adaptar currículo para vaga",
+      label: "adaptar o currículo para a vaga",
     },
   ],
   cta: {

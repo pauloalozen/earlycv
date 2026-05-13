@@ -13,7 +13,15 @@ describe("extractTextFromPdf", () => {
   it("throws on invalid PDF content", async () => {
     const buffer = Buffer.from("not a valid pdf");
 
-    await assert.rejects(() => extractTextFromPdf(buffer), /extract|text|pdf/i);
+    await assert.rejects(() => extractTextFromPdf(buffer), /pdf valido/i);
+  });
+
+  it("rejects oversized PDF buffer before parsing", async () => {
+    const header = Buffer.from("%PDF-");
+    const body = Buffer.alloc(5 * 1024 * 1024 + 1, 0x20);
+    const oversized = Buffer.concat([header, body]);
+
+    await assert.rejects(() => extractTextFromPdf(oversized), /limite de tamanho/i);
   });
 
   it("handles successful extraction when pdf-parse works", async () => {

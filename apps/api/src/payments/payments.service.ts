@@ -15,6 +15,7 @@ import {
   BrickPayloadValidationError,
   parseBrickPaymentPayload,
 } from "./brick-payload";
+import { summarizeSafeError } from "./payment-audit-sanitization";
 import { DatabaseService } from "../database/database.service";
 import { PlansService } from "../plans/plans.service";
 
@@ -486,7 +487,6 @@ export class PaymentsService {
           where: { id: purchase.id },
           data: {
             mpPaymentId,
-            status: "completed",
           },
         });
         await this.plansService.applyApprovedPurchase(purchase.id);
@@ -817,22 +817,7 @@ export class PaymentsService {
 }
 
 function summarizeProviderError(error: unknown): string {
-  if (error instanceof Error) {
-    const causeMessage =
-      typeof (error as { cause?: unknown }).cause === "string"
-        ? (error as { cause?: string }).cause
-        : null;
-    const base = error.message?.trim() || "unknown_error";
-    return causeMessage?.trim() ? `${base}; cause=${causeMessage}` : base;
-  }
-  if (typeof error === "string" && error.trim()) {
-    return error;
-  }
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return "unknown_provider_error";
-  }
+  return summarizeSafeError(error);
 }
 
 function extractPixTransactionData(response: unknown): {

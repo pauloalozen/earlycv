@@ -243,6 +243,62 @@ test("does not record payment_failed when webhook resolution is approved", async
   assert.equal(recordedEvents.includes("payment_failed"), false);
 });
 
+test("handleWebhook stores sanitized audit rawPayload", async () => {
+  const auditRows: Array<Record<string, unknown>> = [];
+
+  const service = new PlansService(
+    {
+      paymentAuditLog: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          auditRows.push(data);
+          return { id: "audit-sanitized-1" };
+        },
+      },
+      planPurchase: {
+        findFirst: async () => null,
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      resolveMercadoPagoPayment: (body: unknown) => Promise<unknown>;
+    }
+  ).resolveMercadoPagoPayment = async () => ({
+    paymentReference: null,
+    paymentId: "mp-123",
+    rawStatus: "pending",
+    status: "pending",
+  });
+
+  await service.handleWebhook("mercadopago", {
+    id: "evt-123",
+    type: "payment",
+    action: "payment.updated",
+    data: { id: "mp-123", token: "secret-token" },
+    payer: {
+      email: "private@example.com",
+      identification: { number: "12345678900" },
+    },
+    headers: { authorization: "Bearer test-token", cookie: "a=b" },
+    nested: { response: { headers: { authorization: "Bearer nested-token" } } },
+  });
+
+  assert.equal(auditRows.length > 0, true);
+  const rawPayload = auditRows[0]?.rawPayload as Record<string, unknown>;
+  assert.equal(typeof rawPayload, "object");
+  assert.equal(rawPayload.id, "evt-123");
+  assert.equal(rawPayload.type, "payment");
+  assert.equal(rawPayload.action, "payment.updated");
+  assert.deepEqual(rawPayload.data, { id: "mp-123" });
+  assert.equal("payer" in rawPayload, false);
+  assert.equal("headers" in rawPayload, false);
+  assert.equal("nested" in rawPayload, false);
+});
+
 test("resumeCheckout recreates MP checkout for pending purchase owned by user", async () => {
   const service = new PlansService(
     {
@@ -593,9 +649,12 @@ test("createMercadoPagoPreference uses shared return config and preserves checko
     assert.equal(checkoutUrl, "https://mp.test/checkout/123");
     assert.ok(preferenceBody);
     assert.deepEqual(preferenceBody?.back_urls, {
-      success: "https://earlycv.com.br/pagamento/concluido?checkoutId=purchase-https",
-      failure: "https://earlycv.com.br/pagamento/falhou?checkoutId=purchase-https",
-      pending: "https://earlycv.com.br/pagamento/pendente?checkoutId=purchase-https",
+      success:
+        "https://earlycv.com.br/pagamento/concluido?checkoutId=purchase-https",
+      failure:
+        "https://earlycv.com.br/pagamento/falhou?checkoutId=purchase-https",
+      pending:
+        "https://earlycv.com.br/pagamento/pendente?checkoutId=purchase-https",
     });
     assert.equal(
       (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
@@ -604,8 +663,9 @@ test("createMercadoPagoPreference uses shared return config and preserves checko
     );
     assert.match(
       String(
-        (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
-          ?.description,
+        (
+          preferenceBody?.items as Array<Record<string, unknown>> | undefined
+        )?.[0]?.description,
       ),
       /EarlyCV|Plano/i,
     );
@@ -686,9 +746,12 @@ test("createMercadoPagoPreference logs warning and skips auto_return on non-http
     assert.equal(checkoutUrl, "https://sandbox.mp.test/checkout/456");
     assert.ok(preferenceBody);
     assert.deepEqual(preferenceBody?.back_urls, {
-      success: "http://localhost:3000/pagamento/concluido?checkoutId=purchase-http",
-      failure: "http://localhost:3000/pagamento/falhou?checkoutId=purchase-http",
-      pending: "http://localhost:3000/pagamento/pendente?checkoutId=purchase-http",
+      success:
+        "http://localhost:3000/pagamento/concluido?checkoutId=purchase-http",
+      failure:
+        "http://localhost:3000/pagamento/falhou?checkoutId=purchase-http",
+      pending:
+        "http://localhost:3000/pagamento/pendente?checkoutId=purchase-http",
     });
     assert.equal(
       (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
@@ -697,8 +760,9 @@ test("createMercadoPagoPreference logs warning and skips auto_return on non-http
     );
     assert.match(
       String(
-        (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
-          ?.description,
+        (
+          preferenceBody?.items as Array<Record<string, unknown>> | undefined
+        )?.[0]?.description,
       ),
       /EarlyCV|Plano/i,
     );
@@ -836,9 +900,11 @@ test("getProAccessToken prefers MERCADOPAGO_PRO_ACCESS_TOKEN over legacy token",
 
   assert.equal(token, "pro-token");
 
-  if (originalProToken === undefined) delete process.env.MERCADOPAGO_PRO_ACCESS_TOKEN;
+  if (originalProToken === undefined)
+    delete process.env.MERCADOPAGO_PRO_ACCESS_TOKEN;
   else process.env.MERCADOPAGO_PRO_ACCESS_TOKEN = originalProToken;
-  if (originalLegacyToken === undefined) delete process.env.MERCADOPAGO_ACCESS_TOKEN;
+  if (originalLegacyToken === undefined)
+    delete process.env.MERCADOPAGO_ACCESS_TOKEN;
   else process.env.MERCADOPAGO_ACCESS_TOKEN = originalLegacyToken;
 });
 
@@ -862,13 +928,29 @@ test("createCheckout updates existing none purchase to pending before returning 
           status: "none",
           paymentReference: "pay-ref-existing",
         }),
-        update: async ({ where, data }: { where: { id: string }; data: { status: string } }) => {
-          updates.push({ id: where.id, status: data.status });
-          return { ok: true };
+        updateMany: async ({
+          where,
+          data,
+        }: {
+          where: { id: string; userId?: string };
+          data: { status: string };
+        }) => {
+          updates.push({
+            id: where.id,
+            status: data.status,
+          });
+
+          assert.equal(where.id, "purchase-existing-none");
+          assert.equal(where.userId, "user-1");
+
+          return { count: 1 };
         },
       },
       user: {
-        findUnique: async () => ({ email: "user-1@earlycv.com.br", name: "User One" }),
+        findUnique: async () => ({
+          email: "user-1@earlycv.com.br",
+          name: "User One",
+        }),
       },
     } as never,
     {
@@ -897,5 +979,175 @@ test("createCheckout updates existing none purchase to pending before returning 
     delete process.env.PAYMENT_BRICK_ENABLED;
     if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
     else process.env.FRONTEND_URL = originalFrontendUrl;
+  }
+});
+
+test("applyApprovedPurchase applies pending purchase once", async () => {
+  let applyCalls = 0;
+  const service = new PlansService(
+    {
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          planPurchase: {
+            findUnique: async () => ({
+              id: "purchase-pending-1",
+              userId: "user-1",
+              planType: "starter",
+              paymentReference: "ref-1",
+              status: "pending",
+              creditsGranted: 3,
+              analysisCreditsGranted: 0,
+              originAction: "buy_credits",
+              originAdaptationId: null,
+              mpPaymentId: null,
+              mpMerchantOrderId: null,
+              mpPreferenceId: null,
+            }),
+            update: async () => ({ ok: true }),
+          },
+          user: { update: async () => ({ ok: true }) },
+          cvUnlock: { upsert: async () => ({ ok: true }) },
+          cvAdaptation: {
+            findUnique: async () => null,
+            update: async () => ({ ok: true }),
+          },
+        }),
+      paymentAuditLog: { create: async () => ({ id: "audit-apply-1" }) },
+    } as never,
+    { record: async () => ({ event: { id: "evt-apply-1" }, ingested: true }) } as never,
+  );
+
+  (
+    service as unknown as {
+      applyApprovedPurchaseInsideTransaction: (
+        tx: unknown,
+        purchase: { id: string },
+      ) => Promise<void>;
+    }
+  ).applyApprovedPurchaseInsideTransaction = async (_tx, purchase) => {
+    applyCalls += 1;
+    assert.equal(purchase.id, "purchase-pending-1");
+  };
+
+  const result = await service.applyApprovedPurchase("purchase-pending-1");
+  assert.equal(result, true);
+  assert.equal(applyCalls, 1);
+});
+
+test("applyApprovedPurchase applies processing statuses once", async () => {
+  const statuses = ["processing_payment", "pending_payment"];
+
+  for (const status of statuses) {
+    let applyCalls = 0;
+    const service = new PlansService(
+      {
+        $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+          callback({
+            planPurchase: {
+              findUnique: async () => ({
+                id: `purchase-${status}`,
+                userId: "user-1",
+                planType: "starter",
+                paymentReference: `ref-${status}`,
+                status,
+                creditsGranted: 3,
+                analysisCreditsGranted: 0,
+                originAction: "buy_credits",
+                originAdaptationId: null,
+                mpPaymentId: null,
+                mpMerchantOrderId: null,
+                mpPreferenceId: null,
+              }),
+              update: async () => ({ ok: true }),
+            },
+            user: { update: async () => ({ ok: true }) },
+            cvUnlock: { upsert: async () => ({ ok: true }) },
+            cvAdaptation: {
+              findUnique: async () => null,
+              update: async () => ({ ok: true }),
+            },
+          }),
+        paymentAuditLog: { create: async () => ({ id: `audit-${status}` }) },
+      } as never,
+      {
+        record: async () => ({
+          event: { id: `evt-${status}` },
+          ingested: true,
+        }),
+      } as never,
+    );
+
+    (
+      service as unknown as {
+        applyApprovedPurchaseInsideTransaction: (
+          tx: unknown,
+          purchase: { status: string },
+        ) => Promise<void>;
+      }
+    ).applyApprovedPurchaseInsideTransaction = async (_tx, purchase) => {
+      applyCalls += 1;
+      assert.equal(purchase.status, status);
+    };
+
+    const result = await service.applyApprovedPurchase(`purchase-${status}`);
+    assert.equal(result, true);
+    assert.equal(applyCalls, 1);
+  }
+});
+
+test("applyApprovedPurchase is idempotent for completed and blocked for failed/refunded", async () => {
+  const blockedStatuses = ["completed", "failed", "refunded"];
+
+  for (const status of blockedStatuses) {
+    let applyCalls = 0;
+    const service = new PlansService(
+      {
+        $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+          callback({
+            planPurchase: {
+              findUnique: async () => ({
+                id: `purchase-${status}`,
+                userId: "user-1",
+                planType: "starter",
+                paymentReference: `ref-${status}`,
+                status,
+                creditsGranted: 3,
+                analysisCreditsGranted: 0,
+                originAction: "buy_credits",
+                originAdaptationId: null,
+                mpPaymentId: null,
+                mpMerchantOrderId: null,
+                mpPreferenceId: null,
+              }),
+              update: async () => ({ ok: true }),
+            },
+            user: { update: async () => ({ ok: true }) },
+            cvUnlock: { upsert: async () => ({ ok: true }) },
+            cvAdaptation: {
+              findUnique: async () => null,
+              update: async () => ({ ok: true }),
+            },
+          }),
+        paymentAuditLog: { create: async () => ({ id: `audit-${status}` }) },
+      } as never,
+      {
+        record: async () => ({
+          event: { id: `evt-${status}` },
+          ingested: true,
+        }),
+      } as never,
+    );
+
+    (
+      service as unknown as {
+        applyApprovedPurchaseInsideTransaction: () => Promise<void>;
+      }
+    ).applyApprovedPurchaseInsideTransaction = async () => {
+      applyCalls += 1;
+    };
+
+    const result = await service.applyApprovedPurchase(`purchase-${status}`);
+    assert.equal(result, false);
+    assert.equal(applyCalls, 0);
   }
 });

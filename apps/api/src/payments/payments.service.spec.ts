@@ -47,6 +47,8 @@ test("getBrickCheckoutData returns checkout summary for valid pending purchase",
     originAdaptationId: null,
     payerEmail: "user-1@earlycv.com.br",
     checkoutMode: "brick",
+    unitsIncluded: 3,
+    unitPrice: 11.9 / 3,
   });
 });
 
@@ -188,6 +190,7 @@ test("submitBrickPayment returns approved redirect when provider approves", asyn
 
   let updateCalled = false;
   let applyCalled = false;
+  let updateData: Record<string, unknown> | null = null;
 
   const service = new PaymentsService(
     {
@@ -203,8 +206,9 @@ test("submitBrickPayment returns approved redirect when provider approves", asyn
           originAdaptationId: null,
         }),
         updateMany: async () => ({ count: 1 }),
-        update: async () => {
+        update: async ({ data }: { data: Record<string, unknown> }) => {
           updateCalled = true;
+          updateData = data;
           return { ok: true };
         },
       },
@@ -235,6 +239,7 @@ test("submitBrickPayment returns approved redirect when provider approves", asyn
       qrCodeText: null,
     });
     assert.equal(updateCalled, true);
+    assert.equal("status" in (updateData ?? {}), false);
     assert.equal(applyCalled, true);
   } finally {
     Payment.prototype.create = originalCreate;
@@ -634,6 +639,98 @@ test("submitBrickPayment rejects invalid notification URL before provider call",
       else process.env.API_URL = originalApiUrl;
     }
   }, BadRequestException);
+});
+
+test("submitBrickPayment provider error does not leak sensitive nested payload", async () => {
+  const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalCreate = Payment.prototype.create;
+
+  process.env.PAYMENT_CHECKOUT_MODE = "brick";
+  process.env.NODE_ENV = "development";
+  Payment.prototype.create = async () => {
+    throw {
+      name: "ProviderError",
+      message: "provider failed",
+      code: "MP-500",
+      response: {
+        status: 500,
+        data: {
+          access_token: "super-secret-token",
+          payer: { email: "private@example.com" },
+        },
+        headers: {
+          authorization: "Bearer leaked",
+          cookie: "session=secret",
+        },
+      },
+      request: {
+        headers: {
+          authorization: "Bearer leaked2",
+        },
+      },
+      config: {
+        headers: {
+          Authorization: "Bearer leaked3",
+        },
+      },
+    };
+  };
+
+  const service = new PaymentsService(
+    {
+      planPurchase: {
+        findFirst: async () => ({
+          id: "purchase-1",
+          amountInCents: 1190,
+          paymentReference: "pref-1",
+          planType: "starter",
+          status: "pending",
+          mpPaymentId: null,
+          originAction: "buy_credits",
+          originAdaptationId: null,
+          user: { email: "payer@earlycv.com.br" },
+        }),
+        updateMany: async () => ({ count: 1 }),
+        update: async () => ({ ok: true }),
+      },
+      paymentAuditLog: { create: async () => ({ ok: true }) },
+    } as never,
+    {} as never,
+  );
+
+  try {
+    await assert.rejects(
+      () =>
+        service.submitBrickPayment("user-1", "purchase-1", {
+          token: "tok_test",
+          payment_method_id: "visa",
+          installments: 1,
+        }),
+      (error: unknown) => {
+        assert.equal(error instanceof BadRequestException, true);
+        const response =
+          error instanceof BadRequestException ? error.getResponse() : null;
+        const message =
+          response && typeof response === "object" && "message" in response
+            ? String((response as { message: unknown }).message)
+            : "";
+
+        assert.equal(message.includes("authorization"), false);
+        assert.equal(message.includes("cookie"), false);
+        assert.equal(message.includes("access_token"), false);
+        assert.equal(message.includes("private@example.com"), false);
+
+        return true;
+      },
+    );
+  } finally {
+    Payment.prototype.create = originalCreate;
+    if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
+    else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
+  }
 });
 
 test("brick client token prefers MERCADOPAGO_BRICK_ACCESS_TOKEN over legacy token", () => {

@@ -19,8 +19,10 @@ export const siteConfig = {
     "vagas no brasil",
   ],
   name: "EarlyCV",
-  ogImage: "/og-image.png",
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://www.earlycv.com.br",
+  ogImage:
+    process.env.NEXT_PUBLIC_OG_IMAGE_URL ||
+    `${process.env.NEXT_PUBLIC_SITE_URL || "https://www.earlycv.com.br"}/og-image.png`,
   titleTemplate: "%s | EarlyCV",
 } as const;
 
