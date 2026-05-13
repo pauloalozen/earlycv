@@ -46,6 +46,12 @@ describe("PlanosPage checkout", () => {
       id: "user-1",
       name: "Alo",
     });
+    process.env.PRICE_PLAN_STARTER = "1190";
+    process.env.PRICE_PLAN_PRO = "2990";
+    process.env.PRICE_PLAN_TURBO = "5990";
+    process.env.QNT_CV_PLAN_STARTER = "3";
+    process.env.QNT_CV_PLAN_PRO = "10";
+    process.env.QNT_CV_PLAN_TURBO = "20";
   });
 
   afterEach(() => {
@@ -122,5 +128,42 @@ describe("PlanosPage checkout", () => {
       const alert = document.querySelector('[role="alert"]');
       expect(alert?.textContent).toMatch(/erro ao iniciar pagamento/i);
     });
+  });
+
+  it("does not send adaptationId when source is resultado-buy-credits", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        purchaseId: "purchase-123",
+        checkoutMode: "brick",
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      await PlanosPage({
+        searchParams: Promise.resolve({
+          aid: "adapt-123",
+          source: "resultado-buy-credits",
+        }),
+      }),
+    );
+    submitProPlanForm();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [
+      string,
+      { body?: string },
+    ];
+    const body = JSON.parse(String(requestInit?.body ?? "{}")) as {
+      adaptationId?: string;
+      planId?: string;
+    };
+
+    expect(body.planId).toBe("pro");
+    expect(body.adaptationId).toBeUndefined();
   });
 });

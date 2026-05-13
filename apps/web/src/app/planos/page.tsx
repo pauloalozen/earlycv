@@ -36,6 +36,8 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
     typeof params.aid === "string" && params.aid.trim().length > 0
       ? params.aid.trim()
       : undefined;
+  const checkoutAdaptationId =
+    params.source === "resultado-unlock-cv" ? adaptationId : undefined;
   const showScoreIndicator =
     params.source === "resultado-buy-credits" && Boolean(adaptationId);
 
@@ -315,7 +317,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                         cta={plan.cta}
                         credits={credits}
                         planPrice={amount}
-                        adaptationId={adaptationId}
+                        adaptationId={checkoutAdaptationId}
                         buttonClassName={
                           dark ? "planos-cta-dark" : "planos-cta-light"
                         }
