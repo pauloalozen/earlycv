@@ -47,6 +47,10 @@ import { ANALYSIS_FETCH, ANALYSIS_NOW } from "./types";
     AnalysisTelemetryService,
     AnalysisProtectionFacade,
   ],
-  exports: [AnalysisConfigService, AnalysisProtectionFacade],
+  exports: [
+    AnalysisConfigService,
+    AnalysisProtectionFacade,
+    AnalysisTelemetryService,
+  ],
 })
 export class AnalysisProtectionModule {}
