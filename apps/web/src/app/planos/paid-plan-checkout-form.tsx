@@ -64,7 +64,21 @@ export function PaidPlanCheckoutForm({
       if (payload.checkoutMode === "brick") {
         router.push(`/pagamento/checkout/${payload.purchaseId}`);
       } else if (payload.checkoutUrl) {
-        window.location.href = payload.checkoutUrl;
+        const pendingUrl = new URL("/pagamento/pendente", window.location.origin);
+        pendingUrl.searchParams.set("checkoutId", payload.purchaseId);
+
+        try {
+          const checkoutUrl = new URL(payload.checkoutUrl);
+          const preferenceId = checkoutUrl.searchParams.get("preference_id");
+          if (preferenceId) {
+            pendingUrl.searchParams.set("preference_id", preferenceId);
+          }
+        } catch {
+          // ignore malformed checkoutUrl and continue with pending route
+        }
+
+        window.open(payload.checkoutUrl, "_blank", "noopener,noreferrer");
+        router.push(`${pendingUrl.pathname}?${pendingUrl.searchParams.toString()}`);
       } else {
         throw new Error("invalid-checkout-payload");
       }

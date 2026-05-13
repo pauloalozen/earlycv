@@ -6,6 +6,7 @@ import PlanosPage from "./page";
 const getCurrentAppUserFromCookiesMock = vi.hoisted(() => vi.fn());
 const useRouterMock = vi.hoisted(() => vi.fn());
 const pushMock = vi.hoisted(() => vi.fn());
+const openMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useRouter: () => useRouterMock(),
@@ -42,6 +43,8 @@ describe("PlanosPage checkout", () => {
     vi.restoreAllMocks();
     useRouterMock.mockReturnValue({ push: pushMock });
     pushMock.mockReset();
+    openMock.mockReset();
+    vi.stubGlobal("open", openMock);
     getCurrentAppUserFromCookiesMock.mockResolvedValue({
       id: "user-1",
       name: "Alo",
@@ -127,6 +130,33 @@ describe("PlanosPage checkout", () => {
     await waitFor(() => {
       const alert = document.querySelector('[role="alert"]');
       expect(alert?.textContent).toMatch(/erro ao iniciar pagamento/i);
+    });
+  });
+
+  it("opens legacy checkout in new tab and redirects current tab to pending", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          purchaseId: "purchase-legacy-123",
+          checkoutUrl: "https://mp.test/legacy?preference_id=pref-123",
+        }),
+      }),
+    );
+
+    render(await PlanosPage({ searchParams: Promise.resolve({}) }));
+    submitProPlanForm();
+
+    await waitFor(() => {
+      expect(openMock).toHaveBeenCalledWith(
+        "https://mp.test/legacy?preference_id=pref-123",
+        "_blank",
+        "noopener,noreferrer",
+      );
+      expect(pushMock).toHaveBeenCalledWith(
+        "/pagamento/pendente?checkoutId=purchase-legacy-123&preference_id=pref-123",
+      );
     });
   });
 
