@@ -189,6 +189,7 @@ export class PaymentsService {
         user: {
           select: {
             email: true,
+            name: true,
           },
         },
       },
@@ -289,6 +290,7 @@ export class PaymentsService {
         user: {
           select: {
             email: true,
+            name: true,
           },
         },
       },
@@ -361,6 +363,22 @@ export class PaymentsService {
     const idempotencyKey = `brick:${purchase.id}:${correlationId}`;
     const payerEmail =
       parsedPayload.payerEmail?.trim() || purchase.user?.email?.trim() || null;
+    if (!payerEmail) {
+      await this.database.planPurchase.update({
+        where: { id: purchase.id },
+        data: { status: "pending" },
+      });
+      throw new BadRequestException({
+        errorCode: "brick_payment_missing_payer_email",
+        message: "Pagamento indisponivel no momento. Tente novamente.",
+      });
+    }
+    const payerName = splitMercadoPagoPayerName(purchase.user?.name ?? null);
+    const mpItem = buildMercadoPagoPlanItem({
+      planType: purchase.planType,
+      amountInCents: purchase.amountInCents,
+      originAction: purchase.originAction,
+    });
     const payerIdentificationPresent = Boolean(parsedPayload.payerIdentification);
 
     const paymentAuditLog = (this.database as unknown as {
@@ -451,9 +469,9 @@ export class PaymentsService {
               }
             : {}),
           payer: {
-            ...(payerEmail
-              ? { email: payerEmail }
-              : {}),
+            email: payerEmail,
+            first_name: payerName.firstName,
+            last_name: payerName.lastName,
             ...(parsedPayload.payerIdentification
               ? { identification: parsedPayload.payerIdentification }
               : {}),
@@ -470,6 +488,14 @@ export class PaymentsService {
             source: "payment_brick",
           },
           notification_url: notificationUrl,
+          statement_descriptor: "EARLYCV",
+          additional_info: {
+            items: [mpItem],
+            payer: {
+              first_name: payerName.firstName,
+              last_name: payerName.lastName,
+            },
+          },
         },
         requestOptions: {
           idempotencyKey,
@@ -980,6 +1006,65 @@ function buildBrickDescription(
   }
 
   return planName ? `EarlyCV - pacote ${planName}` : "EarlyCV - pacote";
+}
+
+type MercadoPagoPlanItem = {
+  id: string;
+  title: string;
+  description: string;
+  category_id: "services";
+  quantity: 1;
+  unit_price: number;
+};
+
+function buildMercadoPagoPlanItem(input: {
+  planType: string;
+  amountInCents: number;
+  originAction: "buy_credits" | "unlock_cv";
+}): MercadoPagoPlanItem {
+  const unitsIncluded =
+    input.originAction === "unlock_cv" ? 1 : (getPlanUnits(input.planType) ?? 1);
+
+  return {
+    id: normalizeMercadoPagoPlanItemId(input.planType),
+    title: `EarlyCV - ${unitsIncluded} adaptações de currículo`,
+    description:
+      "Créditos para adaptação de currículo para vagas específicas no EarlyCV",
+    category_id: "services",
+    quantity: 1,
+    unit_price: input.amountInCents / 100,
+  };
+}
+
+function normalizeMercadoPagoPlanItemId(planType: string): string {
+  const normalized = planType.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  return normalized.length > 0 ? normalized : "plan";
+}
+
+function splitMercadoPagoPayerName(
+  fullName: string | null,
+): { firstName: string; lastName: string } {
+  if (!fullName) {
+    return { firstName: "Cliente", lastName: "EarlyCV" };
+  }
+
+  const parts = fullName
+    .trim()
+    .split(/\s+/)
+    .filter((part) => part.length > 0);
+
+  if (parts.length === 0) {
+    return { firstName: "Cliente", lastName: "EarlyCV" };
+  }
+
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: "EarlyCV" };
+  }
+
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
 }
 
 function getPlanUnits(planType: string): number | null {

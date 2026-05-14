@@ -204,6 +204,7 @@ test("submitBrickPayment returns approved redirect when provider approves", asyn
           mpPaymentId: null,
           originAction: "buy_credits",
           originAdaptationId: null,
+          user: { email: "user-1@earlycv.com.br", name: "User One" },
         }),
         updateMany: async () => ({ count: 1 }),
         update: async ({ data }: { data: Record<string, unknown> }) => {
@@ -265,6 +266,7 @@ test("submitBrickPayment rejects when mode is pro", async () => {
           mpPaymentId: null,
           originAction: "buy_credits",
           originAdaptationId: null,
+          user: { email: "user-1@earlycv.com.br", name: "User One" },
         }),
         updateMany: async () => ({ count: 1 }),
         update: async () => ({ ok: true }),
@@ -303,6 +305,7 @@ test("submitBrickPayment blocks concurrent submit when lock is not acquired", as
           mpPaymentId: null,
           originAction: "buy_credits",
           originAdaptationId: null,
+          user: { email: "user-1@earlycv.com.br", name: "User One" },
         }),
         updateMany: async () => {
           updateManyCalls += 1;
@@ -357,6 +360,7 @@ test("submitBrickPayment accepts pix payload with payer email", async () => {
           mpPaymentId: null,
           originAction: "buy_credits",
           originAdaptationId: null,
+          user: { email: "user-1@earlycv.com.br", name: "User One" },
         }),
         updateMany: async () => ({ count: 1 }),
         update: async () => ({ ok: true }),
@@ -395,6 +399,7 @@ test("submitBrickPayment returns safe rejected error when provider rejects", asy
           mpPaymentId: null,
           originAction: "buy_credits",
           originAdaptationId: null,
+          user: { email: "user-1@earlycv.com.br", name: "User One" },
         }),
         updateMany: async () => ({ count: 1 }),
         update: async () => ({ ok: true }),
@@ -534,6 +539,84 @@ test("submitBrickPayment uses purchase user email as fallback for card payer", a
   assert.equal(result.status, "pending");
   const payer = (capturedBody?.payer ?? {}) as { email?: string };
   assert.equal(payer.email, "fallback-user@example.com");
+
+  Payment.prototype.create = originalCreate;
+});
+
+test("submitBrickPayment sends Mercado Pago quality payload fields for brick", async () => {
+  process.env.PAYMENT_CHECKOUT_MODE = "brick";
+  const originalCreate = Payment.prototype.create;
+  let capturedBody: Record<string, unknown> | null = null;
+  Payment.prototype.create = async (input: { body: Record<string, unknown> }) => {
+    capturedBody = input.body;
+    return { id: 707, status: "pending" } as never;
+  };
+
+  const service = new PaymentsService(
+    {
+      planPurchase: {
+        findFirst: async () => ({
+          id: "purchase-1",
+          amountInCents: 1190,
+          paymentReference: "pay-ref-1",
+          planType: "starter",
+          status: "pending",
+          mpPaymentId: null,
+          originAction: "buy_credits",
+          originAdaptationId: null,
+          user: {
+            email: "payer@earlycv.com.br",
+            name: "Ada Lovelace",
+          },
+        }),
+        updateMany: async () => ({ count: 1 }),
+        update: async () => ({ ok: true }),
+      },
+      paymentAuditLog: { create: async () => ({ ok: true }) },
+    } as never,
+    {} as never,
+  );
+
+  const result = await service.submitBrickPayment("user-1", "purchase-1", {
+    payment_method_id: "visa",
+    token: "tok_123",
+    installments: 1,
+  });
+
+  assert.equal(result.status, "pending");
+  assert.equal(capturedBody?.description, "EarlyCV - pacote Starter");
+  assert.equal(capturedBody?.statement_descriptor, "EARLYCV");
+  assert.equal(capturedBody?.external_reference, "purchase-1");
+  assert.equal(typeof capturedBody?.notification_url, "string");
+  assert.equal(typeof capturedBody?.metadata, "object");
+  assert.equal("back_urls" in (capturedBody ?? {}), false);
+  assert.equal("auto_return" in (capturedBody ?? {}), false);
+
+  const payer = (capturedBody?.payer ?? {}) as {
+    email?: string;
+    first_name?: string;
+    last_name?: string;
+  };
+  assert.equal(payer.email, "payer@earlycv.com.br");
+  assert.equal(payer.first_name, "Ada");
+  assert.equal(payer.last_name, "Lovelace");
+
+  const additionalInfo = (capturedBody?.additional_info ?? {}) as {
+    items?: Array<Record<string, unknown>>;
+    payer?: { first_name?: string; last_name?: string };
+  };
+  const item = additionalInfo.items?.[0] ?? {};
+  assert.equal(item.id, "starter");
+  assert.equal(item.title, "EarlyCV - 3 adaptações de currículo");
+  assert.equal(
+    item.description,
+    "Créditos para adaptação de currículo para vagas específicas no EarlyCV",
+  );
+  assert.equal(item.category_id, "services");
+  assert.equal(item.quantity, 1);
+  assert.equal(item.unit_price, 11.9);
+  assert.equal(additionalInfo.payer?.first_name, "Ada");
+  assert.equal(additionalInfo.payer?.last_name, "Lovelace");
 
   Payment.prototype.create = originalCreate;
 });
