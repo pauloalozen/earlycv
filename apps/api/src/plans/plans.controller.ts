@@ -12,6 +12,7 @@ import {
 } from "@nestjs/common";
 
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
+import { summarizeWebhookPayload } from "../common/analytics-sanitization";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { CreatePlanCheckoutDto } from "./dto/create-plan-checkout.dto";
 import { PlansService } from "./plans.service";
@@ -73,8 +74,9 @@ export class PlansController {
     @Headers("x-signature") xSignature?: string,
     @Headers("x-request-id") xRequestId?: string,
   ) {
+    const summary = summarizeWebhookPayload(body);
     this.logger.log(
-      `[webhook:plans:${provider}] received — sig=${xSignature ? "present" : "absent"} reqId=${xRequestId ?? "-"} body=${JSON.stringify(body).slice(0, 200)}`,
+      `[webhook:plans:${provider}] received sig=${xSignature ? "present" : "absent"} reqId=${xRequestId ?? "-"} hasBody=${String(summary.hasBody)} eventType=${summary.eventType ?? "-"} action=${summary.action ?? "-"} paymentId=${summary.paymentId ?? "-"} keys=${summary.keys.join(",")}`,
     );
     this.plansService.verifyWebhookSignature(
       provider,

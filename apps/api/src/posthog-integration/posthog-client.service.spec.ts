@@ -145,3 +145,31 @@ test("capture uses $session_id as distinctId fallback", () => {
   assert.equal(captured.length, 1);
   assert.equal(captured[0].distinctId, "ph-session-2");
 });
+
+test("capture ignores email-like distinct ids", () => {
+  const captured: Array<Record<string, unknown>> = [];
+  const service = new PosthogClientService({
+    apiKey: "phc_test_key",
+    enabled: true,
+    flushIntervalMs: 5000,
+    maxBatchSize: 50,
+    projectId: "",
+  });
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  (service as any).client = {
+    capture: (message: Record<string, unknown>) => captured.push(message),
+    flush: async () => {},
+    shutdown: () => {},
+  };
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  (service as any).isConfigured = true;
+
+  service.capture("page_view", {
+    distinct_id: "user@example.com",
+    user_id: "user@example.com",
+  });
+
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0].distinctId, "anonymous");
+});

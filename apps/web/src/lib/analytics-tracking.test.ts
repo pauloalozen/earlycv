@@ -69,7 +69,7 @@ describe("analytics tracking", () => {
     });
   });
 
-  it("includes url, search and persisted utm on page_view payload", async () => {
+  it("includes only safe route metadata and persisted utm on page_view payload", async () => {
     window.history.replaceState(
       {},
       "",
@@ -84,9 +84,9 @@ describe("analytics tracking", () => {
     expect(payload.eventName).toBe("page_view");
     expect(payload.metadata).toMatchObject({
       route: "/",
-      url: `${window.location.origin}/?utm_source=linkedin&utm_medium=dm&utm_campaign=validacao_open_to_work&utm_content=v1`,
-      search:
-        "?utm_source=linkedin&utm_medium=dm&utm_campaign=validacao_open_to_work&utm_content=v1",
+      pathname: "/",
+      url: "/",
+      search: null,
       utm_source: "linkedin",
       utm_medium: "dm",
       utm_campaign: "validacao_open_to_work",
@@ -112,9 +112,9 @@ describe("analytics tracking", () => {
       utm_campaign: undefined,
       utm_content: undefined,
       utm_term: undefined,
-      page_location: `${window.location.origin}/adaptar?utm_source=linkedin&utm_medium=dm`,
+      page_location: "/adaptar",
       page_path: "/adaptar",
-      page_referrer: "",
+      page_referrer: null,
     });
   });
 
@@ -125,8 +125,9 @@ describe("analytics tracking", () => {
     const base = getAnalyticsBaseProperties();
     expect(base).toMatchObject({
       route: "/adaptar",
-      url: `${window.location.origin}/adaptar`,
-      search: "",
+      pathname: "/adaptar",
+      url: "/adaptar",
+      search: null,
       source: "frontend",
       app: "earlycv",
     });
@@ -184,5 +185,29 @@ describe("analytics tracking", () => {
       user_id: "user-123",
       event_version: 1,
     });
+  });
+
+  it("removes prohibited nested fields from event metadata", async () => {
+    await trackEvent({
+      eventName: "analysis_started",
+      properties: {
+        cv: "raw cv",
+        nested: {
+          email: "user@example.com",
+          body: { rawPayload: "sensitive" },
+          safe: true,
+        },
+        fileType: "pdf",
+      },
+    });
+
+    const [, options] = fetchMock.mock.calls[0] ?? [];
+    const payload = JSON.parse(String(options?.body ?? "{}"));
+
+    expect(payload.metadata.cv).toBeUndefined();
+    expect(payload.metadata.nested?.email).toBeUndefined();
+    expect(payload.metadata.nested?.body).toBeUndefined();
+    expect(payload.metadata.nested?.safe).toBe(true);
+    expect(payload.metadata.fileType).toBe("pdf");
   });
 });

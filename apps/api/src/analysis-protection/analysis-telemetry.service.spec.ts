@@ -173,6 +173,51 @@ test("redacts sessionPublicToken keys nested inside metadata objects", async () 
   );
 });
 
+test("removes prohibited personal/content fields from nested metadata", async () => {
+  let createPayload: Record<string, unknown> | null = null;
+
+  const service = new AnalysisTelemetryService(
+    {
+      analysisProtectionEvent: {
+        create: async (args: Record<string, unknown>) => {
+          createPayload = args;
+        },
+        upsert: async () => {
+          throw new Error("upsert should not be called");
+        },
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any,
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    posthogExporterStub as any,
+  );
+
+  await service.emit("payload_valid", context, {
+    metadata: {
+      cv: "raw",
+      nested: {
+        email: "user@example.com",
+        previewText: "secret",
+        safe: 1,
+      },
+    },
+  });
+
+  const metadataJson =
+    (createPayload as { data: { metadataJson: Record<string, unknown> } })?.data
+      .metadataJson ?? {};
+  assert.equal(metadataJson.cv, undefined);
+  assert.equal(
+    ((metadataJson.nested as Record<string, unknown>) ?? {}).email,
+    undefined,
+  );
+  assert.equal(
+    ((metadataJson.nested as Record<string, unknown>) ?? {}).previewText,
+    undefined,
+  );
+  assert.equal(((metadataJson.nested as Record<string, unknown>) ?? {}).safe, 1);
+});
+
 test("throws controlled error when event is missing version registry entry", async () => {
   const service = new AnalysisTelemetryService(
     {

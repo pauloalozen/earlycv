@@ -251,14 +251,7 @@ export function PosthogAuthProvider({
         storedIdentifiedUserId === userId;
 
       if (!alreadyIdentified && posthog) {
-        posthog.identify(userId, {
-          ...(typeof payload.user?.email === "string"
-            ? { email: payload.user.email }
-            : {}),
-          ...(typeof payload.user?.name === "string"
-            ? { name: payload.user.name }
-            : {}),
-        });
+        posthog.identify(userId);
       }
 
       writeAuthAnalyticsContext({

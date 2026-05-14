@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+const MAX_POSTHOG_SESSION_ID_LENGTH = 256;
+
 function getApiBaseUrl() {
   const base =
     process.env.API_URL ??
@@ -9,26 +11,47 @@ function getApiBaseUrl() {
 }
 
 export async function POST(request: Request) {
-  const body = await request.text();
+  const rawBody = await request.text();
   const forwardedPosthogSessionId = request.headers
     .get("x-posthog-session-id")
     ?.trim();
 
   let bodySessionId: string | null = null;
-  if (forwardedPosthogSessionId) {
+  if (
+    forwardedPosthogSessionId &&
+    forwardedPosthogSessionId.length <= MAX_POSTHOG_SESSION_ID_LENGTH
+  ) {
     bodySessionId = forwardedPosthogSessionId;
   } else {
     try {
-      const parsed = JSON.parse(body) as {
+      const parsed = JSON.parse(rawBody) as {
         metadata?: { $session_id?: unknown };
       };
       const candidate = parsed.metadata?.$session_id;
-      if (typeof candidate === "string" && candidate.trim().length > 0) {
+      if (
+        typeof candidate === "string" &&
+        candidate.trim().length > 0 &&
+        candidate.trim().length <= MAX_POSTHOG_SESSION_ID_LENGTH
+      ) {
         bodySessionId = candidate.trim();
       }
     } catch {
       bodySessionId = null;
     }
+  }
+
+  let body = rawBody;
+  try {
+    const parsed = JSON.parse(rawBody) as {
+      metadata?: Record<string, unknown>;
+    };
+    if (parsed && typeof parsed === "object" && parsed.metadata) {
+      delete parsed.metadata.body;
+      delete parsed.metadata.rawPayload;
+      body = JSON.stringify(parsed);
+    }
+  } catch {
+    body = rawBody;
   }
 
   const apiResponse = await fetch(

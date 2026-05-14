@@ -4,6 +4,7 @@ import {
   type AnalysisProtectionEventName,
   resolveAnalysisProtectionEventVersion,
 } from "../analysis-observability/analysis-event-version.registry";
+import { sanitizeAnalyticsPayload } from "../common/analytics-sanitization";
 import { DatabaseService } from "../database/database.service";
 import { PosthogEventExporter } from "../posthog-integration/posthog-event-exporter.service";
 import type { AnalysisRequestContext } from "./types";
@@ -82,6 +83,8 @@ export class AnalysisTelemetryService {
       return;
     }
 
+    const sanitizedMetadata = sanitizeAnalyticsPayload(input.metadata ?? {});
+
     const properties = {
       request_id: context.requestId,
       correlation_id: context.correlationId,
@@ -89,7 +92,7 @@ export class AnalysisTelemetryService {
       user_id: context.userId,
       route_key: input.routeKey,
       source: "backend",
-      ...input.metadata,
+      ...sanitizedMetadata,
     };
 
     this.posthogExporter.exportProtectionEvent(
@@ -104,7 +107,7 @@ export class AnalysisTelemetryService {
       return undefined;
     }
 
-    const scrubbed = this.scrubMetadataValue(metadata);
+    const scrubbed = this.scrubMetadataValue(sanitizeAnalyticsPayload(metadata));
 
     if (!scrubbed || Array.isArray(scrubbed) || typeof scrubbed !== "object") {
       return undefined;

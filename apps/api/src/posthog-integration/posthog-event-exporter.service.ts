@@ -3,6 +3,7 @@ import type {
   AnalysisProtectionEventName,
   BusinessFunnelEventName,
 } from "../analysis-observability/analysis-event-version.registry";
+import { sanitizeAnalyticsPayload } from "../common/analytics-sanitization";
 import { PosthogClientService } from "./posthog-client.service";
 import type { PostHogEventSource } from "./types";
 
@@ -77,27 +78,6 @@ const PROTECTION_EVENT_MAPPING: Record<AnalysisProtectionEventName, string> = {
   payload_invalid: "protection_payload_invalid",
 };
 
-const SENSITIVE_FIELDS = [
-  "sessionPublicToken",
-  "token",
-  "secret",
-  "apiKey",
-  "password",
-  "authorization",
-] as const;
-
-const ALWAYS_EXCLUDED_META_FIELDS = [
-  "sessionPublicToken",
-  "token",
-  "secret",
-  "apiKey",
-  "password",
-  "authorization",
-  "cvContent",
-  "cvText",
-  "resumeContent",
-] as const;
-
 @Injectable()
 export class PosthogEventExporter {
   constructor(
@@ -160,44 +140,6 @@ export class PosthogEventExporter {
   private sanitizeProperties(
     properties: Record<string, unknown>,
   ): Record<string, unknown> {
-    const sanitized: Record<string, unknown> = {};
-
-    if (!properties || typeof properties !== "object") {
-      return sanitized;
-    }
-
-    const entries = Object.entries(properties).filter(([key]) => {
-      const lowerKey = key.toLowerCase();
-      return !ALWAYS_EXCLUDED_META_FIELDS.some(
-        (excluded) => excluded.toLowerCase() === lowerKey,
-      );
-    });
-
-    for (const [key, value] of entries) {
-      if (this.isSensitiveField(key)) {
-        sanitized[key] = this.hashValue(String(value));
-      } else {
-        sanitized[key] = value;
-      }
-    }
-
-    return sanitized;
-  }
-
-  private isSensitiveField(key: string): boolean {
-    const lowerKey = key.toLowerCase();
-    return SENSITIVE_FIELDS.some(
-      (sensitive) => sensitive.toLowerCase() === lowerKey,
-    );
-  }
-
-  private hashValue(value: string): string {
-    let hash = 0;
-    for (let i = 0; i < value.length; i++) {
-      const char = value.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return `***hashed:${Math.abs(hash).toString(16)}`;
+    return sanitizeAnalyticsPayload(properties);
   }
 }

@@ -118,6 +118,76 @@ test("records business event and updates projection for first ingestion", async 
   assert.deepEqual(projectionApplied, ["analyze_submit_clicked"]);
 });
 
+test("scrubs prohibited metadata fields before persisting and exporting", async () => {
+  let createdData: Record<string, unknown> | null = null;
+  const exported: Array<Record<string, unknown>> = [];
+
+  const service = new BusinessFunnelEventService(
+    {
+      $transaction: async (
+        callback: (tx: {
+          businessFunnelEvent: {
+            create: (args: {
+              data: Record<string, unknown>;
+            }) => Promise<StoredBusinessFunnelEvent>;
+          };
+        }) => Promise<unknown>,
+      ) => {
+        return callback({
+          businessFunnelEvent: {
+            create: async ({ data }: { data: Record<string, unknown> }) => {
+              createdData = data;
+              return {
+                id: "event-2",
+                createdAt: new Date("2026-04-21T15:30:00.000Z"),
+                ...data,
+              } as StoredBusinessFunnelEvent;
+            },
+          },
+        });
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any,
+    {
+      applyEvent: async () => {},
+    } as BusinessFunnelProjectionService,
+    {
+      exportBusinessFunnelEvent: (
+        _eventName: string,
+        properties: Record<string, unknown>,
+      ) => {
+        exported.push(properties);
+      },
+      shouldExportBusinessFunnelEvent: () => true,
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any,
+  );
+
+  await service.record(
+    {
+      eventName: "page_view",
+      eventVersion: 1,
+      metadata: {
+        pathname: "/adaptar",
+        jobDescription: "secret",
+        nested: { email: "user@example.com", ok: true },
+      },
+    },
+    baseContext,
+  );
+
+  const persisted = (createdData?.metadataJson as Record<string, unknown>) ?? {};
+  assert.equal(persisted.jobDescription, undefined);
+  assert.equal(
+    ((persisted.nested as Record<string, unknown>) ?? {}).email,
+    undefined,
+  );
+  assert.equal(((persisted.nested as Record<string, unknown>) ?? {}).ok, true);
+
+  const exportedProps = exported[0] ?? {};
+  assert.equal(exportedProps.jobDescription, undefined);
+});
+
 test("falls back to null userId when persistence hits user foreign key violation", async () => {
   const storedByKey = new Map<string, StoredBusinessFunnelEvent>();
   const projectionApplied: string[] = [];

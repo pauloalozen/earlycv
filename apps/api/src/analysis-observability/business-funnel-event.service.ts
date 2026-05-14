@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
+import { sanitizeAnalyticsPayload } from "../common/analytics-sanitization";
 import { DatabaseService } from "../database/database.service";
 import { PosthogEventExporter } from "../posthog-integration/posthog-event-exporter.service";
 import { resolveBusinessFunnelEventVersion } from "./analysis-event-version.registry";
@@ -277,8 +278,9 @@ export class BusinessFunnelEventService {
       return undefined;
     }
 
-    const entries = Object.entries(metadata)
-      .filter(([key]) => key !== "sessionPublicToken")
+    const sanitizedMetadata = sanitizeAnalyticsPayload(metadata);
+
+    const entries = Object.entries(sanitizedMetadata)
       .map(([key, value]) => [key, this.toJsonValue(value)])
       .filter((entry): entry is [string, Prisma.InputJsonValue] => {
         return entry[1] !== undefined;
@@ -338,6 +340,8 @@ export class BusinessFunnelEventService {
       return;
     }
 
+    const sanitizedMetadata = sanitizeAnalyticsPayload(input.metadata ?? {});
+
     const properties = {
       event_version: input.eventVersion,
       request_id: input.requestId ?? context.requestId,
@@ -346,7 +350,7 @@ export class BusinessFunnelEventService {
       user_id: context.userId,
       route_key: input.routeKey,
       source: source === "frontend" ? "frontend" : "backend",
-      ...input.metadata,
+      ...sanitizedMetadata,
       ...(context.posthogSessionId
         ? { $session_id: context.posthogSessionId }
         : {}),

@@ -41,3 +41,34 @@ test("exports support all protection registry events", () => {
     );
   }
 });
+
+test("sanitizes prohibited nested properties before export", () => {
+  const captured: Array<Record<string, unknown>> = [];
+  const exporter = new PosthogEventExporter({
+    isEnabled: () => true,
+    capture: (_event: string, properties?: Record<string, unknown>) => {
+      captured.push(properties ?? {});
+    },
+  } as unknown as PosthogClientService);
+
+  exporter.exportBusinessFunnelEvent("page_view", {
+    event_version: 1,
+    pathname: "/adaptar",
+    cv: "raw",
+    nested: {
+      email: "user@example.com",
+      adaptedContentJson: { section: "secret" },
+      ok: true,
+    },
+  });
+
+  assert.equal(captured.length, 1);
+  const props = captured[0];
+  assert.equal(props.cv, undefined);
+  assert.equal((props.nested as Record<string, unknown>).email, undefined);
+  assert.equal(
+    (props.nested as Record<string, unknown>).adaptedContentJson,
+    undefined,
+  );
+  assert.equal((props.nested as Record<string, unknown>).ok, true);
+});

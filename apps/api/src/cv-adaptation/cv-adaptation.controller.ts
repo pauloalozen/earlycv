@@ -27,6 +27,7 @@ import {
   isAllowedCvUploadMimeType,
 } from "../common/cv-file-formats";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { summarizeWebhookPayload } from "../common/analytics-sanitization";
 import { CvAdaptationService } from "./cv-adaptation.service";
 import { AnalyzeCvDto } from "./dto/analyze-cv.dto";
 import { ClaimGuestAdaptationDto } from "./dto/claim-guest-adaptation.dto";
@@ -266,8 +267,9 @@ export class CvAdaptationController {
     @Headers("x-signature") xSignature?: string,
     @Headers("x-request-id") xRequestId?: string,
   ) {
+    const summary = summarizeWebhookPayload(body);
     this.logger.log(
-      `[webhook:cv-adaptation:${provider}] received — sig=${xSignature ? "present" : "absent"} reqId=${xRequestId ?? "-"} body=${JSON.stringify(body).slice(0, 200)}`,
+      `[webhook:cv-adaptation:${provider}] received sig=${xSignature ? "present" : "absent"} reqId=${xRequestId ?? "-"} hasBody=${String(summary.hasBody)} eventType=${summary.eventType ?? "-"} action=${summary.action ?? "-"} paymentId=${summary.paymentId ?? "-"} keys=${summary.keys.join(",")}`,
     );
     this.cvAdaptationService.verifyWebhookSignature(
       provider,

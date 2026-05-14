@@ -5,6 +5,7 @@ import { POSTHOG_INTEGRATION_CONFIG } from "./types";
 
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 const ANALYTICS_APP = "earlycv" as const;
+const INTERNAL_ID_PATTERN = /^[a-zA-Z0-9:_-]{6,128}$/;
 
 type AnalyticsEnv = "production" | "staging" | "development";
 
@@ -115,15 +116,9 @@ export class PosthogClientService {
         platformEnv: process.env.RAILWAY_ENVIRONMENT_NAME,
         nodeEnv: process.env.NODE_ENV,
       });
+      const distinctId = this.resolveSafeDistinctId(properties);
       const message: EventMessage = {
-        distinctId:
-          (properties?.user_id as string) ??
-          (properties?.userId as string) ??
-          (properties?.distinct_id as string) ??
-          (properties?.$session_id as string) ??
-          (properties?.sessionInternalId as string) ??
-          (properties?.session_internal_id as string) ??
-          "anonymous",
+        distinctId,
         event,
         properties: {
           ...(properties ?? {}),
@@ -136,6 +131,36 @@ export class PosthogClientService {
     } catch (error) {
       this.logger.warn(`Failed to capture event ${event}: ${error}`);
     }
+  }
+
+  private resolveSafeDistinctId(properties?: Record<string, unknown>): string {
+    const candidates = [
+      properties?.user_id,
+      properties?.userId,
+      properties?.distinct_id,
+      properties?.$session_id,
+      properties?.sessionInternalId,
+      properties?.session_internal_id,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate !== "string") {
+        continue;
+      }
+
+      const value = candidate.trim();
+      if (!value || value.includes("@") || value.includes(" ")) {
+        continue;
+      }
+
+      if (!INTERNAL_ID_PATTERN.test(value)) {
+        continue;
+      }
+
+      return value;
+    }
+
+    return "anonymous";
   }
 
   async flush(): Promise<void> {

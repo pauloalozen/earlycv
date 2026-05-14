@@ -81,9 +81,7 @@ describe("PosthogAuthProvider", () => {
     await waitFor(() => {
       expect(identifyMock).toHaveBeenCalledTimes(1);
       expect(trackEventMock).toHaveBeenCalledTimes(1);
-      expect(identifyMock).toHaveBeenCalledWith("user-1", {
-        name: "User 1",
-      });
+      expect(identifyMock).toHaveBeenCalledWith("user-1");
     });
 
     expect(trackEventMock).toHaveBeenCalledWith(
@@ -207,7 +205,7 @@ describe("PosthogAuthProvider", () => {
     );
 
     await waitFor(() => {
-      expect(identifyMock).toHaveBeenCalledWith("user-3", {});
+      expect(identifyMock).toHaveBeenCalledWith("user-3");
       expect(trackEventMock).toHaveBeenCalledTimes(1);
     });
 

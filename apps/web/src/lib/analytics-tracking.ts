@@ -12,6 +12,45 @@ const JOURNEY_SESSION_KEY = "journey_session_internal_id";
 const JOURNEY_ROUTE_VISIT_KEY = "journey_current_route_visit_id";
 const JOURNEY_PREVIOUS_ROUTE_KEY = "journey_previous_route";
 
+const PROHIBITED_KEYWORDS = [
+  "cv",
+  "resume",
+  "curriculum",
+  "jobdescription",
+  "job_description",
+  "descriptiontext",
+  "adaptedcontent",
+  "adaptedcontentjson",
+  "previewtext",
+  "aiauditjson",
+  "email",
+  "phone",
+  "telefone",
+  "name",
+  "nome",
+  "cpf",
+  "document",
+  "payer",
+  "card",
+  "token",
+  "pdf",
+  "file",
+  "rawpayload",
+  "body",
+  "password",
+  "refreshtoken",
+  "accesstoken",
+] as const;
+const PROHIBITED_KEY_SET = new Set(PROHIBITED_KEYWORDS);
+
+const ALLOWED_UTM_KEYS = new Set([
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+]);
+
 function isPosthogSessionRequired() {
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
   return typeof key === "string" && key.length > 0;
@@ -132,6 +171,138 @@ type TrackEventInput = {
   properties?: Record<string, unknown>;
 };
 
+function normalizeKey(key: string): string {
+  return key.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
+}
+
+function isProhibitedKey(key: string): boolean {
+  const normalized = normalizeKey(key);
+  return PROHIBITED_KEY_SET.has(normalized);
+}
+
+function sanitizeLeadCode(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes("@") || trimmed.includes(" ")) return undefined;
+  if (!/^[A-Za-z0-9_-]{3,64}$/.test(trimmed)) return undefined;
+  return trimmed;
+}
+
+function toPathnameOnly(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed, window.location.origin);
+    return parsed.pathname || "/";
+  } catch {
+    const q = trimmed.indexOf("?");
+    return (q >= 0 ? trimmed.slice(0, q) : trimmed) || "/";
+  }
+}
+
+function sanitizeReferrer(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes("?")) return null;
+  return toPathnameOnly(trimmed);
+}
+
+function sanitizeAnalyticsMetadata(
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+
+  for (const [key, rawValue] of Object.entries(input)) {
+    if (ALLOWED_UTM_KEYS.has(key)) {
+      if (typeof rawValue === "string") {
+        output[key] = rawValue;
+      }
+      continue;
+    }
+
+    if (key === "leadCode" || key === "lead_code") {
+      const safeLeadCode = sanitizeLeadCode(rawValue);
+      if (safeLeadCode) {
+        output[key] = safeLeadCode;
+      }
+      continue;
+    }
+
+    if (isProhibitedKey(key)) {
+      continue;
+    }
+
+    if (key === "url" || key.endsWith("_url")) {
+      output[key] = toPathnameOnly(rawValue);
+      continue;
+    }
+
+    if (key === "search" || key.endsWith("_search")) {
+      output[key] = null;
+      continue;
+    }
+
+    if (key === "referrer" || key.endsWith("_referrer")) {
+      output[key] = sanitizeReferrer(rawValue);
+      continue;
+    }
+
+    if (
+      key === "route" ||
+      key === "pathname" ||
+      key.endsWith("_route") ||
+      key.endsWith("_pathname")
+    ) {
+      output[key] = toPathnameOnly(rawValue);
+      continue;
+    }
+
+    if (
+      typeof rawValue === "string" ||
+      typeof rawValue === "number" ||
+      typeof rawValue === "boolean" ||
+      rawValue === null
+    ) {
+      output[key] = rawValue;
+      continue;
+    }
+
+    if (Array.isArray(rawValue)) {
+      output[key] = rawValue
+        .map((entry) => {
+          if (
+            typeof entry === "string" ||
+            typeof entry === "number" ||
+            typeof entry === "boolean" ||
+            entry === null
+          ) {
+            return entry;
+          }
+
+          if (entry && typeof entry === "object") {
+            return sanitizeAnalyticsMetadata(entry as Record<string, unknown>);
+          }
+
+          return undefined;
+        })
+        .filter((entry) => entry !== undefined);
+      continue;
+    }
+
+    if (rawValue && typeof rawValue === "object") {
+      const nested = sanitizeAnalyticsMetadata(
+        rawValue as Record<string, unknown>,
+      );
+      if (Object.keys(nested).length > 0) {
+        output[key] = nested;
+      }
+    }
+  }
+
+  return output;
+}
+
 declare global {
   interface Window {
     gtag?: (...args: unknown[]) => void;
@@ -228,15 +399,15 @@ export function getAnalyticsBaseProperties(): Record<string, unknown> {
   const utm = captureAndPersistUtmParams();
 
   const route = typeof window !== "undefined" ? window.location.pathname : null;
-  const url = typeof window !== "undefined" ? window.location.href : null;
+  const url = typeof window !== "undefined" ? window.location.pathname : null;
   const pathname =
     typeof window !== "undefined" ? window.location.pathname : null;
-  const search = typeof window !== "undefined" ? window.location.search : null;
+  const search = null;
   const referrer = typeof document !== "undefined" ? document.referrer : null;
   const authContext = getAuthAnalyticsContext();
   const journeyContext = getJourneyContext();
 
-  return {
+  return sanitizeAnalyticsMetadata({
     route,
     url,
     pathname,
@@ -252,7 +423,7 @@ export function getAnalyticsBaseProperties(): Record<string, unknown> {
     source: "frontend",
     ...analyticsContext,
     ...utm,
-  };
+  });
 }
 
 function emitGa4Event(eventName: string, properties: Record<string, unknown>) {
@@ -265,11 +436,11 @@ function emitGa4Event(eventName: string, properties: Record<string, unknown>) {
   }
 
   const pageLocation =
-    typeof window !== "undefined" ? window.location.href : "";
+    typeof window !== "undefined" ? window.location.pathname : "";
   const pagePath =
     typeof window !== "undefined" ? window.location.pathname : undefined;
   const pageReferrer =
-    typeof document !== "undefined" ? document.referrer : undefined;
+    typeof document !== "undefined" ? sanitizeReferrer(document.referrer) : undefined;
 
   window.gtag("event", eventName, {
     utm_source: properties.utm_source,
@@ -341,13 +512,15 @@ export async function trackEvent(input: TrackEventInput): Promise<void> {
     metadata.isAuthenticated = true;
   }
 
+  const safeMetadata = sanitizeAnalyticsMetadata(metadata);
+
   await postBusinessFunnelEvent({
     eventName: input.eventName,
     eventVersion: input.eventVersion ?? 1,
     idempotencyKey: input.idempotencyKey,
-    metadata,
+    metadata: safeMetadata,
     posthogSessionId: resolvedPosthogSessionId,
   });
 
-  emitGa4Event(input.eventName, metadata);
+  emitGa4Event(input.eventName, safeMetadata);
 }
