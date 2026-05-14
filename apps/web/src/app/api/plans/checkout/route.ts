@@ -33,6 +33,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       checkoutUrl: result.checkoutUrl,
       purchaseId: result.purchaseId,
+      ...(result.checkoutMode ? { checkoutMode: result.checkoutMode } : {}),
     });
   } catch {
     return NextResponse.json({ message: "checkout-failed" }, { status: 502 });

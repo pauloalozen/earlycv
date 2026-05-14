@@ -17,11 +17,15 @@ import {
   getSeoPageBySlug,
   isSeoPageSlug,
 } from "@/lib/seo-pages/pages";
-import { getAbsoluteUrl } from "@/lib/site";
+import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 
 type SeoPageProps = {
   params: Promise<{ slug: string }>;
 };
+
+function sanitizeSeoTitle(rawTitle: string) {
+  return rawTitle.replace(/(\s*\|\s*EarlyCV\s*)+$/u, "").trim();
+}
 
 export function generateStaticParams() {
   return getPublishedSeoPages().map((page) => ({ slug: page.slug }));
@@ -48,21 +52,29 @@ export async function generateMetadata({
   }
 
   const canonical = getAbsoluteUrl(page.path);
+  const title = sanitizeSeoTitle(page.seo.title);
+  const ogImage = page.seo.ogImage
+    ? getAbsoluteUrl(page.seo.ogImage)
+    : siteConfig.ogImage;
+
   return {
     alternates: { canonical },
     description: page.seo.description,
+    ...(page.seo.keywords ? { keywords: page.seo.keywords } : {}),
     openGraph: {
       description: page.seo.description,
-      title: page.seo.title,
+      images: [{ url: ogImage }],
+      title,
       type: "website",
       url: canonical,
     },
     robots: { follow: true, index: true },
-    title: page.seo.title,
+    title,
     twitter: {
       card: "summary_large_image",
       description: page.seo.description,
-      title: page.seo.title,
+      images: [ogImage],
+      title,
     },
   };
 }

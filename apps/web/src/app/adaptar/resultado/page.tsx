@@ -46,7 +46,7 @@ function seededInt(seed: string, min: number, max: number): number {
   return min + (Math.abs(h) % (max - min + 1));
 }
 
-const GUEST_VISIBLE = 2;
+const GUEST_VISIBLE = 1;
 
 const GUEST_MOCK_POSITIVOS: Array<{ texto: string; pontos: number }> = [
   { texto: "Competência avançada diretamente alinhada à vaga", pontos: 8 },
@@ -442,6 +442,12 @@ function extractProfessionalSummaryFromFinalOutput(output: FinalCvOutput | null)
   return "";
 }
 
+function hasFinalGeneratedCv(output: FinalCvOutput | null): boolean {
+  if (!output) return false;
+  const sections = (output as { sections?: Array<{ sectionType?: string }> }).sections ?? [];
+  return sections.some((s) => s.sectionType && s.sectionType !== "other");
+}
+
 const CARD: React.CSSProperties = {
   background: "#fafaf6",
   border: "1px solid rgba(10,10,10,0.08)",
@@ -830,6 +836,7 @@ export default function ResultadoPage() {
       await waitForMinimumDuration(startedAt, RELEASE_MIN_LOADING_MS);
       setReleaseStatus("success");
       setClaiming(false);
+      window.dispatchEvent(new Event("dashboard:credit-redeemed"));
       emitResultadoEvent("cv_unlock_completed", {
         adaptationId: payload.id ?? reviewAdaptationId,
         source_detail: "resultado",
@@ -992,6 +999,7 @@ export default function ResultadoPage() {
       await waitForMinimumDuration(startedAt, RELEASE_MIN_LOADING_MS);
       setReleaseStatus("success");
       setClaiming(false);
+      window.dispatchEvent(new Event("dashboard:credit-redeemed"));
       emitResultadoEvent("cv_unlock_completed", {
         adaptationId: reviewAdaptationId,
         source_detail: "resultado",
@@ -1058,6 +1066,14 @@ export default function ResultadoPage() {
         fallbackFilename: `cv-adaptado.${format}`,
         onStageChange: setDownloadStage,
       });
+      void fetch(`/api/cv-adaptation/${reviewAdaptationId}/content`, {
+        cache: "no-store",
+      })
+        .then((r) => (r.ok ? (r.json() as Promise<{ finalCvOutput?: FinalCvOutput | null }>) : null))
+        .then((payload) => {
+          if (payload?.finalCvOutput) setFinalCvOutput(payload.finalCvOutput);
+        })
+        .catch(() => undefined);
     } catch {
       setClaimError(
         "Não foi possível baixar o arquivo agora. Tente novamente.",
@@ -1197,7 +1213,7 @@ export default function ResultadoPage() {
       ? extractProfessionalSummaryFromFinalOutput(finalCvOutput)
       : "";
   const previewAntesText = data.preview?.antes ?? "";
-  const previewDepoisText = isDownloadReady
+  const previewDepoisText = (isDownloadReady && hasFinalGeneratedCv(finalCvOutput))
     ? unlockedProfessionalSummary
     : data.preview?.depois ?? "";
   const hasPreviewSection = Boolean(data.preview) || Boolean(isDownloadReady);

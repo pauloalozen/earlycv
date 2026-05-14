@@ -15,7 +15,7 @@ export type PurchaseItem = {
   planName: string | null;
   amountInCents: number;
   currency: string;
-  status: "none" | "pending" | "completed" | "failed" | "refunded";
+  status: "none" | "pending" | "processing_payment" | "pending_payment" | "completed" | "failed" | "refunded";
   paidAt: string | null;
   creditsGranted: number;
   analysisCreditsGranted: number;

@@ -808,6 +808,35 @@ export function LandingVariantC() {
                   ))}
                 </ul>
 
+                {plan.unitPriceCents != null && (
+                  <div
+                    style={{
+                      marginBottom: 14,
+                      paddingTop: 10,
+                      paddingBottom: 10,
+                      borderTop: plan.featured
+                        ? "1px solid rgba(198,255,58,0.15)"
+                        : "1px solid rgba(10,10,10,0.07)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        color: plan.featured ? "#c6ff3a" : "#71717a",
+                        letterSpacing: 0.1,
+                      }}
+                    >
+                      Download de CV sai a R${" "}
+                      {(plan.unitPriceCents / 100).toFixed(2).replace(".", ",")}
+                    </span>
+                  </div>
+                )}
+
                 <Link
                   href={plan.cta_link}
                   style={{

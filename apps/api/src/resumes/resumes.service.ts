@@ -108,8 +108,8 @@ export class ResumesService {
         await this.demoteOtherResumes(tx, userId, resumeId);
       }
 
-      return tx.resume.update({
-        where: { id: resumeId },
+      const updateResult = await tx.resume.updateMany({
+        where: { id: resumeId, userId },
         data: {
           title: dto.title,
           sourceFileName: dto.sourceFileName,
@@ -120,6 +120,20 @@ export class ResumesService {
           isMaster: shouldRemainMaster,
         },
       });
+
+      if (updateResult.count !== 1) {
+        throw new NotFoundException("resume not found");
+      }
+
+      const updatedResume = await tx.resume.findFirst({
+        where: { id: resumeId, userId },
+      });
+
+      if (!updatedResume) {
+        throw new NotFoundException("resume not found");
+      }
+
+      return updatedResume;
     });
   }
 
@@ -138,12 +152,20 @@ export class ResumesService {
 
       await this.demoteOtherResumes(tx, userId, resume.id);
 
-      return tx.resume.update({
-        where: { id: resume.id },
+      const updateResult = await tx.resume.updateMany({
+        where: { id: resume.id, userId },
         data: {
           kind: ResumeKind.master,
           isMaster: true,
         },
+      });
+
+      if (updateResult.count !== 1) {
+        throw new NotFoundException("resume not found");
+      }
+
+      return tx.resume.findFirstOrThrow({
+        where: { id: resume.id, userId },
       });
     });
   }
@@ -197,6 +219,7 @@ export class ResumesService {
       if (nextResume) {
         await tx.resume.updateMany({
           where: {
+            userId,
             basedOnResumeId: resumeId,
             NOT: { id: nextResume.id },
           },
@@ -205,19 +228,27 @@ export class ResumesService {
           },
         });
 
-        await tx.resume.update({
-          where: { id: nextResume.id },
+        const promoteResult = await tx.resume.updateMany({
+          where: { id: nextResume.id, userId },
           data: {
             basedOnResumeId: null,
             kind: ResumeKind.master,
             isMaster: true,
           },
         });
+
+        if (promoteResult.count !== 1) {
+          throw new NotFoundException("resume not found");
+        }
       }
 
-      await tx.resume.delete({
-        where: { id: resumeId },
+      const deleteResult = await tx.resume.deleteMany({
+        where: { id: resumeId, userId },
       });
+
+      if (deleteResult.count !== 1) {
+        throw new NotFoundException("resume not found");
+      }
 
       if (!nextResume) {
         return;

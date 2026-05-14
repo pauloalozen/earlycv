@@ -29,11 +29,9 @@ export type WebhookPaymentResolution = {
 @Injectable()
 export class CvAdaptationPaymentService {
   private readonly logger = new Logger(CvAdaptationPaymentService.name);
-  private readonly priceInCents: number;
   private readonly provider: string;
 
   constructor() {
-    this.priceInCents = parseInt(process.env.PRICE_PLAN_STARTER || "1190", 10);
     this.provider = process.env.PAYMENT_PROVIDER || "mercadopago";
   }
 
@@ -83,7 +81,7 @@ export class CvAdaptationPaymentService {
     const preference = new Preference(client);
 
     const paymentReference = existingReference ?? randomUUID();
-    const priceInReais = this.priceInCents / 100;
+    const priceInReais = requireEnvInt("PRICE_PLAN_STARTER") / 100;
 
     const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3000";
     const apiUrl =
@@ -153,7 +151,7 @@ export class CvAdaptationPaymentService {
     return {
       paymentReference,
       checkoutUrl,
-      amountInCents: this.priceInCents,
+      amountInCents: requireEnvInt("PRICE_PLAN_STARTER"),
       currency: "BRL",
       mpPreferenceId: result.id ? String(result.id) : null,
     };
@@ -269,4 +267,18 @@ export class CvAdaptationPaymentService {
       rawStatus,
     };
   }
+}
+
+function requireEnvInt(...names: string[]): number {
+  for (const name of names) {
+    const raw = process.env[name];
+    if (raw) {
+      const value = parseInt(raw, 10);
+      if (isNaN(value)) {
+        throw new Error(`Env var ${name} must be a valid integer, got: "${raw}"`);
+      }
+      return value;
+    }
+  }
+  throw new Error(`Required env var(s) [${names.join(", ")}] are not set`);
 }

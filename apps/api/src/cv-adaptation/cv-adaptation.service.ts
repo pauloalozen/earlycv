@@ -14,10 +14,15 @@ import {
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { Response } from "express";
+import { AnalysisTelemetryService } from "../analysis-protection/analysis-telemetry.service";
 import type { ProtectedAnalysisBlockedResult } from "../analysis-protection/analysis-protection.facade";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
-import { extractTextFromCvFile } from "../common/cv-text-extractor";
+import {
+  extractTextFromCvFile,
+  validateCvFileEnvelope,
+} from "../common/cv-text-extractor";
 import { DatabaseService } from "../database/database.service";
+import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
 import { StorageService } from "../storage/storage.service";
 
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
@@ -56,6 +61,10 @@ type AuditEntry = {
   rawPayload?: object | null;
 };
 
+type ValidationTelemetry = {
+  emit: AnalysisTelemetryService["emit"];
+};
+
 @Injectable()
 export class CvAdaptationService {
   private readonly logger = new Logger(CvAdaptationService.name);
@@ -86,10 +95,22 @@ export class CvAdaptationService {
         return "";
       },
     },
+    @Inject(AnalysisTelemetryService)
+    private readonly analysisTelemetry: ValidationTelemetry = {
+      async emit() {
+        return;
+      },
+    },
   ) {}
 
   async create(userId: string, dto: CreateCvAdaptationDto, file?: FileUpload) {
-    this.validateJobDescription(dto.jobDescriptionText);
+    const normalizedJobDescriptionText = this.validateJobDescription(
+      dto.jobDescriptionText,
+      {
+        context: this.buildProtectionContext(undefined, userId, "cv-adaptation/create"),
+        routeKey: "cv-adaptation/create",
+      },
+    );
 
     let masterResumeId = dto.masterResumeId;
     let masterCvText: string | null = null;
@@ -100,7 +121,11 @@ export class CvAdaptationService {
       try {
         masterCvText = await extractTextFromCvFile(file);
       } catch (error) {
-        this.mapFileExtractionError(error);
+        await this.mapFileExtractionError(error, {
+          context: this.buildProtectionContext(undefined, userId, "cv-adaptation/create"),
+          file,
+          routeKey: "cv-adaptation/create",
+        });
       }
 
       const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
@@ -175,7 +200,7 @@ export class CvAdaptationService {
         userId,
         masterResumeId,
         templateId: dto.templateId || null,
-        jobDescriptionText: dto.jobDescriptionText,
+        jobDescriptionText: normalizedJobDescriptionText,
         jobTitle: dto.jobTitle || null,
         companyName: dto.companyName || null,
         status: "analyzing",
@@ -204,7 +229,7 @@ export class CvAdaptationService {
           adaptationId: adaptation.id,
           companyName: adaptation.companyName,
           hasFile: Boolean(file),
-          jobDescriptionText: adaptation.jobDescriptionText,
+          jobDescriptionText: normalizedJobDescriptionText,
           jobTitle: adaptation.jobTitle,
           masterResumeId,
           route: "cv-adaptation/create",
@@ -405,7 +430,17 @@ export class CvAdaptationService {
     analysisCvSnapshotId: string;
     guestSessionPublicToken: string | null;
   }> {
-    this.validateJobDescription(jobDescriptionText);
+    const normalizedJobDescriptionText = this.validateJobDescription(
+      jobDescriptionText,
+      {
+        context: this.buildProtectionContext(
+          analysisContext,
+          null,
+          "cv-adaptation/analyze-guest",
+        ),
+        routeKey: "cv-adaptation/analyze-guest",
+      },
+    );
 
     const normalizedMasterCvText =
       typeof masterCvText === "string"
@@ -418,6 +453,22 @@ export class CvAdaptationService {
       throw new BadRequestException("PDF file or CV text is required.");
     }
 
+    if (file) {
+      try {
+        validateCvFileEnvelope(file);
+      } catch (error) {
+        await this.mapFileExtractionError(error, {
+          context: this.buildProtectionContext(
+            analysisContext,
+            null,
+            "cv-adaptation/analyze-guest",
+          ),
+          file,
+          routeKey: "cv-adaptation/analyze-guest",
+        });
+      }
+    }
+
     const protectionResult =
       await this.protectedAnalyzeService.executeProtectedAnalyze({
         context: this.buildProtectionContext(
@@ -425,7 +476,7 @@ export class CvAdaptationService {
           null,
           "cv-adaptation/analyze-guest",
         ),
-        jobDescriptionText,
+        jobDescriptionText: normalizedJobDescriptionText,
         loadMasterCvText: async () => {
           if (resolvedMasterCvText) {
             return resolvedMasterCvText;
@@ -446,13 +497,21 @@ export class CvAdaptationService {
             );
             return resolvedMasterCvText;
           } catch (error) {
-            this.mapFileExtractionError(error);
+            return await this.mapFileExtractionError(error, {
+              context: this.buildProtectionContext(
+                analysisContext,
+                null,
+                "cv-adaptation/analyze-guest",
+              ),
+              file,
+              routeKey: "cv-adaptation/analyze-guest",
+            });
           }
         },
         payload: {
           cvFingerprint: file ? this.buildFileFingerprint(file.buffer) : null,
           hasFile: Boolean(file),
-          jobDescriptionText,
+          jobDescriptionText: normalizedJobDescriptionText,
           hasTextInput,
           route: "cv-adaptation/analyze-guest",
         },
@@ -497,11 +556,37 @@ export class CvAdaptationService {
     masterCvText: string;
     analysisCvSnapshotId: string;
   }> {
-    this.validateJobDescription(dto.jobDescriptionText);
+    const normalizedJobDescriptionText = this.validateJobDescription(
+      dto.jobDescriptionText,
+      {
+        context: this.buildProtectionContext(
+          analysisContext,
+          userId,
+          "cv-adaptation/analyze",
+        ),
+        routeKey: "cv-adaptation/analyze",
+      },
+    );
     const hasTextInput = Boolean(dto.masterCvText?.trim());
     let sourceType: "text_input" | "uploaded_file" | "master_resume" =
       "master_resume";
     let resolvedMasterCvText: string | null = null;
+
+    if (file) {
+      try {
+        validateCvFileEnvelope(file);
+      } catch (error) {
+        await this.mapFileExtractionError(error, {
+          context: this.buildProtectionContext(
+            analysisContext,
+            userId,
+            "cv-adaptation/analyze",
+          ),
+          file,
+          routeKey: "cv-adaptation/analyze",
+        });
+      }
+    }
 
     const protectionResult =
       await this.protectedAnalyzeService.executeProtectedAnalyze({
@@ -510,7 +595,7 @@ export class CvAdaptationService {
           userId,
           "cv-adaptation/analyze",
         ),
-        jobDescriptionText: dto.jobDescriptionText,
+        jobDescriptionText: normalizedJobDescriptionText,
         loadMasterCvText: async () => {
           if (resolvedMasterCvText) {
             return resolvedMasterCvText;
@@ -529,7 +614,15 @@ export class CvAdaptationService {
             try {
               masterCvText = await extractTextFromCvFile(file);
             } catch (error) {
-              this.mapFileExtractionError(error);
+              return await this.mapFileExtractionError(error, {
+                context: this.buildProtectionContext(
+                  analysisContext,
+                  userId,
+                  "cv-adaptation/analyze",
+                ),
+                file,
+                routeKey: "cv-adaptation/analyze",
+              });
             }
 
             if (dto.saveAsMaster) {
@@ -590,7 +683,7 @@ export class CvAdaptationService {
           cvFingerprint: file ? this.buildFileFingerprint(file.buffer) : null,
           hasFile: Boolean(file),
           hasTextInput,
-          jobDescriptionText: dto.jobDescriptionText,
+          jobDescriptionText: normalizedJobDescriptionText,
           masterResumeId: dto.masterResumeId ?? null,
           route: "cv-adaptation/analyze",
           saveAsMaster: dto.saveAsMaster === true,
@@ -932,8 +1025,8 @@ export class CvAdaptationService {
       existingReference ?? undefined,
     );
 
-    await this.database.cvAdaptation.update({
-      where: { id },
+    const updateResult = await this.database.cvAdaptation.updateMany({
+      where: { id: adaptation.id, userId },
       data: {
         paymentStatus: "pending",
         paymentReference: intent.paymentReference,
@@ -944,6 +1037,10 @@ export class CvAdaptationService {
           : {}),
       },
     });
+
+    if (updateResult.count !== 1) {
+      throw new NotFoundException("adaptation not found");
+    }
 
     return {
       checkoutUrl: intent.checkoutUrl,
@@ -1020,20 +1117,19 @@ export class CvAdaptationService {
     }
 
     const updated = await this.database.$transaction(async (tx) => {
-      const currentUnlock = await tx.cvUnlock.findUnique({
-        where: { cvAdaptationId: adaptation.id },
+      const currentAdaptation = await tx.cvAdaptation.findFirst({
+        where: { id: adaptation.id, userId },
+        include: {
+          template: { select: { id: true, name: true, slug: true } },
+          cvUnlock: { select: { status: true } },
+        },
       });
 
-      if (currentUnlock?.status === "UNLOCKED") {
-        const currentAdaptation = await tx.cvAdaptation.findUnique({
-          where: { id: adaptation.id },
-          include: {
-            template: { select: { id: true, name: true, slug: true } },
-          },
-        });
-        if (!currentAdaptation) {
-          throw new NotFoundException("adaptation not found");
-        }
+      if (!currentAdaptation) {
+        throw new NotFoundException("adaptation not found");
+      }
+
+      if (currentAdaptation.cvUnlock?.status === "UNLOCKED") {
         return currentAdaptation;
       }
 
@@ -1045,12 +1141,12 @@ export class CvAdaptationService {
       }
 
       const updatedContent = this.withFrozenMissingKeywords(
-        adaptation.adaptedContentJson,
+        currentAdaptation.adaptedContentJson,
         dto?.selectedMissingKeywords,
       );
 
       const nextAdaptation = await tx.cvAdaptation.update({
-        where: { id: adaptation.id },
+        where: { id: currentAdaptation.id },
         data: {
           status: "paid",
           isUnlocked: true,
@@ -1063,7 +1159,7 @@ export class CvAdaptationService {
       await tx.cvUnlock.create({
         data: {
           userId,
-          cvAdaptationId: adaptation.id,
+          cvAdaptationId: currentAdaptation.id,
           creditsConsumed: hasUnlimitedClaims ? 0 : 1,
           source: hasUnlimitedClaims ? "ADMIN" : "CREDIT",
           status: "UNLOCKED",
@@ -1173,8 +1269,8 @@ export class CvAdaptationService {
   ): void {
     if (provider !== "mercadopago") return;
 
-    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
-    if (!secret) return; // dev: sem secret configurado, aceita sem validar
+    const secrets = getMercadoPagoWebhookSecrets();
+    if (secrets.length === 0) return; // dev: sem secret configurado, aceita sem validar
 
     if (!xSignature) {
       throw new UnauthorizedException("Missing webhook signature");
@@ -1203,15 +1299,20 @@ export class CvAdaptationService {
         : "";
 
     const message = `id:${dataId};request-id:${xRequestId ?? ""};ts:${ts};`;
-    const expected = createHmac("sha256", secret).update(message).digest("hex");
-
-    const expectedBuf = Buffer.from(expected);
     const receivedBuf = Buffer.from(v1);
 
-    if (
-      expectedBuf.length !== receivedBuf.length ||
-      !timingSafeEqual(expectedBuf, receivedBuf)
-    ) {
+    const matches = secrets.some((secret) => {
+      const expected = createHmac("sha256", secret)
+        .update(message)
+        .digest("hex");
+      const expectedBuf = Buffer.from(expected);
+      return (
+        expectedBuf.length === receivedBuf.length &&
+        timingSafeEqual(expectedBuf, receivedBuf)
+      );
+    });
+
+    if (!matches) {
       throw new UnauthorizedException("Invalid webhook signature");
     }
   }
@@ -1399,6 +1500,8 @@ export class CvAdaptationService {
   }
 
   private logAuditEvent(entry: AuditEntry): void {
+    const sanitizedPayload = sanitizePaymentAuditPayload(entry.rawPayload);
+
     this.database.paymentAuditLog
       .create({
         data: {
@@ -1413,8 +1516,8 @@ export class CvAdaptationService {
           internalCheckoutType: entry.internalCheckoutType ?? null,
           mpStatus: entry.mpStatus ?? null,
           errorMessage: entry.errorMessage ?? null,
-          ...(entry.rawPayload != null
-            ? { rawPayload: entry.rawPayload as Prisma.InputJsonValue }
+          ...(sanitizedPayload != null
+            ? { rawPayload: sanitizedPayload as Prisma.InputJsonValue }
             : {}),
         },
       })
@@ -2040,17 +2143,95 @@ export class CvAdaptationService {
     });
   }
 
-  private mapFileExtractionError(error: unknown): never {
+  private async mapFileExtractionError(
+    error: unknown,
+    telemetry?: {
+      context: AnalysisRequestContext & { routeKey: string };
+      file?: FileUpload;
+      routeKey: string;
+    },
+  ): Promise<never> {
+    const emitTelemetry = async (reason: string) => {
+      if (!telemetry?.context) {
+        return;
+      }
+
+      await this.analysisTelemetry
+        .emit("payload_invalid", telemetry.context, {
+          metadata: {
+            fileExtension: telemetry.file?.originalname.includes(".")
+              ? `.${telemetry.file.originalname.split(".").pop()?.toLowerCase() ?? ""}`
+              : null,
+            fileSizeBytes: telemetry.file?.size ?? null,
+            mimeType: telemetry.file?.mimetype ?? null,
+            reason,
+          },
+          routeKey: telemetry.routeKey,
+        })
+        .catch(() => undefined);
+    };
+
     if (error instanceof Error) {
+      if (error.name === "InvalidPdfFormatError") {
+        await emitTelemetry("upload_invalid_pdf_signature");
+        this.logger.warn("[cv-validation] invalid PDF signature/content");
+        throw new BadRequestException(
+          "O arquivo enviado nao e um PDF valido. Exporte o curriculo novamente em PDF e tente de novo.",
+        );
+      }
+      if (error.name === "PdfTooLargeError") {
+        await emitTelemetry("upload_pdf_too_large");
+        this.logger.warn("[cv-validation] PDF exceeds maximum size");
+        throw new BadRequestException(
+          "O arquivo excede o limite de 5 MB. Envie uma versao menor do PDF.",
+        );
+      }
+      if (error.name === "PdfTooManyPagesError") {
+        await emitTelemetry("upload_pdf_too_many_pages");
+        this.logger.warn("[cv-validation] PDF exceeds maximum page limit");
+        throw new BadRequestException(
+          "O PDF possui paginas demais para analise automatica. Envie uma versao reduzida do curriculo.",
+        );
+      }
+      if (error.name === "CvFileTooLargeError") {
+        await emitTelemetry("upload_file_too_large");
+        this.logger.warn("[cv-validation] CV file exceeds maximum size");
+        throw new BadRequestException(
+          "O arquivo excede o limite de 5 MB. Envie uma versao menor do CV.",
+        );
+      }
+      if (error.name === "CvExtractionTimeoutError") {
+        await emitTelemetry("parser_timeout");
+        this.logger.warn("[cv-validation] CV extraction timed out");
+        throw new BadRequestException(
+          "Nao foi possivel processar o arquivo dentro do tempo limite. Tente novamente com um arquivo menor.",
+        );
+      }
+      if (error.name === "InvalidDocxFileError") {
+        await emitTelemetry("upload_invalid_docx_structure");
+        this.logger.warn("[cv-validation] invalid DOCX structure/signature");
+        throw new BadRequestException(
+          "O arquivo DOCX enviado parece invalido ou corrompido. Exporte novamente e tente de novo.",
+        );
+      }
+      if (error.name === "InvalidOdtFileError") {
+        await emitTelemetry("upload_invalid_odt_structure");
+        this.logger.warn("[cv-validation] invalid ODT structure/signature");
+        throw new BadRequestException(
+          "O arquivo ODT enviado parece invalido ou corrompido. Exporte novamente e tente de novo.",
+        );
+      }
       if (error.name === "NotACvError") {
+        await emitTelemetry("upload_not_a_cv");
         this.logger.warn(
           "[cv-validation] uploaded file does not look like a CV",
         );
         throw new BadRequestException(
-          "O arquivo enviado não parece ser um currículo. Envie um CV em PDF, DOCX, DOC ou ODT para análise.",
+          "O arquivo enviado nao parece ser um curriculo. Envie um CV em PDF, DOCX ou ODT para analise.",
         );
       }
       if (error.name === "ScannedPdfError") {
+        await emitTelemetry("upload_pdf_no_text");
         this.logger.warn(
           "[cv-validation] PDF has no extractable text (scanned/image)",
         );
@@ -2058,10 +2239,12 @@ export class CvAdaptationService {
           "Não conseguimos ler o texto do PDF. Envie um arquivo com texto selecionável.",
         );
       }
+      await emitTelemetry("upload_extraction_failed");
       this.logger.warn(
         `[cv-validation] file extraction failed: ${error.message}`,
       );
     }
+    await emitTelemetry("upload_extraction_failed");
     throw new BadRequestException(
       "Não foi possível ler o arquivo. Verifique se ele não está protegido por senha, corrompido ou em formato inválido.",
     );
@@ -2245,8 +2428,15 @@ export class CvAdaptationService {
     );
   }
 
-  private validateJobDescription(text: string): void {
+  private validateJobDescription(
+    text: string,
+    telemetry?: {
+      context: AnalysisRequestContext & { routeKey: string };
+      routeKey: string;
+    },
+  ): string {
     const JOB_MIN_CHARS = 80;
+    const JOB_MAX_CHARS = 12_000;
     const JOB_SIGNALS = [
       "requisitos",
       "responsabilidades",
@@ -2276,16 +2466,44 @@ export class CvAdaptationService {
       "candidate",
     ];
 
-    if (!text || text.trim().length < JOB_MIN_CHARS) {
+    const normalized = this.normalizeSnapshotText(text);
+
+    const emitTelemetry = (reason: string) => {
+      if (!telemetry?.context) {
+        return;
+      }
+
+      void this.analysisTelemetry
+        .emit("payload_invalid", telemetry.context, {
+          metadata: {
+            jobDescriptionLength: normalized.length,
+            reason,
+          },
+          routeKey: telemetry.routeKey,
+        })
+        .catch(() => undefined);
+    };
+
+    if (!normalized || normalized.length < JOB_MIN_CHARS) {
+      emitTelemetry("job_description_too_short");
       this.logger.warn("[cv-validation] job description too short");
       throw new BadRequestException(
         "O texto informado não parece uma descrição de vaga. Cole uma descrição válida para continuar.",
       );
     }
 
-    const lower = text.toLowerCase();
+    if (normalized.length > JOB_MAX_CHARS) {
+      emitTelemetry("job_description_too_long");
+      this.logger.warn("[cv-validation] job description too long");
+      throw new BadRequestException(
+        "A descricao da vaga excede o limite de 12.000 caracteres.",
+      );
+    }
+
+    const lower = normalized.toLowerCase();
     const hasSignal = JOB_SIGNALS.some((s) => lower.includes(s));
     if (!hasSignal) {
+      emitTelemetry("job_description_invalid_format");
       this.logger.warn(
         "[cv-validation] job description does not look like a job posting",
       );
@@ -2293,6 +2511,8 @@ export class CvAdaptationService {
         "O texto informado não parece uma descrição de vaga. Cole uma descrição válida para continuar.",
       );
     }
+
+    return normalized;
   }
 
   private async uploadResumeSourceFile(userId: string, file: FileUpload) {
@@ -2317,4 +2537,20 @@ export class CvAdaptationService {
     const raw = err instanceof Error ? err.message : "Unknown AI error";
     return raw.slice(0, 500);
   }
+}
+
+function getMercadoPagoWebhookSecrets(): string[] {
+  const candidates = [
+    process.env.MERCADOPAGO_PRO_WEBHOOK_SECRET,
+    process.env.MERCADOPAGO_BRICK_WEBHOOK_SECRET,
+    process.env.MERCADOPAGO_WEBHOOK_SECRET,
+  ];
+
+  return Array.from(
+    new Set(
+      candidates
+        .map((value) => value?.trim() ?? "")
+        .filter((value) => value.length > 0),
+    ),
+  );
 }

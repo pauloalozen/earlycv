@@ -5,14 +5,50 @@ import { createPostRedirectResponse } from "@/lib/route-response";
 const VALID_PLAN_IDS = ["starter", "pro", "turbo"] as const;
 type PlanId = (typeof VALID_PLAN_IDS)[number];
 
-const PLAN_LINKS: Record<PlanId, string | undefined> = {
-  starter: process.env.LINK_PLAN_STARTER,
-  pro: process.env.LINK_PLAN_PRO,
-  turbo: process.env.LINK_PLAN_TURBO,
-};
-
 function isPlanId(value: string): value is PlanId {
   return VALID_PLAN_IDS.includes(value as PlanId);
+}
+
+function loginRedirectPath(planId: PlanId): string {
+  const next = encodeURIComponent(`/plans/checkout?plan=${planId}`);
+  return `/entrar?next=${next}`;
+}
+
+async function createCheckoutRedirect(
+  requestUrl: string,
+  planId: PlanId,
+  adaptationId?: string,
+) {
+  try {
+    const checkout = await createPlanCheckout(planId, adaptationId);
+
+    if (checkout.checkoutMode === "brick") {
+      return Response.redirect(
+        new URL(`/pagamento/checkout/${checkout.purchaseId}`, requestUrl),
+        303,
+      );
+    }
+
+    return Response.redirect(checkout.checkoutUrl, 303);
+  } catch {
+    return createPostRedirectResponse(requestUrl, "/planos?error=checkout-failed");
+  }
+}
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const planId = String(url.searchParams.get("plan") ?? "").trim();
+
+  if (!isPlanId(planId)) {
+    return createPostRedirectResponse(request.url, "/planos?error=plano-invalido");
+  }
+
+  const user = await getCurrentAppUserFromCookies();
+  if (!user) {
+    return createPostRedirectResponse(request.url, loginRedirectPath(planId));
+  }
+
+  return createCheckoutRedirect(request.url, planId);
 }
 
 export async function POST(request: Request) {
@@ -34,19 +70,5 @@ export async function POST(request: Request) {
     );
   }
 
-  // Use pre-configured MP link if available (adaptationId can't be forwarded here)
-  const directLink = PLAN_LINKS[planId];
-  if (directLink) {
-    return Response.redirect(directLink, 303);
-  }
-
-  try {
-    const { checkoutUrl } = await createPlanCheckout(planId, adaptationId);
-    return Response.redirect(checkoutUrl, 303);
-  } catch {
-    return createPostRedirectResponse(
-      request.url,
-      "/planos?error=checkout-failed",
-    );
-  }
+  return createCheckoutRedirect(request.url, planId, adaptationId);
 }

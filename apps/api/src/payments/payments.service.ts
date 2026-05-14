@@ -1,13 +1,21 @@
+import { randomUUID } from "node:crypto";
+
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from "@nestjs/common";
 import MercadoPagoConfig, { Payment } from "mercadopago";
+import {
+  BrickPayloadValidationError,
+  parseBrickPaymentPayload,
+} from "./brick-payload";
+import { summarizeSafeError } from "./payment-audit-sanitization";
 import { DatabaseService } from "../database/database.service";
 import { PlansService } from "../plans/plans.service";
 
@@ -78,14 +86,17 @@ export type BrickCheckoutDataResponse = {
   originAdaptationId: string | null;
   payerEmail: string | null;
   checkoutMode: "brick";
+  unitsIncluded: number | null;
+  unitPrice: number | null;
 };
 
-export type BrickPayDryRunResponse = {
-  dryRun: true;
+export type BrickPayResponse = {
   purchaseId: string;
-  status: "validated";
+  status: "approved" | "pending";
   checkoutMode: "brick";
-  message: string;
+  redirectTo: string;
+  qrCodeBase64: string | null;
+  qrCodeText: string | null;
 };
 
 @Injectable()
@@ -106,6 +117,17 @@ export class PaymentsService {
     });
 
     if (purchase) {
+      const latestRejectionLog =
+        statusFromPurchase(purchase.status) === "failed"
+          ? await this.database.paymentAuditLog.findFirst({
+              where: {
+                internalCheckoutId: checkoutId,
+                eventType: "payment_rejected",
+              },
+              orderBy: { createdAt: "desc" },
+              select: { errorMessage: true },
+            })
+          : null;
       const adaptation = purchase.originAdaptationId
         ? await this.database.cvAdaptation.findFirst({
             where: {
@@ -134,7 +156,7 @@ export class PaymentsService {
         autoUnlockError: purchase.autoUnlockError,
         adaptationUnlocked: adaptation?.isUnlocked ?? false,
         paymentId: purchase.mpPaymentId ?? null,
-        message: buildMessage(status, "plan"),
+        message: buildMessage(status, "plan", latestRejectionLog?.errorMessage ?? null),
       };
     }
 
@@ -211,9 +233,17 @@ export class PaymentsService {
       });
     }
 
+    const amount = purchase.amountInCents / 100;
+    const unitsIncluded =
+      purchase.originAction === "unlock_cv"
+        ? 1
+        : getPlanUnits(purchase.planType);
+    const unitPrice =
+      unitsIncluded && unitsIncluded > 0 ? amount / unitsIncluded : null;
+
     return {
       purchaseId: purchase.id,
-      amount: purchase.amountInCents / 100,
+      amount,
       currency: purchase.currency,
       description: buildBrickDescription(
         purchase.planType,
@@ -224,6 +254,8 @@ export class PaymentsService {
       originAdaptationId: purchase.originAdaptationId,
       payerEmail: purchase.user?.email ?? null,
       checkoutMode: "brick",
+      unitsIncluded,
+      unitPrice,
     };
   }
 
@@ -242,15 +274,23 @@ export class PaymentsService {
     userId: string,
     purchaseId: string,
     payload: unknown,
-  ): Promise<BrickPayDryRunResponse> {
+  ): Promise<BrickPayResponse> {
     const purchase = await this.database.planPurchase.findFirst({
       where: { id: purchaseId, userId },
       select: {
         id: true,
         amountInCents: true,
+        paymentReference: true,
+        planType: true,
         status: true,
+        mpPaymentId: true,
         originAction: true,
         originAdaptationId: true,
+        user: {
+          select: {
+            email: true,
+          },
+        },
       },
     });
 
@@ -258,7 +298,7 @@ export class PaymentsService {
       throw new NotFoundException("Checkout não encontrado.");
     }
 
-    if (purchase.status !== "pending" && purchase.status !== "none") {
+    if (purchase.status !== "pending") {
       throw new NotFoundException("Checkout não encontrado.");
     }
 
@@ -278,37 +318,270 @@ export class PaymentsService {
       throw new ForbiddenException("Checkout Brick não habilitado para este usuário.");
     }
 
-    if (!payload || typeof payload !== "object") {
+    let parsedPayload: ReturnType<typeof parseBrickPaymentPayload>;
+    try {
+      parsedPayload = parseBrickPaymentPayload(payload);
+    } catch (error) {
+      if (error instanceof BrickPayloadValidationError) {
+        throw new BadRequestException({
+          errorCode: error.code,
+          message: error.message,
+        });
+      }
       throw new BadRequestException("Payload de pagamento inválido.");
     }
 
-    const dryRunEnabled =
-      (process.env.PAYMENT_BRICK_DRY_RUN ?? "true").trim().toLowerCase() ===
-      "true";
-
-    if (!dryRunEnabled) {
-      throw new BadRequestException(
-        "Real payment flow not implemented yet. Enable PAYMENT_BRICK_DRY_RUN=true.",
-      );
+    if (purchase.mpPaymentId) {
+      throw new ConflictException({
+        errorCode: "brick_payment_in_progress",
+        message: "Pagamento em processamento.",
+      });
     }
 
-    const payloadKeys = Object.keys(payload as Record<string, unknown>);
-    const hasAnyInput = payloadKeys.length > 0;
-    if (!hasAnyInput) {
-      throw new BadRequestException("Payload de pagamento inválido.");
+    const lock = await this.database.planPurchase.updateMany({
+      where: {
+        id: purchase.id,
+        userId,
+        status: "pending",
+        mpPaymentId: null,
+      },
+      data: {
+        status: "processing_payment",
+      },
+    });
+
+    if (lock.count !== 1) {
+      throw new ConflictException({
+        errorCode: "brick_payment_in_progress",
+        message: "Pagamento em processamento.",
+      });
     }
 
+    const correlationId = randomUUID();
+    const idempotencyKey = `brick:${purchase.id}:${correlationId}`;
+    const payerEmail =
+      parsedPayload.payerEmail?.trim() || purchase.user?.email?.trim() || null;
+    const payerIdentificationPresent = Boolean(parsedPayload.payerIdentification);
+
+    const paymentAuditLog = (this.database as unknown as {
+      paymentAuditLog?: {
+        create?: (input: {
+          data: Record<string, unknown>;
+        }) => Promise<unknown>;
+      };
+    }).paymentAuditLog;
+
+    void paymentAuditLog
+      ?.create?.({
+        data: {
+          provider: "mercadopago",
+          eventType: "brick_payment_create_started",
+          actionTaken: "provider_call_pending",
+          externalReference: purchase.id,
+          internalCheckoutId: purchase.id,
+          internalCheckoutType: "plan",
+          mpStatus: "processing_payment",
+          rawPayload: {
+            checkoutMode: "brick",
+            idempotencyKey,
+            correlationId,
+            paymentMethodId: parsedPayload.paymentMethodId,
+            payerEmailPresent: Boolean(payerEmail),
+            payerIdentificationPresent,
+          },
+        },
+      })
+      ?.catch(() => undefined);
+
+    const client = this.getMercadoPagoClient();
+    if (!client) {
+      await this.database.planPurchase.update({
+        where: { id: purchase.id },
+        data: { status: "pending" },
+      });
+      throw new BadRequestException({
+        errorCode: "brick_payment_provider_error",
+        message: "Pagamento indisponivel no momento. Tente novamente.",
+      });
+    }
+
+    const paymentClient = new Payment(client);
+    const transactionAmount = purchase.amountInCents / 100;
     this.logger.log(
-      `[checkout:brick] dry_run_validated purchase=${purchase.id} user=${userId} status=${purchase.status}`,
+      `[checkout:brick:pay] create_request purchase=${purchase.id} user=${userId} paymentMethod=${parsedPayload.paymentMethodId} payerEmailPresent=${String(Boolean(payerEmail))} payerIdentificationPresent=${String(payerIdentificationPresent)} transactionAmount=${String(transactionAmount)}`,
     );
+    const notificationUrlResolution = resolveMercadoPagoNotificationUrl({
+      apiUrl: process.env.API_URL,
+      fallbackApiUrl: process.env.NEXT_PUBLIC_API_URL,
+      routePath: "/api/plans/webhook/mercadopago",
+      requireHttps: process.env.NODE_ENV === "production",
+    });
+    const notificationUrl = notificationUrlResolution.url;
+    if (!notificationUrl) {
+      const debugId = randomUUID();
+      this.logger.error(
+        `[checkout:brick:pay] invalid_notification_url debugId=${debugId} apiUrl=${String(process.env.API_URL ?? "")} fallbackApiUrl=${String(process.env.NEXT_PUBLIC_API_URL ?? "")} reason=${notificationUrlResolution.reason}`,
+      );
+      await this.database.planPurchase.update({
+        where: { id: purchase.id },
+        data: { status: "pending" },
+      });
+      const isProduction = process.env.NODE_ENV === "production";
+      const message = isProduction
+        ? "Notification URL invalida para Mercado Pago. Configure API_URL com URL absoluta valida."
+        : `Notification URL invalida para Mercado Pago. reason=${notificationUrlResolution.reason} debugId=${debugId}`;
+      throw new BadRequestException({
+        errorCode: "brick_notification_url_invalid",
+        message,
+      });
+    }
 
-    return {
-      dryRun: true,
-      purchaseId: purchase.id,
-      status: "validated",
-      checkoutMode: "brick",
-      message: "Brick payload validated. No Mercado Pago payment was created.",
-    };
+    try {
+      const response = await paymentClient.create({
+        body: {
+          transaction_amount: transactionAmount,
+          payment_method_id: parsedPayload.paymentMethodId,
+          ...(parsedPayload.kind === "card"
+            ? {
+                token: parsedPayload.token,
+                installments: parsedPayload.installments,
+                ...(parsedPayload.issuerId
+                  ? { issuer_id: parsedPayload.issuerId }
+                  : {}),
+              }
+            : {}),
+          payer: {
+            ...(payerEmail
+              ? { email: payerEmail }
+              : {}),
+            ...(parsedPayload.payerIdentification
+              ? { identification: parsedPayload.payerIdentification }
+              : {}),
+          },
+          external_reference: purchase.id,
+          description: buildBrickDescription(purchase.planType, purchase.originAction),
+          metadata: {
+            purchaseId: purchase.id,
+            paymentReference: purchase.paymentReference,
+            userId,
+            planId: purchase.planType,
+            originAction: purchase.originAction,
+            originAdaptationId: purchase.originAdaptationId,
+            source: "payment_brick",
+          },
+          notification_url: notificationUrl,
+        },
+        requestOptions: {
+          idempotencyKey,
+        },
+      });
+
+      const mpPaymentId =
+        response.id !== undefined && response.id !== null
+          ? String(response.id)
+          : null;
+      const mpStatus = String(response.status ?? "pending");
+
+      if (mpStatus === "approved") {
+        await this.database.planPurchase.update({
+          where: { id: purchase.id },
+          data: {
+            mpPaymentId,
+          },
+        });
+        await this.plansService.applyApprovedPurchase(purchase.id);
+        return {
+          purchaseId: purchase.id,
+          status: "approved",
+          checkoutMode: "brick",
+          redirectTo: `/pagamento/concluido?checkoutId=${purchase.id}`,
+          qrCodeBase64: null,
+          qrCodeText: null,
+        };
+      }
+
+      if (
+        mpStatus === "rejected" ||
+        mpStatus === "cancelled" ||
+        mpStatus === "charged_back" ||
+        mpStatus === "refunded"
+      ) {
+        const rejectionDetail = summarizePaymentRejection(response);
+        await this.database.planPurchase.update({
+          where: { id: purchase.id },
+          data: {
+            mpPaymentId,
+            status: "pending",
+          },
+        });
+        const isProduction = process.env.NODE_ENV === "production";
+        const message = isProduction
+          ? "Pagamento recusado. Verifique os dados ou tente outro meio de pagamento."
+          : `Pagamento recusado. Verifique os dados ou tente outro meio de pagamento. Detalhe: ${rejectionDetail}`;
+        throw new BadRequestException({
+          errorCode: "brick_payment_rejected",
+          message,
+        });
+      }
+
+      if (mpStatus === "pending" || mpStatus === "in_process") {
+        const pixData = extractPixTransactionData(response);
+        await this.database.planPurchase.update({
+          where: { id: purchase.id },
+          data: {
+            mpPaymentId,
+            status: "pending_payment",
+          },
+        });
+        return {
+          purchaseId: purchase.id,
+          status: "pending",
+          checkoutMode: "brick",
+          redirectTo: `/pagamento/pendente?checkoutId=${purchase.id}`,
+          qrCodeBase64: pixData.qrCodeBase64,
+          qrCodeText: pixData.qrCodeText,
+        };
+      }
+
+      const pixData = extractPixTransactionData(response);
+      await this.database.planPurchase.update({
+        where: { id: purchase.id },
+        data: {
+          mpPaymentId,
+          status: "pending_payment",
+        },
+      });
+      return {
+        purchaseId: purchase.id,
+        status: "pending",
+        checkoutMode: "brick",
+        redirectTo: `/pagamento/pendente?checkoutId=${purchase.id}`,
+        qrCodeBase64: pixData.qrCodeBase64,
+        qrCodeText: pixData.qrCodeText,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      const debugId = randomUUID();
+      const providerDetail = summarizeProviderError(error);
+      this.logger.error(
+        `[checkout:brick:pay] provider_error debugId=${debugId} purchase=${purchase.id} user=${userId} paymentMethod=${parsedPayload.paymentMethodId} payerEmailPresent=${String(Boolean(payerEmail))} payerIdentificationPresent=${String(Boolean(parsedPayload.payerIdentification))} detail=${providerDetail}`,
+      );
+      await this.database.planPurchase.update({
+        where: { id: purchase.id },
+        data: { status: "pending_payment" },
+      });
+
+      const isProduction = process.env.NODE_ENV === "production";
+      const safeMessage = isProduction
+        ? "Nao foi possivel processar o pagamento agora. Tente novamente em instantes."
+        : `Nao foi possivel processar o pagamento agora. Detalhe: ${providerDetail}. debugId=${debugId}`;
+      throw new BadRequestException({
+        errorCode: "brick_payment_provider_error",
+        message: safeMessage,
+      });
+    }
   }
 
   async reconcilePending(limit = 50): Promise<{
@@ -317,7 +590,7 @@ export class PaymentsService {
     total: number;
   }> {
     const pendingPurchases = await this.database.planPurchase.findMany({
-      where: { status: "pending" },
+      where: { status: { in: ["pending", "processing_payment", "pending_payment"] } },
       take: limit,
       orderBy: { createdAt: "asc" },
     });
@@ -510,70 +783,156 @@ export class PaymentsService {
   }
 
   private getMercadoPagoClient(): MercadoPagoConfig | null {
+    const token = this.getBrickAccessToken();
+    if (!token) return null;
+    return new MercadoPagoConfig({ accessToken: token });
+  }
+
+  private getBrickAccessToken(): string | null {
+    const explicit = process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN?.trim();
+    if (explicit) {
+      return explicit;
+    }
+
     const isProduction =
       process.env.MERCADOPAGO_MODE === "production" ||
       process.env.NODE_ENV === "production";
     const token = isProduction
-      ? process.env.MERCADOPAGO_ACCESS_TOKEN
-      : (process.env.MERCADOPAGO_ACCESS_TOKEN_TEST ??
-        process.env.MERCADOPAGO_ACCESS_TOKEN);
+      ? process.env.MERCADOPAGO_ACCESS_TOKEN?.trim()
+      : (process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST ??
+        process.env.MERCADOPAGO_ACCESS_TOKEN_TEST ??
+        process.env.MERCADOPAGO_ACCESS_TOKEN)?.trim();
 
-    if (!token) return null;
-    return new MercadoPagoConfig({ accessToken: token });
+    return token || null;
   }
 
   private async evaluateBrickEligibility(userId: string): Promise<{
     useBrick: boolean;
     reason: string;
   }> {
-    const mode = (process.env.PAYMENT_CHECKOUT_MODE ?? "pro").trim();
-    const enabled =
-      (process.env.PAYMENT_BRICK_ENABLED ?? "false").trim().toLowerCase() ===
-      "true";
+    const mode = (process.env.PAYMENT_CHECKOUT_MODE ?? "pro").trim().toLowerCase();
 
     if (mode !== "brick") {
       return { useBrick: false, reason: "mode_not_brick" };
     }
 
-    if (!enabled) {
-      return { useBrick: false, reason: "brick_disabled" };
-    }
-
-    const user = await this.database.user.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true },
-    });
-
-    if (!user) {
-      return { useBrick: false, reason: "user_not_found" };
-    }
-
-    const allowedUserIds = parseCsvList(process.env.PAYMENT_BRICK_ALLOWED_USER_IDS);
-    const allowedEmails = parseCsvList(process.env.PAYMENT_BRICK_ALLOWED_EMAILS).map(
-      (value) => value.toLowerCase(),
-    );
-
-    if (allowedUserIds.length === 0 && allowedEmails.length === 0) {
-      return { useBrick: true, reason: "global_enabled_no_allowlist" };
-    }
-
-    const normalizedUserId = user.id.trim();
-    const normalizedEmail = user.email.trim().toLowerCase();
-    const userIdMatch = allowedUserIds.includes(normalizedUserId);
-    const emailMatch = allowedEmails.includes(normalizedEmail);
-
-    if (userIdMatch || emailMatch) {
-      return { useBrick: true, reason: "allowlist_match" };
-    }
-
-    return { useBrick: false, reason: "allowlist_miss" };
+    void userId;
+    return { useBrick: true, reason: "mode_brick" };
   }
 }
 
-function mapPaymentStatus(raw: string): CheckoutStatus {
+function summarizeProviderError(error: unknown): string {
+  return summarizeSafeError(error);
+}
+
+function summarizePaymentRejection(paymentResponse: unknown): string {
+  if (!paymentResponse || typeof paymentResponse !== "object") {
+    return "status=rejected";
+  }
+
+  const source = paymentResponse as {
+    status?: unknown;
+    status_detail?: unknown;
+    payment_method_id?: unknown;
+  };
+  const status = normalizeOptionalString(source.status) ?? "rejected";
+  const statusDetail = normalizeOptionalString(source.status_detail) ?? "unknown";
+  const paymentMethodId = normalizeOptionalString(source.payment_method_id);
+
+  if (!paymentMethodId) {
+    return `status=${status}; detail=${statusDetail}`;
+  }
+
+  return `status=${status}; detail=${statusDetail}; method=${paymentMethodId}`;
+}
+
+function extractPixTransactionData(response: unknown): {
+  qrCodeBase64: string | null;
+  qrCodeText: string | null;
+} {
+  if (!response || typeof response !== "object") {
+    return { qrCodeBase64: null, qrCodeText: null };
+  }
+
+  const pointOfInteraction = (response as { point_of_interaction?: unknown })
+    .point_of_interaction;
+  if (!pointOfInteraction || typeof pointOfInteraction !== "object") {
+    return { qrCodeBase64: null, qrCodeText: null };
+  }
+
+  const transactionData = (
+    pointOfInteraction as { transaction_data?: unknown }
+  ).transaction_data;
+  if (!transactionData || typeof transactionData !== "object") {
+    return { qrCodeBase64: null, qrCodeText: null };
+  }
+
+  const qrCodeBase64 = normalizeOptionalString(
+    (transactionData as { qr_code_base64?: unknown }).qr_code_base64,
+  );
+  const qrCodeText = normalizeOptionalString(
+    (transactionData as { qr_code?: unknown }).qr_code,
+  );
+
+  return { qrCodeBase64, qrCodeText };
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function resolveMercadoPagoNotificationUrl(input: {
+  apiUrl?: string;
+  fallbackApiUrl?: string;
+  routePath: string;
+  requireHttps: boolean;
+}): { url: string | null; reason: string } {
+  const candidateRaw = input.apiUrl?.trim() || input.fallbackApiUrl?.trim();
+  if (!candidateRaw) return { url: null, reason: "missing_base_url" };
+
+  let base: URL;
+  try {
+    base = new URL(candidateRaw);
+  } catch {
+    return { url: null, reason: "base_url_parse_failed" };
+  }
+
+  const protocol = base.protocol.toLowerCase();
+  if (protocol !== "http:" && protocol !== "https:") {
+    return { url: null, reason: `unsupported_protocol:${protocol}` };
+  }
+
+  if (input.requireHttps && protocol !== "https:") {
+    return { url: null, reason: "https_required_in_production" };
+  }
+
+  const normalizedBasePath = base.pathname.endsWith("/")
+    ? base.pathname.slice(0, -1)
+    : base.pathname;
+  const routePath = input.routePath.startsWith("/")
+    ? input.routePath
+    : `/${input.routePath}`;
+
+  const finalPath = normalizedBasePath.endsWith("/api")
+    ? `${normalizedBasePath}${routePath.replace(/^\/api/, "")}`
+    : `${normalizedBasePath}${routePath}`;
+
+  base.pathname = finalPath;
+  base.search = "";
+  base.hash = "";
+  return { url: base.toString(), reason: "ok" };
+}
+
+function statusFromPurchase(raw: string): CheckoutStatus {
   if (raw === "completed") return "approved";
   if (raw === "failed") return "failed";
   return "pending";
+}
+
+function mapPaymentStatus(raw: string): CheckoutStatus {
+  return statusFromPurchase(raw);
 }
 
 function mapNextAction(status: CheckoutStatus): NextAction {
@@ -592,11 +951,18 @@ function planTypeToName(planType: string): string | null {
   return names[planType] ?? null;
 }
 
-function buildMessage(status: CheckoutStatus, _type: "plan"): string {
+function buildMessage(
+  status: CheckoutStatus,
+  _type: "plan",
+  failureDetail: string | null,
+): string {
   if (status === "approved") {
     return "Pagamento confirmado! Seus créditos estão disponíveis.";
   }
   if (status === "failed") {
+    if (failureDetail === "cc_rejected_high_risk") {
+      return "Pagamento recusado por analise de risco. Tente outro cartao ou Pix.";
+    }
     return "Pagamento não aprovado. Tente novamente.";
   }
   return "Aguardando confirmação do pagamento...";
@@ -616,10 +982,23 @@ function buildBrickDescription(
   return planName ? `EarlyCV - pacote ${planName}` : "EarlyCV - pacote";
 }
 
-function parseCsvList(value: string | undefined): string[] {
-  if (!value) return [];
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
+function getPlanUnits(planType: string): number | null {
+  if (planType === "starter") return requireEnvInt("QNT_CV_PLAN_STARTER");
+  if (planType === "pro") return requireEnvInt("QNT_CV_PLAN_PRO");
+  if (planType === "turbo") return requireEnvInt("QNT_CV_PLAN_TURBO");
+  return null;
+}
+
+function requireEnvInt(...names: string[]): number {
+  for (const name of names) {
+    const raw = process.env[name];
+    if (raw) {
+      const value = parseInt(raw, 10);
+      if (isNaN(value)) {
+        throw new Error(`Env var ${name} must be a valid integer, got: "${raw}"`);
+      }
+      return value;
+    }
+  }
+  throw new Error(`Required env var(s) [${names.join(", ")}] are not set`);
 }

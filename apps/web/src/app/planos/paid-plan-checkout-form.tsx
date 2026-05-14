@@ -1,14 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type FormEvent,
-} from "react";
+import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
 
 type PaidPlanCheckoutFormProps = {
   adaptationId?: string;
@@ -19,11 +12,6 @@ type PaidPlanCheckoutFormProps = {
   planId: "starter" | "pro" | "turbo";
   planLabel: string;
   planPrice: number;
-};
-
-type CheckoutDraft = {
-  checkoutUrl: string;
-  purchaseId: string;
 };
 
 export function PaidPlanCheckoutForm({
@@ -39,21 +27,10 @@ export function PaidPlanCheckoutForm({
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [checkoutDraft, setCheckoutDraft] = useState<CheckoutDraft | null>(null);
-  const [isConfirming, setIsConfirming] = useState(false);
-  const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
-  const descriptionId = `checkout-confirm-description-${planId}`;
-  const titleId = `checkout-confirm-title-${planId}`;
 
   const normalizedPrice = useMemo(() => {
     return Number.isFinite(planPrice) ? planPrice.toFixed(2) : "";
   }, [planPrice]);
-
-  useEffect(() => {
-    if (checkoutDraft) {
-      confirmButtonRef.current?.focus();
-    }
-  }, [checkoutDraft]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,37 +52,41 @@ export function PaidPlanCheckoutForm({
         throw new Error("checkout-failed");
       }
 
-      const payload = (await response.json()) as Partial<CheckoutDraft>;
-      if (!payload.checkoutUrl || !payload.purchaseId) {
+      const payload = (await response.json()) as Partial<{
+        purchaseId: string;
+        checkoutUrl: string;
+        checkoutMode: string;
+      }>;
+      if (!payload.purchaseId) {
         throw new Error("invalid-checkout-payload");
       }
 
-      setCheckoutDraft({
-        checkoutUrl: payload.checkoutUrl,
-        purchaseId: payload.purchaseId,
-      });
+      if (payload.checkoutMode === "brick") {
+        router.push(`/pagamento/checkout/${payload.purchaseId}`);
+      } else if (payload.checkoutUrl) {
+        const pendingUrl = new URL("/pagamento/pendente", window.location.origin);
+        pendingUrl.searchParams.set("checkoutId", payload.purchaseId);
+
+        try {
+          const checkoutUrl = new URL(payload.checkoutUrl);
+          const preferenceId = checkoutUrl.searchParams.get("preference_id");
+          if (preferenceId) {
+            pendingUrl.searchParams.set("preference_id", preferenceId);
+          }
+        } catch {
+          // ignore malformed checkoutUrl and continue with pending route
+        }
+
+        window.open(payload.checkoutUrl, "_blank", "noopener,noreferrer");
+        router.push(`${pendingUrl.pathname}?${pendingUrl.searchParams.toString()}`);
+      } else {
+        throw new Error("invalid-checkout-payload");
+      }
     } catch {
       setError("Erro ao iniciar pagamento. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
-  }
-
-  function handleConfirmCheckout() {
-    if (!checkoutDraft || isConfirming) {
-      return;
-    }
-
-    setError(null);
-    setIsConfirming(true);
-
-    window.open(
-      checkoutDraft.checkoutUrl,
-      "_blank",
-      "noopener,noreferrer",
-    );
-
-    router.push(`/pagamento/pendente?checkoutId=${checkoutDraft.purchaseId}`);
   }
 
   return (
@@ -130,151 +111,19 @@ export function PaidPlanCheckoutForm({
         </button>
       </form>
 
-      {checkoutDraft ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-          aria-describedby={descriptionId}
+      {error ? (
+        <p
+          role="alert"
+          aria-live="assertive"
           style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 30,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(10,10,10,0.35)",
-            padding: "0 16px",
+            margin: "10px 0 14px",
+            fontSize: 12,
+            color: "#991b1b",
           }}
         >
-          <div
-            style={{
-              position: "relative",
-              width: "100%",
-              maxWidth: 520,
-              background: "#fff",
-              border: "1px solid rgba(10,10,10,0.08)",
-              borderRadius: 20,
-              padding: 24,
-              boxShadow: "0 24px 60px -20px rgba(10,10,10,0.35)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 12,
-                marginBottom: 20,
-              }}
-            >
-              <div>
-                <p
-                  id={titleId}
-                  style={{
-                    fontSize: 17,
-                    fontWeight: 500,
-                    color: "#0a0a0a",
-                    margin: "0 0 4px",
-                  }}
-                >
-                  Confirmar pagamento
-                </p>
-                <div id={descriptionId}>
-                  <p
-                    style={{
-                      margin: "0 0 8px",
-                      color: "#6a6560",
-                      fontSize: 13.5,
-                      lineHeight: 1.45,
-                    }}
-                  >
-                    Voce sera redirecionado para o Mercado Pago para concluir o
-                    pagamento.
-                  </p>
-                  <p
-                    style={{
-                      margin: "0 0 8px",
-                      color: "#6a6560",
-                      fontSize: 13.5,
-                      lineHeight: 1.45,
-                    }}
-                  >
-                    Apos pagar, volte ao EarlyCV para aguardar a efetivacao.
-                  </p>
-                  <p
-                    style={{
-                      margin: 0,
-                      color: "#6a6560",
-                      fontSize: 13.5,
-                      lineHeight: 1.45,
-                    }}
-                  >
-                    Pagamentos por PIX podem levar alguns minutos para confirmar.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {error ? (
-              <p
-                role="alert"
-                aria-live="assertive"
-                style={{
-                  margin: "0 0 14px",
-                  borderRadius: 8,
-                  padding: "8px 10px",
-                  background: "#fee2e2",
-                  border: "1px solid #fecaca",
-                  color: "#991b1b",
-                  fontSize: 13,
-                }}
-              >
-                {error}
-              </p>
-            ) : null}
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                ref={confirmButtonRef}
-                type="button"
-                onClick={handleConfirmCheckout}
-                disabled={isConfirming}
-                style={{
-                  border: "none",
-                  borderRadius: 8,
-                  background: "#0a0a0a",
-                  color: "#fafaf6",
-                  padding: "10px 12px",
-                  fontWeight: 600,
-                  fontSize: 13.5,
-                  cursor: isConfirming ? "default" : "pointer",
-                  opacity: isConfirming ? 0.7 : 1,
-                }}
-              >
-                {isConfirming
-                  ? "Abrindo Mercado Pago..."
-                  : "Continuar para Mercado Pago"}
-              </button>
-            </div>
-          </div>
-        </div>
+          {error}
+        </p>
       ) : null}
-
-      {error && !checkoutDraft ?
-        (
-          <p
-            role="alert"
-            aria-live="assertive"
-            style={{
-              margin: "10px 0 14px",
-              fontSize: 12,
-              color: "#991b1b",
-            }}
-          >
-            {error}
-          </p>
-        ) : null}
     </>
   );
 }

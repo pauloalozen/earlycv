@@ -73,6 +73,8 @@ export type SeoPageDefinition = {
   sections: SeoPageSection[];
   seo: {
     description: string;
+    keywords?: string[];
+    ogImage?: string;
     title: string;
   };
   slug: SeoPageSlug;

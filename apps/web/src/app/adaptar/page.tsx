@@ -403,7 +403,7 @@ export default function AdaptarPage() {
       cvMode === "upload" || (!isAuthenticated && !isTextMode);
 
     if (requiresUploadedFile && !file) {
-      setError("Selecione seu CV em PDF, DOCX ou DOC.");
+      setError("Selecione seu CV em PDF, DOCX ou ODT.");
       return;
     }
     if (file && file.size > 5 * 1024 * 1024) {
@@ -509,7 +509,7 @@ export default function AdaptarPage() {
 
         const uploadedFile = file;
         if (!uploadedFile) {
-          setError("Selecione seu CV em PDF, DOCX ou DOC.");
+          setError("Selecione seu CV em PDF, DOCX ou ODT.");
           setLoading(false);
           return;
         }
@@ -795,7 +795,7 @@ export default function AdaptarPage() {
                           letterSpacing: 0.3,
                         }}
                       >
-                        PDF, DOC ou DOCX · até 5 MB
+                        PDF, DOCX ou ODT · até 5 MB
                       </div>
                     </div>
                     {/* Mode toggle */}
@@ -1031,9 +1031,9 @@ export default function AdaptarPage() {
                           const ext =
                             droppedFile.name.split(".").pop()?.toLowerCase() ??
                             "";
-                          if (!["pdf", "doc", "docx", "odt"].includes(ext)) {
+                          if (!["pdf", "docx", "odt"].includes(ext)) {
                             setError(
-                              "Formato inválido. Envie um arquivo PDF, DOC, DOCX ou ODT.",
+                              "Formato inválido. Envie um arquivo PDF, DOCX ou ODT.",
                             );
                             return;
                           }
@@ -1178,7 +1178,7 @@ export default function AdaptarPage() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.doc,.docx,.odt"
+                    accept=".pdf,.docx,.odt"
                     className="hidden"
                     onChange={(e) => {
                       const nextFile = e.target.files?.[0] ?? null;

@@ -69,7 +69,7 @@ test("records enriched payment_failed with purchase_not_found when webhook resol
     type: "payment",
   });
 
-  assert.equal(findUniqueCalls, 1);
+  assert.equal(findUniqueCalls, 2);
   assert.equal(recordedEvents.length, 1);
   assert.equal(recordedEvents[0]?.eventName, "payment_failed");
   assert.equal(recordedEvents[0]?.source, "backend");
@@ -241,6 +241,62 @@ test("does not record payment_failed when webhook resolution is approved", async
   });
 
   assert.equal(recordedEvents.includes("payment_failed"), false);
+});
+
+test("handleWebhook stores sanitized audit rawPayload", async () => {
+  const auditRows: Array<Record<string, unknown>> = [];
+
+  const service = new PlansService(
+    {
+      paymentAuditLog: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          auditRows.push(data);
+          return { id: "audit-sanitized-1" };
+        },
+      },
+      planPurchase: {
+        findFirst: async () => null,
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      resolveMercadoPagoPayment: (body: unknown) => Promise<unknown>;
+    }
+  ).resolveMercadoPagoPayment = async () => ({
+    paymentReference: null,
+    paymentId: "mp-123",
+    rawStatus: "pending",
+    status: "pending",
+  });
+
+  await service.handleWebhook("mercadopago", {
+    id: "evt-123",
+    type: "payment",
+    action: "payment.updated",
+    data: { id: "mp-123", token: "secret-token" },
+    payer: {
+      email: "private@example.com",
+      identification: { number: "12345678900" },
+    },
+    headers: { authorization: "Bearer test-token", cookie: "a=b" },
+    nested: { response: { headers: { authorization: "Bearer nested-token" } } },
+  });
+
+  assert.equal(auditRows.length > 0, true);
+  const rawPayload = auditRows[0]?.rawPayload as Record<string, unknown>;
+  assert.equal(typeof rawPayload, "object");
+  assert.equal(rawPayload.id, "evt-123");
+  assert.equal(rawPayload.type, "payment");
+  assert.equal(rawPayload.action, "payment.updated");
+  assert.deepEqual(rawPayload.data, { id: "mp-123" });
+  assert.equal("payer" in rawPayload, false);
+  assert.equal("headers" in rawPayload, false);
+  assert.equal("nested" in rawPayload, false);
 });
 
 test("resumeCheckout recreates MP checkout for pending purchase owned by user", async () => {
@@ -593,9 +649,12 @@ test("createMercadoPagoPreference uses shared return config and preserves checko
     assert.equal(checkoutUrl, "https://mp.test/checkout/123");
     assert.ok(preferenceBody);
     assert.deepEqual(preferenceBody?.back_urls, {
-      success: "https://earlycv.com.br/pagamento/concluido?checkoutId=purchase-https",
-      failure: "https://earlycv.com.br/pagamento/falhou?checkoutId=purchase-https",
-      pending: "https://earlycv.com.br/pagamento/pendente?checkoutId=purchase-https",
+      success:
+        "https://earlycv.com.br/pagamento/concluido?checkoutId=purchase-https",
+      failure:
+        "https://earlycv.com.br/pagamento/falhou?checkoutId=purchase-https",
+      pending:
+        "https://earlycv.com.br/pagamento/pendente?checkoutId=purchase-https",
     });
     assert.equal(
       (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
@@ -604,8 +663,9 @@ test("createMercadoPagoPreference uses shared return config and preserves checko
     );
     assert.match(
       String(
-        (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
-          ?.description,
+        (
+          preferenceBody?.items as Array<Record<string, unknown>> | undefined
+        )?.[0]?.description,
       ),
       /EarlyCV|Plano/i,
     );
@@ -686,9 +746,12 @@ test("createMercadoPagoPreference logs warning and skips auto_return on non-http
     assert.equal(checkoutUrl, "https://sandbox.mp.test/checkout/456");
     assert.ok(preferenceBody);
     assert.deepEqual(preferenceBody?.back_urls, {
-      success: "http://localhost:3000/pagamento/concluido?checkoutId=purchase-http",
-      failure: "http://localhost:3000/pagamento/falhou?checkoutId=purchase-http",
-      pending: "http://localhost:3000/pagamento/pendente?checkoutId=purchase-http",
+      success:
+        "http://localhost:3000/pagamento/concluido?checkoutId=purchase-http",
+      failure:
+        "http://localhost:3000/pagamento/falhou?checkoutId=purchase-http",
+      pending:
+        "http://localhost:3000/pagamento/pendente?checkoutId=purchase-http",
     });
     assert.equal(
       (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
@@ -697,8 +760,9 @@ test("createMercadoPagoPreference logs warning and skips auto_return on non-http
     );
     assert.match(
       String(
-        (preferenceBody?.items as Array<Record<string, unknown>> | undefined)?.[0]
-          ?.description,
+        (
+          preferenceBody?.items as Array<Record<string, unknown>> | undefined
+        )?.[0]?.description,
       ),
       /EarlyCV|Plano/i,
     );
@@ -724,17 +788,14 @@ test("createMercadoPagoPreference logs warning and skips auto_return on non-http
   }
 });
 
-test("createCheckout returns internal Brick URL for all users when brick mode is enabled and allowlists are empty", async () => {
+test("createCheckout returns internal Brick URL when mode is brick", async () => {
   const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
-  const originalEnabled = process.env.PAYMENT_BRICK_ENABLED;
-  const originalAllowedIds = process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
-  const originalAllowedEmails = process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
   const originalFrontendUrl = process.env.FRONTEND_URL;
 
   process.env.PAYMENT_CHECKOUT_MODE = "brick";
-  process.env.PAYMENT_BRICK_ENABLED = "true";
-  delete process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
-  delete process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
+  process.env.PAYMENT_BRICK_ENABLED = "false";
+  process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = "blocked-user";
+  process.env.PAYMENT_BRICK_ALLOWED_EMAILS = "blocked@example.com";
   process.env.FRONTEND_URL = "https://earlycv.com.br";
 
   const service = new PlansService(
@@ -776,29 +837,18 @@ test("createCheckout returns internal Brick URL for all users when brick mode is
   } finally {
     if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
     else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
-    if (originalEnabled === undefined) delete process.env.PAYMENT_BRICK_ENABLED;
-    else process.env.PAYMENT_BRICK_ENABLED = originalEnabled;
-    if (originalAllowedIds === undefined)
-      delete process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
-    else process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = originalAllowedIds;
-    if (originalAllowedEmails === undefined)
-      delete process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
-    else process.env.PAYMENT_BRICK_ALLOWED_EMAILS = originalAllowedEmails;
+    delete process.env.PAYMENT_BRICK_ENABLED;
+    delete process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
+    delete process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
     if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
     else process.env.FRONTEND_URL = originalFrontendUrl;
   }
 });
 
-test("createCheckout falls back to Checkout Pro when brick allowlists are configured and user is not eligible", async () => {
+test("createCheckout falls back to Checkout Pro when mode is pro", async () => {
   const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
-  const originalEnabled = process.env.PAYMENT_BRICK_ENABLED;
-  const originalAllowedIds = process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
-  const originalAllowedEmails = process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
 
-  process.env.PAYMENT_CHECKOUT_MODE = "brick";
-  process.env.PAYMENT_BRICK_ENABLED = "true";
-  process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = "user-123";
-  process.env.PAYMENT_BRICK_ALLOWED_EMAILS = "allow@email.com";
+  process.env.PAYMENT_CHECKOUT_MODE = "pro";
 
   const service = new PlansService(
     {
@@ -833,154 +883,67 @@ test("createCheckout falls back to Checkout Pro when brick allowlists are config
   } finally {
     if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
     else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
-    if (originalEnabled === undefined) delete process.env.PAYMENT_BRICK_ENABLED;
-    else process.env.PAYMENT_BRICK_ENABLED = originalEnabled;
-    if (originalAllowedIds === undefined)
-      delete process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
-    else process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = originalAllowedIds;
-    if (originalAllowedEmails === undefined)
-      delete process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
-    else process.env.PAYMENT_BRICK_ALLOWED_EMAILS = originalAllowedEmails;
   }
 });
 
-test("createCheckout enables Brick with OR rule when userId matches allowlist", async () => {
-  const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
-  const originalEnabled = process.env.PAYMENT_BRICK_ENABLED;
-  const originalAllowedIds = process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
-  const originalAllowedEmails = process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
-  const originalFrontendUrl = process.env.FRONTEND_URL;
+test("getProAccessToken prefers MERCADOPAGO_PRO_ACCESS_TOKEN over legacy token", async () => {
+  const originalProToken = process.env.MERCADOPAGO_PRO_ACCESS_TOKEN;
+  const originalLegacyToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
 
-  process.env.PAYMENT_CHECKOUT_MODE = "brick";
-  process.env.PAYMENT_BRICK_ENABLED = "true";
-  process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = " user-123 ";
-  process.env.PAYMENT_BRICK_ALLOWED_EMAILS = "other@email.com";
-  process.env.FRONTEND_URL = "https://earlycv.com.br";
+  process.env.MERCADOPAGO_PRO_ACCESS_TOKEN = "pro-token";
+  process.env.MERCADOPAGO_ACCESS_TOKEN = "legacy-token";
 
-  const service = new PlansService(
-    {
-      planPurchase: {
-        findFirst: async () => null,
-        create: async () => ({
-          id: "purchase-brick-2",
-          paymentReference: "pay-ref-brick-2",
-        }),
-        update: async () => ({ ok: true }),
-      },
-      user: {
-        findUnique: async () => ({
-          email: "different@email.com",
-          name: "Allowed By Id",
-        }),
-      },
-    } as never,
-    {
-      record: async () => ({ event: { id: "evt-brick-2" }, ingested: true }),
-    } as never,
-  );
+  const service = new PlansService({} as never, {} as never);
+  const token = (
+    service as unknown as { getProAccessToken: () => string | null }
+  ).getProAccessToken();
 
-  (
-    service as {
-      createMercadoPagoPreference: () => Promise<string>;
-    }
-  ).createMercadoPagoPreference = async () => {
-    throw new Error("checkout pro should not be called when userId is allowed");
-  };
+  assert.equal(token, "pro-token");
 
-  try {
-    const result = await service.createCheckout("user-123", "starter");
-    assert.equal(
-      result.checkoutUrl,
-      "https://earlycv.com.br/pagamento/checkout/purchase-brick-2",
-    );
-  } finally {
-    if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
-    else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
-    if (originalEnabled === undefined) delete process.env.PAYMENT_BRICK_ENABLED;
-    else process.env.PAYMENT_BRICK_ENABLED = originalEnabled;
-    if (originalAllowedIds === undefined)
-      delete process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
-    else process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = originalAllowedIds;
-    if (originalAllowedEmails === undefined)
-      delete process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
-    else process.env.PAYMENT_BRICK_ALLOWED_EMAILS = originalAllowedEmails;
-    if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
-    else process.env.FRONTEND_URL = originalFrontendUrl;
-  }
+  if (originalProToken === undefined)
+    delete process.env.MERCADOPAGO_PRO_ACCESS_TOKEN;
+  else process.env.MERCADOPAGO_PRO_ACCESS_TOKEN = originalProToken;
+  if (originalLegacyToken === undefined)
+    delete process.env.MERCADOPAGO_ACCESS_TOKEN;
+  else process.env.MERCADOPAGO_ACCESS_TOKEN = originalLegacyToken;
 });
 
-test("createCheckout enables Brick with OR rule when email matches allowlist with normalization", async () => {
-  const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
-  const originalEnabled = process.env.PAYMENT_BRICK_ENABLED;
-  const originalAllowedIds = process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
-  const originalAllowedEmails = process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
-  const originalFrontendUrl = process.env.FRONTEND_URL;
+test("getProAccessToken uses MERCADOPAGO_PRO_ACCESS_TOKEN_TEST in non-production", async () => {
+  const originalMode = process.env.MERCADOPAGO_MODE;
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalProTestToken = process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST;
+  const originalLegacyTestToken = process.env.MERCADOPAGO_ACCESS_TOKEN_TEST;
 
-  process.env.PAYMENT_CHECKOUT_MODE = "brick";
-  process.env.PAYMENT_BRICK_ENABLED = "true";
-  process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = "another-user";
-  process.env.PAYMENT_BRICK_ALLOWED_EMAILS = "  TESTE@EMAIL.COM ,,  ";
-  process.env.FRONTEND_URL = "https://earlycv.com.br";
+  process.env.MERCADOPAGO_MODE = "sandbox";
+  process.env.NODE_ENV = "development";
+  process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST = "pro-test-token";
+  process.env.MERCADOPAGO_ACCESS_TOKEN_TEST = "legacy-test-token";
 
-  const service = new PlansService(
-    {
-      planPurchase: {
-        findFirst: async () => null,
-        create: async () => ({
-          id: "purchase-brick-3",
-          paymentReference: "pay-ref-brick-3",
-        }),
-        update: async () => ({ ok: true }),
-      },
-      user: {
-        findUnique: async () => ({
-          email: "  teste@email.com ",
-          name: "Allowed By Email",
-        }),
-      },
-    } as never,
-    {
-      record: async () => ({ event: { id: "evt-brick-3" }, ingested: true }),
-    } as never,
-  );
+  const service = new PlansService({} as never, {} as never);
+  const token = (
+    service as unknown as { getProAccessToken: () => string | null }
+  ).getProAccessToken();
 
-  (
-    service as {
-      createMercadoPagoPreference: () => Promise<string>;
-    }
-  ).createMercadoPagoPreference = async () => {
-    throw new Error("checkout pro should not be called when email is allowed");
-  };
+  assert.equal(token, "pro-test-token");
 
-  try {
-    const result = await service.createCheckout("not-listed", "starter");
-    assert.equal(
-      result.checkoutUrl,
-      "https://earlycv.com.br/pagamento/checkout/purchase-brick-3",
-    );
-  } finally {
-    if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
-    else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
-    if (originalEnabled === undefined) delete process.env.PAYMENT_BRICK_ENABLED;
-    else process.env.PAYMENT_BRICK_ENABLED = originalEnabled;
-    if (originalAllowedIds === undefined)
-      delete process.env.PAYMENT_BRICK_ALLOWED_USER_IDS;
-    else process.env.PAYMENT_BRICK_ALLOWED_USER_IDS = originalAllowedIds;
-    if (originalAllowedEmails === undefined)
-      delete process.env.PAYMENT_BRICK_ALLOWED_EMAILS;
-    else process.env.PAYMENT_BRICK_ALLOWED_EMAILS = originalAllowedEmails;
-    if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
-    else process.env.FRONTEND_URL = originalFrontendUrl;
-  }
+  if (originalMode === undefined) delete process.env.MERCADOPAGO_MODE;
+  else process.env.MERCADOPAGO_MODE = originalMode;
+  if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = originalNodeEnv;
+  if (originalProTestToken === undefined)
+    delete process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST;
+  else process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST = originalProTestToken;
+  if (originalLegacyTestToken === undefined)
+    delete process.env.MERCADOPAGO_ACCESS_TOKEN_TEST;
+  else process.env.MERCADOPAGO_ACCESS_TOKEN_TEST = originalLegacyTestToken;
 });
 
 test("createCheckout updates existing none purchase to pending before returning Brick URL", async () => {
   const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
-  const originalEnabled = process.env.PAYMENT_BRICK_ENABLED;
   const originalFrontendUrl = process.env.FRONTEND_URL;
 
   process.env.PAYMENT_CHECKOUT_MODE = "brick";
-  process.env.PAYMENT_BRICK_ENABLED = "true";
+  process.env.PAYMENT_BRICK_ENABLED = "false";
   process.env.FRONTEND_URL = "https://earlycv.com.br";
 
   const updates: Array<{ id: string; status: string }> = [];
@@ -995,13 +958,29 @@ test("createCheckout updates existing none purchase to pending before returning 
           status: "none",
           paymentReference: "pay-ref-existing",
         }),
-        update: async ({ where, data }: { where: { id: string }; data: { status: string } }) => {
-          updates.push({ id: where.id, status: data.status });
-          return { ok: true };
+        updateMany: async ({
+          where,
+          data,
+        }: {
+          where: { id: string; userId?: string };
+          data: { status: string };
+        }) => {
+          updates.push({
+            id: where.id,
+            status: data.status,
+          });
+
+          assert.equal(where.id, "purchase-existing-none");
+          assert.equal(where.userId, "user-1");
+
+          return { count: 1 };
         },
       },
       user: {
-        findUnique: async () => ({ email: "user-1@earlycv.com.br", name: "User One" }),
+        findUnique: async () => ({
+          email: "user-1@earlycv.com.br",
+          name: "User One",
+        }),
       },
     } as never,
     {
@@ -1027,9 +1006,178 @@ test("createCheckout updates existing none purchase to pending before returning 
   } finally {
     if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
     else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
-    if (originalEnabled === undefined) delete process.env.PAYMENT_BRICK_ENABLED;
-    else process.env.PAYMENT_BRICK_ENABLED = originalEnabled;
+    delete process.env.PAYMENT_BRICK_ENABLED;
     if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
     else process.env.FRONTEND_URL = originalFrontendUrl;
+  }
+});
+
+test("applyApprovedPurchase applies pending purchase once", async () => {
+  let applyCalls = 0;
+  const service = new PlansService(
+    {
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          planPurchase: {
+            findUnique: async () => ({
+              id: "purchase-pending-1",
+              userId: "user-1",
+              planType: "starter",
+              paymentReference: "ref-1",
+              status: "pending",
+              creditsGranted: 3,
+              analysisCreditsGranted: 0,
+              originAction: "buy_credits",
+              originAdaptationId: null,
+              mpPaymentId: null,
+              mpMerchantOrderId: null,
+              mpPreferenceId: null,
+            }),
+            update: async () => ({ ok: true }),
+          },
+          user: { update: async () => ({ ok: true }) },
+          cvUnlock: { upsert: async () => ({ ok: true }) },
+          cvAdaptation: {
+            findUnique: async () => null,
+            update: async () => ({ ok: true }),
+          },
+        }),
+      paymentAuditLog: { create: async () => ({ id: "audit-apply-1" }) },
+    } as never,
+    { record: async () => ({ event: { id: "evt-apply-1" }, ingested: true }) } as never,
+  );
+
+  (
+    service as unknown as {
+      applyApprovedPurchaseInsideTransaction: (
+        tx: unknown,
+        purchase: { id: string },
+      ) => Promise<void>;
+    }
+  ).applyApprovedPurchaseInsideTransaction = async (_tx, purchase) => {
+    applyCalls += 1;
+    assert.equal(purchase.id, "purchase-pending-1");
+  };
+
+  const result = await service.applyApprovedPurchase("purchase-pending-1");
+  assert.equal(result, true);
+  assert.equal(applyCalls, 1);
+});
+
+test("applyApprovedPurchase applies processing statuses once", async () => {
+  const statuses = ["processing_payment", "pending_payment"];
+
+  for (const status of statuses) {
+    let applyCalls = 0;
+    const service = new PlansService(
+      {
+        $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+          callback({
+            planPurchase: {
+              findUnique: async () => ({
+                id: `purchase-${status}`,
+                userId: "user-1",
+                planType: "starter",
+                paymentReference: `ref-${status}`,
+                status,
+                creditsGranted: 3,
+                analysisCreditsGranted: 0,
+                originAction: "buy_credits",
+                originAdaptationId: null,
+                mpPaymentId: null,
+                mpMerchantOrderId: null,
+                mpPreferenceId: null,
+              }),
+              update: async () => ({ ok: true }),
+            },
+            user: { update: async () => ({ ok: true }) },
+            cvUnlock: { upsert: async () => ({ ok: true }) },
+            cvAdaptation: {
+              findUnique: async () => null,
+              update: async () => ({ ok: true }),
+            },
+          }),
+        paymentAuditLog: { create: async () => ({ id: `audit-${status}` }) },
+      } as never,
+      {
+        record: async () => ({
+          event: { id: `evt-${status}` },
+          ingested: true,
+        }),
+      } as never,
+    );
+
+    (
+      service as unknown as {
+        applyApprovedPurchaseInsideTransaction: (
+          tx: unknown,
+          purchase: { status: string },
+        ) => Promise<void>;
+      }
+    ).applyApprovedPurchaseInsideTransaction = async (_tx, purchase) => {
+      applyCalls += 1;
+      assert.equal(purchase.status, status);
+    };
+
+    const result = await service.applyApprovedPurchase(`purchase-${status}`);
+    assert.equal(result, true);
+    assert.equal(applyCalls, 1);
+  }
+});
+
+test("applyApprovedPurchase is idempotent for completed and blocked for failed/refunded", async () => {
+  const blockedStatuses = ["completed", "failed", "refunded"];
+
+  for (const status of blockedStatuses) {
+    let applyCalls = 0;
+    const service = new PlansService(
+      {
+        $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+          callback({
+            planPurchase: {
+              findUnique: async () => ({
+                id: `purchase-${status}`,
+                userId: "user-1",
+                planType: "starter",
+                paymentReference: `ref-${status}`,
+                status,
+                creditsGranted: 3,
+                analysisCreditsGranted: 0,
+                originAction: "buy_credits",
+                originAdaptationId: null,
+                mpPaymentId: null,
+                mpMerchantOrderId: null,
+                mpPreferenceId: null,
+              }),
+              update: async () => ({ ok: true }),
+            },
+            user: { update: async () => ({ ok: true }) },
+            cvUnlock: { upsert: async () => ({ ok: true }) },
+            cvAdaptation: {
+              findUnique: async () => null,
+              update: async () => ({ ok: true }),
+            },
+          }),
+        paymentAuditLog: { create: async () => ({ id: `audit-${status}` }) },
+      } as never,
+      {
+        record: async () => ({
+          event: { id: `evt-${status}` },
+          ingested: true,
+        }),
+      } as never,
+    );
+
+    (
+      service as unknown as {
+        applyApprovedPurchaseInsideTransaction: () => Promise<void>;
+      }
+    ).applyApprovedPurchaseInsideTransaction = async () => {
+      applyCalls += 1;
+    };
+
+    const result = await service.applyApprovedPurchase(`purchase-${status}`);
+    assert.equal(result, false);
+    assert.equal(applyCalls, 0);
   }
 });

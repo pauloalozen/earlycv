@@ -1432,3 +1432,264 @@ test("downloadBaseCv falls back to markdown snapshot when original file is absen
   assert.equal(disposition, "attachment; filename=cv-base-analise.md");
   assert.equal(sentBuffer.toString("utf8"), "file:text-key.md");
 });
+
+test("analyzeGuest normalizes job description before protection payload", async () => {
+  let capturedJobDescription = "";
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-1" }),
+      },
+      resume: { findFirst: async () => null },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async ({
+        jobDescriptionText,
+      }: {
+        jobDescriptionText: string;
+      }) => {
+        capturedJobDescription = jobDescriptionText;
+        return {
+          ok: false,
+          reason: "turnstile_invalid",
+          message: "blocked",
+        };
+      },
+    },
+  );
+
+  await assert.rejects(
+    service.analyzeGuest(
+      "\uFEFF  Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.\r\n",
+      undefined,
+      "Resumo\nExperiencia\nSQL",
+      "token",
+    ),
+  );
+
+  assert.equal(
+    capturedJobDescription,
+    "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+  );
+});
+
+test("analyzeGuest rejects oversized job description before protected analysis", async () => {
+  let protectedCalls = 0;
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-1" }),
+      },
+      resume: { findFirst: async () => null },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => {
+        protectedCalls += 1;
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-1",
+          result: {
+            adaptedContentJson: {},
+            previewText: "preview",
+            masterCvText: "CV",
+          },
+        };
+      },
+    },
+  );
+
+  await assert.rejects(
+    service.analyzeGuest(
+      `Vaga com responsabilidades e requisitos ${"a".repeat(12_100)}`,
+      undefined,
+      "Resumo\nExperiencia\nSQL",
+      "token",
+    ),
+    /12.000 caracteres/i,
+  );
+
+  assert.equal(protectedCalls, 0);
+});
+
+test("analyzeGuest rejects legacy DOC before protected analysis pipeline", async () => {
+  let protectedCalls = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-1" }),
+      },
+      resume: { findFirst: async () => null },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => {
+        protectedCalls += 1;
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-1",
+          result: {
+            adaptedContentJson: {},
+            previewText: "preview",
+            masterCvText: "CV",
+          },
+        };
+      },
+    },
+  );
+
+  await assert.rejects(
+    service.analyzeGuest(
+      "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+      {
+        buffer: Buffer.from("legacy-doc"),
+        encoding: "7bit",
+        fieldname: "file",
+        mimetype: "application/msword",
+        originalname: "cv.doc",
+        size: 10,
+      },
+      undefined,
+      "token",
+    ),
+  );
+
+  assert.equal(protectedCalls, 0);
+});
+
+test("analyzeGuest emits safe payload_invalid telemetry for rejected upload envelope", async () => {
+  let protectedCalls = 0;
+  const emitted: Array<{ eventName: string; metadata?: Record<string, unknown> }> =
+    [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-2" }),
+      },
+      resume: { findFirst: async () => null },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => {
+        protectedCalls += 1;
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-1",
+          result: {
+            adaptedContentJson: {},
+            previewText: "preview",
+            masterCvText: "CV",
+          },
+        };
+      },
+    },
+    {
+      deleteObject: async () => undefined,
+      getObject: async () => Buffer.alloc(0),
+      putObject: async () => "",
+    },
+    {
+      emit: async (
+        eventName: string,
+        _context: unknown,
+        input: { metadata?: Record<string, unknown> },
+      ) => {
+        emitted.push({ eventName, metadata: input.metadata });
+      },
+    },
+  );
+
+  await assert.rejects(
+    service.analyzeGuest(
+      "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+      {
+        buffer: Buffer.from("legacy-doc"),
+        encoding: "7bit",
+        fieldname: "file",
+        mimetype: "application/msword",
+        originalname: "cv.doc",
+        size: 10,
+      },
+      undefined,
+      "token",
+      {
+        correlationId: "corr-1",
+        ip: "203.0.113.10",
+        requestId: "req-1",
+        sessionInternalId: "session-1",
+        sessionPublicToken: "session-public",
+        userId: null,
+        routePath: "/api/cv-adaptation/analyze-guest",
+        userAgentHash: "ua-hash",
+      },
+    ),
+  );
+
+  assert.equal(protectedCalls, 0);
+  assert.equal(emitted.length > 0, true);
+  assert.equal(emitted[0]?.eventName, "payload_invalid");
+  assert.equal(emitted[0]?.metadata?.reason, "upload_extraction_failed");
+  assert.equal(emitted[0]?.metadata?.fileExtension, ".doc");
+  assert.equal(emitted[0]?.metadata?.mimeType, "application/msword");
+  assert.equal("cvText" in (emitted[0]?.metadata ?? {}), false);
+  assert.equal("jobDescriptionText" in (emitted[0]?.metadata ?? {}), false);
+});

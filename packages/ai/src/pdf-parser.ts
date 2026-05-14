@@ -39,6 +39,8 @@ const CV_SIGNALS_EN = [
 const MIN_CV_CHARS = 100;
 const MAX_CV_CHARS = 30_000;
 const MIN_CV_SIGNALS = 2;
+const MAX_PDF_PAGES = 20;
+const PDF_PARSE_TIMEOUT_MS = 8_000;
 
 export class NotACvError extends Error {
   constructor() {
@@ -67,6 +69,27 @@ export class ScannedPdfError extends Error {
   }
 }
 
+export class InvalidPdfFormatError extends Error {
+  constructor() {
+    super("O arquivo enviado nao e um PDF valido.");
+    this.name = "InvalidPdfFormatError";
+  }
+}
+
+export class PdfTooLargeError extends Error {
+  constructor() {
+    super("O arquivo PDF excede o limite de tamanho permitido.");
+    this.name = "PdfTooLargeError";
+  }
+}
+
+export class PdfTooManyPagesError extends Error {
+  constructor() {
+    super("O PDF possui paginas demais para analise automatica.");
+    this.name = "PdfTooManyPagesError";
+  }
+}
+
 function looksLikeCv(text: string): boolean {
   const lower = text.toLowerCase();
   const ptMatches = CV_SIGNALS_PT.filter((s) => lower.includes(s)).length;
@@ -82,8 +105,24 @@ export async function extractTextFromPdf(
     throw new Error("PDF buffer is empty or unreadable");
   }
 
+  if (buffer.length > 5 * 1024 * 1024) {
+    throw new PdfTooLargeError();
+  }
+
+  if (!looksLikePdf(buffer)) {
+    throw new InvalidPdfFormatError();
+  }
+
   try {
-    const data = await pdfParse(buffer);
+    const data = await Promise.race([
+      pdfParse(buffer),
+      createTimeoutPromise(PDF_PARSE_TIMEOUT_MS),
+    ]);
+
+    if (typeof data.numpages === "number" && data.numpages > MAX_PDF_PAGES) {
+      throw new PdfTooManyPagesError();
+    }
+
     const text = data.text.trim();
 
     if (!text || text.length < MIN_CV_CHARS) {
@@ -99,10 +138,30 @@ export async function extractTextFromPdf(
     if (
       error instanceof NotACvError ||
       error instanceof PasswordProtectedPdfError ||
-      error instanceof ScannedPdfError
+      error instanceof ScannedPdfError ||
+      error instanceof InvalidPdfFormatError ||
+      error instanceof PdfTooLargeError ||
+      error instanceof PdfTooManyPagesError
     ) {
       throw error;
     }
     throw new PasswordProtectedPdfError();
   }
+}
+
+function looksLikePdf(buffer: Buffer): boolean {
+  if (buffer.length < 5) {
+    return false;
+  }
+
+  return buffer.subarray(0, 5).toString("ascii") === "%PDF-";
+}
+
+function createTimeoutPromise(timeoutMs: number): Promise<never> {
+  return new Promise((_, reject) => {
+    const ref = setTimeout(() => {
+      reject(new PasswordProtectedPdfError());
+    }, timeoutMs);
+    ref.unref?.();
+  });
 }
