@@ -31,7 +31,7 @@ export class SaveGuestPreviewDto {
   previewText?: string;
 
   @IsString()
-  @MaxLength(8000)
+  @MaxLength(12000)
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   jobDescriptionText!: string;
 

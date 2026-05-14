@@ -17,7 +17,7 @@ export class ClaimGuestAdaptationDto {
   previewText?: string;
 
   @IsString()
-  @MaxLength(8000)
+  @MaxLength(12000)
   jobDescriptionText!: string;
 
   @IsString()
