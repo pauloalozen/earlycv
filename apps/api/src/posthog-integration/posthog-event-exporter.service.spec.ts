@@ -54,6 +54,9 @@ test("sanitizes prohibited nested properties before export", () => {
   exporter.exportBusinessFunnelEvent("page_view", {
     event_version: 1,
     pathname: "/adaptar",
+    next_url: "http://localhost:3000/adaptar/resultado?adaptationId=abc123",
+    next_search: "?adaptationId=abc123",
+    next_pathname: "/adaptar/resultado?adaptationId=abc123",
     cv: "raw",
     nested: {
       email: "user@example.com",
@@ -65,6 +68,9 @@ test("sanitizes prohibited nested properties before export", () => {
   assert.equal(captured.length, 1);
   const props = captured[0];
   assert.equal(props.cv, undefined);
+  assert.equal(props.next_url, "/adaptar/resultado");
+  assert.equal(props.next_search, null);
+  assert.equal(props.next_pathname, "/adaptar/resultado");
   assert.equal((props.nested as Record<string, unknown>).email, undefined);
   assert.equal(
     (props.nested as Record<string, unknown>).adaptedContentJson,

@@ -27,7 +27,7 @@ const PROHIBITED_KEYWORDS = [
   "refreshtoken",
   "accesstoken",
 ] as const;
-const PROHIBITED_KEY_SET = new Set(PROHIBITED_KEYWORDS);
+const PROHIBITED_KEY_SET = new Set<string>(PROHIBITED_KEYWORDS);
 
 const SAFE_UTM_KEYS = new Set([
   "utm_source",
@@ -119,24 +119,34 @@ export function sanitizeAnalyticsPayload(
       continue;
     }
 
-    if (key === "url" || key === "page_location") {
+    if (key === "url" || key === "page_location" || key.endsWith("_url")) {
       const safePath = sanitizePathLikeValue(rawValue);
       if (safePath !== undefined) output[key] = safePath;
       continue;
     }
 
-    if (key === "search") {
+    if (key === "search" || key.endsWith("_search")) {
       output[key] = null;
       continue;
     }
 
-    if (key === "referrer" || key === "page_referrer") {
+    if (
+      key === "referrer" ||
+      key === "page_referrer" ||
+      key.endsWith("_referrer")
+    ) {
       const safeReferrer = sanitizeReferrerValue(rawValue);
       if (safeReferrer !== undefined) output[key] = safeReferrer;
       continue;
     }
 
-    if (key === "pathname" || key === "route" || key === "page_path") {
+    if (
+      key === "pathname" ||
+      key === "route" ||
+      key === "page_path" ||
+      key.endsWith("_pathname") ||
+      key.endsWith("_route")
+    ) {
       const safePath = sanitizePathLikeValue(rawValue);
       if (safePath !== undefined) output[key] = safePath;
       continue;

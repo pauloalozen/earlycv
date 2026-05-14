@@ -41,7 +41,7 @@ const PROHIBITED_KEYWORDS = [
   "refreshtoken",
   "accesstoken",
 ] as const;
-const PROHIBITED_KEY_SET = new Set(PROHIBITED_KEYWORDS);
+const PROHIBITED_KEY_SET = new Set<string>(PROHIBITED_KEYWORDS);
 
 const ALLOWED_UTM_KEYS = new Set([
   "utm_source",
