@@ -908,6 +908,36 @@ test("getProAccessToken prefers MERCADOPAGO_PRO_ACCESS_TOKEN over legacy token",
   else process.env.MERCADOPAGO_ACCESS_TOKEN = originalLegacyToken;
 });
 
+test("getProAccessToken uses MERCADOPAGO_PRO_ACCESS_TOKEN_TEST in non-production", async () => {
+  const originalMode = process.env.MERCADOPAGO_MODE;
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalProTestToken = process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST;
+  const originalLegacyTestToken = process.env.MERCADOPAGO_ACCESS_TOKEN_TEST;
+
+  process.env.MERCADOPAGO_MODE = "sandbox";
+  process.env.NODE_ENV = "development";
+  process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST = "pro-test-token";
+  process.env.MERCADOPAGO_ACCESS_TOKEN_TEST = "legacy-test-token";
+
+  const service = new PlansService({} as never, {} as never);
+  const token = (
+    service as unknown as { getProAccessToken: () => string | null }
+  ).getProAccessToken();
+
+  assert.equal(token, "pro-test-token");
+
+  if (originalMode === undefined) delete process.env.MERCADOPAGO_MODE;
+  else process.env.MERCADOPAGO_MODE = originalMode;
+  if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = originalNodeEnv;
+  if (originalProTestToken === undefined)
+    delete process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST;
+  else process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST = originalProTestToken;
+  if (originalLegacyTestToken === undefined)
+    delete process.env.MERCADOPAGO_ACCESS_TOKEN_TEST;
+  else process.env.MERCADOPAGO_ACCESS_TOKEN_TEST = originalLegacyTestToken;
+});
+
 test("createCheckout updates existing none purchase to pending before returning Brick URL", async () => {
   const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
   const originalFrontendUrl = process.env.FRONTEND_URL;

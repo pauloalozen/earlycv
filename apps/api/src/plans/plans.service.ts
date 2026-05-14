@@ -411,8 +411,8 @@ export class PlansService {
   ): void {
     if (provider !== "mercadopago") return;
 
-    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
-    if (!secret) return; // dev: sem secret configurado, aceita sem validar
+    const secrets = this.getMercadoPagoWebhookSecrets();
+    if (secrets.length === 0) return; // dev: sem secret configurado, aceita sem validar
 
     if (!xSignature) {
       this.logAuditEvent({
@@ -453,15 +453,20 @@ export class PlansService {
         : "";
 
     const message = `id:${dataId};request-id:${xRequestId ?? ""};ts:${ts};`;
-    const expected = createHmac("sha256", secret).update(message).digest("hex");
-
-    const expectedBuf = Buffer.from(expected);
     const receivedBuf = Buffer.from(v1);
 
-    if (
-      expectedBuf.length !== receivedBuf.length ||
-      !timingSafeEqual(expectedBuf, receivedBuf)
-    ) {
+    const matches = secrets.some((secret) => {
+      const expected = createHmac("sha256", secret)
+        .update(message)
+        .digest("hex");
+      const expectedBuf = Buffer.from(expected);
+      return (
+        expectedBuf.length === receivedBuf.length &&
+        timingSafeEqual(expectedBuf, receivedBuf)
+      );
+    });
+
+    if (!matches) {
       this.logAuditEvent({
         eventType: "webhook_received",
         actionTaken: "invalid_signature",
@@ -1098,9 +1103,26 @@ export class PlansService {
     }
 
     return (
+      process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST?.trim() ??
       process.env.MERCADOPAGO_ACCESS_TOKEN_TEST?.trim() ??
       process.env.MERCADOPAGO_ACCESS_TOKEN?.trim() ??
       null
+    );
+  }
+
+  private getMercadoPagoWebhookSecrets(): string[] {
+    const candidates = [
+      process.env.MERCADOPAGO_PRO_WEBHOOK_SECRET,
+      process.env.MERCADOPAGO_BRICK_WEBHOOK_SECRET,
+      process.env.MERCADOPAGO_WEBHOOK_SECRET,
+    ];
+
+    return Array.from(
+      new Set(
+        candidates
+          .map((value) => value?.trim() ?? "")
+          .filter((value) => value.length > 0),
+      ),
     );
   }
 

@@ -1269,8 +1269,8 @@ export class CvAdaptationService {
   ): void {
     if (provider !== "mercadopago") return;
 
-    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
-    if (!secret) return; // dev: sem secret configurado, aceita sem validar
+    const secrets = getMercadoPagoWebhookSecrets();
+    if (secrets.length === 0) return; // dev: sem secret configurado, aceita sem validar
 
     if (!xSignature) {
       throw new UnauthorizedException("Missing webhook signature");
@@ -1299,15 +1299,20 @@ export class CvAdaptationService {
         : "";
 
     const message = `id:${dataId};request-id:${xRequestId ?? ""};ts:${ts};`;
-    const expected = createHmac("sha256", secret).update(message).digest("hex");
-
-    const expectedBuf = Buffer.from(expected);
     const receivedBuf = Buffer.from(v1);
 
-    if (
-      expectedBuf.length !== receivedBuf.length ||
-      !timingSafeEqual(expectedBuf, receivedBuf)
-    ) {
+    const matches = secrets.some((secret) => {
+      const expected = createHmac("sha256", secret)
+        .update(message)
+        .digest("hex");
+      const expectedBuf = Buffer.from(expected);
+      return (
+        expectedBuf.length === receivedBuf.length &&
+        timingSafeEqual(expectedBuf, receivedBuf)
+      );
+    });
+
+    if (!matches) {
       throw new UnauthorizedException("Invalid webhook signature");
     }
   }
@@ -2532,4 +2537,20 @@ export class CvAdaptationService {
     const raw = err instanceof Error ? err.message : "Unknown AI error";
     return raw.slice(0, 500);
   }
+}
+
+function getMercadoPagoWebhookSecrets(): string[] {
+  const candidates = [
+    process.env.MERCADOPAGO_PRO_WEBHOOK_SECRET,
+    process.env.MERCADOPAGO_BRICK_WEBHOOK_SECRET,
+    process.env.MERCADOPAGO_WEBHOOK_SECRET,
+  ];
+
+  return Array.from(
+    new Set(
+      candidates
+        .map((value) => value?.trim() ?? "")
+        .filter((value) => value.length > 0),
+    ),
+  );
 }

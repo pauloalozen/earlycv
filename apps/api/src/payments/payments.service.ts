@@ -506,6 +506,7 @@ export class PaymentsService {
         mpStatus === "charged_back" ||
         mpStatus === "refunded"
       ) {
+        const rejectionDetail = summarizePaymentRejection(response);
         await this.database.planPurchase.update({
           where: { id: purchase.id },
           data: {
@@ -513,10 +514,13 @@ export class PaymentsService {
             status: "pending",
           },
         });
+        const isProduction = process.env.NODE_ENV === "production";
+        const message = isProduction
+          ? "Pagamento recusado. Verifique os dados ou tente outro meio de pagamento."
+          : `Pagamento recusado. Verifique os dados ou tente outro meio de pagamento. Detalhe: ${rejectionDetail}`;
         throw new BadRequestException({
           errorCode: "brick_payment_rejected",
-          message:
-            "Pagamento recusado. Verifique os dados ou tente outro meio de pagamento.",
+          message,
         });
       }
 
@@ -795,7 +799,8 @@ export class PaymentsService {
       process.env.NODE_ENV === "production";
     const token = isProduction
       ? process.env.MERCADOPAGO_ACCESS_TOKEN?.trim()
-      : (process.env.MERCADOPAGO_ACCESS_TOKEN_TEST ??
+      : (process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST ??
+        process.env.MERCADOPAGO_ACCESS_TOKEN_TEST ??
         process.env.MERCADOPAGO_ACCESS_TOKEN)?.trim();
 
     return token || null;
@@ -818,6 +823,27 @@ export class PaymentsService {
 
 function summarizeProviderError(error: unknown): string {
   return summarizeSafeError(error);
+}
+
+function summarizePaymentRejection(paymentResponse: unknown): string {
+  if (!paymentResponse || typeof paymentResponse !== "object") {
+    return "status=rejected";
+  }
+
+  const source = paymentResponse as {
+    status?: unknown;
+    status_detail?: unknown;
+    payment_method_id?: unknown;
+  };
+  const status = normalizeOptionalString(source.status) ?? "rejected";
+  const statusDetail = normalizeOptionalString(source.status_detail) ?? "unknown";
+  const paymentMethodId = normalizeOptionalString(source.payment_method_id);
+
+  if (!paymentMethodId) {
+    return `status=${status}; detail=${statusDetail}`;
+  }
+
+  return `status=${status}; detail=${statusDetail}; method=${paymentMethodId}`;
 }
 
 function extractPixTransactionData(response: unknown): {

@@ -380,7 +380,8 @@ test("submitBrickPayment accepts pix payload with payer email", async () => {
 test("submitBrickPayment returns safe rejected error when provider rejects", async () => {
   process.env.PAYMENT_CHECKOUT_MODE = "brick";
   const originalCreate = Payment.prototype.create;
-  Payment.prototype.create = async () => ({ id: 404, status: "rejected" }) as never;
+  Payment.prototype.create = async () =>
+    ({ id: 404, status: "rejected", status_detail: "rejected_insufficient_data" }) as never;
 
   const service = new PaymentsService(
     {
@@ -415,8 +416,13 @@ test("submitBrickPayment returns safe rejected error when provider rejects", asy
       assert.equal(error instanceof BadRequestException, true);
       const response = (error as BadRequestException).getResponse() as {
         errorCode?: string;
+        message?: string;
       };
       assert.equal(response.errorCode, "brick_payment_rejected");
+      assert.equal(
+        String(response.message).includes("rejected_insufficient_data"),
+        true,
+      );
       throw error;
     }
   }, BadRequestException);
@@ -751,4 +757,34 @@ test("brick client token prefers MERCADOPAGO_BRICK_ACCESS_TOKEN over legacy toke
   else process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN = originalBrickToken;
   if (originalLegacyToken === undefined) delete process.env.MERCADOPAGO_ACCESS_TOKEN;
   else process.env.MERCADOPAGO_ACCESS_TOKEN = originalLegacyToken;
+});
+
+test("brick client token uses MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST in non-production", () => {
+  const originalMode = process.env.MERCADOPAGO_MODE;
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalBrickTestToken = process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST;
+  const originalLegacyTestToken = process.env.MERCADOPAGO_ACCESS_TOKEN_TEST;
+
+  process.env.MERCADOPAGO_MODE = "sandbox";
+  process.env.NODE_ENV = "development";
+  process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST = "brick-test-token";
+  process.env.MERCADOPAGO_ACCESS_TOKEN_TEST = "legacy-test-token";
+
+  const service = new PaymentsService({} as never, {} as never);
+
+  const token = (
+    service as unknown as { getBrickAccessToken: () => string | null }
+  ).getBrickAccessToken();
+  assert.equal(token, "brick-test-token");
+
+  if (originalMode === undefined) delete process.env.MERCADOPAGO_MODE;
+  else process.env.MERCADOPAGO_MODE = originalMode;
+  if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = originalNodeEnv;
+  if (originalBrickTestToken === undefined)
+    delete process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST;
+  else process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST = originalBrickTestToken;
+  if (originalLegacyTestToken === undefined)
+    delete process.env.MERCADOPAGO_ACCESS_TOKEN_TEST;
+  else process.env.MERCADOPAGO_ACCESS_TOKEN_TEST = originalLegacyTestToken;
 });
