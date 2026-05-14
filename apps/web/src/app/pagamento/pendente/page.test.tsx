@@ -10,6 +10,7 @@ import PagamentoPendente from "./page";
 
 const mockUseSearchParams = vi.fn();
 const mockGetCheckoutStatusClient = vi.fn();
+const mockResumeCheckoutClient = vi.fn();
 const mockDownloadFromApi = vi.fn();
 const trackEventMock = vi.fn();
 
@@ -24,7 +25,7 @@ vi.mock("@/components/page-shell", () => ({
 vi.mock("@/lib/payments-browser-api", () => ({
   getCheckoutStatusClient: (...args: unknown[]) =>
     mockGetCheckoutStatusClient(...args),
-  resumeCheckoutClient: vi.fn(),
+  resumeCheckoutClient: (...args: unknown[]) => mockResumeCheckoutClient(...args),
 }));
 
 vi.mock("@/lib/client-download", () => ({
@@ -38,6 +39,7 @@ vi.mock("@/lib/analytics-tracking", () => ({
 describe("PagamentoPendente", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    mockResumeCheckoutClient.mockReset();
     trackEventMock.mockReset();
     trackEventMock.mockResolvedValue(undefined);
     mockUseSearchParams.mockReturnValue({
@@ -154,6 +156,45 @@ describe("PagamentoPendente", () => {
           }),
         }),
       );
+    });
+  });
+
+  it("reabre checkout usando a URL retornada pelo resume", async () => {
+    mockGetCheckoutStatusClient.mockResolvedValue({
+      nextAction: "continue_polling",
+    });
+    mockResumeCheckoutClient.mockResolvedValue({
+      checkoutUrl: "http://localhost:3000/pagamento/checkout/chk-1",
+    });
+
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { href: "http://localhost:3000/pagamento/pendente?checkoutId=chk-1" },
+    });
+
+    render(<PagamentoPendente />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Abrir pagamento novamente" }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Abrir pagamento novamente" }),
+    );
+
+    await waitFor(() => {
+      expect(mockResumeCheckoutClient).toHaveBeenCalledWith("chk-1");
+      expect(window.location.href).toBe(
+        "http://localhost:3000/pagamento/checkout/chk-1",
+      );
+    });
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: originalLocation,
     });
   });
 });

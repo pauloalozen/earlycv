@@ -494,6 +494,110 @@ test("resumeCheckout keeps working when user email is invalid", async () => {
   assert.deepEqual(result, { checkoutUrl: "https://mp.test/checkout/new" });
 });
 
+test("resumeCheckout returns brick checkout url when mode is brick", async () => {
+  const previousMode = process.env.PAYMENT_CHECKOUT_MODE;
+  process.env.PAYMENT_CHECKOUT_MODE = "brick";
+
+  try {
+    const service = new PlansService(
+      {
+        planPurchase: {
+          findUnique: async () => ({
+            id: "purchase-1",
+            userId: "user-1",
+            planType: "pro",
+            amountInCents: 2990,
+            creditsGranted: 3,
+            analysisCreditsGranted: 9,
+            paymentReference: "pay-ref-1",
+            status: "pending",
+          }),
+        },
+        user: {
+          findUnique: async () => ({
+            email: "user-1@earlycv.com.br",
+            name: "User One",
+          }),
+        },
+      } as never,
+      {
+        record: async () => ({ event: { id: "evt-brick" }, ingested: true }),
+      } as never,
+    );
+
+    (
+      service as {
+        createMercadoPagoPreference: () => Promise<string>;
+      }
+    ).createMercadoPagoPreference = async () => {
+      throw new Error("createMercadoPagoPreference should not be called");
+    };
+
+    const result = await service.resumeCheckout("user-1", "purchase-1");
+
+    assert.deepEqual(result, {
+      checkoutUrl: "http://localhost:3000/pagamento/checkout/purchase-1",
+    });
+  } finally {
+    if (previousMode === undefined) {
+      delete process.env.PAYMENT_CHECKOUT_MODE;
+    } else {
+      process.env.PAYMENT_CHECKOUT_MODE = previousMode;
+    }
+  }
+});
+
+test("listMyPurchases points pending purchase to brick checkout when mode is brick", async () => {
+  const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+  process.env.PAYMENT_CHECKOUT_MODE = "brick";
+  process.env.FRONTEND_URL = "https://earlycv.com.br";
+
+  try {
+    const service = new PlansService(
+      {
+        planPurchase: {
+          findMany: async () => [
+            {
+              id: "purchase-pending-1",
+              planType: "pro",
+              amountInCents: 2990,
+              currency: "BRL",
+              status: "pending",
+              paidAt: null,
+              creditsGranted: 3,
+              analysisCreditsGranted: 9,
+              mpPaymentId: null,
+              mpPreferenceId: null,
+              paymentReference: "pay-ref-1",
+              createdAt: new Date("2026-05-14T00:00:00.000Z"),
+              originAction: "buy_credits",
+              originAdaptationId: null,
+              autoUnlockProcessedAt: null,
+              autoUnlockError: null,
+            },
+          ],
+        },
+      } as never,
+      {
+        record: async () => ({ event: { id: "evt-list-1" }, ingested: true }),
+      } as never,
+    );
+
+    const purchases = await service.listMyPurchases("user-1");
+
+    assert.equal(
+      purchases[0]?.pendingPaymentUrl,
+      "https://earlycv.com.br/pagamento/checkout/purchase-pending-1",
+    );
+  } finally {
+    if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
+    else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
+    if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+    else process.env.FRONTEND_URL = originalFrontendUrl;
+  }
+});
+
 test("createCheckout with adaptationId reuses only unlock_cv purchase", async () => {
   let receivedWhere: Record<string, unknown> | null = null;
   const service = new PlansService(

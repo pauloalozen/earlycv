@@ -175,6 +175,7 @@ export class PlansService {
     });
 
     const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3000";
+    const brickDecision = this.evaluateBrickCheckoutEligibility();
 
     return purchases.map((p) => ({
       id: p.id,
@@ -196,7 +197,9 @@ export class PlansService {
       autoUnlockError: p.autoUnlockError,
       pendingPaymentUrl:
         p.status === "pending" || p.status === "none"
-          ? `${frontendUrl}/pagamento/pendente?checkoutId=${p.id}&resume=1`
+          ? brickDecision.useBrick
+            ? `${frontendUrl}/pagamento/checkout/${p.id}`
+            : `${frontendUrl}/pagamento/pendente?checkoutId=${p.id}&resume=1`
           : null,
     }));
   }
@@ -319,7 +322,6 @@ export class PlansService {
     userId: string,
     purchaseId: string,
   ): Promise<{ checkoutUrl: string }> {
-    const payer = await this.resolveMercadoPagoPayer(userId);
     const purchase = await this.database.planPurchase.findUnique({
       where: { id: purchaseId },
       select: {
@@ -346,6 +348,16 @@ export class PlansService {
       throw new BadRequestException("Tipo de compra invalido para retomada.");
     }
 
+    const brickDecision = this.evaluateBrickCheckoutEligibility();
+    if (brickDecision.useBrick) {
+      this.logger.log(
+        `[checkout:resume] purchase=${purchase.id} user=${userId} status=${purchase.status} useBrick=true reason=${brickDecision.reason}`,
+      );
+      return { checkoutUrl: this.buildBrickCheckoutUrl(purchase.id) };
+    }
+
+    const payer = await this.resolveMercadoPagoPayer(userId);
+
     const checkoutUrl = await this.createMercadoPagoPreference(
       purchase.id,
       purchase.paymentReference,
@@ -359,7 +371,7 @@ export class PlansService {
     );
 
     this.logger.log(
-      `[checkout:resume] purchase=${purchase.id} user=${userId} status=${purchase.status}`,
+      `[checkout:resume] purchase=${purchase.id} user=${userId} status=${purchase.status} useBrick=false reason=${brickDecision.reason}`,
     );
 
     return { checkoutUrl };
