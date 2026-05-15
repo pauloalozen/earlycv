@@ -13,6 +13,7 @@ import {
 import Script from "next/script";
 import "./globals.css";
 
+import { IncidentBanner } from "@/components/incident-banner";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 
 const dmSans = DM_Sans({
@@ -171,7 +172,10 @@ gtag('config', '${GA_MEASUREMENT_ID}');`}
           </>
         ) : null}
       </head>
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <IncidentBanner />
+        {children}
+      </body>
     </html>
   );
 }
