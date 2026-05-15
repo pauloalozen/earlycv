@@ -1785,9 +1785,6 @@ export class CvAdaptationService {
     const structureJson = (adaptation.template?.structureJson ??
       null) as TemplateStructureJson | null;
 
-    // Validate PDF generates correctly (do not save — generated on-demand at download)
-    await this.pdfService.generatePdf(output, structureJson ?? templateSlug);
-
     // Create adapted Resume record
     const adaptedResume = await this.database.resume.create({
       data: {
