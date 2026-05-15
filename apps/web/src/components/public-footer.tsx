@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { openAnalyticsConsentPreferences } from "@/lib/analytics-consent";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -199,6 +200,24 @@ export function PublicFooter() {
         >
           EarlyCV © 2026
         </span>
+        <button
+          type="button"
+          onClick={openAnalyticsConsentPreferences}
+          style={{
+            fontFamily: MONO,
+            fontSize: 11,
+            color: "#6a6a66",
+            letterSpacing: 0.3,
+            background: "transparent",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+            textDecoration: "underline",
+            textUnderlineOffset: 3,
+          }}
+        >
+          Preferências de cookies
+        </button>
       </div>
     </footer>
   );
