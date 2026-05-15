@@ -200,6 +200,10 @@ export class BusinessFunnelEventService {
     input: RecordBusinessFunnelEventInput,
     source: BusinessFunnelEventSource,
   ) {
+    if (!input || typeof input !== "object") {
+      throw new BadRequestException("payload is required");
+    }
+
     if (typeof input.eventName !== "string" || !input.eventName.trim()) {
       throw new BadRequestException("eventName is required");
     }

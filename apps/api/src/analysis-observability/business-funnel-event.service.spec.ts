@@ -1148,3 +1148,29 @@ test("rejects frontend emission of payment_failed", async () => {
     },
   );
 });
+
+test("rejects missing payload with BadRequestException", async () => {
+  const service = new BusinessFunnelEventService(
+    {
+      $transaction: async () => {
+        throw new Error("transaction should not be called");
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any,
+    {
+      applyEvent: async () => {
+        throw new Error("projection should not be called");
+      },
+    } as BusinessFunnelProjectionService,
+  );
+
+  await assert.rejects(
+    // biome-ignore lint/suspicious/noExplicitAny: runtime guard validation
+    service.record(undefined as any, baseContext, "frontend"),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match((error as BadRequestException).message, /payload/i);
+      return true;
+    },
+  );
+});
