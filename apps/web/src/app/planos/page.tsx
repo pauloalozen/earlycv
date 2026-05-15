@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
@@ -563,6 +564,33 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
               imediato · Sem renovação automática
             </p>
           </div>
+
+          <p
+            style={{
+              marginTop: 10,
+              textAlign: "center",
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: "#8a8a85",
+              letterSpacing: 0.2,
+            }}
+          >
+            Consulte a{" "}
+            <Link
+              href="/privacidade"
+              style={{ color: "#0a0a0a", textDecoration: "underline" }}
+            >
+              Política de Privacidade
+            </Link>{" "}
+            e os{" "}
+            <Link
+              href="/termos-de-uso"
+              style={{ color: "#0a0a0a", textDecoration: "underline" }}
+            >
+              Termos de Uso
+            </Link>
+            .
+          </p>
         </div>
       </main>
 

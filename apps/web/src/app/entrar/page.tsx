@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/logo";
 import { PageShell } from "@/components/page-shell";
@@ -243,6 +244,44 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
                   <span style={{ color: "#d8d7cf" }}>{row.v}</span>
                 </div>
               ))}
+
+              <div
+                style={{
+                  marginTop: 14,
+                  paddingTop: 10,
+                  paddingBottom: 10,
+                  borderTop: "1px solid rgba(250,250,246,0.12)",
+                  borderBottom: "1px solid rgba(250,250,246,0.12)",
+                }}
+              >
+                <p
+                  style={{
+                    margin: 0,
+                    textAlign: "left",
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#8a8a85",
+                    letterSpacing: 0.2,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Ao continuar vc concorda com o{" "}
+                  <Link
+                    href="/termos-de-uso"
+                    style={{ color: "#d8d7cf", textDecoration: "underline" }}
+                  >
+                    Termo de Uso
+                  </Link>{" "}
+                  e{" "}
+                  <Link
+                    href="/privacidade"
+                    style={{ color: "#d8d7cf", textDecoration: "underline" }}
+                  >
+                    Privacidade
+                  </Link>
+                  .
+                </p>
+              </div>
             </div>
           </div>
 
@@ -392,6 +431,36 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
                 </>
               )}
             </p>
+
+            <p
+              className="entrar-legal-mobile"
+              style={{
+                display: "none",
+                textAlign: "center",
+                fontFamily: MONO,
+                fontSize: 10.5,
+                color: "#8a8a85",
+                marginTop: 36,
+                letterSpacing: 0.2,
+                lineHeight: 1.5,
+              }}
+            >
+              Ao continuar vc concorda com o{" "}
+              <Link
+                href="/termos-de-uso"
+                style={{ color: "#0a0a0a", textDecoration: "underline" }}
+              >
+                Termo de Uso
+              </Link>{" "}
+              e{" "}
+              <Link
+                href="/privacidade"
+                style={{ color: "#0a0a0a", textDecoration: "underline" }}
+              >
+                Privacidade
+              </Link>
+              .
+            </p>
           </div>
         </div>
 
@@ -408,6 +477,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
             .entrar-body { padding-left: 0 !important; justify-content: flex-start !important; padding-top: 28px !important; }
             .entrar-h1 { margin: 0 !important; font-size: 38px !important; }
             .entrar-form-title { font-size: 22px !important; }
+            .entrar-legal-mobile { display: block !important; }
           }
         `}</style>
       </main>

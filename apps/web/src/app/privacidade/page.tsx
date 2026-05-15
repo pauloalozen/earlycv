@@ -185,14 +185,15 @@ export default function PrivacyPage() {
               letterSpacing: -0.2,
             }}
           >
-            Consentimento e aceite
+            Bases legais do tratamento
           </p>
           <p style={{ fontSize: 13.5, lineHeight: 1.65, color: "#3a3a38" }}>
-            Ao criar conta, enviar currículo, colar descrição de vaga, integrar
-            login social ou continuar navegando em funcionalidades autenticadas,
-            você consente com o tratamento de dados pessoais nos limites desta
-            política, da legislação aplicável (incluindo LGPD) e dos Termos de
-            Uso do EarlyCV.
+            O EarlyCV trata dados pessoais conforme a base legal aplicável em
+            cada operação: execução de contrato/serviço para conta, análise de
+            CV e adaptação; obrigação legal para registros e rotinas financeiras;
+            legítimo interesse para segurança, prevenção a fraude e melhoria do
+            produto; e consentimento quando aplicável, especialmente para cookies
+            não essenciais e comunicações opcionais.
           </p>
         </div>
 
@@ -209,13 +210,21 @@ export default function PrivacyPage() {
           >
             1. Dados coletados
           </h2>
-          <ul style={{ margin: "0 0 8px", paddingLeft: 18 }}>
+          <ul
+            style={{
+              margin: "0 0 8px",
+              paddingLeft: 0,
+              listStylePosition: "inside",
+            }}
+          >
             {[
-              "Dados de cadastro e autenticação (nome, email, identificadores de sessão e tokens).",
-              "Dados de perfil profissional informados por você (headline, localidade e informações correlatas).",
-              "Dados de currículo e histórico de adaptações (arquivos, texto extraído, metadados e resultados).",
-              "Dados de uso e telemetria técnica (logs, IP, dispositivo, datas e horários de acesso).",
-              "Dados de pagamento e compra de planos, observadas as informações efetivamente disponibilizadas pelos provedores de pagamento.",
+              "Cadastro e autenticação: nome, email, credenciais e identificadores de sessão.",
+              "Currículo: arquivo enviado, texto extraído, metadados, histórico profissional, formação, links e demais dados que você incluir.",
+              "Vaga: descrição colada ou informações de vaga fornecidas por você.",
+              "Resultados gerados: análise, pontuação, sugestões e currículo adaptado.",
+              "Pagamento: plano, status e identificadores de compra/transação; não armazenamos dados completos de cartão.",
+              "Uso e segurança: IP, dispositivo, logs, eventos técnicos, dados de sessão, cookies e tecnologias similares.",
+              "Analytics: eventos de navegação e funil de produto, sem envio intencional de conteúdo bruto de CV/vaga para ferramentas de analytics.",
             ].map((item) => (
               <li
                 key={item}
@@ -273,9 +282,15 @@ export default function PrivacyPage() {
             necessários para hospedagem, autenticação, armazenamento,
             processamento de IA, monitoramento, pagamentos e comunicações
             transacionais, sempre no limite necessário para execução
-            operacional. O EarlyCV também pode compartilhar dados mediante
-            obrigação legal, ordem judicial ou para exercício regular de
-            direitos em processos administrativos, arbitrais ou judiciais.
+            operacional. Entre os principais fornecedores e infraestruturas
+            utilizadas, quando aplicável, estão: OpenAI (processamento de IA),
+            PostHog (analytics de produto/eventos), Google Analytics/GA4
+            (métricas de navegação e aquisição), Mercado Pago (pagamentos),
+            Cloudflare (DNS, segurança e Turnstile), Vercel e Railway
+            (hospedagem/infraestrutura) e Resend (emails transacionais). O
+            EarlyCV também pode compartilhar dados mediante obrigação legal,
+            ordem judicial ou para exercício regular de direitos em processos
+            administrativos, arbitrais ou judiciais.
           </p>
         </div>
 
@@ -293,12 +308,13 @@ export default function PrivacyPage() {
             4. Uso de IA e dados profissionais
           </h2>
           <p style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}>
-            Ao submeter currículo e descrição de vaga, você autoriza o
-            tratamento dessas informações para gerar análises e sugestões de
-            adaptação. Você declara ter legitimidade para enviar os dados e
+            Ao submeter currículo e descrição de vaga, essas informações serão
+            tratadas para gerar análises e sugestões de adaptação. Você declara
+            ter legitimidade para enviar os dados e
             assume responsabilidade pelo conteúdo submetido. O EarlyCV não
             garante entrevista, contratação, aprovação em processos seletivos ou
-            qualquer resultado profissional específico.
+            qualquer resultado profissional específico. O processamento pode usar
+            provedores de IA, incluindo OpenAI, conforme a finalidade do serviço.
           </p>
         </div>
 
@@ -326,6 +342,74 @@ export default function PrivacyPage() {
           </p>
         </div>
 
+        {/* Section 5.1 */}
+        <div style={{ marginBottom: 32 }}>
+          <h2
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: -0.8,
+              margin: "0 0 12px",
+              lineHeight: 1.2,
+            }}
+          >
+            5.1 Cookies e tecnologias similares
+          </h2>
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}>
+            O EarlyCV utiliza cookies e tecnologias similares para
+            autenticação, segurança da sessão e funcionamento essencial da
+            plataforma. Também utiliza tecnologias de analytics, como PostHog e
+            Google Analytics/GA4, para medir uso e melhorar a experiência.
+            Cookies e tecnologias não essenciais serão tratados conforme a base
+            legal aplicável e, quando exigido, dependerão de consentimento.
+          </p>
+        </div>
+
+        {/* Section 5.2 */}
+        <div style={{ marginBottom: 32 }}>
+          <h2
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: -0.8,
+              margin: "0 0 12px",
+              lineHeight: 1.2,
+            }}
+          >
+            5.2 Retenção e exclusão
+          </h2>
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}>
+            Dados de conta são mantidos enquanto a conta estiver ativa. CVs,
+            análises e adaptações podem ser mantidos enquanto necessários para o
+            serviço ou enquanto você optar por manter histórico. Registros de
+            compra e pagamento são mantidos pelo prazo necessário para
+            obrigações legais e defesa de direitos. Logs técnicos e de segurança
+            são mantidos por prazo limitado. Você pode solicitar exclusão quando
+            cabível, observadas as retenções obrigatórias.
+          </p>
+        </div>
+
+        {/* Section 5.3 */}
+        <div style={{ marginBottom: 32 }}>
+          <h2
+            style={{
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: -0.8,
+              margin: "0 0 12px",
+              lineHeight: 1.2,
+            }}
+          >
+            5.3 Dados sensíveis
+          </h2>
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}>
+            O EarlyCV não solicita dados sensíveis. Evite enviar documentos,
+            endereço completo, dados de saúde, religião, biometria ou dados de
+            terceiros. Se essas informações forem enviadas por você, poderão ser
+            processadas apenas para execução do serviço solicitado.
+          </p>
+        </div>
+
         {/* Section 6 */}
         <div style={{ marginBottom: 32 }}>
           <h2
@@ -342,9 +426,12 @@ export default function PrivacyPage() {
           <p style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}>
             Nos termos da LGPD, você pode solicitar confirmação de tratamento,
             acesso, correção, anonimização quando aplicável, portabilidade,
-            eliminação de dados tratados por consentimento e informações sobre
-            compartilhamento. Para exercício desses direitos, contate:{" "}
-            <span style={{ fontWeight: 500 }}>privacidade@earlycv.app</span>.
+            eliminação de dados pessoais, quando aplicável nos termos da LGPD,
+            e informações sobre
+            compartilhamento. Para solicitações LGPD e exercício desses
+            direitos, contate:{" "}
+            <span style={{ fontWeight: 500 }}>privacidade@earlycv.com.br</span>
+            .
           </p>
         </div>
 

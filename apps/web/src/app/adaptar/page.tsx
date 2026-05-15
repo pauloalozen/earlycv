@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
@@ -1591,6 +1592,33 @@ export default function AdaptarPage() {
                     </div>
                   ))}
                 </div>
+
+                <p
+                  style={{
+                    margin: "2px 2px 0",
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#7a7a74",
+                    lineHeight: 1.5,
+                    textAlign: "center",
+                  }}
+                >
+                  Evite enviar dados sensíveis desnecessários.
+                  <br />·{" "}
+                  <Link
+                    href="/privacidade"
+                    style={{ color: "#0a0a0a", textDecoration: "underline" }}
+                  >
+                    Privacidade
+                  </Link>{" "}
+                  ·{" "}
+                  <Link
+                    href="/termos-de-uso"
+                    style={{ color: "#0a0a0a", textDecoration: "underline" }}
+                  >
+                    Termos de Uso
+                  </Link>
+                </p>
               </div>
             </div>
           </form>

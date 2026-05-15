@@ -965,6 +965,33 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                 </p>
               )}
 
+              <p
+                style={{
+                  marginTop: 12,
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#8a8a85",
+                  letterSpacing: "0.02em",
+                  lineHeight: 1.45,
+                }}
+              >
+                Pagamento processado pelo Mercado Pago.{" "}
+                <Link
+                  href="/privacidade"
+                  style={{ color: "#0a0a0a", textDecoration: "underline" }}
+                >
+                  Política de Privacidade
+                </Link>{" "}
+                e{" "}
+                <Link
+                  href="/termos-de-uso"
+                  style={{ color: "#0a0a0a", textDecoration: "underline" }}
+                >
+                  Termos de Uso
+                </Link>
+                .
+              </p>
+
               {/* Footer */}
               <div
                 style={{

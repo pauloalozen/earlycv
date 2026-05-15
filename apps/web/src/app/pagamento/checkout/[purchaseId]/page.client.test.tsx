@@ -94,6 +94,27 @@ describe("BrickCheckoutClientPage", () => {
     });
   });
 
+  it("renders legal links in checkout context", async () => {
+    mockGetBrickCheckoutClient.mockResolvedValue({
+      purchaseId: "purchase-1",
+      amount: 11.9,
+      currency: "BRL",
+      description: "EarlyCV - pacote Starter",
+      status: "pending",
+      originAction: "buy_credits",
+      originAdaptationId: null,
+      payerEmail: "user@example.com",
+      checkoutMode: "brick",
+    });
+
+    render(<BrickCheckoutClientPage purchaseId="purchase-1" />);
+
+    expect(
+      await screen.findByRole("link", { name: /pol[ií]tica de privacidade/i }),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: /termos de uso/i })).toBeTruthy();
+  });
+
   it("redirects to concluded path when submit returns approved", async () => {
     let capturedOnSubmit: ((payload: unknown) => Promise<void>) | null = null;
     mockCreateBrick.mockImplementation(

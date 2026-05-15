@@ -233,10 +233,17 @@ export default function TermsPage() {
           >
             2. Regras de uso e condutas vedadas
           </h2>
-          <ul style={{ margin: "0 0 8px", paddingLeft: 18 }}>
+          <ul
+            style={{
+              margin: "0 0 8px",
+              paddingLeft: 0,
+              listStylePosition: "inside",
+            }}
+          >
             {[
               "Usar o serviço para fins ilícitos, discriminatórios, difamatórios ou em violação a direitos de terceiros.",
               "Enviar dados sem base legal, consentimento ou legitimidade para tratamento.",
+              "Enviar dados sensíveis desnecessários, como documentos, endereço completo, informações de saúde, religião, dados biométricos ou dados de terceiros sem legitimidade.",
               "Tentar contornar limites técnicos, créditos, autenticação, segurança ou controles antiabuso.",
               "Realizar engenharia reversa, scraping não autorizado, automação abusiva ou interferência na infraestrutura.",
             ].map((item) => (
@@ -273,7 +280,9 @@ export default function TermsPage() {
             licença não exclusiva para processar, armazenar, transformar e
             exibir os dados estritamente para operação da plataforma, prevenção
             de abuso, auditoria, suporte e melhoria do serviço. Você declara que
-            o conteúdo submetido não infringe direitos de terceiros.
+            o conteúdo submetido não infringe direitos de terceiros. Você é
+            responsável por revisar o currículo gerado antes de qualquer uso,
+            envio ou candidatura.
           </p>
         </div>
 
@@ -296,7 +305,8 @@ export default function TermsPage() {
             depende de confirmação de pagamento e cumprimento das regras da
             plataforma. Estornos, cancelamentos e disputas obedecem à legislação
             aplicável, aos termos de pagamento e às políticas específicas
-            divulgadas no fluxo de compra.
+            divulgadas no fluxo de compra. Créditos, planos e pagamentos seguem
+            as regras e condições exibidas no momento da compra.
           </p>
         </div>
 
@@ -392,7 +402,10 @@ export default function TermsPage() {
             Brasil. Fica eleito o foro da comarca de São Paulo/SP, com renúncia
             a qualquer outro, salvo disposição legal imperativa diversa. O
             EarlyCV pode alterar estes termos a qualquer tempo, mediante
-            publicação da versão vigente nesta rota.
+            publicação da versão vigente nesta rota. O EarlyCV também pode
+            suspender ou encerrar suas operações, total ou parcialmente, a
+            qualquer momento, sem aviso prévio e sem obrigação de indenização,
+            observadas as disposições legais aplicáveis.
           </p>
         </div>
 

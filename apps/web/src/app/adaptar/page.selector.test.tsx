@@ -67,4 +67,18 @@ describe("AdaptarPage selector defaults", () => {
       "background: rgb(10, 10, 10)",
     );
   });
+
+  it("renders legal links and sensitive-data warning in adaptation flow", async () => {
+    getAuthStatusMock.mockResolvedValue({ userName: null });
+
+    render(<AdaptarPage />);
+
+    expect(
+      await screen.findByText(/evite enviar dados sens[ií]veis desnecess[áa]rios/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /pol[ií]tica de privacidade/i }),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: /termos de uso/i })).toBeTruthy();
+  });
 });

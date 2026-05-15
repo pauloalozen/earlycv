@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PlanosPage from "./page";
@@ -195,5 +201,25 @@ describe("PlanosPage checkout", () => {
 
     expect(body.planId).toBe("pro");
     expect(body.adaptationId).toBeUndefined();
+  });
+
+  it("renders legal links near critical purchase context", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          purchaseId: "purchase-123",
+          checkoutMode: "brick",
+        }),
+      }),
+    );
+
+    render(await PlanosPage({ searchParams: Promise.resolve({}) }));
+
+    expect(
+      screen.getByRole("link", { name: /pol[ií]tica de privacidade/i }),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: /termos de uso/i })).toBeTruthy();
   });
 });
