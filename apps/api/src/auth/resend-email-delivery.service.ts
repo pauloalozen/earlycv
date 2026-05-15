@@ -32,46 +32,10 @@ export class ResendEmailDeliveryService implements EmailDeliveryPort {
       }),
     });
 
-    const requestId =
-      res.headers.get("x-request-id") ?? res.headers.get("x-correlation-id");
-
     if (!res.ok) {
-      this.logger.error("Email delivery failed", {
-        errorCode: `HTTP_${res.status}`,
-        operation: "email_send",
-        provider: "resend",
-        requestId: requestId ?? undefined,
-        status: "failure",
-      });
+      const body = await res.text();
+      this.logger.error(`Resend error ${res.status}: ${body}`);
       throw new Error(`Failed to send email via Resend: ${res.status}`);
-    }
-
-    const responseBody = await this.safeParseResponseBody(res);
-    this.logger.log("Email delivery succeeded", {
-      messageId: this.extractMessageId(responseBody),
-      operation: "email_send",
-      provider: "resend",
-      requestId: requestId ?? undefined,
-      status: "success",
-    });
-  }
-
-  private extractMessageId(responseBody: unknown): string | undefined {
-    if (!responseBody || typeof responseBody !== "object") {
-      return undefined;
-    }
-
-    const candidate = (responseBody as { id?: unknown }).id;
-    return typeof candidate === "string" && candidate.length > 0
-      ? candidate
-      : undefined;
-  }
-
-  private async safeParseResponseBody(res: Response): Promise<unknown> {
-    try {
-      return await res.json();
-    } catch {
-      return undefined;
     }
   }
 }
