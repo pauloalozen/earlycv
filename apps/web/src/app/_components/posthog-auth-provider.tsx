@@ -2,6 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics-tracking";
+import {
+  isAnalyticsConsentGateEnabled,
+  onAnalyticsConsentChanged,
+  readAnalyticsConsentState,
+} from "@/lib/analytics-consent";
 import { persistPosthogSessionId } from "@/lib/posthog-session";
 
 const AUTH_ANALYTICS_STORAGE_KEY = "analytics_auth_context";
@@ -110,6 +115,7 @@ export function PosthogAuthProvider({
 
   useEffect(() => {
     let cancelled = false;
+    let cleanupConsentListener = () => {};
 
     const bootstrap = async () => {
       if (!sessionStorage.getItem(AUTH_ANALYTICS_STORAGE_KEY)) {
@@ -122,7 +128,11 @@ export function PosthogAuthProvider({
 
       const posthogConfig = getPosthogConfig();
       let posthog: Awaited<ReturnType<typeof loadPosthogClient>> | null = null;
-      if (posthogConfig) {
+      const consentState = readAnalyticsConsentState();
+      const shouldInitPosthog =
+        posthogConfig &&
+        (!isAnalyticsConsentGateEnabled() || consentState === "accepted");
+      if (shouldInitPosthog) {
         posthog = await loadPosthogClient();
         if (cancelled) {
           return;
@@ -146,7 +156,16 @@ export function PosthogAuthProvider({
         posthogSessionClient.onSessionId?.((sessionId) => {
           persistPosthogSessionId(sessionId);
         });
+      } else if (consentState === "denied") {
+        sessionStorage.removeItem("analytics_posthog_session_id");
       }
+
+      cleanupConsentListener = onAnalyticsConsentChanged((nextState) => {
+        if (nextState === "denied") {
+          posthog?.reset();
+          sessionStorage.removeItem("analytics_posthog_session_id");
+        }
+      });
 
       if (typeof fetch !== "function") {
         writeAuthAnalyticsContext({
@@ -269,6 +288,7 @@ export function PosthogAuthProvider({
 
     return () => {
       cancelled = true;
+      cleanupConsentListener();
     };
   }, []);
 

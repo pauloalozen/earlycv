@@ -8,6 +8,7 @@ vi.mock("@/lib/cv-adaptation-api", () => ({
 }));
 
 import {
+  __resetAnalyticsTrackingForTests,
   captureAndPersistUtmParams,
   getAnalyticsBaseProperties,
   trackEvent,
@@ -35,7 +36,10 @@ describe("analytics tracking", () => {
     fetchMock.mockResolvedValue({ ok: true, text: async () => "" });
     vi.stubGlobal("fetch", fetchMock);
     vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "phc_test_key");
+    vi.stubEnv("NEXT_PUBLIC_ANALYTICS_CONSENT_ENABLED", "true");
+    __resetAnalyticsTrackingForTests();
     window.localStorage.removeItem("analytics_first_touch_utm");
+    window.localStorage.setItem("analytics_consent_status", "accepted");
     sessionStorage.removeItem("analytics_auth_context");
     sessionStorage.removeItem("journey_session_internal_id");
     sessionStorage.removeItem("journey_current_route_visit_id");
@@ -67,6 +71,40 @@ describe("analytics tracking", () => {
       utm_campaign: "validacao_open_to_work",
       utm_content: "v1",
     });
+  });
+
+  it("does not emit frontend tracking when consent is unknown", async () => {
+    window.localStorage.removeItem("analytics_consent_status");
+
+    await trackEvent({ eventName: "page_view" });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not emit frontend tracking when consent is denied", async () => {
+    window.localStorage.setItem("analytics_consent_status", "denied");
+
+    await trackEvent({ eventName: "page_view" });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not persist first-touch utm before consent", () => {
+    window.localStorage.removeItem("analytics_consent_status");
+    window.history.replaceState(
+      {},
+      "",
+      "/?utm_source=linkedin&utm_medium=dm&utm_campaign=launch",
+    );
+
+    const firstTouch = captureAndPersistUtmParams();
+
+    expect(firstTouch).toMatchObject({
+      utm_source: "linkedin",
+      utm_medium: "dm",
+      utm_campaign: "launch",
+    });
+    expect(window.localStorage.getItem("analytics_first_touch_utm")).toBeNull();
   });
 
   it("includes only safe route metadata and persisted utm on page_view payload", async () => {

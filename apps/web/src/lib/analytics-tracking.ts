@@ -1,4 +1,8 @@
 import { getFrontendAnalyticsContext } from "@/lib/analytics-context";
+import {
+  isAnalyticsConsentGateEnabled,
+  readAnalyticsConsentState,
+} from "@/lib/analytics-consent";
 import { emitBusinessFunnelEvent } from "@/lib/cv-adaptation-api";
 import {
   getPosthogSessionId,
@@ -50,6 +54,12 @@ const ALLOWED_UTM_KEYS = new Set([
   "utm_content",
   "utm_term",
 ]);
+
+let transientFirstTouchUtm: UtmParams = {};
+
+export function __resetAnalyticsTrackingForTests() {
+  transientFirstTouchUtm = {};
+}
 
 function isPosthogSessionRequired() {
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
@@ -344,8 +354,27 @@ export function captureAndPersistUtmParams(): UtmParams {
 
   const currentUrlUtm = readWindowUtmParams();
   const hasCurrentUtm = Object.keys(currentUrlUtm).length > 0;
+  const consentState = readAnalyticsConsentState();
+  const allowPersistence =
+    !isAnalyticsConsentGateEnabled() || consentState === "accepted";
+
+  if (!allowPersistence) {
+    const hasTransient = Object.keys(transientFirstTouchUtm).length > 0;
+    if (hasTransient) {
+      return transientFirstTouchUtm;
+    }
+
+    if (hasCurrentUtm) {
+      transientFirstTouchUtm = currentUrlUtm;
+      return currentUrlUtm;
+    }
+
+    return {};
+  }
+
   if (!hasCurrentUtm) {
-    return getPersistedUtmParams();
+    const persisted = getPersistedUtmParams();
+    return Object.keys(persisted).length > 0 ? persisted : transientFirstTouchUtm;
   }
 
   const existing = getPersistedUtmParams();
@@ -355,6 +384,7 @@ export function captureAndPersistUtmParams(): UtmParams {
   }
 
   storage.setItem(UTM_STORAGE_KEY, JSON.stringify(currentUrlUtm));
+  transientFirstTouchUtm = currentUrlUtm;
   return currentUrlUtm;
 }
 
@@ -489,6 +519,14 @@ async function postBusinessFunnelEvent(payload: {
 }
 
 export async function trackEvent(input: TrackEventInput): Promise<void> {
+  const consentState = readAnalyticsConsentState();
+  if (
+    isAnalyticsConsentGateEnabled() &&
+    (consentState === "unknown" || consentState === "denied")
+  ) {
+    return;
+  }
+
   const resolvedPosthogSessionId = await ensurePosthogSessionIdForEvent(
     input.eventName,
   );

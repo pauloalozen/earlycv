@@ -33,6 +33,7 @@ test("security headers include hardened baseline", async () => {
   assert.ok(cspReportOnly);
   assert.match(cspReportOnly, /frame-ancestors 'self'/);
   assert.match(cspReportOnly, /object-src 'none'/);
+  assert.match(cspReportOnly, /https:\/\/c\.earlycv\.com\.br/);
 });
 
 test("admin surfaces receive noindex x-robots-tag", async () => {

@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { AnalyticsConsentBanner } from "./_components/analytics-consent-banner";
 import { JourneyTrackerProvider } from "./_components/journey-tracker-provider";
 import { PosthogAuthProvider } from "./_components/posthog-auth-provider";
 
@@ -40,6 +41,7 @@ export default function Template({
           >
             {children}
           </div>
+          <AnalyticsConsentBanner />
         </JourneyTrackerProvider>
       </Suspense>
     </PosthogAuthProvider>

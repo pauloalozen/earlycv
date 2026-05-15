@@ -70,6 +70,8 @@ const instrumentSerif = Instrument_Serif({
 
 const isProduction = process.env.NODE_ENV === "production";
 const GA_MEASUREMENT_ID = "G-FGMKXL50XR";
+const analyticsConsentEnabled =
+  process.env.NEXT_PUBLIC_ANALYTICS_CONSENT_ENABLED !== "false";
 
 export const viewport: Viewport = {
   colorScheme: "light",
@@ -167,6 +169,7 @@ export default function RootLayout({
               {`window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
+${analyticsConsentEnabled ? "gtag('consent', 'default', { analytics_storage: 'denied' });" : ""}
 gtag('config', '${GA_MEASUREMENT_ID}');`}
             </Script>
           </>
