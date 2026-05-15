@@ -33,8 +33,17 @@ export class ResendEmailDeliveryService implements EmailDeliveryPort {
     });
 
     if (!res.ok) {
-      const body = await res.text();
-      this.logger.error(`Resend error ${res.status}: ${body}`);
+      const requestId =
+        res.headers.get("x-request-id") ??
+        res.headers.get("x-correlation-id") ??
+        undefined;
+      this.logger.error("Resend email delivery failed", {
+        provider: "resend",
+        operation: "email_send",
+        status: "failure",
+        errorCode: `HTTP_${res.status}`,
+        requestId,
+      });
       throw new Error(`Failed to send email via Resend: ${res.status}`);
     }
   }
