@@ -72,6 +72,15 @@ describe("extractApiErrorMessage", () => {
       ),
     ).toBe("service unavailable");
   });
+
+  it("returns fallback for HTML challenge pages", () => {
+    const raw =
+      "<!DOCTYPE html><html><head><title>Just a moment...</title></head><body>challenge</body></html>";
+
+    expect(extractApiErrorMessage(raw, "Falha ao analisar CV.")).toBe(
+      "Falha ao analisar CV.",
+    );
+  });
 });
 
 describe("analyzeGuestCv request forwarding", () => {
