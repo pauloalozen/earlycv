@@ -11,7 +11,7 @@ import type {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
-import { CustomApiAdapter, CustomHtmlAdapter } from "./adapters";
+import { CustomApiAdapter, CustomHtmlAdapter, GupyAdapter } from "./adapters";
 import type {
   IngestionPreviewItem,
   IngestionRunSummary,
@@ -61,10 +61,12 @@ export class IngestionService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(CustomHtmlAdapter) customHtmlAdapter: CustomHtmlAdapter,
     @Inject(CustomApiAdapter) customApiAdapter: CustomApiAdapter,
+    @Inject(GupyAdapter) gupyAdapter: GupyAdapter,
   ) {
     this.adapters = new Map<JobSource["sourceType"], IngestionSourceAdapter>([
       [customHtmlAdapter.sourceType, customHtmlAdapter],
       [customApiAdapter.sourceType, customApiAdapter],
+      [gupyAdapter.sourceType, gupyAdapter],
     ]);
   }
 
