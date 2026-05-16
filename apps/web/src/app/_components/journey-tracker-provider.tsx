@@ -7,6 +7,10 @@ import {
   trackEvent,
 } from "@/lib/analytics-tracking";
 import {
+  isAnalyticsConsentGateEnabled,
+  readAnalyticsConsentState,
+} from "@/lib/analytics-consent";
+import {
   consumeSessionEngagedOnce,
   consumeSessionStartedOnce,
   createJourneyState,
@@ -199,6 +203,14 @@ function tryEmitWithBeacon(payload: {
   idempotencyKey: string;
   metadata: Record<string, unknown>;
 }) {
+  const consentState = readAnalyticsConsentState();
+  if (
+    isAnalyticsConsentGateEnabled() &&
+    (consentState === "unknown" || consentState === "denied")
+  ) {
+    return false;
+  }
+
   if (typeof navigator === "undefined" || !navigator.sendBeacon) {
     return false;
   }

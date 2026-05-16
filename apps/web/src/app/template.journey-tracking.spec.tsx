@@ -35,6 +35,19 @@ import Template from "./template";
 
 describe("Template journey tracking", () => {
   beforeEach(() => {
+    const store = new Map<string, string>();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
+        },
+        removeItem: (key: string) => {
+          store.delete(key);
+        },
+      },
+    });
     process.env.NEXT_PUBLIC_POSTHOG_KEY = "ph-test-key";
     trackEventMock.mockReset();
     trackEventMock.mockResolvedValue(undefined);
@@ -53,6 +66,14 @@ describe("Template journey tracking", () => {
     useSearchParamsMock.mockReturnValue(new URLSearchParams());
     __resetSessionStartedEmissionGuardForTests();
     sessionStorage.clear();
+    localStorage.setItem(
+      "analytics_consent_status",
+      JSON.stringify({
+        state: "accepted",
+        savedAt: Date.now(),
+        expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+      }),
+    );
   });
 
   afterEach(() => {
@@ -194,6 +215,27 @@ describe("Template journey tracking", () => {
 
     expect(payload.eventName).toBe("page_leave");
     expect(payload.metadata?.$session_id).toBe("ph-session-1");
+  });
+
+  it("does not send beacon when consent is unknown", async () => {
+    localStorage.removeItem("analytics_consent_status");
+    const sendBeaconMock = vi.fn(() => true);
+    Object.defineProperty(window.navigator, "sendBeacon", {
+      configurable: true,
+      value: sendBeaconMock,
+    });
+
+    render(
+      <Template>
+        <div>child</div>
+      </Template>,
+    );
+
+    window.dispatchEvent(new Event("pagehide"));
+
+    await waitFor(() => {
+      expect(sendBeaconMock).not.toHaveBeenCalled();
+    });
   });
 
   it("does not emit site_exit_candidate for auth redirect and emits auth_oauth_redirect_started", async () => {
