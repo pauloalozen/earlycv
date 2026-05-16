@@ -3,56 +3,85 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Badge, BrandMark, buttonVariants } from "@/components/ui";
-import { getJobBySlug, jobs } from "@/lib/jobs";
+import { getPublicJobBySlug } from "@/lib/public-jobs-api";
 import { getAbsoluteUrl } from "@/lib/site";
 
 type JobPageProps = {
-  params: Promise<{
-    slug: string;
-  }>;
+  params: Promise<{ slug: string }>;
 };
 
-export async function generateStaticParams() {
-  return jobs.map((job) => ({ slug: job.slug }));
+type JobSection = {
+  bodyHtml: string;
+  title: string;
+};
+
+function sanitizeJobHtml(html: string) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/\son\w+="[^"]*"/gi, "")
+    .replace(/\son\w+='[^']*'/gi, "")
+    .replace(/javascript:/gi, "");
 }
 
-export async function generateMetadata({
-  params,
-}: JobPageProps): Promise<Metadata> {
+function splitHtmlSections(descriptionHtml: string): JobSection[] {
+  const safeHtml = sanitizeJobHtml(descriptionHtml ?? "");
+  const sectionRegex = /<section>\s*<h2>(.*?)<\/h2>([\s\S]*?)<\/section>/gi;
+  const sections: JobSection[] = [];
+
+  let match = sectionRegex.exec(safeHtml);
+  while (match) {
+    const [, title, bodyHtml] = match;
+    if (title?.trim() && bodyHtml?.trim()) {
+      sections.push({
+        title: title.trim(),
+        bodyHtml: bodyHtml.trim(),
+      });
+    }
+    match = sectionRegex.exec(safeHtml);
+  }
+
+  if (sections.length > 0) {
+    return sections;
+  }
+
+  return [
+    {
+      title: "Descricao da vaga",
+      bodyHtml: safeHtml,
+    },
+  ];
+}
+
+async function loadJob(slug: string) {
+  try {
+    return await getPublicJobBySlug(slug);
+  } catch {
+    return null;
+  }
+}
+
+export async function generateMetadata({ params }: JobPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const job = getJobBySlug(slug);
+  const job = await loadJob(slug);
 
   if (!job) {
     return {
-      title: "Vaga não encontrada",
-      robots: {
-        index: false,
-        follow: false,
-      },
+      title: "Vaga nao encontrada",
+      robots: { index: false, follow: false },
     };
   }
 
   const title = `${job.title} na ${job.company}`;
-  const description = `${job.title} na ${job.company} em ${job.location}. ${job.summary} Veja requisitos, contexto, salário estimado e detalhes da candidatura.`;
+  const description = `${job.title} na ${job.company} em ${job.location}. Veja detalhes da vaga e aplique no portal de origem.`;
   const url = getAbsoluteUrl(`/vagas/${job.slug}`);
 
   return {
     title,
     description,
-    alternates: {
-      canonical: url,
-    },
-    keywords: [job.title, job.company, job.location, ...job.keywords],
-    openGraph: {
-      type: "article",
-      url,
-      title,
-      description,
-    },
-    twitter: {
-      title,
-      description,
-    },
+    alternates: { canonical: url },
+    openGraph: { type: "article", url, title, description },
+    twitter: { title, description },
     robots: {
       index: true,
       follow: true,
@@ -69,19 +98,17 @@ export async function generateMetadata({
 
 export default async function JobPage({ params }: JobPageProps) {
   const { slug } = await params;
-  const job = getJobBySlug(slug);
-
-  if (!job) {
-    notFound();
-  }
+  const job = await loadJob(slug);
+  if (!job) notFound();
+  const sections = splitHtmlSections(job.descriptionHtml);
 
   const jobJsonLd = {
     "@context": "https://schema.org",
     "@type": "JobPosting",
     title: job.title,
     description: job.description,
-    datePosted: job.datePosted,
-    employmentType: job.employmentType,
+    datePosted: job.publishedAtSource ?? job.firstSeenAt,
+    employmentType: job.employmentType ?? undefined,
     hiringOrganization: {
       "@type": "Organization",
       name: job.company,
@@ -90,23 +117,11 @@ export default async function JobPage({ params }: JobPageProps) {
       "@type": "Place",
       address: {
         "@type": "PostalAddress",
-        addressCountry: "BR",
+        addressCountry: job.country ?? "BR",
         addressLocality: job.location,
       },
     },
-    applicantLocationRequirements: {
-      "@type": "Country",
-      name: "Brasil",
-    },
-    baseSalary: {
-      "@type": "MonetaryAmount",
-      currency: "BRL",
-      value: {
-        "@type": "QuantitativeValue",
-        unitText: "MONTH",
-        value: job.salary,
-      },
-    },
+    applicantLocationRequirements: { "@type": "Country", name: "Brasil" },
     directApply: true,
     url: getAbsoluteUrl(`/vagas/${job.slug}`),
   };
@@ -119,17 +134,15 @@ export default async function JobPage({ params }: JobPageProps) {
         <header className="mb-12 flex flex-col gap-6 border-b border-stone-200 pb-8 md:flex-row md:items-center md:justify-between">
           <Link className="flex items-center gap-2.5" href="/">
             <BrandMark className="size-7 rounded-[9px]" />
-            <span className="font-logo text-2xl tracking-tight text-stone-800">
-              earlyCV
-            </span>
+            <span className="font-logo text-2xl tracking-tight text-stone-800">earlyCV</span>
           </Link>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Link className={buttonVariants({ variant: "outline" })} href="/">
-              Voltar para home
+            <Link className={buttonVariants({ variant: "outline" })} href="/vagas">
+              Voltar para vagas
             </Link>
-            <Link className={buttonVariants()} href="/ui">
-              Comecar agora
+            <Link className={buttonVariants()} href="/adaptar">
+              Adaptar para esta vaga
             </Link>
           </div>
         </header>
@@ -138,50 +151,33 @@ export default async function JobPage({ params }: JobPageProps) {
           <section className="space-y-5">
             <div className="flex flex-wrap items-center gap-3">
               <Badge variant="accent">{job.company}</Badge>
-              <Badge variant="success">fit {job.fitScore}/100</Badge>
-              <Badge variant="outline">{job.timeLabel}</Badge>
+              <Badge variant="outline">{job.workModel ?? "nao informado"}</Badge>
+              <Badge variant="neutral">primeira captura {new Date(job.firstSeenAt).toLocaleDateString("pt-BR")}</Badge>
             </div>
 
             <div className="space-y-4">
-              <h1 className="max-w-4xl text-4xl font-bold tracking-tight text-stone-900 md:text-5xl">
-                {job.title}
-              </h1>
-              <p className="max-w-3xl text-lg leading-8 text-stone-600">
-                {job.summary}
-              </p>
+              <h1 className="max-w-4xl text-4xl font-bold tracking-tight text-stone-900 md:text-5xl">{job.title}</h1>
             </div>
 
             <div className="grid gap-4 rounded-[20px] border border-stone-200 bg-white p-6 md:grid-cols-4">
               <div>
-                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">
-                  Localizacao
-                </p>
-                <p className="mt-2 text-sm font-medium text-stone-800">
-                  {job.location}
-                </p>
+                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">Localizacao</p>
+                <p className="mt-2 text-sm font-medium text-stone-800">{job.location}</p>
               </div>
               <div>
-                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">
-                  Modelo
-                </p>
-                <p className="mt-2 text-sm font-medium text-stone-800">
-                  {job.remoteType}
-                </p>
+                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">Modelo</p>
+                <p className="mt-2 text-sm font-medium text-stone-800">{job.workModel ?? "nao informado"}</p>
               </div>
               <div>
-                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">
-                  Tipo
-                </p>
-                <p className="mt-2 text-sm font-medium text-stone-800">
-                  Tempo integral
-                </p>
+                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">Tipo</p>
+                <p className="mt-2 text-sm font-medium text-stone-800">{job.employmentType ?? "nao informado"}</p>
               </div>
               <div>
-                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">
-                  Faixa salarial
-                </p>
+                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">Publicada em</p>
                 <p className="mt-2 text-sm font-medium text-stone-800">
-                  {job.salary}
+                  {job.publishedAtSource
+                    ? new Date(job.publishedAtSource).toLocaleDateString("pt-BR")
+                    : "nao informado"}
                 </p>
               </div>
             </div>
@@ -189,43 +185,30 @@ export default async function JobPage({ params }: JobPageProps) {
 
           <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="space-y-6 rounded-[24px] border border-stone-200 bg-white p-8">
-              <div className="space-y-3">
-                <h2 className="text-2xl font-bold tracking-tight text-stone-900">
-                  Descricao da vaga
-                </h2>
-                <p className="text-base leading-8 text-stone-600">
-                  {job.description}
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <h2 className="text-2xl font-bold tracking-tight text-stone-900">
-                  Palavras-chave que podem ranquear
-                </h2>
-                <ul className="grid gap-3 md:grid-cols-2">
-                  {job.keywords.map((keyword) => (
-                    <li
-                      className="rounded-xl bg-stone-100 px-4 py-3 text-sm font-medium text-stone-700"
-                      key={keyword}
-                    >
-                      {keyword}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {sections.map((section) => (
+                <div className="space-y-3" key={section.title}>
+                  <h2 className="text-2xl font-bold tracking-tight text-stone-900">{section.title}</h2>
+                  <div
+                    className="prose prose-stone max-w-none text-base leading-8"
+                    dangerouslySetInnerHTML={{ __html: section.bodyHtml }}
+                  />
+                </div>
+              ))}
             </div>
 
-            <aside className="space-y-4 rounded-[24px] border border-stone-200 bg-white p-6 h-fit">
-              <h2 className="text-xl font-bold tracking-tight text-stone-900">
-                Proximo passo
-              </h2>
+            <aside className="h-fit space-y-4 rounded-[24px] border border-stone-200 bg-white p-6">
+              <h2 className="text-xl font-bold tracking-tight text-stone-900">Candidatura</h2>
               <p className="text-sm leading-7 text-stone-600">
-                Use a EarlyCV para monitorar vagas semelhantes, avaliar
-                aderencia e adaptar o curriculo para esta oportunidade.
+                A candidatura acontece no portal da empresa. Abra a vaga original para aplicar.
               </p>
-              <Link className={buttonVariants({ block: true })} href="/">
-                Monitorar vagas parecidas
-              </Link>
+              <a
+                className={buttonVariants({ block: true })}
+                href={job.sourceJobUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Abrir vaga original
+              </a>
             </aside>
           </section>
         </article>

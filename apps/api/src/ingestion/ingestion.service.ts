@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -72,6 +73,20 @@ export class IngestionService {
 
   async runJobSource(jobSourceId: string) {
     const jobSource = await this.getJobSourceContext(jobSourceId);
+    const runningRun = await this.database.ingestionRun.findFirst({
+      where: {
+        jobSourceId,
+        status: "running",
+      },
+      orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+    });
+
+    if (runningRun) {
+      throw new ConflictException(
+        "ingestion run already in progress for this source",
+      );
+    }
+
     const run = await this.database.ingestionRun.create({
       data: {
         jobSourceId,

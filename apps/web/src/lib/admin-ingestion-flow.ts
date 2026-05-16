@@ -1,7 +1,7 @@
 export type SourceDefaults = {
   crawlStrategy: "api" | "html";
   parserKey: string;
-  sourceType: "custom_api" | "custom_html";
+  sourceType: "custom_api" | "custom_html" | "gupy";
 };
 
 export type CreateCompanyInput = {
@@ -20,7 +20,7 @@ export type CreateJobSourceInput = {
   isActive: boolean;
   parserKey: string;
   sourceName: string;
-  sourceType: "custom_api" | "custom_html";
+  sourceType: "custom_api" | "custom_html" | "gupy";
   sourceUrl: string;
 };
 
@@ -28,6 +28,15 @@ function getTrimmedValue(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
 
   return value.length > 0 ? value : undefined;
+}
+
+function inferGupySourceTypeFromUrl(sourceUrl: string) {
+  try {
+    const hostname = new URL(sourceUrl).hostname.toLowerCase();
+    return hostname.endsWith(".gupy.io");
+  } catch {
+    return false;
+  }
 }
 
 export function buildAdminRedirect(
@@ -49,6 +58,14 @@ export function buildAdminRedirect(
 }
 
 export function getSourceDefaults(sourceType: string): SourceDefaults {
+  if (sourceType === "gupy") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "gupy",
+      sourceType: "gupy",
+    };
+  }
+
   if (sourceType === "custom_api") {
     return {
       crawlStrategy: "api",
@@ -108,7 +125,10 @@ export function parseJobSourceFormData(
     throw new Error("Preencha os campos obrigatorios da fonte.");
   }
 
-  const defaults = getSourceDefaults(sourceType);
+  const effectiveSourceType = sourceUrl && inferGupySourceTypeFromUrl(sourceUrl)
+    ? "gupy"
+    : sourceType;
+  const defaults = getSourceDefaults(effectiveSourceType);
   const checkIntervalMinutes = Number(intervalRaw);
 
   if (!Number.isInteger(checkIntervalMinutes) || checkIntervalMinutes < 1) {

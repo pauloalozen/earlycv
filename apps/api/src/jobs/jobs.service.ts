@@ -61,6 +61,34 @@ export class JobsService {
     });
   }
 
+  listPublic() {
+    return this.database.job.findMany({
+      where: { status: "active" },
+      orderBy: [{ firstSeenAt: "desc" }, { updatedAt: "desc" }],
+      select: {
+        canonicalKey: true,
+        company: {
+          select: {
+            name: true,
+          },
+        },
+        country: true,
+        descriptionClean: true,
+        descriptionRaw: true,
+        employmentType: true,
+        firstSeenAt: true,
+        id: true,
+        lastSeenAt: true,
+        locationText: true,
+        publishedAtSource: true,
+        sourceJobUrl: true,
+        status: true,
+        title: true,
+        workModel: true,
+      },
+    });
+  }
+
   async getById(jobId: string) {
     const job = await this.database.job.findUnique({
       where: { id: jobId },

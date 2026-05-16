@@ -8,6 +8,7 @@ import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { cn } from "@/lib/cn";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { RunSourceSubmitButton } from "./_components/run-source-submit-button";
 import { runJobSourceAction } from "./actions";
 
 export const metadata = buildAdminMetadata("Ingestion");
@@ -109,17 +110,17 @@ export default async function AdminIngestionPage({
               admin / ingestion
             </p>
             <h1 className="text-4xl font-bold tracking-tight">
-              Runs manuais por fonte
+              Execucao de fontes
             </h1>
             <p className="max-w-3xl text-sm leading-7 text-stone-600">
-              Execute ingestao sincrona, valide contadores e acompanhe as
-              ultimas tentativas antes de plugar a fila assíncrona.
+              Rode manualmente, acompanhe auditoria e revise o escalonamento de
+              cada fonte de vagas em um unico ponto.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
             <Link className={buttonVariants()} href={`/admin/ingestion/new`}>
-              Adicionar empresa e fonte
+              Cadastrar empresa e fonte
             </Link>
           </div>
 
@@ -158,6 +159,7 @@ export default async function AdminIngestionPage({
               <option value="">Todos os tipos</option>
               <option value="custom_html">custom_html</option>
               <option value="custom_api">custom_api</option>
+              <option value="gupy">gupy</option>
             </select>
             <form className="contents" id="sources-filter" method="GET">
               <button
@@ -213,6 +215,14 @@ export default async function AdminIngestionPage({
                     </div>
                     <div>
                       <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
+                        escalonamento
+                      </p>
+                      <p className="mt-2 text-sm font-medium text-stone-900">
+                        a cada {source.checkIntervalMinutes} min
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
                         novos / atualizados
                       </p>
                       <p className="mt-2 text-sm font-medium text-stone-900">
@@ -243,9 +253,7 @@ export default async function AdminIngestionPage({
                         type="hidden"
                         value={redirectPath}
                       />
-                      <button className={buttonVariants()} type="submit">
-                        Rodar agora
-                      </button>
+                      <RunSourceSubmitButton />
                     </form>
 
                     <Link

@@ -72,6 +72,7 @@ type SearchableCompany = {
 };
 
 type SearchableSource = {
+  checkIntervalMinutes: number;
   company: { name: string };
   id: string;
   ingestionRuns?: IngestionRunSummary[];

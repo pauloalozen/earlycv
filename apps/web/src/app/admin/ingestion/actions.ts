@@ -84,6 +84,7 @@ export async function createJobSourceAction(formData: FormData) {
   );
 
   let source: Awaited<ReturnType<typeof createJobSource>>;
+  const runAfterCreate = formData.get("runAfterCreate") === "on";
 
   try {
     const payload = parseJobSourceFormData(formData);
@@ -104,6 +105,31 @@ export async function createJobSourceAction(formData: FormData) {
         ...(companyName ? { companyName } : {}),
         step: "job-source",
       }),
+    );
+  }
+
+  if (runAfterCreate) {
+    try {
+      await runJobSource(source.id);
+    } catch (error) {
+      if (isRedirectControlFlowError(error)) {
+        throw error;
+      }
+
+      const message =
+        error instanceof Error
+          ? `Fonte criada, mas a execucao manual falhou: ${error.message}`
+          : "Fonte criada, mas a execucao manual falhou.";
+
+      redirect(buildAdminRedirect(ROOT_REDIRECT_PATH, "error", message));
+    }
+
+    redirect(
+      buildAdminRedirect(
+        ROOT_REDIRECT_PATH,
+        "success",
+        `Fonte ${source.sourceName} criada e executada com sucesso.`,
+      ),
     );
   }
 

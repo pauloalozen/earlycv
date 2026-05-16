@@ -48,7 +48,7 @@ export type CreateJobSourcePayload = {
   isActive: boolean;
   parserKey: string;
   sourceName: string;
-  sourceType: "custom_api" | "custom_html";
+  sourceType: "custom_api" | "custom_html" | "gupy";
   sourceUrl: string;
 };
 
