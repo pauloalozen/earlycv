@@ -108,16 +108,20 @@ test("repository marks cancel requested with status transition", async () => {
   const now = new Date();
   const database = {
     ingestionBatchRun: {
-      update: async ({
+      updateMany: async ({
         where,
         data,
       }: {
         where: Record<string, unknown>;
         data: Record<string, unknown>;
       }) => {
-        assert.deepEqual(where, { id: "batch-1" });
+        assert.deepEqual(where, { id: "batch-1", status: { in: ["queued", "running"] } });
         assert.equal(data.status, "cancelling");
         assert.equal(data.cancelRequestedAt instanceof Date, true);
+        return { count: 1 };
+      },
+      findUnique: async ({ where }: { where: Record<string, unknown> }) => {
+        assert.deepEqual(where, { id: "batch-1" });
         return { id: "batch-1", status: "cancelling", cancelRequestedAt: now };
       },
     },

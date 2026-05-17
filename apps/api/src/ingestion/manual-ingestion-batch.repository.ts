@@ -99,12 +99,16 @@ export class ManualIngestionBatchRepository {
   }
 
   async markCancelRequested(batchRunId: string) {
-    return this.database.ingestionBatchRun.update({
-      where: { id: batchRunId },
+    await this.database.ingestionBatchRun.updateMany({
+      where: { id: batchRunId, status: { in: ["queued", "running"] } },
       data: {
         status: "cancelling",
         cancelRequestedAt: new Date(),
       },
+    });
+
+    return this.database.ingestionBatchRun.findUnique({
+      where: { id: batchRunId },
     });
   }
 }
