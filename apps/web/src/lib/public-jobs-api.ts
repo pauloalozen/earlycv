@@ -12,6 +12,7 @@ export type PublicJob = {
   lastSeenAt: string;
   location: string;
   publishedAtSource: string | null;
+  seniorityLevel: string | null;
   slug: string;
   sourceJobUrl: string;
   status: string;
@@ -19,9 +20,36 @@ export type PublicJob = {
   workModel: string | null;
 };
 
+export type PublicJobsPage = {
+  data: PublicJob[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export type PublicJobsFilters = {
+  q?: string;
+  workModel?: string;
+  seniorityLevel?: string;
+  companyName?: string;
+  publishedWithin?: "24h" | "3d" | "7d";
+  page?: number;
+  limit?: number;
+};
+
+export type FacetItem = { value: string; count: number };
+
+export type PublicJobFacets = {
+  workModels: FacetItem[];
+  seniorityLevels: FacetItem[];
+  companies: FacetItem[];
+};
+
 function getApiBaseUrl() {
   const configuredBaseUrl =
-    process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+    process.env.API_URL ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    "http://localhost:4000";
 
   return configuredBaseUrl.endsWith("/api")
     ? configuredBaseUrl
@@ -40,20 +68,28 @@ async function requestPublicJobs<T>(path: string) {
   return (await response.json()) as T;
 }
 
-export function filterPublicJobs(jobs: PublicJob[], query?: string) {
-  const normalizedQuery = query?.trim().toLowerCase();
-  if (!normalizedQuery) return jobs;
+export async function listPublicJobs(
+  filters?: PublicJobsFilters,
+): Promise<PublicJobsPage> {
+  const params = new URLSearchParams();
+  if (filters?.q) params.set("q", filters.q);
+  if (filters?.workModel) params.set("workModel", filters.workModel);
+  if (filters?.seniorityLevel)
+    params.set("seniorityLevel", filters.seniorityLevel);
+  if (filters?.companyName) params.set("companyName", filters.companyName);
+  if (filters?.publishedWithin)
+    params.set("publishedWithin", filters.publishedWithin);
+  if (filters?.page) params.set("page", String(filters.page));
+  if (filters?.limit) params.set("limit", String(filters.limit));
 
-  return jobs.filter((job) => {
-    const haystacks = [job.title, job.company, job.location, job.description];
-    return haystacks.some((value) => value.toLowerCase().includes(normalizedQuery));
-  });
-}
-
-export async function listPublicJobs() {
-  return requestPublicJobs<PublicJob[]>("/public/jobs");
+  const qs = params.toString();
+  return requestPublicJobs<PublicJobsPage>(`/public/jobs${qs ? `?${qs}` : ""}`);
 }
 
 export async function getPublicJobBySlug(slug: string) {
   return requestPublicJobs<PublicJob>(`/public/jobs/${slug}`);
+}
+
+export async function getPublicJobFacets(): Promise<PublicJobFacets> {
+  return requestPublicJobs<PublicJobFacets>("/public/jobs/facets");
 }

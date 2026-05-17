@@ -10,6 +10,7 @@ type PublicJobInput = {
   locationText: string;
   publishedAtSource: Date | null;
   descriptionRaw: string;
+  seniorityLevel: string | null;
   sourceJobUrl: string;
   status: string;
   title: string;
@@ -27,6 +28,7 @@ export type PublicJobView = {
   lastSeenAt: string;
   location: string;
   publishedAtSource: string | null;
+  seniorityLevel: string | null;
   slug: string;
   descriptionHtml: string;
   sourceJobUrl: string;
@@ -64,6 +66,7 @@ export function toPublicJobView(job: PublicJobInput): PublicJobView {
     lastSeenAt: job.lastSeenAt.toISOString(),
     location: job.locationText,
     publishedAtSource: job.publishedAtSource?.toISOString() ?? null,
+    seniorityLevel: job.seniorityLevel,
     slug: buildPublicJobSlug(job.id, job.title, job.company.name),
     sourceJobUrl: job.sourceJobUrl,
     status: job.status,

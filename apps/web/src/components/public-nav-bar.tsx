@@ -135,6 +135,17 @@ export function PublicNavBar({
 
         <div className="hidden items-center gap-5 md:flex">
           <Link
+            href="/vagas"
+            style={{
+              fontSize: 13,
+              color: linkColor,
+              fontWeight: 400,
+              textDecoration: "none",
+            }}
+          >
+            Vagas
+          </Link>
+          <Link
             href="/blog"
             style={{
               fontSize: 13,
@@ -221,6 +232,13 @@ export function PublicNavBar({
       <div
         className={`public-mob-nav${isMenuOpen ? " public-mob-nav--open" : ""}`}
       >
+        <Link
+          href="/vagas"
+          onClick={() => setIsMenuOpen(false)}
+          className="public-mob-nav-item"
+        >
+          Vagas
+        </Link>
         <Link
           href="/blog"
           onClick={() => setIsMenuOpen(false)}

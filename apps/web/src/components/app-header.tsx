@@ -425,6 +425,23 @@ export function AppHeader({
                       ),
                     },
                     {
+                      href: "/vagas",
+                      label: "Vagas",
+                      icon: (
+                        <>
+                          <rect
+                            x="2"
+                            y="7"
+                            width="20"
+                            height="14"
+                            rx="2"
+                            ry="2"
+                          />
+                          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                        </>
+                      ),
+                    },
+                    {
                       href: "/compras",
                       label: "Minhas compras",
                       icon: (
@@ -728,6 +745,16 @@ export function AppHeader({
                   <>
                     <path d="M12 20h9" />
                     <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  </>
+                ),
+              },
+              {
+                href: "/vagas",
+                label: "Vagas",
+                icon: (
+                  <>
+                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
                   </>
                 ),
               },

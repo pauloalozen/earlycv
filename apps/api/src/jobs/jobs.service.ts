@@ -81,12 +81,138 @@ export class JobsService {
         lastSeenAt: true,
         locationText: true,
         publishedAtSource: true,
+        seniorityLevel: true,
         sourceJobUrl: true,
         status: true,
         title: true,
         workModel: true,
       },
     });
+  }
+
+  async listPublicFiltered(filters: {
+    q?: string;
+    workModel?: string;
+    seniorityLevel?: string;
+    companyName?: string;
+    publishedWithin?: "24h" | "3d" | "7d";
+    page: number;
+    limit: number;
+  }) {
+    const {
+      q,
+      workModel,
+      seniorityLevel,
+      companyName,
+      publishedWithin,
+      page,
+      limit,
+    } = filters;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.JobWhereInput = { status: "active" };
+
+    if (q) {
+      where.OR = [
+        { title: { contains: q, mode: "insensitive" } },
+        { descriptionClean: { contains: q, mode: "insensitive" } },
+      ];
+    }
+
+    if (workModel) {
+      where.workModel = workModel;
+    }
+
+    if (seniorityLevel) {
+      where.seniorityLevel = seniorityLevel;
+    }
+
+    if (companyName) {
+      where.company = { name: { contains: companyName, mode: "insensitive" } };
+    }
+
+    if (publishedWithin) {
+      const hoursMap = { "24h": 24, "3d": 72, "7d": 168 } as const;
+      const cutoff = new Date(
+        Date.now() - hoursMap[publishedWithin] * 3_600_000,
+      );
+      where.publishedAtSource = { gte: cutoff };
+    }
+
+    const select = {
+      canonicalKey: true,
+      company: { select: { name: true } },
+      country: true,
+      descriptionClean: true,
+      descriptionRaw: true,
+      employmentType: true,
+      firstSeenAt: true,
+      id: true,
+      lastSeenAt: true,
+      locationText: true,
+      publishedAtSource: true,
+      seniorityLevel: true,
+      sourceJobUrl: true,
+      status: true,
+      title: true,
+      workModel: true,
+    } as const;
+
+    const [jobs, total] = await Promise.all([
+      this.database.job.findMany({
+        where,
+        orderBy: [{ firstSeenAt: "desc" }, { updatedAt: "desc" }],
+        skip,
+        take: limit,
+        select,
+      }),
+      this.database.job.count({ where }),
+    ]);
+
+    return { jobs, total, page, limit };
+  }
+
+  async listPublicFacets() {
+    const jobs = await this.database.job.findMany({
+      where: { status: "active" },
+      select: {
+        workModel: true,
+        seniorityLevel: true,
+        company: { select: { name: true } },
+      },
+    });
+
+    const workModelMap = new Map<string, number>();
+    const seniorityMap = new Map<string, number>();
+    const companyMap = new Map<string, number>();
+
+    for (const job of jobs) {
+      if (job.workModel) {
+        workModelMap.set(
+          job.workModel,
+          (workModelMap.get(job.workModel) ?? 0) + 1,
+        );
+      }
+      if (job.seniorityLevel) {
+        seniorityMap.set(
+          job.seniorityLevel,
+          (seniorityMap.get(job.seniorityLevel) ?? 0) + 1,
+        );
+      }
+      const co = job.company.name;
+      companyMap.set(co, (companyMap.get(co) ?? 0) + 1);
+    }
+
+    const toSorted = (m: Map<string, number>) =>
+      [...m.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count);
+
+    return {
+      workModels: toSorted(workModelMap),
+      seniorityLevels: toSorted(seniorityMap),
+      companies: toSorted(companyMap).slice(0, 20),
+    };
   }
 
   async getById(jobId: string) {
