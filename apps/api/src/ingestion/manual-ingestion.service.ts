@@ -1,9 +1,9 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { JobSourceType } from "@prisma/client";
 
 import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
 import type { ListManualRunItemsDto } from "./dto/list-manual-run-items.dto";
 import type { ListManualRunsDto } from "./dto/list-manual-runs.dto";
+import type { ManualAdapterType } from "./dto/start-manual-adapter-run.dto";
 
 @Injectable()
 export class ManualIngestionService {
@@ -12,7 +12,7 @@ export class ManualIngestionService {
     private readonly batchRepository: ManualIngestionBatchRepository,
   ) {}
 
-  async startAdapterRun(adapterType: JobSourceType, requestedByUserId: string) {
+  async startAdapterRun(adapterType: ManualAdapterType, requestedByUserId: string) {
     const run = await this.batchRepository.createAdapterBatchRun({
       adapterType,
       requestedByUserId,
