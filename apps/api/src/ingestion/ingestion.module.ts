@@ -6,6 +6,7 @@ import { CustomApiAdapter, CustomHtmlAdapter, GupyAdapter } from "./adapters";
 import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
 import { IngestionController } from "./ingestion.controller";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
+import { IngestionManualRunnerService } from "./ingestion-manual-runner.service";
 import { IngestionSchedulerService } from "./ingestion-scheduler.service";
 import { IngestionService } from "./ingestion.service";
 
@@ -18,6 +19,7 @@ import { IngestionService } from "./ingestion.service";
     GlobalSchedulerConfigService,
     IngestionLockRepository,
     IngestionSchedulerService,
+    IngestionManualRunnerService,
     CustomHtmlAdapter,
     CustomApiAdapter,
     GupyAdapter,
