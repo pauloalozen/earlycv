@@ -8,6 +8,24 @@ import {
 
 import { DatabaseService } from "../database/database.service";
 
+function isMissingManualBatchTableError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const prismaError = error as Error & {
+    code?: string;
+    meta?: { modelName?: string; table?: string };
+  };
+
+  if (prismaError.code !== "P2021") {
+    return false;
+  }
+
+  const modelName = prismaError.meta?.modelName;
+  return modelName === "IngestionBatchRun" || modelName === "IngestionBatchItem";
+}
+
 type CreateAdapterBatchRunInput = {
   adapterType: JobSourceType;
   requestedByUserId?: string;
@@ -29,86 +47,123 @@ export class ManualIngestionBatchRepository {
   ) {}
 
   async createAdapterBatchRun(input: CreateAdapterBatchRunInput) {
-    return this.database.$transaction(async (tx) => {
-      const sources = await tx.jobSource.findMany({
-        where: {
-          isActive: true,
-          sourceType: input.adapterType,
-        },
-        select: {
-          company: { select: { name: true } },
-          companyId: true,
-          id: true,
-          sourceName: true,
-          sourceType: true,
-        },
-      });
-
-      const batchRun = await tx.ingestionBatchRun.create({
-        data: {
-          requestedByUserId: input.requestedByUserId,
-          scopeType: "adapter",
-          scopeValue: input.adapterType,
-          status: "queued",
-          totalSources: sources.length,
-        },
-      });
-
-      if (sources.length > 0) {
-        await tx.ingestionBatchItem.createMany({
-          data: sources.map((source) => ({
-            batchRunId: batchRun.id,
-            companyId: source.companyId,
-            companyName: source.company.name,
-            jobSourceId: source.id,
-            sourceName: source.sourceName,
-            sourceType: source.sourceType,
-            status: "queued",
-          })),
+    try {
+      return this.database.$transaction(async (tx) => {
+        const sources = await tx.jobSource.findMany({
+          where: {
+            isActive: true,
+            sourceType: input.adapterType,
+          },
+          select: {
+            company: { select: { name: true } },
+            companyId: true,
+            id: true,
+            sourceName: true,
+            sourceType: true,
+          },
         });
-      }
 
-      return batchRun;
-    });
+        const batchRun = await tx.ingestionBatchRun.create({
+          data: {
+            requestedByUserId: input.requestedByUserId,
+            scopeType: "adapter",
+            scopeValue: input.adapterType,
+            status: "queued",
+            totalSources: sources.length,
+          },
+        });
+
+        if (sources.length > 0) {
+          await tx.ingestionBatchItem.createMany({
+            data: sources.map((source) => ({
+              batchRunId: batchRun.id,
+              companyId: source.companyId,
+              companyName: source.company.name,
+              jobSourceId: source.id,
+              sourceName: source.sourceName,
+              sourceType: source.sourceType,
+              status: "queued",
+            })),
+          });
+        }
+
+        return batchRun;
+      });
+    } catch (error) {
+      if (isMissingManualBatchTableError(error)) {
+        throw new Error(
+          "Manual ingestion tables are missing. Apply database migrations before starting manual runs.",
+        );
+      }
+      throw error;
+    }
   }
 
   async listRuns(filters: ListRunsFilters = {}) {
-    return this.database.ingestionBatchRun.findMany({
-      where: {
-        scopeType: filters.scopeType,
-        status: filters.status,
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    try {
+      return this.database.ingestionBatchRun.findMany({
+        where: {
+          scopeType: filters.scopeType,
+          status: filters.status,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (error) {
+      if (isMissingManualBatchTableError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async getRunById(batchRunId: string) {
-    return this.database.ingestionBatchRun.findUnique({
-      where: { id: batchRunId },
-    });
+    try {
+      return this.database.ingestionBatchRun.findUnique({
+        where: { id: batchRunId },
+      });
+    } catch (error) {
+      if (isMissingManualBatchTableError(error)) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async listRunItems(batchRunId: string, filters: ListRunItemsFilters = {}) {
-    return this.database.ingestionBatchItem.findMany({
-      where: {
-        batchRunId,
-        status: filters.status,
-      },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    });
+    try {
+      return this.database.ingestionBatchItem.findMany({
+        where: {
+          batchRunId,
+          status: filters.status,
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      });
+    } catch (error) {
+      if (isMissingManualBatchTableError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async markCancelRequested(batchRunId: string) {
-    await this.database.ingestionBatchRun.updateMany({
-      where: { id: batchRunId, status: { in: ["queued", "running"] } },
-      data: {
-        status: "cancelling",
-        cancelRequestedAt: new Date(),
-      },
-    });
+    try {
+      await this.database.ingestionBatchRun.updateMany({
+        where: { id: batchRunId, status: { in: ["queued", "running"] } },
+        data: {
+          status: "cancelling",
+          cancelRequestedAt: new Date(),
+        },
+      });
 
-    return this.database.ingestionBatchRun.findUnique({
-      where: { id: batchRunId },
-    });
+      return this.database.ingestionBatchRun.findUnique({
+        where: { id: batchRunId },
+      });
+    } catch (error) {
+      if (isMissingManualBatchTableError(error)) {
+        return null;
+      }
+      throw error;
+    }
   }
 }

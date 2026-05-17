@@ -10,6 +10,23 @@ const MANUAL_RUNNER_LOCK_ID = "manual-ingestion-batch-runner";
 const MANUAL_RUNNER_LOCK_TTL_MS = 60_000;
 const ITEM_LOCK_TTL_MS = 10 * 60_000;
 
+function isMissingManualBatchTableError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const prismaError = error as Error & {
+    code?: string;
+    meta?: { modelName?: string; table?: string };
+  };
+
+  return (
+    prismaError.code === "P2021" &&
+    (prismaError.meta?.modelName === "IngestionBatchRun" ||
+      prismaError.meta?.modelName === "IngestionBatchItem")
+  );
+}
+
 @Injectable()
 export class IngestionManualRunnerService {
   private readonly logger = new Logger(IngestionManualRunnerService.name);
@@ -27,7 +44,17 @@ export class IngestionManualRunnerService {
       return;
     }
 
-    await this.processNextBatchRun();
+    try {
+      await this.processNextBatchRun();
+    } catch (error) {
+      if (isMissingManualBatchTableError(error)) {
+        this.logger.warn(
+          "manual ingestion runner disabled: missing manual ingestion tables (run database migrations)",
+        );
+        return;
+      }
+      throw error;
+    }
   }
 
   async processNextBatchRun() {
