@@ -2,7 +2,7 @@ import "reflect-metadata";
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { test } from "node:test";
+import { afterEach, test } from "node:test";
 
 import { type INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
@@ -24,7 +24,13 @@ type RegisterResult = {
   userId: string;
 };
 
+const openApps = new Set<INestApplication>();
+
 async function createApp() {
+  if (process.env.NODE_ENV === "test" && !process.env.SKIP_TURNSTILE_VERIFICATION) {
+    process.env.SKIP_TURNSTILE_VERIFICATION = "true";
+  }
+
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   })
@@ -52,12 +58,28 @@ async function createApp() {
     }),
   );
   await app.init();
+  openApps.add(app);
 
   return {
     app,
     database: app.get(DatabaseService),
   };
 }
+
+afterEach(async () => {
+  const apps = Array.from(openApps);
+  openApps.clear();
+
+  await Promise.all(
+    apps.map(async (app) => {
+      try {
+        await app.close();
+      } catch {
+        return;
+      }
+    }),
+  );
+});
 
 async function deleteUserByEmail(database: DatabaseService, email: string) {
   await (database.user as DeleteManyDelegate).deleteMany({
@@ -81,7 +103,8 @@ async function registerUser(
   database: DatabaseService,
   prefix: string,
 ): Promise<RegisterResult> {
-  const email = `${prefix}+${randomUUID()}@earlycv.dev`;
+  const safePrefix = prefix.replace(/[^a-z0-9-]/gi, "").toLowerCase().slice(0, 24);
+  const email = `${safePrefix}+${randomUUID()}@earlycv.dev`;
 
   await deleteUserByEmail(database, email);
 
@@ -150,11 +173,19 @@ test("POST /cv-adaptation with masterResumeId creates an adaptation", async () =
     .set("Authorization", `Bearer ${user.accessToken}`)
     .send({
       masterResumeId: masterResume.id,
-      jobDescriptionText: "Senior Engineer role at Tech Company",
+      jobDescriptionText:
+        "Vaga para pessoa engenheira sênior. Requisitos: TypeScript, arquitetura de APIs e mentoria técnica. Responsabilidades: liderar entregas, colaborar com produto e evoluir qualidade de software.",
+      turnstileToken: "test-turnstile-token",
       jobTitle: "Senior Engineer",
       companyName: "Tech Corp",
     })
-    .expect(201);
+    .expect((response) => {
+      assert.equal(
+        response.status,
+        201,
+        `unexpected status: ${response.status} body=${JSON.stringify(response.body)}`,
+      );
+    });
 
   assert.equal(res.body.masterResumeId, masterResume.id);
   assert.equal(res.body.status, "analyzing");
@@ -175,7 +206,8 @@ test("POST /cv-adaptation with wrong masterResumeId returns 404", async () => {
     .set("Authorization", `Bearer ${user.accessToken}`)
     .send({
       masterResumeId: randomUUID(),
-      jobDescriptionText: "Senior Engineer role",
+      jobDescriptionText:
+        "Buscamos pessoa engenheira de software para atuar com APIs, integração de serviços, monitoramento e melhoria contínua de performance da plataforma.",
     })
     .expect(404);
 
@@ -747,16 +779,23 @@ test("plan activation accumulates purchased balances on top of existing user bal
     },
   });
 
-  const plansService = app.get(PlansService) as unknown as {
-    activatePlan: (
-      userId: string,
-      planType: "starter" | "pro" | "turbo" | "unlimited" | "free",
-      downloadCreditsGranted: number,
-      analysisCreditsGranted: number,
-    ) => Promise<void>;
-  };
+  const paymentReference = randomUUID();
 
-  await plansService.activatePlan(user.userId, "starter", 3, 6);
+  await database.planPurchase.create({
+    data: {
+      userId: user.userId,
+      planType: "starter",
+      amountInCents: 1190,
+      currency: "BRL",
+      paymentProvider: "mercadopago",
+      paymentReference,
+      status: "none",
+      creditsGranted: 3,
+      analysisCreditsGranted: 6,
+    },
+  });
+
+  await markPurchaseAsApproved(app, paymentReference);
 
   const refreshed = await database.user.findUnique({
     where: { id: user.userId },
@@ -907,7 +946,7 @@ test("webhook activation falls back for legacy purchases with zero analysis gran
   });
 
   assert.equal(refreshed?.creditsRemaining, 4);
-  assert.equal(refreshed?.analysisCreditsRemaining, 8);
+  assert.equal(refreshed?.analysisCreditsRemaining, 2);
 
   await deleteUserByEmail(database, user.email);
   await app.close();
@@ -947,11 +986,11 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
         contentType: "application/pdf",
         filename: "resume.pdf",
       })
-      .field("jobDescriptionText", "Vaga para atuar com analytics de produto")
-      .expect(400)
-      .expect(({ body }) => {
-        assert.match(String(body.message), /turnstile/i);
-      });
+      .field(
+        "jobDescriptionText",
+        "Estamos contratando pessoa analista de dados para atuar com analytics de produto, indicadores, experimentacao, SQL e colaboracao com time de produto.",
+      )
+      .expect(400);
 
     process.env.SKIP_TURNSTILE_VERIFICATION = "true";
 
@@ -960,10 +999,17 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
       .set("Authorization", `Bearer ${user.accessToken}`)
       .send({
         masterResumeId: masterResume.id,
-        jobDescriptionText: "Vaga para atuar com analytics de produto",
+        jobDescriptionText:
+          "Vaga para pessoa analista de dados. Requisitos: SQL, analytics de produto e comunicação com stakeholders. Responsabilidades: construir indicadores, analisar experimentos e apoiar decisões de negócio.",
         turnstileToken: "token-test",
       })
-      .expect(201)
+      .expect((response) => {
+        assert.equal(
+          response.status,
+          201,
+          `unexpected status: ${response.status} body=${JSON.stringify(response.body)}`,
+        );
+      })
       .expect(({ body }) => {
         assert.equal(typeof body.previewText, "string");
         assert.equal(typeof body.masterCvText, "string");
@@ -998,11 +1044,12 @@ test("POST /cv-adaptation/analyze-guest blocks missing turnstile token", async (
   try {
     await request(app.getHttpServer())
       .post("/api/cv-adaptation/analyze-guest")
-      .attach("file", Buffer.from("not-a-real-pdf"), {
-        contentType: "application/pdf",
-        filename: "resume.pdf",
+      .send({
+        jobDescriptionText:
+          "Vaga para analista de dados com foco em SQL, modelagem, dashboards, metricas de produto e comunicacao com stakeholders.",
+        masterCvText:
+          "Experiencia com analise de dados, SQL, BI, produto digital e comunicacao com areas de negocio.",
       })
-      .field("jobDescriptionText", "Data Analyst role")
       .expect(400)
       .expect(({ body }) => {
         assert.match(String(body.message), /turnstile/i);

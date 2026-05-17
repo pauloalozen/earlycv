@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -11,7 +12,7 @@ import type {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
-import { CustomApiAdapter, CustomHtmlAdapter } from "./adapters";
+import { CustomApiAdapter, CustomHtmlAdapter, GupyAdapter } from "./adapters";
 import type {
   IngestionPreviewItem,
   IngestionRunSummary,
@@ -21,6 +22,13 @@ import type {
 } from "./types";
 
 type IngestionRunRecord = IngestionRun & {
+  jobSource?: {
+    company: {
+      id: string;
+      name: string;
+    };
+    sourceName: string;
+  };
   previewJson: IngestionPreviewItem[] | null;
 };
 
@@ -40,6 +48,13 @@ function toRunSummary(run: IngestionRunRecord): IngestionRunSummary {
     failedCount: run.failedCount,
     finishedAt: run.finishedAt?.toISOString() ?? null,
     id: run.id,
+    ...(run.jobSource
+      ? {
+          companyId: run.jobSource.company.id,
+          companyName: run.jobSource.company.name,
+          sourceName: run.jobSource.sourceName,
+        }
+      : {}),
     jobSourceId: run.jobSourceId,
     newCount: run.newCount,
     previewItems: run.previewJson ?? [],
@@ -61,15 +76,31 @@ export class IngestionService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(CustomHtmlAdapter) customHtmlAdapter: CustomHtmlAdapter,
     @Inject(CustomApiAdapter) customApiAdapter: CustomApiAdapter,
+    @Inject(GupyAdapter) gupyAdapter: GupyAdapter,
   ) {
     this.adapters = new Map<JobSource["sourceType"], IngestionSourceAdapter>([
       [customHtmlAdapter.sourceType, customHtmlAdapter],
       [customApiAdapter.sourceType, customApiAdapter],
+      [gupyAdapter.sourceType, gupyAdapter],
     ]);
   }
 
   async runJobSource(jobSourceId: string) {
     const jobSource = await this.getJobSourceContext(jobSourceId);
+    const runningRun = await this.database.ingestionRun.findFirst({
+      where: {
+        jobSourceId,
+        status: "running",
+      },
+      orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+    });
+
+    if (runningRun) {
+      throw new ConflictException(
+        "ingestion run already in progress for this source",
+      );
+    }
+
     const run = await this.database.ingestionRun.create({
       data: {
         jobSourceId,
@@ -186,6 +217,19 @@ export class IngestionService {
 
   async listAllRuns() {
     const runs = await this.database.ingestionRun.findMany({
+      include: {
+        jobSource: {
+          select: {
+            company: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            sourceName: true,
+          },
+        },
+      },
       orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
     });
 

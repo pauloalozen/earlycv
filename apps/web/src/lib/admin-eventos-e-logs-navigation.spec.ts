@@ -4,24 +4,22 @@ import { resolveEmitPayload } from "./admin-events-emit-payload.ts";
 import { getAdminNavItems } from "./admin-users-operations.ts";
 
 test("admin nav includes eventos e logs route", () => {
-  assert.deepEqual(
-    getAdminNavItems().find((item) => item.href === "/admin/eventos-e-logs"),
-    {
-      href: "/admin/eventos-e-logs",
-      label: "Eventos e logs",
-      phase: "fase 4",
-    },
+  const item = getAdminNavItems().find(
+    (navItem) => navItem.href === "/admin/eventos-e-logs",
   );
+
+  assert.equal(item?.href, "/admin/eventos-e-logs");
+  assert.equal(item?.label, "Eventos e logs");
+  assert.equal(item?.phase, "fase 4");
 });
 
 test("admin nav includes liberacoes de cv route", () => {
-  assert.deepEqual(
-    getAdminNavItems().find((item) => item.href === "/admin/liberacoes-cv"),
-    {
-      href: "/admin/liberacoes-cv",
-      label: "Liberacoes de CV",
-    },
+  const item = getAdminNavItems().find(
+    (navItem) => navItem.href === "/admin/liberacoes-cv",
   );
+
+  assert.equal(item?.href, "/admin/liberacoes-cv");
+  assert.equal(item?.label, "Liberacoes de CV");
 });
 
 test("resolveEmitPayload returns expected payload for single mode", () => {

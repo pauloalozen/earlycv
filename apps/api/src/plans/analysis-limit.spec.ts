@@ -21,36 +21,56 @@ test("resolveDailyAnalysisLimit maps env values for plans", () => {
   assert.equal(resolveDailyAnalysisLimit("unlimited", env), null);
 });
 
-test("resolveDailyAnalysisLimit falls back for invalid env values", () => {
-  assert.equal(
-    resolveDailyAnalysisLimit("free", {
-      QNT_AN_PLAN_FREE: "0",
-    } as NodeJS.ProcessEnv),
-    3,
+test("resolveDailyAnalysisLimit throws for invalid env values", () => {
+  assert.throws(
+    () =>
+      resolveDailyAnalysisLimit("free", {
+        QNT_AN_PLAN_FREE: "0",
+        QNT_AN_PLAN_STARTER: "6",
+        QNT_AN_PLAN_PRO: "9",
+        QNT_AN_PLAN_TURBO: "30",
+      } as NodeJS.ProcessEnv),
+    /QNT_AN_PLAN_FREE/,
   );
-  assert.equal(
-    resolveDailyAnalysisLimit("starter", {
-      QNT_AN_PLAN_STARTER: "-1",
-    } as NodeJS.ProcessEnv),
-    6,
+  assert.throws(
+    () =>
+      resolveDailyAnalysisLimit("starter", {
+        QNT_AN_PLAN_FREE: "3",
+        QNT_AN_PLAN_STARTER: "-1",
+        QNT_AN_PLAN_PRO: "9",
+        QNT_AN_PLAN_TURBO: "30",
+      } as NodeJS.ProcessEnv),
+    /QNT_AN_PLAN_STARTER/,
   );
-  assert.equal(
-    resolveDailyAnalysisLimit("pro", {
-      QNT_AN_PLAN_PRO: "abc",
-    } as NodeJS.ProcessEnv),
-    9,
+  assert.throws(
+    () =>
+      resolveDailyAnalysisLimit("pro", {
+        QNT_AN_PLAN_FREE: "3",
+        QNT_AN_PLAN_STARTER: "6",
+        QNT_AN_PLAN_PRO: "abc",
+        QNT_AN_PLAN_TURBO: "30",
+      } as NodeJS.ProcessEnv),
+    /QNT_AN_PLAN_PRO/,
   );
-  assert.equal(
-    resolveDailyAnalysisLimit("turbo", {
-      QNT_AN_PLAN_TURBO: "3abc",
-    } as NodeJS.ProcessEnv),
-    30,
+  assert.throws(
+    () =>
+      resolveDailyAnalysisLimit("turbo", {
+        QNT_AN_PLAN_FREE: "3",
+        QNT_AN_PLAN_STARTER: "6",
+        QNT_AN_PLAN_PRO: "9",
+        QNT_AN_PLAN_TURBO: "3abc",
+      } as NodeJS.ProcessEnv),
+    /QNT_AN_PLAN_TURBO/,
   );
-  assert.equal(
-    resolveDailyAnalysisLimit("free", {
-      QNT_AN_PLAN_FREE: "",
-    } as NodeJS.ProcessEnv),
-    3,
+  assert.throws(
+    () =>
+      resolveDailyAnalysisLimit("free", {
+        QNT_AN_PLAN_FREE: "",
+        QNT_AN_PLAN_STARTER: "6",
+        QNT_AN_PLAN_PRO: "9",
+        QNT_AN_PLAN_TURBO: "30",
+      } as NodeJS.ProcessEnv),
+    /QNT_AN_PLAN_FREE/,
   );
 });
 

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 
+import { ConflictException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 
 import { CompaniesModule } from "../companies/companies.module";
@@ -116,6 +117,58 @@ test("IngestionService preserves firstSeenAt and updates existing jobs on rerun"
   assert.equal(updatedJob.lastSeenAt >= firstJob.lastSeenAt, true);
 
   await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
+});
+
+test("IngestionService blocks starting a second run while one is running", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const company = await database.company.create({
+    data: {
+      name: "Concurrent Run Co",
+      normalizedName: `concurrent-run-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "api",
+      parserKey: "custom_api",
+      sourceName: "Concurrent API Source",
+      sourceType: "custom_api",
+      sourceUrl: `https://api.example.com/${randomUUID()}`,
+    },
+  });
+
+  await database.ingestionRun.create({
+    data: {
+      jobSourceId: jobSource.id,
+      status: "running",
+    },
+  });
+
+  await assert.rejects(() => service.runJobSource(jobSource.id), (error) => {
+    assert.equal(error instanceof ConflictException, true);
+    assert.equal(
+      (error as ConflictException).message,
+      "ingestion run already in progress for this source",
+    );
+    return true;
+  });
+
+  await database.ingestionRun.deleteMany({ where: { jobSourceId: jobSource.id } });
   await database.jobSource.delete({ where: { id: jobSource.id } });
   await database.company.delete({ where: { id: company.id } });
   await moduleRef.close();

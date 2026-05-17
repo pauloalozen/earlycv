@@ -1,14 +1,25 @@
 import Link from "next/link";
 
 import { buttonVariants, Card, Input } from "@/components/ui";
-import { listJobSources } from "@/lib/admin-ingestion-api";
+import {
+  getGlobalSchedulerConfig,
+  listAllIngestionRuns,
+  listJobSources,
+} from "@/lib/admin-ingestion-api";
 import { buildSourceStatus, filterSources } from "@/lib/admin-operations";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { cn } from "@/lib/cn";
 import { buildAdminMetadata } from "@/lib/route-metadata";
-import { runJobSourceAction } from "./actions";
+import { RunSourceSubmitButton } from "./_components/run-source-submit-button";
+import {
+  deleteJobSourceAction,
+  importCompanySourcesCsvAction,
+  runGlobalSchedulerNowAction,
+  runJobSourceAction,
+  updateGlobalSchedulerAction,
+} from "./actions";
 
 export const metadata = buildAdminMetadata("Ingestion");
 
@@ -94,7 +105,11 @@ export default async function AdminIngestionPage({
   }
 
   try {
-    const sources = await listJobSources();
+    const [sources, globalRuns, schedulerConfig] = await Promise.all([
+      listJobSources(),
+      listAllIngestionRuns(),
+      getGlobalSchedulerConfig(),
+    ]);
     const sourceViews = sources.map((source) => ({
       ...source,
       status: buildSourceStatus(source),
@@ -109,21 +124,69 @@ export default async function AdminIngestionPage({
               admin / ingestion
             </p>
             <h1 className="text-4xl font-bold tracking-tight">
-              Runs manuais por fonte
+              Execucao de fontes
             </h1>
             <p className="max-w-3xl text-sm leading-7 text-stone-600">
-              Execute ingestao sincrona, valide contadores e acompanhe as
-              ultimas tentativas antes de plugar a fila assíncrona.
+              Rode manualmente, acompanhe auditoria e revise o escalonamento de
+              cada fonte de vagas em um unico ponto.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
             <Link className={buttonVariants()} href={`/admin/ingestion/new`}>
-              Adicionar empresa e fonte
+              Cadastrar empresa e fonte
             </Link>
           </div>
 
           <StatusBanner message={message} status={status} />
+
+          <Card className="grid gap-4 lg:grid-cols-2" padding="lg">
+            <form action={importCompanySourcesCsvAction} className="space-y-3">
+              <input name="redirectPath" type="hidden" value="/admin/ingestion" />
+              <p className="font-semibold text-stone-900">Importar empresas por CSV</p>
+              <Input name="file" required type="file" />
+              <div className="flex gap-3">
+                <button className={buttonVariants({ variant: "outline" })} name="dryRun" type="submit" value="true">
+                  Validar (dry-run)
+                </button>
+                <button className={buttonVariants()} name="dryRun" type="submit" value="false">
+                  Importar e persistir
+                </button>
+              </div>
+            </form>
+
+            <div className="space-y-3">
+              <p className="font-semibold text-stone-900">Scheduler global</p>
+              <form action={updateGlobalSchedulerAction} className="grid gap-3">
+                <input name="redirectPath" type="hidden" value="/admin/ingestion" />
+                <label className="flex items-center gap-3">
+                  <input
+                    className="size-4 accent-stone-700"
+                    defaultChecked={schedulerConfig.enabled}
+                    name="enabled"
+                    type="checkbox"
+                  />
+                  <span className="text-sm font-medium text-stone-700">Ativar cron global</span>
+                </label>
+                <Input defaultValue={schedulerConfig.globalCron ?? "*/30 * * * *"} name="globalCron" placeholder="*/30 * * * *" />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input defaultValue={String(schedulerConfig.normalDelayMs)} min={1000} name="normalDelayMs" type="number" />
+                  <Input defaultValue={String(schedulerConfig.errorDelayMs)} min={1000} name="errorDelayMs" type="number" />
+                </div>
+                <div className="flex gap-3">
+                  <button className={buttonVariants()} type="submit">
+                    Salvar scheduler
+                  </button>
+                </div>
+              </form>
+              <form action={runGlobalSchedulerNowAction}>
+                <input name="redirectPath" type="hidden" value="/admin/ingestion" />
+                <button className={buttonVariants({ variant: "outline" })} type="submit">
+                  Rodar global agora
+                </button>
+              </form>
+            </div>
+          </Card>
 
           <Card
             className="grid gap-3 lg:grid-cols-[1.4fr_1fr_1fr_auto]"
@@ -158,6 +221,7 @@ export default async function AdminIngestionPage({
               <option value="">Todos os tipos</option>
               <option value="custom_html">custom_html</option>
               <option value="custom_api">custom_api</option>
+              <option value="gupy">gupy</option>
             </select>
             <form className="contents" id="sources-filter" method="GET">
               <button
@@ -213,6 +277,14 @@ export default async function AdminIngestionPage({
                     </div>
                     <div>
                       <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
+                        escalonamento
+                      </p>
+                      <p className="mt-2 text-sm font-medium text-stone-900">
+                        a cada {source.checkIntervalMinutes} min
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
                         novos / atualizados
                       </p>
                       <p className="mt-2 text-sm font-medium text-stone-900">
@@ -243,9 +315,7 @@ export default async function AdminIngestionPage({
                         type="hidden"
                         value={redirectPath}
                       />
-                      <button className={buttonVariants()} type="submit">
-                        Rodar agora
-                      </button>
+                      <RunSourceSubmitButton />
                     </form>
 
                     <Link
@@ -254,11 +324,48 @@ export default async function AdminIngestionPage({
                     >
                       Ver auditoria
                     </Link>
+
+                    <form action={deleteJobSourceAction}>
+                      <input name="jobSourceId" type="hidden" value={source.id} />
+                      <input name="redirectPath" type="hidden" value={redirectPath} />
+                      <button
+                        className={buttonVariants({ variant: "outline" })}
+                        type="submit"
+                      >
+                        Excluir fonte
+                      </button>
+                    </form>
                   </div>
                 </Card>
               );
             })}
           </div>
+
+          <Card className="space-y-3" padding="lg">
+            <p className="font-semibold text-stone-900">Execucoes globais recentes</p>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead>
+                  <tr className="text-stone-500">
+                    <th className="py-2 pr-4">Empresa</th>
+                    <th className="py-2 pr-4">Fonte</th>
+                    <th className="py-2 pr-4">Inicio</th>
+                    <th className="py-2 pr-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {globalRuns.slice(0, 20).map((run) => (
+                    <tr className="border-t border-stone-200" key={run.id}>
+                      <td className="py-2 pr-4">{run.companyName ?? "-"}</td>
+                      <td className="py-2 pr-4">{run.sourceName ?? "-"}</td>
+                      <td className="py-2 pr-4">{new Date(run.startedAt).toLocaleString("pt-BR")}</td>
+                      <td className="py-2 pr-4">{run.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </div>
       </main>
     );

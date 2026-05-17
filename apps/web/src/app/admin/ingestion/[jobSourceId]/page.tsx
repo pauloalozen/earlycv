@@ -6,6 +6,7 @@ import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { RunSourceSubmitButton } from "../_components/run-source-submit-button";
 import { runJobSourceAction } from "../actions";
 
 export const metadata = buildAdminMetadata("Detalhe da ingestion");
@@ -72,9 +73,7 @@ export default async function JobSourceAdminPage({
               <form action={runJobSourceAction}>
                 <input name="jobSourceId" type="hidden" value={source.id} />
                 <input name="redirectPath" type="hidden" value={redirectPath} />
-                <button className={buttonVariants()} type="submit">
-                  Rodar agora
-                </button>
+                <RunSourceSubmitButton />
               </form>
 
               <Link

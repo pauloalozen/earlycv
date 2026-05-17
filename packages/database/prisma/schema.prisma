@@ -525,6 +525,10 @@ model JobSource {
   parserKey            String
   crawlStrategy        CrawlStrategy
   isActive             Boolean        @default(true)
+  scheduleEnabled      Boolean        @default(false)
+  scheduleCron         String?
+  scheduleTimezone     String         @default("America/Sao_Paulo")
+  isFallbackAdapter    Boolean        @default(false)
   checkIntervalMinutes Int
   lastCheckedAt        DateTime?
   lastSuccessAt        DateTime?
@@ -538,6 +542,26 @@ model JobSource {
 
   @@unique([companyId, sourceUrl])
   @@index([companyId])
+}
+
+model IngestionSchedulerConfig {
+  id            String   @id
+  enabled       Boolean  @default(false)
+  globalCron    String?
+  timezone      String   @default("America/Sao_Paulo")
+  normalDelayMs Int      @default(45000)
+  errorDelayMs  Int      @default(90000)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model IngestionSchedulerLock {
+  id        String   @id
+  owner     String
+  lockedAt  DateTime
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model IngestionRun {
