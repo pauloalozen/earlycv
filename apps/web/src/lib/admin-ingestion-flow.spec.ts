@@ -119,3 +119,29 @@ test("isRedirectControlFlowError detects Next redirect errors", () => {
   assert.equal(isRedirectControlFlowError(redirectError), true);
   assert.equal(isRedirectControlFlowError(new Error("regular error")), false);
 });
+
+test("buildAdminRedirect encodes async manual run success messaging", () => {
+  const location = buildAdminRedirect(
+    "/admin/ingestion",
+    "success",
+    "Execucao manual iniciada em background.",
+  );
+
+  assert.equal(
+    location,
+    "/admin/ingestion?status=success&message=Execucao+manual+iniciada+em+background.",
+  );
+});
+
+test("buildAdminRedirect encodes manual run cancel success messaging", () => {
+  const location = buildAdminRedirect(
+    "/admin/ingestion?tab=manual",
+    "success",
+    "Cancelamento solicitado.",
+  );
+
+  assert.equal(
+    location,
+    "/admin/ingestion?tab=manual&status=success&message=Cancelamento+solicitado.",
+  );
+});

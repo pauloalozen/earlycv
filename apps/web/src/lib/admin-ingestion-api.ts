@@ -99,6 +99,60 @@ export type IngestionRunSummary = {
   updatedCount: number;
 };
 
+export type ManualAdapterType = "gupy" | "custom_html" | "custom_api";
+
+export type ManualRunStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelling"
+  | "cancelled";
+
+export type ManualRunScopeType = "adapter" | "source" | "global";
+
+export type ManualRunItemStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "skipped"
+  | "cancelled";
+
+export type StartManualAdapterRunResponse = {
+  batchRunId: string;
+  status: ManualRunStatus;
+};
+
+export type ManualRunRecord = {
+  id: string;
+  scopeType: ManualRunScopeType;
+  scopeValue: string;
+  status: ManualRunStatus;
+  requestedByUserId: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  cancelRequestedAt: string | null;
+  totalSources: number;
+  succeededCount: number;
+  failedCount: number;
+  skippedCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ManualRunItemRecord = {
+  id: string;
+  batchRunId: string;
+  jobSourceId: string;
+  status: ManualRunItemStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type JobSourceRecord = {
   checkIntervalMinutes: number;
   company: {
@@ -299,6 +353,73 @@ export async function runGlobalSchedulerNow(token?: string) {
       method: "POST",
     },
   );
+}
+
+export async function startManualAdapterRun(
+  adapterType: ManualAdapterType,
+  token?: string,
+) {
+  return apiRequest<StartManualAdapterRunResponse>(
+    `/runs/manual/adapter/${adapterType}`,
+    token,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function listManualRuns(
+  filters?: {
+    scopeType?: ManualRunScopeType;
+    status?: ManualRunStatus;
+  },
+  token?: string,
+) {
+  const searchParams = new URLSearchParams();
+
+  if (filters?.status) {
+    searchParams.set("status", filters.status);
+  }
+
+  if (filters?.scopeType) {
+    searchParams.set("scopeType", filters.scopeType);
+  }
+
+  const queryString = searchParams.toString();
+  const path = queryString ? `/runs/manual?${queryString}` : "/runs/manual";
+
+  return apiRequest<ManualRunRecord[]>(path, token);
+}
+
+export async function getManualRunById(batchRunId: string, token?: string) {
+  return apiRequest<ManualRunRecord>(`/runs/manual/${batchRunId}`, token);
+}
+
+export async function listManualRunItems(
+  batchRunId: string,
+  filters?: {
+    status?: ManualRunItemStatus;
+  },
+  token?: string,
+) {
+  const searchParams = new URLSearchParams();
+
+  if (filters?.status) {
+    searchParams.set("status", filters.status);
+  }
+
+  const queryString = searchParams.toString();
+  const path = queryString
+    ? `/runs/manual/${batchRunId}/items?${queryString}`
+    : `/runs/manual/${batchRunId}/items`;
+
+  return apiRequest<ManualRunItemRecord[]>(path, token);
+}
+
+export async function cancelManualRun(batchRunId: string, token?: string) {
+  return apiRequest<ManualRunRecord>(`/runs/manual/${batchRunId}/cancel`, token, {
+    method: "POST",
+  });
 }
 
 export async function deleteJobSource(jobSourceId: string, token?: string) {

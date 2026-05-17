@@ -3,11 +3,14 @@
 import { redirect } from "next/navigation";
 
 import {
+  cancelManualRun,
   createCompany,
   createJobSource,
   deleteJobSource,
   importCompanySourcesCsv,
+  type ManualAdapterType,
   runJobSource,
+  startManualAdapterRun,
   runGlobalSchedulerNow,
   updateGlobalSchedulerConfig,
 } from "@/lib/admin-ingestion-api";
@@ -250,4 +253,81 @@ export async function deleteJobSourceAction(formData: FormData) {
   }
 
   redirect(buildAdminRedirect(redirectPath, "success", "Fonte excluida com sucesso."));
+}
+
+export async function startManualAdapterRunAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const adapterType = String(formData.get("adapterType") ?? "").trim();
+  const allowedAdapterTypes: ManualAdapterType[] = [
+    "gupy",
+    "custom_html",
+    "custom_api",
+  ];
+
+  if (!adapterType) {
+    redirect(
+      buildAdminRedirect(
+        redirectPath,
+        "error",
+        "Informe o tipo de adaptador para execucao manual.",
+      ),
+    );
+  }
+
+  if (!allowedAdapterTypes.includes(adapterType as ManualAdapterType)) {
+    redirect(
+      buildAdminRedirect(redirectPath, "error", "Tipo de adaptador invalido."),
+    );
+  }
+
+  try {
+    await startManualAdapterRun(adapterType as ManualAdapterType);
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Falha ao iniciar execucao manual do adaptador.";
+
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  redirect(
+    buildAdminRedirect(
+      redirectPath,
+      "success",
+      "Execucao manual iniciada em background.",
+    ),
+  );
+}
+
+export async function cancelManualRunAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const batchRunId = String(formData.get("batchRunId") ?? "").trim();
+
+  if (!batchRunId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe o lote manual."));
+  }
+
+  try {
+    await cancelManualRun(batchRunId);
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+
+    const message =
+      error instanceof Error ? error.message : "Falha ao solicitar cancelamento.";
+
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  redirect(buildAdminRedirect(redirectPath, "success", "Cancelamento solicitado."));
 }
