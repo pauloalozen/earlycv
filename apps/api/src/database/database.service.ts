@@ -57,6 +57,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.ingestionRun;
   }
 
+  get ingestionSchedulerConfig() {
+    return this.prisma.ingestionSchedulerConfig;
+  }
+
+  get ingestionSchedulerLock() {
+    return this.prisma.ingestionSchedulerLock;
+  }
+
   get cvAdaptation() {
     return this.prisma.cvAdaptation;
   }

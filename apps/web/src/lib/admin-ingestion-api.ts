@@ -45,11 +45,45 @@ export type CreateJobSourcePayload = {
   checkIntervalMinutes: number;
   companyId: string;
   crawlStrategy: "api" | "html";
+  isFallbackAdapter?: boolean;
   isActive: boolean;
   parserKey: string;
+  scheduleCron?: string;
+  scheduleEnabled?: boolean;
+  scheduleTimezone?: "America/Sao_Paulo";
   sourceName: string;
   sourceType: "custom_api" | "custom_html" | "gupy";
   sourceUrl: string;
+};
+
+export type GlobalSchedulerConfig = {
+  enabled: boolean;
+  errorDelayMs: number;
+  globalCron: string | null;
+  id: string;
+  normalDelayMs: number;
+  timezone: string;
+};
+
+export type CsvImportReport = {
+  lines: Array<{
+    companyAction?: "created" | "updated";
+    companyName: string;
+    inferredAdapter?: "custom_html" | "gupy";
+    line: number;
+    message: string;
+    sourceAction?: "created" | "updated";
+    status: "error" | "success";
+  }>;
+  summary: {
+    companiesCreated: number;
+    companiesUpdated: number;
+    errorCount: number;
+    sourcesCreated: number;
+    sourcesUpdated: number;
+    successCount: number;
+    totalLines: number;
+  };
 };
 
 export type IngestionRunSummary = {
@@ -81,9 +115,13 @@ export type JobSourceRecord = {
   lastErrorMessage: string | null;
   lastSuccessAt: string | null;
   parserKey: string;
+  scheduleCron?: string | null;
+  scheduleEnabled?: boolean;
+  scheduleTimezone?: string;
   sourceName: string;
   sourceType: string;
   sourceUrl: string;
+  isFallbackAdapter?: boolean;
 };
 
 function getApiBaseUrl() {
@@ -202,4 +240,75 @@ export async function runJobSource(jobSourceId: string, token?: string) {
       method: "POST",
     },
   );
+}
+
+export async function importCompanySourcesCsv(
+  payload: { dryRun: boolean; file: File },
+  token?: string,
+) {
+  const bearerToken = await resolveToken(token);
+  const formData = new FormData();
+  formData.set("file", payload.file);
+
+  const response = await fetch(
+    `${getApiBaseUrl()}/runs/import-csv?dryRun=${payload.dryRun ? "true" : "false"}`,
+    {
+      method: "POST",
+      body: formData,
+      headers: {
+        Authorization: `Bearer ${bearerToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+
+  return (await response.json()) as CsvImportReport;
+}
+
+export async function getGlobalSchedulerConfig(token?: string) {
+  return apiRequest<GlobalSchedulerConfig>("/runs/scheduler/global", token);
+}
+
+export async function updateGlobalSchedulerConfig(
+  payload: {
+    enabled: boolean;
+    errorDelayMs: number;
+    globalCron?: string;
+    normalDelayMs: number;
+    timezone?: "America/Sao_Paulo";
+  },
+  token?: string,
+) {
+  return apiRequest<GlobalSchedulerConfig>("/runs/scheduler/global", token, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function runGlobalSchedulerNow(token?: string) {
+  return apiRequest<{ failed?: number; skipped?: number; status: string; succeeded?: number }>(
+    "/runs/scheduler/global/run",
+    token,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function deleteJobSource(jobSourceId: string, token?: string) {
+  return apiRequest<{ ok: true }>(`/job-sources/${jobSourceId}`, token, {
+    method: "DELETE",
+  });
+}
+
+export async function deleteCompany(companyId: string, token?: string) {
+  return apiRequest<{ ok: true }>(`/companies/${companyId}`, token, {
+    method: "DELETE",
+  });
 }

@@ -17,8 +17,12 @@ export type CreateJobSourceInput = {
   checkIntervalMinutes: number;
   companyId: string;
   crawlStrategy: "api" | "html";
+  isFallbackAdapter?: boolean;
   isActive: boolean;
   parserKey: string;
+  scheduleCron?: string;
+  scheduleEnabled?: boolean;
+  scheduleTimezone?: "America/Sao_Paulo";
   sourceName: string;
   sourceType: "custom_api" | "custom_html" | "gupy";
   sourceUrl: string;
@@ -140,10 +144,18 @@ export function parseJobSourceFormData(
     companyId,
     crawlStrategy: defaults.crawlStrategy,
     isActive: formData.get("isActive") === "on",
+    ...(formData.get("scheduleEnabled") === "on"
+      ? {
+          scheduleEnabled: true,
+          scheduleCron: getTrimmedValue(formData, "scheduleCron") ?? "*/30 * * * *",
+          scheduleTimezone: "America/Sao_Paulo" as const,
+        }
+      : {}),
     parserKey: defaults.parserKey,
     sourceName,
     sourceType: defaults.sourceType,
     sourceUrl,
+    isFallbackAdapter: defaults.sourceType === "custom_html",
   };
 }
 

@@ -7,17 +7,9 @@ import {
 import { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { normalizeCompanyName } from "../ingestion/name-normalization";
 import type { CreateCompanyDto } from "./dto/create-company.dto";
 import type { UpdateCompanyDto } from "./dto/update-company.dto";
-
-function normalizeName(name: string) {
-  return name
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 @Injectable()
 export class CompaniesService {
@@ -48,7 +40,7 @@ export class CompaniesService {
       return await this.database.company.create({
         data: {
           ...dto,
-          normalizedName: normalizeName(dto.name),
+          normalizedName: normalizeCompanyName(dto.name),
         },
       });
     } catch (error) {
@@ -65,7 +57,9 @@ export class CompaniesService {
         data: {
           ...dto,
           normalizedName:
-            dto.name === undefined ? undefined : normalizeName(dto.name),
+            dto.name === undefined
+              ? undefined
+              : normalizeCompanyName(dto.name),
         },
       });
     } catch (error) {

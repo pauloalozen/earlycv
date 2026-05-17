@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "sh -c 'biome lint --config-path \"$(realpath ../../biome.json)\" src'",
     "check": "sh -c 'biome check --config-path \"$(realpath ../../biome.json)\" src'",
-    "test": "npm run test:spec && npm run test:ui",
+    "test": "sh -c 'npm run test:spec -- \"$@\" && npm run test:ui' --",
     "test:spec": "node --import tsx --test src/**/*.spec.ts",
     "test:ui": "vitest run src/**/*.test.ts src/**/*.test.tsx src/**/*.spec.tsx"
   },

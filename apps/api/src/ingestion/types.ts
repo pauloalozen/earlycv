@@ -62,12 +62,15 @@ export type JobSourceContext = Pick<
 };
 
 export type IngestionRunSummary = {
+  companyId?: string;
+  companyName?: string;
   failedCount: number;
   finishedAt: string | null;
   id: string;
   jobSourceId: string;
   newCount: number;
   previewItems: IngestionPreviewItem[];
+  sourceName?: string;
   skippedCount: number;
   startedAt: string;
   status: IngestionRunStatus;

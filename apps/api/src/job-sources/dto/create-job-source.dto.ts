@@ -6,6 +6,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   IsUrl,
   MaxLength,
   Min,
@@ -49,4 +50,25 @@ export class CreateJobSourceDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  scheduleEnabled?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  scheduleCron?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @Matches(/^America\/Sao_Paulo$/)
+  scheduleTimezone?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isFallbackAdapter?: boolean;
 }

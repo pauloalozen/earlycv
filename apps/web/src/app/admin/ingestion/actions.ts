@@ -5,7 +5,11 @@ import { redirect } from "next/navigation";
 import {
   createCompany,
   createJobSource,
+  deleteJobSource,
+  importCompanySourcesCsv,
   runJobSource,
+  runGlobalSchedulerNow,
+  updateGlobalSchedulerConfig,
 } from "@/lib/admin-ingestion-api";
 import {
   buildAdminRedirect,
@@ -140,4 +144,110 @@ export async function createJobSourceAction(formData: FormData) {
       `Fonte ${source.sourceName} criada com sucesso.`,
     ),
   );
+}
+
+export async function importCompanySourcesCsvAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const dryRun = String(formData.get("dryRun") ?? "true") === "true";
+  const fileEntry = formData.get("file");
+
+  if (!(fileEntry instanceof File)) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Arquivo CSV ausente."));
+  }
+
+  try {
+    const report = await importCompanySourcesCsv({ dryRun, file: fileEntry });
+    redirect(
+      buildAdminRedirect(
+        redirectPath,
+        "success",
+        `${dryRun ? "Dry-run" : "Importacao"} concluido: ${report.summary.successCount} sucesso(s), ${report.summary.errorCount} erro(s).`,
+      ),
+    );
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+
+    const message =
+      error instanceof Error ? error.message : "Falha ao importar CSV.";
+
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+}
+
+export async function updateGlobalSchedulerAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+
+  try {
+    await updateGlobalSchedulerConfig({
+      enabled: formData.get("enabled") === "on",
+      errorDelayMs: Number(formData.get("errorDelayMs") ?? 90000),
+      globalCron: String(formData.get("globalCron") ?? "").trim() || undefined,
+      normalDelayMs: Number(formData.get("normalDelayMs") ?? 45000),
+      timezone: "America/Sao_Paulo",
+    });
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error ? error.message : "Falha ao salvar scheduler global.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  redirect(buildAdminRedirect(redirectPath, "success", "Scheduler global atualizado."));
+}
+
+export async function runGlobalSchedulerNowAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+
+  try {
+    const result = await runGlobalSchedulerNow();
+    redirect(
+      buildAdminRedirect(
+        redirectPath,
+        "success",
+        `Execucao global: ${result.status}.`,
+      ),
+    );
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Falha ao executar scheduler global.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+}
+
+export async function deleteJobSourceAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const jobSourceId = String(formData.get("jobSourceId") ?? "").trim();
+
+  if (!jobSourceId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe a fonte."));
+  }
+
+  try {
+    await deleteJobSource(jobSourceId);
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : "Falha ao excluir fonte.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  redirect(buildAdminRedirect(redirectPath, "success", "Fonte excluida com sucesso."));
 }

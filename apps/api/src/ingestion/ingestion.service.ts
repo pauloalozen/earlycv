@@ -22,6 +22,13 @@ import type {
 } from "./types";
 
 type IngestionRunRecord = IngestionRun & {
+  jobSource?: {
+    company: {
+      id: string;
+      name: string;
+    };
+    sourceName: string;
+  };
   previewJson: IngestionPreviewItem[] | null;
 };
 
@@ -41,6 +48,13 @@ function toRunSummary(run: IngestionRunRecord): IngestionRunSummary {
     failedCount: run.failedCount,
     finishedAt: run.finishedAt?.toISOString() ?? null,
     id: run.id,
+    ...(run.jobSource
+      ? {
+          companyId: run.jobSource.company.id,
+          companyName: run.jobSource.company.name,
+          sourceName: run.jobSource.sourceName,
+        }
+      : {}),
     jobSourceId: run.jobSourceId,
     newCount: run.newCount,
     previewItems: run.previewJson ?? [],
@@ -203,6 +217,19 @@ export class IngestionService {
 
   async listAllRuns() {
     const runs = await this.database.ingestionRun.findMany({
+      include: {
+        jobSource: {
+          select: {
+            company: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            sourceName: true,
+          },
+        },
+      },
       orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
     });
 
