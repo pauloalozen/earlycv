@@ -9,6 +9,8 @@ import { IngestionLockRepository } from "./ingestion-lock.repository";
 import { IngestionManualRunnerService } from "./ingestion-manual-runner.service";
 import { IngestionSchedulerService } from "./ingestion-scheduler.service";
 import { IngestionService } from "./ingestion.service";
+import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
+import { ManualIngestionService } from "./manual-ingestion.service";
 
 @Module({
   imports: [DatabaseModule],
@@ -20,6 +22,8 @@ import { IngestionService } from "./ingestion.service";
     IngestionLockRepository,
     IngestionSchedulerService,
     IngestionManualRunnerService,
+    ManualIngestionBatchRepository,
+    ManualIngestionService,
     CustomHtmlAdapter,
     CustomApiAdapter,
     GupyAdapter,

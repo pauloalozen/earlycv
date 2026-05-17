@@ -1,4 +1,8 @@
 import {
+  AuthenticatedUser,
+  type AuthenticatedRequestUser,
+} from "../common/authenticated-user.decorator";
+import {
   BadRequestException,
   Body,
   Controller,
@@ -22,7 +26,17 @@ import { AdminIngestionImportService } from "./admin-ingestion-import.service";
 import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
 import { IngestionSchedulerService } from "./ingestion-scheduler.service";
 import { IngestionService } from "./ingestion.service";
+import { ManualIngestionService } from "./manual-ingestion.service";
+import { ListManualRunItemsDto } from "./dto/list-manual-run-items.dto";
+import { ListManualRunsDto } from "./dto/list-manual-runs.dto";
+import { StartManualAdapterRunDto } from "./dto/start-manual-adapter-run.dto";
 import { UpdateGlobalSchedulerDto } from "./dto/update-global-scheduler.dto";
+
+const ingestionValidationOptions = {
+  transform: true,
+  whitelist: true,
+  forbidNonWhitelisted: true,
+} as const;
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @InternalRoles("admin", "superadmin")
@@ -37,6 +51,8 @@ export class IngestionController {
     private readonly globalSchedulerConfigService: GlobalSchedulerConfigService,
     @Inject(IngestionSchedulerService)
     private readonly ingestionSchedulerService: IngestionSchedulerService,
+    @Inject(ManualIngestionService)
+    private readonly manualIngestionService: ManualIngestionService,
   ) {}
 
   @Get()
@@ -89,5 +105,57 @@ export class IngestionController {
   @HttpCode(200)
   runGlobalSchedulerNow() {
     return this.ingestionSchedulerService.runGlobalNow();
+  }
+
+  @Post("manual/adapter/:adapterType")
+  @HttpCode(202)
+  startManualAdapterRun(
+    @Param(
+      new ValidationPipe({
+        ...ingestionValidationOptions,
+        expectedType: StartManualAdapterRunDto,
+      }),
+    )
+    params: StartManualAdapterRunDto,
+    @AuthenticatedUser() user: AuthenticatedRequestUser,
+  ) {
+    return this.manualIngestionService.startAdapterRun(params.adapterType, user.id);
+  }
+
+  @Get("manual")
+  listManualRuns(
+    @Query(
+      new ValidationPipe({
+        ...ingestionValidationOptions,
+        expectedType: ListManualRunsDto,
+      }),
+    )
+    query: ListManualRunsDto,
+  ) {
+    return this.manualIngestionService.listRuns(query);
+  }
+
+  @Get("manual/:batchRunId")
+  getManualRunById(@Param("batchRunId") batchRunId: string) {
+    return this.manualIngestionService.getRunById(batchRunId);
+  }
+
+  @Get("manual/:batchRunId/items")
+  listManualRunItems(
+    @Param("batchRunId") batchRunId: string,
+    @Query(
+      new ValidationPipe({
+        ...ingestionValidationOptions,
+        expectedType: ListManualRunItemsDto,
+      }),
+    )
+    query: ListManualRunItemsDto,
+  ) {
+    return this.manualIngestionService.listRunItems(batchRunId, query);
+  }
+
+  @Post("manual/:batchRunId/cancel")
+  cancelManualRun(@Param("batchRunId") batchRunId: string) {
+    return this.manualIngestionService.cancel(batchRunId);
   }
 }
