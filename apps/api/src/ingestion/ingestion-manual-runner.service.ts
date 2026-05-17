@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
+import { randomUUID } from "node:crypto";
 
 import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
@@ -30,7 +31,7 @@ export class IngestionManualRunnerService {
   }
 
   async processNextBatchRun() {
-    const owner = `manual-runner-${Date.now()}`;
+    const owner = `manual-runner-${randomUUID()}`;
     const acquired = await this.lockRepository.acquire(
       MANUAL_RUNNER_LOCK_ID,
       owner,
@@ -74,6 +75,25 @@ export class IngestionManualRunnerService {
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
+
+    const runBeforeLoop = await this.database.ingestionBatchRun.findUnique({
+      where: { id: batchRunId },
+    });
+    if (!runBeforeLoop) {
+      return;
+    }
+    if (runBeforeLoop.cancelRequestedAt || runBeforeLoop.status === "cancelling") {
+      const cancelledCount = await this.cancelRemainingItems(batchRunId);
+      await this.database.ingestionBatchRun.update({
+        where: { id: batchRunId },
+        data: {
+          finishedAt: new Date(),
+          skippedCount: runBeforeLoop.skippedCount + cancelledCount,
+          status: "cancelled",
+        },
+      });
+      return;
+    }
 
     for (const item of items) {
       const latestRun = await this.database.ingestionBatchRun.findUnique({
@@ -161,6 +181,17 @@ export class IngestionManualRunnerService {
       where: { id: batchRunId },
     });
     if (!latestRun) {
+      return;
+    }
+
+    if (latestRun.cancelRequestedAt || latestRun.status === "cancelling") {
+      await this.database.ingestionBatchRun.update({
+        where: { id: batchRunId },
+        data: {
+          finishedAt: new Date(),
+          status: "cancelled",
+        },
+      });
       return;
     }
 

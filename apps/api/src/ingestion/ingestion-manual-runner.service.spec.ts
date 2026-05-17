@@ -269,3 +269,45 @@ test("runner stops scheduling remaining items when cancellation is requested", a
   assert.equal(items.get("item-cancel-2")?.status, "cancelled");
   assert.deepEqual(runJobSourceCalls, ["source-cancel-1"]);
 });
+
+test("runner keeps cancelling run with no pending items as cancelled", async () => {
+  const { runs, service } = createServiceFixture();
+  runs.set("batch-cancelling-empty", {
+    id: "batch-cancelling-empty",
+    status: "cancelling",
+    cancelRequestedAt: new Date("2026-01-01T00:00:00.000Z"),
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  const run = runs.get("batch-cancelling-empty");
+  assert.equal(run?.status, "cancelled");
+  assert.equal(run?.finishedAt instanceof Date, true);
+});
+
+test("runner finalizes queued run with no items as completed", async () => {
+  const { runs, service } = createServiceFixture();
+  runs.set("batch-empty", {
+    id: "batch-empty",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  const run = runs.get("batch-empty");
+  assert.equal(run?.status, "completed");
+  assert.equal(run?.finishedAt instanceof Date, true);
+});
