@@ -142,6 +142,9 @@ export type ManualRunRecord = {
 };
 
 export type ManualRunItemRecord = {
+  companyName: string;
+  sourceName: string;
+  sourceType: ManualAdapterType;
   id: string;
   batchRunId: string;
   jobSourceId: string;
