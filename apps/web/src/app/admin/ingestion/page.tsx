@@ -256,7 +256,7 @@ export default async function AdminIngestionPage({
                           <td className="px-4 py-3">{source.company.name}</td>
                           <td className="px-4 py-3">{source.sourceName}</td>
                           <td className="px-4 py-3">{source.sourceType}</td>
-                          <td className="px-4 py-3">{source.status}</td>
+                          <td className="px-4 py-3">{source.status.label}</td>
                           <td className="px-4 py-3">{latestRun?.status ?? "nao executado"}</td>
                           <td className="px-4 py-3">
                             <div className="flex flex-wrap gap-2">

@@ -60,11 +60,6 @@ export class IngestionController {
     return this.ingestionService.listAllRuns();
   }
 
-  @Get(":id")
-  getById(@Param("id") id: string) {
-    return this.ingestionService.getRunById(id);
-  }
-
   @Post("import-csv")
   @HttpCode(200)
   @UseInterceptors(FileInterceptor("file"))
@@ -157,5 +152,10 @@ export class IngestionController {
   @Post("manual/:batchRunId/cancel")
   cancelManualRun(@Param("batchRunId") batchRunId: string) {
     return this.manualIngestionService.cancel(batchRunId);
+  }
+
+  @Get(":id")
+  getById(@Param("id") id: string) {
+    return this.ingestionService.getRunById(id);
   }
 }
