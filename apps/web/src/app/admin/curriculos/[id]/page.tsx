@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-
-import { Badge, buttonVariants, Card, InfoField } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Badge, Card, InfoField } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import {
@@ -99,7 +99,7 @@ export default async function AdminResumeDetailPage({
             <p className="text-sm text-stone-600">
               {owner.name} - {owner.email}
             </p>
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+            <p className="text-[11px] font-medium text-stone-400">
               {resume.id}
             </p>
           </div>

@@ -1,8 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-
-import { buttonVariants } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
 
 type Props = {
   currentCredits: number;

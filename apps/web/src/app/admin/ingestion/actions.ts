@@ -8,18 +8,18 @@ import {
   createJobSource,
   deleteJobSource,
   importCompanySourcesCsv,
+  runGlobalSchedulerNow,
   runJobSource,
   startManualAdapterRun,
-  runGlobalSchedulerNow,
   updateGlobalSchedulerConfig,
 } from "@/lib/admin-ingestion-api";
 import {
   buildAdminRedirect,
   isRedirectControlFlowError,
-  parseManualAdapterType,
-  parseManualBatchRunId,
   parseCompanyFormData,
   parseJobSourceFormData,
+  parseManualAdapterType,
+  parseManualBatchRunId,
 } from "@/lib/admin-ingestion-flow";
 
 const ROOT_REDIRECT_PATH = "/admin/ingestion";
@@ -200,11 +200,15 @@ export async function updateGlobalSchedulerAction(formData: FormData) {
       throw error;
     }
     const message =
-      error instanceof Error ? error.message : "Falha ao salvar scheduler global.";
+      error instanceof Error
+        ? error.message
+        : "Falha ao salvar scheduler global.";
     redirect(buildAdminRedirect(redirectPath, "error", message));
   }
 
-  redirect(buildAdminRedirect(redirectPath, "success", "Scheduler global atualizado."));
+  redirect(
+    buildAdminRedirect(redirectPath, "success", "Scheduler global atualizado."),
+  );
 }
 
 export async function runGlobalSchedulerNowAction(formData: FormData) {
@@ -249,11 +253,14 @@ export async function deleteJobSourceAction(formData: FormData) {
     if (isRedirectControlFlowError(error)) {
       throw error;
     }
-    const message = error instanceof Error ? error.message : "Falha ao excluir fonte.";
+    const message =
+      error instanceof Error ? error.message : "Falha ao excluir fonte.";
     redirect(buildAdminRedirect(redirectPath, "error", message));
   }
 
-  redirect(buildAdminRedirect(redirectPath, "success", "Fonte excluida com sucesso."));
+  redirect(
+    buildAdminRedirect(redirectPath, "success", "Fonte excluida com sucesso."),
+  );
 }
 
 export async function startManualAdapterRunAction(formData: FormData) {
@@ -264,7 +271,8 @@ export async function startManualAdapterRunAction(formData: FormData) {
   try {
     adapterType = parseManualAdapterType(formData.get("adapterType"));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Tipo de adaptador invalido.";
+    const message =
+      error instanceof Error ? error.message : "Tipo de adaptador invalido.";
     redirect(buildAdminRedirect(redirectPath, "error", message));
   }
 
@@ -300,7 +308,8 @@ export async function cancelManualRunAction(formData: FormData) {
   try {
     batchRunId = parseManualBatchRunId(formData.get("batchRunId"));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Informe o lote manual.";
+    const message =
+      error instanceof Error ? error.message : "Informe o lote manual.";
     redirect(buildAdminRedirect(redirectPath, "error", message));
   }
 
@@ -312,10 +321,14 @@ export async function cancelManualRunAction(formData: FormData) {
     }
 
     const message =
-      error instanceof Error ? error.message : "Falha ao solicitar cancelamento.";
+      error instanceof Error
+        ? error.message
+        : "Falha ao solicitar cancelamento.";
 
     redirect(buildAdminRedirect(redirectPath, "error", message));
   }
 
-  redirect(buildAdminRedirect(redirectPath, "success", "Cancelamento solicitado."));
+  redirect(
+    buildAdminRedirect(redirectPath, "success", "Cancelamento solicitado."),
+  );
 }

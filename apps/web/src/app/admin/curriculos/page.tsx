@@ -1,12 +1,6 @@
 import Link from "next/link";
-
-import {
-  Badge,
-  buttonVariants,
-  Card,
-  EmptyState,
-  Input,
-} from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Badge, Card, EmptyState, Input } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import {

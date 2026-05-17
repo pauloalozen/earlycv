@@ -1,15 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-
-import { buttonVariants, Card, EmptyState } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card, EmptyState } from "@/components/ui";
 import {
   buildCompanyDetailData,
   getPhaseOneAdminDataSafely,
 } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-import { buildAdminMetadata } from "@/lib/route-metadata";
 import { cn } from "@/lib/cn";
+import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminStatusBadge } from "../../_components/admin-status-badge";
 import { AdminTokenState } from "../../_components/admin-token-state";
@@ -51,7 +51,10 @@ export default async function AdminCompanyDetailPage({
   params,
   searchParams,
 }: CompanyDetailPageProps) {
-  const [{ id }, { message, status }] = await Promise.all([params, searchParams]);
+  const [{ id }, { message, status }] = await Promise.all([
+    params,
+    searchParams,
+  ]);
   const token = await getBackofficeSessionToken();
 
   if (!token) {
@@ -127,33 +130,25 @@ export default async function AdminCompanyDetailPage({
 
         <div className="grid gap-4 md:grid-cols-4">
           <Card padding="sm" variant="muted">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
-              status
-            </p>
+            <p className="text-[11px] font-medium text-stone-400">status</p>
             <div className="mt-3">
               <AdminStatusBadge status={company.status} />
             </div>
           </Card>
           <Card padding="sm" variant="muted">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
-              fontes
-            </p>
+            <p className="text-[11px] font-medium text-stone-400">fontes</p>
             <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">
               {company.relatedSources.length}
             </p>
           </Card>
           <Card padding="sm" variant="muted">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
-              website
-            </p>
+            <p className="text-[11px] font-medium text-stone-400">website</p>
             <p className="mt-2 text-sm font-medium text-stone-900">
               {company.websiteUrl ?? "nao informado"}
             </p>
           </Card>
           <Card padding="sm" variant="muted">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
-              carreiras
-            </p>
+            <p className="text-[11px] font-medium text-stone-400">carreiras</p>
             <p className="mt-2 text-sm font-medium text-stone-900">
               {company.careersUrl ?? "nao informado"}
             </p>

@@ -1,6 +1,6 @@
 import Link from "next/link";
-
-import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card, EmptyState, Input } from "@/components/ui";
 import {
   buildPendingTypeLabel,
   filterPendingItems,
@@ -120,7 +120,7 @@ export default async function AdminPendingPage({
                 key={`${item.type}:${item.entityId}`}
               >
                 <div className="space-y-2">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+                  <p className="text-[11px] font-medium text-stone-400">
                     {buildPendingTypeLabel(item.type)} - prioridade{" "}
                     {item.priority}
                   </p>

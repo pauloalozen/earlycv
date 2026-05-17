@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-
-import { buttonVariants } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
 
 type UserRow = {
   id: string;
@@ -40,16 +39,16 @@ export function UsersList({ users, deleteAction }: UsersListProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-stone-100 bg-stone-50 text-left">
-              <th className="px-4 py-3 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-stone-500">
+              <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
                 Usuario
               </th>
-              <th className="hidden px-4 py-3 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-stone-500 md:table-cell">
+              <th className="hidden px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400 md:table-cell">
                 Plano
               </th>
-              <th className="hidden px-4 py-3 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-stone-500 lg:table-cell">
+              <th className="hidden px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400 lg:table-cell">
                 Status
               </th>
-              <th className="px-4 py-3 text-right font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-stone-500">
+              <th className="px-4 py-3 text-right text-[11px] font-medium uppercase tracking-wider text-stone-400">
                 Acoes
               </th>
             </tr>
@@ -65,7 +64,7 @@ export function UsersList({ users, deleteAction }: UsersListProps) {
                   {user.planType}
                 </td>
                 <td className="hidden px-4 py-3 lg:table-cell">
-                  <span className="inline-block rounded-full bg-stone-100 px-2 py-0.5 font-mono text-[11px] text-stone-600">
+                  <span className="inline-block rounded-md bg-stone-100 px-2 py-0.5 text-[11px] text-stone-600">
                     {user.completenessStatus.label}
                   </span>
                 </td>
@@ -92,7 +91,7 @@ export function UsersList({ users, deleteAction }: UsersListProps) {
                       </Link>
                     ) : null}
                     <button
-                      className="inline-flex h-9 items-center justify-center rounded-lg border border-red-300 bg-white px-3.5 font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-red-700 transition-colors hover:bg-red-50 disabled:pointer-events-none disabled:opacity-50"
+                      className="inline-flex h-8 items-center justify-center rounded-lg border border-red-200 bg-white px-3 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 disabled:pointer-events-none disabled:opacity-50"
                       onClick={() => setPendingDeleteId(user.id)}
                       type="button"
                     >
@@ -129,7 +128,7 @@ export function UsersList({ users, deleteAction }: UsersListProps) {
                 Cancelar
               </button>
               <button
-                className="inline-flex h-11 items-center justify-center rounded-lg border border-red-300 bg-red-600 px-5 font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-red-700 disabled:pointer-events-none disabled:opacity-50"
+                className="inline-flex h-11 items-center justify-center rounded-lg border border-red-300 bg-red-600 px-5 text-[11px] font-medium text-white transition-colors hover:bg-red-700 disabled:pointer-events-none disabled:opacity-50"
                 disabled={isPending}
                 onClick={handleDeleteConfirm}
                 type="button"

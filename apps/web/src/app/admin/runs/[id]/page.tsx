@@ -1,6 +1,6 @@
 import Link from "next/link";
-
-import { buttonVariants, Card } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card } from "@/components/ui";
 import { getIngestionRunById, getJobSource } from "@/lib/admin-ingestion-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
@@ -57,9 +57,7 @@ export default async function AdminRunDetailPage({
 
           <div className="grid gap-4 md:grid-cols-4">
             <Card padding="sm" variant="muted">
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
-                status
-              </p>
+              <p className="text-[11px] font-medium text-stone-400">status</p>
               <div className="mt-3">
                 <AdminStatusBadge
                   status={{
@@ -75,15 +73,13 @@ export default async function AdminRunDetailPage({
               </div>
             </Card>
             <Card padding="sm" variant="muted">
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
-                novas
-              </p>
+              <p className="text-[11px] font-medium text-stone-400">novas</p>
               <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">
                 {run.newCount}
               </p>
             </Card>
             <Card padding="sm" variant="muted">
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+              <p className="text-[11px] font-medium text-stone-400">
                 atualizadas
               </p>
               <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">
@@ -91,9 +87,7 @@ export default async function AdminRunDetailPage({
               </p>
             </Card>
             <Card padding="sm" variant="muted">
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
-                falhas
-              </p>
+              <p className="text-[11px] font-medium text-stone-400">falhas</p>
               <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">
                 {run.failedCount}
               </p>

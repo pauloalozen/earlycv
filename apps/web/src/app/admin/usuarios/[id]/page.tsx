@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-
-import { buttonVariants, Card, EmptyState, InfoField } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card, EmptyState, InfoField } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import {
@@ -109,9 +109,7 @@ export default async function AdminUserDetailPage({
 
         <div className="grid gap-4 md:grid-cols-4">
           <Card padding="sm" variant="muted">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
-              completude
-            </p>
+            <p className="text-[11px] font-medium text-stone-400">completude</p>
             <div className="mt-3">
               <AdminStatusBadge status={user.completenessStatus} />
             </div>
@@ -163,7 +161,7 @@ export default async function AdminUserDetailPage({
           <Card className="border-stone-200 bg-stone-50/80" padding="lg">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div className="space-y-2">
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-700">
+                <p className="text-[11px] font-medium text-stone-400">
                   sessao assistida ativa
                 </p>
                 <h2 className="text-xl font-bold tracking-tight text-stone-950">

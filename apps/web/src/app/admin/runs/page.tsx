@@ -1,6 +1,6 @@
 import Link from "next/link";
-
-import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card, EmptyState, Input } from "@/components/ui";
 import { filterRuns } from "@/lib/admin-operations";
 import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
@@ -113,7 +113,7 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
                   key={run.id}
                 >
                   <div className="space-y-2">
-                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+                    <p className="text-[11px] font-medium text-stone-400">
                       {run.startedAt}
                     </p>
                     <h2 className="text-lg font-bold tracking-tight text-stone-950">

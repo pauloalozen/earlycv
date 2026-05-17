@@ -1,6 +1,6 @@
 import Link from "next/link";
-
-import { buttonVariants, Card } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card } from "@/components/ui";
 
 type AdminTokenStateProps = {
   actionHref?: string;
@@ -20,7 +20,7 @@ export function AdminTokenState({
       className="mx-auto max-w-2xl space-y-4 border-stone-200 bg-white"
       padding="lg"
     >
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+      <p className="text-[11px] font-medium text-stone-400">
         admin / acesso interno
       </p>
       <h1 className="text-2xl font-bold tracking-tight text-stone-950">

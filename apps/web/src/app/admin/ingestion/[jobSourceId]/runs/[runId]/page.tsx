@@ -1,6 +1,6 @@
 import Link from "next/link";
-
-import { buttonVariants, Card } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card } from "@/components/ui";
 import { getIngestionRun, getJobSource } from "@/lib/admin-ingestion-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
@@ -56,7 +56,7 @@ export default async function IngestionRunDetailPage({
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-2">
-              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-700">
+              <p className="text-[11px] font-medium text-stone-400">
                 {jobSource.company.name}
               </p>
               <h1 className="text-3xl font-bold tracking-tight">
@@ -75,21 +75,17 @@ export default async function IngestionRunDetailPage({
 
           <div className="grid gap-4 md:grid-cols-4">
             <Card className="space-y-2">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
-                status
-              </p>
+              <p className="text-[11px] font-medium text-stone-400">status</p>
               <p className="text-sm font-medium text-stone-900">{run.status}</p>
             </Card>
             <Card className="space-y-2">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
-                novas
-              </p>
+              <p className="text-[11px] font-medium text-stone-400">novas</p>
               <p className="text-sm font-medium text-stone-900">
                 {run.newCount}
               </p>
             </Card>
             <Card className="space-y-2">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
+              <p className="text-[11px] font-medium text-stone-400">
                 atualizadas
               </p>
               <p className="text-sm font-medium text-stone-900">
@@ -97,9 +93,7 @@ export default async function IngestionRunDetailPage({
               </p>
             </Card>
             <Card className="space-y-2">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
-                falhas
-              </p>
+              <p className="text-[11px] font-medium text-stone-400">falhas</p>
               <p className="text-sm font-medium text-stone-900">
                 {run.failedCount}
               </p>
@@ -108,9 +102,7 @@ export default async function IngestionRunDetailPage({
 
           <Card className="space-y-4">
             <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
-                janela
-              </p>
+              <p className="text-[11px] font-medium text-stone-400">janela</p>
               <p className="mt-2 text-sm text-stone-700">
                 inicio {run.startedAt} - fim {run.finishedAt ?? "em andamento"}
               </p>
@@ -130,7 +122,7 @@ export default async function IngestionRunDetailPage({
                       <p className="text-sm font-semibold text-stone-900">
                         {item.title}
                       </p>
-                      <span className="rounded-full bg-white px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-stone-700">
+                      <span className="rounded-md bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-600">
                         {item.action}
                       </span>
                     </div>

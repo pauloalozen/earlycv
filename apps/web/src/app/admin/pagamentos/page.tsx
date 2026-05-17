@@ -1,7 +1,9 @@
 import Link from "next/link";
-
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card } from "@/components/ui";
 import { listAdminPayments } from "@/lib/admin-payments-api";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { AdminShellHeader } from "../_components/admin-shell-header";
 
 export const metadata = buildAdminMetadata("Pagamentos");
 
@@ -18,7 +20,7 @@ function statusLabel(status: string) {
 
 function statusClass(status: string) {
   if (status === "completed" || status === "approved")
-    return "text-green-700 bg-green-50";
+    return "text-emerald-700 bg-emerald-50";
   if (status === "pending") return "text-yellow-700 bg-yellow-50";
   if (status === "failed") return "text-red-700 bg-red-50";
   return "text-stone-600 bg-stone-100";
@@ -81,155 +83,159 @@ export default async function AdminPagamentosPage({
   };
 
   return (
-    <div className="px-6 py-8 max-w-7xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-stone-900">Pagamentos</h1>
-        <p className="text-sm text-stone-500 mt-1">
-          {total} registro{total !== 1 ? "s" : ""} encontrado
-          {total !== 1 ? "s" : ""}
-        </p>
-      </div>
-
-      {/* Filtros */}
-      <form
-        method="GET"
-        action="/admin/pagamentos"
-        className="flex flex-wrap gap-3 mb-6"
-      >
-        <select
-          name="status"
-          defaultValue={sp.status ?? ""}
-          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700"
-        >
-          <option value="">Todos os status</option>
-          <option value="pending">Pendente</option>
-          <option value="completed">Aprovado</option>
-          <option value="failed">Falhou</option>
-        </select>
-
-        <input
-          name="from"
-          type="date"
-          defaultValue={sp.from ?? ""}
-          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700"
-          placeholder="De"
-        />
-        <input
-          name="to"
-          type="date"
-          defaultValue={sp.to ?? ""}
-          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700"
-          placeholder="Até"
+    <div className="px-6 py-10 md:px-10">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <AdminShellHeader
+          eyebrow="admin / pagamentos"
+          subtitle={`${total} registro${total !== 1 ? "s" : ""} encontrado${total !== 1 ? "s" : ""}.`}
+          title="Pagamentos"
         />
 
-        <input
-          name="userId"
-          defaultValue={sp.userId ?? ""}
-          placeholder="User ID"
-          className="rounded-lg border border-stone-200 px-3 py-2 text-sm bg-white text-stone-700 w-64"
-        />
+        <Card padding="sm" variant="ghost">
+          <form
+            action="/admin/pagamentos"
+            className="flex flex-wrap gap-3"
+            method="GET"
+          >
+            <select
+              className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm font-medium text-stone-900"
+              defaultValue={sp.status ?? ""}
+              name="status"
+            >
+              <option value="">Todos os status</option>
+              <option value="pending">Pendente</option>
+              <option value="completed">Aprovado</option>
+              <option value="failed">Falhou</option>
+            </select>
+            <input
+              className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700"
+              defaultValue={sp.from ?? ""}
+              name="from"
+              type="date"
+            />
+            <input
+              className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700"
+              defaultValue={sp.to ?? ""}
+              name="to"
+              type="date"
+            />
+            <input
+              className="h-10 w-64 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700"
+              defaultValue={sp.userId ?? ""}
+              name="userId"
+              placeholder="User ID"
+            />
+            <button className={buttonVariants()} type="submit">
+              Filtrar
+            </button>
+            <Link
+              className={buttonVariants({ variant: "outline" })}
+              href="/admin/pagamentos"
+            >
+              Limpar
+            </Link>
+          </form>
+        </Card>
 
-        <button
-          type="submit"
-          className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
-        >
-          Filtrar
-        </button>
-        <Link
-          href="/admin/pagamentos"
-          className="rounded-lg border border-stone-200 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100"
-        >
-          Limpar
-        </Link>
-      </form>
-
-      {/* Tabela */}
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b border-stone-100 bg-stone-50 text-left text-xs font-semibold uppercase tracking-wide text-stone-500">
-            <tr>
-              <th className="px-4 py-3">Usuário</th>
-              <th className="px-4 py-3">Plano</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Valor</th>
-              <th className="px-4 py-3">Data</th>
-              <th className="px-4 py-3">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-50">
-            {items.length === 0 && (
+        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="border-b border-stone-100 bg-stone-50 text-left">
               <tr>
-                <td
-                  colSpan={6}
-                  className="px-4 py-8 text-center text-stone-400"
-                >
-                  Nenhum pagamento encontrado.
-                </td>
+                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  Usuario
+                </th>
+                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  Plano
+                </th>
+                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  Valor
+                </th>
+                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  Data
+                </th>
+                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  Acoes
+                </th>
               </tr>
-            )}
-            {items.map((item) => (
-              <tr key={item.checkoutId} className="hover:bg-stone-50">
-                <td className="px-4 py-3">
-                  <div className="text-stone-800 font-medium truncate max-w-[160px]">
+            </thead>
+            <tbody className="divide-y divide-stone-50">
+              {items.length === 0 && (
+                <tr>
+                  <td
+                    className="px-4 py-8 text-center text-stone-400"
+                    colSpan={6}
+                  >
+                    Nenhum pagamento encontrado.
+                  </td>
+                </tr>
+              )}
+              {items.map((item) => (
+                <tr className="hover:bg-stone-50" key={item.checkoutId}>
+                  <td className="max-w-[160px] truncate px-4 py-3 font-medium text-stone-800">
                     {item.userEmail ?? item.userId}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-stone-600">
-                  {item.planName ?? (
-                    <span className="font-mono text-xs">
-                      {item.checkoutId.slice(0, 8)}…
+                  </td>
+                  <td className="px-4 py-3 text-stone-600">
+                    {item.planName ?? (
+                      <span className="font-mono text-xs">
+                        {item.checkoutId.slice(0, 8)}…
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusClass(item.status)}`}
+                    >
+                      {statusLabel(item.status)}
                     </span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusClass(item.status)}`}
-                  >
-                    {statusLabel(item.status)}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-stone-700">
-                  {formatCents(item.amountInCents)}
-                </td>
-                <td className="px-4 py-3 text-stone-500 whitespace-nowrap">
-                  {formatDate(item.createdAt)}
-                </td>
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/admin/pagamentos/${item.checkoutId}`}
-                    className="text-xs font-medium text-stone-700 hover:underline"
-                  >
-                    Ver detalhes
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  </td>
+                  <td className="px-4 py-3 text-stone-700">
+                    {formatCents(item.amountInCents)}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-stone-500">
+                    {formatDate(item.createdAt)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
+                      href={`/admin/pagamentos/${item.checkoutId}`}
+                    >
+                      Detalhe
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      {/* Paginação */}
-      <div className="mt-4 flex items-center justify-between text-sm text-stone-500">
-        <span>
-          Página {page} · {items.length} de {total}
-        </span>
-        <div className="flex gap-2">
-          {page > 1 && (
-            <Link
-              href={buildUrl({ page: String(page - 1) })}
-              className="rounded-lg border border-stone-200 px-3 py-1.5 hover:bg-stone-100"
-            >
-              ← Anterior
-            </Link>
-          )}
-          {items.length === 50 && (
-            <Link
-              href={buildUrl({ page: String(page + 1) })}
-              className="rounded-lg border border-stone-200 px-3 py-1.5 hover:bg-stone-100"
-            >
-              Próxima →
-            </Link>
-          )}
+        <div className="flex items-center justify-between text-sm text-stone-500">
+          <span>
+            Pagina {page} · {items.length} de {total}
+          </span>
+          <div className="flex gap-2">
+            {page > 1 && (
+              <Link
+                className={buttonVariants({ variant: "outline" })}
+                href={buildUrl({ page: String(page - 1) })}
+              >
+                ← Anterior
+              </Link>
+            )}
+            {items.length === 50 && (
+              <Link
+                className={buttonVariants({ variant: "outline" })}
+                href={buildUrl({ page: String(page + 1) })}
+              >
+                Proxima →
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </div>

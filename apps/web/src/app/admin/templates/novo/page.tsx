@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { buttonVariants, Card, Input } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card, Input } from "@/components/ui";
 import { adminCreateResumeTemplate } from "@/lib/admin-resume-templates-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";

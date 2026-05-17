@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
 
-import { buttonVariants } from "@/components/ui";
 import { getTemplateSignedUrlsAction } from "../_actions/get-template-signed-urls";
 import { uploadTemplateFileAction } from "../_actions/upload-template-file";
 
@@ -87,7 +87,7 @@ export function TemplateFileUpload({
         />
         <span
           className={buttonVariants({
-            variant: currentFileUrl ? "outline" : "primary",
+            variant: currentFileUrl ? "outline" : "default",
           })}
         >
           {uploading

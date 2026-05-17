@@ -1,4 +1,5 @@
-import { buttonVariants, Card, EmptyState, Input } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card, EmptyState, Input } from "@/components/ui";
 import { filterJobs } from "@/lib/admin-operations";
 import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";

@@ -1,8 +1,7 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
-
-import { buttonVariants } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
 
 export function RunSourceSubmitButton() {
   const { pending } = useFormStatus();

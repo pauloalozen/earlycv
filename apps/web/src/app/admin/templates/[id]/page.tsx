@@ -2,8 +2,8 @@ import { revalidatePath } from "next/cache";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-
-import { buttonVariants, Card, Input } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card, Input } from "@/components/ui";
 import {
   type AdminResumeTemplateDto,
   adminListResumeTemplates,

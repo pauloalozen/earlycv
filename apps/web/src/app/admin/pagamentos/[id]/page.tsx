@@ -53,7 +53,7 @@ function eventClass(actionTaken: string) {
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+      <dt className="text-[11px] font-medium uppercase tracking-wider text-stone-400">
         {label}
       </dt>
       <dd className="mt-0.5 font-mono text-sm text-stone-800 break-all">
@@ -114,7 +114,7 @@ export default async function AdminPagamentoDetailPage({
 
       {/* Dados do checkout */}
       <section className="mb-8 rounded-xl border border-stone-200 bg-white p-6">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-stone-500">
+        <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-stone-400">
           Dados do checkout
         </h2>
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -145,7 +145,7 @@ export default async function AdminPagamentoDetailPage({
       {/* Reconciliação */}
       {!isCompleted && (
         <section className="mb-8 rounded-xl border border-stone-200 bg-stone-50 p-6">
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-700">
+          <h2 className="mb-2 text-xs font-medium uppercase tracking-wider text-stone-500">
             Reconciliação manual
           </h2>
           <p className="mb-4 text-sm text-stone-700">
@@ -161,7 +161,7 @@ export default async function AdminPagamentoDetailPage({
 
       {/* Timeline de auditoria */}
       <section className="rounded-xl border border-stone-200 bg-white p-6">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-stone-500">
+        <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-stone-400">
           Histórico de eventos ({auditLogs.length})
         </h2>
 

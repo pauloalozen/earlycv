@@ -1,6 +1,6 @@
 import Link from "next/link";
-
-import { buttonVariants, Card, EmptyState, StatCard } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card, EmptyState, StatCard } from "@/components/ui";
 import { buildPendingTypeLabel } from "@/lib/admin-operations";
 import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
@@ -115,7 +115,7 @@ export default async function AdminOverviewPage({
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="space-y-1">
-                        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+                        <p className="text-[11px] font-medium text-stone-400">
                           {buildPendingTypeLabel(item.type)} - prioridade{" "}
                           {item.priority}
                         </p>
@@ -153,7 +153,7 @@ export default async function AdminOverviewPage({
             </div>
             <div className="grid gap-3">
               <Card padding="sm" variant="muted">
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+                <p className="text-[11px] font-medium text-stone-400">
                   empresas incompletas
                 </p>
                 <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">
@@ -165,7 +165,7 @@ export default async function AdminOverviewPage({
                 </p>
               </Card>
               <Card padding="sm" variant="muted">
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+                <p className="text-[11px] font-medium text-stone-400">
                   fontes aguardando run
                 </p>
                 <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">
@@ -177,7 +177,7 @@ export default async function AdminOverviewPage({
                 </p>
               </Card>
               <Card padding="sm" variant="muted">
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+                <p className="text-[11px] font-medium text-stone-400">
                   runs com falha
                 </p>
                 <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">
@@ -188,7 +188,7 @@ export default async function AdminOverviewPage({
                 </p>
               </Card>
               <Card padding="sm" variant="muted">
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+                <p className="text-[11px] font-medium text-stone-400">
                   vagas catalogadas
                 </p>
                 <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">

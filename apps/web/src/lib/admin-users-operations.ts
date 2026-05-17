@@ -14,44 +14,18 @@ export type BackofficeNavItem = {
   href: string;
   label: string;
   phase?: string;
-  section?: "core" | "jobs" | "users" | "ops";
+  section?: "negocio" | "ingestion" | "sistema";
 };
 
 const adminNavItems: BackofficeNavItem[] = [
-  { href: "/admin", label: "Visao geral", section: "core" },
-  { href: "/admin/pagamentos", label: "Pagamentos", section: "core" },
-  { href: "/admin/liberacoes-cv", label: "Liberacoes de CV", section: "core" },
-  { href: "/admin/empresas", label: "Empresas", section: "jobs" },
-  { href: "/admin/fontes", label: "Fontes de vagas", section: "jobs" },
-  { href: "/admin/runs", label: "Runs de ingestao", section: "jobs" },
-  { href: "/admin/vagas", label: "Vagas", section: "jobs" },
-  { href: "/admin/pendencias", label: "Pendencias", section: "jobs" },
-  {
-    href: "/admin/usuarios",
-    label: "Usuarios",
-    phase: "fase 3",
-    section: "users",
-  },
-  { href: "/admin/perfis", label: "Perfis", phase: "fase 3", section: "users" },
-  {
-    href: "/admin/curriculos",
-    label: "Curriculos",
-    phase: "fase 3",
-    section: "users",
-  },
-  { href: "/admin/templates", label: "Templates de CV", section: "ops" },
-  {
-    href: "/admin/configuracoes",
-    label: "Configuracoes",
-    phase: "fase 4",
-    section: "ops",
-  },
-  {
-    href: "/admin/eventos-e-logs",
-    label: "Eventos e logs",
-    phase: "fase 4",
-    section: "ops",
-  },
+  { href: "/admin", label: "Visao geral", section: "negocio" },
+  { href: "/admin/usuarios", label: "Usuarios", section: "negocio" },
+  { href: "/admin/pagamentos", label: "Pagamentos", section: "negocio" },
+  { href: "/admin/liberacoes-cv", label: "Liberacoes de CV", section: "negocio" },
+  { href: "/admin/ingestion", label: "Ingestao", section: "ingestion" },
+  { href: "/admin/templates", label: "Templates de CV", section: "sistema" },
+  { href: "/admin/configuracoes", label: "Configuracoes", section: "sistema" },
+  { href: "/admin/eventos-e-logs", label: "Eventos e logs", phase: "fase 4", section: "sistema" },
 ];
 
 const superadminNavItems: BackofficeNavItem[] = [

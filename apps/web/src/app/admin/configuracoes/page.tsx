@@ -111,7 +111,7 @@ async function AdminSettingsPageBody({
               <Card className="space-y-4" key={entry.key}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="space-y-1">
-                    <p className="font-mono text-xs uppercase tracking-[0.14em] text-stone-500">
+                    <p className="text-[11px] font-medium text-stone-400">
                       {entry.key}
                     </p>
                     <p className="text-sm text-stone-600">

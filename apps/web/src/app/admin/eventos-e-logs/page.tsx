@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-
-import { Badge, buttonVariants, Card, EmptyState } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Badge, Card, EmptyState } from "@/components/ui";
 import {
   type EmitAdminAnalysisEventsResponse,
   emitAdminAnalysisEvents,
@@ -169,7 +169,7 @@ function EventSection({
             key={`${group}-${entry.eventName}-${entry.eventVersion}`}
           >
             <div className="space-y-1">
-              <p className="font-mono text-xs uppercase tracking-[0.14em] text-stone-500">
+              <p className="text-[11px] font-medium text-stone-500">
                 {entry.eventName}
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
@@ -223,12 +223,20 @@ function EventResults({ result }: { result: EventResultsState | null }) {
       {result.results.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-stone-200">
           <table className="w-full text-left text-sm">
-            <thead className="bg-stone-50 text-xs uppercase tracking-[0.12em] text-stone-500">
+            <thead className="bg-stone-50">
               <tr>
-                <th className="px-4 py-3">Evento</th>
-                <th className="px-4 py-3">Dominio</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Erro</th>
+                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  Evento
+                </th>
+                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  Dominio
+                </th>
+                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  Erro
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-200 bg-white">
@@ -413,7 +421,7 @@ async function AdminEventsLogsPageBody({
                         key={eventName}
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-mono text-xs uppercase tracking-[0.14em] text-stone-600">
+                          <p className="text-[11px] font-medium text-stone-600">
                             {eventName}
                           </p>
                           <Badge variant="neutral">
@@ -464,7 +472,7 @@ async function AdminEventsLogsPageBody({
                         key={eventName}
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-mono text-xs uppercase tracking-[0.14em] text-stone-600">
+                          <p className="text-[11px] font-medium text-stone-600">
                             {eventName}
                           </p>
                           <Badge variant="neutral">

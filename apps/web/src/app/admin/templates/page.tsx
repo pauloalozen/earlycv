@@ -1,8 +1,8 @@
 import { revalidatePath } from "next/cache";
 import Image from "next/image";
 import Link from "next/link";
-
-import { Badge, buttonVariants, Card, EmptyState } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Badge, Card, EmptyState } from "@/components/ui";
 import {
   type AdminResumeTemplateDto,
   adminListResumeTemplates,

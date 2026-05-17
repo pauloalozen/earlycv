@@ -1,15 +1,15 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-
-import { buttonVariants, Card } from "@/components/ui";
-import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card } from "@/components/ui";
+import { listCompanies, listJobSources } from "@/lib/admin-ingestion-api";
+import { buildAdminStateModel } from "@/lib/admin-state";
 import {
   getAdminDataErrorKind,
   isInvalidAdminTokenError,
   isMissingAdminRoleError,
 } from "@/lib/admin-token-errors";
-import { listCompanies, listJobSources } from "@/lib/admin-ingestion-api";
-import { buildAdminStateModel } from "@/lib/admin-state";
+import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 
 export const metadata = buildAdminMetadata("Detalhe da fonte");

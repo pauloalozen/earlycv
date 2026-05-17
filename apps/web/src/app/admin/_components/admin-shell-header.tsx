@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-
-import { buttonVariants } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
 
 type AdminShellHeaderProps = {
   actions?: ReactNode;
@@ -19,9 +18,7 @@ export function AdminShellHeader({
     <header className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-6 md:p-8">
       <div className="space-y-2">
         {eyebrow ? (
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-500">
-            {eyebrow}
-          </p>
+          <p className="text-[11px] font-medium text-stone-400">{eyebrow}</p>
         ) : null}
         <h1 className="text-3xl font-semibold tracking-tight text-stone-950 md:text-4xl">
           {title}

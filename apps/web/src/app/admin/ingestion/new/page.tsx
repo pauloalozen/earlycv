@@ -1,6 +1,6 @@
 import Link from "next/link";
-
-import { buttonVariants, Card, Input } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card, Input } from "@/components/ui";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { cn } from "@/lib/cn";
 import { buildAdminMetadata } from "@/lib/route-metadata";
@@ -59,7 +59,7 @@ function StepBadge({
   return (
     <div
       className={cn(
-        "rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em]",
+        "rounded-full px-3 py-1 text-[11px] font-medium",
         active ? "bg-stone-100 text-stone-700" : "bg-stone-200 text-stone-500",
       )}
     >
@@ -100,7 +100,7 @@ export default async function NewAdminSourcePage({
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-2">
-            <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-700">
+            <p className="text-[11px] font-medium text-stone-400">
               admin / onboarding de fonte
             </p>
             <h1 className="text-4xl font-bold tracking-tight">
@@ -375,7 +375,7 @@ export default async function NewAdminSourcePage({
 
           <Card className="space-y-5" padding="lg" variant="ghost">
             <div className="space-y-2">
-              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-500">
+              <p className="text-[11px] font-medium text-stone-400">
                 como funciona
               </p>
               <h2 className="text-xl font-bold tracking-tight text-stone-900">

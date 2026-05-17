@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-
-import { buttonVariants, Card, EmptyState, InfoField } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card, EmptyState, InfoField } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
@@ -86,7 +86,7 @@ export default async function AdminProfileDetailPage({
 
         <div className="grid gap-4 md:grid-cols-4">
           <Card padding="sm" variant="muted">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-500">
+            <p className="text-[11px] font-medium text-stone-400">
               status do perfil
             </p>
             <div className="mt-3">

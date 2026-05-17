@@ -1,6 +1,6 @@
 import Link from "next/link";
-
-import { buttonVariants, Card } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { Card } from "@/components/ui";
 import { getJobSource, listIngestionRuns } from "@/lib/admin-ingestion-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
@@ -60,7 +60,7 @@ export default async function JobSourceAdminPage({
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-2">
-              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-stone-700">
+              <p className="text-[11px] font-medium text-stone-400">
                 {source.company.name}
               </p>
               <h1 className="text-3xl font-bold tracking-tight">
@@ -99,7 +99,7 @@ export default async function JobSourceAdminPage({
 
           <div className="grid gap-4 md:grid-cols-3">
             <Card className="space-y-2">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
+              <p className="text-[11px] font-medium text-stone-400">
                 ultimo sucesso
               </p>
               <p className="text-sm font-medium text-stone-900">
@@ -107,7 +107,7 @@ export default async function JobSourceAdminPage({
               </p>
             </Card>
             <Card className="space-y-2">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
+              <p className="text-[11px] font-medium text-stone-400">
                 ultimo erro
               </p>
               <p className="text-sm font-medium text-stone-900">
@@ -115,7 +115,7 @@ export default async function JobSourceAdminPage({
               </p>
             </Card>
             <Card className="space-y-2">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
+              <p className="text-[11px] font-medium text-stone-400">
                 frequencia alvo
               </p>
               <p className="text-sm font-medium text-stone-900">
@@ -142,7 +142,7 @@ export default async function JobSourceAdminPage({
                     key={run.id}
                   >
                     <div className="space-y-1">
-                      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">
+                      <p className="text-[11px] font-medium text-stone-400">
                         {run.startedAt}
                       </p>
                       <p className="text-sm font-medium text-stone-900">

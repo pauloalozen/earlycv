@@ -12,7 +12,9 @@ export async function deleteCompanyAction(formData: FormData) {
   const companyId = String(formData.get("companyId") ?? "").trim();
 
   if (!companyId) {
-    redirect(buildAdminRedirect("/admin/empresas", "error", "Empresa ausente."));
+    redirect(
+      buildAdminRedirect("/admin/empresas", "error", "Empresa ausente."),
+    );
   }
 
   try {
@@ -30,6 +32,10 @@ export async function deleteCompanyAction(formData: FormData) {
   }
 
   redirect(
-    buildAdminRedirect("/admin/empresas", "success", "Empresa excluida com sucesso."),
+    buildAdminRedirect(
+      "/admin/empresas",
+      "success",
+      "Empresa excluida com sucesso.",
+    ),
   );
 }
