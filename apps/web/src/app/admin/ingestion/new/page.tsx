@@ -104,11 +104,11 @@ export default async function NewAdminSourcePage({
               admin / onboarding de fonte
             </p>
             <h1 className="text-4xl font-bold tracking-tight">
-              Adicionar empresa e primeira fonte
+              Fluxo rapido de ingestao
             </h1>
             <p className="max-w-3xl text-sm leading-7 text-stone-600">
-              Crie a empresa e em seguida conecte a primeira fonte de vagas sem
-              sair do painel administrativo.
+              Cadastre empresa, conecte o portal de vagas e ja deixe a execucao
+              manual pronta com escalonamento definido.
             </p>
           </div>
 
@@ -138,8 +138,8 @@ export default async function NewAdminSourcePage({
                     Passo 1 - dados da empresa
                   </h2>
                   <p className="text-sm leading-7 text-stone-600">
-                    Cadastre a empresa base. O nome sera normalizado no backend
-                    e reaproveitado na fonte criada no passo seguinte.
+                    Campos obrigatorios para iniciar: nome, URL do portal de
+                    vagas e segmento. Os demais campos sao opcionais.
                   </p>
                 </div>
 
@@ -168,9 +168,34 @@ export default async function NewAdminSourcePage({
                     />
                   </label>
 
+                  <label className="space-y-2" htmlFor="company-careers-url">
+                    <span className="text-sm font-semibold text-stone-800">
+                      URL do portal de vagas
+                    </span>
+                    <Input
+                      id="company-careers-url"
+                      name="careersUrl"
+                      placeholder="https://empresa.gupy.io"
+                      type="url"
+                      required
+                    />
+                  </label>
+
+                  <label className="space-y-2" htmlFor="company-industry">
+                    <span className="text-sm font-semibold text-stone-800">
+                      Segmento
+                    </span>
+                    <Input
+                      id="company-industry"
+                      name="industry"
+                      placeholder="Tecnologia"
+                      required
+                    />
+                  </label>
+
                   <label className="space-y-2" htmlFor="company-website-url">
                     <span className="text-sm font-semibold text-stone-800">
-                      Website
+                      Website (opcional)
                     </span>
                     <Input
                       id="company-website-url"
@@ -180,21 +205,9 @@ export default async function NewAdminSourcePage({
                     />
                   </label>
 
-                  <label className="space-y-2" htmlFor="company-careers-url">
-                    <span className="text-sm font-semibold text-stone-800">
-                      Pagina de carreiras
-                    </span>
-                    <Input
-                      id="company-careers-url"
-                      name="careersUrl"
-                      placeholder="https://empresa.com/carreiras"
-                      type="url"
-                    />
-                  </label>
-
                   <label className="space-y-2" htmlFor="company-linkedin-url">
                     <span className="text-sm font-semibold text-stone-800">
-                      LinkedIn
+                      LinkedIn (opcional)
                     </span>
                     <Input
                       id="company-linkedin-url"
@@ -204,23 +217,12 @@ export default async function NewAdminSourcePage({
                     />
                   </label>
 
-                  <label className="space-y-2" htmlFor="company-industry">
-                    <span className="text-sm font-semibold text-stone-800">
-                      Industria
-                    </span>
-                    <Input
-                      id="company-industry"
-                      name="industry"
-                      placeholder="Tecnologia"
-                    />
-                  </label>
-
                   <label
                     className="space-y-2 md:col-span-2"
                     htmlFor="company-country"
                   >
                     <span className="text-sm font-semibold text-stone-800">
-                      Pais
+                      Pais (opcional)
                     </span>
                     <Input
                       id="company-country"
@@ -245,8 +247,9 @@ export default async function NewAdminSourcePage({
                   <p className="text-sm leading-7 text-stone-600">
                     Empresa criada:{" "}
                     <strong>{companyName ?? "Empresa selecionada"}</strong>.
-                    Agora cadastre a primeira `JobSource` para ela aparecer na
-                    grade principal pronta para rodar ingestao.
+                    Agora cadastre a primeira `JobSource`, configure
+                    escalonamento e, se quiser, execute manualmente no mesmo
+                    passo.
                   </p>
                 </div>
 
@@ -287,10 +290,11 @@ export default async function NewAdminSourcePage({
                     </span>
                     <select
                       className={fieldClassName}
-                      defaultValue="custom_html"
+                      defaultValue="gupy"
                       id="job-source-type"
                       name="sourceType"
                     >
+                      <option value="gupy">gupy</option>
                       <option value="custom_html">custom_html</option>
                       <option value="custom_api">custom_api</option>
                     </select>
@@ -298,7 +302,7 @@ export default async function NewAdminSourcePage({
 
                   <label className="space-y-2" htmlFor="job-source-interval">
                     <span className="text-sm font-semibold text-stone-800">
-                      Intervalo de verificacao
+                      Escalonamento de execucao (minutos)
                     </span>
                     <Input
                       defaultValue="30"
@@ -307,6 +311,10 @@ export default async function NewAdminSourcePage({
                       name="checkIntervalMinutes"
                       type="number"
                     />
+                    <p className="text-xs text-stone-500">
+                      Define a cadencia de verificacao automatica para esta
+                      fonte.
+                    </p>
                   </label>
 
                   <label
@@ -319,7 +327,7 @@ export default async function NewAdminSourcePage({
                     <Input
                       id="job-source-url"
                       name="sourceUrl"
-                      placeholder="https://empresa.com/carreiras"
+                      placeholder="https://ifood.gupy.io"
                       required
                       type="url"
                     />
@@ -334,6 +342,18 @@ export default async function NewAdminSourcePage({
                     />
                     <span className="text-sm font-medium text-stone-700">
                       Fonte ativa para o painel
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-3 md:col-span-2">
+                    <input
+                      className="size-4 accent-stone-700"
+                      defaultChecked
+                      name="runAfterCreate"
+                      type="checkbox"
+                    />
+                    <span className="text-sm font-medium text-stone-700">
+                      Executar manualmente assim que criar a fonte
                     </span>
                   </label>
 

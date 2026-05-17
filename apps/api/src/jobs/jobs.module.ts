@@ -5,10 +5,11 @@ import { DatabaseModule } from "../database/database.module";
 import { JobSourcesModule } from "../job-sources/job-sources.module";
 import { JobsController } from "./jobs.controller";
 import { JobsService } from "./jobs.service";
+import { PublicJobsController } from "./public-jobs.controller";
 
 @Module({
   imports: [DatabaseModule, CompaniesModule, JobSourcesModule],
-  controllers: [JobsController],
+  controllers: [JobsController, PublicJobsController],
   providers: [JobsService],
 })
 export class JobsModule {}

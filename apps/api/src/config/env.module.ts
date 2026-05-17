@@ -9,6 +9,9 @@ export type EnvSource = Record<string, string | undefined>;
 export type AppEnv = {
   API_HOST: string;
   API_PORT: number;
+  LINKEDIN_CALLBACK_URL: string;
+  LINKEDIN_CLIENT_ID: string;
+  LINKEDIN_CLIENT_SECRET: string;
   JWT_ACCESS_SECRET: string;
   JWT_ACCESS_TTL: number;
   JWT_REFRESH_SECRET: string;
@@ -59,6 +62,9 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     GOOGLE_CLIENT_ID: {},
     GOOGLE_CLIENT_SECRET: {},
     GOOGLE_CALLBACK_URL: {},
+    LINKEDIN_CLIENT_ID: {},
+    LINKEDIN_CLIENT_SECRET: {},
+    LINKEDIN_CALLBACK_URL: {},
   });
 
   const env = readEnv(source);
@@ -69,6 +75,9 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     GOOGLE_CALLBACK_URL: env.GOOGLE_CALLBACK_URL as string,
     GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID as string,
     GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET as string,
+    LINKEDIN_CALLBACK_URL: env.LINKEDIN_CALLBACK_URL as string,
+    LINKEDIN_CLIENT_ID: env.LINKEDIN_CLIENT_ID as string,
+    LINKEDIN_CLIENT_SECRET: env.LINKEDIN_CLIENT_SECRET as string,
     JWT_ACCESS_SECRET: env.JWT_ACCESS_SECRET as string,
     JWT_ACCESS_TTL: env.JWT_ACCESS_TTL,
     JWT_REFRESH_SECRET: env.JWT_REFRESH_SECRET as string,

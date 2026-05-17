@@ -38,6 +38,12 @@ test("getSourceDefaults maps source type to parser and crawl strategy", () => {
     parserKey: "custom_api",
     sourceType: "custom_api",
   });
+
+  assert.deepEqual(getSourceDefaults("gupy"), {
+    crawlStrategy: "api",
+    parserKey: "gupy",
+    sourceType: "gupy",
+  });
 });
 
 test("parseCompanyFormData trims fields and omits blank optional values", () => {
@@ -73,11 +79,35 @@ test("parseJobSourceFormData derives parser defaults from the selected type", ()
     checkIntervalMinutes: 30,
     companyId: "cmp_123",
     crawlStrategy: "api",
+    isFallbackAdapter: false,
     isActive: true,
     parserKey: "custom_api",
     sourceName: "ACME Careers",
     sourceType: "custom_api",
     sourceUrl: "https://acme.dev/careers",
+  });
+});
+
+test("parseJobSourceFormData infers gupy type from sourceUrl hostname", () => {
+  const formData = new FormData();
+
+  formData.set("companyId", "cmp_123");
+  formData.set("sourceName", "  Itau Gupy  ");
+  formData.set("sourceType", "custom_api");
+  formData.set("sourceUrl", "https://vemproitau.gupy.io/");
+  formData.set("checkIntervalMinutes", "30");
+  formData.set("isActive", "on");
+
+  assert.deepEqual(parseJobSourceFormData(formData), {
+    checkIntervalMinutes: 30,
+    companyId: "cmp_123",
+    crawlStrategy: "api",
+    isFallbackAdapter: false,
+    isActive: true,
+    parserKey: "gupy",
+    sourceName: "Itau Gupy",
+    sourceType: "gupy",
+    sourceUrl: "https://vemproitau.gupy.io/",
   });
 });
 

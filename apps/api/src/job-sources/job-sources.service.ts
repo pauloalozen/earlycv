@@ -8,19 +8,9 @@ import { Prisma } from "@prisma/client";
 
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
+import { canonicalizeSourceUrl } from "../ingestion/url-normalization";
 import type { CreateJobSourceDto } from "./dto/create-job-source.dto";
 import type { UpdateJobSourceDto } from "./dto/update-job-source.dto";
-
-function normalizeSourceUrl(rawUrl: string) {
-  const url = new URL(rawUrl.trim());
-
-  url.hash = "";
-  url.search = "";
-  url.pathname = url.pathname.replace(/\/+$/, "") || "/";
-  url.hostname = url.hostname.toLowerCase();
-
-  return url.toString();
-}
 
 @Injectable()
 export class JobSourcesService {
@@ -64,7 +54,7 @@ export class JobSourcesService {
 
   async create(dto: CreateJobSourceDto) {
     await this.companiesService.getById(dto.companyId);
-    const normalizedSourceUrl = normalizeSourceUrl(dto.sourceUrl);
+    const normalizedSourceUrl = canonicalizeSourceUrl(dto.sourceUrl);
 
     try {
       return await this.database.jobSource.create({
@@ -94,9 +84,9 @@ export class JobSourcesService {
         data: {
           ...dto,
           sourceUrl:
-            dto.sourceUrl === undefined
-              ? undefined
-              : normalizeSourceUrl(dto.sourceUrl),
+              dto.sourceUrl === undefined
+                ? undefined
+                : canonicalizeSourceUrl(dto.sourceUrl),
         },
         include: {
           company: true,

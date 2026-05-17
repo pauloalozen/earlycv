@@ -9,22 +9,49 @@ import {
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { cn } from "@/lib/cn";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminStatusBadge } from "../../_components/admin-status-badge";
 import { AdminTokenState } from "../../_components/admin-token-state";
+import { deleteCompanyAction } from "./actions";
 
 export const metadata = buildAdminMetadata("Detalhe da empresa");
 
 type CompanyDetailPageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ message?: string; status?: string; token?: string }>;
 };
+
+function StatusBanner({
+  message,
+  status,
+}: {
+  message?: string;
+  status?: string;
+}) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border px-4 py-3 text-sm font-medium",
+        status === "success"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+          : "border-stone-200 bg-stone-50 text-stone-900",
+      )}
+    >
+      {message}
+    </div>
+  );
+}
 
 export default async function AdminCompanyDetailPage({
   params,
   searchParams,
 }: CompanyDetailPageProps) {
-  const [{ id }] = await Promise.all([params, searchParams]);
+  const [{ id }, { message, status }] = await Promise.all([params, searchParams]);
   const token = await getBackofficeSessionToken();
 
   if (!token) {
@@ -76,16 +103,27 @@ export default async function AdminCompanyDetailPage({
               </Link>
               <Link
                 className={buttonVariants()}
-                href={`/admin/ingestion/new&step=job-source&companyId=${company.id}&companyName=${encodeURIComponent(company.name)}`}
+                href={`/admin/ingestion/new?step=job-source&companyId=${company.id}&companyName=${encodeURIComponent(company.name)}`}
               >
                 Criar primeira fonte
               </Link>
+              <form action={deleteCompanyAction}>
+                <input name="companyId" type="hidden" value={company.id} />
+                <button
+                  className={buttonVariants({ variant: "outline" })}
+                  type="submit"
+                >
+                  Excluir empresa
+                </button>
+              </form>
             </>
           }
           eyebrow="admin / empresas / detalhe"
           subtitle="Veja o estado operacional da empresa e continue o onboarding de captura quando necessario."
           title={company.name}
         />
+
+        <StatusBanner message={message} status={status} />
 
         <div className="grid gap-4 md:grid-cols-4">
           <Card padding="sm" variant="muted">
