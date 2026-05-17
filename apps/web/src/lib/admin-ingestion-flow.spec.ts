@@ -5,6 +5,8 @@ import {
   buildAdminRedirect,
   getSourceDefaults,
   isRedirectControlFlowError,
+  parseManualAdapterType,
+  parseManualBatchRunId,
   parseCompanyFormData,
   parseJobSourceFormData,
 } from "./admin-ingestion-flow.ts";
@@ -144,4 +146,20 @@ test("buildAdminRedirect encodes manual run cancel success messaging", () => {
     location,
     "/admin/ingestion?tab=manual&status=success&message=Cancelamento+solicitado.",
   );
+});
+
+test("parseManualAdapterType accepts allowed adapter types", () => {
+  assert.equal(parseManualAdapterType("gupy"), "gupy");
+  assert.equal(parseManualAdapterType("custom_html"), "custom_html");
+  assert.equal(parseManualAdapterType("custom_api"), "custom_api");
+});
+
+test("parseManualAdapterType rejects empty and unknown adapter values", () => {
+  assert.throws(() => parseManualAdapterType(null), /Informe o tipo de adaptador/);
+  assert.throws(() => parseManualAdapterType("workday"), /Tipo de adaptador invalido/);
+});
+
+test("parseManualBatchRunId trims and validates run id", () => {
+  assert.equal(parseManualBatchRunId("  batch-123  "), "batch-123");
+  assert.throws(() => parseManualBatchRunId("  "), /Informe o lote manual/);
 });

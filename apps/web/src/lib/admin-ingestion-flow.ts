@@ -28,6 +28,14 @@ export type CreateJobSourceInput = {
   sourceUrl: string;
 };
 
+export const MANUAL_ADAPTER_TYPES = [
+  "gupy",
+  "custom_html",
+  "custom_api",
+] as const;
+
+export type ManualAdapterType = (typeof MANUAL_ADAPTER_TYPES)[number];
+
 function getTrimmedValue(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
 
@@ -167,4 +175,25 @@ export function isRedirectControlFlowError(error: unknown) {
     typeof error.digest === "string" &&
     error.digest.startsWith("NEXT_REDIRECT")
   );
+}
+
+export function parseManualAdapterType(value: FormDataEntryValue | null): ManualAdapterType {
+  const adapterType = String(value ?? "").trim();
+  if (!adapterType) {
+    throw new Error("Informe o tipo de adaptador para execucao manual.");
+  }
+
+  if (!MANUAL_ADAPTER_TYPES.includes(adapterType as ManualAdapterType)) {
+    throw new Error("Tipo de adaptador invalido.");
+  }
+
+  return adapterType as ManualAdapterType;
+}
+
+export function parseManualBatchRunId(value: FormDataEntryValue | null): string {
+  const batchRunId = String(value ?? "").trim();
+  if (!batchRunId) {
+    throw new Error("Informe o lote manual.");
+  }
+  return batchRunId;
 }

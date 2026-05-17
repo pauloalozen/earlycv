@@ -8,7 +8,6 @@ import {
   createJobSource,
   deleteJobSource,
   importCompanySourcesCsv,
-  type ManualAdapterType,
   runJobSource,
   startManualAdapterRun,
   runGlobalSchedulerNow,
@@ -17,6 +16,8 @@ import {
 import {
   buildAdminRedirect,
   isRedirectControlFlowError,
+  parseManualAdapterType,
+  parseManualBatchRunId,
   parseCompanyFormData,
   parseJobSourceFormData,
 } from "@/lib/admin-ingestion-flow";
@@ -259,31 +260,16 @@ export async function startManualAdapterRunAction(formData: FormData) {
   const redirectPath = String(
     formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
   );
-  const adapterType = String(formData.get("adapterType") ?? "").trim();
-  const allowedAdapterTypes: ManualAdapterType[] = [
-    "gupy",
-    "custom_html",
-    "custom_api",
-  ];
-
-  if (!adapterType) {
-    redirect(
-      buildAdminRedirect(
-        redirectPath,
-        "error",
-        "Informe o tipo de adaptador para execucao manual.",
-      ),
-    );
-  }
-
-  if (!allowedAdapterTypes.includes(adapterType as ManualAdapterType)) {
-    redirect(
-      buildAdminRedirect(redirectPath, "error", "Tipo de adaptador invalido."),
-    );
+  let adapterType: ReturnType<typeof parseManualAdapterType>;
+  try {
+    adapterType = parseManualAdapterType(formData.get("adapterType"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Tipo de adaptador invalido.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
   }
 
   try {
-    await startManualAdapterRun(adapterType as ManualAdapterType);
+    await startManualAdapterRun(adapterType);
   } catch (error) {
     if (isRedirectControlFlowError(error)) {
       throw error;
@@ -310,10 +296,12 @@ export async function cancelManualRunAction(formData: FormData) {
   const redirectPath = String(
     formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
   );
-  const batchRunId = String(formData.get("batchRunId") ?? "").trim();
-
-  if (!batchRunId) {
-    redirect(buildAdminRedirect(redirectPath, "error", "Informe o lote manual."));
+  let batchRunId: string;
+  try {
+    batchRunId = parseManualBatchRunId(formData.get("batchRunId"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Informe o lote manual.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
   }
 
   try {
