@@ -82,6 +82,30 @@ enum IngestionRunStatus {
   failed
 }
 
+enum IngestionBatchScopeType {
+  adapter
+  source
+  global
+}
+
+enum IngestionBatchRunStatus {
+  queued
+  running
+  completed
+  failed
+  cancelling
+  cancelled
+}
+
+enum IngestionBatchItemStatus {
+  queued
+  running
+  completed
+  failed
+  skipped
+  cancelled
+}
+
 enum AffiliatePartnerStatus {
   draft
   active
@@ -211,6 +235,7 @@ model User {
   businessFunnelEvents      BusinessFunnelEvent[]
   analysisCvSnapshots       AnalysisCvSnapshot[]           @relation("AnalysisCvSnapshotOwner")
   claimedAnalysisCvSnapshots AnalysisCvSnapshot[]          @relation("AnalysisCvSnapshotClaimedBy")
+  requestedIngestionBatchRuns IngestionBatchRun[]          @relation("IngestionBatchRunRequestedByUser")
 }
 
 model UserDailyAnalysisUsage {
@@ -420,6 +445,7 @@ model Company {
   updatedAt      DateTime    @updatedAt
   jobSources     JobSource[]
   jobs           Job[]
+  ingestionBatchItems IngestionBatchItem[]
 }
 
 model CvAdaptation {
@@ -539,6 +565,7 @@ model JobSource {
   company              Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   jobs                 Job[]
   ingestionRuns        IngestionRun[]
+  ingestionBatchItems  IngestionBatchItem[]
 
   @@unique([companyId, sourceUrl])
   @@index([companyId])
@@ -579,8 +606,60 @@ model IngestionRun {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   jobSource    JobSource          @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  ingestionBatchItems IngestionBatchItem[]
 
   @@index([jobSourceId, createdAt])
+}
+
+model IngestionBatchRun {
+  id                String                  @id @default(cuid())
+  scopeType         IngestionBatchScopeType
+  scopeValue        String
+  status            IngestionBatchRunStatus @default(queued)
+  requestedByUserId String?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  cancelRequestedAt DateTime?
+  totalSources      Int                     @default(0)
+  succeededCount    Int                     @default(0)
+  failedCount       Int                     @default(0)
+  skippedCount      Int                     @default(0)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  requestedByUser   User?                   @relation("IngestionBatchRunRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  items             IngestionBatchItem[]
+
+  @@index([status, createdAt])
+  @@index([scopeType, scopeValue, createdAt])
+  @@index([requestedByUserId, createdAt])
+}
+
+model IngestionBatchItem {
+  id             String                   @id @default(cuid())
+  batchRunId     String
+  jobSourceId    String
+  companyId      String
+  companyName    String
+  sourceName     String
+  sourceType     JobSourceType
+  status         IngestionBatchItemStatus @default(queued)
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  errorMessage   String?
+  ingestionRunId String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  batchRun       IngestionBatchRun        @relation(fields: [batchRunId], references: [id], onDelete: Cascade)
+  jobSource      JobSource                @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  company        Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  ingestionRun   IngestionRun?            @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
+
+  @@index([batchRunId, status, createdAt])
+  @@index([status, updatedAt])
+  @@index([jobSourceId])
+  @@index([companyId])
+  @@index([ingestionRunId])
+  @@unique([batchRunId, jobSourceId])
 }
 
 model AffiliatePartner {
