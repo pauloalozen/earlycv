@@ -43,6 +43,7 @@ export class PlansController {
       user.id,
       dto.planId,
       dto.adaptationId,
+      dto.selectedMissingKeywords,
     );
   }
 

@@ -1160,6 +1160,20 @@ export default function ResultadoPage() {
     : [];
   const effectiveSelected =
     frozenKeywords.length > 0 ? new Set(frozenKeywords) : selecionadas;
+  const planosBuyCreditsHref = (() => {
+    if (!reviewAdaptationId) return "/planos";
+    const params = new URLSearchParams({
+      aid: reviewAdaptationId,
+      source: "resultado-buy-credits",
+    });
+    for (const keyword of effectiveSelected) {
+      const sanitized = keyword.trim();
+      if (sanitized.length > 0) {
+        params.append("kw", sanitized);
+      }
+    }
+    return `/planos?${params.toString()}`;
+  })();
   const isKeywordsFrozen = frozenKeywords.length > 0;
   const isGuestView = isAuthenticated !== true && !isDemo;
   const vagaSeed = `${data.vaga.cargo}::${data.vaga.empresa}`;
@@ -4042,12 +4056,8 @@ export default function ResultadoPage() {
                           : "Liberar CV com 1 crédito"}
                       </button>
                     ) : (
-                      <a
-                        href={
-                          reviewAdaptationId
-                            ? `/planos?aid=${reviewAdaptationId}&source=resultado-buy-credits`
-                            : "/planos"
-                        }
+                        <a
+                        href={planosBuyCreditsHref}
                         onClick={() => {
                           emitResultadoEvent("buy_credits_clicked", {
                             adaptationId: reviewAdaptationId,
@@ -4075,11 +4085,7 @@ export default function ResultadoPage() {
                     )
                   ) : hasCredits === false ? (
                     <a
-                      href={
-                        reviewAdaptationId
-                          ? `/planos?aid=${reviewAdaptationId}&source=resultado-buy-credits`
-                          : "/planos"
-                      }
+                      href={planosBuyCreditsHref}
                       onClick={() => {
                         emitResultadoEvent("buy_credits_clicked", {
                           adaptationId: reviewAdaptationId,

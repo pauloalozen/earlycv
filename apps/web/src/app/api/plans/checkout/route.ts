@@ -9,6 +9,7 @@ type CheckoutPlanId = (typeof VALID_PLAN_IDS)[number];
 type CheckoutPayload = {
   planId?: string;
   adaptationId?: string;
+  selectedMissingKeywords?: string[];
 };
 
 export async function POST(request: Request) {
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
     const result = await createPlanCheckout(
       payload.planId as CheckoutPlanId,
       payload.adaptationId?.trim() || undefined,
+      payload.selectedMissingKeywords,
     );
 
     return NextResponse.json({

@@ -5,6 +5,7 @@ import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
 
 type PaidPlanCheckoutFormProps = {
   adaptationId?: string;
+  selectedMissingKeywords?: string[];
   buttonClassName: string;
   buttonStyle: CSSProperties;
   cta: string;
@@ -16,6 +17,7 @@ type PaidPlanCheckoutFormProps = {
 
 export function PaidPlanCheckoutForm({
   adaptationId,
+  selectedMissingKeywords = [],
   buttonClassName,
   buttonStyle,
   cta,
@@ -42,10 +44,20 @@ export function PaidPlanCheckoutForm({
     setIsLoading(true);
 
     try {
+      const sanitizedSelectedMissingKeywords = selectedMissingKeywords
+        .map((keyword) => keyword.trim())
+        .filter((keyword) => keyword.length > 0)
+        .slice(0, 80);
       const response = await fetch("/api/plans/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ adaptationId, planId }),
+        body: JSON.stringify({
+          adaptationId,
+          planId,
+          ...(sanitizedSelectedMissingKeywords.length > 0
+            ? { selectedMissingKeywords: sanitizedSelectedMissingKeywords }
+            : {}),
+        }),
       });
 
       if (!response.ok) {
@@ -101,6 +113,9 @@ export function PaidPlanCheckoutForm({
         {adaptationId && (
           <input type="hidden" name="adaptationId" value={adaptationId} />
         )}
+        {selectedMissingKeywords.map((keyword) => (
+          <input key={keyword} type="hidden" name="selectedMissingKeywords" value={keyword} />
+        ))}
         <button
           type="submit"
           style={buttonStyle}

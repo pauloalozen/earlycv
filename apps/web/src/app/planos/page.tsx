@@ -21,8 +21,25 @@ const MONO = "var(--font-geist-mono), monospace";
 const SERIF_ITALIC = "var(--font-instrument-serif), serif";
 
 type PlanosPageProps = {
-  searchParams: Promise<{ error?: string; aid?: string; source?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    aid?: string;
+    source?: string;
+    kw?: string | string[];
+  }>;
 };
+
+function parseSelectedMissingKeywords(
+  raw: string | string[] | undefined,
+): string[] {
+  if (!raw) return [];
+
+  const values = Array.isArray(raw) ? raw : [raw];
+  return values
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .slice(0, 80);
+}
 
 export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   const [user, params] = await Promise.all([
@@ -38,9 +55,10 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
       ? params.aid.trim()
       : undefined;
   const checkoutAdaptationId =
-    params.source === "resultado-unlock-cv" ? adaptationId : undefined;
+    params.source === "resultado-buy-credits" ? adaptationId : undefined;
   const showScoreIndicator =
     params.source === "resultado-buy-credits" && Boolean(adaptationId);
+  const selectedMissingKeywords = parseSelectedMissingKeywords(params.kw);
 
   let initialScore: number | null = null;
   let initialProjectedScore: number | null = null;
@@ -48,7 +66,9 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   if (showScoreIndicator && adaptationId) {
     try {
       const payload = await getCvAdaptationContent(adaptationId);
-      const signal = extractDashboardAnalysisSignal(payload.adaptedContentJson);
+      const signal = extractDashboardAnalysisSignal(payload.adaptedContentJson, {
+        selectedMissingKeywords,
+      });
       initialScore = signal.adjustments.scoreBefore;
       initialProjectedScore = signal.adjustments.scoreFinal;
     } catch {
@@ -144,6 +164,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
               adaptationId={adaptationId}
               initialScore={initialScore}
               initialProjectedScore={initialProjectedScore}
+              selectedMissingKeywords={selectedMissingKeywords}
             />
           ) : null}
 
@@ -319,6 +340,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                         credits={credits}
                         planPrice={amount}
                         adaptationId={checkoutAdaptationId}
+                        selectedMissingKeywords={selectedMissingKeywords}
                         buttonClassName={
                           dark ? "planos-cta-dark" : "planos-cta-light"
                         }
