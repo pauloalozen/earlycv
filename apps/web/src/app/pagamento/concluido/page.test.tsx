@@ -1,4 +1,4 @@
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PagamentoConcluido from "./page";
@@ -64,5 +64,26 @@ describe("PagamentoConcluido", () => {
         }),
       );
     });
+  });
+
+  it("shows only download actions plus dashboard link for unlock_cv origin", async () => {
+    mockGetCheckoutStatusClient.mockResolvedValueOnce({
+      nextAction: "show_success",
+      message: "ok",
+      type: "plan",
+      originAction: "unlock_cv",
+      originAdaptationId: "adapt-1",
+      autoUnlockProcessedAt: "2026-05-19T00:00:00.000Z",
+      autoUnlockError: null,
+      adaptationUnlocked: true,
+    });
+
+    render(<PagamentoConcluido />);
+
+    expect(await screen.findByText(/Baixar PDF/i)).toBeTruthy();
+    expect(screen.getByText(/Baixar DOCX/i)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Ir para o painel/i })).toBeTruthy();
+    expect(screen.queryByText(/Adaptar meu CV agora/i)).toBeNull();
+    expect(screen.queryByText(/Ver análise do CV/i)).toBeNull();
   });
 });

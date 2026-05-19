@@ -12,10 +12,12 @@ export function ScoreIndicator({
   adaptationId,
   initialScore = null,
   initialProjectedScore = null,
+  selectedMissingKeywords = [],
 }: {
   adaptationId?: string;
   initialScore?: number | null;
   initialProjectedScore?: number | null;
+  selectedMissingKeywords?: string[];
 }) {
   const [score, setScore] = useState<number | null>(initialScore);
   const [scoreProjetado, setScoreProjetado] = useState<number | null>(
@@ -37,7 +39,9 @@ export function ScoreIndicator({
       .then((payload) => {
         const raw = payload.adaptedContentJson;
         if (!raw || cancelled) return;
-        const signal = extractDashboardAnalysisSignal(raw);
+        const signal = extractDashboardAnalysisSignal(raw, {
+          selectedMissingKeywords,
+        });
         const baseScore = signal.adjustments.scoreBefore;
         const projected = signal.adjustments.scoreFinal;
         if (typeof baseScore === "number") {
@@ -57,7 +61,7 @@ export function ScoreIndicator({
     return () => {
       cancelled = true;
     };
-  }, [adaptationId]);
+  }, [adaptationId, selectedMissingKeywords]);
 
   useEffect(() => {
     if (adaptationId) return;

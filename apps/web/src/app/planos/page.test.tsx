@@ -13,6 +13,7 @@ const getCurrentAppUserFromCookiesMock = vi.hoisted(() => vi.fn());
 const useRouterMock = vi.hoisted(() => vi.fn());
 const pushMock = vi.hoisted(() => vi.fn());
 const openMock = vi.hoisted(() => vi.fn());
+const extractDashboardAnalysisSignalMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useRouter: () => useRouterMock(),
@@ -35,9 +36,11 @@ vi.mock("@/lib/cv-adaptation-api", () => ({
 }));
 
 vi.mock("@/lib/dashboard-test-metrics", () => ({
-  extractDashboardAnalysisSignal: vi.fn(() => ({
+  extractDashboardAnalysisSignal: extractDashboardAnalysisSignalMock,
+}));
+
+extractDashboardAnalysisSignalMock.mockImplementation(() => ({
     adjustments: { scoreBefore: null, scoreFinal: null },
-  })),
 }));
 
 vi.mock("./score-indicator", () => ({
@@ -55,6 +58,7 @@ describe("PlanosPage checkout", () => {
       id: "user-1",
       name: "Alo",
     });
+    extractDashboardAnalysisSignalMock.mockClear();
     process.env.PRICE_PLAN_STARTER = "1190";
     process.env.PRICE_PLAN_PRO = "2990";
     process.env.PRICE_PLAN_TURBO = "5990";
@@ -166,7 +170,7 @@ describe("PlanosPage checkout", () => {
     });
   });
 
-  it("does not send adaptationId when source is resultado-buy-credits", async () => {
+  it("sends adaptationId and selected keywords when source is resultado-buy-credits", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -181,6 +185,7 @@ describe("PlanosPage checkout", () => {
         searchParams: Promise.resolve({
           aid: "adapt-123",
           source: "resultado-buy-credits",
+          kw: ["Python", "SQL"],
         }),
       }),
     );
@@ -197,10 +202,12 @@ describe("PlanosPage checkout", () => {
     const body = JSON.parse(String(requestInit?.body ?? "{}")) as {
       adaptationId?: string;
       planId?: string;
+      selectedMissingKeywords?: string[];
     };
 
     expect(body.planId).toBe("pro");
-    expect(body.adaptationId).toBeUndefined();
+    expect(body.adaptationId).toBe("adapt-123");
+    expect(body.selectedMissingKeywords).toEqual(["Python", "SQL"]);
   });
 
   it("renders legal links near critical purchase context", async () => {
@@ -221,5 +228,31 @@ describe("PlanosPage checkout", () => {
       screen.getByRole("link", { name: /pol[ií]tica de privacidade/i }),
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: /termos de uso/i })).toBeTruthy();
+  });
+
+  it("forwards selected keywords from querystring to score calculation", async () => {
+    const { getCvAdaptationContent } = await import("@/lib/cv-adaptation-api");
+    vi.mocked(getCvAdaptationContent).mockResolvedValue({
+      adaptedContentJson: {
+        vaga: { cargo: "Analista", empresa: "Empresa" },
+      },
+      isUnlocked: false,
+      paymentStatus: "none",
+    });
+
+    render(
+      await PlanosPage({
+        searchParams: Promise.resolve({
+          aid: "adapt-321",
+          source: "resultado-buy-credits",
+          kw: ["Python", "SQL"],
+        }),
+      }),
+    );
+
+    expect(extractDashboardAnalysisSignalMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      { selectedMissingKeywords: ["Python", "SQL"] },
+    );
   });
 });

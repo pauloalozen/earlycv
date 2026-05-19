@@ -65,7 +65,33 @@ describe("POST /api/plans/checkout", () => {
       checkoutUrl: "https://mp.example/checkout",
       purchaseId: "purchase_123",
     });
-    expect(createPlanCheckoutMock).toHaveBeenCalledWith("pro", "a1");
+    expect(createPlanCheckoutMock).toHaveBeenCalledWith("pro", "a1", undefined);
+  });
+
+  it("forwards selectedMissingKeywords when provided", async () => {
+    getCurrentAppUserFromCookiesMock.mockResolvedValueOnce({ id: "u1" });
+    createPlanCheckoutMock.mockResolvedValueOnce({
+      checkoutUrl: "https://mp.example/checkout",
+      purchaseId: "purchase_456",
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/plans/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          planId: "pro",
+          adaptationId: "a2",
+          selectedMissingKeywords: ["Python", "SQL"],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(createPlanCheckoutMock).toHaveBeenCalledWith("pro", "a2", [
+      "Python",
+      "SQL",
+    ]);
   });
 
   it("returns 502 when checkout creation fails", async () => {

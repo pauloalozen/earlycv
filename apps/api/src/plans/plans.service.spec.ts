@@ -651,6 +651,64 @@ test("createCheckout with adaptationId reuses only unlock_cv purchase", async ()
   );
 });
 
+test("createCheckout persists selectedMissingKeywords on origin adaptation", async () => {
+  let updatedAdaptedContent: Record<string, unknown> | null = null;
+  const service = new PlansService(
+    {
+      cvAdaptation: {
+        findUnique: async () => ({
+          userId: "user-1",
+          isUnlocked: false,
+          adaptedContentJson: { vaga: { cargo: "Analista" } },
+        }),
+        update: async ({
+          data,
+        }: {
+          data: { adaptedContentJson: Record<string, unknown> };
+        }) => {
+          updatedAdaptedContent = data.adaptedContentJson;
+          return {};
+        },
+      },
+      planPurchase: {
+        findFirst: async () => null,
+        create: async () => ({
+          id: "purchase-kw-1",
+          paymentReference: "pay-ref-kw-1",
+        }),
+      },
+      user: {
+        findUnique: async () => ({ email: "a@b.com", name: "User" }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-kw-1" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      createMercadoPagoPreference: (
+        purchaseId: string,
+        paymentReference: string,
+        plan: { label: string; amountInCents: number },
+      ) => Promise<string>;
+    }
+  ).createMercadoPagoPreference = async () => "https://mp.test/checkout/new";
+
+  await service.createCheckout(
+    "user-1",
+    "starter",
+    "00000000-0000-0000-0000-000000000001",
+    ["Python", " SQL "],
+  );
+
+  assert.deepEqual(updatedAdaptedContent?.selectedMissingKeywords, [
+    "Python",
+    "SQL",
+  ]);
+});
+
 test("createCheckout without adaptationId reuses only buy_credits purchase", async () => {
   let receivedWhere: Record<string, unknown> | null = null;
   const service = new PlansService(

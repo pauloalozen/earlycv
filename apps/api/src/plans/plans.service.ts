@@ -208,6 +208,7 @@ export class PlansService {
     userId: string,
     planId: PlanId,
     adaptationId?: string,
+    selectedMissingKeywords: string[] = [],
   ): Promise<{
     checkoutUrl: string;
     purchaseId: string;
@@ -218,6 +219,11 @@ export class PlansService {
 
     if (adaptationId) {
       await this.assertAdaptationCanBeAutoUnlocked(userId, adaptationId);
+      await this.persistSelectedMissingKeywordsOnAdaptation(
+        userId,
+        adaptationId,
+        selectedMissingKeywords,
+      );
     }
 
     const existing = await this.database.planPurchase.findFirst({
@@ -1020,6 +1026,51 @@ export class PlansService {
     if (!adaptation.adaptedContentJson) {
       throw new BadRequestException("Adaptation analysis is not ready yet.");
     }
+  }
+
+  private async persistSelectedMissingKeywordsOnAdaptation(
+    userId: string,
+    adaptationId: string,
+    selectedMissingKeywords: string[],
+  ): Promise<void> {
+    if (selectedMissingKeywords.length === 0) {
+      return;
+    }
+
+    const adaptation = await this.database.cvAdaptation.findUnique({
+      where: { id: adaptationId },
+      select: {
+        userId: true,
+        adaptedContentJson: true,
+      },
+    });
+
+    if (!adaptation || adaptation.userId !== userId) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    if (!adaptation.adaptedContentJson || typeof adaptation.adaptedContentJson !== "object") {
+      return;
+    }
+
+    const sanitized = selectedMissingKeywords
+      .map((keyword) => keyword.trim())
+      .filter((keyword) => keyword.length > 0)
+      .slice(0, 80);
+
+    if (sanitized.length === 0) {
+      return;
+    }
+
+    await this.database.cvAdaptation.update({
+      where: { id: adaptationId },
+      data: {
+        adaptedContentJson: {
+          ...(adaptation.adaptedContentJson as Record<string, unknown>),
+          selectedMissingKeywords: sanitized,
+        } as Prisma.InputJsonValue,
+      },
+    });
   }
 
   private resolveAnalysisCreditsForActivation(

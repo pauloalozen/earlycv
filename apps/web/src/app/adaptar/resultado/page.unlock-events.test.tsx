@@ -380,6 +380,9 @@ describe("resultado unlock tracking", () => {
 
     const buyLink = document.querySelector('a[href*="/planos"]');
     expect(buyLink).not.toBeNull();
+    const href = (buyLink as HTMLAnchorElement).getAttribute("href") ?? "";
+    expect(href).toContain("source=resultado-buy-credits");
+    expect(href).toContain("kw=sql");
 
     fireEvent.click(buyLink as HTMLAnchorElement);
 

@@ -764,30 +764,6 @@ function ConcluidoContent() {
               </div>
             </Stagger>
 
-            {showCvUnlock && result?.originAdaptationId && (
-              <Stagger mounted={approvedMounted} delay={0.72}>
-                <Link
-                  href={`/adaptar/resultado?adaptationId=${result.originAdaptationId}`}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "center",
-                    border: "1px solid rgba(10,10,10,0.15)",
-                    borderRadius: 10,
-                    padding: "13px",
-                    fontSize: 14,
-                    fontWeight: 500,
-                    color: "#0a0a0a",
-                    textDecoration: "none",
-                    background: "#fff",
-                    marginBottom: 14,
-                  }}
-                >
-                  Ver análise do CV
-                </Link>
-              </Stagger>
-            )}
-
             <Stagger mounted={approvedMounted} delay={0.78}>
               <div
                 style={{
