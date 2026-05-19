@@ -388,6 +388,9 @@ export default async function AdminIngestionPage({
                         Status
                       </th>
                       <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                        Agendamento
+                      </th>
+                      <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
                         Ultimo run
                       </th>
                       <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
@@ -400,7 +403,7 @@ export default async function AdminIngestionPage({
                       <tr>
                         <td
                           className="px-4 py-6 text-center text-stone-400"
-                          colSpan={6}
+                          colSpan={7}
                         >
                           Nenhuma fonte encontrada.
                         </td>
@@ -422,6 +425,11 @@ export default async function AdminIngestionPage({
                           </td>
                           <td className="px-4 py-3 text-stone-600">
                             {source.status.label}
+                          </td>
+                          <td className="px-4 py-3 text-stone-500">
+                            {source.scheduleEnabled
+                              ? `ligado ${source.scheduleCron ?? "-"}`
+                              : "desligado"}
                           </td>
                           <td className="px-4 py-3 text-stone-500">
                             {latestRun?.status ?? "—"}

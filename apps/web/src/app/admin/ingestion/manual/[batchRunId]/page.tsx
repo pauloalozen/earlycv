@@ -52,6 +52,13 @@ export default async function ManualRunDetailPage({
       listManualRunItems(batchRunId),
     ]);
 
+    const totalCount = items.length;
+    const succeededCount = items.filter((item) => item.status === "completed").length;
+    const failedCount = items.filter((item) => item.status === "failed").length;
+    const skippedCount = items.filter(
+      (item) => item.status === "skipped" || item.status === "cancelled",
+    ).length;
+
     return (
       <main className="min-h-screen bg-stone-50 px-6 py-10 text-stone-900 md:px-10">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -93,10 +100,13 @@ export default async function ManualRunDetailPage({
           </div>
 
           <div className="grid gap-3 rounded-xl border border-stone-200 bg-white p-4 md:grid-cols-4">
-            <div className="text-sm">Total: {run.totalSources}</div>
-            <div className="text-sm">Sucesso: {run.succeededCount}</div>
-            <div className="text-sm">Falha: {run.failedCount}</div>
-            <div className="text-sm">Skip: {run.skippedCount}</div>
+            <div className="text-sm">Total: {totalCount}</div>
+            <div className="text-sm">Sucesso: {succeededCount}</div>
+            <div className="text-sm">Falha: {failedCount}</div>
+            <div className="text-sm">Skip: {skippedCount}</div>
+            <div className="text-xs text-stone-500 md:col-span-4">
+              Calculado a partir dos itens do lote.
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">

@@ -7,7 +7,7 @@ import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { RunSourceSubmitButton } from "../_components/run-source-submit-button";
-import { runJobSourceAction } from "../actions";
+import { runJobSourceAction, updateJobSourceScheduleAction } from "../actions";
 
 export const metadata = buildAdminMetadata("Detalhe da ingestion");
 
@@ -54,6 +54,7 @@ export default async function JobSourceAdminPage({
       listIngestionRuns(jobSourceId),
     ]);
     const redirectPath = `/admin/ingestion/${jobSourceId}`;
+    const isScheduled = Boolean(source.scheduleEnabled && source.scheduleCron);
 
     return (
       <main className="min-h-screen bg-stone-50 px-6 py-10 text-stone-900 md:px-10">
@@ -123,6 +124,58 @@ export default async function JobSourceAdminPage({
               </p>
             </Card>
           </div>
+
+          <Card className="space-y-4" padding="lg">
+            <h2 className="text-lg font-bold tracking-tight">Agendamento</h2>
+            <div className="grid gap-3 text-sm text-stone-700 md:grid-cols-3">
+              <div className="space-y-1">
+                <p className="text-[11px] font-medium text-stone-400">Status</p>
+                <p className="font-medium text-stone-900">
+                  {isScheduled ? "Escalonado" : "Desligado"}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] font-medium text-stone-400">Cron</p>
+                <p className="font-medium text-stone-900">
+                  {source.scheduleCron ?? "-"}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] font-medium text-stone-400">Fuso</p>
+                <p className="font-medium text-stone-900">
+                  {source.scheduleTimezone ?? "America/Sao_Paulo"}
+                </p>
+              </div>
+            </div>
+
+            <form action={updateJobSourceScheduleAction} className="space-y-3">
+              <input name="jobSourceId" type="hidden" value={source.id} />
+              <input name="redirectPath" type="hidden" value={redirectPath} />
+
+              <label className="flex items-center gap-2 text-sm text-stone-700">
+                <input
+                  defaultChecked={Boolean(source.scheduleEnabled)}
+                  name="scheduleEnabled"
+                  type="checkbox"
+                />
+                Ativar agendamento da fonte
+              </label>
+
+              <label className="block space-y-1 text-sm text-stone-700">
+                <span className="text-[11px] font-medium text-stone-400">cron</span>
+                <input
+                  className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 outline-none focus:border-stone-400"
+                  defaultValue={source.scheduleCron ?? "*/30 * * * *"}
+                  name="scheduleCron"
+                  placeholder="*/30 * * * *"
+                />
+              </label>
+
+              <button className={buttonVariants({ size: "sm" })} type="submit">
+                Salvar agendamento
+              </button>
+            </form>
+          </Card>
 
           <Card className="overflow-hidden p-0">
             <div className="border-b border-stone-200 px-6 py-4">

@@ -10,6 +10,35 @@ const MANUAL_RUNNER_LOCK_ID = "manual-ingestion-batch-runner";
 const MANUAL_RUNNER_LOCK_TTL_MS = 60_000;
 const ITEM_LOCK_TTL_MS = 10 * 60_000;
 
+function clampRunAggregate(
+  totalSources: number,
+  succeededCount: number,
+  failedCount: number,
+  skippedCount: number,
+) {
+  let succeeded = Math.max(0, succeededCount);
+  let failed = Math.max(0, failedCount);
+  let skipped = Math.max(0, skippedCount);
+  let overflow = succeeded + failed + skipped - Math.max(0, totalSources);
+
+  if (overflow > 0) {
+    const skippedDecrement = Math.min(skipped, overflow);
+    skipped -= skippedDecrement;
+    overflow -= skippedDecrement;
+  }
+  if (overflow > 0) {
+    const failedDecrement = Math.min(failed, overflow);
+    failed -= failedDecrement;
+    overflow -= failedDecrement;
+  }
+  if (overflow > 0) {
+    const succeededDecrement = Math.min(succeeded, overflow);
+    succeeded -= succeededDecrement;
+  }
+
+  return { failedCount: failed, skippedCount: skipped, succeededCount: succeeded };
+}
+
 function isMissingManualBatchTableError(error: unknown) {
   if (!(error instanceof Error)) {
     return false;
@@ -110,15 +139,7 @@ export class IngestionManualRunnerService {
       return;
     }
     if (runBeforeLoop.cancelRequestedAt || runBeforeLoop.status === "cancelling") {
-      const cancelledCount = await this.cancelRemainingItems(batchRunId);
-      await this.database.ingestionBatchRun.update({
-        where: { id: batchRunId },
-        data: {
-          finishedAt: new Date(),
-          skippedCount: runBeforeLoop.skippedCount + cancelledCount,
-          status: "cancelled",
-        },
-      });
+      await this.finalizeCancelledRun(batchRunId, runBeforeLoop.id);
       return;
     }
 
@@ -132,22 +153,17 @@ export class IngestionManualRunnerService {
       }
 
       if (latestRun.cancelRequestedAt || latestRun.status === "cancelling") {
-        const cancelledCount = await this.cancelRemainingItems(batchRunId);
-        await this.database.ingestionBatchRun.update({
-          where: { id: batchRunId },
-          data: {
-            finishedAt: new Date(),
-            skippedCount: latestRun.skippedCount + cancelledCount,
-            status: "cancelled",
-          },
-        });
+        await this.finalizeCancelledRun(batchRunId, latestRun.id);
         return;
       }
 
-      await this.database.ingestionBatchItem.update({
-        where: { id: item.id },
+      const markRunningResult = await this.database.ingestionBatchItem.updateMany({
+        where: { id: item.id, status: { in: ["queued"] } },
         data: { startedAt: new Date(), status: "running" },
       });
+      if (markRunningResult.count === 0) {
+        continue;
+      }
 
       const itemOwner = `${owner}:${item.id}`;
       const itemLockId = `job-source:${item.jobSourceId}`;
@@ -158,44 +174,50 @@ export class IngestionManualRunnerService {
       );
 
       if (!sourceLockAcquired) {
-        await this.database.ingestionBatchItem.update({
-          where: { id: item.id },
+        const markSkippedResult = await this.database.ingestionBatchItem.updateMany({
+          where: { id: item.id, status: { in: ["running"] } },
           data: { finishedAt: new Date(), status: "skipped" },
         });
-        await this.database.ingestionBatchRun.update({
-          where: { id: batchRunId },
-          data: { skippedCount: { increment: 1 } },
-        });
+        if (markSkippedResult.count > 0) {
+          await this.database.ingestionBatchRun.update({
+            where: { id: batchRunId },
+            data: { skippedCount: { increment: 1 } },
+          });
+        }
         continue;
       }
 
       try {
         await this.ingestionService.runJobSource(item.jobSourceId);
-        await this.database.ingestionBatchItem.update({
-          where: { id: item.id },
+        const markCompletedResult = await this.database.ingestionBatchItem.updateMany({
+          where: { id: item.id, status: { in: ["queued", "running"] } },
           data: {
             errorMessage: null,
             finishedAt: new Date(),
             status: "completed",
           },
         });
-        await this.database.ingestionBatchRun.update({
-          where: { id: batchRunId },
-          data: { succeededCount: { increment: 1 } },
-        });
+        if (markCompletedResult.count > 0) {
+          await this.database.ingestionBatchRun.update({
+            where: { id: batchRunId },
+            data: { succeededCount: { increment: 1 } },
+          });
+        }
       } catch (error) {
-        await this.database.ingestionBatchItem.update({
-          where: { id: item.id },
+        const markFailedResult = await this.database.ingestionBatchItem.updateMany({
+          where: { id: item.id, status: { in: ["queued", "running"] } },
           data: {
             errorMessage: error instanceof Error ? error.message : "ingestion failed",
             finishedAt: new Date(),
             status: "failed",
           },
         });
-        await this.database.ingestionBatchRun.update({
-          where: { id: batchRunId },
-          data: { failedCount: { increment: 1 } },
-        });
+        if (markFailedResult.count > 0) {
+          await this.database.ingestionBatchRun.update({
+            where: { id: batchRunId },
+            data: { failedCount: { increment: 1 } },
+          });
+        }
         this.logger.warn(
           `manual ingestion item failed ${item.id}: ${error instanceof Error ? error.message : "unknown"}`,
         );
@@ -212,24 +234,57 @@ export class IngestionManualRunnerService {
     }
 
     if (latestRun.cancelRequestedAt || latestRun.status === "cancelling") {
-      await this.database.ingestionBatchRun.update({
-        where: { id: batchRunId },
-        data: {
-          finishedAt: new Date(),
-          status: "cancelled",
-        },
-      });
+      await this.finalizeCancelledRun(batchRunId, latestRun.id);
       return;
     }
 
-    const hasFailures = latestRun.failedCount > 0;
+    await this.finalizeRun(batchRunId, latestRun.id, false);
+  }
+
+  private async finalizeCancelledRun(batchRunId: string, runId: string) {
+    await this.cancelRemainingItems(batchRunId);
+    await this.finalizeRun(batchRunId, runId, true);
+  }
+
+  private async finalizeRun(batchRunId: string, runId: string, cancelled: boolean) {
+    const run = await this.database.ingestionBatchRun.findUnique({
+      where: { id: runId },
+    });
+    if (!run) {
+      return;
+    }
+
+    const counters = await this.recomputeRunCounters(batchRunId, run.totalSources);
+    const status = cancelled ? "cancelled" : counters.failedCount > 0 ? "failed" : "completed";
     await this.database.ingestionBatchRun.update({
-      where: { id: batchRunId },
+      where: { id: runId },
       data: {
         finishedAt: new Date(),
-        status: hasFailures ? "failed" : "completed",
+        ...counters,
+        status,
       },
     });
+  }
+
+  private async recomputeRunCounters(batchRunId: string, totalSources: number) {
+    const items = await this.database.ingestionBatchItem.findMany({
+      where: { batchRunId },
+    });
+
+    let succeededCount = 0;
+    let failedCount = 0;
+    let skippedCount = 0;
+    for (const item of items) {
+      if (item.status === "completed") {
+        succeededCount += 1;
+      } else if (item.status === "failed") {
+        failedCount += 1;
+      } else if (item.status === "skipped" || item.status === "cancelled") {
+        skippedCount += 1;
+      }
+    }
+
+    return clampRunAggregate(totalSources, succeededCount, failedCount, skippedCount);
   }
 
   private async cancelRemainingItems(batchRunId: string) {

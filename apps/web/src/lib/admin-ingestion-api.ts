@@ -56,6 +56,12 @@ export type CreateJobSourcePayload = {
   sourceUrl: string;
 };
 
+export type UpdateJobSourcePayload = {
+  scheduleCron?: string | null;
+  scheduleEnabled?: boolean;
+  scheduleTimezone?: "America/Sao_Paulo";
+};
+
 export type GlobalSchedulerConfig = {
   enabled: boolean;
   errorDelayMs: number;
@@ -428,6 +434,20 @@ export async function cancelManualRun(batchRunId: string, token?: string) {
 export async function deleteJobSource(jobSourceId: string, token?: string) {
   return apiRequest<{ ok: true }>(`/job-sources/${jobSourceId}`, token, {
     method: "DELETE",
+  });
+}
+
+export async function updateJobSource(
+  jobSourceId: string,
+  payload: UpdateJobSourcePayload,
+  token?: string,
+) {
+  return apiRequest<JobSourceRecord>(`/job-sources/${jobSourceId}`, token, {
+    body: JSON.stringify(payload),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "PATCH",
   });
 }
 

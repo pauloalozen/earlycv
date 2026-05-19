@@ -11,6 +11,7 @@ import {
   runGlobalSchedulerNow,
   runJobSource,
   startManualAdapterRun,
+  updateJobSource,
   updateGlobalSchedulerConfig,
 } from "@/lib/admin-ingestion-api";
 import {
@@ -208,6 +209,51 @@ export async function updateGlobalSchedulerAction(formData: FormData) {
 
   redirect(
     buildAdminRedirect(redirectPath, "success", "Scheduler global atualizado."),
+  );
+}
+
+export async function updateJobSourceScheduleAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const jobSourceId = String(formData.get("jobSourceId") ?? "").trim();
+
+  if (!jobSourceId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe a fonte."));
+  }
+
+  const scheduleEnabled = formData.get("scheduleEnabled") === "on";
+  const scheduleCron = String(formData.get("scheduleCron") ?? "").trim();
+  const schedulePayload = scheduleEnabled
+    ? {
+        scheduleCron: scheduleCron || "*/30 * * * *",
+        scheduleEnabled: true,
+        scheduleTimezone: "America/Sao_Paulo" as const,
+      }
+    : {
+        scheduleCron: null,
+        scheduleEnabled: false,
+      };
+
+  try {
+    await updateJobSource(jobSourceId, schedulePayload);
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Falha ao atualizar agendamento da fonte.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  redirect(
+    buildAdminRedirect(
+      redirectPath,
+      "success",
+      "Agendamento da fonte atualizado.",
+    ),
   );
 }
 

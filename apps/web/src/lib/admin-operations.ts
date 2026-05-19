@@ -77,6 +77,8 @@ type SearchableSource = {
   id: string;
   ingestionRuns?: IngestionRunSummary[];
   parserKey?: string;
+  scheduleCron?: string | null;
+  scheduleEnabled?: boolean;
   sourceName: string;
   sourceType: string;
   sourceUrl?: string;
