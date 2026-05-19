@@ -447,13 +447,18 @@ export class CvAdaptationService {
         ? this.normalizeSnapshotText(masterCvText)
         : "";
     const hasTextInput = normalizedMasterCvText.length > 0;
+    const shouldUseUploadedFile = !hasTextInput && Boolean(file);
     let resolvedMasterCvText: string | null = null;
 
     if (!file && !hasTextInput) {
       throw new BadRequestException("PDF file or CV text is required.");
     }
 
-    if (file) {
+    if (hasTextInput) {
+      this.validateCvTextInput(normalizedMasterCvText);
+    }
+
+    if (shouldUseUploadedFile && file) {
       try {
         validateCvFileEnvelope(file);
       } catch (error) {
@@ -509,8 +514,11 @@ export class CvAdaptationService {
           }
         },
         payload: {
-          cvFingerprint: file ? this.buildFileFingerprint(file.buffer) : null,
-          hasFile: Boolean(file),
+          cvFingerprint:
+            shouldUseUploadedFile && file
+              ? this.buildFileFingerprint(file.buffer)
+              : null,
+          hasFile: shouldUseUploadedFile,
           jobDescriptionText: normalizedJobDescriptionText,
           hasTextInput,
           route: "cv-adaptation/analyze-guest",
@@ -533,7 +541,7 @@ export class CvAdaptationService {
       guestSessionHash: this.hashGuestSessionToken(
         analysisContext?.sessionPublicToken,
       ),
-      file,
+      file: shouldUseUploadedFile ? file : undefined,
       userId: null,
     });
 
@@ -568,11 +576,16 @@ export class CvAdaptationService {
       },
     );
     const hasTextInput = Boolean(dto.masterCvText?.trim());
+    const shouldUseUploadedFile = !hasTextInput && Boolean(file);
     let sourceType: "text_input" | "uploaded_file" | "master_resume" =
       "master_resume";
     let resolvedMasterCvText: string | null = null;
 
-    if (file) {
+    if (hasTextInput && dto.masterCvText) {
+      this.validateCvTextInput(this.normalizeSnapshotText(dto.masterCvText));
+    }
+
+    if (shouldUseUploadedFile && file) {
       try {
         validateCvFileEnvelope(file);
       } catch (error) {
@@ -680,8 +693,11 @@ export class CvAdaptationService {
           );
         },
         payload: {
-          cvFingerprint: file ? this.buildFileFingerprint(file.buffer) : null,
-          hasFile: Boolean(file),
+          cvFingerprint:
+            shouldUseUploadedFile && file
+              ? this.buildFileFingerprint(file.buffer)
+              : null,
+          hasFile: shouldUseUploadedFile,
           hasTextInput,
           jobDescriptionText: normalizedJobDescriptionText,
           masterResumeId: dto.masterResumeId ?? null,
@@ -705,7 +721,7 @@ export class CvAdaptationService {
       sourceType,
       text: finalMasterCvText,
       guestSessionHash: null,
-      file,
+      file: shouldUseUploadedFile ? file : undefined,
       userId,
     });
 
@@ -2506,6 +2522,45 @@ export class CvAdaptationService {
       );
       throw new BadRequestException(
         "O texto informado não parece uma descrição de vaga. Cole uma descrição válida para continuar.",
+      );
+    }
+
+    return normalized;
+  }
+
+  private validateCvTextInput(text: string): string {
+    const normalized = this.normalizeSnapshotText(text);
+
+    if (!normalized) {
+      throw new BadRequestException("Digite o texto do seu CV.");
+    }
+
+    if (normalized.length < 120) {
+      throw new BadRequestException(
+        "O texto do CV está muito curto. Inclua mais detalhes antes de analisar.",
+      );
+    }
+
+    const nonEmptyLines = normalized
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (nonEmptyLines.length < 3) {
+      throw new BadRequestException(
+        "Organize o CV em mais linhas (resumo, experiências e competências, por exemplo).",
+      );
+    }
+
+    const hasCommonCvSection =
+      /(experi[eê]ncia|forma[cç][aã]o|habilidades|compet[eê]ncias|resumo|projetos|idiomas|certifica[cç][oõ]es)/i.test(
+        normalized,
+      );
+    const hasDateSignal = /\b(19|20)\d{2}\b/.test(normalized);
+
+    if (!hasCommonCvSection && !hasDateSignal) {
+      throw new BadRequestException(
+        "Esse texto não parece ser um currículo. Inclua seções como experiência, formação ou competências.",
       );
     }
 
