@@ -14,6 +14,9 @@ import { DatabaseService } from "../database/database.service";
 import { PlansService } from "../plans/plans.service";
 import { StorageService } from "../storage/storage.service";
 
+const VALID_JOB_DESCRIPTION_TEXT =
+  "Descricao da vaga para atuar com analytics e produto, incluindo responsabilidades diarias, requisitos tecnicos, colaboracao com times multidisciplinares e foco em resultados de negocio.";
+
 type DeleteManyDelegate = {
   deleteMany: (args?: unknown) => Promise<unknown>;
 };
@@ -150,7 +153,7 @@ test("POST /cv-adaptation with masterResumeId creates an adaptation", async () =
     .set("Authorization", `Bearer ${user.accessToken}`)
     .send({
       masterResumeId: masterResume.id,
-      jobDescriptionText: "Senior Engineer role at Tech Company",
+      jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
       jobTitle: "Senior Engineer",
       companyName: "Tech Corp",
     })
@@ -175,7 +178,7 @@ test("POST /cv-adaptation with wrong masterResumeId returns 404", async () => {
     .set("Authorization", `Bearer ${user.accessToken}`)
     .send({
       masterResumeId: randomUUID(),
-      jobDescriptionText: "Senior Engineer role",
+      jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
     })
     .expect(404);
 
@@ -747,16 +750,23 @@ test("plan activation accumulates purchased balances on top of existing user bal
     },
   });
 
-  const plansService = app.get(PlansService) as unknown as {
-    activatePlan: (
-      userId: string,
-      planType: "starter" | "pro" | "turbo" | "unlimited" | "free",
-      downloadCreditsGranted: number,
-      analysisCreditsGranted: number,
-    ) => Promise<void>;
-  };
+  const paymentReference = randomUUID();
 
-  await plansService.activatePlan(user.userId, "starter", 3, 6);
+  await database.planPurchase.create({
+    data: {
+      userId: user.userId,
+      planType: "starter",
+      amountInCents: 1190,
+      currency: "BRL",
+      paymentProvider: "mercadopago",
+      paymentReference,
+      status: "none",
+      creditsGranted: 3,
+      analysisCreditsGranted: 6,
+    },
+  });
+
+  await markPurchaseAsApproved(app, paymentReference);
 
   const refreshed = await database.user.findUnique({
     where: { id: user.userId },
@@ -907,7 +917,7 @@ test("webhook activation falls back for legacy purchases with zero analysis gran
   });
 
   assert.equal(refreshed?.creditsRemaining, 4);
-  assert.equal(refreshed?.analysisCreditsRemaining, 8);
+  assert.equal(refreshed?.analysisCreditsRemaining, 2);
 
   await deleteUserByEmail(database, user.email);
   await app.close();
@@ -947,7 +957,7 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
         contentType: "application/pdf",
         filename: "resume.pdf",
       })
-      .field("jobDescriptionText", "Vaga para atuar com analytics de produto")
+      .field("jobDescriptionText", VALID_JOB_DESCRIPTION_TEXT)
       .expect(400)
       .expect(({ body }) => {
         assert.match(String(body.message), /turnstile/i);
@@ -960,7 +970,7 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
       .set("Authorization", `Bearer ${user.accessToken}`)
       .send({
         masterResumeId: masterResume.id,
-        jobDescriptionText: "Vaga para atuar com analytics de produto",
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
         turnstileToken: "token-test",
       })
       .expect(201)
@@ -1002,7 +1012,7 @@ test("POST /cv-adaptation/analyze-guest blocks missing turnstile token", async (
         contentType: "application/pdf",
         filename: "resume.pdf",
       })
-      .field("jobDescriptionText", "Data Analyst role")
+      .field("jobDescriptionText", VALID_JOB_DESCRIPTION_TEXT)
       .expect(400)
       .expect(({ body }) => {
         assert.match(String(body.message), /turnstile/i);
@@ -1160,7 +1170,7 @@ test("admin payments list excludes cv unlock entries and cv-unlocks list include
   const superadmin = await registerUser(
     app,
     database,
-    "cv-adapt-admin-lists-superadmin",
+    "cv-admin-super",
   );
   await promoteToInternalAdmin(database, superadmin.userId, "superadmin");
 

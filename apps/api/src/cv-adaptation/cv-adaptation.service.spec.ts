@@ -25,6 +25,9 @@ const makeAnalyzeDto = () => ({
   turnstileToken: "token",
 });
 
+const validMasterCvText =
+  "Resumo profissional com foco em analise de dados e produto digital para tomada de decisao.\nExperiencia\n2022 - 2025\nSQL, Python e dashboards";
+
 test("analyzeAuthenticated delegates protected execution through gateway boundary", async () => {
   const service = new CvAdaptationServiceCtor(
     {
@@ -191,11 +194,126 @@ test("analyzeGuest accepts CV text without file", async () => {
   const result = await service.analyzeGuest(
     "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
     undefined,
-    "Resumo\nExperiencia\n2022\nSQL",
+    validMasterCvText,
     "token",
   );
 
   assert.equal(result.masterCvText, "CV texto");
+});
+
+test("analyzeGuest validates job description before CV text checks", async () => {
+  let protectedCalls = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-1" }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => {
+        protectedCalls += 1;
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-1",
+          result: {
+            adaptedContentJson: {},
+            previewText: "preview",
+            masterCvText: "CV",
+          },
+        };
+      },
+    },
+  );
+
+  await assert.rejects(
+    service.analyzeGuest("texto invalido", undefined, "curto", "token"),
+    /não parece uma descrição de vaga/i,
+  );
+
+  assert.equal(protectedCalls, 0);
+});
+
+test("analyzeGuest prioritizes masterCvText and ignores uploaded file", async () => {
+  let payloadHasFile = true;
+  let payloadCvFingerprint: string | null | undefined;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-1" }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: { ok: true },
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async ({
+        payload,
+      }: {
+        payload: { cvFingerprint?: string | null; hasFile?: boolean };
+      }) => {
+        payloadHasFile = Boolean(payload.hasFile);
+        payloadCvFingerprint = payload.cvFingerprint;
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-1",
+          result: {
+            adaptedContentJson: { ok: true },
+            previewText: "preview",
+            masterCvText: "Resumo\nExperiencia\n2022\nSQL",
+          },
+        };
+      },
+    },
+  );
+
+  const result = await service.analyzeGuest(
+    "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    {
+      buffer: Buffer.from("legacy-doc"),
+      encoding: "7bit",
+      fieldname: "file",
+      mimetype: "application/msword",
+      originalname: "cv.doc",
+      size: 10,
+    },
+    validMasterCvText,
+    "token",
+  );
+
+  assert.equal(result.previewText, "preview");
+  assert.equal(payloadHasFile, false);
+  assert.equal(payloadCvFingerprint, null);
 });
 
 test("analyzeAuthenticated accepts masterCvText without file or masterResumeId", async () => {
@@ -241,7 +359,7 @@ test("analyzeAuthenticated accepts masterCvText without file or masterResumeId",
   const result = await service.analyzeAuthenticated("user-1", {
     jobDescriptionText:
       "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
-    masterCvText: "Resumo\nExperiencia\n2022\nSQL",
+    masterCvText: validMasterCvText,
     saveAsMaster: false,
     turnstileToken: "token",
   });
@@ -1057,7 +1175,7 @@ test("analyzeGuest persists snapshot hash from stored markdown content", async (
   const result = await service.analyzeGuest(
     "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
     undefined,
-    "Resumo\nExperiencia\n2022\nSQL",
+    validMasterCvText,
     "token",
   );
 
@@ -1291,19 +1409,17 @@ test("analyzeAuthenticated uses the same normalized text for AI load and snapsho
   const result = await service.analyzeAuthenticated("user-1", {
     jobDescriptionText:
       "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
-    masterCvText: "\uFEFF  Linha 1\r\nLinha 2  ",
+    masterCvText: `\uFEFF  ${validMasterCvText.replace(/\n/g, "\r\n")}  `,
     saveAsMaster: false,
     turnstileToken: "token",
   });
 
-  assert.equal(aiLoadedText, "Linha 1\nLinha 2");
-  assert.equal(storedMarkdown, "Linha 1\nLinha 2");
-  assert.equal(result.masterCvText, "Linha 1\nLinha 2");
+  assert.equal(aiLoadedText, validMasterCvText);
+  assert.equal(storedMarkdown, validMasterCvText);
+  assert.equal(result.masterCvText, validMasterCvText);
   assert.equal(
     storedSha,
-    createHash("sha256")
-      .update(Buffer.from("Linha 1\nLinha 2", "utf8"))
-      .digest("hex"),
+    createHash("sha256").update(Buffer.from(validMasterCvText, "utf8")).digest("hex"),
   );
 });
 
@@ -1477,7 +1593,7 @@ test("analyzeGuest normalizes job description before protection payload", async 
     service.analyzeGuest(
       "\uFEFF  Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.\r\n",
       undefined,
-      "Resumo\nExperiencia\nSQL",
+      validMasterCvText,
       "token",
     ),
   );
@@ -1532,7 +1648,7 @@ test("analyzeGuest rejects oversized job description before protected analysis",
     service.analyzeGuest(
       `Vaga com responsabilidades e requisitos ${"a".repeat(12_100)}`,
       undefined,
-      "Resumo\nExperiencia\nSQL",
+      validMasterCvText,
       "token",
     ),
     /12.000 caracteres/i,
