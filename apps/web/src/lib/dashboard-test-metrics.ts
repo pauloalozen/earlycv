@@ -4,6 +4,10 @@ export type DashboardMetricInput = {
   score: number | null;
 };
 
+type ExtractDashboardAnalysisSignalOptions = {
+  selectedMissingKeywords?: string[];
+};
+
 type AnalysisSignal = {
   adjustments: {
     notes: string | null;
@@ -23,8 +27,13 @@ function parseNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function normalizeKeyword(value: string): string {
+  return value.trim().toLocaleLowerCase("pt-BR");
+}
+
 export function extractDashboardAnalysisSignal(
   adaptedContentJson: unknown,
+  options: ExtractDashboardAnalysisSignalOptions = {},
 ): AnalysisSignal {
   const parsed =
     adaptedContentJson && typeof adaptedContentJson === "object"
@@ -41,7 +50,7 @@ export function extractDashboardAnalysisSignal(
 
   try {
     const normalized = normalizeData(parsed as CvAnalysisData);
-    const selectedMissingKeywords = Array.isArray(
+    const payloadSelectedMissingKeywords = Array.isArray(
       parsed.selectedMissingKeywords,
     )
       ? parsed.selectedMissingKeywords.filter(
@@ -49,9 +58,20 @@ export function extractDashboardAnalysisSignal(
             typeof value === "string" && value.trim().length > 0,
         )
       : [];
-    const selectedSet = new Set(selectedMissingKeywords);
+    const selectedMissingKeywords =
+      options.selectedMissingKeywords && options.selectedMissingKeywords.length > 0
+        ? options.selectedMissingKeywords
+            .filter(
+              (value): value is string =>
+                typeof value === "string" && value.trim().length > 0,
+            )
+            .map((keyword) => keyword.trim())
+        : payloadSelectedMissingKeywords;
+    const selectedSet = new Set(
+      selectedMissingKeywords.map((keyword) => normalizeKeyword(keyword)),
+    );
     const selectedKeywordsPoints = normalized.keywords.ausentes
-      .filter((keyword) => selectedSet.has(keyword.kw))
+      .filter((keyword) => selectedSet.has(normalizeKeyword(keyword.kw)))
       .reduce((sum, keyword) => sum + keyword.pontos, 0);
     const scoreBefore = normalized.score.scoreAtualBase;
     const scoreFinal = Math.min(

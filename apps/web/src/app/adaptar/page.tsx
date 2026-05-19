@@ -34,7 +34,7 @@ const LOADING_STEPS = [
 
 const CV_INPUT_BOX_MIN_HEIGHT = 154;
 const IS_TEST_ENV = process.env.NODE_ENV === "test";
-const ANALYSIS_MIN_LOADING_MS = IS_TEST_ENV ? 0 : 10000;
+const ANALYSIS_MIN_LOADING_MS = IS_TEST_ENV ? 0 : 5000;
 const RESULT_TRANSITION_DELAY_MS = IS_TEST_ENV ? 0 : 2000;
 
 const EXAMPLE_JOB = `Analista de Dados Sênior — Nubank
@@ -150,6 +150,13 @@ export default function AdaptarPage() {
     ((token: string | null) => void) | null
   >(null);
   const [turnstileScriptReady, setTurnstileScriptReady] = useState(false);
+
+  const clearSelectedFile = useCallback(() => {
+    setFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, []);
 
   const resolvePendingTurnstileToken = useCallback((token: string | null) => {
     const resolve = turnstilePendingTokenResolverRef.current;
@@ -444,10 +451,8 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const [result] = await Promise.all([
-          analyzeAuthenticatedCv(formData),
-          new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
-        ]);
+        const result = await analyzeAuthenticatedCv(formData);
+        await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
         analyzeResult = result;
       } else if (isAuthenticated && cvMode === "upload" && file) {
         formData.append("file", file);
@@ -459,10 +464,8 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const [result] = await Promise.all([
-          analyzeAuthenticatedCv(formData),
-          new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
-        ]);
+        const result = await analyzeAuthenticatedCv(formData);
+        await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
         analyzeResult = result;
       } else if (isAuthenticated && cvMode === "text") {
         emitUiFunnelEvent("analysis_started", {
@@ -472,10 +475,8 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const [result] = await Promise.all([
-          analyzeAuthenticatedCv(formData),
-          new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
-        ]);
+        const result = await analyzeAuthenticatedCv(formData);
+        await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
         analyzeResult = result;
       } else {
         if (cvMode === "text") {
@@ -486,16 +487,14 @@ export default function AdaptarPage() {
               isAuthenticated,
             },
           });
-          const [result] = await Promise.all([
-            analyzeGuestCv(formData),
-            new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
-          ]);
+          const result = await analyzeGuestCv(formData);
           analyzeResult = result;
           if (!analyzeResult.ok) {
             setLoading(false);
             setError(analyzeResult.error);
             return;
           }
+          await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
           setLoadingStep(3);
           await new Promise((r) => setTimeout(r, RESULT_TRANSITION_DELAY_MS));
           setGuestAnalysisRaw(
@@ -522,10 +521,7 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const [result] = await Promise.all([
-          analyzeGuestCv(formData),
-          new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
-        ]);
+        const result = await analyzeGuestCv(formData);
         analyzeResult = result;
       }
       if (!analyzeResult.ok) {
@@ -533,6 +529,7 @@ export default function AdaptarPage() {
         setError(analyzeResult.error);
         return;
       }
+      await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
       setLoadingStep(3);
       await new Promise((r) => setTimeout(r, RESULT_TRANSITION_DELAY_MS));
 
@@ -821,8 +818,8 @@ export default function AdaptarPage() {
                               type="button"
                               onClick={() => {
                                 setCvMode(mode);
-                                if (mode === "master") setFile(null);
-                                if (mode === "text") setFile(null);
+                                if (mode === "master") clearSelectedFile();
+                                if (mode === "text") clearSelectedFile();
                                 setError(null);
                               }}
                               style={{
@@ -870,7 +867,7 @@ export default function AdaptarPage() {
                               type="button"
                               onClick={() => {
                                 setCvMode(mode);
-                                if (mode === "text") setFile(null);
+                                if (mode === "text") clearSelectedFile();
                                 setError(null);
                               }}
                               style={{

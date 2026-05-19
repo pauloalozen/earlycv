@@ -129,6 +129,37 @@ test("extractDashboardAnalysisSignal adds selected missing keywords to final sco
   assert.equal(signal.score, expectedFinal);
 });
 
+test("extractDashboardAnalysisSignal matches selected keywords case-insensitively", () => {
+  const payload = makeAnalysisPayload() as CvAnalysisData & {
+    selectedMissingKeywords?: string[];
+  };
+
+  payload.keywords.ausentes = [{ kw: "Python", pontos: 15 }];
+  payload.selectedMissingKeywords = ["python"];
+
+  const normalized = normalizeData(payload);
+  const expectedFinal = Math.min(
+    100,
+    normalized.score.scoreAposLiberarBase + 15,
+  );
+
+  const signal = extractDashboardAnalysisSignal(payload);
+
+  assert.equal(signal.score, expectedFinal);
+});
+
+test("extractDashboardAnalysisSignal applies selected keywords from runtime override", () => {
+  const payload = makeAnalysisPayload();
+  const normalized = normalizeData(payload);
+  const expectedFinal = Math.min(100, normalized.score.scoreAposLiberarBase + 15);
+
+  const signal = extractDashboardAnalysisSignal(payload, {
+    selectedMissingKeywords: ["Python"],
+  });
+
+  assert.equal(signal.score, expectedFinal);
+});
+
 test("extractDashboardAnalysisSignal exposes adjustments popup payload", () => {
   const payload = makeAnalysisPayload();
   payload.adaptation_notes = "Ajustes aplicados no CV";

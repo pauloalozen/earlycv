@@ -14,6 +14,9 @@ import { DatabaseService } from "../database/database.service";
 import { PlansService } from "../plans/plans.service";
 import { StorageService } from "../storage/storage.service";
 
+const VALID_JOB_DESCRIPTION_TEXT =
+  "Descricao da vaga para atuar com analytics e produto, incluindo responsabilidades diarias, requisitos tecnicos, colaboracao com times multidisciplinares e foco em resultados de negocio.";
+
 type DeleteManyDelegate = {
   deleteMany: (args?: unknown) => Promise<unknown>;
 };
@@ -173,9 +176,7 @@ test("POST /cv-adaptation with masterResumeId creates an adaptation", async () =
     .set("Authorization", `Bearer ${user.accessToken}`)
     .send({
       masterResumeId: masterResume.id,
-      jobDescriptionText:
-        "Vaga para pessoa engenheira sênior. Requisitos: TypeScript, arquitetura de APIs e mentoria técnica. Responsabilidades: liderar entregas, colaborar com produto e evoluir qualidade de software.",
-      turnstileToken: "test-turnstile-token",
+      jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
       jobTitle: "Senior Engineer",
       companyName: "Tech Corp",
     })
@@ -206,8 +207,7 @@ test("POST /cv-adaptation with wrong masterResumeId returns 404", async () => {
     .set("Authorization", `Bearer ${user.accessToken}`)
     .send({
       masterResumeId: randomUUID(),
-      jobDescriptionText:
-        "Buscamos pessoa engenheira de software para atuar com APIs, integração de serviços, monitoramento e melhoria contínua de performance da plataforma.",
+      jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
     })
     .expect(404);
 
@@ -986,11 +986,11 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
         contentType: "application/pdf",
         filename: "resume.pdf",
       })
-      .field(
-        "jobDescriptionText",
-        "Estamos contratando pessoa analista de dados para atuar com analytics de produto, indicadores, experimentacao, SQL e colaboracao com time de produto.",
-      )
-      .expect(400);
+      .field("jobDescriptionText", VALID_JOB_DESCRIPTION_TEXT)
+      .expect(400)
+      .expect(({ body }) => {
+        assert.match(String(body.message), /turnstile/i);
+      });
 
     process.env.SKIP_TURNSTILE_VERIFICATION = "true";
 
@@ -999,8 +999,7 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
       .set("Authorization", `Bearer ${user.accessToken}`)
       .send({
         masterResumeId: masterResume.id,
-        jobDescriptionText:
-          "Vaga para pessoa analista de dados. Requisitos: SQL, analytics de produto e comunicação com stakeholders. Responsabilidades: construir indicadores, analisar experimentos e apoiar decisões de negócio.",
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
         turnstileToken: "token-test",
       })
       .expect((response) => {
@@ -1207,7 +1206,7 @@ test("admin payments list excludes cv unlock entries and cv-unlocks list include
   const superadmin = await registerUser(
     app,
     database,
-    "cv-adapt-admin-lists-superadmin",
+    "cv-admin-super",
   );
   await promoteToInternalAdmin(database, superadmin.userId, "superadmin");
 

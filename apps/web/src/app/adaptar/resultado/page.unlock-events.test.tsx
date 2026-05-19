@@ -271,6 +271,40 @@ describe("resultado unlock tracking", () => {
     ).not.toBeNull();
   });
 
+  it("shows locked keywords copy after CV unlock", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/adaptar/resultado?adaptationId=adp-locked-copy",
+    );
+
+    getAuthStatusMock.mockResolvedValue({
+      isAuthenticated: true,
+      userName: "User",
+      hasCredits: true,
+      internalRole: "none",
+      availableCreditsDisplay: 3,
+    });
+
+    mockResultadoFetch({
+      redeemOk: true,
+      isUnlocked: true,
+      adaptedContentJson: {
+        selectedMissingKeywords: ["sql"],
+        vaga: { cargo: "Analista", empresa: "Empresa" },
+      },
+    });
+
+    render(<ResultadoPage />);
+
+    expect(
+      await screen.findByText("Seção bloqueada após liberação do CV"),
+    ).not.toBeNull();
+    expect(
+      screen.queryByText(/Selecione quais você deseja incluir\./i),
+    ).toBeNull();
+  });
+
   it("shows professional summary in unlocked preview when available", async () => {
     window.history.replaceState(
       {},
@@ -380,6 +414,9 @@ describe("resultado unlock tracking", () => {
 
     const buyLink = document.querySelector('a[href*="/planos"]');
     expect(buyLink).not.toBeNull();
+    const href = (buyLink as HTMLAnchorElement).getAttribute("href") ?? "";
+    expect(href).toContain("source=resultado-buy-credits");
+    expect(href).toContain("kw=sql");
 
     fireEvent.click(buyLink as HTMLAnchorElement);
 

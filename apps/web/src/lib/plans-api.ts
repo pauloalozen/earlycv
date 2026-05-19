@@ -41,6 +41,7 @@ export async function listMyPurchases(): Promise<PurchaseItem[]> {
 export async function createPlanCheckout(
   planId: "starter" | "pro" | "turbo",
   adaptationId?: string,
+  selectedMissingKeywords: string[] = [],
 ): Promise<{
   checkoutUrl: string;
   purchaseId: string;
@@ -49,6 +50,9 @@ export async function createPlanCheckout(
   const response = await apiRequest("POST", "/plans/checkout", {
     planId,
     ...(adaptationId ? { adaptationId } : {}),
+    ...(selectedMissingKeywords.length > 0
+      ? { selectedMissingKeywords }
+      : {}),
   });
   if (!response.ok) {
     const err = await response.text();

@@ -1,4 +1,10 @@
-import { IsIn, IsOptional, IsString, MaxLength } from "class-validator";
+import {
+  IsArray,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from "class-validator";
 
 export class CreatePlanCheckoutDto {
   @IsIn(["starter", "pro", "turbo"])
@@ -8,4 +14,10 @@ export class CreatePlanCheckoutDto {
   @IsString()
   @MaxLength(64)
   adaptationId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  selectedMissingKeywords?: string[];
 }

@@ -1160,6 +1160,20 @@ export default function ResultadoPage() {
     : [];
   const effectiveSelected =
     frozenKeywords.length > 0 ? new Set(frozenKeywords) : selecionadas;
+  const planosBuyCreditsHref = (() => {
+    if (!reviewAdaptationId) return "/planos";
+    const params = new URLSearchParams({
+      aid: reviewAdaptationId,
+      source: "resultado-buy-credits",
+    });
+    for (const keyword of effectiveSelected) {
+      const sanitized = keyword.trim();
+      if (sanitized.length > 0) {
+        params.append("kw", sanitized);
+      }
+    }
+    return `/planos?${params.toString()}`;
+  })();
   const isKeywordsFrozen = frozenKeywords.length > 0;
   const isGuestView = isAuthenticated !== true && !isDemo;
   const vagaSeed = `${data.vaga.cargo}::${data.vaga.empresa}`;
@@ -1641,98 +1655,6 @@ export default function ResultadoPage() {
               </div>
             </div>
           </div>
-
-          {/* ── Alerta de competição / Early bird ── */}
-          {jobAnalysisCount === null || jobAnalysisCount < 15 ? (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 14,
-                background: "rgba(198,255,58,0.1)",
-                border: "1px solid rgba(198,255,58,0.35)",
-                borderRadius: 14,
-                padding: "14px 18px",
-                marginBottom: 8,
-              }}
-            >
-              <span style={{ fontSize: 18, marginTop: 1, flexShrink: 0 }}>
-                🚀
-              </span>
-              <div>
-                <p
-                  style={{
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    color: "#2a3a08",
-                    margin: "0 0 3px",
-                  }}
-                >
-                  Você é uma das primeiras pessoas a analisar essa vaga
-                </p>
-                <p
-                  style={{
-                    fontSize: 12.5,
-                    color: "#405410",
-                    lineHeight: 1.5,
-                    margin: 0,
-                  }}
-                >
-                  Não perca tempo — baixe seu CV ideal e se candidate antes que
-                  a concorrência chegue.{" "}
-                  <strong>
-                    Candidatos que aplicam cedo têm mais visibilidade com
-                    recrutadores.
-                  </strong>
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 14,
-                background: "#fffbeb",
-                border: "1px solid rgba(245,158,11,0.2)",
-                borderRadius: 14,
-                padding: "14px 18px",
-                marginBottom: 8,
-              }}
-            >
-              <span style={{ fontSize: 18, marginTop: 1, flexShrink: 0 }}>
-                ⚠️
-              </span>
-              <div>
-                <p
-                  style={{
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    color: "#92400e",
-                    margin: "0 0 3px",
-                  }}
-                >
-                  {jobAnalysisCount} candidatos já analisaram esta vaga
-                </p>
-                <p
-                  style={{
-                    fontSize: 12.5,
-                    color: "#78350f",
-                    lineHeight: 1.5,
-                    margin: 0,
-                  }}
-                >
-                  Vagas como essa recebem centenas de candidaturas. Recrutadores
-                  priorizam os CVs com maior compatibilidade — e você está{" "}
-                  {Math.abs(delta)} pts {delta < 0 ? "abaixo" : "acima"} da
-                  média agora.{" "}
-                  <strong>
-                    Seu CV otimizado já está pronto. Cada hora conta.
-                  </strong>
-                </p>
-              </div>
-            </div>
-          )}
 
           {/* ════════════════════════════════════════════════════
               SEÇÃO 1 — Experiência Profissional
@@ -2375,8 +2297,9 @@ export default function ResultadoPage() {
               FALTANDO NO SEU CV ({data.keywords.ausentes.length})
             </p>
             <p style={{ fontSize: 12.5, color: "#8a8a85", marginBottom: 12 }}>
-              Selecione quais você deseja incluir. Seu CV otimizado só
-              adicionará as que você aprovar.
+              {isDownloadReady
+                ? "Seção bloqueada após liberação do CV"
+                : "Selecione quais você deseja incluir. Seu CV otimizado só adicionará as que você aprovar."}
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -4042,12 +3965,8 @@ export default function ResultadoPage() {
                           : "Liberar CV com 1 crédito"}
                       </button>
                     ) : (
-                      <a
-                        href={
-                          reviewAdaptationId
-                            ? `/planos?aid=${reviewAdaptationId}&source=resultado-buy-credits`
-                            : "/planos"
-                        }
+                        <a
+                        href={planosBuyCreditsHref}
                         onClick={() => {
                           emitResultadoEvent("buy_credits_clicked", {
                             adaptationId: reviewAdaptationId,
@@ -4075,11 +3994,7 @@ export default function ResultadoPage() {
                     )
                   ) : hasCredits === false ? (
                     <a
-                      href={
-                        reviewAdaptationId
-                          ? `/planos?aid=${reviewAdaptationId}&source=resultado-buy-credits`
-                          : "/planos"
-                      }
+                      href={planosBuyCreditsHref}
                       onClick={() => {
                         emitResultadoEvent("buy_credits_clicked", {
                           adaptationId: reviewAdaptationId,

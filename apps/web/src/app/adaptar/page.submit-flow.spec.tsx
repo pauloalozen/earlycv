@@ -90,6 +90,10 @@ describe("AdaptarPage submit analytics flow", () => {
     saveGuestPreviewMock.mockResolvedValue({ id: "saved-1" });
     sessionStorage.clear();
     turnstileCallback = null;
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      value: vi.fn(),
+      configurable: true,
+    });
   });
 
   it("requests invisible turnstile token on submit and appends it to FormData", async () => {
@@ -500,6 +504,44 @@ describe("AdaptarPage submit analytics flow", () => {
       name: "Upload",
     });
     expect(uploadButton).toBeTruthy();
+  });
+
+  it("allows re-uploading the same file after switching from text back to upload", async () => {
+    getAuthStatusMock.mockResolvedValueOnce({ userName: null });
+
+    const { container } = render(<AdaptarPage />);
+
+    await screen.findByRole("button", { name: "Upload" });
+
+    const fileInput =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
+
+    if (!fileInput) {
+      throw new Error("Expected file input to exist");
+    }
+
+    const resumeFile = new File(["cv"], "cv.pdf", {
+      type: "application/pdf",
+    });
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [resumeFile],
+      },
+    });
+
+    await screen.findByText("cv.pdf");
+
+    fireEvent.click(screen.getByRole("button", { name: "Digitar texto" }));
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [resumeFile],
+      },
+    });
+
+    expect(await screen.findByText("cv.pdf")).toBeTruthy();
   });
 
   it("persists authenticated analysis before navigating to resultado", async () => {
