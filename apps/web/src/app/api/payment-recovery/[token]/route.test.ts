@@ -16,7 +16,9 @@ describe("GET /api/payment-recovery/[token]", () => {
       vi.fn().mockResolvedValueOnce(
         new Response(null, {
           status: 302,
-          headers: { location: "https://earlycv.com.br/login?returnUrl=%2Ffoo" },
+          headers: {
+            location: "https://earlycv.com.br/entrar?tab=entrar&next=%2Ffoo",
+          },
         }),
       ),
     );
@@ -27,7 +29,7 @@ describe("GET /api/payment-recovery/[token]", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(
-      "https://earlycv.com.br/login?returnUrl=%2Ffoo",
+      "https://earlycv.com.br/entrar?tab=entrar&next=%2Ffoo",
     );
   });
 });

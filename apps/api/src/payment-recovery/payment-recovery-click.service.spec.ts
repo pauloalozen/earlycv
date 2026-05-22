@@ -238,7 +238,7 @@ test("logged out redirects to login with safe internal return url", async () => 
     returnUrl: "https://evil.com",
   });
   assert.equal(result.redirectTarget, "login");
-  assert.match(result.redirectUrl, /returnUrl=%2Fapi%2Fpayment-recovery%2Fbridge%2Fa{64}/);
+  assert.match(result.redirectUrl, /\/entrar\?tab=entrar&next=%2Fapi%2Fpayment-recovery%2Fbridge%2Fa{64}/);
 });
 
 test("logged in as different user gets blocked and mismatch event emitted", async () => {
