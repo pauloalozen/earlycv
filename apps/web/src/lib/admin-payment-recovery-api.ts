@@ -30,6 +30,18 @@ export type PaymentRecoveryPendingResponse = {
   totalPages: number;
 };
 
+type RawPaymentRecoveryItem = Omit<PaymentRecoveryItem, "alreadySent" | "score"> & {
+  score?: number | null;
+  scoreAfter?: number | null;
+  recoveryEmailCount?: number;
+  lastRecoveryEmailSentAt?: string | null;
+  alreadySent?: boolean;
+};
+
+type RawPaymentRecoveryPendingResponse = Omit<PaymentRecoveryPendingResponse, "items"> & {
+  items: RawPaymentRecoveryItem[];
+};
+
 export type PaymentRecoveryActionResult = {
   ok: boolean;
   status?: "sent" | "skipped" | "failed";
@@ -90,9 +102,25 @@ export async function listAdminPaymentRecoveryPending(params: {
   if (params.page) qs.set("page", String(params.page));
   if (params.pageSize) qs.set("pageSize", String(params.pageSize));
 
-  return apiRequest<PaymentRecoveryPendingResponse>(
+  const response = await apiRequest<RawPaymentRecoveryPendingResponse>(
     `/admin/payment-recovery/pending?${qs.toString()}`,
   );
+
+  return {
+    ...response,
+    items: response.items.map((item) => {
+      const alreadySent =
+        item.alreadySent ??
+        (typeof item.recoveryEmailCount === "number"
+          ? item.recoveryEmailCount > 0
+          : Boolean(item.lastRecoveryEmailSentAt));
+      return {
+        ...item,
+        score: item.score ?? item.scoreAfter ?? null,
+        alreadySent,
+      };
+    }),
+  } satisfies PaymentRecoveryPendingResponse;
 }
 
 export async function ignoreAdminPaymentRecoveryPurchase(

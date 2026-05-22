@@ -55,8 +55,9 @@ export async function sendRecoveryEmailAction(
   try {
     const result = await sendAdminPaymentRecoveryEmail(purchaseId);
     revalidatePath("/admin/payment-recovery");
+    const isSuccess = result.status === "sent";
     return {
-      kind: result.ok ? "success" : "error",
+      kind: isSuccess ? "success" : "error",
       message: mapSendMessage(result.status, result.reason),
     };
   } catch (error) {

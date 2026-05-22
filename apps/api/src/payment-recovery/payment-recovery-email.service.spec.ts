@@ -159,6 +159,13 @@ test("real send creates email and token; token persisted as hash", async () => {
 });
 
 test("provider failure returns failed with error message", async () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+  const originalApiUrl = process.env.API_URL;
+  process.env.NODE_ENV = "production";
+  process.env.FRONTEND_URL = "https://earlycv.com.br";
+  process.env.API_URL = "https://api.earlycv.com.br";
+
   const originalFetch = global.fetch;
   global.fetch = (async () => ({ ok: false, status: 500, json: async () => ({ message: "boom" }) })) as any;
   const { service, emails } = makeService();
@@ -167,6 +174,9 @@ test("provider failure returns failed with error message", async () => {
   assert.equal(result.reason, "provider_failure");
   assert.equal(emails[0].errorMessage, "boom");
   global.fetch = originalFetch;
+  process.env.NODE_ENV = originalNodeEnv;
+  process.env.FRONTEND_URL = originalFrontendUrl;
+  process.env.API_URL = originalApiUrl;
 });
 
 test("local environment mocks email send and logs payload", async () => {

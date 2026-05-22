@@ -46,7 +46,14 @@ export class PaymentRecoveryEmailService {
   private async sendViaResend(to: string, subject: string, text: string) {
     const apiKey = process.env.RESEND_API_KEY ?? "";
     const from = process.env.EMAIL_FROM ?? "EarlyCV <noreply@earlycv.com.br>";
-    const isLocalEnv = process.env.NODE_ENV === "development";
+    const frontendUrl = process.env.FRONTEND_URL ?? "";
+    const apiUrl = process.env.API_URL ?? "";
+    const appEnv = process.env.APP_ENV ?? "";
+    const isLocalEnv =
+      process.env.NODE_ENV !== "production" ||
+      appEnv === "development" ||
+      frontendUrl.includes("localhost") ||
+      apiUrl.includes("localhost");
 
     if (isLocalEnv) {
       const mockMessageId = `mock-local-${Date.now()}`;
