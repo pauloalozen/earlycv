@@ -304,6 +304,21 @@ describe("RecoveryTableClient actions", () => {
     expect(await screen.findByText(/nao foi possivel enviar o email/i)).toBeInTheDocument();
   });
 
+  it("renders purchase date in a dedicated first column", async () => {
+    render(
+      <RecoveryTableClient
+        items={[baseItem]}
+        onIgnore={vi.fn(async () => ({ kind: "success", message: "ok" }))}
+        onSendEmail={vi.fn(async () => ({ kind: "success", message: "ok" }))}
+        onUnignore={vi.fn(async () => ({ kind: "success", message: "ok" }))}
+      />,
+    );
+
+    const headers = await screen.findAllByRole("columnheader");
+    expect(headers[0]).toHaveTextContent(/data pedido/i);
+    expect(screen.getByText(/30\/04\/2026, 21:00/i)).toBeInTheDocument();
+  });
+
   it("calls ignore and unignore callbacks", async () => {
     const onIgnore = vi.fn(async () => ({ kind: "success" as const, message: "ignored" }));
     const onUnignore = vi.fn(async () => ({ kind: "success" as const, message: "unignored" }));

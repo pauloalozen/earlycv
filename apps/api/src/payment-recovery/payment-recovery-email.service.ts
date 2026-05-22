@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
 import { buildPaymentRecoveryEmailCopy } from "./payment-recovery-email-copy";
@@ -23,6 +23,8 @@ export type SendPaymentRecoveryEmailResult = {
 
 @Injectable()
 export class PaymentRecoveryEmailService {
+  private readonly logger = new Logger(PaymentRecoveryEmailService.name);
+
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(PaymentRecoveryConfigService)
@@ -44,6 +46,19 @@ export class PaymentRecoveryEmailService {
   private async sendViaResend(to: string, subject: string, text: string) {
     const apiKey = process.env.RESEND_API_KEY ?? "";
     const from = process.env.EMAIL_FROM ?? "EarlyCV <noreply@earlycv.com.br>";
+    const isLocalEnv = process.env.NODE_ENV === "development";
+
+    if (isLocalEnv) {
+      const mockMessageId = `mock-local-${Date.now()}`;
+      this.logger.log(
+        `[payment-recovery-email-mock] from="${from}" to="${to}" subject="${subject}" messageId=${mockMessageId}`,
+      );
+      console.info(
+        `\n📧 [payment-recovery-email-mock] de=${from} para=${to} assunto="${subject}"\n  texto: ${text}\n`,
+      );
+      return mockMessageId;
+    }
+
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {

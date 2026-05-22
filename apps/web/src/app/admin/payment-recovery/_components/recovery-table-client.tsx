@@ -97,6 +97,7 @@ export function RecoveryTableClient({
         <table className="w-full text-sm">
           <thead className="border-b border-stone-100 bg-stone-50 text-left text-xs font-semibold uppercase tracking-wide text-stone-500">
             <tr>
+              <th className="px-3 py-3">Data pedido</th>
               <th className="px-3 py-3">Usuario</th>
               <th className="px-3 py-3">Pedido</th>
               <th className="px-3 py-3">Origem</th>
@@ -111,7 +112,7 @@ export function RecoveryTableClient({
           <tbody className="divide-y divide-stone-100">
             {items.length === 0 ? (
               <tr>
-                <td className="px-3 py-8 text-center text-stone-400" colSpan={9}>
+                <td className="px-3 py-8 text-center text-stone-400" colSpan={10}>
                   Nenhum pedido pendente encontrado para os filtros aplicados.
                 </td>
               </tr>
@@ -123,15 +124,15 @@ export function RecoveryTableClient({
 
               return (
                 <tr className={statusRowClass(item)} key={item.purchaseId}>
+                  <td className="px-3 py-3 text-stone-700">
+                    {formatPurchaseCreatedAt(item.createdAt)}
+                  </td>
                   <td className="px-3 py-3 text-stone-800">
                     {item.userName ?? item.userId}
                     <div className="text-xs text-stone-500">{item.userEmail ?? "—"}</div>
                   </td>
                   <td className="px-3 py-3 text-stone-700">
                     <div className="font-mono text-xs text-stone-600">{item.purchaseId}</div>
-                    <div className="text-xs text-stone-500">
-                      Pedido gerado em {formatPurchaseCreatedAt(item.createdAt)}
-                    </div>
                   </td>
                   <td className="px-3 py-3 text-stone-700">{item.originAction ?? "—"}</td>
                   <td className="px-3 py-3 text-stone-700">{item.jobTitle ?? "—"}</td>

@@ -169,6 +169,39 @@ test("provider failure returns failed with error message", async () => {
   global.fetch = originalFetch;
 });
 
+test("local environment mocks email send and logs payload", async () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "development";
+
+  const originalFetch = global.fetch;
+  global.fetch = (async () => {
+    throw new Error("fetch should not be called in local mock");
+  }) as any;
+
+  const originalInfo = console.info;
+  const infoCalls: string[] = [];
+  console.info = ((message: string) => {
+    infoCalls.push(String(message));
+  }) as typeof console.info;
+
+  try {
+    const { service, emails } = makeService();
+    const result = await service.send({
+      purchaseId: "purchase-1",
+      adminUserId: "admin-1",
+    });
+    assert.equal(result.status, "sent");
+    assert.equal(result.realEmailSent, true);
+    assert.equal((emails[0]?.providerMessageId ?? "").startsWith("mock-local-"), true);
+    assert.equal(infoCalls.length > 0, true);
+    assert.equal(infoCalls.some((entry) => entry.includes("[payment-recovery-email-mock]")), true);
+  } finally {
+    process.env.NODE_ENV = originalNodeEnv;
+    global.fetch = originalFetch;
+    console.info = originalInfo;
+  }
+});
+
 test("copy supports jobTitle fallback and score sentence variants without forbidden phrases", () => {
   const a = buildPaymentRecoveryEmailCopy({
     firstName: null,
