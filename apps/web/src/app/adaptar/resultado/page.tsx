@@ -1273,6 +1273,7 @@ export default function ResultadoPage() {
       >
         <AppHeader
           userName={userName}
+          userRole={internalRole}
           availableCredits={availableCreditsDisplay}
         />
 

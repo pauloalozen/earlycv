@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/logo";
+import type { AppInternalRole } from "@/lib/app-session";
 
 const MONO = "var(--font-geist-mono), monospace";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 
 type Props = {
   userName?: string | null;
+  userRole?: AppInternalRole | null;
   logoSize?: "sm" | "md";
   backgroundColor?: string;
   variant?: "dark" | "light";
@@ -18,6 +20,7 @@ const CREDIT_REDEEMED_EVENT = "dashboard:credit-redeemed";
 
 export function AppHeader({
   userName,
+  userRole,
   logoSize = "md",
   backgroundColor = "rgba(243,242,237,0.95)",
   variant = "dark",
@@ -32,6 +35,8 @@ export function AppHeader({
 
   const mobileBg =
     backgroundColor !== "transparent" ? backgroundColor : "#f9f8f4";
+  const canAccessAdmin = userRole === "admin" || userRole === "superadmin";
+  const canAccessSuperadmin = userRole === "superadmin";
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -446,6 +451,34 @@ export function AppHeader({
                         </>
                       ),
                     },
+                    ...(canAccessAdmin
+                      ? [
+                          {
+                            href: "/admin",
+                            label: "Admin",
+                            icon: (
+                              <>
+                                <rect x="4" y="3" width="16" height="18" rx="2" />
+                                <path d="M9 8h6" />
+                                <path d="M9 12h6" />
+                              </>
+                            ),
+                          },
+                        ]
+                      : []),
+                    ...(canAccessSuperadmin
+                      ? [
+                          {
+                            href: "/superadmin",
+                            label: "Superadmin",
+                            icon: (
+                              <>
+                                <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 16l-4.9 2.2.9-5.5-4-3.9 5.5-.8z" />
+                              </>
+                            ),
+                          },
+                        ]
+                      : []),
                   ].map((item) => (
                     <a
                       key={item.href}
@@ -753,6 +786,34 @@ export function AppHeader({
                   </>
                 ),
               },
+              ...(canAccessAdmin
+                ? [
+                    {
+                      href: "/admin",
+                      label: "Admin",
+                      icon: (
+                        <>
+                          <rect x="4" y="3" width="16" height="18" rx="2" />
+                          <path d="M9 8h6" />
+                          <path d="M9 12h6" />
+                        </>
+                      ),
+                    },
+                  ]
+                : []),
+              ...(canAccessSuperadmin
+                ? [
+                    {
+                      href: "/superadmin",
+                      label: "Superadmin",
+                      icon: (
+                        <>
+                          <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 16l-4.9 2.2.9-5.5-4-3.9 5.5-.8z" />
+                        </>
+                      ),
+                    },
+                  ]
+                : []),
             ].map((item) => (
               <a
                 key={item.href}

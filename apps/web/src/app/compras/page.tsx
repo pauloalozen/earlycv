@@ -165,7 +165,11 @@ export default async function ComprasPage() {
           position: "relative",
         }}
       >
-        <AppHeader userName={user.name} availableCredits={availableCredits} />
+        <AppHeader
+          userName={user.name}
+          userRole={user.internalRole}
+          availableCredits={availableCredits}
+        />
 
         <div
           className="compras-content"
