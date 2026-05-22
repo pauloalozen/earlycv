@@ -8,7 +8,10 @@ import type { RecoveryActionUiResult } from "../actions";
 
 type Props = {
   items: PaymentRecoveryItem[];
-  onSendEmail: (purchaseId: string) => Promise<RecoveryActionUiResult>;
+  onSendEmail: (
+    purchaseId: string,
+    forceResend?: boolean,
+  ) => Promise<RecoveryActionUiResult>;
   onIgnore: (purchaseId: string, reason?: string) => Promise<RecoveryActionUiResult>;
   onUnignore: (purchaseId: string) => Promise<RecoveryActionUiResult>;
 };
@@ -53,6 +56,7 @@ export function RecoveryTableClient({
   const router = useRouter();
 
   const [modalPurchase, setModalPurchase] = useState<PaymentRecoveryItem | null>(null);
+  const [confirmResendPurchaseId, setConfirmResendPurchaseId] = useState<string | null>(null);
 
   const fallbackError: RecoveryActionUiResult = {
     kind: "error",
@@ -145,7 +149,10 @@ export function RecoveryTableClient({
                       <button
                         className="rounded-md bg-stone-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
                         disabled={sendDisabled || rowPending}
-                        onClick={() => setModalPurchase(item)}
+                        onClick={() => {
+                          setConfirmResendPurchaseId(null);
+                          setModalPurchase(item);
+                        }}
                         type="button"
                       >
                         Enviar email
@@ -202,23 +209,48 @@ export function RecoveryTableClient({
               Aviso: ambiente pode estar em dry-run ou com allowlist, sem envio real.
             </p>
             <div className="mt-4 flex justify-end gap-2">
-              <button className="rounded-md border border-stone-300 px-3 py-2 text-sm" onClick={() => setModalPurchase(null)} type="button">Cancelar</button>
+              <button
+                className="rounded-md border border-stone-300 px-3 py-2 text-sm"
+                onClick={() => {
+                  setConfirmResendPurchaseId(null);
+                  setModalPurchase(null);
+                }}
+                type="button"
+              >
+                Cancelar
+              </button>
               <button
                 className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white"
                 disabled={pendingPurchaseId === modalPurchase.purchaseId}
                 onClick={() => {
                   const purchaseId = modalPurchase.purchaseId;
+                  const shouldConfirmResend =
+                    modalPurchase.alreadySent && confirmResendPurchaseId !== purchaseId;
+                  if (shouldConfirmResend) {
+                    setConfirmResendPurchaseId(purchaseId);
+                    return;
+                  }
                   runAction(
                     purchaseId,
-                    () => onSendEmail(purchaseId),
-                    () => setModalPurchase(null),
+                    () => onSendEmail(purchaseId, modalPurchase.alreadySent),
+                    () => {
+                      setConfirmResendPurchaseId(null);
+                      setModalPurchase(null);
+                    },
                   );
                 }}
                 type="button"
               >
-                Confirmar envio
+                {confirmResendPurchaseId === modalPurchase.purchaseId
+                  ? "Reenviar mesmo assim"
+                  : "Confirmar envio"}
               </button>
             </div>
+            {confirmResendPurchaseId === modalPurchase.purchaseId ? (
+              <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Este email ja foi enviado anteriormente. Tem certeza que deseja reenviar?
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}

@@ -51,9 +51,10 @@ function mapSendMessage(status?: string, reason?: string) {
 
 export async function sendRecoveryEmailAction(
   purchaseId: string,
+  forceResend = false,
 ): Promise<RecoveryActionUiResult> {
   try {
-    const result = await sendAdminPaymentRecoveryEmail(purchaseId);
+    const result = await sendAdminPaymentRecoveryEmail(purchaseId, forceResend);
     revalidatePath("/admin/payment-recovery");
     const isSuccess = result.status === "sent";
     return {

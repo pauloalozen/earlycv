@@ -6,7 +6,7 @@ import { buildPaymentRecoveryEmailCopy } from "./payment-recovery-email-copy";
 import { PaymentRecoveryConfigService } from "./payment-recovery.config";
 import { PaymentRecoveryEligibilityService } from "./payment-recovery-eligibility.service";
 
-type SendInput = { purchaseId: string; adminUserId: string };
+type SendInput = { purchaseId: string; adminUserId: string; forceResend?: boolean };
 
 export type SendPaymentRecoveryEmailResult = {
   success: boolean;
@@ -82,6 +82,8 @@ export class PaymentRecoveryEmailService {
   }
 
   async send(input: SendInput): Promise<SendPaymentRecoveryEmailResult> {
+    const forceResend = input.forceResend === true;
+
     const purchase = await this.database.planPurchase.findUnique({
       where: { id: input.purchaseId },
       include: {
@@ -159,8 +161,8 @@ export class PaymentRecoveryEmailService {
       let reason = "ok";
       if (ignored) reason = "ignored";
       else if (eligibilityStatus !== "eligible") reason = eligibilityReason;
-      else if (hasRealSent) reason = "already_sent";
-      else if (hasCooldown) reason = "cooldown_active";
+      else if (!forceResend && hasRealSent) reason = "already_sent";
+      else if (!forceResend && hasCooldown) reason = "cooldown_active";
       else if (!emailEnabled) reason = "email_disabled";
       else if (dryRun) reason = "dry_run";
       else if (!allowlistMatched) reason = "allowlist_blocked";

@@ -30,7 +30,25 @@ describe("payment recovery actions", () => {
 
     expect(result.kind).toBe("success");
     expect(result.message).toMatch(/email enviado com sucesso/i);
+    expect(sendAdminPaymentRecoveryEmailMock).toHaveBeenCalledWith(
+      "purchase-1",
+      false,
+    );
     expect(revalidatePathMock).toHaveBeenCalledWith("/admin/payment-recovery");
+  });
+
+  it("forwards forceResend when requested", async () => {
+    sendAdminPaymentRecoveryEmailMock.mockResolvedValueOnce({
+      status: "sent",
+      reason: "sent",
+    });
+
+    await sendRecoveryEmailAction("purchase-1", true);
+
+    expect(sendAdminPaymentRecoveryEmailMock).toHaveBeenCalledWith(
+      "purchase-1",
+      true,
+    );
   });
 
   it("returns error kind for skipped responses", async () => {

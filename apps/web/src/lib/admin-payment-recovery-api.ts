@@ -143,9 +143,15 @@ export async function unignoreAdminPaymentRecoveryPurchase(purchaseId: string) {
   );
 }
 
-export async function sendAdminPaymentRecoveryEmail(purchaseId: string) {
+export async function sendAdminPaymentRecoveryEmail(
+  purchaseId: string,
+  forceResend = false,
+) {
   return apiRequest<PaymentRecoveryActionResult>(
     `/admin/payment-recovery/${purchaseId}/send-email`,
-    { method: "POST" },
+    {
+      method: "POST",
+      body: JSON.stringify(forceResend ? { forceResend: true } : {}),
+    },
   );
 }
