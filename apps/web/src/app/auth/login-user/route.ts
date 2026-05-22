@@ -4,10 +4,25 @@ import { loginWithPassword, parseAuthApiError } from "@/lib/auth-api";
 import { createPostRedirectResponse } from "@/lib/route-response";
 
 function sanitizeNext(next: string | undefined): string {
-  if (!next?.startsWith("/") || next.startsWith("//")) {
+  const raw = next?.trim();
+  if (!raw) {
     return "/dashboard";
   }
-  return next;
+
+  const normalized = raw.startsWith("%")
+    ? (() => {
+        try {
+          return decodeURIComponent(raw);
+        } catch {
+          return raw;
+        }
+      })()
+    : raw;
+
+  if (!normalized.startsWith("/") || normalized.startsWith("//")) {
+    return "/dashboard";
+  }
+  return normalized;
 }
 
 export async function POST(request: Request) {
