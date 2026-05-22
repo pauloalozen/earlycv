@@ -96,6 +96,8 @@ type PlanConfigEntry = {
   analysisCreditsGranted: number;
 };
 
+const CHECKOUT_REUSE_WINDOW_MINUTES = 15;
+
 function getPlanConfig(): Record<PlanId, PlanConfigEntry> {
   return {
     starter: {
@@ -226,11 +228,16 @@ export class PlansService {
       );
     }
 
+    const recentThreshold = new Date(
+      Date.now() - CHECKOUT_REUSE_WINDOW_MINUTES * 60 * 1000,
+    );
+
     const existing = await this.database.planPurchase.findFirst({
       where: {
         userId,
         planType: planId as UserPlanType,
         status: { in: ["none", "pending"] },
+        createdAt: { gte: recentThreshold },
         originAction: adaptationId ? "unlock_cv" : "buy_credits",
         originAdaptationId: adaptationId ?? null,
       },

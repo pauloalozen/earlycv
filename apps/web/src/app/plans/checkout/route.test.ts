@@ -32,13 +32,8 @@ describe("/plans/checkout route", () => {
     expect(createPlanCheckoutMock).not.toHaveBeenCalled();
   });
 
-  it("redirects authenticated GET to brick checkout page", async () => {
+  it("redirects authenticated GET to planos without creating checkout", async () => {
     getCurrentAppUserFromCookiesMock.mockResolvedValueOnce({ id: "u1" });
-    createPlanCheckoutMock.mockResolvedValueOnce({
-      checkoutUrl: "https://mp.example/legacy",
-      purchaseId: "purchase_123",
-      checkoutMode: "brick",
-    });
 
     const response = await GET(
       new Request("http://localhost/plans/checkout?plan=starter"),
@@ -46,17 +41,13 @@ describe("/plans/checkout route", () => {
 
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(
-      "http://localhost/pagamento/checkout/purchase_123",
+      "http://localhost/planos?plan=starter",
     );
-    expect(createPlanCheckoutMock).toHaveBeenCalledWith("starter", undefined);
+    expect(createPlanCheckoutMock).not.toHaveBeenCalled();
   });
 
-  it("redirects to checkout error for non-brick GET checkout mode", async () => {
+  it("redirects authenticated GET keeping valid plan query for UI continuity", async () => {
     getCurrentAppUserFromCookiesMock.mockResolvedValueOnce({ id: "u1" });
-    createPlanCheckoutMock.mockResolvedValueOnce({
-      checkoutUrl: "https://mp.example/fallback",
-      purchaseId: "purchase_123",
-    });
 
     const response = await GET(
       new Request("http://localhost/plans/checkout?plan=turbo"),
@@ -64,9 +55,9 @@ describe("/plans/checkout route", () => {
 
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(
-      "http://localhost/planos?error=checkout-failed",
+      "http://localhost/planos?plan=turbo",
     );
-    expect(createPlanCheckoutMock).toHaveBeenCalledWith("turbo", undefined);
+    expect(createPlanCheckoutMock).not.toHaveBeenCalled();
   });
 
   it("ignores direct MP env links and creates checkout on POST", async () => {

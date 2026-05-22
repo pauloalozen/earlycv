@@ -770,23 +770,49 @@ export function LandingVariantB() {
                   ))}
                 </ul>
 
-                <Link
-                  href={plan.cta_link}
-                  style={{
-                    display: "block",
-                    textAlign: "center",
-                    background: plan.featured ? "#c6ff3a" : "#0a0a0a",
-                    color: plan.featured ? "#0a0a0a" : "#fff",
-                    borderRadius: 8,
-                    padding: "10px 16px",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    textDecoration: "none",
-                    letterSpacing: -0.1,
-                  }}
-                >
-                  {plan.cta_lading}
-                </Link>
+                {plan.checkoutPlanId ? (
+                  <form action="/plans/checkout" method="post">
+                    <input type="hidden" name="planId" value={plan.checkoutPlanId} />
+                    <button
+                      type="submit"
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        textAlign: "center",
+                        background: plan.featured ? "#c6ff3a" : "#0a0a0a",
+                        color: plan.featured ? "#0a0a0a" : "#fff",
+                        borderRadius: 8,
+                        padding: "10px 16px",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        textDecoration: "none",
+                        letterSpacing: -0.1,
+                        border: "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {plan.cta_lading}
+                    </button>
+                  </form>
+                ) : (
+                  <Link
+                    href={plan.cta_link}
+                    style={{
+                      display: "block",
+                      textAlign: "center",
+                      background: plan.featured ? "#c6ff3a" : "#0a0a0a",
+                      color: plan.featured ? "#0a0a0a" : "#fff",
+                      borderRadius: 8,
+                      padding: "10px 16px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      textDecoration: "none",
+                      letterSpacing: -0.1,
+                    }}
+                  >
+                    {plan.cta_lading}
+                  </Link>
+                )}
               </div>
             ))}
           </div>

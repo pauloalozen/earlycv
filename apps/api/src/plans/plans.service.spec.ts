@@ -748,6 +748,140 @@ test("createCheckout without adaptationId reuses only buy_credits purchase", asy
   assert.equal(receivedWhere?.originAdaptationId, null);
 });
 
+test("createCheckout reuses recent pending buy_credits checkout on repeated calls", async () => {
+  const purchases: Array<{
+    id: string;
+    userId: string;
+    planType: string;
+    status: string;
+    originAction: string;
+    originAdaptationId: string | null;
+    paymentReference: string;
+    createdAt: Date;
+  }> = [];
+
+  let createCalls = 0;
+
+  const service = new PlansService(
+    {
+      planPurchase: {
+        findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+          const createdAtFilter = where.createdAt as { gte?: Date } | undefined;
+          const gte = createdAtFilter?.gte;
+          return (
+            purchases.find((purchase) => {
+              if (purchase.userId !== where.userId) return false;
+              if (purchase.planType !== where.planType) return false;
+              if (purchase.originAction !== where.originAction) return false;
+              if (purchase.originAdaptationId !== where.originAdaptationId)
+                return false;
+              if (purchase.status !== "none" && purchase.status !== "pending")
+                return false;
+              if (gte && purchase.createdAt < gte) return false;
+              return true;
+            }) ?? null
+          );
+        },
+        updateMany: async () => ({ count: 1 }),
+        create: async () => {
+          createCalls += 1;
+          const purchase = {
+            id: `purchase-${createCalls}`,
+            userId: "user-1",
+            planType: "starter",
+            status: "none",
+            originAction: "buy_credits",
+            originAdaptationId: null,
+            paymentReference: `pay-ref-${createCalls}`,
+            createdAt: new Date(),
+          };
+          purchases.push(purchase);
+          return purchase;
+        },
+      },
+      user: {
+        findUnique: async () => ({ email: "a@b.com", name: "User" }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-reuse-1" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      createMercadoPagoPreference: (
+        purchaseId: string,
+        paymentReference: string,
+        plan: { label: string; amountInCents: number },
+      ) => Promise<string>;
+    }
+  ).createMercadoPagoPreference = async (purchaseId) =>
+    `https://mp.test/checkout/${purchaseId}`;
+
+  const first = await service.createCheckout("user-1", "starter");
+  const second = await service.createCheckout("user-1", "starter");
+
+  assert.equal(createCalls, 1);
+  assert.equal(first.purchaseId, second.purchaseId);
+});
+
+test("createCheckout does not reuse stale pending buy_credits checkout", async () => {
+  let createCalls = 0;
+  const stalePurchase = {
+    id: "purchase-stale-1",
+    userId: "user-1",
+    planType: "starter",
+    status: "pending",
+    originAction: "buy_credits",
+    originAdaptationId: null,
+    paymentReference: "pay-ref-stale-1",
+    createdAt: new Date(Date.now() - 16 * 60 * 1000),
+  };
+
+  const service = new PlansService(
+    {
+      planPurchase: {
+        findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+          const createdAtFilter = where.createdAt as { gte?: Date } | undefined;
+          const gte = createdAtFilter?.gte;
+          if (!gte) return stalePurchase;
+          return stalePurchase.createdAt >= gte ? stalePurchase : null;
+        },
+        create: async () => {
+          createCalls += 1;
+          return {
+            id: "purchase-fresh-1",
+            paymentReference: "pay-ref-fresh-1",
+          };
+        },
+      },
+      user: {
+        findUnique: async () => ({ email: "a@b.com", name: "User" }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-reuse-2" }, ingested: true }),
+    } as never,
+  );
+
+  (
+    service as {
+      createMercadoPagoPreference: (
+        purchaseId: string,
+        paymentReference: string,
+        plan: { label: string; amountInCents: number },
+      ) => Promise<string>;
+    }
+  ).createMercadoPagoPreference = async (purchaseId) =>
+    `https://mp.test/checkout/${purchaseId}`;
+
+  const result = await service.createCheckout("user-1", "starter");
+
+  assert.equal(createCalls, 1);
+  assert.equal(result.purchaseId, "purchase-fresh-1");
+});
+
 test("createMercadoPagoPreference uses shared return config and preserves checkoutId query", async () => {
   const originalFrontendUrl = process.env.FRONTEND_URL;
   const originalApiUrl = process.env.API_URL;
