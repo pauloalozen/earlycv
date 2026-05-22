@@ -20,6 +20,7 @@ import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import { IgnorePaymentRecoveryDto } from "./dto/ignore-payment-recovery.dto";
 import { ListPaymentRecoveryDto } from "./dto/list-payment-recovery.dto";
+import { SendPaymentRecoveryEmailDto } from "./dto/send-payment-recovery-email.dto";
 import { PaymentRecoveryAdminEventsService } from "./payment-recovery-admin-events.service";
 import { PaymentRecoveryConfigService } from "./payment-recovery.config";
 import { PaymentRecoveryEmailService } from "./payment-recovery-email.service";
@@ -120,9 +121,20 @@ export class PaymentRecoveryAdminController {
   async sendEmail(
     @Param("purchaseId") purchaseId: string,
     @AuthenticatedUser() adminUser: AuthenticatedRequestUser,
+    @Body(
+      new ValidationPipe({
+        ...paymentRecoveryValidationOptions,
+        expectedType: SendPaymentRecoveryEmailDto,
+      }),
+    )
+    body: SendPaymentRecoveryEmailDto = {},
   ) {
     this.assertAdminFeatureEnabled();
-    const result = await this.emailService.send({ purchaseId, adminUserId: adminUser.id });
+    const result = await this.emailService.send({
+      purchaseId,
+      adminUserId: adminUser.id,
+      forceResend: body.forceResend === true,
+    });
     this.events.emailSendRequested({
       adminUserId: adminUser.id,
       purchaseId,

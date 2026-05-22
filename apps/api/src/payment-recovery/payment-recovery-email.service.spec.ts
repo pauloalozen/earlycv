@@ -164,6 +164,41 @@ test("second real send same group blocked already_sent and cooldown blocks repea
   assert.equal(second.reason, "cooldown_active");
 });
 
+test("force resend bypasses already_sent and cooldown guards", async () => {
+  const oldReal = { realEmailSent: true, createdAt: new Date(Date.now() - 3_600_000) };
+  const recent = { realEmailSent: false, createdAt: new Date() };
+
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+  const originalApiUrl = process.env.API_URL;
+  process.env.NODE_ENV = "production";
+  process.env.FRONTEND_URL = "https://earlycv.com.br";
+  process.env.API_URL = "https://api.earlycv.com.br";
+
+  const originalFetch = global.fetch;
+  global.fetch = (async () => ({ ok: true, json: async () => ({ id: "provider-force" }) })) as any;
+
+  try {
+    const first = await makeService({ priorEmails: [oldReal] }).service.send({
+      purchaseId: "purchase-1",
+      adminUserId: "admin-1",
+      forceResend: true,
+    } as any);
+    const second = await makeService({ priorEmails: [recent] }).service.send({
+      purchaseId: "purchase-1",
+      adminUserId: "admin-1",
+      forceResend: true,
+    } as any);
+    assert.equal(first.status, "sent");
+    assert.equal(second.status, "sent");
+  } finally {
+    global.fetch = originalFetch;
+    process.env.NODE_ENV = originalNodeEnv;
+    process.env.FRONTEND_URL = originalFrontendUrl;
+    process.env.API_URL = originalApiUrl;
+  }
+});
+
 test("transactional gate re-check prevents duplicate real send on double attempt", async () => {
   const { service, emails } = makeService();
   const originalFetch = global.fetch;

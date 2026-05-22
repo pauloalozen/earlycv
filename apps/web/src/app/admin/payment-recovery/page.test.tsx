@@ -195,7 +195,12 @@ describe("RecoveryTableClient actions", () => {
   });
 
   it("opens send modal preview and calls send endpoint callback", async () => {
-    const onSendEmail = vi.fn(async () => ({ kind: "success" as const, message: "sent" }));
+    const onSendEmail = vi.fn(
+      async (_purchaseId: string, _forceResend?: boolean) => ({
+        kind: "success" as const,
+        message: "sent",
+      }),
+    );
     render(
       <RecoveryTableClient
         items={[baseItem]}
@@ -212,8 +217,36 @@ describe("RecoveryTableClient actions", () => {
     fireEvent.click(screen.getByRole("button", { name: /confirmar envio/i }));
 
     await waitFor(() => {
-      expect(onSendEmail).toHaveBeenCalledWith("purchase-1");
+      expect(onSendEmail).toHaveBeenCalledWith("purchase-1", false);
       expect(refreshMock).toHaveBeenCalled();
+    });
+  });
+
+  it("asks confirmation before resending when email was already sent", async () => {
+    const onSendEmail = vi.fn(
+      async (_purchaseId: string, _forceResend?: boolean) => ({
+        kind: "success" as const,
+        message: "resent",
+      }),
+    );
+    render(
+      <RecoveryTableClient
+        items={[{ ...baseItem, alreadySent: true }]}
+        onIgnore={vi.fn(async () => ({ kind: "success", message: "ok" }))}
+        onSendEmail={onSendEmail}
+        onUnignore={vi.fn(async () => ({ kind: "success", message: "ok" }))}
+      />,
+    );
+
+    fireEvent.click((await screen.findAllByRole("button", { name: /enviar email/i }))[0]);
+    fireEvent.click(await screen.findByRole("button", { name: /confirmar envio/i }));
+
+    expect(await screen.findByText(/ja foi enviado anteriormente/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /reenviar mesmo assim/i }));
+
+    await waitFor(() => {
+      expect(onSendEmail).toHaveBeenCalledWith("purchase-1", true);
     });
   });
 
