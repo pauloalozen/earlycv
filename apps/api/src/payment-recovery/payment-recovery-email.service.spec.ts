@@ -269,4 +269,6 @@ test("copy supports jobTitle fallback and score sentence variants without forbid
   assert.equal(b.text.includes("+12 pontos"), true);
   assert.equal(a.text.includes("improvementPercent"), false);
   assert.equal(a.text.toLowerCase().includes("company"), false);
+  assert.equal(a.html.includes("Retomar pagamento agora"), true);
+  assert.equal(a.html.includes("<a href=\"https://x\""), true);
 });
