@@ -39,7 +39,7 @@ export class PaymentRecoveryEmailService {
 
   private shouldSendReal(emailEnabled: boolean, dryRun: boolean, allowlistMatched: boolean) {
     if (!emailEnabled) return false;
-    if (!dryRun) return allowlistMatched;
+    if (dryRun) return false;
     return allowlistMatched;
   }
 
@@ -130,7 +130,8 @@ export class PaymentRecoveryEmailService {
 
     const scoreJson = (adaptation?.adaptedContentJson ?? {}) as Record<string, unknown>;
     const firstName = purchase.user.name?.split(" ")[0] ?? null;
-    const recoveryLink = `https://earlycv.com.br/recovery/${tokenRaw}`;
+    const frontendUrl = process.env.FRONTEND_URL ?? "https://earlycv.com.br";
+    const recoveryLink = `${frontendUrl}/api/payment-recovery/${tokenRaw}`;
     const copy = buildPaymentRecoveryEmailCopy({
       firstName,
       jobTitle: adaptation?.jobTitle ?? null,
@@ -161,6 +162,7 @@ export class PaymentRecoveryEmailService {
       else if (hasRealSent) reason = "already_sent";
       else if (hasCooldown) reason = "cooldown_active";
       else if (!emailEnabled) reason = "email_disabled";
+      else if (dryRun) reason = "dry_run";
       else if (!allowlistMatched) reason = "allowlist_blocked";
 
       const token = await tx.paymentRecoveryToken.create({
