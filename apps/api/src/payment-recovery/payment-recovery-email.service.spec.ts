@@ -137,7 +137,7 @@ test("recovery link points to public payment recovery endpoint", async () => {
     const result = await service.send({ purchaseId: "purchase-1", adminUserId: "admin-1" });
     assert.equal(result.status, "sent");
     assert.equal(typeof payload?.text, "string");
-    assert.equal(payload.text.includes("https://earlycv.com.br/api/payment-recovery/"), true);
+    assert.equal(payload.text.includes("https://earlycv.com.br/recovery/"), true);
   } finally {
     global.fetch = originalFetch;
     process.env.NODE_ENV = originalNodeEnv;
