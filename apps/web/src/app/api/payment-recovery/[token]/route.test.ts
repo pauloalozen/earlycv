@@ -52,4 +52,28 @@ describe("GET /api/payment-recovery/[token]", () => {
       }),
     );
   });
+
+  it("returns not found for generic recovery redirect", async () => {
+    process.env.API_URL = "https://api.earlycv.com.br";
+    cookiesMock.mockResolvedValueOnce({
+      get: vi.fn().mockReturnValue({ value: "access-token-1" }),
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: {
+            location: "https://earlycv.com.br/recuperar-pagamento",
+          },
+        }),
+      ),
+    );
+
+    const response = await GET(new Request("http://localhost/api/payment-recovery/token-1"), {
+      params: Promise.resolve({ token: "token-1" }),
+    });
+
+    expect(response.status).toBe(404);
+  });
 });

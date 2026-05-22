@@ -46,6 +46,14 @@ export async function GET(
 
   const location = response.headers.get("location");
   if (location) {
+    try {
+      const locationUrl = new URL(location, incomingUrl);
+      if (locationUrl.pathname === "/recuperar-pagamento") {
+        return new NextResponse("Not Found", { status: 404 });
+      }
+    } catch {
+      return new NextResponse("Not Found", { status: 404 });
+    }
     return NextResponse.redirect(location, response.status);
   }
 

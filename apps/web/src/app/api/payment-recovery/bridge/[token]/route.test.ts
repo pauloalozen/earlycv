@@ -56,7 +56,7 @@ describe("GET /api/payment-recovery/bridge/[token]", () => {
     );
   });
 
-  it("redirects to generic recovery page when bridge token is invalid", async () => {
+  it("returns not found when bridge token is invalid", async () => {
     process.env.API_URL = "https://api.earlycv.com.br";
     cookiesMock.mockResolvedValueOnce({
       get: vi.fn().mockReturnValue({ value: "access-token-1" }),
@@ -78,9 +78,6 @@ describe("GET /api/payment-recovery/bridge/[token]", () => {
       },
     );
 
-    expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(
-      "http://localhost/recuperar-pagamento?status=token-invalido",
-    );
+    expect(response.status).toBe(404);
   });
 });
