@@ -131,7 +131,7 @@ export class PaymentRecoveryEmailService {
     const scoreJson = (adaptation?.adaptedContentJson ?? {}) as Record<string, unknown>;
     const firstName = purchase.user.name?.split(" ")[0] ?? null;
     const frontendUrl = process.env.FRONTEND_URL ?? "https://earlycv.com.br";
-    const recoveryLink = `${frontendUrl}/api/payment-recovery/${tokenRaw}`;
+    const recoveryLink = `${frontendUrl}/recovery/${tokenRaw}`;
     const copy = buildPaymentRecoveryEmailCopy({
       firstName,
       jobTitle: adaptation?.jobTitle ?? null,
