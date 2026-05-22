@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Card } from "@/components/ui";
-import { listCompanies, listJobSources } from "@/lib/admin-ingestion-api";
+import { getCompany, listJobSources } from "@/lib/admin-ingestion-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import {
   getAdminDataErrorKind,
@@ -13,6 +13,10 @@ import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 
 export const metadata = buildAdminMetadata("Detalhe da fonte");
+
+function isApiNotFoundError(error: unknown) {
+  return error instanceof Error && error.message.startsWith("API 404:");
+}
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -65,14 +69,16 @@ export default async function AdminSourceAliasPage({
       redirect(`/admin/empresas/${id}`);
     }
 
-    const companies = await listCompanies();
-    const company = companies.find((item) => item.id === id) ?? null;
-
-    if (company) {
+    try {
+      await getCompany(id);
       redirect(`/admin/empresas/${id}`);
-    }
+    } catch (error) {
+      if (isApiNotFoundError(error)) {
+        notFound();
+      }
 
-    notFound();
+      throw error;
+    }
   } catch (error) {
     if (isInvalidAdminTokenError(error) || isMissingAdminRoleError(error)) {
       const state = buildAdminStateModel(

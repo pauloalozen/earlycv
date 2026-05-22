@@ -235,6 +235,10 @@ export async function listCompanies(token?: string) {
   return apiRequest<CompanyRecord[]>("/companies", token);
 }
 
+export async function getCompany(companyId: string, token?: string) {
+  return apiRequest<CompanyRecord>(`/companies/${companyId}`, token);
+}
+
 export async function listJobs(token?: string) {
   return apiRequest<JobRecord[]>("/jobs", token);
 }
