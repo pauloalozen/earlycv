@@ -160,6 +160,18 @@ enum PaymentProvider {
   stripe
 }
 
+enum PaymentRecoveryEligibilityStatus {
+  eligible
+  possibly_resolved
+  not_eligible
+}
+
+enum PaymentRecoveryEmailStatus {
+  sent
+  failed
+  skipped
+}
+
 enum PlanPurchaseOriginAction {
   buy_credits
   unlock_cv
@@ -279,6 +291,75 @@ model PlanPurchase {
   @@index([originAdaptationId])
   @@index([paymentReference])
   @@index([mpPaymentId])
+}
+
+model PaymentRecoveryEmail {
+  id                String                     @id @default(cuid())
+  purchaseId        String
+  userId            String
+  adaptationId      String?
+  recoveryGroupKey  String
+  step              String                     @default("manual_admin")
+  status            PaymentRecoveryEmailStatus
+  sentByAdminUserId String
+  sentAt            DateTime?
+  dryRun            Boolean                    @default(true)
+  allowlistMatched  Boolean                    @default(false)
+  realEmailSent     Boolean                    @default(false)
+  providerMessageId String?
+  errorMessage      String?
+  subject           String?
+  preheader         String?
+  templateVariables Json?
+  tokenId           String?                    @unique
+  clickedAt         DateTime?
+  metadataJson      Json?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  token             PaymentRecoveryToken?      @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+
+  @@index([purchaseId, createdAt])
+  @@index([userId, createdAt])
+  @@index([adaptationId])
+  @@index([recoveryGroupKey, createdAt])
+}
+
+model PaymentRecoveryToken {
+  id           String   @id @default(cuid())
+  purchaseId   String
+  userId       String
+  adaptationId String?
+  recoveryGroupKey String
+  tokenHash    String   @unique
+  emailRecordId String? @unique
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  emailRecord  PaymentRecoveryEmail?
+
+  @@index([purchaseId, createdAt])
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@index([recoveryGroupKey, createdAt])
+}
+
+model PaymentRecoveryIgnore {
+  id               String   @id @default(cuid())
+  purchaseId       String   @unique
+  userId           String
+  adaptationId     String?
+  reason           String?
+  ignoredByAdminId String
+  ignoredAt        DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([userId])
+  @@index([adaptationId])
+  @@index([ignoredAt])
 }
 
 model PaymentAuditLog {

@@ -6,6 +6,7 @@ import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
+import type { AppInternalRole } from "@/lib/app-session";
 import { trackEvent } from "@/lib/analytics-tracking";
 import {
   analyzeAuthenticatedCv,
@@ -131,6 +132,7 @@ export default function AdaptarPage() {
   const [availableCredits, setAvailableCredits] = useState<
     number | "∞" | "—" | undefined
   >(undefined);
+  const [userRole, setUserRole] = useState<AppInternalRole | null>(null);
   const [masterResume, setMasterResume] = useState<
     ResumeDto | null | undefined
   >(undefined);
@@ -317,6 +319,7 @@ export default function AdaptarPage() {
       getMyMasterResume().catch(() => null as ResumeDto | null),
     ]).then(([status, resume]) => {
       setUserName(status.userName ?? null);
+      setUserRole(status.internalRole ?? null);
       setAvailableCredits(status.availableCreditsDisplay);
       setMasterResume(resume ?? null);
       if (status.userName && resume) {
@@ -627,7 +630,11 @@ export default function AdaptarPage() {
           }}
         />
 
-        <AppHeader userName={userName} availableCredits={availableCredits} />
+        <AppHeader
+          userName={userName}
+          userRole={userRole}
+          availableCredits={availableCredits}
+        />
         <div
           ref={turnstileContainerRef}
           aria-hidden
@@ -1324,7 +1331,7 @@ export default function AdaptarPage() {
                           emitUiFunnelEvent("job_description_filled");
                         }
                       }}
-                      placeholder="Cole a vaga completa (isso melhora sua análise)..."
+                      placeholder="Cole a vaga completa"
                       style={{
                         width: "100%",
                         border: "none",

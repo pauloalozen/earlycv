@@ -105,7 +105,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
           flexDirection: "column",
         }}
       >
-        <AppHeader userName={user?.name} />
+        <AppHeader userName={user?.name} userRole={user?.internalRole ?? null} />
 
         <div
           className="planos-content"

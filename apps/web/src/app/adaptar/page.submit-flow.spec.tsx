@@ -121,7 +121,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const { container } = render(<AdaptarPage />);
 
     const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa (isso melhora sua análise)...",
+      "Cole a vaga completa",
     );
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
@@ -174,7 +174,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const { container } = render(<AdaptarPage />);
 
     const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa (isso melhora sua análise)...",
+      "Cole a vaga completa",
     );
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
@@ -212,7 +212,7 @@ describe("AdaptarPage submit analytics flow", () => {
     render(<AdaptarPage />);
 
     const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa (isso melhora sua análise)...",
+      "Cole a vaga completa",
     );
 
     trackEventMock.mockClear();
@@ -257,7 +257,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const { container } = render(<AdaptarPage />);
 
     const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa (isso melhora sua análise)...",
+      "Cole a vaga completa",
     );
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
@@ -309,7 +309,7 @@ describe("AdaptarPage submit analytics flow", () => {
       /Cole seu currículo em texto/i,
     );
     const jobTextarea = screen.getByPlaceholderText(
-      "Cole a vaga completa (isso melhora sua análise)...",
+      "Cole a vaga completa",
     );
 
     fireEvent.change(cvTextarea, {
@@ -343,7 +343,7 @@ describe("AdaptarPage submit analytics flow", () => {
       /Cole seu currículo em texto/i,
     );
     const jobTextarea = screen.getByPlaceholderText(
-      "Cole a vaga completa (isso melhora sua análise)...",
+      "Cole a vaga completa",
     );
 
     fireEvent.change(cvTextarea, {
@@ -376,7 +376,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const { container } = render(<AdaptarPage />);
 
     const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa (isso melhora sua análise)...",
+      "Cole a vaga completa",
     );
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
@@ -428,7 +428,7 @@ describe("AdaptarPage submit analytics flow", () => {
       /Cole seu currículo em texto/i,
     );
     const jobTextarea = screen.getByPlaceholderText(
-      "Cole a vaga completa (isso melhora sua análise)...",
+      "Cole a vaga completa",
     );
 
     fireEvent.change(cvTextarea, {
@@ -463,7 +463,7 @@ describe("AdaptarPage submit analytics flow", () => {
     render(<AdaptarPage />);
 
     const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa (isso melhora sua análise)...",
+      "Cole a vaga completa",
     );
 
     trackEventMock.mockClear();
@@ -550,7 +550,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const { container } = render(<AdaptarPage />);
 
     const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa (isso melhora sua análise)...",
+      "Cole a vaga completa",
     );
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');

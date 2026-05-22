@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
+import type { AppInternalRole } from "@/lib/app-session";
 import type { ResumeDto } from "@/lib/resumes-api";
 import {
   deleteMasterResume,
@@ -27,6 +28,7 @@ export default function MeusCvsPage() {
   const [masterResume, setMasterResume] = useState<
     ResumeDto | null | undefined
   >(undefined);
+  const [userRole, setUserRole] = useState<AppInternalRole | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +36,10 @@ export default function MeusCvsPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   useEffect(() => {
-    getAuthStatus().then(({ userName: name }) => setUserName(name ?? null));
+    getAuthStatus().then(({ userName: name, internalRole }) => {
+      setUserName(name ?? null);
+      setUserRole(internalRole ?? null);
+    });
     getMyMasterResume().then((r) => setMasterResume(r ?? null));
   }, []);
 
@@ -99,7 +104,11 @@ export default function MeusCvsPage() {
     <PageShell>
       <main className="min-h-screen bg-[#FAFAFA] text-[#111111]">
         {userName ? (
-          <AppHeader userName={userName} backgroundColor="#FAFAFA" />
+          <AppHeader
+            userName={userName}
+            userRole={userRole}
+            backgroundColor="#FAFAFA"
+          />
         ) : (
           <header className="flex shrink-0 items-center px-10 py-6">
             <a

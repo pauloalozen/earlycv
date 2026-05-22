@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     return createPostRedirectResponse(request.url, loginRedirectPath(planId));
   }
 
-  return createCheckoutRedirect(request.url, planId);
+  return createPostRedirectResponse(request.url, `/planos?plan=${planId}`);
 }
 
 export async function POST(request: Request) {

@@ -221,6 +221,39 @@ test("resume migration guards master and adapted invariants", () => {
   );
 });
 
+test("Payment recovery models and enums exist", () => {
+  const eligibilityStatus = getBlock("enum", "PaymentRecoveryEligibilityStatus");
+
+  assert.match(eligibilityStatus, /^\s*eligible$/m);
+  assert.match(eligibilityStatus, /^\s*possibly_resolved$/m);
+  assert.match(eligibilityStatus, /^\s*not_eligible$/m);
+
+  const emailStatus = getBlock("enum", "PaymentRecoveryEmailStatus");
+  assert.match(emailStatus, /^\s*sent$/m);
+  assert.match(emailStatus, /^\s*failed$/m);
+  assert.match(emailStatus, /^\s*skipped$/m);
+
+  const email = getBlock("model", "PaymentRecoveryEmail");
+  assert.match(email, /purchaseId\s+String/);
+  assert.match(email, /recoveryGroupKey\s+String/);
+  assert.match(email, /sentByAdminUserId\s+String/);
+  assert.match(email, /dryRun\s+Boolean/);
+  assert.match(email, /realEmailSent\s+Boolean/);
+  assert.match(email, /subject\s+String\?/);
+  assert.match(email, /tokenId\s+String\?/);
+  assert.match(email, /clickedAt\s+DateTime\?/);
+
+  const token = getBlock("model", "PaymentRecoveryToken");
+  assert.match(token, /tokenHash\s+String\s+@unique/);
+  assert.match(token, /recoveryGroupKey\s+String/);
+  assert.match(token, /emailRecordId\s+String\?\s+@unique/);
+  assert.match(token, /expiresAt\s+DateTime/);
+
+  const ignore = getBlock("model", "PaymentRecoveryIgnore");
+  assert.match(ignore, /purchaseId\s+String\s+@unique/);
+  assert.match(ignore, /ignoredByAdminId\s+String/);
+});
+
 test("affiliate foundation models partner campaigns, code attribution, and commission snapshots", () => {
   const partner = getBlock("model", "AffiliatePartner");
   const campaign = getBlock("model", "AffiliateCampaign");

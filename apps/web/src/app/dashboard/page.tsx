@@ -190,6 +190,7 @@ export default async function DashboardPage({
       >
         <AppHeader
           userName={user.name}
+          userRole={user.internalRole}
           availableCredits={availableDownloadCredits}
         />
 
