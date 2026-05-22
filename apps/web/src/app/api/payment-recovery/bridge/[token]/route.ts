@@ -46,6 +46,12 @@ export async function GET(
     return NextResponse.redirect(location, response.status);
   }
 
+  if (response.status === 401 || response.status === 403 || response.status === 404) {
+    return NextResponse.redirect(
+      new URL("/recuperar-pagamento?status=token-invalido", request.url),
+    );
+  }
+
   const text = await response.text();
   return new NextResponse(text, {
     status: response.status,
