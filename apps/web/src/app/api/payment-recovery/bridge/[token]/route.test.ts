@@ -55,4 +55,32 @@ describe("GET /api/payment-recovery/bridge/[token]", () => {
       }),
     );
   });
+
+  it("redirects to generic recovery page when bridge token is invalid", async () => {
+    process.env.API_URL = "https://api.earlycv.com.br";
+    cookiesMock.mockResolvedValueOnce({
+      get: vi.fn().mockReturnValue({ value: "access-token-1" }),
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: "Token invalido." }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+
+    const response = await GET(
+      new Request("http://localhost/api/payment-recovery/bridge/token-2"),
+      {
+        params: Promise.resolve({ token: "token-2" }),
+      },
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost/recuperar-pagamento?status=token-invalido",
+    );
+  });
 });
