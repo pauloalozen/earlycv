@@ -235,7 +235,9 @@ export class PaymentRecoveryClickService {
   private loginRedirect(returnUrl: string | null | undefined, token: string): string {
     const fallbackPath = `/api/payment-recovery/bridge/${token}`;
     const safeReturn = this.sanitizeInternalPath(returnUrl) ?? fallbackPath;
-    return this.frontendUrl(`/login?returnUrl=${encodeURIComponent(safeReturn)}`);
+    return this.frontendUrl(
+      `/entrar?tab=entrar&next=${encodeURIComponent(safeReturn)}`,
+    );
   }
 
   private sanitizeInternalPath(value: string | null | undefined): string | null {
