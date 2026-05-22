@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const cookiesMock = vi.hoisted(() => vi.fn());
+
+vi.mock("next/headers", () => ({
+  cookies: cookiesMock,
+}));
+
 import { GET } from "./route";
 
 describe("GET /api/payment-recovery/bridge/[token]", () => {
@@ -11,14 +17,22 @@ describe("GET /api/payment-recovery/bridge/[token]", () => {
 
   it("forwards bridge redirect response from api", async () => {
     process.env.API_URL = "https://api.earlycv.com.br";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValueOnce(
+    cookiesMock.mockResolvedValueOnce({
+      get: vi.fn().mockReturnValue({ value: "access-token-1" }),
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
         new Response(null, {
           status: 302,
-          headers: { location: "https://www.mercadopago.com.br/checkout/v1/redirect" },
+          headers: {
+            location: "https://www.mercadopago.com.br/checkout/v1/redirect",
+          },
         }),
-      ),
+      );
+    vi.stubGlobal(
+      "fetch",
+      fetchMock,
     );
 
     const response = await GET(
@@ -31,6 +45,14 @@ describe("GET /api/payment-recovery/bridge/[token]", () => {
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(
       "https://www.mercadopago.com.br/checkout/v1/redirect",
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.earlycv.com.br/api/payment-recovery/bridge/token-2",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer access-token-1",
+        }),
+      }),
     );
   });
 });
