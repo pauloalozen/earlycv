@@ -171,7 +171,7 @@ export class PaymentRecoveryClickService {
       if (["pending", "none", "pending_payment", "processing_payment"].includes(purchaseStatus)) {
         return {
           redirectTarget: "checkout",
-          redirectUrl: this.frontendUrl(`/payment-recovery/bridge/${normalizedToken}`),
+          redirectUrl: this.frontendUrl(`/api/payment-recovery/bridge/${normalizedToken}`),
         };
       }
 
@@ -233,7 +233,7 @@ export class PaymentRecoveryClickService {
   }
 
   private loginRedirect(returnUrl: string | null | undefined, token: string): string {
-    const fallbackPath = `/payment-recovery/bridge/${token}`;
+    const fallbackPath = `/api/payment-recovery/bridge/${token}`;
     const safeReturn = this.sanitizeInternalPath(returnUrl) ?? fallbackPath;
     return this.frontendUrl(`/login?returnUrl=${encodeURIComponent(safeReturn)}`);
   }

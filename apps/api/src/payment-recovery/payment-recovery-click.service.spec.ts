@@ -100,7 +100,7 @@ test("pending valid token records click and redirects to bridge", async () => {
   });
 
   assert.equal(result.redirectTarget, "checkout");
-  assert.match(result.redirectUrl, /\/payment-recovery\/bridge\//);
+  assert.match(result.redirectUrl, /\/api\/payment-recovery\/bridge\//);
   assert.equal(Boolean(emailUpdatePayload), true);
   assert.equal(events.some((entry) => entry.event === "payment_recovery_email_clicked"), true);
 });
@@ -238,7 +238,7 @@ test("logged out redirects to login with safe internal return url", async () => 
     returnUrl: "https://evil.com",
   });
   assert.equal(result.redirectTarget, "login");
-  assert.match(result.redirectUrl, /returnUrl=%2Fpayment-recovery%2Fbridge%2Fa{64}/);
+  assert.match(result.redirectUrl, /returnUrl=%2Fapi%2Fpayment-recovery%2Fbridge%2Fa{64}/);
 });
 
 test("logged in as different user gets blocked and mismatch event emitted", async () => {

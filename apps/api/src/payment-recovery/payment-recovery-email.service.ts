@@ -39,13 +39,13 @@ export class PaymentRecoveryEmailService {
 
   private shouldSendReal(emailEnabled: boolean, dryRun: boolean, allowlistMatched: boolean) {
     if (!emailEnabled) return false;
-    if (!dryRun) return allowlistMatched;
+    if (dryRun) return false;
     return allowlistMatched;
   }
 
-  private async sendViaResend(to: string, subject: string, text: string) {
+  private async sendViaResend(to: string, subject: string, text: string, html: string) {
     const apiKey = process.env.RESEND_API_KEY ?? "";
-    const from = process.env.EMAIL_FROM ?? "EarlyCV <noreply@earlycv.com.br>";
+    const from = process.env.EMAIL_FROM ?? "EarlyCV <contato@earlycv.com.br>";
     const frontendUrl = process.env.FRONTEND_URL ?? "";
     const apiUrl = process.env.API_URL ?? "";
     const appEnv = process.env.APP_ENV ?? "";
@@ -72,7 +72,7 @@ export class PaymentRecoveryEmailService {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from, to: [to], subject, text }),
+      body: JSON.stringify({ from, to: [to], subject, text, html }),
     });
     const body = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
     if (!res.ok) {
@@ -130,7 +130,8 @@ export class PaymentRecoveryEmailService {
 
     const scoreJson = (adaptation?.adaptedContentJson ?? {}) as Record<string, unknown>;
     const firstName = purchase.user.name?.split(" ")[0] ?? null;
-    const recoveryLink = `https://earlycv.com.br/recovery/${tokenRaw}`;
+    const frontendUrl = process.env.FRONTEND_URL ?? "https://earlycv.com.br";
+    const recoveryLink = `${frontendUrl}/api/payment-recovery/${tokenRaw}`;
     const copy = buildPaymentRecoveryEmailCopy({
       firstName,
       jobTitle: adaptation?.jobTitle ?? null,
@@ -161,6 +162,7 @@ export class PaymentRecoveryEmailService {
       else if (hasRealSent) reason = "already_sent";
       else if (hasCooldown) reason = "cooldown_active";
       else if (!emailEnabled) reason = "email_disabled";
+      else if (dryRun) reason = "dry_run";
       else if (!allowlistMatched) reason = "allowlist_blocked";
 
       const token = await tx.paymentRecoveryToken.create({
@@ -223,6 +225,7 @@ export class PaymentRecoveryEmailService {
         purchase.user.email,
         copy.subject,
         copy.text,
+        copy.html,
       );
       await this.database.paymentRecoveryEmail.update({
         where: { id: txResult.emailRecord.id },

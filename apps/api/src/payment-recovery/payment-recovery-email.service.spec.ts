@@ -101,14 +101,49 @@ test("DRY_RUN true outside allowlist no real send", async () => {
   assert.equal(result.realEmailSent, false);
 });
 
-test("DRY_RUN true inside allowlist may send real", async () => {
+test("DRY_RUN true inside allowlist skips real send", async () => {
   const originalFetch = global.fetch;
-  global.fetch = (async () => ({ ok: true, json: async () => ({ id: "provider-1" }) })) as any;
+  let fetchCalled = false;
+  global.fetch = (async () => {
+    fetchCalled = true;
+    return { ok: true, json: async () => ({ id: "provider-1" }) };
+  }) as any;
   const { service } = makeService({ dryRun: true, allowlist: ["user@example.com"] });
   const result = await service.send({ purchaseId: "purchase-1", adminUserId: "admin-1" });
-  assert.equal(result.status, "sent");
-  assert.equal(result.realEmailSent, true);
+  assert.equal(result.status, "skipped");
+  assert.equal(result.realEmailSent, false);
+  assert.equal(result.reason, "dry_run");
+  assert.equal(fetchCalled, false);
   global.fetch = originalFetch;
+});
+
+test("recovery link points to public payment recovery endpoint", async () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+  const originalApiUrl = process.env.API_URL;
+  process.env.NODE_ENV = "production";
+  process.env.FRONTEND_URL = "https://earlycv.com.br";
+  process.env.API_URL = "https://api.earlycv.com.br";
+
+  const originalFetch = global.fetch;
+  let payload: any = null;
+  global.fetch = (async (_url: string, init?: any) => {
+    payload = JSON.parse(String(init?.body ?? "{}"));
+    return { ok: true, json: async () => ({ id: "provider-link" }) };
+  }) as any;
+
+  try {
+    const { service } = makeService();
+    const result = await service.send({ purchaseId: "purchase-1", adminUserId: "admin-1" });
+    assert.equal(result.status, "sent");
+    assert.equal(typeof payload?.text, "string");
+    assert.equal(payload.text.includes("https://earlycv.com.br/api/payment-recovery/"), true);
+  } finally {
+    global.fetch = originalFetch;
+    process.env.NODE_ENV = originalNodeEnv;
+    process.env.FRONTEND_URL = originalFrontendUrl;
+    process.env.API_URL = originalApiUrl;
+  }
 });
 
 test("eligibility possibly_resolved/not_eligible and ignored block real send", async () => {
@@ -234,4 +269,6 @@ test("copy supports jobTitle fallback and score sentence variants without forbid
   assert.equal(b.text.includes("+12 pontos"), true);
   assert.equal(a.text.includes("improvementPercent"), false);
   assert.equal(a.text.toLowerCase().includes("company"), false);
+  assert.equal(a.html.includes("Retomar pagamento agora"), true);
+  assert.equal(a.html.includes("<a href=\"https://x\""), true);
 });
