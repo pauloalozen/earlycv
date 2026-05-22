@@ -1,8 +1,9 @@
 import {
   CanActivate,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
-  TooManyRequestsException,
 } from "@nestjs/common";
 
 import { PaymentRecoveryConfigService } from "./payment-recovery.config";
@@ -33,7 +34,7 @@ export class PaymentRecoveryPublicRateLimitGuard implements CanActivate {
     }
 
     if (bucket.count >= limit) {
-      throw new TooManyRequestsException("Too many requests");
+      throw new HttpException("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
     bucket.count += 1;

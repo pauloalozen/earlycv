@@ -9,6 +9,9 @@ export class OptionalJwtAuthGuard extends AuthGuard("jwt") {
     _error: unknown,
     user: TUser | false | null,
   ): TUser | null {
-    return user ?? null;
+    if (user === false) {
+      return null;
+    }
+    return user;
   }
 }

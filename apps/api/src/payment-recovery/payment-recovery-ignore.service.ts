@@ -1,4 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import type { PlanPurchaseOriginAction } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 
@@ -64,7 +65,7 @@ export class PaymentRecoveryIgnoreService {
   private async resolveGroupPurchaseIds(purchase: {
     userId: string;
     originAdaptationId: string | null;
-    originAction: string;
+    originAction: PlanPurchaseOriginAction;
   }) {
     const groupRows = await this.database.planPurchase.findMany({
       where: {

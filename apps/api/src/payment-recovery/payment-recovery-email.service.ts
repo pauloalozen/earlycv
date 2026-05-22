@@ -65,7 +65,7 @@ export class PaymentRecoveryEmailService {
       include: {
         user: { select: { id: true, name: true, email: true } },
       },
-    } as any);
+    });
     if (!purchase || !purchase.user?.email) {
       throw new Error("purchase_not_found_or_missing_email");
     }
@@ -74,7 +74,7 @@ export class PaymentRecoveryEmailService {
       ? await this.database.cvAdaptation.findUnique({
           where: { id: purchase.originAdaptationId },
           select: { id: true, jobTitle: true, adaptedContentJson: true },
-        } as any)
+        })
       : null;
 
     const eligibility = await this.eligibility.evaluateByPurchaseId(input.purchaseId);
