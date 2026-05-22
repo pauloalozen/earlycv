@@ -19,6 +19,7 @@ import { InfraModule } from "./infra/infra.module";
 import { JobSourcesModule } from "./job-sources/job-sources.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { PaymentsModule } from "./payments/payments.module";
+import { PaymentRecoveryModule } from "./payment-recovery/payment-recovery.module";
 import { PlansModule } from "./plans/plans.module";
 import { PosthogIntegrationModule } from "./posthog-integration/posthog-integration.module";
 import { ProfilesModule } from "./profiles/profiles.module";
@@ -55,6 +56,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     CvUnlocksModule,
     PlansModule,
     PaymentsModule,
+    PaymentRecoveryModule,
     PosthogIntegrationModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

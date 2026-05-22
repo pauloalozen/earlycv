@@ -101,6 +101,18 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.paymentAuditLog;
   }
 
+  get paymentRecoveryEmail() {
+    return this.prisma.paymentRecoveryEmail;
+  }
+
+  get paymentRecoveryToken() {
+    return this.prisma.paymentRecoveryToken;
+  }
+
+  get paymentRecoveryIgnore() {
+    return this.prisma.paymentRecoveryIgnore;
+  }
+
   get $transaction() {
     return this.prisma.$transaction.bind(this.prisma);
   }
