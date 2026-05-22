@@ -25,11 +25,27 @@ function parseErrorMessage(error: unknown) {
 
 function mapSendMessage(status?: string, reason?: string) {
   if (status === "sent") return "Email enviado com sucesso.";
-  if (status === "dry_run") return "Ambiente em dry-run: envio simulado.";
-  if (status === "allowlist_blocked")
+  if (reason === "email_disabled") {
+    return "Envio desativado no ambiente (PAYMENT_RECOVERY_EMAIL_ENABLED=false).";
+  }
+  if (reason === "allowlist_blocked") {
     return "Envio bloqueado por allowlist do ambiente.";
-  if (status === "already_sent" || reason === "already_sent")
+  }
+  if (reason === "already_sent") {
     return "Este pedido ja recebeu email anteriormente.";
+  }
+  if (reason === "cooldown_active") {
+    return "Ja existe envio recente para este contexto. Aguarde o cooldown.";
+  }
+  if (reason === "ignored") {
+    return "Pedido ignorado. Desfaca o ignore para permitir envio.";
+  }
+  if (status === "skipped" && reason === "ok") {
+    return "Ambiente em dry-run: envio simulado sem disparo real.";
+  }
+  if (status === "failed" && reason === "provider_failure") {
+    return "Falha no provedor de email. Verifique RESEND_API_KEY e EMAIL_FROM.";
+  }
   return "Nao foi possivel enviar o email.";
 }
 

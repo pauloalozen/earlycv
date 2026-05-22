@@ -26,6 +26,21 @@ function sendDisabledReason(item: PaymentRecoveryItem) {
   return null;
 }
 
+function formatPurchaseCreatedAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export function RecoveryTableClient({
   items,
   onSendEmail,
@@ -112,7 +127,12 @@ export function RecoveryTableClient({
                     {item.userName ?? item.userId}
                     <div className="text-xs text-stone-500">{item.userEmail ?? "—"}</div>
                   </td>
-                  <td className="px-3 py-3 font-mono text-xs text-stone-600">{item.purchaseId}</td>
+                  <td className="px-3 py-3 text-stone-700">
+                    <div className="font-mono text-xs text-stone-600">{item.purchaseId}</div>
+                    <div className="text-xs text-stone-500">
+                      Pedido gerado em {formatPurchaseCreatedAt(item.createdAt)}
+                    </div>
+                  </td>
                   <td className="px-3 py-3 text-stone-700">{item.originAction ?? "—"}</td>
                   <td className="px-3 py-3 text-stone-700">{item.jobTitle ?? "—"}</td>
                   <td className="px-3 py-3 text-stone-700">{item.score ?? "—"}</td>

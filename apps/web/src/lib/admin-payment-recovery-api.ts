@@ -32,7 +32,7 @@ export type PaymentRecoveryPendingResponse = {
 
 export type PaymentRecoveryActionResult = {
   ok: boolean;
-  status?: "sent" | "dry_run" | "allowlist_blocked" | "already_sent" | "failed";
+  status?: "sent" | "skipped" | "failed";
   reason?: string;
   message?: string;
 };
