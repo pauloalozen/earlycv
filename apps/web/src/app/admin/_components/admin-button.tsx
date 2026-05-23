@@ -6,20 +6,21 @@ type AdminButtonVariantOptions = {
 };
 
 const BASE =
-  "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2";
+  "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none";
 
 const VARIANTS: Record<
   NonNullable<AdminButtonVariantOptions["variant"]>,
   string
 > = {
-  default: "bg-stone-950 !text-white hover:bg-stone-800 active:bg-stone-900",
+  default:
+    "bg-[#0a0a0a] !text-[#fafaf6] hover:bg-[#2a2620] active:bg-[#2a2620]",
   outline:
-    "border border-stone-200 bg-white text-stone-900 hover:bg-stone-50 active:bg-stone-100",
+    "border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] text-[#2a2620] hover:bg-[#ebe9e3]",
 };
 
 const SIZES: Record<NonNullable<AdminButtonVariantOptions["size"]>, string> = {
-  sm: "h-8 px-3 text-xs",
-  md: "h-10 px-4 text-[13px]",
+  sm: "h-7 px-3 text-[11.5px]",
+  md: "h-9 px-4 text-[12.5px]",
 };
 
 export function buttonVariants(

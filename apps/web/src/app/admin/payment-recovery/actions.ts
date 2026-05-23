@@ -85,7 +85,10 @@ export async function unignoreRecoveryAction(
   try {
     await unignoreAdminPaymentRecoveryPurchase(purchaseId);
     revalidatePath("/admin/payment-recovery");
-    return { kind: "success", message: "Pedido removido da lista de ignorados." };
+    return {
+      kind: "success",
+      message: "Pedido removido da lista de ignorados.",
+    };
   } catch (error) {
     return { kind: "error", message: parseErrorMessage(error) };
   }

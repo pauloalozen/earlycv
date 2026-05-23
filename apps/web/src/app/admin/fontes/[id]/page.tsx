@@ -62,7 +62,7 @@ export default async function AdminSourceAliasPage({
     const companySources = sources.filter((source) => source.companyId === id);
 
     if (companySources.length === 1) {
-      redirect(`/admin/ingestion/${companySources[0]!.id}`);
+      redirect(`/admin/ingestion/${companySources[0]?.id}`);
     }
 
     if (companySources.length > 1) {

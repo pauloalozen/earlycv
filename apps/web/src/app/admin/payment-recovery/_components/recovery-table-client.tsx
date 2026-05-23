@@ -12,7 +12,10 @@ type Props = {
     purchaseId: string,
     forceResend?: boolean,
   ) => Promise<RecoveryActionUiResult>;
-  onIgnore: (purchaseId: string, reason?: string) => Promise<RecoveryActionUiResult>;
+  onIgnore: (
+    purchaseId: string,
+    reason?: string,
+  ) => Promise<RecoveryActionUiResult>;
   onUnignore: (purchaseId: string) => Promise<RecoveryActionUiResult>;
 };
 
@@ -25,7 +28,8 @@ function statusRowClass(item: PaymentRecoveryItem) {
 
 function sendDisabledReason(item: PaymentRecoveryItem) {
   if (item.ignored) return "Pedido ignorado.";
-  if (item.eligibilityStatus !== "eligible") return "Pedido inelegivel para envio.";
+  if (item.eligibilityStatus !== "eligible")
+    return "Pedido inelegivel para envio.";
   return null;
 }
 
@@ -51,12 +55,17 @@ export function RecoveryTableClient({
   onUnignore,
 }: Props) {
   const [message, setMessage] = useState<RecoveryActionUiResult | null>(null);
-  const [pendingPurchaseId, setPendingPurchaseId] = useState<string | null>(null);
+  const [pendingPurchaseId, setPendingPurchaseId] = useState<string | null>(
+    null,
+  );
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
-  const [modalPurchase, setModalPurchase] = useState<PaymentRecoveryItem | null>(null);
-  const [confirmResendPurchaseId, setConfirmResendPurchaseId] = useState<string | null>(null);
+  const [modalPurchase, setModalPurchase] =
+    useState<PaymentRecoveryItem | null>(null);
+  const [confirmResendPurchaseId, setConfirmResendPurchaseId] = useState<
+    string | null
+  >(null);
 
   const fallbackError: RecoveryActionUiResult = {
     kind: "error",
@@ -116,7 +125,10 @@ export function RecoveryTableClient({
           <tbody className="divide-y divide-stone-100">
             {items.length === 0 ? (
               <tr>
-                <td className="px-3 py-8 text-center text-stone-400" colSpan={10}>
+                <td
+                  className="px-3 py-8 text-center text-stone-400"
+                  colSpan={10}
+                >
                   Nenhum pedido pendente encontrado para os filtros aplicados.
                 </td>
               </tr>
@@ -124,7 +136,8 @@ export function RecoveryTableClient({
             {items.map((item) => {
               const disabledReason = sendDisabledReason(item);
               const sendDisabled = Boolean(disabledReason);
-              const rowPending = pendingPurchaseId === item.purchaseId && isPending;
+              const rowPending =
+                pendingPurchaseId === item.purchaseId && isPending;
 
               return (
                 <tr className={statusRowClass(item)} key={item.purchaseId}>
@@ -133,17 +146,33 @@ export function RecoveryTableClient({
                   </td>
                   <td className="px-3 py-3 text-stone-800">
                     {item.userName ?? item.userId}
-                    <div className="text-xs text-stone-500">{item.userEmail ?? "—"}</div>
+                    <div className="text-xs text-stone-500">
+                      {item.userEmail ?? "—"}
+                    </div>
                   </td>
                   <td className="px-3 py-3 text-stone-700">
-                    <div className="font-mono text-xs text-stone-600">{item.purchaseId}</div>
+                    <div className="font-mono text-xs text-stone-600">
+                      {item.purchaseId}
+                    </div>
                   </td>
-                  <td className="px-3 py-3 text-stone-700">{item.originAction ?? "—"}</td>
-                  <td className="px-3 py-3 text-stone-700">{item.jobTitle ?? "—"}</td>
-                  <td className="px-3 py-3 text-stone-700">{item.score ?? "—"}</td>
-                  <td className="px-3 py-3 text-stone-700">{item.hasAvailableCredits ? "Disponiveis" : "Sem creditos"}</td>
-                  <td className="px-3 py-3 text-stone-700">{item.ignored ? "ignored" : item.eligibilityStatus}</td>
-                  <td className="px-3 py-3 text-stone-700">{item.alreadySent ? "Ja enviado" : "Nao enviado"}</td>
+                  <td className="px-3 py-3 text-stone-700">
+                    {item.originAction ?? "—"}
+                  </td>
+                  <td className="px-3 py-3 text-stone-700">
+                    {item.jobTitle ?? "—"}
+                  </td>
+                  <td className="px-3 py-3 text-stone-700">
+                    {item.score ?? "—"}
+                  </td>
+                  <td className="px-3 py-3 text-stone-700">
+                    {item.hasAvailableCredits ? "Disponiveis" : "Sem creditos"}
+                  </td>
+                  <td className="px-3 py-3 text-stone-700">
+                    {item.ignored ? "ignored" : item.eligibilityStatus}
+                  </td>
+                  <td className="px-3 py-3 text-stone-700">
+                    {item.alreadySent ? "Ja enviado" : "Nao enviado"}
+                  </td>
                   <td className="px-3 py-3">
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -157,13 +186,19 @@ export function RecoveryTableClient({
                       >
                         Enviar email
                       </button>
-                      {disabledReason ? <span className="text-xs text-stone-500">{disabledReason}</span> : null}
+                      {disabledReason ? (
+                        <span className="text-xs text-stone-500">
+                          {disabledReason}
+                        </span>
+                      ) : null}
                       {item.ignored ? (
                         <button
                           className="rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-700"
                           disabled={rowPending}
                           onClick={() => {
-                            runAction(item.purchaseId, () => onUnignore(item.purchaseId));
+                            runAction(item.purchaseId, () =>
+                              onUnignore(item.purchaseId),
+                            );
                           }}
                           type="button"
                         >
@@ -199,14 +234,23 @@ export function RecoveryTableClient({
       </div>
 
       {modalPurchase ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="w-full max-w-lg rounded-xl border border-stone-200 bg-white p-5">
-            <h2 className="text-lg font-bold text-stone-900">Confirmar envio de recuperacao</h2>
+            <h2 className="text-lg font-bold text-stone-900">
+              Confirmar envio de recuperacao
+            </h2>
             <p className="mt-2 text-sm text-stone-600">
-              Preview: email para {modalPurchase.userEmail ?? "usuario sem email"} sobre o pedido {modalPurchase.purchaseId}.
+              Preview: email para{" "}
+              {modalPurchase.userEmail ?? "usuario sem email"} sobre o pedido{" "}
+              {modalPurchase.purchaseId}.
             </p>
             <p className="mt-2 text-xs text-stone-500">
-              Aviso: ambiente pode estar em dry-run ou com allowlist, sem envio real.
+              Aviso: ambiente pode estar em dry-run ou com allowlist, sem envio
+              real.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
@@ -225,7 +269,8 @@ export function RecoveryTableClient({
                 onClick={() => {
                   const purchaseId = modalPurchase.purchaseId;
                   const shouldConfirmResend =
-                    modalPurchase.alreadySent && confirmResendPurchaseId !== purchaseId;
+                    modalPurchase.alreadySent &&
+                    confirmResendPurchaseId !== purchaseId;
                   if (shouldConfirmResend) {
                     setConfirmResendPurchaseId(purchaseId);
                     return;
@@ -248,7 +293,8 @@ export function RecoveryTableClient({
             </div>
             {confirmResendPurchaseId === modalPurchase.purchaseId ? (
               <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                Este email ja foi enviado anteriormente. Tem certeza que deseja reenviar?
+                Este email ja foi enviado anteriormente. Tem certeza que deseja
+                reenviar?
               </p>
             ) : null}
           </div>

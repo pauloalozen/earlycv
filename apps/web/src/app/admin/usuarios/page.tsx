@@ -1,5 +1,6 @@
 import { buttonVariants } from "@/app/admin/_components/admin-button";
-import { Card, EmptyState, Input } from "@/components/ui";
+import { AdminPageWrap } from "@/app/admin/_components/admin-primitives";
+import { EmptyState } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import {
@@ -75,65 +76,72 @@ export default async function AdminUsersPage({
   }));
 
   return (
-    <div className="px-6 py-10 md:px-10">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <AdminShellHeader
-          eyebrow="admin / usuarios"
-          subtitle="Acompanhe contas, completude de perfil e disponibilidade de CV master sem sair do backoffice operacional."
-          title="Usuarios"
+    <AdminPageWrap>
+      <AdminShellHeader
+        eyebrow="admin · usuários"
+        subtitle="Acompanhe contas, completude de perfil e disponibilidade de CV master sem sair do backoffice operacional."
+        title="Usuários."
+      />
+
+      <form
+        className="mb-4 flex flex-wrap gap-2"
+        id="users-filter"
+        method="GET"
+      >
+        <input
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+            minWidth: 240,
+          }}
+          defaultValue={query}
+          name="query"
+          placeholder="Buscar por nome, email ou ID"
         />
-
-        <Card
-          className="grid gap-3 md:grid-cols-[1.4fr_0.9fr_0.8fr_auto]"
-          padding="sm"
-          variant="ghost"
+        <select
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={status ?? ""}
+          name="status"
         >
-          <Input
-            defaultValue={query}
-            form="users-filter"
-            name="query"
-            placeholder="Buscar por nome, email ou id"
-          />
-          <select
-            className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
-            defaultValue={status ?? ""}
-            form="users-filter"
-            name="status"
-          >
-            <option value="">Todos os status</option>
-            <option value="perfil ausente">perfil ausente</option>
-            <option value="perfil incompleto">perfil incompleto</option>
-            <option value="sem cv master">sem cv master</option>
-            <option value="completo">completo</option>
-          </select>
-          <select
-            className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
-            defaultValue={planType ?? ""}
-            form="users-filter"
-            name="planType"
-          >
-            <option value="">Todos os planos</option>
-            <option value="free">free</option>
-          </select>
-          <form className="contents" id="users-filter" method="GET">
-            <button
-              className={buttonVariants({ variant: "outline" })}
-              type="submit"
-            >
-              Filtrar
-            </button>
-          </form>
-        </Card>
+          <option value="">status: todos</option>
+          <option value="perfil ausente">perfil ausente</option>
+          <option value="perfil incompleto">perfil incompleto</option>
+          <option value="sem cv master">sem cv master</option>
+          <option value="completo">completo</option>
+        </select>
+        <select
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={planType ?? ""}
+          name="planType"
+        >
+          <option value="">plano: todos</option>
+          <option value="free">free</option>
+        </select>
+        <button className={buttonVariants()} type="submit">
+          Filtrar
+        </button>
+      </form>
 
-        {filteredUsers.length === 0 ? (
-          <EmptyState
-            description="Nenhuma conta corresponde aos filtros atuais. Ajuste a busca para revisar outro usuario."
-            title="Nenhum resultado"
-          />
-        ) : (
-          <UsersList deleteAction={deleteUserAction} users={userRows} />
-        )}
-      </div>
-    </div>
+      {filteredUsers.length === 0 ? (
+        <EmptyState
+          description="Nenhuma conta corresponde aos filtros atuais. Ajuste a busca para revisar outro usuário."
+          title="Nenhum resultado"
+        />
+      ) : (
+        <UsersList deleteAction={deleteUserAction} users={userRows} />
+      )}
+    </AdminPageWrap>
   );
 }

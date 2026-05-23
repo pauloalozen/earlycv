@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
-import { Card } from "@/components/ui";
+import {
+  AdminPageWrap,
+  AdminPagination,
+  AdminPill,
+  AdminTable,
+  AdminTd,
+  AdminTh,
+} from "@/app/admin/_components/admin-primitives";
 import { listAdminPayments } from "@/lib/admin-payments-api";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
@@ -18,7 +25,7 @@ function statusLabel(status: string) {
   return map[status] ?? status;
 }
 
-function statusClass(status: string) {
+function _statusClass(status: string) {
   if (status === "completed" || status === "approved")
     return "text-emerald-700 bg-emerald-50";
   if (status === "pending") return "text-yellow-700 bg-yellow-50";
@@ -83,161 +90,179 @@ export default async function AdminPagamentosPage({
   };
 
   return (
-    <div className="px-6 py-10 md:px-10">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <AdminShellHeader
-          eyebrow="admin / pagamentos"
-          subtitle={`${total} registro${total !== 1 ? "s" : ""} encontrado${total !== 1 ? "s" : ""}.`}
-          title="Pagamentos"
-        />
-
-        <Card padding="sm" variant="ghost">
-          <form
-            action="/admin/pagamentos"
-            className="flex flex-wrap gap-3"
-            method="GET"
+    <AdminPageWrap>
+      <AdminShellHeader
+        actions={
+          <Link
+            className={buttonVariants({ variant: "outline" })}
+            href="/admin/pagamentos"
           >
-            <select
-              className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm font-medium text-stone-900"
-              defaultValue={sp.status ?? ""}
-              name="status"
-            >
-              <option value="">Todos os status</option>
-              <option value="pending">Pendente</option>
-              <option value="completed">Aprovado</option>
-              <option value="failed">Falhou</option>
-            </select>
-            <input
-              className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700"
-              defaultValue={sp.from ?? ""}
-              name="from"
-              type="date"
-            />
-            <input
-              className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700"
-              defaultValue={sp.to ?? ""}
-              name="to"
-              type="date"
-            />
-            <input
-              className="h-10 w-64 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700"
-              defaultValue={sp.userId ?? ""}
-              name="userId"
-              placeholder="User ID"
-            />
-            <button className={buttonVariants()} type="submit">
-              Filtrar
-            </button>
-            <Link
-              className={buttonVariants({ variant: "outline" })}
-              href="/admin/pagamentos"
-            >
-              Limpar
-            </Link>
-          </form>
-        </Card>
+            ↓ Exportar CSV
+          </Link>
+        }
+        eyebrow="admin · pagamentos"
+        subtitle={`Auditoria de transações por plano, status e período. ${total} registro${total !== 1 ? "s" : ""}.`}
+        title="Pagamentos."
+      />
 
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="border-b border-stone-100 bg-stone-50 text-left">
-              <tr>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Usuario
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Plano
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Valor
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Data
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Acoes
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-50">
-              {items.length === 0 && (
-                <tr>
-                  <td
-                    className="px-4 py-8 text-center text-stone-400"
-                    colSpan={6}
-                  >
-                    Nenhum pagamento encontrado.
-                  </td>
-                </tr>
-              )}
-              {items.map((item) => (
-                <tr className="hover:bg-stone-50" key={item.checkoutId}>
-                  <td className="max-w-[160px] truncate px-4 py-3 font-medium text-stone-800">
-                    {item.userEmail ?? item.userId}
-                  </td>
-                  <td className="px-4 py-3 text-stone-600">
-                    {item.planName ?? (
-                      <span className="font-mono text-xs">
-                        {item.checkoutId.slice(0, 8)}…
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusClass(item.status)}`}
-                    >
-                      {statusLabel(item.status)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-stone-700">
-                    {formatCents(item.amountInCents)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-stone-500">
-                    {formatDate(item.createdAt)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      className={buttonVariants({
-                        size: "sm",
-                        variant: "outline",
-                      })}
-                      href={`/admin/pagamentos/${item.checkoutId}`}
-                    >
-                      Detalhe
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <form
+        action="/admin/pagamentos"
+        className="mb-4 flex flex-wrap gap-2"
+        method="GET"
+      >
+        <select
+          className="h-9 rounded-md border px-3 text-[12.5px] font-medium"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.status ?? ""}
+          name="status"
+        >
+          <option value="">Todos os status</option>
+          <option value="pending">Pendente</option>
+          <option value="completed">Aprovado</option>
+          <option value="failed">Falhou</option>
+        </select>
+        <input
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.from ?? ""}
+          name="from"
+          type="date"
+        />
+        <input
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.to ?? ""}
+          name="to"
+          type="date"
+        />
+        <input
+          className="h-9 w-64 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.userId ?? ""}
+          name="userId"
+          placeholder="User ID ou email"
+        />
+        <button className={buttonVariants()} type="submit">
+          Filtrar
+        </button>
+        <Link
+          className={buttonVariants({ variant: "outline" })}
+          href="/admin/pagamentos"
+        >
+          Limpar
+        </Link>
+      </form>
 
-        <div className="flex items-center justify-between text-sm text-stone-500">
-          <span>
-            Pagina {page} · {items.length} de {total}
-          </span>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                className={buttonVariants({ variant: "outline" })}
-                href={buildUrl({ page: String(page - 1) })}
+      <AdminTable>
+        <thead>
+          <tr>
+            <AdminTh>Usuário</AdminTh>
+            <AdminTh w={110}>Plano</AdminTh>
+            <AdminTh w={140}>Status</AdminTh>
+            <AdminTh w={120} align="right">
+              Valor
+            </AdminTh>
+            <AdminTh w={180}>Data</AdminTh>
+            <AdminTh w={100} align="right">
+              Ações
+            </AdminTh>
+          </tr>
+        </thead>
+        <tbody>
+          {items.length === 0 && (
+            <tr>
+              <td
+                colSpan={6}
+                style={{
+                  padding: "32px 16px",
+                  textAlign: "center",
+                  color: "#8a8580",
+                  fontSize: 13,
+                }}
               >
-                ← Anterior
-              </Link>
-            )}
-            {items.length === 50 && (
-              <Link
-                className={buttonVariants({ variant: "outline" })}
-                href={buildUrl({ page: String(page + 1) })}
-              >
-                Proxima →
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+                Nenhum pagamento encontrado.
+              </td>
+            </tr>
+          )}
+          {items.map((item) => (
+            <tr key={item.checkoutId}>
+              <AdminTd mono muted>
+                {item.userEmail ?? item.userId}
+              </AdminTd>
+              <AdminTd>
+                <AdminPill tone="neutral" mono>
+                  {item.planName ?? item.checkoutId.slice(0, 8)}
+                </AdminPill>
+              </AdminTd>
+              <AdminTd>
+                <AdminPill
+                  tone={
+                    item.status === "completed" || item.status === "approved"
+                      ? "ok"
+                      : item.status === "pending"
+                        ? "warn"
+                        : item.status === "failed"
+                          ? "danger"
+                          : "neutral"
+                  }
+                  mono
+                >
+                  {statusLabel(item.status)}
+                </AdminPill>
+              </AdminTd>
+              <AdminTd align="right" mono>
+                {formatCents(item.amountInCents)}
+              </AdminTd>
+              <AdminTd mono muted>
+                {formatDate(item.createdAt)}
+              </AdminTd>
+              <AdminTd align="right">
+                <Link
+                  className={buttonVariants({ size: "sm", variant: "outline" })}
+                  href={`/admin/pagamentos/${item.checkoutId}`}
+                >
+                  Detalhe
+                </Link>
+              </AdminTd>
+            </tr>
+          ))}
+        </tbody>
+      </AdminTable>
+
+      <AdminPagination summary={`página ${page} · ${items.length} de ${total}`}>
+        {page > 1 && (
+          <Link
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            href={buildUrl({ page: String(page - 1) })}
+          >
+            ← anterior
+          </Link>
+        )}
+        {items.length === 50 && (
+          <Link
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            href={buildUrl({ page: String(page + 1) })}
+          >
+            próxima →
+          </Link>
+        )}
+      </AdminPagination>
+    </AdminPageWrap>
   );
 }

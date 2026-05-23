@@ -53,7 +53,9 @@ export default async function ManualRunDetailPage({
     ]);
 
     const totalCount = items.length;
-    const succeededCount = items.filter((item) => item.status === "completed").length;
+    const succeededCount = items.filter(
+      (item) => item.status === "completed",
+    ).length;
     const failedCount = items.filter((item) => item.status === "failed").length;
     const skippedCount = items.filter(
       (item) => item.status === "skipped" || item.status === "cancelled",

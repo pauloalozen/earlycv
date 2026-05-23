@@ -21,12 +21,13 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/admin-payment-recovery-api", () => ({
-  listAdminPaymentRecoveryPending: (...args: unknown[]) => listPendingMock(...args),
+  listAdminPaymentRecoveryPending: (...args: unknown[]) =>
+    listPendingMock(...args),
 }));
 
-import AdminPaymentRecoveryPage from "./page";
 import { RecoveryTableClient } from "./_components/recovery-table-client";
 import type { RecoveryActionUiResult } from "./actions";
+import AdminPaymentRecoveryPage from "./page";
 
 const baseItem = {
   purchaseId: "purchase-1",
@@ -57,9 +58,13 @@ describe("AdminPaymentRecoveryPage", () => {
   });
 
   it("renders and requests default listing params", async () => {
-    render(await AdminPaymentRecoveryPage({ searchParams: Promise.resolve({}) }));
+    render(
+      await AdminPaymentRecoveryPage({ searchParams: Promise.resolve({}) }),
+    );
 
-    expect(await screen.findByText("Recuperacao de pedidos pendentes")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Recuperacao de pedidos pendentes"),
+    ).toBeInTheDocument();
     expect(listPendingMock).toHaveBeenCalledWith(
       expect.objectContaining({
         eligibilityStatus: "eligible",
@@ -129,7 +134,9 @@ describe("AdminPaymentRecoveryPage", () => {
       }),
     );
 
-    expect(await screen.findByRole("link", { name: /anterior/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("link", { name: /anterior/i }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /proxima/i })).toBeInTheDocument();
   });
 
@@ -142,7 +149,9 @@ describe("AdminPaymentRecoveryPage", () => {
       totalPages: 1,
     });
 
-    render(await AdminPaymentRecoveryPage({ searchParams: Promise.resolve({}) }));
+    render(
+      await AdminPaymentRecoveryPage({ searchParams: Promise.resolve({}) }),
+    );
 
     expect(
       await screen.findByText(/nenhum pedido pendente encontrado/i),
@@ -160,7 +169,11 @@ describe("RecoveryTableClient actions", () => {
       <RecoveryTableClient
         items={[
           baseItem,
-          { ...baseItem, purchaseId: "purchase-2", eligibilityStatus: "not_eligible" as const },
+          {
+            ...baseItem,
+            purchaseId: "purchase-2",
+            eligibilityStatus: "not_eligible" as const,
+          },
           { ...baseItem, purchaseId: "purchase-3", ignored: true },
         ]}
         onIgnore={vi.fn(async () => ({ kind: "success", message: "ok" }))}
@@ -169,9 +182,15 @@ describe("RecoveryTableClient actions", () => {
       />,
     );
 
-    const eligibleRow = (await screen.findAllByText("purchase-1"))[0].closest("tr");
-    const notEligibleRow = (await screen.findAllByText("purchase-2"))[0].closest("tr");
-    const ignoredRow = (await screen.findAllByText("purchase-3"))[0].closest("tr");
+    const eligibleRow = (await screen.findAllByText("purchase-1"))[0].closest(
+      "tr",
+    );
+    const notEligibleRow = (
+      await screen.findAllByText("purchase-2")
+    )[0].closest("tr");
+    const ignoredRow = (await screen.findAllByText("purchase-3"))[0].closest(
+      "tr",
+    );
 
     expect(eligibleRow).toBeTruthy();
     expect(notEligibleRow).toBeTruthy();
@@ -210,7 +229,9 @@ describe("RecoveryTableClient actions", () => {
       />,
     );
 
-    fireEvent.click((await screen.findAllByRole("button", { name: /enviar email/i }))[0]);
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /enviar email/i }))[0],
+    );
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText(/dry-run ou com allowlist/i)).toBeInTheDocument();
 
@@ -238,12 +259,20 @@ describe("RecoveryTableClient actions", () => {
       />,
     );
 
-    fireEvent.click((await screen.findAllByRole("button", { name: /enviar email/i }))[0]);
-    fireEvent.click(await screen.findByRole("button", { name: /confirmar envio/i }));
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /enviar email/i }))[0],
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: /confirmar envio/i }),
+    );
 
-    expect(await screen.findByText(/ja foi enviado anteriormente/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/ja foi enviado anteriormente/i),
+    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /reenviar mesmo assim/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /reenviar mesmo assim/i }),
+    );
 
     await waitFor(() => {
       expect(onSendEmail).toHaveBeenCalledWith("purchase-1", true);
@@ -268,7 +297,9 @@ describe("RecoveryTableClient actions", () => {
       />,
     );
 
-    fireEvent.click((await screen.findAllByRole("button", { name: /enviar email/i }))[0]);
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /enviar email/i }))[0],
+    );
     const confirmButton = await screen.findByRole("button", {
       name: /confirmar envio/i,
     });
@@ -299,7 +330,9 @@ describe("RecoveryTableClient actions", () => {
       />,
     );
 
-    fireEvent.click((await screen.findAllByRole("button", { name: /enviar email/i }))[0]);
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /enviar email/i }))[0],
+    );
     const confirmButton = await screen.findByRole("button", {
       name: /confirmar envio/i,
     });
@@ -309,15 +342,23 @@ describe("RecoveryTableClient actions", () => {
       await screen.findByText(/nao foi possivel concluir a operacao/i),
     ).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /enviar email/i })).toBeEnabled();
+      expect(
+        screen.getByRole("button", { name: /enviar email/i }),
+      ).toBeEnabled();
     });
   });
 
   it("shows success and error result messages", async () => {
     const onSendEmail = vi
       .fn()
-      .mockResolvedValueOnce({ kind: "success", message: "Email enviado com sucesso." })
-      .mockResolvedValueOnce({ kind: "error", message: "Nao foi possivel enviar o email." });
+      .mockResolvedValueOnce({
+        kind: "success",
+        message: "Email enviado com sucesso.",
+      })
+      .mockResolvedValueOnce({
+        kind: "error",
+        message: "Nao foi possivel enviar o email.",
+      });
 
     render(
       <RecoveryTableClient
@@ -328,13 +369,25 @@ describe("RecoveryTableClient actions", () => {
       />,
     );
 
-    fireEvent.click((await screen.findAllByRole("button", { name: /enviar email/i }))[0]);
-    fireEvent.click(await screen.findByRole("button", { name: /confirmar envio/i }));
-    expect(await screen.findByText(/email enviado com sucesso/i)).toBeInTheDocument();
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /enviar email/i }))[0],
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: /confirmar envio/i }),
+    );
+    expect(
+      await screen.findByText(/email enviado com sucesso/i),
+    ).toBeInTheDocument();
 
-    fireEvent.click((await screen.findAllByRole("button", { name: /enviar email/i }))[0]);
-    fireEvent.click(await screen.findByRole("button", { name: /confirmar envio/i }));
-    expect(await screen.findByText(/nao foi possivel enviar o email/i)).toBeInTheDocument();
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /enviar email/i }))[0],
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: /confirmar envio/i }),
+    );
+    expect(
+      await screen.findByText(/nao foi possivel enviar o email/i),
+    ).toBeInTheDocument();
   });
 
   it("renders purchase date in a dedicated first column", async () => {
@@ -353,8 +406,14 @@ describe("RecoveryTableClient actions", () => {
   });
 
   it("calls ignore and unignore callbacks", async () => {
-    const onIgnore = vi.fn(async () => ({ kind: "success" as const, message: "ignored" }));
-    const onUnignore = vi.fn(async () => ({ kind: "success" as const, message: "unignored" }));
+    const onIgnore = vi.fn(async () => ({
+      kind: "success" as const,
+      message: "ignored",
+    }));
+    const onUnignore = vi.fn(async () => ({
+      kind: "success" as const,
+      message: "unignored",
+    }));
     vi.spyOn(window, "prompt").mockReturnValue("manual");
 
     const { rerender } = render(
@@ -366,8 +425,12 @@ describe("RecoveryTableClient actions", () => {
       />,
     );
 
-    fireEvent.click((await screen.findAllByRole("button", { name: /^Ignorar$/i }))[0]);
-    await waitFor(() => expect(onIgnore).toHaveBeenCalledWith("purchase-1", "manual"));
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /^Ignorar$/i }))[0],
+    );
+    await waitFor(() =>
+      expect(onIgnore).toHaveBeenCalledWith("purchase-1", "manual"),
+    );
 
     rerender(
       <RecoveryTableClient
@@ -378,12 +441,17 @@ describe("RecoveryTableClient actions", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /desfazer ignorar/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /desfazer ignorar/i }),
+    );
     await waitFor(() => expect(onUnignore).toHaveBeenCalledWith("purchase-1"));
   });
 
   it("does not call ignore callback when ignore prompt is cancelled", async () => {
-    const onIgnore = vi.fn(async () => ({ kind: "success" as const, message: "ignored" }));
+    const onIgnore = vi.fn(async () => ({
+      kind: "success" as const,
+      message: "ignored",
+    }));
     vi.spyOn(window, "prompt").mockReturnValue(null);
 
     render(
@@ -395,7 +463,9 @@ describe("RecoveryTableClient actions", () => {
       />,
     );
 
-    fireEvent.click((await screen.findAllByRole("button", { name: /^Ignorar$/i }))[0]);
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /^Ignorar$/i }))[0],
+    );
     await waitFor(() => {
       expect(onIgnore).not.toHaveBeenCalled();
     });

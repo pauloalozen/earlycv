@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
-
-import { Badge, Card, EmptyState, Input } from "@/components/ui";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { AdminPageWrap, AT } from "@/app/admin/_components/admin-primitives";
+import { EmptyState, Input } from "@/components/ui";
 import {
   type AdminAnalysisConfigEntry,
   listAnalysisProtectionConfigs,
@@ -91,106 +92,248 @@ async function AdminSettingsPageBody({
     );
   }
 
+  const riskColors: Record<string, string> = {
+    high: AT.danger,
+    medium: AT.warn,
+    low: AT.muted2,
+  };
+
   return (
-    <div className="px-6 py-10 md:px-10">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-        <AdminShellHeader
-          eyebrow="admin / configuracoes"
-          subtitle="Ajuste guardrails de protection sem alterar UX publica. Valores altos de risco exigem cautela operacional."
-          title="Configuracoes"
+    <AdminPageWrap maxWidth={1100}>
+      <AdminShellHeader
+        eyebrow="admin · configurações"
+        subtitle="Ajuste guardrails de proteção sem alterar UX pública. Valores de risco alto afetam usuários em produção."
+        title="Configurações."
+      />
+
+      {/* Aviso */}
+      <div
+        style={{
+          background: AT.warnBg,
+          border: "1px solid rgba(138,96,20,0.20)",
+          borderRadius: 8,
+          padding: "10px 14px",
+          marginBottom: 18,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          fontSize: 12.5,
+          color: "#5a4012",
+        }}
+      >
+        <span
+          style={{
+            fontFamily: '"Geist Mono", monospace',
+            fontSize: 10,
+            letterSpacing: 1,
+            fontWeight: 600,
+            background: "rgba(138,96,20,0.18)",
+            padding: "2px 7px",
+            borderRadius: 3,
+          }}
+        >
+          ATENÇÃO
+        </span>
+        Alterações em configs de risco <strong>high</strong> afetam usuários em
+        produção. Confirme com o time antes de salvar.
+      </div>
+
+      {entries.length === 0 ? (
+        <EmptyState
+          description="Nenhuma configuração de proteção encontrada no catálogo runtime."
+          title="Sem configurações"
         />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {entries.map((entry) => (
+            <div
+              key={entry.key}
+              style={{
+                background: AT.card,
+                border: `1px solid ${AT.border}`,
+                borderRadius: 10,
+                padding: "16px 18px",
+              }}
+            >
+              {/* Linha 1: key + metadados sutis */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 14,
+                  marginBottom: 4,
+                  flexWrap: "wrap",
+                }}
+              >
+                <code
+                  style={{
+                    fontFamily: '"Geist Mono", monospace',
+                    fontSize: 13.5,
+                    color: AT.ink2,
+                    fontWeight: 600,
+                  }}
+                >
+                  {entry.key}
+                </code>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    fontFamily: '"Geist Mono", monospace',
+                    fontSize: 10.5,
+                    color: AT.muted2,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: riskColors[entry.risk] ?? AT.muted2,
+                      display: "inline-block",
+                    }}
+                  />
+                  <span>risco</span>
+                  <span
+                    style={{
+                      color: riskColors[entry.risk] ?? AT.muted2,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {entry.risk}
+                  </span>
+                </span>
+                <span
+                  style={{
+                    fontFamily: '"Geist Mono", monospace',
+                    fontSize: 10.5,
+                    color: AT.muted2,
+                  }}
+                >
+                  origem{" "}
+                  <span style={{ color: AT.ink2, fontWeight: 600 }}>
+                    {entry.origin}
+                  </span>
+                </span>
+                <span
+                  style={{
+                    fontFamily: '"Geist Mono", monospace',
+                    fontSize: 10.5,
+                    color: AT.muted2,
+                  }}
+                >
+                  tipo{" "}
+                  <span style={{ color: AT.ink2, fontWeight: 600 }}>
+                    {entry.type}
+                  </span>
+                </span>
+              </div>
 
-        {entries.length === 0 ? (
-          <EmptyState
-            description="Nenhuma configuracao de protection encontrada no catalogo runtime."
-            title="Sem configuracoes"
-          />
-        ) : (
-          <div className="grid gap-4">
-            {entries.map((entry) => (
-              <Card className="space-y-4" key={entry.key}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="text-[11px] font-medium text-stone-400">
-                      {entry.key}
-                    </p>
-                    <p className="text-sm text-stone-600">
-                      {entry.impactDescription}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge
-                      variant={entry.risk === "high" ? "neutral" : "accent"}
-                    >
-                      risco {entry.risk}
-                    </Badge>
-                    <Badge variant="neutral">origem {entry.origin}</Badge>
-                    <Badge variant="neutral">tipo {entry.type}</Badge>
-                  </div>
-                </div>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: AT.muted,
+                  lineHeight: 1.5,
+                  marginBottom: 10,
+                }}
+              >
+                {entry.impactDescription}
+              </p>
 
-                <div className="grid gap-2 text-sm text-stone-600 md:grid-cols-3">
-                  <p>
-                    <strong>Default:</strong> {formatDefaultValue(entry)}
-                  </p>
-                  <p>
-                    <strong>Range:</strong>{" "}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 24,
+                  fontSize: 11.5,
+                  fontFamily: '"Geist Mono", monospace',
+                  color: AT.muted2,
+                  marginBottom: 12,
+                }}
+              >
+                <span>
+                  default:{" "}
+                  <span style={{ color: AT.ink2, fontWeight: 600 }}>
+                    {formatDefaultValue(entry)}
+                  </span>
+                </span>
+                <span>
+                  range:{" "}
+                  <span style={{ color: AT.ink2, fontWeight: 600 }}>
                     {entry.min !== undefined || entry.max !== undefined
                       ? `${entry.min ?? "-"} .. ${entry.max ?? "-"}`
                       : "n/a"}
-                  </p>
-                  {entry.values ? (
-                    <p>
-                      <strong>Valores:</strong> {entry.values.join(", ")}
-                    </p>
-                  ) : null}
-                </div>
+                  </span>
+                </span>
+                {entry.values ? (
+                  <span>
+                    valores:{" "}
+                    <span style={{ color: AT.ink2, fontWeight: 600 }}>
+                      {entry.values.join(", ")}
+                    </span>
+                  </span>
+                ) : null}
+              </div>
 
-                <form
-                  action={updateConfig.bind(null, entry.key)}
-                  className="grid gap-3 md:grid-cols-[1fr_auto]"
-                >
-                  {entry.type === "enum" && entry.values ? (
-                    <select
-                      className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
-                      defaultValue={formatEditableValue(entry)}
-                      name="value"
-                    >
-                      {entry.values.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  ) : entry.type === "boolean" ? (
-                    <select
-                      className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
-                      defaultValue={formatEditableValue(entry)}
-                      name="value"
-                    >
-                      <option value="true">true</option>
-                      <option value="false">false</option>
-                    </select>
-                  ) : (
+              <form
+                action={updateConfig.bind(null, entry.key)}
+                style={{ display: "flex", gap: 8, alignItems: "center" }}
+              >
+                {entry.type === "enum" && entry.values ? (
+                  <select
+                    className="h-9 rounded-md border px-3 text-[13px]"
+                    style={{
+                      borderColor: AT.border,
+                      background: AT.bg,
+                      color: AT.ink2,
+                      fontFamily: '"Geist Mono", monospace',
+                      maxWidth: 420,
+                      flex: 1,
+                    }}
+                    defaultValue={formatEditableValue(entry)}
+                    name="value"
+                  >
+                    {entry.values.map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                ) : entry.type === "boolean" ? (
+                  <select
+                    className="h-9 rounded-md border px-3 text-[13px]"
+                    style={{
+                      borderColor: AT.border,
+                      background: AT.bg,
+                      color: AT.ink2,
+                      fontFamily: '"Geist Mono", monospace',
+                      maxWidth: 420,
+                      flex: 1,
+                    }}
+                    defaultValue={formatEditableValue(entry)}
+                    name="value"
+                  >
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                ) : (
+                  <div style={{ flex: 1, maxWidth: 420 }}>
                     <Input
                       defaultValue={formatEditableValue(entry)}
                       name="value"
                       placeholder="Novo valor"
                       type={entry.type === "int" ? "number" : "text"}
                     />
-                  )}
-                  <button
-                    className="h-12 rounded-lg bg-stone-500 px-4 text-sm font-semibold text-white transition hover:bg-stone-800"
-                    type="submit"
-                  >
-                    Salvar
-                  </button>
-                </form>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+                  </div>
+                )}
+                <button className={buttonVariants()} type="submit">
+                  Salvar
+                </button>
+              </form>
+            </div>
+          ))}
+        </div>
+      )}
+    </AdminPageWrap>
   );
 }

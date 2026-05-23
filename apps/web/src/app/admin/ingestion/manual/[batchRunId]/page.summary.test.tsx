@@ -9,9 +9,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({ children, href }: { children: React.ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
-  ),
+  default: ({
+    children,
+    href,
+  }: {
+    children: React.ReactNode;
+    href: string;
+  }) => <a href={href}>{children}</a>,
 }));
 
 vi.mock("@/lib/backoffice-session.server", () => ({
@@ -124,7 +128,9 @@ describe("ManualRunDetailPage summary", () => {
     expect(screen.getByText("Sucesso: 1")).toBeInTheDocument();
     expect(screen.getByText("Falha: 1")).toBeInTheDocument();
     expect(screen.getByText("Skip: 2")).toBeInTheDocument();
-    expect(screen.getByText("Calculado a partir dos itens do lote.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Calculado a partir dos itens do lote."),
+    ).toBeInTheDocument();
 
     expect(screen.queryByText("Total: 99")).not.toBeInTheDocument();
     expect(screen.queryByText("Sucesso: 5")).not.toBeInTheDocument();

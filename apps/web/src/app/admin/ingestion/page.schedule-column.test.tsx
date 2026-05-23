@@ -12,9 +12,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({ children, href }: { children: React.ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
-  ),
+  default: ({
+    children,
+    href,
+  }: {
+    children: React.ReactNode;
+    href: string;
+  }) => <a href={href}>{children}</a>,
 }));
 
 vi.mock("@/lib/backoffice-session.server", () => ({
@@ -86,7 +90,9 @@ describe("AdminIngestionPage fontes schedule signal", () => {
     const table = screen.getByRole("table");
     const scope = within(table);
 
-    expect(scope.getByRole("columnheader", { name: "Agendamento" })).toBeInTheDocument();
+    expect(
+      scope.getByRole("columnheader", { name: "Agendamento" }),
+    ).toBeInTheDocument();
     expect(scope.getByText(/ligado/i)).toBeInTheDocument();
     expect(scope.getByText(/\*\/30 \* \* \* \*/)).toBeInTheDocument();
   });
@@ -116,7 +122,9 @@ describe("AdminIngestionPage fontes schedule signal", () => {
     const table = screen.getByRole("table");
     const scope = within(table);
 
-    expect(scope.getByRole("columnheader", { name: "Agendamento" })).toBeInTheDocument();
+    expect(
+      scope.getByRole("columnheader", { name: "Agendamento" }),
+    ).toBeInTheDocument();
     expect(scope.getByText(/desligado/i)).toBeInTheDocument();
   });
 });

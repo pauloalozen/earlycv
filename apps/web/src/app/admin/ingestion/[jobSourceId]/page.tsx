@@ -162,7 +162,9 @@ export default async function JobSourceAdminPage({
               </label>
 
               <label className="block space-y-1 text-sm text-stone-700">
-                <span className="text-[11px] font-medium text-stone-400">cron</span>
+                <span className="text-[11px] font-medium text-stone-400">
+                  cron
+                </span>
                 <input
                   className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 outline-none focus:border-stone-400"
                   defaultValue={source.scheduleCron ?? "*/30 * * * *"}

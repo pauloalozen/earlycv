@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
-import { Card } from "@/components/ui";
+import {
+  AdminPageWrap,
+  AdminPagination,
+  AdminPill,
+  AdminTable,
+  AdminTd,
+  AdminTh,
+} from "@/app/admin/_components/admin-primitives";
 import { listAdminCvUnlocks } from "@/lib/admin-cv-unlocks-api";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
@@ -68,182 +75,213 @@ export default async function AdminCvUnlocksPage({
   };
 
   return (
-    <div className="px-6 py-10 md:px-10">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <AdminShellHeader
-          eyebrow="admin / liberacoes-cv"
-          subtitle={`${response.total} registro${response.total !== 1 ? "s" : ""} encontrado${response.total !== 1 ? "s" : ""}.`}
-          title="Liberacoes de CV"
-        />
-
-        <Card padding="sm" variant="ghost">
-          <form
-            action="/admin/liberacoes-cv"
-            className="flex flex-wrap gap-3"
-            method="GET"
+    <AdminPageWrap>
+      <AdminShellHeader
+        actions={
+          <Link
+            className={buttonVariants({ variant: "outline" })}
+            href="/admin/liberacoes-cv"
           >
-            <input
-              className="h-10 w-52 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700"
-              defaultValue={sp.email ?? ""}
-              name="email"
-              placeholder="Email"
-            />
-            <input
-              className="h-10 w-52 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700"
-              defaultValue={sp.userId ?? ""}
-              name="userId"
-              placeholder="User ID"
-            />
-            <input
-              className="h-10 w-64 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700"
-              defaultValue={sp.cvAdaptationId ?? ""}
-              name="cvAdaptationId"
-              placeholder="CV Adaptation ID"
-            />
-            <select
-              className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm font-medium text-stone-900"
-              defaultValue={sp.source ?? ""}
-              name="source"
-            >
-              <option value="">Todas as origens</option>
-              <option value="CREDIT">Credito</option>
-              <option value="PLAN_ENTITLEMENT">Plano</option>
-              <option value="ADMIN">Admin</option>
-              <option value="LEGACY">Legado</option>
-            </select>
-            <select
-              className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm font-medium text-stone-900"
-              defaultValue={sp.status ?? ""}
-              name="status"
-            >
-              <option value="">Todos os status</option>
-              <option value="UNLOCKED">Liberado</option>
-              <option value="REVOKED">Revogado</option>
-            </select>
-            <input
-              className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700"
-              defaultValue={sp.dateFrom ?? ""}
-              name="dateFrom"
-              type="date"
-            />
-            <input
-              className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700"
-              defaultValue={sp.dateTo ?? ""}
-              name="dateTo"
-              type="date"
-            />
-            <button className={buttonVariants()} type="submit">
-              Filtrar
-            </button>
-            <Link
-              className={buttonVariants({ variant: "outline" })}
-              href="/admin/liberacoes-cv"
-            >
-              Limpar
-            </Link>
-          </form>
-        </Card>
+            ↓ Exportar CSV
+          </Link>
+        }
+        eyebrow="admin · liberações de cv"
+        subtitle={`Histórico de adaptações de CV liberadas para download, por crédito ou pacote. ${response.total} registro${response.total !== 1 ? "s" : ""}.`}
+        title="Liberações de CV."
+      />
 
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="border-b border-stone-100 bg-stone-50 text-left">
-              <tr>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Data
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Usuario
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Email
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  CV / Adaptacao
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Vaga
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Score
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Creditos
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Origem
-                </th>
-                <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-50">
-              {response.items.length === 0 && (
-                <tr>
-                  <td
-                    className="px-4 py-8 text-center text-stone-400"
-                    colSpan={9}
-                  >
-                    Nenhuma liberacao encontrada.
-                  </td>
-                </tr>
-              )}
-              {response.items.map((item) => (
-                <tr className="hover:bg-stone-50" key={item.id}>
-                  <td className="whitespace-nowrap px-4 py-3 text-stone-600">
-                    {formatDate(item.unlockedAt)}
-                  </td>
-                  <td className="px-4 py-3 text-stone-800">
-                    {item.userName ?? item.userId}
-                  </td>
-                  <td className="px-4 py-3 text-stone-600">
-                    {item.userEmail ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-stone-500">
-                    {item.cvAdaptationId}
-                  </td>
-                  <td className="px-4 py-3 text-stone-600">
-                    {item.jobTitle ?? "—"}
-                    {item.companyName ? ` @ ${item.companyName}` : ""}
-                  </td>
-                  <td className="px-4 py-3 text-stone-600">
-                    {item.score ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-stone-700">
-                    {item.creditsConsumed}
-                  </td>
-                  <td className="px-4 py-3 text-stone-600">{item.source}</td>
-                  <td className="px-4 py-3 text-stone-600">{item.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <form
+        action="/admin/liberacoes-cv"
+        className="mb-4 flex flex-wrap gap-2"
+        method="GET"
+      >
+        <input
+          className="h-9 w-48 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.email ?? ""}
+          name="email"
+          placeholder="Email"
+        />
+        <input
+          className="h-9 w-48 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.userId ?? ""}
+          name="userId"
+          placeholder="User ID"
+        />
+        <input
+          className="h-9 w-60 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.cvAdaptationId ?? ""}
+          name="cvAdaptationId"
+          placeholder="CV Adaptation ID"
+        />
+        <select
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.source ?? ""}
+          name="source"
+        >
+          <option value="">origem: todas</option>
+          <option value="CREDIT">Crédito</option>
+          <option value="PLAN_ENTITLEMENT">Plano</option>
+          <option value="ADMIN">Admin</option>
+          <option value="LEGACY">Legado</option>
+        </select>
+        <select
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.status ?? ""}
+          name="status"
+        >
+          <option value="">status: todos</option>
+          <option value="UNLOCKED">Liberado</option>
+          <option value="REVOKED">Revogado</option>
+        </select>
+        <input
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.dateFrom ?? ""}
+          name="dateFrom"
+          type="date"
+        />
+        <input
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.dateTo ?? ""}
+          name="dateTo"
+          type="date"
+        />
+        <button className={buttonVariants()} type="submit">
+          Filtrar
+        </button>
+        <Link
+          className={buttonVariants({ variant: "outline" })}
+          href="/admin/liberacoes-cv"
+        >
+          Limpar
+        </Link>
+      </form>
 
-        <div className="flex items-center justify-between text-sm text-stone-500">
-          <span>
-            Pagina {response.page} de {response.totalPages}
-          </span>
-          <div className="flex gap-2">
-            {response.page > 1 && (
-              <Link
-                className={buttonVariants({ variant: "outline" })}
-                href={buildUrl({ page: String(response.page - 1) })}
+      <AdminTable>
+        <thead>
+          <tr>
+            <AdminTh w={160}>Data</AdminTh>
+            <AdminTh w={140}>Usuário</AdminTh>
+            <AdminTh w={200}>Email</AdminTh>
+            <AdminTh w={230}>CV / Adaptação</AdminTh>
+            <AdminTh>Vaga</AdminTh>
+            <AdminTh w={70} align="right">
+              Score
+            </AdminTh>
+            <AdminTh w={80} align="right">
+              Créditos
+            </AdminTh>
+            <AdminTh w={90}>Origem</AdminTh>
+            <AdminTh w={100}>Status</AdminTh>
+          </tr>
+        </thead>
+        <tbody>
+          {response.items.length === 0 && (
+            <tr>
+              <td
+                colSpan={9}
+                style={{
+                  padding: "32px 16px",
+                  textAlign: "center",
+                  color: "#8a8580",
+                  fontSize: 13,
+                }}
               >
-                ← Anterior
-              </Link>
-            )}
-            {response.page < response.totalPages && (
-              <Link
-                className={buttonVariants({ variant: "outline" })}
-                href={buildUrl({ page: String(response.page + 1) })}
-              >
-                Proxima →
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+                Nenhuma liberação encontrada.
+              </td>
+            </tr>
+          )}
+          {response.items.map((item) => (
+            <tr key={item.id}>
+              <AdminTd mono muted>
+                {formatDate(item.unlockedAt)}
+              </AdminTd>
+              <AdminTd>{item.userName ?? item.userId}</AdminTd>
+              <AdminTd mono muted>
+                {item.userEmail ?? "—"}
+              </AdminTd>
+              <AdminTd mono muted>
+                {item.cvAdaptationId.slice(0, 24)}…
+              </AdminTd>
+              <AdminTd>
+                {item.jobTitle ?? "—"}
+                {item.companyName ? ` @ ${item.companyName}` : ""}
+              </AdminTd>
+              <AdminTd align="right" mono>
+                {item.score ?? "—"}
+              </AdminTd>
+              <AdminTd align="right" mono>
+                {item.creditsConsumed}
+              </AdminTd>
+              <AdminTd>
+                <AdminPill tone="neutral" mono>
+                  {item.source}
+                </AdminPill>
+              </AdminTd>
+              <AdminTd>
+                <AdminPill tone={item.status === "UNLOCKED" ? "ok" : "danger"}>
+                  {item.status}
+                </AdminPill>
+              </AdminTd>
+            </tr>
+          ))}
+        </tbody>
+      </AdminTable>
+
+      <AdminPagination
+        summary={`página ${response.page} de ${response.totalPages}`}
+      >
+        {response.page > 1 && (
+          <Link
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            href={buildUrl({ page: String(response.page - 1) })}
+          >
+            ← anterior
+          </Link>
+        )}
+        {response.page < response.totalPages && (
+          <Link
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            href={buildUrl({ page: String(response.page + 1) })}
+          >
+            próxima →
+          </Link>
+        )}
+      </AdminPagination>
+    </AdminPageWrap>
   );
 }

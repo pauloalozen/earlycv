@@ -2,7 +2,12 @@ import { revalidatePath } from "next/cache";
 import Image from "next/image";
 import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
-import { Badge, Card, EmptyState } from "@/components/ui";
+import {
+  AdminPageWrap,
+  AdminPill,
+  AT,
+} from "@/app/admin/_components/admin-primitives";
+import { EmptyState } from "@/components/ui";
 import {
   type AdminResumeTemplateDto,
   adminListResumeTemplates,
@@ -49,98 +54,177 @@ export default async function AdminTemplatesPage() {
   }
 
   return (
-    <div className="px-6 py-10 md:px-10">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <AdminShellHeader
-          actions={
-            <Link className={buttonVariants()} href="/admin/templates/novo">
-              Novo template
-            </Link>
-          }
-          eyebrow="admin / templates de cv"
-          subtitle="Gerencie os templates disponíveis para adaptação de CV."
-          title="Templates de CV"
+    <AdminPageWrap>
+      <AdminShellHeader
+        actions={
+          <Link className={buttonVariants()} href="/admin/templates/novo">
+            + Novo template
+          </Link>
+        }
+        eyebrow="admin · templates de cv"
+        subtitle="Gerencie os templates disponíveis para adaptação de CV. Apenas templates ativos aparecem para o usuário final."
+        title="Templates de CV."
+      />
+
+      {templates.length === 0 ? (
+        <EmptyState
+          description="Crie o primeiro template para ele aparecer na tela de adaptação."
+          title="Nenhum template cadastrado"
         />
-
-        {templates.length === 0 ? (
-          <EmptyState
-            description="Crie o primeiro template para ele aparecer na tela de adaptação."
-            title="Nenhum template cadastrado"
-          />
-        ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {templates.map((template) => (
-              <Card className="space-y-4" key={template.id}>
-                <div className="flex gap-4">
-                  {/* Preview thumbnail */}
-                  <div className="relative h-52 w-40 shrink-0 overflow-hidden rounded border border-stone-200 bg-stone-100">
-                    {template.previewImageUrl ? (
-                      <Image
-                        src={template.previewImageUrl}
-                        alt={`Preview ${template.name}`}
-                        fill
-                        unoptimized
-                        className="object-cover object-top"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-stone-400 text-xs text-center px-1">
-                        Sem preview
-                      </div>
-                    )}
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 14,
+          }}
+        >
+          {templates.map((template) => (
+            <div
+              key={template.id}
+              style={{
+                background: AT.card,
+                border: `1px solid ${AT.border}`,
+                borderRadius: 10,
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              {/* Preview */}
+              <div
+                style={{
+                  background: AT.bgAlt,
+                  height: 200,
+                  borderBottom: `1px solid ${AT.border}`,
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {template.previewImageUrl ? (
+                  <Image
+                    src={template.previewImageUrl}
+                    alt={`Preview ${template.name}`}
+                    fill
+                    unoptimized
+                    className="object-cover object-top"
+                  />
+                ) : (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: AT.muted2,
+                      textAlign: "center",
+                      padding: "0 16px",
+                    }}
+                  >
+                    Sem preview
                   </div>
+                )}
+                <div style={{ position: "absolute", top: 10, right: 10 }}>
+                  <AdminPill tone={template.isActive ? "ok" : "neutral"} mono>
+                    {template.isActive ? "ATIVO" : "INATIVO"}
+                  </AdminPill>
+                </div>
+              </div>
 
-                  <div className="flex flex-1 items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <p className="text-xl font-bold tracking-tight text-stone-950">
-                        {template.name}
-                      </p>
-                      <p className="font-mono text-sm text-stone-500">
-                        {template.slug}
-                      </p>
-                    </div>
-                    <Badge variant={template.isActive ? "accent" : "neutral"}>
-                      {template.isActive ? "ativo" : "inativo"}
-                    </Badge>
+              {/* Info */}
+              <div
+                style={{
+                  padding: "14px 16px",
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "baseline",
+                    justifyContent: "space-between",
+                    marginBottom: 4,
+                  }}
+                >
+                  <div
+                    style={{ fontSize: 15, fontWeight: 600, color: AT.ink2 }}
+                  >
+                    {template.name}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: '"Geist Mono", monospace',
+                      fontSize: 11,
+                      color: AT.muted2,
+                    }}
+                  >
+                    {template.slug}
                   </div>
                 </div>
 
                 {template.description && (
-                  <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-                    <p className="text-sm text-stone-600">
-                      {template.description}
-                    </p>
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: AT.muted,
+                      lineHeight: 1.4,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {template.description}
                   </div>
                 )}
 
                 {template.targetRole && (
-                  <div className="grid gap-2 text-sm text-stone-600">
-                    <p>
-                      <strong>Cargo alvo:</strong> {template.targetRole}
-                    </p>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 11.5,
+                      color: AT.muted2,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: '"Geist Mono", monospace',
+                        letterSpacing: 0.6,
+                      }}
+                    >
+                      CARGO ALVO
+                    </span>
+                    <span style={{ color: AT.ink2, fontWeight: 500 }}>
+                      {template.targetRole}
+                    </span>
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-3">
+                <div style={{ display: "flex", gap: 6, marginTop: "auto" }}>
                   <Link
-                    className={buttonVariants()}
+                    className={buttonVariants({ size: "sm" })}
                     href={`/admin/templates/${template.id}`}
                   >
                     Editar
                   </Link>
                   <form action={toggleStatus.bind(null, template.id)}>
                     <button
-                      className={buttonVariants({ variant: "outline" })}
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
                       type="submit"
                     >
                       {template.isActive ? "Desativar" : "Ativar"}
                     </button>
                   </form>
                 </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </AdminPageWrap>
   );
 }

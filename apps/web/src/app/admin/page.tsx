@@ -1,25 +1,79 @@
 import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
-import { Card, EmptyState, StatCard } from "@/components/ui";
+import {
+  AdminPageWrap,
+  AdminPill,
+  AdminStatCard,
+  AdminStatsRow,
+  AT,
+} from "@/app/admin/_components/admin-primitives";
+import { EmptyState } from "@/components/ui";
 import { buildPendingTypeLabel } from "@/lib/admin-operations";
+import { listAdminPayments } from "@/lib/admin-payments-api";
 import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "./_components/admin-shell-header";
-import { AdminStatusBadge } from "./_components/admin-status-badge";
 import { AdminTokenState } from "./_components/admin-token-state";
+import { type Period, PeriodSelector } from "./_components/period-selector";
 
 export const metadata = buildAdminMetadata("Visao geral");
 
+const VALID_PERIODS: Period[] = ["hoje", "7d", "30d", "mes"];
+
+function resolvePeriod(raw?: string): Period {
+  return VALID_PERIODS.includes(raw as Period) ? (raw as Period) : "30d";
+}
+
+function getSinceDate(period: Period): Date {
+  const now = new Date();
+  switch (period) {
+    case "hoje":
+      return new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+      );
+    case "7d":
+      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    case "mes":
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    default:
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  }
+}
+
+function periodSubLabel(period: Period): string {
+  switch (period) {
+    case "hoje":
+      return "hoje";
+    case "7d":
+      return "últimos 7 dias";
+    case "30d":
+      return "últimos 30 dias";
+    case "mes":
+      return "este mês";
+  }
+}
+
+function formatBRL(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+}
+
 type AdminOverviewPageProps = {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ period?: string; token?: string }>;
 };
 
 export default async function AdminOverviewPage({
   searchParams,
 }: AdminOverviewPageProps) {
-  await searchParams;
+  const { period: rawPeriod } = await searchParams;
+  const period = resolvePeriod(rawPeriod);
+
   const token = await getBackofficeSessionToken();
 
   if (!token) {
@@ -45,260 +99,404 @@ export default async function AdminOverviewPage({
   }
 
   const {
+    adminUsers,
+    adminUserViews,
     companyViews,
+    companies,
     jobs,
     orderedRuns,
-    overviewMetrics,
     pendingItems,
     sourceViews,
   } = overviewDataResult.data;
 
-  return (
-    <div className="px-6 py-10 md:px-10">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <AdminShellHeader
-          actions={
-            <>
-              <Link className={buttonVariants()} href={`/admin/empresas/nova`}>
-                Adicionar empresa e fonte
-              </Link>
-              <Link
-                className={buttonVariants({ variant: "outline" })}
-                href={`/admin/pendencias`}
-              >
-                Ver pendencias
-              </Link>
-            </>
-          }
-          eyebrow="admin / visao geral"
-          subtitle="Acompanhe o estado operacional da captura e continue fluxos interrompidos sem sair do backoffice."
-          title="Central operacional"
-        />
+  // ── Period cutoff ──────────────────────────────────────────────
+  const since = getSinceDate(period);
+  const sinceIso = since.toISOString();
+  const subLabel = periodSubLabel(period);
 
-        <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-          {overviewMetrics.map((metric) => (
-            <StatCard
-              key={metric.label}
-              label={metric.label}
-              value={metric.value}
+  // ── Period-sensitive metrics ───────────────────────────────────
+  const newUsers = adminUsers.filter((u) => u.createdAt >= sinceIso).length;
+  const runsInPeriod = orderedRuns.filter(
+    (r) => r.startedAt != null && r.startedAt >= sinceIso,
+  ).length;
+  const failedRunsInPeriod = orderedRuns.filter(
+    (r) =>
+      r.startedAt != null && r.startedAt >= sinceIso && r.status === "failed",
+  ).length;
+
+  let approvedPaymentsCount = 0;
+  let revenueInCents = 0;
+  try {
+    const paymentsResult = await listAdminPayments({
+      from: sinceIso,
+      limit: 1000,
+    });
+    const approved = paymentsResult.items.filter(
+      (p) => p.status === "approved" || p.status === "completed",
+    );
+    approvedPaymentsCount = approved.length;
+    revenueInCents = approved.reduce(
+      (sum, p) => sum + (p.amountInCents ?? 0),
+      0,
+    );
+  } catch {
+    // payments API indisponível — mantém zeros
+  }
+
+  // ── State metrics (current snapshot) ──────────────────────────
+  const totalUsers = adminUsers.length;
+  const totalAdaptedResumes = adminUserViews.reduce(
+    (sum, u) => sum + u.adaptedResumeCount,
+    0,
+  );
+  const incompleteCompanies = companyViews.filter(
+    (item) => item.status.label !== "completa",
+  ).length;
+  const sourcesAwaitingRun = sourceViews.filter(
+    (item) => item.status.label === "aguardando primeiro run",
+  ).length;
+  const failedRunsTotal = orderedRuns.filter(
+    (r) => r.status === "failed",
+  ).length;
+
+  return (
+    <AdminPageWrap>
+      <AdminShellHeader
+        actions={
+          <>
+            <Link
+              className={buttonVariants({ variant: "outline" })}
+              href="/admin/empresas/nova"
+            >
+              + Empresa e fonte
+            </Link>
+            <Link className={buttonVariants()} href="/admin/pendencias">
+              Ver pendências
+            </Link>
+          </>
+        }
+        eyebrow="admin · visão geral"
+        subtitle="Acompanhe o estado do produto, captura e operação financeira sem sair do backoffice."
+        title="Central operacional."
+      />
+
+      {/* ── Métricas por período ───────────────────────────────── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 12,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: '"Geist Mono", monospace',
+            fontSize: 10.5,
+            letterSpacing: 1.2,
+            color: AT.muted2,
+            fontWeight: 500,
+          }}
+        >
+          NEGÓCIO · PERÍODO
+        </div>
+        <PeriodSelector current={period} />
+      </div>
+
+      <AdminStatsRow cols={4}>
+        <AdminStatCard
+          label="Novos cadastros"
+          value={String(newUsers)}
+          sub={subLabel}
+        />
+        <AdminStatCard
+          label="Pagamentos aprovados"
+          value={String(approvedPaymentsCount)}
+          sub={subLabel}
+        />
+        <AdminStatCard
+          label="Receita"
+          value={revenueInCents > 0 ? formatBRL(revenueInCents) : "—"}
+          sub={subLabel}
+        />
+        <AdminStatCard
+          label="Runs executados"
+          value={String(runsInPeriod)}
+          sub={
+            failedRunsInPeriod > 0
+              ? `${failedRunsInPeriod} com falha`
+              : subLabel
+          }
+        />
+      </AdminStatsRow>
+
+      {/* ── Estado atual (snapshot) ────────────────────────────── */}
+      <div
+        style={{
+          fontFamily: '"Geist Mono", monospace',
+          fontSize: 10.5,
+          letterSpacing: 1.2,
+          color: AT.muted2,
+          fontWeight: 500,
+          margin: "4px 0 12px",
+        }}
+      >
+        PRODUTO · ESTADO ATUAL
+      </div>
+
+      <AdminStatsRow cols={4}>
+        <AdminStatCard
+          label="Usuários cadastrados"
+          value={String(totalUsers)}
+          sub="total acumulado"
+        />
+        <AdminStatCard
+          label="CVs adaptados"
+          value={String(totalAdaptedResumes)}
+          sub="total acumulado"
+        />
+        <AdminStatCard
+          label="Vagas catalogadas"
+          value={String(jobs.length)}
+          sub="total acumulado"
+        />
+        <AdminStatCard
+          label="Pendências abertas"
+          value={String(pendingItems.length)}
+          sub={pendingItems.length === 0 ? "tudo ok" : "requer atenção"}
+        />
+      </AdminStatsRow>
+
+      {/* ── Pendências + Sinais ────────────────────────────────── */}
+      <div
+        style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 16 }}
+      >
+        {/* Pendências */}
+        <div
+          style={{
+            background: AT.card,
+            border: `1px solid ${AT.border}`,
+            borderRadius: 10,
+            padding: "18px 18px 14px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontFamily: '"Geist Mono", monospace',
+                  fontSize: 10.5,
+                  letterSpacing: 1.2,
+                  color: AT.muted2,
+                  fontWeight: 500,
+                  marginBottom: 4,
+                }}
+              >
+                PENDÊNCIAS PRIORIZADAS · {pendingItems.length}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: AT.ink2 }}>
+                Próximas ações operacionais
+              </div>
+            </div>
+            <Link
+              href="/admin/pendencias"
+              style={{
+                fontSize: 12,
+                color: AT.muted,
+                textDecoration: "none",
+                fontWeight: 500,
+              }}
+            >
+              abrir fila completa →
+            </Link>
+          </div>
+
+          {pendingItems.length === 0 ? (
+            <EmptyState
+              description="Nenhuma pendencia operacional aberta no momento."
+              title="Tudo sob controle"
             />
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              {pendingItems.slice(0, 5).map((item, i) => (
+                <div
+                  key={`${item.type}:${item.entityId}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 14,
+                    padding: "12px 0",
+                    borderTop: `1px solid ${i === 0 ? AT.border : AT.borderSoft}`,
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                        marginBottom: 3,
+                      }}
+                    >
+                      <AdminPill tone="warn" mono>
+                        {buildPendingTypeLabel(item.type)}
+                      </AdminPill>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: AT.ink2,
+                        }}
+                      >
+                        {item.title}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11.5,
+                        color: AT.muted,
+                        fontFamily: '"Geist Mono", monospace',
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {item.description}
+                    </div>
+                  </div>
+                  <Link
+                    className={buttonVariants({
+                      size: "sm",
+                      variant: "outline",
+                    })}
+                    href={item.href}
+                  >
+                    {item.cta}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Sinais rápidos */}
+        <div
+          style={{
+            background: AT.card,
+            border: `1px solid ${AT.border}`,
+            borderRadius: 10,
+            padding: "18px 18px 8px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontFamily: '"Geist Mono", monospace',
+                  fontSize: 10.5,
+                  letterSpacing: 1.2,
+                  color: AT.muted2,
+                  fontWeight: 500,
+                  marginBottom: 4,
+                }}
+              >
+                CAPTURA · SAÚDE
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: AT.ink2 }}>
+                Estado da ingestão
+              </div>
+            </div>
+            <Link
+              href="/admin/ingestion"
+              style={{
+                fontSize: 12,
+                color: AT.muted,
+                textDecoration: "none",
+                fontWeight: 500,
+              }}
+            >
+              ver ingestão →
+            </Link>
+          </div>
+
+          {[
+            {
+              label: "Empresas incompletas",
+              value: incompleteCompanies,
+              note: "sem dados completos",
+              alertIfNonZero: true,
+            },
+            {
+              label: "Fontes aguardando run",
+              value: sourcesAwaitingRun,
+              note: "agendamento pendente",
+              alertIfNonZero: true,
+            },
+            {
+              label: "Runs com falha (total)",
+              value: failedRunsTotal,
+              note: "verificar logs",
+              alertIfNonZero: true,
+            },
+            {
+              label: "Empresas configuradas",
+              value: companies.length,
+              note: "total",
+              alertIfNonZero: false,
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                padding: "14px 0",
+                borderTop: `1px solid ${AT.borderSoft}`,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: AT.ink2 }}>
+                  {s.label}
+                </div>
+                <div style={{ fontSize: 11.5, color: AT.muted2, marginTop: 2 }}>
+                  {s.note}
+                </div>
+              </div>
+              <div
+                style={{
+                  fontFamily: '"Geist", sans-serif',
+                  fontSize: 22,
+                  fontWeight: 500,
+                  letterSpacing: -0.8,
+                  color:
+                    s.alertIfNonZero && s.value > 0
+                      ? AT.warn
+                      : s.value === 0
+                        ? AT.ok
+                        : AT.ink2,
+                }}
+              >
+                {s.value}
+              </div>
+            </div>
           ))}
         </div>
-
-        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <Card className="space-y-4" padding="lg">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-bold tracking-tight text-stone-950">
-                Pendencias priorizadas
-              </h2>
-              <Link
-                className={buttonVariants({ size: "sm", variant: "outline" })}
-                href={`/admin/pendencias`}
-              >
-                Abrir fila completa
-              </Link>
-            </div>
-
-            {pendingItems.length === 0 ? (
-              <EmptyState
-                description="Nenhuma pendencia operacional aberta no momento."
-                title="Tudo sob controle"
-              />
-            ) : (
-              <div className="grid gap-3">
-                {pendingItems.slice(0, 5).map((item) => (
-                  <Card
-                    className="space-y-3"
-                    key={`${item.type}:${item.entityId}`}
-                    padding="sm"
-                    variant="ghost"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="text-[11px] font-medium text-stone-400">
-                          {buildPendingTypeLabel(item.type)} - prioridade{" "}
-                          {item.priority}
-                        </p>
-                        <p className="text-sm font-semibold text-stone-950">
-                          {item.title}
-                        </p>
-                        <p className="text-sm leading-6 text-stone-600">
-                          {item.description}
-                        </p>
-                      </div>
-                      <Link
-                        className={buttonVariants({ size: "sm" })}
-                        href={item.href}
-                      >
-                        {item.cta}
-                      </Link>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card className="space-y-4" padding="lg">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-bold tracking-tight text-stone-950">
-                Sinais rapidos
-              </h2>
-              <Link
-                className={buttonVariants({ size: "sm", variant: "outline" })}
-                href={`/admin/runs`}
-              >
-                Ver runs
-              </Link>
-            </div>
-            <div className="grid gap-3">
-              <Card padding="sm" variant="muted">
-                <p className="text-[11px] font-medium text-stone-400">
-                  empresas incompletas
-                </p>
-                <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">
-                  {
-                    companyViews.filter(
-                      (item) => item.status.label !== "completa",
-                    ).length
-                  }
-                </p>
-              </Card>
-              <Card padding="sm" variant="muted">
-                <p className="text-[11px] font-medium text-stone-400">
-                  fontes aguardando run
-                </p>
-                <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">
-                  {
-                    sourceViews.filter(
-                      (item) => item.status.label === "aguardando primeiro run",
-                    ).length
-                  }
-                </p>
-              </Card>
-              <Card padding="sm" variant="muted">
-                <p className="text-[11px] font-medium text-stone-400">
-                  runs com falha
-                </p>
-                <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">
-                  {
-                    orderedRuns.filter((item) => item.status === "failed")
-                      .length
-                  }
-                </p>
-              </Card>
-              <Card padding="sm" variant="muted">
-                <p className="text-[11px] font-medium text-stone-400">
-                  vagas catalogadas
-                </p>
-                <p className="mt-2 text-2xl font-bold tracking-tight text-stone-950">
-                  {jobs.length}
-                </p>
-              </Card>
-            </div>
-          </Card>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-2">
-          <Card className="space-y-4" padding="lg">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-bold tracking-tight text-stone-950">
-                Empresas em destaque
-              </h2>
-              <Link
-                className={buttonVariants({ size: "sm", variant: "outline" })}
-                href={`/admin/empresas`}
-              >
-                Ver empresas
-              </Link>
-            </div>
-            <div className="grid gap-3">
-              {companyViews.slice(0, 5).map((company) => (
-                <Card
-                  className="flex items-center justify-between gap-3"
-                  key={company.id}
-                  padding="sm"
-                  variant="ghost"
-                >
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-stone-950">
-                      {company.name}
-                    </p>
-                    <p className="text-sm text-stone-600">
-                      {company.relatedSources.length} fonte(s) vinculada(s)
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <AdminStatusBadge status={company.status} />
-                    <Link
-                      className={buttonVariants({
-                        size: "sm",
-                        variant: "outline",
-                      })}
-                      href={`/admin/empresas/${company.id}`}
-                    >
-                      Detalhe
-                    </Link>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="space-y-4" padding="lg">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-bold tracking-tight text-stone-950">
-                Ultimos runs
-              </h2>
-              <Link
-                className={buttonVariants({ size: "sm", variant: "outline" })}
-                href={`/admin/runs`}
-              >
-                Abrir historico
-              </Link>
-            </div>
-            <div className="grid gap-3">
-              {orderedRuns.slice(0, 5).map((run) => (
-                <Card
-                  className="flex items-center justify-between gap-3"
-                  key={run.id}
-                  padding="sm"
-                  variant="ghost"
-                >
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-stone-950">
-                      Run {run.id}
-                    </p>
-                    <p className="text-sm text-stone-600">{run.startedAt}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <AdminStatusBadge
-                      status={{
-                        label: run.status,
-                        tone:
-                          run.status === "failed"
-                            ? "danger"
-                            : run.status === "running"
-                              ? "warning"
-                              : "success",
-                      }}
-                    />
-                    <Link
-                      className={buttonVariants({
-                        size: "sm",
-                        variant: "outline",
-                      })}
-                      href={`/admin/runs/${run.id}`}
-                    >
-                      Detalhe
-                    </Link>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </Card>
-        </div>
       </div>
-    </div>
+    </AdminPageWrap>
   );
 }

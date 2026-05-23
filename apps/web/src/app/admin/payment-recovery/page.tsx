@@ -1,13 +1,19 @@
 import Link from "next/link";
-
+import { buttonVariants } from "@/app/admin/_components/admin-button";
+import {
+  AdminPageWrap,
+  AdminStatCard,
+  AdminStatsRow,
+} from "@/app/admin/_components/admin-primitives";
 import { listAdminPaymentRecoveryPending } from "@/lib/admin-payment-recovery-api";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { AdminShellHeader } from "../_components/admin-shell-header";
+import { RecoveryTableClient } from "./_components/recovery-table-client";
 import {
   ignoreRecoveryAction,
   sendRecoveryEmailAction,
   unignoreRecoveryAction,
 } from "./actions";
-import { RecoveryTableClient } from "./_components/recovery-table-client";
 
 export const metadata = buildAdminMetadata("Recuperacao");
 
@@ -53,7 +59,9 @@ export default async function AdminPaymentRecoveryPage({
   const localPagedSummaryEligible = response.items.filter(
     (item) => item.eligibilityStatus === "eligible" && !item.ignored,
   ).length;
-  const localPagedSummaryIgnored = response.items.filter((item) => item.ignored).length;
+  const localPagedSummaryIgnored = response.items.filter(
+    (item) => item.ignored,
+  ).length;
   const localPagedSummaryAlreadySent = response.items.filter(
     (item) => item.alreadySent,
   ).length;
@@ -79,58 +87,155 @@ export default async function AdminPaymentRecoveryPage({
   };
 
   return (
-    <div className="max-w-7xl px-6 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-stone-900">Recuperacao de pedidos pendentes</h1>
-        <p className="mt-1 text-sm text-stone-500">
-          Revisao manual de pedidos pendentes para envio de email de recuperacao.
-        </p>
-      </div>
+    <AdminPageWrap>
+      <AdminShellHeader
+        actions={
+          <Link
+            className={buttonVariants({ variant: "outline" })}
+            href="/admin/payment-recovery"
+          >
+            ↓ Exportar CSV
+          </Link>
+        }
+        eyebrow="admin · recuperação de pedidos"
+        subtitle="Revisão manual de pedidos pendentes para envio de email de recuperação. Aplique filtros e dispare por linha."
+        title="Recuperação de pedidos pendentes."
+      />
 
-      <div className="mb-6 grid gap-3 md:grid-cols-3">
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-wide text-stone-500">Resumo local (pagina)</p>
-          <p className="text-xl font-semibold text-stone-900">{localPagedSummaryEligible}</p>
-          <p className="text-xs text-stone-500">Elegiveis para envio</p>
-        </div>
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-wide text-stone-500">Resumo local (pagina)</p>
-          <p className="text-xl font-semibold text-stone-900">{localPagedSummaryAlreadySent}</p>
-          <p className="text-xs text-stone-500">Ja enviados</p>
-        </div>
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-wide text-stone-500">Resumo local (pagina)</p>
-          <p className="text-xl font-semibold text-stone-900">{localPagedSummaryIgnored}</p>
-          <p className="text-xs text-stone-500">Ignorados</p>
-        </div>
-      </div>
+      <AdminStatsRow>
+        <AdminStatCard
+          label="Elegíveis para envio"
+          value={String(localPagedSummaryEligible)}
+          sub="nesta página"
+        />
+        <AdminStatCard
+          label="Já enviados"
+          value={String(localPagedSummaryAlreadySent)}
+          sub="nesta página"
+        />
+        <AdminStatCard
+          label="Ignorados"
+          value={String(localPagedSummaryIgnored)}
+        />
+        <AdminStatCard
+          label="Total na página"
+          value={String(response.items.length)}
+        />
+      </AdminStatsRow>
 
-      <form action="/admin/payment-recovery" className="mb-6 flex flex-wrap gap-3" method="GET">
-        <select className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700" defaultValue={normalized.eligibilityStatus} name="eligibilityStatus">
+      <form
+        action="/admin/payment-recovery"
+        className="mb-4 flex flex-wrap gap-2"
+        method="GET"
+      >
+        <select
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={normalized.eligibilityStatus}
+          name="eligibilityStatus"
+        >
           <option value="eligible">eligible</option>
           <option value="possibly_resolved">possibly_resolved</option>
           <option value="not_eligible">not_eligible</option>
         </select>
-        <input className="w-48 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700" defaultValue={sp.originAction ?? ""} name="originAction" placeholder="originAction" />
-        <select className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700" defaultValue={sp.alreadySent ?? ""} name="alreadySent">
-          <option value="">alreadySent: todos</option>
-          <option value="true">alreadySent: true</option>
-          <option value="false">alreadySent: false</option>
+        <input
+          className="h-9 w-48 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.originAction ?? ""}
+          name="originAction"
+          placeholder="originAction"
+        />
+        <select
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.alreadySent ?? ""}
+          name="alreadySent"
+        >
+          <option value="">enviado: todos</option>
+          <option value="true">enviado: sim</option>
+          <option value="false">enviado: não</option>
         </select>
-        <select className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700" defaultValue={sp.hasAvailableCredits ?? ""} name="hasAvailableCredits">
-          <option value="">creditos: todos</option>
-          <option value="true">creditos: true</option>
-          <option value="false">creditos: false</option>
+        <select
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.hasAvailableCredits ?? ""}
+          name="hasAvailableCredits"
+        >
+          <option value="">créditos: todos</option>
+          <option value="true">créditos: sim</option>
+          <option value="false">créditos: não</option>
         </select>
-        <select className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700" defaultValue={normalized.ignored} name="ignored">
-          <option value="false">ignored: false</option>
-          <option value="true">ignored: true</option>
+        <select
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={normalized.ignored}
+          name="ignored"
+        >
+          <option value="false">ignorado: false</option>
+          <option value="true">ignorado: true</option>
         </select>
-        <input className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700" defaultValue={sp.dateFrom ?? ""} name="dateFrom" type="date" />
-        <input className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700" defaultValue={sp.dateTo ?? ""} name="dateTo" type="date" />
-        <input className="w-56 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700" defaultValue={sp.search ?? ""} name="search" placeholder="Buscar por usuario, email, pedido" />
-        <button className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white" type="submit">Filtrar</button>
-        <Link className="rounded-lg border border-stone-200 px-4 py-2 text-sm text-stone-600" href="/admin/payment-recovery">Limpar</Link>
+        <input
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.dateFrom ?? ""}
+          name="dateFrom"
+          type="date"
+        />
+        <input
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.dateTo ?? ""}
+          name="dateTo"
+          type="date"
+        />
+        <input
+          className="h-9 w-56 rounded-md border px-3 text-[12.5px]"
+          style={{
+            borderColor: "rgba(10,10,10,0.08)",
+            background: "#fafaf6",
+            color: "#2a2620",
+          }}
+          defaultValue={sp.search ?? ""}
+          name="search"
+          placeholder="Buscar por usuário, email, pedido"
+        />
+        <button className={buttonVariants()} type="submit">
+          Filtrar
+        </button>
+        <Link
+          className={buttonVariants({ variant: "outline" })}
+          href="/admin/payment-recovery"
+        >
+          Limpar
+        </Link>
       </form>
 
       <RecoveryTableClient
@@ -140,21 +245,36 @@ export default async function AdminPaymentRecoveryPage({
         onUnignore={unignoreRecoveryAction}
       />
 
-      <div className="mt-4 flex items-center justify-between text-sm text-stone-500">
-        <span>Pagina {response.page} de {response.totalPages}</span>
+      <div
+        className="mt-4 flex items-center justify-between"
+        style={{
+          fontSize: 12,
+          color: "#8a8580",
+          fontFamily: '"Geist Mono", monospace',
+        }}
+      >
+        <span>
+          página {response.page} de {response.totalPages}
+        </span>
         <div className="flex gap-2">
           {response.page > 1 ? (
-            <Link className="rounded-lg border border-stone-200 px-3 py-1.5 hover:bg-stone-100" href={buildUrl({ page: String(response.page - 1) })}>
-              ← Anterior
+            <Link
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              href={buildUrl({ page: String(response.page - 1) })}
+            >
+              ← anterior
             </Link>
           ) : null}
           {response.page < response.totalPages ? (
-            <Link className="rounded-lg border border-stone-200 px-3 py-1.5 hover:bg-stone-100" href={buildUrl({ page: String(response.page + 1) })}>
-              Proxima →
+            <Link
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              href={buildUrl({ page: String(response.page + 1) })}
+            >
+              próxima →
             </Link>
           ) : null}
         </div>
       </div>
-    </div>
+    </AdminPageWrap>
   );
 }
