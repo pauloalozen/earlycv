@@ -6,9 +6,9 @@ import {
   getGlobalSchedulerConfig,
   listAllIngestionRuns,
   listJobSources,
+  listJobSourcesPaginated,
   listManualRuns,
 } from "@/lib/admin-ingestion-api";
-import { buildSourceStatus, filterSources } from "@/lib/admin-operations";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
@@ -32,10 +32,6 @@ type SearchParams = Promise<{
   tab?: "fontes" | "vagas" | "runs" | "scheduler";
   message?: string;
   status?: string;
-  query?: string;
-  sourceStatus?: string;
-  type?: string;
-  sourcesPage?: string;
   vagaQuery?: string;
   vagaSource?: string;
   vagaStatus?: string;
@@ -148,12 +144,8 @@ export default async function AdminIngestionPage({
     globalPage,
     manualPage,
     message,
-    query,
-    sourceStatus,
-    sourcesPage,
     status,
     tab,
-    type,
     vagaQuery,
     vagaSource,
     vagaStatus,
@@ -172,37 +164,22 @@ export default async function AdminIngestionPage({
   }
 
   try {
-    const [sources, manualRuns, globalRuns, schedulerConfig] =
+    const [sources, manualRuns, globalRuns, schedulerConfig, sourcesFirstPage] =
       await Promise.all([
         listJobSources(),
         listManualRuns(),
         listAllIngestionRuns(),
         getGlobalSchedulerConfig(),
+        listJobSourcesPaginated({ pageSize: 50 }),
       ]);
 
-    const sourceViews = sources.map((source) => ({
-      ...source,
-      status: buildSourceStatus(source),
-    }));
-
     const sourceMap = new Map(sources.map((s) => [s.id, s]));
-
-    // fontes tab
-    const filteredSources = filterSources(sourceViews, {
-      query,
-      status: sourceStatus,
-      type,
-    });
-    const pageSize = 10;
-    const pagedSources = paginate(
-      filteredSources,
-      Number(sourcesPage ?? "1") || 1,
-      pageSize,
-    );
 
     const availableSourceNames = [
       ...new Set(sources.map((s) => s.sourceName)),
     ].sort();
+
+    const pageSize = 10;
 
     // runs tab
     const pagedManualRuns = paginate(
@@ -290,75 +267,7 @@ export default async function AdminIngestionPage({
         {activeTab === "fontes" && (
           <div className="flex flex-col gap-4">
             <IngestionDashboardCards />
-
-            <Card
-              className="grid gap-3 lg:grid-cols-[1.4fr_1fr_1fr_auto]"
-              padding="sm"
-              variant="ghost"
-            >
-              <Input
-                defaultValue={query}
-                form="fontes-filter"
-                name="query"
-                placeholder="Buscar fonte ou empresa"
-              />
-              <select
-                className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
-                defaultValue={sourceStatus ?? ""}
-                form="fontes-filter"
-                name="sourceStatus"
-              >
-                <option value="">Todos os status</option>
-                <option value="aguardando primeiro run">
-                  aguardando primeiro run
-                </option>
-                <option value="falha recente">falha recente</option>
-                <option value="ativa">ativa</option>
-              </select>
-              <select
-                className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
-                defaultValue={type ?? ""}
-                form="fontes-filter"
-                name="type"
-              >
-                <option value="">Todos os tipos</option>
-                <option value="custom_html">custom_html</option>
-                <option value="custom_api">custom_api</option>
-                <option value="gupy">gupy</option>
-              </select>
-              <form className="contents" id="fontes-filter" method="GET">
-                <input name="tab" type="hidden" value="fontes" />
-                <button
-                  className={buttonVariants({ variant: "outline" })}
-                  type="submit"
-                >
-                  Filtrar
-                </button>
-              </form>
-            </Card>
-
-            <FontesTableClient
-              initialSources={pagedSources.rows}
-              page={pagedSources.page}
-              totalPages={pagedSources.totalPages}
-              prevHref={
-                pagedSources.page > 1
-                  ? buildTabHref("fontes", {
-                      sourcesPage: String(pagedSources.page - 1),
-                    })
-                  : null
-              }
-              nextHref={
-                pagedSources.page < pagedSources.totalPages
-                  ? buildTabHref("fontes", {
-                      sourcesPage: String(pagedSources.page + 1),
-                    })
-                  : null
-              }
-              query={query}
-              sourceStatus={sourceStatus}
-              type={type}
-            />
+            <FontesTableClient initialData={sourcesFirstPage} />
           </div>
         )}
 

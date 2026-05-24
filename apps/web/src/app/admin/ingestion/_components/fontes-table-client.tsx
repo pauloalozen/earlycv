@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
   AT,
@@ -25,28 +25,28 @@ type IngestionRunSummary = {
 };
 
 type JobSourceRow = {
+  activeJobsCount: number;
+  company: { name: string };
+  consecutive403Count?: number;
   id: string;
+  ingestionRuns?: IngestionRunSummary[];
+  pausedUntil?: string | null;
+  scheduleCron?: string | null;
+  scheduleEnabled?: boolean;
   sourceName: string;
   sourceType: string;
-  company: { name: string };
-  scheduleEnabled?: boolean;
-  scheduleCron?: string | null;
-  consecutive403Count?: number;
-  pausedUntil?: string | null;
-  ingestionRuns?: IngestionRunSummary[];
+};
+
+type PagedResult = {
+  page: number;
+  pageSize: number;
+  rows: JobSourceRow[];
+  total: number;
+  totalPages: number;
 };
 
 type Props = {
-  initialSources: JobSourceRow[];
-  // pagination
-  page: number;
-  totalPages: number;
-  prevHref: string | null;
-  nextHref: string | null;
-  // filters
-  query?: string;
-  sourceStatus?: string;
-  type?: string;
+  initialData: PagedResult;
 };
 
 function elapsedLabel(startedAt: string) {
@@ -82,58 +82,159 @@ function RunStatusBadge({ run }: { run?: IngestionRunSummary | null }) {
       </span>
     );
   }
-  if (run.status === "completed")
-    return <AdminPill tone="ok">concluído</AdminPill>;
+  if (run.status === "completed") return <AdminPill tone="ok">concluído</AdminPill>;
   return <AdminPill tone="danger">falhou</AdminPill>;
 }
 
-export function FontesTableClient({
-  initialSources,
-  page,
-  totalPages,
-  prevHref,
-  nextHref,
-  query,
-  sourceStatus,
-  type,
-}: Props) {
-  const [sources, setSources] = useState<JobSourceRow[]>(initialSources);
+export function FontesTableClient({ initialData }: Props) {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [result, setResult] = useState<PagedResult>(initialData);
+  const [togglePending, setTogglePending] = useState(false);
+
+  const isFirstRender = useRef(true);
+  const paramsRef = useRef({ search: "", statusFilter: "", typeFilter: "", page: 1 });
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [togglePending, startToggleTransition] = useTransition();
 
-  async function pollSources() {
-    try {
-      const res = await fetch("/api/admin/ingestion/sources");
-      if (!res.ok) return;
-      const fresh: JobSourceRow[] = await res.json();
-      setSources(fresh);
-    } catch {
-      // ignore
+  const fetchSources = useCallback(
+    async (params: {
+      search: string;
+      statusFilter: string;
+      typeFilter: string;
+      page: number;
+    }) => {
+      try {
+        const qs = new URLSearchParams({ page: String(params.page), pageSize: "50" });
+        if (params.search) qs.set("search", params.search);
+        if (params.statusFilter) qs.set("statusFilter", params.statusFilter);
+        if (params.typeFilter) qs.set("typeFilter", params.typeFilter);
+        const res = await fetch(`/api/admin/ingestion/sources?${qs}`);
+        if (!res.ok) return;
+        const data: PagedResult = await res.json();
+        setResult(data);
+      } catch {
+        // ignore
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
     }
-  }
+    paramsRef.current = { search, statusFilter, typeFilter, page };
+    fetchSources({ search, statusFilter, typeFilter, page });
+  }, [search, statusFilter, typeFilter, page, fetchSources]);
 
   useEffect(() => {
-    setSources(initialSources);
-  }, [initialSources]);
-
-  useEffect(() => {
-    pollingRef.current = setInterval(pollSources, 5_000);
+    pollingRef.current = setInterval(() => {
+      fetchSources(paramsRef.current);
+    }, 5_000);
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, []);
+  }, [fetchSources]);
+
+  function handleSearchChange(value: string) {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setSearch(value);
+      setPage(1);
+    }, 300);
+  }
+
+  function handleStatusFilterChange(value: string) {
+    setStatusFilter(value);
+    setPage(1);
+  }
+
+  function handleTypeFilterChange(value: string) {
+    setTypeFilter(value);
+    setPage(1);
+  }
+
+  const rows = result.rows;
+  const total = result.total;
+  const totalPages = result.totalPages;
+  const currentPage = result.page;
+  const pageSize = result.pageSize;
+
+  const firstItem = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const lastItem = Math.min(currentPage * pageSize, total);
 
   const redirectPath = "/admin/ingestion?tab=fontes";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* CSV import no topo */}
+      {/* Filter bar */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          type="text"
+          placeholder="Buscar fonte ou empresa"
+          onChange={(e) => handleSearchChange(e.target.value)}
+          style={{
+            height: 32,
+            borderRadius: 6,
+            border: `1px solid ${AT.border}`,
+            background: AT.card,
+            color: AT.ink2,
+            padding: "0 10px",
+            fontSize: 12.5,
+            flex: "1 1 200px",
+            minWidth: 160,
+          }}
+        />
+        <select
+          defaultValue=""
+          onChange={(e) => handleStatusFilterChange(e.target.value)}
+          style={{
+            height: 32,
+            borderRadius: 6,
+            border: `1px solid ${AT.border}`,
+            background: AT.card,
+            color: AT.ink2,
+            padding: "0 10px",
+            fontSize: 12.5,
+          }}
+        >
+          <option value="">Todos os status</option>
+          <option value="aguardando primeiro run">aguardando primeiro run</option>
+          <option value="falha recente">falha recente</option>
+          <option value="ativa">ativa</option>
+        </select>
+        <select
+          defaultValue=""
+          onChange={(e) => handleTypeFilterChange(e.target.value)}
+          style={{
+            height: 32,
+            borderRadius: 6,
+            border: `1px solid ${AT.border}`,
+            background: AT.card,
+            color: AT.ink2,
+            padding: "0 10px",
+            fontSize: 12.5,
+          }}
+        >
+          <option value="">Todos os tipos</option>
+          <option value="custom_html">custom_html</option>
+          <option value="custom_api">custom_api</option>
+          <option value="gupy">gupy</option>
+        </select>
+      </div>
+
+      {/* Counter + CSV import */}
       <div
         style={{
           display: "flex",
           gap: 8,
           alignItems: "center",
           flexWrap: "wrap",
+          justifyContent: "space-between",
         }}
       >
         <span
@@ -143,35 +244,46 @@ export function FontesTableClient({
             fontFamily: '"Geist Mono", monospace',
           }}
         >
-          Importar por CSV:
+          Mostrando {firstItem}–{lastItem} de {total}
         </span>
-        <form action={importCompanySourcesCsvAction} className="flex gap-2">
-          <input name="redirectPath" type="hidden" value={redirectPath} />
-          <input
-            className="h-8 rounded-md border px-2 text-xs"
-            style={{ borderColor: AT.border, background: AT.card, color: AT.ink2 }}
-            accept=".csv"
-            name="file"
-            required
-            type="file"
-          />
-          <button
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-            name="dryRun"
-            type="submit"
-            value="true"
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span
+            style={{
+              fontSize: 12,
+              color: AT.muted,
+              fontFamily: '"Geist Mono", monospace',
+            }}
           >
-            Validar (dry-run)
-          </button>
-          <button
-            className={buttonVariants({ size: "sm" })}
-            name="dryRun"
-            type="submit"
-            value="false"
-          >
-            Importar
-          </button>
-        </form>
+            Importar por CSV:
+          </span>
+          <form action={importCompanySourcesCsvAction} className="flex gap-2">
+            <input name="redirectPath" type="hidden" value={redirectPath} />
+            <input
+              className="h-8 rounded-md border px-2 text-xs"
+              style={{ borderColor: AT.border, background: AT.card, color: AT.ink2 }}
+              accept=".csv"
+              name="file"
+              required
+              type="file"
+            />
+            <button
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+              name="dryRun"
+              type="submit"
+              value="true"
+            >
+              Validar (dry-run)
+            </button>
+            <button
+              className={buttonVariants({ size: "sm" })}
+              name="dryRun"
+              type="submit"
+              value="false"
+            >
+              Importar
+            </button>
+          </form>
+        </div>
       </div>
 
       <AdminTable>
@@ -180,6 +292,7 @@ export function FontesTableClient({
             <AdminTh>Empresa</AdminTh>
             <AdminTh>Fonte</AdminTh>
             <AdminTh w={110}>Adapter</AdminTh>
+            <AdminTh w={70}>Vagas</AdminTh>
             <AdminTh w={180}>Status</AdminTh>
             <AdminTh w={140}>Agendamento</AdminTh>
             <AdminTh w={160}>Último run</AdminTh>
@@ -189,10 +302,10 @@ export function FontesTableClient({
           </tr>
         </thead>
         <tbody>
-          {sources.length === 0 && (
+          {rows.length === 0 && (
             <tr>
               <td
-                colSpan={7}
+                colSpan={8}
                 style={{
                   padding: "32px 16px",
                   textAlign: "center",
@@ -204,7 +317,7 @@ export function FontesTableClient({
               </td>
             </tr>
           )}
-          {sources.map((source) => {
+          {rows.map((source) => {
             const latestRun = source.ingestionRuns?.[0] ?? null;
             const isRunning = latestRun?.status === "running";
             return (
@@ -215,18 +328,25 @@ export function FontesTableClient({
                   transition: "background 0.15s",
                 }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLTableRowElement).style.background =
-                    AT.bgAlt;
+                  (e.currentTarget as HTMLTableRowElement).style.background = AT.bgAlt;
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLTableRowElement).style.background =
-                    "";
+                  (e.currentTarget as HTMLTableRowElement).style.background = "";
                 }}
               >
                 <AdminTd>{source.company.name}</AdminTd>
                 <AdminTd muted>{source.sourceName}</AdminTd>
                 <AdminTd mono muted>
                   {source.sourceType}
+                </AdminTd>
+                <AdminTd mono>
+                  <span
+                    style={{
+                      color: source.activeJobsCount === 0 ? AT.muted : AT.ink2,
+                    }}
+                  >
+                    {source.activeJobsCount}
+                  </span>
                 </AdminTd>
                 <AdminTd>
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -253,17 +373,17 @@ export function FontesTableClient({
                       }
                       disabled={togglePending}
                       onClick={() => {
-                        startToggleTransition(async () => {
-                          const fd = new FormData();
-                          fd.set("jobSourceId", source.id);
-                          fd.set(
-                            "scheduleEnabled",
-                            source.scheduleEnabled ? "false" : "true",
-                          );
-                          fd.set("redirectPath", redirectPath);
-                          await toggleScheduleEnabledAction(fd);
-                          await pollSources();
-                        });
+                        setTogglePending(true);
+                        const fd = new FormData();
+                        fd.set("jobSourceId", source.id);
+                        fd.set(
+                          "scheduleEnabled",
+                          source.scheduleEnabled ? "false" : "true",
+                        );
+                        fd.set("redirectPath", redirectPath);
+                        toggleScheduleEnabledAction(fd)
+                          .then(() => fetchSources(paramsRef.current))
+                          .finally(() => setTogglePending(false));
                       }}
                       style={{
                         width: 36,
@@ -291,7 +411,11 @@ export function FontesTableClient({
                       />
                     </button>
                     <span
-                      style={{ fontSize: 11.5, color: AT.muted, fontFamily: '"Geist Mono", monospace' }}
+                      style={{
+                        fontSize: 11.5,
+                        color: AT.muted,
+                        fontFamily: '"Geist Mono", monospace',
+                      }}
                     >
                       {source.scheduleCron ?? "—"}
                     </span>
@@ -310,7 +434,9 @@ export function FontesTableClient({
                         type="submit"
                         disabled={isRunning}
                         title={isRunning ? "Em execução" : undefined}
-                        style={isRunning ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+                        style={
+                          isRunning ? { opacity: 0.45, cursor: "not-allowed" } : undefined
+                        }
                       >
                         Rodar
                       </button>
@@ -340,23 +466,25 @@ export function FontesTableClient({
       </AdminTable>
 
       <AdminPagination
-        summary={`página ${page} de ${totalPages}`}
+        summary={`Mostrando ${firstItem}–${lastItem} de ${total} · página ${currentPage} de ${totalPages}`}
       >
-        {prevHref && (
-          <Link
+        {currentPage > 1 && (
+          <button
             className={buttonVariants({ size: "sm", variant: "outline" })}
-            href={prevHref}
+            type="button"
+            onClick={() => setPage((p) => p - 1)}
           >
             ← anterior
-          </Link>
+          </button>
         )}
-        {nextHref && (
-          <Link
+        {currentPage < totalPages && (
+          <button
             className={buttonVariants({ size: "sm", variant: "outline" })}
-            href={nextHref}
+            type="button"
+            onClick={() => setPage((p) => p + 1)}
           >
             próxima →
-          </Link>
+          </button>
         )}
       </AdminPagination>
 
