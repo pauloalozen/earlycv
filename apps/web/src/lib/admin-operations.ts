@@ -74,9 +74,12 @@ type SearchableCompany = {
 type SearchableSource = {
   checkIntervalMinutes: number;
   company: { name: string };
+  consecutive403Count?: number;
   id: string;
   ingestionRuns?: IngestionRunSummary[];
   parserKey?: string;
+  pauseReason?: string | null;
+  pausedUntil?: string | null;
   scheduleCron?: string | null;
   scheduleEnabled?: boolean;
   sourceName: string;

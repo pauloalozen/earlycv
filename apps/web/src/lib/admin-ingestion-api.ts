@@ -170,6 +170,7 @@ export type JobSourceRecord = {
     normalizedName: string;
   };
   companyId: string;
+  consecutive403Count?: number;
   id: string;
   ingestionRuns?: IngestionRunSummary[];
   isActive: boolean;
@@ -178,6 +179,8 @@ export type JobSourceRecord = {
   lastErrorMessage: string | null;
   lastSuccessAt: string | null;
   parserKey: string;
+  pauseReason?: string | null;
+  pausedUntil?: string | null;
   scheduleCron?: string | null;
   scheduleEnabled?: boolean;
   scheduleTimezone?: string;
@@ -359,13 +362,14 @@ export async function updateGlobalSchedulerConfig(
 }
 
 export async function runGlobalSchedulerNow(token?: string) {
-  return apiRequest<{ failed?: number; skipped?: number; status: string; succeeded?: number }>(
-    "/runs/scheduler/global/run",
-    token,
-    {
-      method: "POST",
-    },
-  );
+  return apiRequest<{
+    failed?: number;
+    skipped?: number;
+    status: string;
+    succeeded?: number;
+  }>("/runs/scheduler/global/run", token, {
+    method: "POST",
+  });
 }
 
 export async function startManualAdapterRun(
@@ -430,9 +434,13 @@ export async function listManualRunItems(
 }
 
 export async function cancelManualRun(batchRunId: string, token?: string) {
-  return apiRequest<ManualRunRecord>(`/runs/manual/${batchRunId}/cancel`, token, {
-    method: "POST",
-  });
+  return apiRequest<ManualRunRecord>(
+    `/runs/manual/${batchRunId}/cancel`,
+    token,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export async function deleteJobSource(jobSourceId: string, token?: string) {

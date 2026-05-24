@@ -1,6 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
-
+import { shouldSkipDetailFetch } from "../dedup-policy";
+import { IngestionFetchError } from "../errors";
 import type {
+  IngestionCollectContext,
   IngestionSourceAdapter,
   JobSourceContext,
   NormalizedJobObservation,
@@ -70,10 +72,16 @@ function sleep(ms: number) {
 }
 
 function stripHtml(value: string) {
-  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function normalizeWorkModel(value?: string | null, remoteWorking?: boolean | null) {
+function normalizeWorkModel(
+  value?: string | null,
+  remoteWorking?: boolean | null,
+) {
   if (remoteWorking) return "remote";
   if (value === "hybrid") return "hybrid";
   if (value === "on-site") return "onsite";
@@ -92,7 +100,8 @@ function normalizeTitle(value?: string | null) {
 function getSubdomainFromSourceUrl(sourceUrl: string) {
   const parsed = new URL(sourceUrl);
   const match = parsed.hostname.toLowerCase().match(/^([a-z0-9-]+)\.gupy\.io$/);
-  if (!match?.[1]) throw new Error("gupy sourceUrl must point to {subdomain}.gupy.io");
+  if (!match?.[1])
+    throw new Error("gupy sourceUrl must point to {subdomain}.gupy.io");
   return match[1];
 }
 
@@ -119,7 +128,10 @@ export class GupyAdapter implements IngestionSourceAdapter {
   private readonly logger = new Logger(GupyAdapter.name);
   private readonly limit = 10;
 
-  async collect(jobSource: JobSourceContext): Promise<NormalizedJobObservation[]> {
+  async collect(
+    jobSource: JobSourceContext,
+    context?: IngestionCollectContext,
+  ): Promise<NormalizedJobObservation[]> {
     const subdomain = getSubdomainFromSourceUrl(jobSource.sourceUrl);
     const baseUrl = `https://${subdomain}.gupy.io/api/v1/jobs`;
     const observations: NormalizedJobObservation[] = [];
@@ -131,7 +143,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
       const page = await this.fetchPage(baseUrl, offset);
       if (!page) {
         if (offset === 0) {
-          return this.collectFromBoardHtml(subdomain);
+          return this.collectFromBoardHtml(subdomain, context);
         }
         break;
       }
@@ -161,6 +173,14 @@ export class GupyAdapter implements IngestionSourceAdapter {
 
     const response = await this.fetchWithRetry(url);
 
+    if (response.status === 403) {
+      throw new IngestionFetchError({
+        context: "gupy_board_api",
+        message: "Gupy board API request returned 403 forbidden",
+        statusCode: 403,
+      });
+    }
+
     if (!response.ok) {
       this.logger.warn(
         `Skipping Gupy page due to HTTP ${response.status} at offset ${offset}`,
@@ -171,11 +191,21 @@ export class GupyAdapter implements IngestionSourceAdapter {
     return (await response.json()) as GupyApiResponse;
   }
 
-  private async collectFromBoardHtml(subdomain: string) {
+  private async collectFromBoardHtml(
+    subdomain: string,
+    context?: IngestionCollectContext,
+  ) {
     const boardUrl = `https://${subdomain}.gupy.io/jobs`;
     const boardResponse = await this.fetchWithRetry(new URL(boardUrl));
 
     if (!boardResponse.ok) {
+      if (boardResponse.status === 403) {
+        throw new IngestionFetchError({
+          context: "gupy_board_html",
+          message: "Gupy board HTML request returned 403 forbidden",
+          statusCode: 403,
+        });
+      }
       throw new Error(`gupy board is unavailable at ${boardUrl}`);
     }
 
@@ -186,10 +216,54 @@ export class GupyAdapter implements IngestionSourceAdapter {
 
     for (const boardJob of boardJobs) {
       try {
+        const canonicalKey = `gupy:${subdomain}:${String(boardJob.id)}`;
+        const now = new Date();
+        if (context) {
+          try {
+            const existing =
+              await context.getExistingJobByCanonicalKey(canonicalKey);
+            if (shouldSkipDetailFetch(existing?.lastSeenAt, now)) {
+              observations.push(
+                this.toObservation(
+                  subdomain,
+                  {
+                    addressCity: boardJob.workplace?.address?.city ?? undefined,
+                    addressCountry:
+                      boardJob.workplace?.address?.country ?? undefined,
+                    addressState:
+                      boardJob.workplace?.address?.stateShortName ??
+                      boardJob.workplace?.address?.state ??
+                      undefined,
+                    departmentName: boardJob.department ?? undefined,
+                    id: boardJob.id,
+                    name: boardJob.title ?? undefined,
+                    type: boardJob.type ?? undefined,
+                    workplaceType:
+                      boardJob.workplace?.workplaceType ?? undefined,
+                  },
+                  { detailFetchSkipped: true },
+                ),
+              );
+              continue;
+            }
+          } catch (error) {
+            this.logger.warn(
+              `Failed dedup lookup for ${canonicalKey}: ${error instanceof Error ? error.message : "unknown"}`,
+            );
+          }
+        }
+
         const detailUrl = `https://${subdomain}.gupy.io/jobs/${String(boardJob.id)}?jobBoardSource=gupy_public_page`;
         const detailResponse = await this.fetchWithRetry(new URL(detailUrl));
 
         if (!detailResponse.ok) {
+          if (detailResponse.status === 403) {
+            throw new IngestionFetchError({
+              context: "gupy_job_detail",
+              message: `Gupy job detail request returned 403 forbidden for ${String(boardJob.id)}`,
+              statusCode: 403,
+            });
+          }
           this.logger.warn(
             `Skipping Gupy detail due to HTTP ${detailResponse.status} for job ${String(boardJob.id)}`,
           );
@@ -201,16 +275,22 @@ export class GupyAdapter implements IngestionSourceAdapter {
         const detailJob = detailData.props?.pageProps?.job;
 
         if (!detailJob) {
-          this.logger.warn(`Skipping Gupy detail missing job payload for ${String(boardJob.id)}`);
+          this.logger.warn(
+            `Skipping Gupy detail missing job payload for ${String(boardJob.id)}`,
+          );
           continue;
         }
 
         observations.push(
           this.toObservation(subdomain, {
             addressCity:
-              detailJob.addressCity ?? boardJob.workplace?.address?.city ?? undefined,
+              detailJob.addressCity ??
+              boardJob.workplace?.address?.city ??
+              undefined,
             addressCountry:
-              detailJob.addressCountry ?? boardJob.workplace?.address?.country ?? undefined,
+              detailJob.addressCountry ??
+              boardJob.workplace?.address?.country ??
+              undefined,
             addressState:
               detailJob.addressStateShortName ??
               boardJob.workplace?.address?.stateShortName ??
@@ -225,7 +305,9 @@ export class GupyAdapter implements IngestionSourceAdapter {
             responsibilities: detailJob.responsibilities ?? undefined,
             type: detailJob.jobType ?? boardJob.type ?? undefined,
             workplaceType:
-              detailJob.workplaceType ?? boardJob.workplace?.workplaceType ?? undefined,
+              detailJob.workplaceType ??
+              boardJob.workplace?.workplaceType ??
+              undefined,
           }),
         );
       } catch (error) {
@@ -265,9 +347,17 @@ export class GupyAdapter implements IngestionSourceAdapter {
     return JSON.parse(match[1]) as T;
   }
 
-  private toObservation(subdomain: string, job: GupyApiJob): NormalizedJobObservation {
+  private toObservation(
+    subdomain: string,
+    job: GupyApiJob,
+    options?: { detailFetchSkipped?: boolean },
+  ): NormalizedJobObservation {
     const publishedAt = normalizeDate(job.publishedAt);
-    const locationParts = [job.addressCity, job.addressState, job.addressCountry]
+    const locationParts = [
+      job.addressCity,
+      job.addressState,
+      job.addressCountry,
+    ]
       .map((value) => value?.trim())
       .filter((value): value is string => Boolean(value));
 
@@ -287,6 +377,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
       country: job.addressCountry?.trim() || undefined,
       descriptionClean,
       descriptionRaw,
+      detailFetchSkipped: options?.detailFetchSkipped,
       employmentType: job.type?.trim() || undefined,
       externalJobId: String(job.id),
       firstSeenAt: publishedAt,

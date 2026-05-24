@@ -1,9 +1,9 @@
 import { Inject, Injectable } from "@nestjs/common";
-import {
-  type IngestionBatchItemStatus,
-  type IngestionBatchRunStatus,
-  type IngestionBatchScopeType,
-  type JobSourceType,
+import type {
+  IngestionBatchItemStatus,
+  IngestionBatchRunStatus,
+  IngestionBatchScopeType,
+  JobSourceType,
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
@@ -23,7 +23,9 @@ function isMissingManualBatchTableError(error: unknown) {
   }
 
   const modelName = prismaError.meta?.modelName;
-  return modelName === "IngestionBatchRun" || modelName === "IngestionBatchItem";
+  return (
+    modelName === "IngestionBatchRun" || modelName === "IngestionBatchItem"
+  );
 }
 
 type CreateAdapterBatchRunInput = {
@@ -52,6 +54,7 @@ export class ManualIngestionBatchRepository {
         const sources = await tx.jobSource.findMany({
           where: {
             isActive: true,
+            OR: [{ pausedUntil: null }, { pausedUntil: { lte: new Date() } }],
             sourceType: input.adapterType,
           },
           select: {

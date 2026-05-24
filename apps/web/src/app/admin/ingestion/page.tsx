@@ -423,7 +423,20 @@ export default async function AdminIngestionPage({
                           {source.sourceType}
                         </td>
                         <td className="px-4 py-3 text-stone-600">
-                          {source.status.label}
+                          <div className="space-y-1">
+                            <p>{source.status.label}</p>
+                            <p className="text-xs text-stone-500">
+                              403 seguidos: {source.consecutive403Count ?? 0}
+                            </p>
+                            {source.pausedUntil ? (
+                              <p className="text-xs text-amber-700">
+                                pausado ate{" "}
+                                {new Date(source.pausedUntil).toLocaleString(
+                                  "pt-BR",
+                                )}
+                              </p>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-stone-500">
                           {source.scheduleEnabled

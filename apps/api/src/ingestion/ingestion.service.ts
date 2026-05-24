@@ -13,7 +13,11 @@ import type {
 
 import { DatabaseService } from "../database/database.service";
 import { CustomApiAdapter, CustomHtmlAdapter, GupyAdapter } from "./adapters";
+import { evaluate403CircuitBreaker } from "./circuit-breaker-policy";
+import { isForbiddenIngestionError } from "./errors";
+import { getStaleCutoff } from "./stale-policy";
 import type {
+  IngestionCollectContext,
   IngestionPreviewItem,
   IngestionRunSummary,
   IngestionSourceAdapter,
@@ -87,6 +91,7 @@ export class IngestionService {
 
   async runJobSource(jobSourceId: string) {
     const jobSource = await this.getJobSourceContext(jobSourceId);
+    this.assertJobSourceNotPaused(jobSource);
     const runningRun = await this.database.ingestionRun.findFirst({
       where: {
         jobSourceId,
@@ -111,17 +116,23 @@ export class IngestionService {
     try {
       const observations = await this.getAdapter(jobSource.sourceType).collect(
         jobSource,
+        this.createCollectContext(),
       );
       const previewItems: IngestionPreviewItem[] = [];
       let newCount = 0;
       let updatedCount = 0;
       let skippedCount = 0;
       let failedCount = 0;
+      let staleMarkedCount = 0;
+      let detailFetchSkippedCount = 0;
 
       for (const observation of observations) {
         try {
           const result = await this.upsertObservation(jobSource, observation);
           previewItems.push(result.previewItem);
+          if (observation.detailFetchSkipped) {
+            detailFetchSkippedCount += 1;
+          }
 
           if (result.previewItem.action === "created") {
             newCount += 1;
@@ -144,6 +155,22 @@ export class IngestionService {
 
       const status: IngestionRunStatus =
         failedCount > 0 ? "failed" : "completed";
+
+      if (failedCount === 0) {
+        staleMarkedCount = await this.markSourceJobsAsInactiveWhenStale(
+          jobSource.id,
+          new Date(),
+        );
+      }
+
+      const circuitState = evaluate403CircuitBreaker({
+        event: "success",
+        now: new Date(),
+        previousConsecutive403Count: jobSource.consecutive403Count,
+        previousPauseReason: jobSource.pauseReason,
+        previousPausedUntil: jobSource.pausedUntil,
+      });
+
       const updatedRun = await this.database.ingestionRun.update({
         where: { id: run.id },
         data: {
@@ -171,11 +198,28 @@ export class IngestionService {
               ? `${failedCount} item(s) failed during ingestion.`
               : null,
           lastSuccessAt: new Date(),
+          consecutive403Count: circuitState.consecutive403Count,
+          pausedUntil: circuitState.pausedUntil,
+          pauseReason: circuitState.pauseReason,
         },
       });
 
-      return toRunSummary(updatedRun as IngestionRunRecord);
+      return {
+        ...toRunSummary(updatedRun as IngestionRunRecord),
+        currentConsecutive403: circuitState.consecutive403Count,
+        pauseTriggered: circuitState.pauseTriggered,
+        detailFetchSkippedCount,
+        staleMarkedCount,
+      };
     } catch (error) {
+      const circuitState = evaluate403CircuitBreaker({
+        event: isForbiddenIngestionError(error) ? "error_403" : "error_other",
+        now: new Date(),
+        previousConsecutive403Count: jobSource.consecutive403Count,
+        previousPauseReason: jobSource.pauseReason,
+        previousPausedUntil: jobSource.pausedUntil,
+      });
+
       const failedRun = await this.database.ingestionRun.update({
         where: { id: run.id },
         data: {
@@ -195,11 +239,29 @@ export class IngestionService {
           lastErrorAt: new Date(),
           lastErrorMessage:
             error instanceof Error ? error.message : "ingestion failed",
+          consecutive403Count: circuitState.consecutive403Count,
+          pausedUntil: circuitState.pausedUntil,
+          pauseReason: circuitState.pauseReason,
         },
       });
 
-      return toRunSummary(failedRun as IngestionRunRecord);
+      return {
+        ...toRunSummary(failedRun as IngestionRunRecord),
+        currentConsecutive403: circuitState.consecutive403Count,
+        pauseTriggered: circuitState.pauseTriggered,
+      };
     }
+  }
+
+  private createCollectContext(): IngestionCollectContext {
+    return {
+      getExistingJobByCanonicalKey: async (canonicalKey: string) => {
+        return this.database.job.findUnique({
+          where: { canonicalKey },
+          select: { lastSeenAt: true },
+        });
+      },
+    };
   }
 
   async listRuns(jobSourceId: string) {
@@ -306,6 +368,22 @@ export class IngestionService {
     return adapter;
   }
 
+  private assertJobSourceNotPaused(jobSource: JobSourceContext) {
+    if (!jobSource.pausedUntil) {
+      return;
+    }
+
+    const now = new Date();
+    if (jobSource.pausedUntil <= now) {
+      return;
+    }
+
+    const pauseReason = jobSource.pauseReason ?? "source paused";
+    throw new ConflictException(
+      `job source is paused until ${jobSource.pausedUntil.toISOString()} (${pauseReason})`,
+    );
+  }
+
   private async upsertObservation(
     jobSource: JobSourceContext,
     observation: NormalizedJobObservation,
@@ -384,5 +462,24 @@ export class IngestionService {
         title: observation.title,
       } satisfies IngestionPreviewItem,
     };
+  }
+
+  private async markSourceJobsAsInactiveWhenStale(
+    jobSourceId: string,
+    now: Date,
+  ) {
+    const cutoff = getStaleCutoff(now);
+    const result = await this.database.job.updateMany({
+      where: {
+        jobSourceId,
+        status: "active",
+        lastSeenAt: { lt: cutoff },
+      },
+      data: {
+        status: "inactive",
+      },
+    });
+
+    return result.count;
   }
 }

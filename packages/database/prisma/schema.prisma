@@ -641,6 +641,9 @@ model JobSource {
   lastSuccessAt        DateTime?
   lastErrorAt          DateTime?
   lastErrorMessage     String?
+  consecutive403Count  Int            @default(0)
+  pausedUntil          DateTime?
+  pauseReason          String?
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
   company              Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)

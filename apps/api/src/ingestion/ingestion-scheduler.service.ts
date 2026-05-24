@@ -4,8 +4,8 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 import { DatabaseService } from "../database/database.service";
 import { doesCronMatchDate } from "./cron-utils";
 import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
-import { IngestionLockRepository } from "./ingestion-lock.repository";
 import { IngestionService } from "./ingestion.service";
+import { IngestionLockRepository } from "./ingestion-lock.repository";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -17,7 +17,8 @@ export class IngestionSchedulerService {
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(IngestionService) private readonly ingestionService: IngestionService,
+    @Inject(IngestionService)
+    private readonly ingestionService: IngestionService,
     @Inject(IngestionLockRepository)
     private readonly lockRepository: IngestionLockRepository,
     @Inject(GlobalSchedulerConfigService)
@@ -40,6 +41,7 @@ export class IngestionSchedulerService {
     const sources = await this.database.jobSource.findMany({
       where: {
         isActive: true,
+        OR: [{ pausedUntil: null }, { pausedUntil: { lte: now } }],
         scheduleEnabled: true,
         scheduleCron: { not: null },
       },
@@ -47,7 +49,10 @@ export class IngestionSchedulerService {
     });
 
     for (const source of sources) {
-      if (!source.scheduleCron || !doesCronMatchDate(source.scheduleCron, now)) {
+      if (
+        !source.scheduleCron ||
+        !doesCronMatchDate(source.scheduleCron, now)
+      ) {
         continue;
       }
 
@@ -103,7 +108,10 @@ export class IngestionSchedulerService {
     try {
       const config = await this.globalConfigService.getConfig();
       const sources = await this.database.jobSource.findMany({
-        where: { isActive: true },
+        where: {
+          isActive: true,
+          OR: [{ pausedUntil: null }, { pausedUntil: { lte: new Date() } }],
+        },
         include: { company: true },
         orderBy: [
           { company: { name: "asc" } },
@@ -140,7 +148,10 @@ export class IngestionSchedulerService {
           );
           await sleep(config.errorDelayMs);
         } finally {
-          await this.lockRepository.release(`job-source:${source.id}`, sourceLockOwner);
+          await this.lockRepository.release(
+            `job-source:${source.id}`,
+            sourceLockOwner,
+          );
         }
       }
 

@@ -98,7 +98,7 @@ export default async function JobSourceAdminPage({
             </div>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <Card className="space-y-2">
               <p className="text-[11px] font-medium text-stone-400">
                 ultimo sucesso
@@ -121,6 +121,19 @@ export default async function JobSourceAdminPage({
               </p>
               <p className="text-sm font-medium text-stone-900">
                 {source.checkIntervalMinutes} min
+              </p>
+            </Card>
+            <Card className="space-y-2">
+              <p className="text-[11px] font-medium text-stone-400">
+                estado do circuit breaker
+              </p>
+              <p className="text-sm font-medium text-stone-900">
+                403 seguidos: {source.consecutive403Count ?? 0}
+              </p>
+              <p className="text-xs text-stone-600">
+                {source.pausedUntil
+                  ? `Pausado ate ${new Date(source.pausedUntil).toLocaleString("pt-BR")} (${source.pauseReason ?? "sem motivo"})`
+                  : "Sem pausa ativa"}
               </p>
             </Card>
           </div>

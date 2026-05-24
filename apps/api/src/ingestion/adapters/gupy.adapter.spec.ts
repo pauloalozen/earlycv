@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { IngestionFetchError } from "../errors";
 import type { JobSourceContext } from "../types";
 import { GupyAdapter } from "./gupy.adapter";
 
 type MockResponse = {
   status?: number;
   json?: unknown;
+  text?: string;
 };
 
 function createJobSourceContext(sourceUrl: string): JobSourceContext {
@@ -47,6 +49,7 @@ function createFetchMock(sequence: MockResponse[]) {
       status,
       statusText: String(status),
       json: async () => entry?.json ?? {},
+      text: async () => entry?.text ?? "",
     } as Response;
   }) as typeof fetch;
 
@@ -195,4 +198,250 @@ test("GupyAdapter throws explicit error when subdomain is missing", async () => 
       ),
     /gupy sourceUrl must point to \{subdomain\}\.gupy\.io/i,
   );
+});
+
+test("GupyAdapter throws typed error when board API responds 403", async () => {
+  const fetchMock = createFetchMock([
+    {
+      status: 403,
+      json: { message: "forbidden" },
+    },
+  ]);
+
+  try {
+    const adapter = new GupyAdapter();
+
+    await assert.rejects(
+      () => adapter.collect(createJobSourceContext("https://ifood.gupy.io")),
+      (error) => {
+        assert.equal(error instanceof IngestionFetchError, true);
+        assert.equal((error as IngestionFetchError).statusCode, 403);
+        return true;
+      },
+    );
+  } finally {
+    fetchMock.restore();
+  }
+});
+
+test("GupyAdapter skips detail fetch for fresh job from HTML board", async () => {
+  const boardPayload = {
+    props: {
+      pageProps: {
+        jobs: [
+          {
+            id: "101",
+            title: "Pessoa Engenheira Backend",
+            type: "CLT",
+            workplace: {
+              address: {
+                city: "Sao Paulo",
+                country: "Brasil",
+                state: "SP",
+              },
+              workplaceType: "hybrid",
+            },
+          },
+        ],
+      },
+    },
+  };
+  const boardHtml = `<html><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(boardPayload)}</script></html>`;
+  const fetchMock = createFetchMock([
+    { status: 500, json: { message: "fallback html" } },
+    { status: 200, text: boardHtml },
+  ]);
+
+  try {
+    const adapter = new GupyAdapter();
+    const observations = await adapter.collect(
+      createJobSourceContext("https://ifood.gupy.io"),
+      {
+        getExistingJobByCanonicalKey: async () => ({
+          lastSeenAt: new Date("2026-06-10T11:30:00.000Z"),
+        }),
+      },
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(fetchMock.calls.length, 2);
+    assert.equal(observations[0]?.detailFetchSkipped, true);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
+test("GupyAdapter fetches detail for stale existing HTML job", async () => {
+  const boardPayload = {
+    props: { pageProps: { jobs: [{ id: "102", title: "Pessoa Backend" }] } },
+  };
+  const detailPayload = {
+    props: {
+      pageProps: {
+        job: {
+          id: "102",
+          name: "Pessoa Backend",
+          description: "<p>Desc</p>",
+          publishedAt: "2026-05-16T10:00:00.000Z",
+        },
+      },
+    },
+  };
+  const fetchMock = createFetchMock([
+    { status: 500, json: { message: "fallback html" } },
+    {
+      status: 200,
+      text: `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(boardPayload)}</script>`,
+    },
+    {
+      status: 200,
+      text: `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(detailPayload)}</script>`,
+    },
+  ]);
+
+  try {
+    const adapter = new GupyAdapter();
+    const observations = await adapter.collect(
+      createJobSourceContext("https://ifood.gupy.io"),
+      {
+        getExistingJobByCanonicalKey: async () => ({
+          lastSeenAt: new Date("2024-01-01T10:00:00.000Z"),
+        }),
+      },
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(fetchMock.calls.length, 3);
+    assert.equal(observations[0]?.detailFetchSkipped, undefined);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
+test("GupyAdapter fetches detail for new HTML job", async () => {
+  const boardPayload = {
+    props: { pageProps: { jobs: [{ id: "103", title: "Pessoa Frontend" }] } },
+  };
+  const detailPayload = {
+    props: {
+      pageProps: {
+        job: {
+          id: "103",
+          name: "Pessoa Frontend",
+          description: "<p>Desc</p>",
+          publishedAt: "2026-05-16T10:00:00.000Z",
+        },
+      },
+    },
+  };
+  const fetchMock = createFetchMock([
+    { status: 500, json: { message: "fallback html" } },
+    {
+      status: 200,
+      text: `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(boardPayload)}</script>`,
+    },
+    {
+      status: 200,
+      text: `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(detailPayload)}</script>`,
+    },
+  ]);
+
+  try {
+    const adapter = new GupyAdapter();
+    const observations = await adapter.collect(
+      createJobSourceContext("https://ifood.gupy.io"),
+      {
+        getExistingJobByCanonicalKey: async () => null,
+      },
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(fetchMock.calls.length, 3);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
+test("GupyAdapter fail-opens when lookup throws in HTML path", async () => {
+  const boardPayload = {
+    props: { pageProps: { jobs: [{ id: "104", title: "Pessoa Dados" }] } },
+  };
+  const detailPayload = {
+    props: {
+      pageProps: {
+        job: {
+          id: "104",
+          name: "Pessoa Dados",
+          description: "<p>Desc</p>",
+          publishedAt: "2026-05-16T10:00:00.000Z",
+        },
+      },
+    },
+  };
+  const fetchMock = createFetchMock([
+    { status: 500, json: { message: "fallback html" } },
+    {
+      status: 200,
+      text: `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(boardPayload)}</script>`,
+    },
+    {
+      status: 200,
+      text: `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(detailPayload)}</script>`,
+    },
+  ]);
+
+  try {
+    const adapter = new GupyAdapter();
+    const observations = await adapter.collect(
+      createJobSourceContext("https://ifood.gupy.io"),
+      {
+        getExistingJobByCanonicalKey: async () => {
+          throw new Error("lookup failed");
+        },
+      },
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(fetchMock.calls.length, 3);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
+test("GupyAdapter does not call lookup context on API path", async () => {
+  const now = "2026-05-16T10:00:00.000Z";
+  const fetchMock = createFetchMock([
+    {
+      json: {
+        results: [
+          {
+            id: 701,
+            name: "Pessoa DevOps",
+            description: "Desc",
+            publishedAt: now,
+          },
+        ],
+        total: 1,
+      },
+    },
+  ]);
+  let lookupCalls = 0;
+
+  try {
+    const adapter = new GupyAdapter();
+    const observations = await adapter.collect(
+      createJobSourceContext("https://ifood.gupy.io"),
+      {
+        getExistingJobByCanonicalKey: async () => {
+          lookupCalls += 1;
+          return null;
+        },
+      },
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(lookupCalls, 0);
+  } finally {
+    fetchMock.restore();
+  }
 });

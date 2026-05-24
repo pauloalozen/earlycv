@@ -23,6 +23,7 @@ export type NormalizedJobObservation = {
   country?: string;
   descriptionClean: string;
   descriptionRaw: string;
+  detailFetchSkipped?: boolean;
   employmentType?: string;
   externalJobId?: string;
   firstSeenAt: string;
@@ -38,9 +39,18 @@ export type NormalizedJobObservation = {
   workModel?: string;
 };
 
+export type IngestionCollectContext = {
+  getExistingJobByCanonicalKey(
+    canonicalKey: string,
+  ): Promise<{ lastSeenAt: Date | null } | null>;
+};
+
 export type IngestionSourceAdapter = {
   sourceType: JobSourceType;
-  collect(jobSource: JobSourceContext): Promise<NormalizedJobObservation[]>;
+  collect(
+    jobSource: JobSourceContext,
+    context?: IngestionCollectContext,
+  ): Promise<NormalizedJobObservation[]>;
 };
 
 export type JobSourceContext = Pick<
@@ -48,7 +58,10 @@ export type JobSourceContext = Pick<
   | "checkIntervalMinutes"
   | "companyId"
   | "crawlStrategy"
+  | "consecutive403Count"
   | "id"
+  | "pauseReason"
+  | "pausedUntil"
   | "parserKey"
   | "sourceName"
   | "sourceType"
@@ -68,11 +81,15 @@ export type IngestionRunSummary = {
   finishedAt: string | null;
   id: string;
   jobSourceId: string;
+  currentConsecutive403?: number;
+  detailFetchSkippedCount?: number;
   newCount: number;
+  pauseTriggered?: boolean;
   previewItems: IngestionPreviewItem[];
   sourceName?: string;
   skippedCount: number;
   startedAt: string;
+  staleMarkedCount?: number;
   status: IngestionRunStatus;
   updatedCount: number;
 };
