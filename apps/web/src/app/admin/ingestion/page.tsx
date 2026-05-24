@@ -341,8 +341,19 @@ export default async function AdminIngestionPage({
               initialSources={pagedSources.rows}
               page={pagedSources.page}
               totalPages={pagedSources.totalPages}
-              buildHref={(p) =>
-                buildTabHref("fontes", { sourcesPage: String(p) })
+              prevHref={
+                pagedSources.page > 1
+                  ? buildTabHref("fontes", {
+                      sourcesPage: String(pagedSources.page - 1),
+                    })
+                  : null
+              }
+              nextHref={
+                pagedSources.page < pagedSources.totalPages
+                  ? buildTabHref("fontes", {
+                      sourcesPage: String(pagedSources.page + 1),
+                    })
+                  : null
               }
               query={query}
               sourceStatus={sourceStatus}

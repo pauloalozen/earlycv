@@ -5,7 +5,6 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
   AT,
-  AdminFilterBar,
   AdminPagination,
   AdminPill,
   AdminTable,
@@ -42,7 +41,8 @@ type Props = {
   // pagination
   page: number;
   totalPages: number;
-  buildHref: (p: number) => string;
+  prevHref: string | null;
+  nextHref: string | null;
   // filters
   query?: string;
   sourceStatus?: string;
@@ -91,7 +91,8 @@ export function FontesTableClient({
   initialSources,
   page,
   totalPages,
-  buildHref,
+  prevHref,
+  nextHref,
   query,
   sourceStatus,
   type,
@@ -341,18 +342,18 @@ export function FontesTableClient({
       <AdminPagination
         summary={`página ${page} de ${totalPages}`}
       >
-        {page > 1 && (
+        {prevHref && (
           <Link
             className={buttonVariants({ size: "sm", variant: "outline" })}
-            href={buildHref(page - 1)}
+            href={prevHref}
           >
             ← anterior
           </Link>
         )}
-        {page < totalPages && (
+        {nextHref && (
           <Link
             className={buttonVariants({ size: "sm", variant: "outline" })}
-            href={buildHref(page + 1)}
+            href={nextHref}
           >
             próxima →
           </Link>
