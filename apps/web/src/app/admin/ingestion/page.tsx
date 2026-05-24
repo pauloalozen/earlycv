@@ -6,14 +6,9 @@ import {
   getGlobalSchedulerConfig,
   listAllIngestionRuns,
   listJobSources,
-  listJobs,
   listManualRuns,
 } from "@/lib/admin-ingestion-api";
-import {
-  buildSourceStatus,
-  filterJobs,
-  filterSources,
-} from "@/lib/admin-operations";
+import { buildSourceStatus, filterSources } from "@/lib/admin-operations";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
@@ -21,13 +16,12 @@ import { cn } from "@/lib/cn";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
-import { RunSourceSubmitButton } from "./_components/run-source-submit-button";
+import { FontesTableClient } from "./_components/fontes-table-client";
+import { IngestionDashboardCards } from "./_components/ingestion-dashboard-cards";
+import { VagasTabClient } from "./_components/vagas-tab-client";
 import {
   cancelManualRunAction,
-  deleteJobSourceAction,
-  importCompanySourcesCsvAction,
   runGlobalSchedulerNowAction,
-  runJobSourceAction,
   startManualAdapterRunAction,
   updateGlobalSchedulerAction,
 } from "./actions";
@@ -35,22 +29,16 @@ import {
 export const metadata = buildAdminMetadata("Ingestao");
 
 type SearchParams = Promise<{
-  // aba ativa
   tab?: "fontes" | "vagas" | "runs" | "scheduler";
-  // banner de retorno de acao
   message?: string;
   status?: string;
-  // filtros da aba fontes
   query?: string;
   sourceStatus?: string;
   type?: string;
   sourcesPage?: string;
-  // filtros da aba vagas
   vagaQuery?: string;
   vagaSource?: string;
   vagaStatus?: string;
-  vagasPage?: string;
-  // paginacao da aba runs
   manualPage?: string;
   globalPage?: string;
 }>;
@@ -169,7 +157,6 @@ export default async function AdminIngestionPage({
     vagaQuery,
     vagaSource,
     vagaStatus,
-    vagasPage,
   } = await searchParams;
 
   const token = await getBackofficeSessionToken();
@@ -185,13 +172,12 @@ export default async function AdminIngestionPage({
   }
 
   try {
-    const [sources, manualRuns, globalRuns, schedulerConfig, jobs] =
+    const [sources, manualRuns, globalRuns, schedulerConfig] =
       await Promise.all([
         listJobSources(),
         listManualRuns(),
         listAllIngestionRuns(),
         getGlobalSchedulerConfig(),
-        listJobs(),
       ]);
 
     const sourceViews = sources.map((source) => ({
@@ -214,30 +200,9 @@ export default async function AdminIngestionPage({
       pageSize,
     );
 
-    // vagas tab
     const availableSourceNames = [
       ...new Set(sources.map((s) => s.sourceName)),
     ].sort();
-    const filteredJobs = filterJobs(
-      jobs.map((job) => ({
-        companyName:
-          sourceMap.get(job.jobSourceId)?.company.name ?? job.companyId,
-        id: job.id,
-        locationText: job.locationText,
-        sourceName:
-          sourceMap.get(job.jobSourceId)?.sourceName ?? job.jobSourceId,
-        status: job.status,
-        title: job.title,
-      })),
-      { query: vagaQuery, sourceName: vagaSource, status: vagaStatus },
-    );
-    const filteredJobIds = new Set(filteredJobs.map((j) => j.id));
-    const visibleJobs = jobs.filter((j) => filteredJobIds.has(j.id));
-    const pagedJobs = paginate(
-      visibleJobs,
-      Number(vagasPage ?? "1") || 1,
-      pageSize,
-    );
 
     // runs tab
     const pagedManualRuns = paginate(
@@ -308,7 +273,7 @@ export default async function AdminIngestionPage({
             Fontes
           </TabLink>
           <TabLink active={activeTab === "vagas"} href={buildTabHref("vagas")}>
-            Vagas ({jobs.length})
+            Vagas
           </TabLink>
           <TabLink active={activeTab === "runs"} href={buildTabHref("runs")}>
             Runs
@@ -324,6 +289,8 @@ export default async function AdminIngestionPage({
         {/* ── FONTES ── */}
         {activeTab === "fontes" && (
           <div className="flex flex-col gap-4">
+            <IngestionDashboardCards />
+
             <Card
               className="grid gap-3 lg:grid-cols-[1.4fr_1fr_1fr_auto]"
               padding="sm"
@@ -370,261 +337,28 @@ export default async function AdminIngestionPage({
               </form>
             </Card>
 
-            <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-stone-100 bg-stone-50 text-left">
-                  <tr>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Empresa
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Fonte
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Adapter
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Agendamento
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Ultimo run
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Acoes
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {pagedSources.rows.length === 0 && (
-                    <tr>
-                      <td
-                        className="px-4 py-6 text-center text-stone-400"
-                        colSpan={7}
-                      >
-                        Nenhuma fonte encontrada.
-                      </td>
-                    </tr>
-                  )}
-                  {pagedSources.rows.map((source) => {
-                    const latestRun = source.ingestionRuns?.[0] ?? null;
-                    const redirectPath = "/admin/ingestion?tab=fontes";
-                    return (
-                      <tr className="hover:bg-stone-50" key={source.id}>
-                        <td className="px-4 py-3 font-medium text-stone-900">
-                          {source.company.name}
-                        </td>
-                        <td className="px-4 py-3 text-stone-600">
-                          {source.sourceName}
-                        </td>
-                        <td className="px-4 py-3 text-stone-500">
-                          {source.sourceType}
-                        </td>
-                        <td className="px-4 py-3 text-stone-600">
-                          <div className="space-y-1">
-                            <p>{source.status.label}</p>
-                            <p className="text-xs text-stone-500">
-                              403 seguidos: {source.consecutive403Count ?? 0}
-                            </p>
-                            {source.pausedUntil ? (
-                              <p className="text-xs text-amber-700">
-                                pausado ate{" "}
-                                {new Date(source.pausedUntil).toLocaleString(
-                                  "pt-BR",
-                                )}
-                              </p>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-stone-500">
-                          {source.scheduleEnabled
-                            ? `ligado ${source.scheduleCron ?? "-"}`
-                            : "desligado"}
-                        </td>
-                        <td className="px-4 py-3 text-stone-500">
-                          {latestRun?.status ?? "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-2">
-                            <form action={runJobSourceAction}>
-                              <input
-                                name="jobSourceId"
-                                type="hidden"
-                                value={source.id}
-                              />
-                              <input
-                                name="redirectPath"
-                                type="hidden"
-                                value={redirectPath}
-                              />
-                              <RunSourceSubmitButton />
-                            </form>
-                            <Link
-                              className={buttonVariants({
-                                size: "sm",
-                                variant: "outline",
-                              })}
-                              href={`/admin/ingestion/${source.id}`}
-                            >
-                              Detalhe
-                            </Link>
-                            <form action={deleteJobSourceAction}>
-                              <input
-                                name="jobSourceId"
-                                type="hidden"
-                                value={source.id}
-                              />
-                              <input
-                                name="redirectPath"
-                                type="hidden"
-                                value={redirectPath}
-                              />
-                              <button
-                                className={buttonVariants({
-                                  size: "sm",
-                                  variant: "outline",
-                                })}
-                                type="submit"
-                              >
-                                Excluir
-                              </button>
-                            </form>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <PaginationBar
+            <FontesTableClient
+              initialSources={pagedSources.rows}
+              page={pagedSources.page}
+              totalPages={pagedSources.totalPages}
               buildHref={(p) =>
                 buildTabHref("fontes", { sourcesPage: String(p) })
               }
-              page={pagedSources.page}
-              totalPages={pagedSources.totalPages}
+              query={query}
+              sourceStatus={sourceStatus}
+              type={type}
             />
           </div>
         )}
 
         {/* ── VAGAS ── */}
         {activeTab === "vagas" && (
-          <div className="flex flex-col gap-4">
-            <Card
-              className="grid gap-3 lg:grid-cols-[1.3fr_1fr_0.8fr_auto]"
-              padding="sm"
-              variant="ghost"
-            >
-              <Input
-                defaultValue={vagaQuery}
-                form="vagas-filter"
-                name="vagaQuery"
-                placeholder="Buscar por titulo, empresa ou local"
-              />
-              <select
-                className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
-                defaultValue={vagaSource ?? ""}
-                form="vagas-filter"
-                name="vagaSource"
-              >
-                <option value="">Todas as fontes</option>
-                {availableSourceNames.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="h-12 rounded-lg border border-stone-200 bg-white px-4 text-sm font-medium text-stone-900"
-                defaultValue={vagaStatus ?? ""}
-                form="vagas-filter"
-                name="vagaStatus"
-              >
-                <option value="">Todos os status</option>
-                <option value="active">active</option>
-                <option value="inactive">inactive</option>
-                <option value="removed">removed</option>
-              </select>
-              <form className="contents" id="vagas-filter" method="GET">
-                <input name="tab" type="hidden" value="vagas" />
-                <button
-                  className={buttonVariants({ variant: "outline" })}
-                  type="submit"
-                >
-                  Filtrar
-                </button>
-              </form>
-            </Card>
-
-            <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-stone-100 bg-stone-50 text-left">
-                  <tr>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Titulo
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Empresa / Fonte
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Localizacao
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                      Chave
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {pagedJobs.rows.length === 0 && (
-                    <tr>
-                      <td
-                        className="px-4 py-6 text-center text-stone-400"
-                        colSpan={5}
-                      >
-                        Nenhuma vaga encontrada.
-                      </td>
-                    </tr>
-                  )}
-                  {pagedJobs.rows.map((job) => {
-                    const source = sourceMap.get(job.jobSourceId);
-                    return (
-                      <tr className="hover:bg-stone-50" key={job.id}>
-                        <td className="px-4 py-3 font-medium text-stone-900">
-                          {job.title}
-                        </td>
-                        <td className="px-4 py-3 text-stone-600">
-                          {source?.company.name ?? job.companyId}
-                          <span className="text-stone-400"> · </span>
-                          {source?.sourceName ?? job.jobSourceId}
-                        </td>
-                        <td className="px-4 py-3 text-stone-500">
-                          {job.locationText || "—"}
-                        </td>
-                        <td className="px-4 py-3 text-stone-500">
-                          {job.status}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-[11px] text-stone-400">
-                          {job.canonicalKey}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <PaginationBar
-              buildHref={(p) => buildTabHref("vagas", { vagasPage: String(p) })}
-              page={pagedJobs.page}
-              totalPages={pagedJobs.totalPages}
-            />
-          </div>
+          <VagasTabClient
+            availableSourceNames={availableSourceNames}
+            initialVagaQuery={vagaQuery}
+            initialVagaSource={vagaSource}
+            initialVagaStatus={vagaStatus}
+          />
         )}
 
         {/* ── RUNS ── */}
@@ -910,39 +644,10 @@ export default async function AdminIngestionPage({
               </form>
             </Card>
 
-            <Card className="space-y-4" padding="lg">
-              <h2 className="text-base font-semibold text-stone-900">
-                Importar empresas por CSV
-              </h2>
-              <form
-                action={importCompanySourcesCsvAction}
-                className="flex flex-col gap-3"
-              >
-                <input
-                  name="redirectPath"
-                  type="hidden"
-                  value="/admin/ingestion?tab=scheduler"
-                />
-                <Input accept=".csv" name="file" required type="file" />
-                <div className="flex gap-3">
-                  <button
-                    className={buttonVariants({ variant: "outline" })}
-                    name="dryRun"
-                    type="submit"
-                    value="true"
-                  >
-                    Validar (dry-run)
-                  </button>
-                  <button
-                    className={buttonVariants()}
-                    name="dryRun"
-                    type="submit"
-                    value="false"
-                  >
-                    Importar
-                  </button>
-                </div>
-              </form>
+            <Card className="space-y-4 p-4" padding="lg">
+              <p className="text-sm text-stone-500">
+                Importação de CSV disponível na aba Fontes.
+              </p>
             </Card>
           </div>
         )}
