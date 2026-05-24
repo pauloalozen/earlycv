@@ -459,7 +459,7 @@ export async function updateJobSource(
     headers: {
       "Content-Type": "application/json",
     },
-    method: "PATCH",
+    method: "PUT",
   });
 }
 
