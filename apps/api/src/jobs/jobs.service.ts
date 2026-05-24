@@ -61,6 +61,51 @@ export class JobsService {
     });
   }
 
+  async listAdmin(params: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    sourceFilter?: string;
+    statusFilter?: string;
+  }) {
+    const page = params.page ?? 1;
+    const pageSize = params.pageSize ?? 20;
+    const skip = (page - 1) * pageSize;
+
+    const where: Prisma.JobWhereInput = {};
+
+    if (params.search) {
+      const term = params.search;
+      where.OR = [
+        { title: { contains: term, mode: "insensitive" } },
+        { locationText: { contains: term, mode: "insensitive" } },
+        { company: { name: { contains: term, mode: "insensitive" } } },
+      ];
+    }
+
+    if (params.sourceFilter) {
+      where.jobSource = {
+        sourceName: { equals: params.sourceFilter, mode: "insensitive" },
+      };
+    }
+
+    if (params.statusFilter) {
+      where.status = params.statusFilter as Prisma.EnumJobStatusFilter;
+    }
+
+    const [jobs, total] = await Promise.all([
+      this.database.job.findMany({
+        where,
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+        skip,
+        take: pageSize,
+      }),
+      this.database.job.count({ where }),
+    ]);
+
+    return { jobs, total, page, pageSize };
+  }
+
   listPublic() {
     return this.database.job.findMany({
       where: { status: "active" },
