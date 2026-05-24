@@ -76,7 +76,7 @@ export class JobSourcesService {
         ],
         take: 1,
       },
-    } as const;
+    };
 
     const [rows, total] = await Promise.all([
       this.database.jobSource.findMany({
