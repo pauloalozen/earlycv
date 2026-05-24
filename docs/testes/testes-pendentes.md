@@ -1,11 +1,7 @@
-correções:
+## Falhas pre-existentes conhecidas
 
-1. Quando o usuário seleciona keyword que não tem no seu cv, o score que está aparecendo no card de score na tela plano
-   está mostrando valor sem considerar os pontos do keyword selecionado
-
-2. Retirar o card de aviso de quantidade de candidados que já analisaram a vaga, vamos voltar isso quando o sistema
-   tiver bastante volume de acesso de usuário, por enquanto pode deixar inativo.
-
-3. Na rota adaptar, o sistema está fazendo o parse do documento depois validando a vaga, o sistema demora para dar erro
-   quando a vaga é fora do que é esperado, o sistema deve primeiro fazer as checagens de cv quando é texto digitado, depois
-   checagem da vaga, se passar ai sim fazer o parse do documento anexo,
+- **POST /cv-adaptation/analyze-guest blocks missing turnstile token** (`apps/api/src/cv-adaptation/cv-adaptation.e2e-spec.ts`)
+  - Falha atual: validacao de tamanho do CV roda antes da validacao de turnstile, retornando "O texto do CV esta muito curto" em vez da mensagem esperada de turnstile.
+  - Identificada durante validacao consolidada da Fase 1 do hardening de ingestao (data: 23/05/2026).
+  - Confirmado como pre-existente: nenhum commit dos PRs Ghost Mode, Stale Lifecycle, Circuit Breaker 403 ou Dedup tocou em `cv-adaptation/`.
+  - Acao: ajustar ordem de validacao no controller/service de cv-adaptation, fora do escopo da Fase 1.
