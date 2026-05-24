@@ -105,6 +105,37 @@ describe("PosthogAuthProvider", () => {
     });
   });
 
+  it("uses reverse proxy env names and enables PostHog pageview capture", async () => {
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "");
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_UIHOST", "");
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_API_HOST", "https://c.earlycv.com.br");
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_UI_HOST", "https://us.posthog.com");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ authenticated: false, user: null }),
+      }),
+    );
+
+    render(
+      <PosthogAuthProvider>
+        <div>child</div>
+      </PosthogAuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(initMock).toHaveBeenCalledWith(
+        "phc_test_key",
+        expect.objectContaining({
+          api_host: "https://c.earlycv.com.br",
+          ui_host: "https://us.posthog.com",
+          capture_pageview: true,
+        }),
+      );
+    });
+  });
+
   it("identifies authenticated user once across remounts", async () => {
     vi.stubGlobal(
       "fetch",

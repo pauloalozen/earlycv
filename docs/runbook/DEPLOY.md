@@ -124,8 +124,9 @@ Domain**.
 ```
 NEXT_PUBLIC_API_URL=https://api.earlycv.com.br
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=<chave pública do painel Turnstile>
-NEXT_PUBLIC_POSTHOG_KEY=<opcional>
-NEXT_PUBLIC_POSTHOG_HOST=https://app.posthog.com
+NEXT_PUBLIC_POSTHOG_KEY=<chave pública do projeto PostHog>
+NEXT_PUBLIC_POSTHOG_API_HOST=https://c.earlycv.com.br
+NEXT_PUBLIC_POSTHOG_UI_HOST=https://us.posthog.com
 ```
 
 ---

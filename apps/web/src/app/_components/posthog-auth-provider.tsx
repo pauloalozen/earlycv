@@ -93,8 +93,13 @@ function getPosthogConfig() {
   }
 
   const apiHost =
-    process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() || "https://us.i.posthog.com";
-  const uiHost = process.env.NEXT_PUBLIC_POSTHOG_UIHOST?.trim() || undefined;
+    process.env.NEXT_PUBLIC_POSTHOG_API_HOST?.trim() ||
+    process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() ||
+    "https://c.earlycv.com.br";
+  const uiHost =
+    process.env.NEXT_PUBLIC_POSTHOG_UI_HOST?.trim() ||
+    process.env.NEXT_PUBLIC_POSTHOG_UIHOST?.trim() ||
+    "https://us.posthog.com";
 
   return { apiHost, apiKey, uiHost };
 }
@@ -143,7 +148,7 @@ export function PosthogAuthProvider({
             api_host: posthogConfig.apiHost,
             ui_host: posthogConfig.uiHost,
             autocapture: false,
-            capture_pageview: false,
+            capture_pageview: true,
             capture_pageleave: false,
             capture_performance: false,
             person_profiles: "identified_only",
