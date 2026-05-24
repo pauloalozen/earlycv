@@ -62,6 +62,14 @@ export type UpdateJobSourcePayload = {
   scheduleTimezone?: "America/Sao_Paulo";
 };
 
+export type JobSourcePagedResult = {
+  page: number;
+  pageSize: number;
+  rows: (JobSourceRecord & { activeJobsCount: number })[];
+  total: number;
+  totalPages: number;
+};
+
 export type GlobalSchedulerConfig = {
   enabled: boolean;
   errorDelayMs: number;
@@ -232,6 +240,25 @@ async function apiRequest<T>(path: string, token?: string, init?: RequestInit) {
 
 export async function listJobSources(token?: string) {
   return apiRequest<JobSourceRecord[]>("/job-sources", token);
+}
+
+export async function listJobSourcesPaginated(
+  params: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    statusFilter?: string;
+    typeFilter?: string;
+  },
+  token?: string,
+) {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.pageSize) qs.set("pageSize", String(params.pageSize));
+  if (params.search) qs.set("search", params.search);
+  if (params.statusFilter) qs.set("statusFilter", params.statusFilter);
+  if (params.typeFilter) qs.set("typeFilter", params.typeFilter);
+  return apiRequest<JobSourcePagedResult>(`/job-sources/paginated?${qs}`, token);
 }
 
 export async function listCompanies(token?: string) {
@@ -459,7 +486,7 @@ export async function updateJobSource(
     headers: {
       "Content-Type": "application/json",
     },
-    method: "PATCH",
+    method: "PUT",
   });
 }
 

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getGlobalSchedulerConfig: vi.fn(),
   listAllIngestionRuns: vi.fn(),
   listJobSources: vi.fn(),
+  listJobSourcesPaginated: vi.fn(),
   listJobs: vi.fn(),
   listManualRuns: vi.fn(),
 }));
@@ -29,6 +30,7 @@ vi.mock("@/lib/admin-ingestion-api", () => ({
   getGlobalSchedulerConfig: mocks.getGlobalSchedulerConfig,
   listAllIngestionRuns: mocks.listAllIngestionRuns,
   listJobSources: mocks.listJobSources,
+  listJobSourcesPaginated: mocks.listJobSourcesPaginated,
   listJobs: mocks.listJobs,
   listManualRuns: mocks.listManualRuns,
 }));
@@ -40,6 +42,7 @@ vi.mock("./actions", () => ({
   runGlobalSchedulerNowAction: vi.fn(),
   runJobSourceAction: vi.fn(),
   startManualAdapterRunAction: vi.fn(),
+  toggleScheduleEnabledAction: vi.fn(),
   updateGlobalSchedulerAction: vi.fn(),
 }));
 
@@ -63,24 +66,39 @@ describe("AdminIngestionPage fontes schedule signal", () => {
       timezone: "America/Sao_Paulo",
     });
     mocks.listJobs.mockResolvedValue([]);
+    mocks.listJobSources.mockResolvedValue([]);
+    mocks.listJobSourcesPaginated.mockResolvedValue({
+      page: 1,
+      pageSize: 50,
+      rows: [],
+      total: 0,
+      totalPages: 1,
+    });
   });
 
-  it("shows ligado with cron snippet when source schedule is enabled", async () => {
-    mocks.listJobSources.mockResolvedValue([
-      {
-        checkIntervalMinutes: 30,
-        company: { id: "cmp_1", name: "ACME", normalizedName: "acme" },
-        companyId: "cmp_1",
-        id: "src_1",
-        isActive: true,
-        parserKey: "gupy",
-        scheduleCron: "*/30 * * * *",
-        scheduleEnabled: true,
-        sourceName: "ACME Careers",
-        sourceType: "gupy",
-        sourceUrl: "https://acme.gupy.io",
-      },
-    ]);
+  it("renders Agendamento column with cron when schedule enabled", async () => {
+    const source = {
+      activeJobsCount: 0,
+      checkIntervalMinutes: 30,
+      company: { id: "cmp_1", name: "ACME", normalizedName: "acme" },
+      companyId: "cmp_1",
+      id: "src_1",
+      isActive: true,
+      parserKey: "gupy",
+      scheduleCron: "*/30 * * * *",
+      scheduleEnabled: true,
+      sourceName: "ACME Careers",
+      sourceType: "gupy",
+      sourceUrl: "https://acme.gupy.io",
+    };
+    mocks.listJobSources.mockResolvedValue([source]);
+    mocks.listJobSourcesPaginated.mockResolvedValue({
+      page: 1,
+      pageSize: 50,
+      rows: [source],
+      total: 1,
+      totalPages: 1,
+    });
 
     const page = await AdminIngestionPage({
       searchParams: Promise.resolve({ tab: "fontes" }),
@@ -93,26 +111,37 @@ describe("AdminIngestionPage fontes schedule signal", () => {
     expect(
       scope.getByRole("columnheader", { name: "Agendamento" }),
     ).toBeInTheDocument();
-    expect(scope.getByText(/ligado/i)).toBeInTheDocument();
+    // cron expression visible next to toggle
     expect(scope.getByText(/\*\/30 \* \* \* \*/)).toBeInTheDocument();
+    // toggle button present (title distinguishes on/off)
+    expect(
+      scope.getByRole("button", { name: /desativar agendamento/i }),
+    ).toBeInTheDocument();
   });
 
-  it("shows desligado when source schedule is disabled", async () => {
-    mocks.listJobSources.mockResolvedValue([
-      {
-        checkIntervalMinutes: 30,
-        company: { id: "cmp_1", name: "ACME", normalizedName: "acme" },
-        companyId: "cmp_1",
-        id: "src_1",
-        isActive: true,
-        parserKey: "gupy",
-        scheduleCron: null,
-        scheduleEnabled: false,
-        sourceName: "ACME Careers",
-        sourceType: "gupy",
-        sourceUrl: "https://acme.gupy.io",
-      },
-    ]);
+  it("renders toggle off and no cron when schedule disabled", async () => {
+    const source = {
+      activeJobsCount: 0,
+      checkIntervalMinutes: 30,
+      company: { id: "cmp_1", name: "ACME", normalizedName: "acme" },
+      companyId: "cmp_1",
+      id: "src_1",
+      isActive: true,
+      parserKey: "gupy",
+      scheduleCron: null,
+      scheduleEnabled: false,
+      sourceName: "ACME Careers",
+      sourceType: "gupy",
+      sourceUrl: "https://acme.gupy.io",
+    };
+    mocks.listJobSources.mockResolvedValue([source]);
+    mocks.listJobSourcesPaginated.mockResolvedValue({
+      page: 1,
+      pageSize: 50,
+      rows: [source],
+      total: 1,
+      totalPages: 1,
+    });
 
     const page = await AdminIngestionPage({
       searchParams: Promise.resolve({ tab: "fontes" }),
@@ -125,6 +154,8 @@ describe("AdminIngestionPage fontes schedule signal", () => {
     expect(
       scope.getByRole("columnheader", { name: "Agendamento" }),
     ).toBeInTheDocument();
-    expect(scope.getByText(/desligado/i)).toBeInTheDocument();
+    expect(
+      scope.getByRole("button", { name: /ativar agendamento/i }),
+    ).toBeInTheDocument();
   });
 });

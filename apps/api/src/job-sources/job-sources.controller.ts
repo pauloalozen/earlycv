@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
@@ -16,6 +17,7 @@ import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import { IngestionService } from "../ingestion/ingestion.service";
 import { CreateJobSourceDto } from "./dto/create-job-source.dto";
+import { ListJobSourcesDto } from "./dto/list-job-sources.dto";
 import { UpdateJobSourceDto } from "./dto/update-job-source.dto";
 import { JobSourcesService } from "./job-sources.service";
 
@@ -52,6 +54,20 @@ export class JobSourcesController {
   @Get()
   list() {
     return this.jobSourcesService.list();
+  }
+
+  @Get("paginated")
+  listPaginated(
+    @Query(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: false,
+      }),
+    )
+    dto: ListJobSourcesDto,
+  ) {
+    return this.jobSourcesService.listPaginated(dto);
   }
 
   @Get(":id")
