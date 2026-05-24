@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/logo";
 import type { AppInternalRole } from "@/lib/app-session";
+import {
+  canAccessJobsInGhostMode,
+  isJobsGhostModeEnabled,
+} from "@/lib/jobs-ghost-mode";
 
 const MONO = "var(--font-geist-mono), monospace";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -37,6 +41,8 @@ export function AppHeader({
     backgroundColor !== "transparent" ? backgroundColor : "#f9f8f4";
   const canAccessAdmin = userRole === "admin" || userRole === "superadmin";
   const canAccessSuperadmin = userRole === "superadmin";
+  const canSeeJobsLink =
+    !isJobsGhostModeEnabled() || canAccessJobsInGhostMode(userRole);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -475,7 +481,13 @@ export function AppHeader({
                             label: "Admin",
                             icon: (
                               <>
-                                <rect x="4" y="3" width="16" height="18" rx="2" />
+                                <rect
+                                  x="4"
+                                  y="3"
+                                  width="16"
+                                  height="18"
+                                  rx="2"
+                                />
                                 <path d="M9 8h6" />
                                 <path d="M9 12h6" />
                               </>
@@ -496,40 +508,44 @@ export function AppHeader({
                           },
                         ]
                       : []),
-                  ].map((item) => (
-                    <a
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setOpen(false)}
-                      className={`app-hdr-dd-item${item.href === "/dashboard" ? " app-hdr-dd-item--active" : ""}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "8px",
-                        fontSize: 13.5,
-                        fontFamily: GEIST,
-                        color: "#1a1a1a",
-                        textDecoration: "none",
-                      }}
-                    >
-                      <svg
-                        className="app-hdr-dd-icon"
-                        aria-hidden="true"
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+                  ]
+                    .filter((item) =>
+                      item.href === "/vagas" ? canSeeJobsLink : true,
+                    )
+                    .map((item) => (
+                      <a
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        className={`app-hdr-dd-item${item.href === "/dashboard" ? " app-hdr-dd-item--active" : ""}`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "8px",
+                          fontSize: 13.5,
+                          fontFamily: GEIST,
+                          color: "#1a1a1a",
+                          textDecoration: "none",
+                        }}
                       >
-                        {item.icon}
-                      </svg>
-                      {item.label}
-                    </a>
-                  ))}
+                        <svg
+                          className="app-hdr-dd-icon"
+                          aria-hidden="true"
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          {item.icon}
+                        </svg>
+                        {item.label}
+                      </a>
+                    ))}
                   <a
                     href="/contato"
                     onClick={() => setOpen(false)}
@@ -841,29 +857,33 @@ export function AppHeader({
                     },
                   ]
                 : []),
-            ].map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                className="app-hdr-mob-nav-item"
-                onClick={() => setMobileOpen(false)}
-              >
-                <svg
-                  aria-hidden="true"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+            ]
+              .filter((item) =>
+                item.href === "/vagas" ? canSeeJobsLink : true,
+              )
+              .map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="app-hdr-mob-nav-item"
+                  onClick={() => setMobileOpen(false)}
                 >
-                  {item.icon}
-                </svg>
-                {item.label}
-              </a>
-            ))}
+                  <svg
+                    aria-hidden="true"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    {item.icon}
+                  </svg>
+                  {item.label}
+                </a>
+              ))}
             <a
               href="/contato"
               className="app-hdr-mob-nav-item"

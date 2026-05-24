@@ -1,8 +1,11 @@
 import type { MetadataRoute } from "next";
 
+import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
+  const isGhostMode = isJobsGhostModeEnabled();
+
   return {
     host: siteConfig.siteUrl,
     rules: [
@@ -24,6 +27,7 @@ export default function robots(): MetadataRoute.Robots {
           "/pagamento",
           "/api/",
           "/auth/",
+          ...(isGhostMode ? ["/vagas", "/vagas/*"] : []),
         ],
       },
     ],

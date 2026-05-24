@@ -6,6 +6,10 @@ import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import {
+  canAccessJobsInGhostMode,
+  isJobsGhostModeEnabled,
+} from "@/lib/jobs-ghost-mode";
+import {
   getPublicJobBySlug,
   listPublicJobs,
   type PublicJob,
@@ -102,6 +106,7 @@ async function loadJob(slug: string) {
 export async function generateMetadata({
   params,
 }: JobPageProps): Promise<Metadata> {
+  const isGhostMode = isJobsGhostModeEnabled();
   const { slug } = await params;
   const job = await loadJob(slug);
 
@@ -123,11 +128,11 @@ export async function generateMetadata({
     openGraph: { type: "article", url, title, description },
     twitter: { title, description },
     robots: {
-      index: true,
-      follow: true,
+      index: !isGhostMode,
+      follow: !isGhostMode,
       googleBot: {
-        index: true,
-        follow: true,
+        index: !isGhostMode,
+        follow: !isGhostMode,
         "max-image-preview": "large",
         "max-snippet": -1,
         "max-video-preview": -1,
@@ -220,12 +225,15 @@ function SimCard({ job }: { job: PublicJob }) {
 }
 
 export default async function JobPage({ params }: JobPageProps) {
-  const { slug } = await params;
+  const isGhostMode = isJobsGhostModeEnabled();
+  const user = await getCurrentAppUserFromCookies().catch(() => null);
 
-  const [job, user] = await Promise.all([
-    loadJob(slug),
-    getCurrentAppUserFromCookies().catch(() => null),
-  ]);
+  if (isGhostMode && !canAccessJobsInGhostMode(user?.internalRole)) {
+    notFound();
+  }
+
+  const { slug } = await params;
+  const job = await loadJob(slug);
 
   if (!job) notFound();
 

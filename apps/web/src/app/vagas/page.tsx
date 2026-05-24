@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import {
+  canAccessJobsInGhostMode,
+  isJobsGhostModeEnabled,
+} from "@/lib/jobs-ghost-mode";
 import {
   getPublicJobFacets,
   listPublicJobs,
@@ -80,13 +85,14 @@ type SearchParams = {
 };
 
 export function generateMetadata(): Metadata {
+  const isGhostMode = isJobsGhostModeEnabled();
   const url = getAbsoluteUrl("/vagas");
   return {
     title: "Vagas de tecnologia e dados | EarlyCV",
     description:
       "Vagas em tecnologia, dados, produto e áreas digitais monitoradas pelo EarlyCV — chegam antes do LinkedIn.",
     alternates: { canonical: url },
-    robots: { index: true, follow: true },
+    robots: { index: !isGhostMode, follow: !isGhostMode },
     openGraph: {
       title: "Vagas | EarlyCV",
       description:
@@ -444,6 +450,13 @@ type VagasPageProps = {
 };
 
 export default async function VagasPage({ searchParams }: VagasPageProps) {
+  const isGhostMode = isJobsGhostModeEnabled();
+  const user = await getCurrentAppUserFromCookies().catch(() => null);
+
+  if (isGhostMode && !canAccessJobsInGhostMode(user?.internalRole)) {
+    notFound();
+  }
+
   const params = await searchParams;
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
 
@@ -467,7 +480,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
       ? PUBLISHED_WITHIN_MAP[publicada as keyof typeof PUBLISHED_WITHIN_MAP]
       : undefined;
 
-  const [jobsResult, facets, user] = await Promise.all([
+  const [jobsResult, facets] = await Promise.all([
     listPublicJobs({
       q: effectiveQ,
       workModel: effectiveModalidade,
@@ -478,7 +491,6 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
       limit: 20,
     }),
     getPublicJobFacets().catch(() => null),
-    getCurrentAppUserFromCookies().catch(() => null),
   ]);
 
   let hasCvMaster = false;

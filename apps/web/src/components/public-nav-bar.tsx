@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
 import { Logo } from "./logo";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
+const IS_JOBS_GHOST_MODE = isJobsGhostModeEnabled();
 
 export function PublicNavBar({
   dark = false,
@@ -134,17 +136,19 @@ export function PublicNavBar({
         </Link>
 
         <div className="hidden items-center gap-5 md:flex">
-          <Link
-            href="/vagas"
-            style={{
-              fontSize: 13,
-              color: linkColor,
-              fontWeight: 400,
-              textDecoration: "none",
-            }}
-          >
-            Vagas
-          </Link>
+          {IS_JOBS_GHOST_MODE ? null : (
+            <Link
+              href="/vagas"
+              style={{
+                fontSize: 13,
+                color: linkColor,
+                fontWeight: 400,
+                textDecoration: "none",
+              }}
+            >
+              Vagas
+            </Link>
+          )}
           <Link
             href="/blog"
             style={{
@@ -232,13 +236,15 @@ export function PublicNavBar({
       <div
         className={`public-mob-nav${isMenuOpen ? " public-mob-nav--open" : ""}`}
       >
-        <Link
-          href="/vagas"
-          onClick={() => setIsMenuOpen(false)}
-          className="public-mob-nav-item"
-        >
-          Vagas
-        </Link>
+        {IS_JOBS_GHOST_MODE ? null : (
+          <Link
+            href="/vagas"
+            onClick={() => setIsMenuOpen(false)}
+            className="public-mob-nav-item"
+          >
+            Vagas
+          </Link>
+        )}
         <Link
           href="/blog"
           onClick={() => setIsMenuOpen(false)}

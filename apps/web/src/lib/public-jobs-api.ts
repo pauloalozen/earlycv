@@ -1,5 +1,7 @@
 import "server-only";
 
+import { apiRequest } from "./api-request";
+
 export type PublicJob = {
   canonicalKey: string;
   company: string;
@@ -45,21 +47,8 @@ export type PublicJobFacets = {
   companies: FacetItem[];
 };
 
-function getApiBaseUrl() {
-  const configuredBaseUrl =
-    process.env.API_URL ??
-    process.env.NEXT_PUBLIC_API_URL ??
-    "http://localhost:4000";
-
-  return configuredBaseUrl.endsWith("/api")
-    ? configuredBaseUrl
-    : `${configuredBaseUrl}/api`;
-}
-
 async function requestPublicJobs<T>(path: string) {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    cache: "no-store",
-  });
+  const response = await apiRequest("GET", path);
 
   if (!response.ok) {
     throw new Error(`Public jobs API ${response.status}`);

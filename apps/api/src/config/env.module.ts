@@ -9,6 +9,7 @@ export type EnvSource = Record<string, string | undefined>;
 export type AppEnv = {
   API_HOST: string;
   API_PORT: number;
+  JOBS_GHOST_MODE: boolean;
   LINKEDIN_CALLBACK_URL: string;
   LINKEDIN_CLIENT_ID: string;
   LINKEDIN_CLIENT_SECRET: string;
@@ -40,7 +41,9 @@ export function loadLocalEnvFileIfPresent(cwd = process.cwd()) {
 }
 
 export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
-  const { defineEnv, envToNumber } = await import("@earlycv/config/env");
+  const { defineEnv, envToBoolean, envToNumber } = await import(
+    "@earlycv/config/env"
+  );
   const readEnv = defineEnv({
     API_HOST: {
       default: "0.0.0.0",
@@ -48,6 +51,10 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     API_PORT: {
       default: "4000",
       parse: (value: string, key: string) => envToNumber(value, key),
+    },
+    JOBS_GHOST_MODE: {
+      default: "false",
+      parse: (value: string) => envToBoolean(value),
     },
     JWT_ACCESS_SECRET: {},
     JWT_ACCESS_TTL: {
@@ -72,6 +79,7 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
   return {
     API_HOST: env.API_HOST as string,
     API_PORT: env.API_PORT,
+    JOBS_GHOST_MODE: env.JOBS_GHOST_MODE,
     GOOGLE_CALLBACK_URL: env.GOOGLE_CALLBACK_URL as string,
     GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID as string,
     GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET as string,

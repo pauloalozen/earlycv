@@ -5,19 +5,26 @@ import {
   NotFoundException,
   Param,
   Query,
+  Req,
   UseGuards,
 } from "@nestjs/common";
+import type { Request } from "express";
 
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { InternalRoles } from "../common/roles.decorator";
 import { JobsService } from "./jobs.service";
 import { buildPublicJobSlug, toPublicJobView } from "./public-job-view";
+import { PublicJobsGhostModeGuard } from "./public-jobs-ghost-mode.guard";
 
 @Controller("public/jobs")
 export class PublicJobsController {
   constructor(@Inject(JobsService) private readonly jobsService: JobsService) {}
 
   @Get()
+  @InternalRoles("admin", "superadmin")
+  @UseGuards(PublicJobsGhostModeGuard)
   async list(
+    @Req() _request: Request,
     @Query("q") q?: string,
     @Query("workModel") workModel?: string,
     @Query("seniorityLevel") seniorityLevel?: string,
@@ -57,12 +64,16 @@ export class PublicJobsController {
   }
 
   @Get("facets")
-  async getFacets() {
+  @InternalRoles("admin", "superadmin")
+  @UseGuards(PublicJobsGhostModeGuard)
+  async getFacets(@Req() _request: Request) {
     return this.jobsService.listPublicFacets();
   }
 
   @Get(":slug")
-  async getBySlug(@Param("slug") slug: string) {
+  @InternalRoles("admin", "superadmin")
+  @UseGuards(PublicJobsGhostModeGuard)
+  async getBySlug(@Req() _request: Request, @Param("slug") slug: string) {
     const jobs = await this.jobsService.listPublic();
     const found = jobs.find(
       (job) => buildPublicJobSlug(job.id, job.title, job.company.name) === slug,
