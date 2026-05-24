@@ -60,6 +60,11 @@ export class IngestionController {
     return this.ingestionService.listAllRuns();
   }
 
+  @Get("dashboard")
+  getDashboard() {
+    return this.ingestionService.getDashboard();
+  }
+
   @Post("import-csv")
   @HttpCode(200)
   @UseInterceptors(FileInterceptor("file"))

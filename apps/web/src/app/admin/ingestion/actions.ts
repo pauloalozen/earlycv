@@ -346,6 +346,31 @@ export async function startManualAdapterRunAction(formData: FormData) {
   );
 }
 
+export async function toggleScheduleEnabledAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const jobSourceId = String(formData.get("jobSourceId") ?? "").trim();
+  const scheduleEnabled = String(formData.get("scheduleEnabled")) === "true";
+
+  if (!jobSourceId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe a fonte."));
+  }
+
+  try {
+    await updateJobSource(jobSourceId, { scheduleEnabled });
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Falha ao atualizar agendamento.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+}
+
 export async function cancelManualRunAction(formData: FormData) {
   const redirectPath = String(
     formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,

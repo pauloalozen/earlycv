@@ -324,6 +324,110 @@ export class IngestionService {
     return toRunSummary(run as IngestionRunRecord);
   }
 
+  async getDashboard() {
+    const now = new Date();
+    const cutoff24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    const [allSources, runs24h, runningNow, staleJobsCount] = await Promise.all(
+      [
+        this.database.jobSource.findMany({
+          include: { company: { select: { name: true } } },
+        }),
+        this.database.ingestionRun.findMany({
+          where: { startedAt: { gte: cutoff24h } },
+          select: {
+            id: true,
+            status: true,
+            newCount: true,
+            skippedCount: true,
+          },
+        }),
+        this.database.ingestionRun.count({ where: { status: "running" } }),
+        this.database.job.count({
+          where: { status: "inactive", updatedAt: { gte: cutoff24h } },
+        }),
+      ],
+    );
+
+    const pausedSources = allSources
+      .filter((s) => s.pausedUntil && s.pausedUntil > now)
+      .map((s) => ({
+        id: s.id,
+        sourceName: s.sourceName,
+        companyName: s.company.name,
+        pausedUntil: s.pausedUntil!.toISOString(),
+        pauseReason: s.pauseReason,
+        consecutive403Count: s.consecutive403Count,
+      }));
+
+    const sources403 = allSources
+      .filter(
+        (s) =>
+          s.consecutive403Count > 0 &&
+          (!s.pausedUntil || s.pausedUntil <= now),
+      )
+      .map((s) => ({
+        id: s.id,
+        sourceName: s.sourceName,
+        companyName: s.company.name,
+        consecutive403Count: s.consecutive403Count,
+        lastErrorAt: s.lastErrorAt?.toISOString() ?? null,
+        lastErrorMessage: s.lastErrorMessage,
+      }));
+
+    const recentJobs = await this.database.job.findMany({
+      where: { lastSeenAt: { gt: cutoff24h } },
+      select: { jobSourceId: true, descriptionClean: true },
+    });
+
+    const sourceInfoMap = new Map(
+      allSources.map((s) => [
+        s.id,
+        { sourceName: s.sourceName, companyName: s.company.name },
+      ]),
+    );
+    const driftMap = new Map<string, { total: number; withoutDesc: number }>();
+    for (const job of recentJobs) {
+      const entry = driftMap.get(job.jobSourceId) ?? {
+        total: 0,
+        withoutDesc: 0,
+      };
+      entry.total += 1;
+      if (!job.descriptionClean || job.descriptionClean.trim() === "") {
+        entry.withoutDesc += 1;
+      }
+      driftMap.set(job.jobSourceId, entry);
+    }
+    const driftSources = [...driftMap.entries()]
+      .filter(([, d]) => d.total > 0 && d.withoutDesc / d.total > 0.5)
+      .map(([sourceId, d]) => ({
+        id: sourceId,
+        ...(sourceInfoMap.get(sourceId) ?? {
+          sourceName: sourceId,
+          companyName: "",
+        }),
+        total: d.total,
+        withoutDesc: d.withoutDesc,
+        pctWithoutDesc: Math.round((d.withoutDesc / d.total) * 100),
+      }));
+
+    const newJobs24h = runs24h.reduce((sum, r) => sum + r.newCount, 0);
+    const dedupSkipped24h = runs24h.reduce((sum, r) => sum + r.skippedCount, 0);
+
+    return {
+      pausedSources,
+      sources403,
+      driftSources,
+      summary24h: {
+        totalRuns: runs24h.length,
+        runningNow,
+        newJobs: newJobs24h,
+        staleJobs: staleJobsCount,
+        dedupSkipped: dedupSkipped24h,
+      },
+    };
+  }
+
   private async assertJobSourceExists(jobSourceId: string) {
     const jobSource = await this.database.jobSource.findUnique({
       where: { id: jobSourceId },
