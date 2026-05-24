@@ -40,6 +40,7 @@ vi.mock("./actions", () => ({
   runGlobalSchedulerNowAction: vi.fn(),
   runJobSourceAction: vi.fn(),
   startManualAdapterRunAction: vi.fn(),
+  toggleScheduleEnabledAction: vi.fn(),
   updateGlobalSchedulerAction: vi.fn(),
 }));
 
@@ -65,7 +66,7 @@ describe("AdminIngestionPage fontes schedule signal", () => {
     mocks.listJobs.mockResolvedValue([]);
   });
 
-  it("shows ligado with cron snippet when source schedule is enabled", async () => {
+  it("renders Agendamento column with cron when schedule enabled", async () => {
     mocks.listJobSources.mockResolvedValue([
       {
         checkIntervalMinutes: 30,
@@ -93,11 +94,15 @@ describe("AdminIngestionPage fontes schedule signal", () => {
     expect(
       scope.getByRole("columnheader", { name: "Agendamento" }),
     ).toBeInTheDocument();
-    expect(scope.getByText(/ligado/i)).toBeInTheDocument();
+    // cron expression visible next to toggle
     expect(scope.getByText(/\*\/30 \* \* \* \*/)).toBeInTheDocument();
+    // toggle button present (title distinguishes on/off)
+    expect(
+      scope.getByRole("button", { name: /desativar agendamento/i }),
+    ).toBeInTheDocument();
   });
 
-  it("shows desligado when source schedule is disabled", async () => {
+  it("renders toggle off and no cron when schedule disabled", async () => {
     mocks.listJobSources.mockResolvedValue([
       {
         checkIntervalMinutes: 30,
@@ -125,6 +130,8 @@ describe("AdminIngestionPage fontes schedule signal", () => {
     expect(
       scope.getByRole("columnheader", { name: "Agendamento" }),
     ).toBeInTheDocument();
-    expect(scope.getByText(/desligado/i)).toBeInTheDocument();
+    expect(
+      scope.getByRole("button", { name: /ativar agendamento/i }),
+    ).toBeInTheDocument();
   });
 });
