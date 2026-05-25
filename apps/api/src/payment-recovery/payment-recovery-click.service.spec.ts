@@ -1,13 +1,14 @@
-/* biome-ignore-all lint/suspicious/noExplicitAny: test doubles for prisma and service internals */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { PaymentRecoveryClickService } from "./payment-recovery-click.service";
 
+type ClickDeps = ConstructorParameters<typeof PaymentRecoveryClickService>;
+
 function createService(overrides?: {
-  findToken?: (where: Record<string, unknown>) => Promise<any>;
-  updateToken?: (args: Record<string, unknown>) => Promise<any>;
-  updateEmail?: (args: Record<string, unknown>) => Promise<any>;
+  findToken?: (where: Record<string, unknown>) => Promise<unknown>;
+  updateToken?: (args: Record<string, unknown>) => Promise<unknown>;
+  updateEmail?: (args: Record<string, unknown>) => Promise<unknown>;
 }) {
   const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
   const database = {
@@ -37,13 +38,13 @@ function createService(overrides?: {
     cvAdaptation: {
       findUnique: async () => ({ id: "adapt-1", isUnlocked: false }),
     },
-  } as any;
+  } as ClickDeps[0];
 
   const service = new PaymentRecoveryClickService(database, {
     emit: (event: string, payload: Record<string, unknown>) => {
       events.push({ event, payload });
     },
-  } as any);
+  } as ClickDeps[1]);
 
   return { service, events };
 }
@@ -155,7 +156,7 @@ test("token is not consumed and multiple clicks update lastClickedAt", async () 
 });
 
 test("click metadata merge preserves existing keys", async () => {
-  let updatePayload: Record<string, any> | null = null;
+  let updatePayload: Record<string, unknown> | null = null;
   const { service } = createService({
     findToken: async () => ({
       id: "tok-1",
@@ -175,9 +176,22 @@ test("click metadata merge preserves existing keys", async () => {
     token: "a".repeat(64),
     currentUserId: "user-1",
   });
-  assert.equal(updatePayload?.data?.metadataJson?.set?.keep, "yes");
   assert.equal(
-    typeof updatePayload?.data?.metadataJson?.set?.lastClickedAt,
+    (
+      (
+        (updatePayload?.data as Record<string, unknown>)
+          ?.metadataJson as Record<string, unknown>
+      )?.set as Record<string, unknown>
+    )?.keep,
+    "yes",
+  );
+  assert.equal(
+    typeof (
+      (
+        (updatePayload?.data as Record<string, unknown>)
+          ?.metadataJson as Record<string, unknown>
+      )?.set as Record<string, unknown>
+    )?.lastClickedAt,
     "string",
   );
 });
@@ -195,13 +209,16 @@ test("approved purchase redirects to success when adaptation already unlocked", 
     }),
   });
 
-  (service as any).database.planPurchase.findUnique = async () => ({
+  const serviceDb = (
+    service as unknown as { database: Record<string, Record<string, unknown>> }
+  ).database;
+  serviceDb.planPurchase.findUnique = async () => ({
     id: "purchase-1",
     status: "completed",
     userId: "user-1",
     originAction: "unlock_cv",
   });
-  (service as any).database.cvAdaptation.findUnique = async () => ({
+  serviceDb.cvAdaptation.findUnique = async () => ({
     id: "adapt-1",
     isUnlocked: true,
   });
@@ -236,7 +253,10 @@ test("canceled or refunded purchase returns generic", async () => {
       recoveryGroupKey: "g1",
     }),
   });
-  (service as any).database.planPurchase.findUnique = async () => ({
+  const serviceDb = (
+    service as unknown as { database: Record<string, Record<string, unknown>> }
+  ).database;
+  serviceDb.planPurchase.findUnique = async () => ({
     id: "purchase-1",
     status: "refunded",
     userId: "user-1",

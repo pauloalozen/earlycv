@@ -1,4 +1,3 @@
-/* biome-ignore-all lint/suspicious/noExplicitAny: transaction/provider payload typing pending strict refactor */
 import { createHash, randomBytes } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 
@@ -11,6 +10,11 @@ type SendInput = {
   purchaseId: string;
   adminUserId: string;
   forceResend?: boolean;
+};
+
+type TxEmailRow = {
+  createdAt: Date;
+  realEmailSent: boolean;
 };
 
 export type SendPaymentRecoveryEmailResult = {
@@ -183,7 +187,7 @@ export class PaymentRecoveryEmailService {
       recoveryLink,
     });
 
-    const txResult = await this.database.$transaction(async (tx: any) => {
+    const txResult = await this.database.$transaction(async (tx) => {
       await tx.$executeRawUnsafe(
         "SELECT pg_advisory_xact_lock(hashtext($1))",
         recoveryGroupKey,
@@ -195,11 +199,11 @@ export class PaymentRecoveryEmailService {
       });
 
       const cooldownStart = new Date(now.getTime() - 10 * 60 * 1000);
-      const hasCooldown = priorGroupEmails.some(
-        (row: any) => row.createdAt >= cooldownStart,
+      const hasCooldown = (priorGroupEmails as TxEmailRow[]).some(
+        (row) => row.createdAt >= cooldownStart,
       );
-      const hasRealSent = priorGroupEmails.some(
-        (row: any) => row.realEmailSent === true,
+      const hasRealSent = (priorGroupEmails as TxEmailRow[]).some(
+        (row) => row.realEmailSent === true,
       );
 
       let reason = "ok";
@@ -281,7 +285,7 @@ export class PaymentRecoveryEmailService {
           status: "sent",
           errorMessage: null,
         },
-      } as any);
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "provider_error";
       await this.database.paymentRecoveryEmail.update({
@@ -291,7 +295,7 @@ export class PaymentRecoveryEmailService {
           errorMessage: message,
           realEmailSent: false,
         },
-      } as any);
+      });
       return {
         success: false,
         status: "failed",

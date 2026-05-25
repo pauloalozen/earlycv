@@ -1,4 +1,3 @@
-/* biome-ignore-all lint/suspicious/noExplicitAny: Prisma query narrowing in this service requires gradual typing */
 import { createHash } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 
@@ -22,6 +21,21 @@ type ClickResult = {
     | "completed"
     | "payment_status"
     | "generic";
+};
+
+type RecoveryTokenRecord = {
+  adaptationId: string | null;
+  emailRecordId: string;
+  expiresAt: Date;
+  id: string;
+  purchaseId: string;
+  recoveryGroupKey: string | null;
+  userId: string;
+};
+
+type PurchaseRecord = {
+  originAction: string;
+  status: string;
 };
 
 @Injectable()
@@ -50,9 +64,9 @@ export class PaymentRecoveryClickService {
       const tokenHash = createHash("sha256")
         .update(normalizedToken)
         .digest("hex");
-      const token = await this.database.paymentRecoveryToken.findUnique({
+      const token = (await this.database.paymentRecoveryToken.findUnique({
         where: { tokenHash },
-      } as any);
+      })) as RecoveryTokenRecord | null;
       if (!token?.emailRecordId) {
         this.logger.log(
           "[payment-recovery-public] audit token_invalid reason=token_not_found_or_unlinked",
@@ -69,21 +83,21 @@ export class PaymentRecoveryClickService {
       const [purchase, user, adaptation, emailRecord] = await Promise.all([
         this.database.planPurchase.findUnique({
           where: { id: token.purchaseId },
-        } as any),
+        }),
         this.database.user.findUnique({
           where: { id: token.userId },
           select: { id: true },
-        } as any),
+        }),
         token.adaptationId
           ? this.database.cvAdaptation.findUnique({
               where: { id: token.adaptationId },
               select: { id: true, isUnlocked: true },
-            } as any)
+            })
           : Promise.resolve(null),
         this.database.paymentRecoveryEmail.findUnique({
           where: { id: token.emailRecordId },
           select: { id: true, clickedAt: true, metadataJson: true },
-        } as any),
+        }),
       ]);
 
       if (!purchase || !user || !emailRecord) {
@@ -243,12 +257,12 @@ export class PaymentRecoveryClickService {
         clickedAt: clickedAt ?? now,
         ...metadataUpdate,
       },
-    } as any);
+    });
   }
 
   private emitClicked(
-    token: any,
-    purchase: any,
+    token: RecoveryTokenRecord,
+    purchase: PurchaseRecord,
     input: ClickInput,
     reason: string,
   ): void {

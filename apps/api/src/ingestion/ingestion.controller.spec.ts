@@ -1,4 +1,3 @@
-/* biome-ignore-all lint/suspicious/noExplicitAny: dynamic controller shape assertions in tests */
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
@@ -45,11 +44,12 @@ test("controller exposes manual ingestion endpoints", () => {
     } as never,
   );
 
-  assert.equal(typeof (controller as any).startManualAdapterRun, "function");
-  assert.equal(typeof (controller as any).listManualRuns, "function");
-  assert.equal(typeof (controller as any).getManualRunById, "function");
-  assert.equal(typeof (controller as any).listManualRunItems, "function");
-  assert.equal(typeof (controller as any).cancelManualRun, "function");
+  const shape = controller as unknown as Record<string, unknown>;
+  assert.equal(typeof shape.startManualAdapterRun, "function");
+  assert.equal(typeof shape.listManualRuns, "function");
+  assert.equal(typeof shape.getManualRunById, "function");
+  assert.equal(typeof shape.listManualRunItems, "function");
+  assert.equal(typeof shape.cancelManualRun, "function");
 });
 
 test("POST manual adapter run returns queued payload", async () => {

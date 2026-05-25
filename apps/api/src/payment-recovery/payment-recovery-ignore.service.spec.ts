@@ -1,4 +1,3 @@
-/* biome-ignore-all lint/suspicious/noExplicitAny: prisma mock arguments are intentionally open */
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
@@ -20,16 +19,21 @@ test("ignore/unignore persists at displayed grouping level", async () => {
       findMany: async () => [{ id: "purchase-1" }, { id: "purchase-2" }],
     },
     paymentRecoveryIgnore: {
-      upsert: async (args: any) => {
+      upsert: async (args: {
+        where: { purchaseId: string };
+        create: unknown;
+      }) => {
         upsertCalls.push(args.where.purchaseId);
         return args.create;
       },
-      deleteMany: async (args: any) => {
+      deleteMany: async (args: { where: { purchaseId: { in: string[] } } }) => {
         deletedIds = args.where.purchaseId.in;
         return { count: deletedIds.length };
       },
     },
-  } as any);
+  } as unknown as ConstructorParameters<
+    typeof PaymentRecoveryIgnoreService
+  >[0]);
 
   await service.ignore({
     purchaseId: "purchase-2",

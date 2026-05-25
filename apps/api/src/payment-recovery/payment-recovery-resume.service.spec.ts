@@ -1,9 +1,10 @@
-/* biome-ignore-all lint/suspicious/noExplicitAny: unit tests use dynamic service mocks */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { NotFoundException } from "@nestjs/common";
 import { PaymentRecoveryResumeService } from "./payment-recovery-resume.service";
+
+type ResumeDeps = ConstructorParameters<typeof PaymentRecoveryResumeService>;
 
 test("bridge service delegates to plans resume checkout", async () => {
   let delegated: { userId: string; purchaseId: string } | null = null;
@@ -29,14 +30,14 @@ test("bridge service delegates to plans resume checkout", async () => {
           originAdaptationId: "adapt-1",
         }),
       },
-    } as any,
+    } as ResumeDeps[0],
     {
       resumeCheckout: async (userId: string, purchaseId: string) => {
         delegated = { userId, purchaseId };
         return { checkoutUrl: "https://checkout.example/path" };
       },
-    } as any,
-    { emit: () => undefined } as any,
+    } as ResumeDeps[1],
+    { emit: () => undefined } as ResumeDeps[2],
   );
 
   const result = await service.resumeCheckoutForToken({
@@ -71,13 +72,13 @@ test("bridge service rejects ownership mismatch", async () => {
           originAdaptationId: "adapt-1",
         }),
       },
-    } as any,
+    } as ResumeDeps[0],
     {
       resumeCheckout: async () => ({
         checkoutUrl: "https://checkout.example/path",
       }),
-    } as any,
-    { emit: () => undefined } as any,
+    } as ResumeDeps[1],
+    { emit: () => undefined } as ResumeDeps[2],
   );
 
   await assert.rejects(async () => {

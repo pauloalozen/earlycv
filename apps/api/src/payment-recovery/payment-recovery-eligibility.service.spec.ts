@@ -1,4 +1,3 @@
-/* biome-ignore-all lint/suspicious/noExplicitAny: mocked datasets intentionally loose in tests */
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
@@ -8,25 +7,25 @@ import { PaymentRecoveryEligibilityService } from "./payment-recovery-eligibilit
 
 type MockDb = {
   planPurchase: {
-    findMany: (args?: any) => Promise<any[]>;
-    findUnique: (args?: any) => Promise<any | null>;
+    findMany: (args?: unknown) => Promise<unknown[]>;
+    findUnique: (args?: unknown) => Promise<unknown | null>;
   };
-  paymentRecoveryEmail: { findMany: (args?: unknown) => Promise<any[]> };
+  paymentRecoveryEmail: { findMany: (args?: unknown) => Promise<unknown[]> };
   cvAdaptation: {
-    findMany: (args?: unknown) => Promise<any[]>;
-    findUnique: (args?: any) => Promise<any | null>;
+    findMany: (args?: unknown) => Promise<unknown[]>;
+    findUnique: (args?: unknown) => Promise<unknown | null>;
   };
-  paymentRecoveryIgnore: { findMany: (args?: unknown) => Promise<any[]> };
+  paymentRecoveryIgnore: { findMany: (args?: unknown) => Promise<unknown[]> };
 };
 
 function createService(data: {
-  purchases: any[];
-  emails?: any[];
-  ignores?: any[];
+  purchases: Record<string, unknown>[];
+  emails?: Record<string, unknown>[];
+  ignores?: Record<string, unknown>[];
 }) {
   const db: MockDb = {
     planPurchase: {
-      findMany: async ({ where }: any = {}) => {
+      findMany: async ({ where }: { where?: Record<string, unknown> } = {}) => {
         if (!where) return data.purchases;
         return data.purchases.filter((purchase) => {
           if (where.userId && purchase.userId !== where.userId) return false;
@@ -43,11 +42,11 @@ function createService(data: {
           return true;
         });
       },
-      findUnique: async ({ where }: any = {}) =>
+      findUnique: async ({ where }: { where?: Record<string, unknown> } = {}) =>
         data.purchases.find((purchase) => purchase.id === where?.id) ?? null,
     },
     paymentRecoveryEmail: {
-      findMany: async ({ where }: any = {}) => {
+      findMany: async ({ where }: { where?: Record<string, unknown> } = {}) => {
         const items = data.emails ?? [];
         const ids = where?.purchaseId?.in;
         if (!Array.isArray(ids)) {
@@ -57,7 +56,7 @@ function createService(data: {
       },
     },
     cvAdaptation: {
-      findMany: async ({ where }: any = {}) => {
+      findMany: async ({ where }: { where?: Record<string, unknown> } = {}) => {
         const ids = where?.id?.in;
         if (!Array.isArray(ids)) {
           return [];
@@ -66,7 +65,11 @@ function createService(data: {
           .map((purchase) => purchase.adaptation)
           .filter((adaptation) => adaptation && ids.includes(adaptation.id));
       },
-      findUnique: async ({ where }: any = {}) => {
+      findUnique: async ({
+        where,
+      }: {
+        where?: Record<string, unknown>;
+      } = {}) => {
         return (
           data.purchases
             .map((purchase) => purchase.adaptation)
@@ -75,7 +78,7 @@ function createService(data: {
       },
     },
     paymentRecoveryIgnore: {
-      findMany: async ({ where }: any = {}) => {
+      findMany: async ({ where }: { where?: Record<string, unknown> } = {}) => {
         const items = data.ignores ?? [];
         const ids = where?.purchaseId?.in;
         if (!Array.isArray(ids)) {
@@ -86,7 +89,11 @@ function createService(data: {
     },
   };
 
-  return new PaymentRecoveryEligibilityService(db as any);
+  return new PaymentRecoveryEligibilityService(
+    db as unknown as ConstructorParameters<
+      typeof PaymentRecoveryEligibilityService
+    >[0],
+  );
 }
 
 function buildPurchase(overrides: Record<string, unknown> = {}) {

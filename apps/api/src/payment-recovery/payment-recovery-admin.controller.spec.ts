@@ -1,4 +1,3 @@
-/* biome-ignore-all lint/suspicious/noExplicitAny: test doubles rely on dynamic mocks */
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
@@ -7,6 +6,10 @@ import { test } from "node:test";
 import { GUARDS_METADATA } from "@nestjs/common/constants";
 import { INTERNAL_ROLES_KEY } from "../common/roles.decorator";
 import { PaymentRecoveryAdminController } from "./payment-recovery-admin.controller";
+
+type AdminControllerDeps = ConstructorParameters<
+  typeof PaymentRecoveryAdminController
+>;
 
 test("payment recovery admin controller enforces admin/superadmin guards", () => {
   const guards =
@@ -29,23 +32,26 @@ test("listPending forwards default filters and emits list viewed event", async (
         capturedFilters = filters;
         return { items: [], total: 0, page: 1, pageSize: 20 };
       },
-    } as any,
-    { ignore: async () => [], unignore: async () => undefined } as any,
-    { isAdminEnabled: () => true } as any,
+    } as AdminControllerDeps[0],
+    {
+      ignore: async () => [],
+      unignore: async () => undefined,
+    } as AdminControllerDeps[1],
+    { isAdminEnabled: () => true } as AdminControllerDeps[2],
     {
       listViewed: (input: Record<string, unknown>) => {
         listViewedCall = input;
       },
       ignored: () => undefined,
       unignored: () => undefined,
-    } as any,
-    { send: async () => ({}) } as any,
+    } as AdminControllerDeps[3],
+    { send: async () => ({}) } as AdminControllerDeps[4],
   );
 
   await controller.listPending(
     {
       id: "admin-1",
-    } as any,
+    } as Parameters<PaymentRecoveryAdminController["listPending"]>[0],
     {},
   );
 
@@ -75,29 +81,37 @@ test("listPending supports all requested filters and pagination", async () => {
         capturedFilters = filters;
         return { items: [], total: 0, page: 2, pageSize: 50 };
       },
-    } as any,
-    { ignore: async () => [], unignore: async () => undefined } as any,
-    { isAdminEnabled: () => true } as any,
+    } as AdminControllerDeps[0],
+    {
+      ignore: async () => [],
+      unignore: async () => undefined,
+    } as AdminControllerDeps[1],
+    { isAdminEnabled: () => true } as AdminControllerDeps[2],
     {
       listViewed: () => undefined,
       ignored: () => undefined,
       unignored: () => undefined,
-    } as any,
-    { send: async () => ({}) } as any,
+    } as AdminControllerDeps[3],
+    { send: async () => ({}) } as AdminControllerDeps[4],
   );
 
-  await controller.listPending({ id: "admin-1" } as any, {
-    eligibilityStatus: "possibly_resolved",
-    originAction: "unlock_cv",
-    alreadySent: "false",
-    hasAvailableCredits: "true",
-    ignored: "all",
-    dateFrom: "2026-05-01",
-    dateTo: "2026-05-30",
-    search: "john@example.com",
-    page: 2,
-    pageSize: 50,
-  });
+  await controller.listPending(
+    { id: "admin-1" } as Parameters<
+      PaymentRecoveryAdminController["listPending"]
+    >[0],
+    {
+      eligibilityStatus: "possibly_resolved",
+      originAction: "unlock_cv",
+      alreadySent: "false",
+      hasAvailableCredits: "true",
+      ignored: "all",
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-30",
+      search: "john@example.com",
+      page: 2,
+      pageSize: 50,
+    },
+  );
 
   assert.deepEqual(capturedFilters, {
     eligibilityStatus: "possibly_resolved",
@@ -118,7 +132,7 @@ test("ignore and unignore delegate persistence and emit events", async () => {
   const controller = new PaymentRecoveryAdminController(
     {
       listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
-    } as any,
+    } as AdminControllerDeps[0],
     {
       ignore: async (input: Record<string, unknown>) => {
         calls.push(`ignore:${JSON.stringify(input)}`);
@@ -126,8 +140,8 @@ test("ignore and unignore delegate persistence and emit events", async () => {
       unignore: async (input: Record<string, unknown>) => {
         calls.push(`unignore:${JSON.stringify(input)}`);
       },
-    } as any,
-    { isAdminEnabled: () => true } as any,
+    } as AdminControllerDeps[1],
+    { isAdminEnabled: () => true } as AdminControllerDeps[2],
     {
       listViewed: () => undefined,
       ignored: (input: Record<string, unknown>) => {
@@ -136,14 +150,22 @@ test("ignore and unignore delegate persistence and emit events", async () => {
       unignored: (input: Record<string, unknown>) => {
         calls.push(`event-unignored:${JSON.stringify(input)}`);
       },
-    } as any,
-    { send: async () => ({}) } as any,
+    } as AdminControllerDeps[3],
+    { send: async () => ({}) } as AdminControllerDeps[4],
   );
 
-  await controller.ignore("purchase-1", { id: "admin-1" } as any, {
-    reason: "false positive",
-  });
-  await controller.unignore("purchase-1", { id: "admin-1" } as any);
+  await controller.ignore(
+    "purchase-1",
+    { id: "admin-1" } as Parameters<
+      PaymentRecoveryAdminController["ignore"]
+    >[1],
+    {
+      reason: "false positive",
+    },
+  );
+  await controller.unignore("purchase-1", { id: "admin-1" } as Parameters<
+    PaymentRecoveryAdminController["unignore"]
+  >[1]);
 
   assert.equal(
     calls.some((value) => value.includes("ignore")),
@@ -167,20 +189,28 @@ test("listPending fails closed when admin feature is disabled", async () => {
   const controller = new PaymentRecoveryAdminController(
     {
       listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
-    } as any,
-    { ignore: async () => [], unignore: async () => undefined } as any,
-    { isAdminEnabled: () => false } as any,
+    } as AdminControllerDeps[0],
+    {
+      ignore: async () => [],
+      unignore: async () => undefined,
+    } as AdminControllerDeps[1],
+    { isAdminEnabled: () => false } as AdminControllerDeps[2],
     {
       listViewed: () => undefined,
       ignored: () => undefined,
       unignored: () => undefined,
-    } as any,
-    { send: async () => ({}) } as any,
+    } as AdminControllerDeps[3],
+    { send: async () => ({}) } as AdminControllerDeps[4],
   );
 
   await assert.rejects(
     async () => {
-      await controller.listPending({ id: "admin-1" } as any, {});
+      await controller.listPending(
+        { id: "admin-1" } as Parameters<
+          PaymentRecoveryAdminController["listPending"]
+        >[0],
+        {},
+      );
     },
     {
       name: "ForbiddenException",
@@ -193,9 +223,12 @@ test("sendEmail returns required fields and emits events with correct payload", 
   const controller = new PaymentRecoveryAdminController(
     {
       listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
-    } as any,
-    { ignore: async () => [], unignore: async () => undefined } as any,
-    { isAdminEnabled: () => true } as any,
+    } as AdminControllerDeps[0],
+    {
+      ignore: async () => [],
+      unignore: async () => undefined,
+    } as AdminControllerDeps[1],
+    { isAdminEnabled: () => true } as AdminControllerDeps[2],
     {
       listViewed: () => undefined,
       ignored: () => undefined,
@@ -210,7 +243,7 @@ test("sendEmail returns required fields and emits events with correct payload", 
         calls.push(`payment_recovery_email_skipped:${JSON.stringify(input)}`),
       emailFailed: (input: Record<string, unknown>) =>
         calls.push(`payment_recovery_email_failed:${JSON.stringify(input)}`),
-    } as any,
+    } as AdminControllerDeps[3],
     {
       send: async () => ({
         success: true,
@@ -224,12 +257,12 @@ test("sendEmail returns required fields and emits events with correct payload", 
         eligibilityStatus: "eligible",
         eligibilityReason: "pending_unlock_cv_not_unlocked",
       }),
-    } as any,
+    } as AdminControllerDeps[4],
   );
 
   const result = await controller.sendEmail("purchase-1", {
     id: "admin-1",
-  } as any);
+  } as Parameters<PaymentRecoveryAdminController["sendEmail"]>[1]);
 
   assert.deepEqual(result, {
     success: true,

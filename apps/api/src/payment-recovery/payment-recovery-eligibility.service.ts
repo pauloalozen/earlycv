@@ -1,4 +1,3 @@
-/* biome-ignore-all lint/suspicious/noExplicitAny: legacy prisma enum coercion pending typed normalization */
 import { Inject, Injectable } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
@@ -437,23 +436,26 @@ export class PaymentRecoveryEligibilityService {
       ? `${purchase.userId}:${purchase.originAdaptationId}`
       : `${purchase.userId}:${purchase.originAction}`;
 
+    const groupWhere = purchase.originAdaptationId
+      ? {
+          userId: purchase.userId,
+          originAdaptationId: purchase.originAdaptationId,
+        }
+      : {
+          userId: purchase.userId,
+          originAction: purchase.originAction,
+          originAdaptationId: null,
+        };
     const groupPurchases = (await this.database.planPurchase.findMany({
-      where: purchase.originAdaptationId
-        ? {
-            userId: purchase.userId,
-            originAdaptationId: purchase.originAdaptationId,
-          }
-        : {
-            userId: purchase.userId,
-            originAction: purchase.originAction as any,
-            originAdaptationId: null,
-          },
+      where: groupWhere,
       include: {
         user: {
           select: { id: true, name: true, email: true, creditsRemaining: true },
         },
       },
-    })) as PurchaseRecord[];
+    } as unknown as Parameters<
+      DatabaseService["planPurchase"]["findMany"]
+    >[0])) as unknown as PurchaseRecord[];
 
     const allUserPurchases = (await this.database.planPurchase.findMany({
       where: { userId: purchase.userId },
@@ -462,7 +464,9 @@ export class PaymentRecoveryEligibilityService {
           select: { id: true, name: true, email: true, creditsRemaining: true },
         },
       },
-    })) as PurchaseRecord[];
+    } as unknown as Parameters<
+      DatabaseService["planPurchase"]["findMany"]
+    >[0])) as unknown as PurchaseRecord[];
     const indexes = this.buildIndexes(allUserPurchases);
     const classification = this.classifyPurchase(purchase, indexes);
     const scores = readScoreFields(purchase.adaptation?.adaptedContentJson);

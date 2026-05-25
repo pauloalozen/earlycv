@@ -1,4 +1,3 @@
-/* biome-ignore-all lint/suspicious/noExplicitAny: complex test mocks with dynamic payloads */
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
@@ -12,11 +11,11 @@ function makeService(options?: {
   allowlist?: string[];
   eligibilityStatus?: "eligible" | "possibly_resolved" | "not_eligible";
   ignored?: boolean;
-  priorEmails?: any[];
+  priorEmails?: Record<string, unknown>[];
 }) {
-  const emails: any[] = [];
-  const tokens: any[] = [];
-  const db: any = {
+  const emails: Record<string, unknown>[] = [];
+  const tokens: Record<string, unknown>[] = [];
+  const db = {
     planPurchase: {
       findUnique: async () => ({
         id: "purchase-1",
@@ -35,7 +34,7 @@ function makeService(options?: {
     },
     paymentRecoveryEmail: {
       findMany: async () => [...(options?.priorEmails ?? []), ...emails],
-      create: async ({ data }: any) => {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
         const row = {
           id: `email-${emails.length + 1}`,
           ...data,
@@ -44,13 +43,19 @@ function makeService(options?: {
         emails.push(row);
         return row;
       },
-      update: async ({ where, data }: any) => {
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
         const row = emails.find((item) => item.id === where.id);
         Object.assign(row, data);
       },
     },
     paymentRecoveryToken: {
-      create: async ({ data }: any) => {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
         const row = { id: `token-${tokens.length + 1}`, ...data };
         tokens.push(row);
         return row;
@@ -59,7 +64,8 @@ function makeService(options?: {
     },
     $executeRawUnsafe: async () => undefined,
   };
-  db.$transaction = async (callback: (tx: any) => Promise<any>) => callback(db);
+  db.$transaction = async (callback: (tx: typeof db) => Promise<unknown>) =>
+    callback(db);
 
   const config = {
     isEmailEnabled: () => options?.emailEnabled ?? true,
@@ -83,9 +89,15 @@ function makeService(options?: {
 
   return {
     service: new PaymentRecoveryEmailService(
-      db as any,
-      config as any,
-      eligibility as any,
+      db as unknown as ConstructorParameters<
+        typeof PaymentRecoveryEmailService
+      >[0],
+      config as unknown as ConstructorParameters<
+        typeof PaymentRecoveryEmailService
+      >[1],
+      eligibility as unknown as ConstructorParameters<
+        typeof PaymentRecoveryEmailService
+      >[2],
     ),
     emails,
     tokens,
@@ -124,7 +136,7 @@ test("DRY_RUN true inside allowlist skips real send", async () => {
   global.fetch = (async () => {
     fetchCalled = true;
     return { ok: true, json: async () => ({ id: "provider-1" }) };
-  }) as any;
+  }) as typeof fetch;
   const { service } = makeService({
     dryRun: true,
     allowlist: ["user@example.com"],
@@ -149,11 +161,11 @@ test("recovery link points to public payment recovery endpoint", async () => {
   process.env.API_URL = "https://api.earlycv.com.br";
 
   const originalFetch = global.fetch;
-  let payload: any = null;
-  global.fetch = (async (_url: string, init?: any) => {
+  let payload: Record<string, unknown> | null = null;
+  global.fetch = (async (_url: string, init?: RequestInit) => {
     payload = JSON.parse(String(init?.body ?? "{}"));
     return { ok: true, json: async () => ({ id: "provider-link" }) };
-  }) as any;
+  }) as typeof fetch;
 
   try {
     const { service } = makeService();
@@ -227,19 +239,19 @@ test("force resend bypasses already_sent and cooldown guards", async () => {
   global.fetch = (async () => ({
     ok: true,
     json: async () => ({ id: "provider-force" }),
-  })) as any;
+  })) as typeof fetch;
 
   try {
     const first = await makeService({ priorEmails: [oldReal] }).service.send({
       purchaseId: "purchase-1",
       adminUserId: "admin-1",
       forceResend: true,
-    } as any);
+    });
     const second = await makeService({ priorEmails: [recent] }).service.send({
       purchaseId: "purchase-1",
       adminUserId: "admin-1",
       forceResend: true,
-    } as any);
+    });
     assert.equal(first.status, "sent");
     assert.equal(second.status, "sent");
   } finally {
@@ -256,7 +268,7 @@ test("transactional gate re-check prevents duplicate real send on double attempt
   global.fetch = (async () => ({
     ok: true,
     json: async () => ({ id: "provider-3" }),
-  })) as any;
+  })) as typeof fetch;
 
   const first = await service.send({
     purchaseId: "purchase-1",
@@ -283,7 +295,7 @@ test("real send creates email and token; token persisted as hash", async () => {
   global.fetch = (async () => ({
     ok: true,
     json: async () => ({ id: "provider-2" }),
-  })) as any;
+  })) as typeof fetch;
   const { service, emails, tokens } = makeService();
   const result = await service.send({
     purchaseId: "purchase-1",
@@ -310,7 +322,7 @@ test("provider failure returns failed with error message", async () => {
     ok: false,
     status: 500,
     json: async () => ({ message: "boom" }),
-  })) as any;
+  })) as typeof fetch;
   const { service, emails } = makeService();
   const result = await service.send({
     purchaseId: "purchase-1",
@@ -332,7 +344,7 @@ test("local environment mocks email send and logs payload", async () => {
   const originalFetch = global.fetch;
   global.fetch = (async () => {
     throw new Error("fetch should not be called in local mock");
-  }) as any;
+  }) as typeof fetch;
 
   const originalInfo = console.info;
   const infoCalls: string[] = [];

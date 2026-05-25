@@ -1,4 +1,3 @@
-/* biome-ignore-all lint/suspicious/noExplicitAny: prisma select narrowing pending typed repository extraction */
 import { createHash } from "node:crypto";
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 
@@ -32,7 +31,7 @@ export class PaymentRecoveryResumeService {
       .digest("hex");
     const token = await this.database.paymentRecoveryToken.findUnique({
       where: { tokenHash },
-    } as any);
+    });
 
     if (!token?.purchaseId || token.expiresAt.getTime() <= Date.now()) {
       throw new NotFoundException("Token invalido.");
@@ -47,7 +46,7 @@ export class PaymentRecoveryResumeService {
         originAction: true,
         originAdaptationId: true,
       },
-    } as any);
+    });
     if (!purchase || purchase.userId !== input.currentUserId) {
       this.events.emit("payment_recovery_token_user_mismatch", {
         tokenId: token.id,
