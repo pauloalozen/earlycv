@@ -26,19 +26,27 @@ export class PaymentRecoveryResumeService {
       throw new NotFoundException("Token invalido.");
     }
 
-    const tokenHash = createHash("sha256").update(normalizedToken).digest("hex");
+    const tokenHash = createHash("sha256")
+      .update(normalizedToken)
+      .digest("hex");
     const token = await this.database.paymentRecoveryToken.findUnique({
       where: { tokenHash },
-    } as any);
+    });
 
-    if (!token || !token.purchaseId || token.expiresAt.getTime() <= Date.now()) {
+    if (!token?.purchaseId || token.expiresAt.getTime() <= Date.now()) {
       throw new NotFoundException("Token invalido.");
     }
 
     const purchase = await this.database.planPurchase.findUnique({
       where: { id: token.purchaseId },
-      select: { id: true, userId: true, status: true, originAction: true, originAdaptationId: true },
-    } as any);
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        originAction: true,
+        originAdaptationId: true,
+      },
+    });
     if (!purchase || purchase.userId !== input.currentUserId) {
       this.events.emit("payment_recovery_token_user_mismatch", {
         tokenId: token.id,
@@ -55,7 +63,10 @@ export class PaymentRecoveryResumeService {
       throw new NotFoundException("Token invalido.");
     }
 
-    const resumed = await this.plansService.resumeCheckout(input.currentUserId, purchase.id);
+    const resumed = await this.plansService.resumeCheckout(
+      input.currentUserId,
+      purchase.id,
+    );
     this.events.emit("payment_recovery_checkout_resumed", {
       tokenId: token.id,
       purchaseId: token.purchaseId,

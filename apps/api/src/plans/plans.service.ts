@@ -1056,7 +1056,10 @@ export class PlansService {
       throw new NotFoundException("adaptation not found");
     }
 
-    if (!adaptation.adaptedContentJson || typeof adaptation.adaptedContentJson !== "object") {
+    if (
+      !adaptation.adaptedContentJson ||
+      typeof adaptation.adaptedContentJson !== "object"
+    ) {
       return;
     }
 
@@ -1495,7 +1498,7 @@ function requireEnvInt(...names: string[]): number {
     const raw = process.env[name];
     if (raw) {
       const value = parseInt(raw, 10);
-      if (isNaN(value)) {
+      if (Number.isNaN(value)) {
         throw new Error(
           `Env var ${name} must be a valid integer, got: "${raw}"`,
         );

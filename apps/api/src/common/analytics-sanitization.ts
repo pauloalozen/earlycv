@@ -80,7 +80,9 @@ function sanitizeReferrerValue(value: unknown): string | null | undefined {
   return sanitizePathLikeValue(trimmed) ?? null;
 }
 
-function toSafeScalar(value: unknown): string | number | boolean | null | undefined {
+function toSafeScalar(
+  value: unknown,
+): string | number | boolean | null | undefined {
   if (value === null) return null;
   if (typeof value === "string") return value;
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -166,7 +168,9 @@ export function sanitizeAnalyticsPayload(
     }
 
     if (typeof rawValue === "object" && rawValue !== null) {
-      const nested = sanitizeAnalyticsPayload(rawValue as Record<string, unknown>);
+      const nested = sanitizeAnalyticsPayload(
+        rawValue as Record<string, unknown>,
+      );
       if (Object.keys(nested).length > 0) {
         output[key] = nested;
       }
@@ -201,7 +205,9 @@ export function summarizeWebhookPayload(body: unknown): {
 
   const record = body as Record<string, unknown>;
   const data =
-    record.data && typeof record.data === "object" && !Array.isArray(record.data)
+    record.data &&
+    typeof record.data === "object" &&
+    !Array.isArray(record.data)
       ? (record.data as Record<string, unknown>)
       : null;
 

@@ -30,7 +30,10 @@ type RegisterResult = {
 const openApps = new Set<INestApplication>();
 
 async function createApp() {
-  if (process.env.NODE_ENV === "test" && !process.env.SKIP_TURNSTILE_VERIFICATION) {
+  if (
+    process.env.NODE_ENV === "test" &&
+    !process.env.SKIP_TURNSTILE_VERIFICATION
+  ) {
     process.env.SKIP_TURNSTILE_VERIFICATION = "true";
   }
 
@@ -106,7 +109,10 @@ async function registerUser(
   database: DatabaseService,
   prefix: string,
 ): Promise<RegisterResult> {
-  const safePrefix = prefix.replace(/[^a-z0-9-]/gi, "").toLowerCase().slice(0, 24);
+  const safePrefix = prefix
+    .replace(/[^a-z0-9-]/gi, "")
+    .toLowerCase()
+    .slice(0, 24);
   const email = `${safePrefix}+${randomUUID()}@earlycv.dev`;
 
   await deleteUserByEmail(database, email);
@@ -1203,11 +1209,7 @@ test("redeem-credit does not debit twice for the same adaptation", async () => {
 test("admin payments list excludes cv unlock entries and cv-unlocks list includes them", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "cv-adapt-admin-lists-user");
-  const superadmin = await registerUser(
-    app,
-    database,
-    "cv-admin-super",
-  );
+  const superadmin = await registerUser(app, database, "cv-admin-super");
   await promoteToInternalAdmin(database, superadmin.userId, "superadmin");
 
   const masterResume = await database.resume.create({

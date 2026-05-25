@@ -9,8 +9,10 @@ import { INTERNAL_ROLES_KEY } from "../common/roles.decorator";
 import { IngestionController } from "./ingestion.controller";
 
 test("ingestion controller enforces admin/superadmin guards", () => {
-  const guards = Reflect.getMetadata(GUARDS_METADATA, IngestionController) ?? [];
-  const roles = Reflect.getMetadata(INTERNAL_ROLES_KEY, IngestionController) ?? [];
+  const guards =
+    Reflect.getMetadata(GUARDS_METADATA, IngestionController) ?? [];
+  const roles =
+    Reflect.getMetadata(INTERNAL_ROLES_KEY, IngestionController) ?? [];
 
   assert.equal(Array.isArray(guards), true);
   assert.equal(guards.length >= 2, true);
@@ -42,11 +44,12 @@ test("controller exposes manual ingestion endpoints", () => {
     } as never,
   );
 
-  assert.equal(typeof (controller as any).startManualAdapterRun, "function");
-  assert.equal(typeof (controller as any).listManualRuns, "function");
-  assert.equal(typeof (controller as any).getManualRunById, "function");
-  assert.equal(typeof (controller as any).listManualRunItems, "function");
-  assert.equal(typeof (controller as any).cancelManualRun, "function");
+  const shape = controller as unknown as Record<string, unknown>;
+  assert.equal(typeof shape.startManualAdapterRun, "function");
+  assert.equal(typeof shape.listManualRuns, "function");
+  assert.equal(typeof shape.getManualRunById, "function");
+  assert.equal(typeof shape.listManualRunItems, "function");
+  assert.equal(typeof shape.cancelManualRun, "function");
 });
 
 test("POST manual adapter run returns queued payload", async () => {
@@ -91,7 +94,10 @@ test("POST manual adapter run returns queued payload", async () => {
       getRunById: async () => ({}) as never,
       listRunItems: async () => [],
       listRuns: async () => [],
-      startAdapterRun: async (adapterType: string, requestedByUserId: string) => {
+      startAdapterRun: async (
+        adapterType: string,
+        requestedByUserId: string,
+      ) => {
         receivedAdapter = adapterType;
         receivedUserId = requestedByUserId;
         return queued;

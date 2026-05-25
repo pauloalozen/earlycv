@@ -1340,7 +1340,9 @@ test("applyApprovedPurchase applies pending purchase once", async () => {
         }),
       paymentAuditLog: { create: async () => ({ id: "audit-apply-1" }) },
     } as never,
-    { record: async () => ({ event: { id: "evt-apply-1" }, ingested: true }) } as never,
+    {
+      record: async () => ({ event: { id: "evt-apply-1" }, ingested: true }),
+    } as never,
   );
 
   (

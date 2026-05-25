@@ -355,7 +355,7 @@ export class IngestionService {
         id: s.id,
         sourceName: s.sourceName,
         companyName: s.company.name,
-        pausedUntil: s.pausedUntil!.toISOString(),
+        pausedUntil: s.pausedUntil?.toISOString(),
         pauseReason: s.pauseReason,
         consecutive403Count: s.consecutive403Count,
       }));
@@ -363,8 +363,7 @@ export class IngestionService {
     const sources403 = allSources
       .filter(
         (s) =>
-          s.consecutive403Count > 0 &&
-          (!s.pausedUntil || s.pausedUntil <= now),
+          s.consecutive403Count > 0 && (!s.pausedUntil || s.pausedUntil <= now),
       )
       .map((s) => ({
         id: s.id,

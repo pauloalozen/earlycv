@@ -20,14 +20,13 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
-
+import { summarizeWebhookPayload } from "../common/analytics-sanitization";
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import {
   ALLOWED_CV_FORMATS_LABEL,
   isAllowedCvUploadMimeType,
 } from "../common/cv-file-formats";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
-import { summarizeWebhookPayload } from "../common/analytics-sanitization";
 import { CvAdaptationService } from "./cv-adaptation.service";
 import { AnalyzeCvDto } from "./dto/analyze-cv.dto";
 import { ClaimGuestAdaptationDto } from "./dto/claim-guest-adaptation.dto";

@@ -95,7 +95,8 @@ test("payment-recovery module exposes config token overrides", async () => {
   process.env.ADMIN_PAYMENT_RECOVERY_ENABLED = "true";
   process.env.PAYMENT_RECOVERY_EMAIL_ENABLED = "true";
   process.env.PAYMENT_RECOVERY_EMAIL_DRY_RUN = "false";
-  process.env.PAYMENT_RECOVERY_EMAIL_ALLOWLIST = "ops@example.com, admin@example.com";
+  process.env.PAYMENT_RECOVERY_EMAIL_ALLOWLIST =
+    "ops@example.com, admin@example.com";
   process.env.PAYMENT_RECOVERY_TOKEN_TTL_DAYS = "9";
   process.env.PAYMENT_RECOVERY_PUBLIC_RATE_LIMIT_PER_MINUTE = "45";
   process.env.PAYMENT_RECOVERY_TOKEN_SINGLE_USE = "false";
@@ -133,7 +134,8 @@ test("payment recovery config uses fail-closed parsing for invalid values", () =
   process.env.ADMIN_PAYMENT_RECOVERY_ENABLED = "definitely";
   process.env.PAYMENT_RECOVERY_EMAIL_ENABLED = "sometimes";
   process.env.PAYMENT_RECOVERY_EMAIL_DRY_RUN = "maybe";
-  process.env.PAYMENT_RECOVERY_EMAIL_ALLOWLIST = " a@example.com, ,b@example.com ,,";
+  process.env.PAYMENT_RECOVERY_EMAIL_ALLOWLIST =
+    " a@example.com, ,b@example.com ,,";
   process.env.PAYMENT_RECOVERY_TOKEN_TTL_DAYS = "NaN";
   process.env.PAYMENT_RECOVERY_PUBLIC_RATE_LIMIT_PER_MINUTE = "invalid";
   process.env.PAYMENT_RECOVERY_TOKEN_SINGLE_USE = "unexpected";
@@ -143,7 +145,10 @@ test("payment recovery config uses fail-closed parsing for invalid values", () =
   assert.equal(service.isAdminEnabled(), false);
   assert.equal(service.isEmailEnabled(), false);
   assert.equal(service.isDryRun(), true);
-  assert.deepEqual(service.emailAllowlist(), ["a@example.com", "b@example.com"]);
+  assert.deepEqual(service.emailAllowlist(), [
+    "a@example.com",
+    "b@example.com",
+  ]);
   assert.equal(service.tokenTtlDays(), 7);
   assert.equal(service.publicRateLimitPerMinute(), 30);
   assert.equal(service.isTokenSingleUse(), true);

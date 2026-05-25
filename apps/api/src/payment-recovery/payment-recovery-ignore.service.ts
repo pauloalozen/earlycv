@@ -16,7 +16,12 @@ export class PaymentRecoveryIgnoreService {
   }) {
     const purchase = await this.database.planPurchase.findUnique({
       where: { id: input.purchaseId },
-      select: { id: true, userId: true, originAdaptationId: true, originAction: true },
+      select: {
+        id: true,
+        userId: true,
+        originAdaptationId: true,
+        originAction: true,
+      },
     });
     if (!purchase) {
       throw new NotFoundException("purchase not found");
@@ -50,7 +55,12 @@ export class PaymentRecoveryIgnoreService {
   async unignore(input: { purchaseId: string }) {
     const purchase = await this.database.planPurchase.findUnique({
       where: { id: input.purchaseId },
-      select: { id: true, userId: true, originAdaptationId: true, originAction: true },
+      select: {
+        id: true,
+        userId: true,
+        originAdaptationId: true,
+        originAction: true,
+      },
     });
     if (!purchase) {
       throw new NotFoundException("purchase not found");

@@ -11,13 +11,13 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import MercadoPagoConfig, { Payment } from "mercadopago";
+import { DatabaseService } from "../database/database.service";
+import { PlansService } from "../plans/plans.service";
 import {
   BrickPayloadValidationError,
   parseBrickPaymentPayload,
 } from "./brick-payload";
 import { summarizeSafeError } from "./payment-audit-sanitization";
-import { DatabaseService } from "../database/database.service";
-import { PlansService } from "../plans/plans.service";
 
 type CheckoutStatus = "pending" | "approved" | "failed";
 type NextAction =
@@ -156,7 +156,11 @@ export class PaymentsService {
         autoUnlockError: purchase.autoUnlockError,
         adaptationUnlocked: adaptation?.isUnlocked ?? false,
         paymentId: purchase.mpPaymentId ?? null,
-        message: buildMessage(status, "plan", latestRejectionLog?.errorMessage ?? null),
+        message: buildMessage(
+          status,
+          "plan",
+          latestRejectionLog?.errorMessage ?? null,
+        ),
       };
     }
 
@@ -317,7 +321,9 @@ export class PaymentsService {
 
     const eligibility = await this.evaluateBrickEligibility(userId);
     if (!eligibility.useBrick) {
-      throw new ForbiddenException("Checkout Brick não habilitado para este usuário.");
+      throw new ForbiddenException(
+        "Checkout Brick não habilitado para este usuário.",
+      );
     }
 
     let parsedPayload: ReturnType<typeof parseBrickPaymentPayload>;
@@ -379,15 +385,19 @@ export class PaymentsService {
       amountInCents: purchase.amountInCents,
       originAction: purchase.originAction,
     });
-    const payerIdentificationPresent = Boolean(parsedPayload.payerIdentification);
+    const payerIdentificationPresent = Boolean(
+      parsedPayload.payerIdentification,
+    );
 
-    const paymentAuditLog = (this.database as unknown as {
-      paymentAuditLog?: {
-        create?: (input: {
-          data: Record<string, unknown>;
-        }) => Promise<unknown>;
-      };
-    }).paymentAuditLog;
+    const paymentAuditLog = (
+      this.database as unknown as {
+        paymentAuditLog?: {
+          create?: (input: {
+            data: Record<string, unknown>;
+          }) => Promise<unknown>;
+        };
+      }
+    ).paymentAuditLog;
 
     void paymentAuditLog
       ?.create?.({
@@ -477,7 +487,10 @@ export class PaymentsService {
               : {}),
           },
           external_reference: purchase.id,
-          description: buildBrickDescription(purchase.planType, purchase.originAction),
+          description: buildBrickDescription(
+            purchase.planType,
+            purchase.originAction,
+          ),
           metadata: {
             purchaseId: purchase.id,
             paymentReference: purchase.paymentReference,
@@ -616,7 +629,9 @@ export class PaymentsService {
     total: number;
   }> {
     const pendingPurchases = await this.database.planPurchase.findMany({
-      where: { status: { in: ["pending", "processing_payment", "pending_payment"] } },
+      where: {
+        status: { in: ["pending", "processing_payment", "pending_payment"] },
+      },
       take: limit,
       orderBy: { createdAt: "asc" },
     });
@@ -825,9 +840,11 @@ export class PaymentsService {
       process.env.NODE_ENV === "production";
     const token = isProduction
       ? process.env.MERCADOPAGO_ACCESS_TOKEN?.trim()
-      : (process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST ??
-        process.env.MERCADOPAGO_ACCESS_TOKEN_TEST ??
-        process.env.MERCADOPAGO_ACCESS_TOKEN)?.trim();
+      : (
+          process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST ??
+          process.env.MERCADOPAGO_ACCESS_TOKEN_TEST ??
+          process.env.MERCADOPAGO_ACCESS_TOKEN
+        )?.trim();
 
     return token || null;
   }
@@ -836,7 +853,9 @@ export class PaymentsService {
     useBrick: boolean;
     reason: string;
   }> {
-    const mode = (process.env.PAYMENT_CHECKOUT_MODE ?? "pro").trim().toLowerCase();
+    const mode = (process.env.PAYMENT_CHECKOUT_MODE ?? "pro")
+      .trim()
+      .toLowerCase();
 
     if (mode !== "brick") {
       return { useBrick: false, reason: "mode_not_brick" };
@@ -862,7 +881,8 @@ function summarizePaymentRejection(paymentResponse: unknown): string {
     payment_method_id?: unknown;
   };
   const status = normalizeOptionalString(source.status) ?? "rejected";
-  const statusDetail = normalizeOptionalString(source.status_detail) ?? "unknown";
+  const statusDetail =
+    normalizeOptionalString(source.status_detail) ?? "unknown";
   const paymentMethodId = normalizeOptionalString(source.payment_method_id);
 
   if (!paymentMethodId) {
@@ -886,9 +906,8 @@ function extractPixTransactionData(response: unknown): {
     return { qrCodeBase64: null, qrCodeText: null };
   }
 
-  const transactionData = (
-    pointOfInteraction as { transaction_data?: unknown }
-  ).transaction_data;
+  const transactionData = (pointOfInteraction as { transaction_data?: unknown })
+    .transaction_data;
   if (!transactionData || typeof transactionData !== "object") {
     return { qrCodeBase64: null, qrCodeText: null };
   }
@@ -1023,7 +1042,9 @@ function buildMercadoPagoPlanItem(input: {
   originAction: "buy_credits" | "unlock_cv";
 }): MercadoPagoPlanItem {
   const unitsIncluded =
-    input.originAction === "unlock_cv" ? 1 : (getPlanUnits(input.planType) ?? 1);
+    input.originAction === "unlock_cv"
+      ? 1
+      : (getPlanUnits(input.planType) ?? 1);
 
   return {
     id: normalizeMercadoPagoPlanItemId(input.planType),
@@ -1037,13 +1058,17 @@ function buildMercadoPagoPlanItem(input: {
 }
 
 function normalizeMercadoPagoPlanItemId(planType: string): string {
-  const normalized = planType.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  const normalized = planType
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "-");
   return normalized.length > 0 ? normalized : "plan";
 }
 
-function splitMercadoPagoPayerName(
-  fullName: string | null,
-): { firstName: string; lastName: string } {
+function splitMercadoPagoPayerName(fullName: string | null): {
+  firstName: string;
+  lastName: string;
+} {
   if (!fullName) {
     return { firstName: "Cliente", lastName: "EarlyCV" };
   }
@@ -1079,8 +1104,10 @@ function requireEnvInt(...names: string[]): number {
     const raw = process.env[name];
     if (raw) {
       const value = parseInt(raw, 10);
-      if (isNaN(value)) {
-        throw new Error(`Env var ${name} must be a valid integer, got: "${raw}"`);
+      if (Number.isNaN(value)) {
+        throw new Error(
+          `Env var ${name} must be a valid integer, got: "${raw}"`,
+        );
       }
       return value;
     }

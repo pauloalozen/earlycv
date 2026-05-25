@@ -133,7 +133,9 @@ export async function extractTextFromCvFile(file: UploadFile): Promise<string> {
   throw new UnsupportedCvFileTypeError();
 }
 
-export function validateCvFileEnvelope(file: UploadFile): NormalizedFileMetadata {
+export function validateCvFileEnvelope(
+  file: UploadFile,
+): NormalizedFileMetadata {
   if (!file?.buffer || file.buffer.length === 0) {
     throw new Error("Uploaded file is empty or unreadable");
   }
@@ -173,7 +175,10 @@ function isFileTypeConsistent(mimeType: string, extension: string): boolean {
   }
 
   if (extension === ".odt") {
-    return ["application/vnd.oasis.opendocument.text", "application/octet-stream"].includes(mimeType);
+    return [
+      "application/vnd.oasis.opendocument.text",
+      "application/octet-stream",
+    ].includes(mimeType);
   }
 
   return false;
@@ -209,7 +214,10 @@ async function convertWithLibreOfficeAndReadText(
       execLibreOfficeConvertToText(sourcePath, tempDir),
       EXTRACTION_TIMEOUT_MS,
     );
-    return await withTimeout(readFile(outputPath, "utf8"), EXTRACTION_TIMEOUT_MS);
+    return await withTimeout(
+      readFile(outputPath, "utf8"),
+      EXTRACTION_TIMEOUT_MS,
+    );
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -293,7 +301,10 @@ function includesAscii(buffer: Buffer, text: string): boolean {
   return buffer.includes(Buffer.from(text, "ascii"));
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
   let timeoutRef: ReturnType<typeof setTimeout> | null = null;
 
   const timeoutPromise = new Promise<never>((_, reject) => {

@@ -14,8 +14,8 @@ import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { OptionalJwtAuthGuard } from "../common/optional-jwt-auth.guard";
 import { PaymentRecoveryClickService } from "./payment-recovery-click.service";
-import { PaymentRecoveryResumeService } from "./payment-recovery-resume.service";
 import { PaymentRecoveryPublicRateLimitGuard } from "./payment-recovery-public-rate-limit.guard";
+import { PaymentRecoveryResumeService } from "./payment-recovery-resume.service";
 
 @Controller()
 export class PaymentRecoveryPublicController {

@@ -1,9 +1,8 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-
-import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
 import type { ListManualRunItemsDto } from "./dto/list-manual-run-items.dto";
 import type { ListManualRunsDto } from "./dto/list-manual-runs.dto";
 import type { ManualAdapterType } from "./dto/start-manual-adapter-run.dto";
+import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
 
 @Injectable()
 export class ManualIngestionService {
@@ -12,7 +11,10 @@ export class ManualIngestionService {
     private readonly batchRepository: ManualIngestionBatchRepository,
   ) {}
 
-  async startAdapterRun(adapterType: ManualAdapterType, requestedByUserId: string) {
+  async startAdapterRun(
+    adapterType: ManualAdapterType,
+    requestedByUserId: string,
+  ) {
     const run = await this.batchRepository.createAdapterBatchRun({
       adapterType,
       requestedByUserId,

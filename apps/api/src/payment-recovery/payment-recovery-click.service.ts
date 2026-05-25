@@ -15,7 +15,27 @@ type ClickInput = {
 
 type ClickResult = {
   redirectUrl: string;
-  redirectTarget: "login" | "checkout" | "completed" | "payment_status" | "generic";
+  redirectTarget:
+    | "login"
+    | "checkout"
+    | "completed"
+    | "payment_status"
+    | "generic";
+};
+
+type RecoveryTokenRecord = {
+  adaptationId: string | null;
+  emailRecordId: string;
+  expiresAt: Date;
+  id: string;
+  purchaseId: string;
+  recoveryGroupKey: string | null;
+  userId: string;
+};
+
+type PurchaseRecord = {
+  originAction: string;
+  status: string;
 };
 
 @Injectable()
@@ -41,12 +61,16 @@ export class PaymentRecoveryClickService {
         return this.redirectGeneric();
       }
 
-      const tokenHash = createHash("sha256").update(normalizedToken).digest("hex");
-      const token = await this.database.paymentRecoveryToken.findUnique({
+      const tokenHash = createHash("sha256")
+        .update(normalizedToken)
+        .digest("hex");
+      const token = (await this.database.paymentRecoveryToken.findUnique({
         where: { tokenHash },
-      } as any);
-      if (!token || !token.emailRecordId) {
-        this.logger.log("[payment-recovery-public] audit token_invalid reason=token_not_found_or_unlinked");
+      })) as RecoveryTokenRecord | null;
+      if (!token?.emailRecordId) {
+        this.logger.log(
+          "[payment-recovery-public] audit token_invalid reason=token_not_found_or_unlinked",
+        );
         this.events.emit("payment_recovery_token_invalid", {
           reason: "token_not_found_or_unlinked",
           ip: input.ip ?? null,
@@ -57,22 +81,29 @@ export class PaymentRecoveryClickService {
       }
 
       const [purchase, user, adaptation, emailRecord] = await Promise.all([
-        this.database.planPurchase.findUnique({ where: { id: token.purchaseId } } as any),
-        this.database.user.findUnique({ where: { id: token.userId }, select: { id: true } } as any),
+        this.database.planPurchase.findUnique({
+          where: { id: token.purchaseId },
+        }),
+        this.database.user.findUnique({
+          where: { id: token.userId },
+          select: { id: true },
+        }),
         token.adaptationId
           ? this.database.cvAdaptation.findUnique({
               where: { id: token.adaptationId },
               select: { id: true, isUnlocked: true },
-            } as any)
+            })
           : Promise.resolve(null),
         this.database.paymentRecoveryEmail.findUnique({
           where: { id: token.emailRecordId },
           select: { id: true, clickedAt: true, metadataJson: true },
-        } as any),
+        }),
       ]);
 
       if (!purchase || !user || !emailRecord) {
-        this.logger.log("[payment-recovery-public] audit token_invalid reason=token_linked_records_missing");
+        this.logger.log(
+          "[payment-recovery-public] audit token_invalid reason=token_linked_records_missing",
+        );
         this.events.emit("payment_recovery_token_invalid", {
           reason: "token_linked_records_missing",
           ip: input.ip ?? null,
@@ -83,7 +114,9 @@ export class PaymentRecoveryClickService {
       }
 
       if (token.expiresAt.getTime() <= Date.now()) {
-        this.logger.log(`[payment-recovery-public] audit token_expired tokenId=${token.id}`);
+        this.logger.log(
+          `[payment-recovery-public] audit token_expired tokenId=${token.id}`,
+        );
         this.events.emit("payment_recovery_token_expired", {
           tokenId: token.id,
           purchaseId: token.purchaseId,
@@ -140,7 +173,9 @@ export class PaymentRecoveryClickService {
 
       if (purchaseStatus === "completed") {
         if (adaptation?.isUnlocked && adaptation.id) {
-          const redirectUrl = this.frontendUrl(`/adaptar/resultado?adaptationId=${adaptation.id}`);
+          const redirectUrl = this.frontendUrl(
+            `/adaptar/resultado?adaptationId=${adaptation.id}`,
+          );
           this.events.emit("payment_recovery_click_redirected_completed", {
             tokenId: token.id,
             purchaseId: token.purchaseId,
@@ -154,7 +189,9 @@ export class PaymentRecoveryClickService {
           return { redirectTarget: "completed", redirectUrl };
         }
 
-        const redirectUrl = this.frontendUrl(`/pagamento/concluido?checkoutId=${token.purchaseId}`);
+        const redirectUrl = this.frontendUrl(
+          `/pagamento/concluido?checkoutId=${token.purchaseId}`,
+        );
         this.events.emit("payment_recovery_click_redirected_completed", {
           tokenId: token.id,
           purchaseId: token.purchaseId,
@@ -168,16 +205,24 @@ export class PaymentRecoveryClickService {
         return { redirectTarget: "payment_status", redirectUrl };
       }
 
-      if (["pending", "none", "pending_payment", "processing_payment"].includes(purchaseStatus)) {
+      if (
+        ["pending", "none", "pending_payment", "processing_payment"].includes(
+          purchaseStatus,
+        )
+      ) {
         return {
           redirectTarget: "checkout",
-          redirectUrl: this.frontendUrl(`/api/payment-recovery/bridge/${normalizedToken}`),
+          redirectUrl: this.frontendUrl(
+            `/api/payment-recovery/bridge/${normalizedToken}`,
+          ),
         };
       }
 
       return this.redirectGeneric();
     } catch (error) {
-      this.logger.warn(`[payment-recovery-public] click_failed ${(error as Error)?.message ?? "unknown"}`);
+      this.logger.warn(
+        `[payment-recovery-public] click_failed ${(error as Error)?.message ?? "unknown"}`,
+      );
       this.events.emit("payment_recovery_click_failed", {
         reason: "unexpected_error",
         ip: input.ip ?? null,
@@ -212,10 +257,15 @@ export class PaymentRecoveryClickService {
         clickedAt: clickedAt ?? now,
         ...metadataUpdate,
       },
-    } as any);
+    });
   }
 
-  private emitClicked(token: any, purchase: any, input: ClickInput, reason: string): void {
+  private emitClicked(
+    token: RecoveryTokenRecord,
+    purchase: PurchaseRecord,
+    input: ClickInput,
+    reason: string,
+  ): void {
     this.events.emit("payment_recovery_email_clicked", {
       tokenId: token.id,
       purchaseId: token.purchaseId,
@@ -232,7 +282,10 @@ export class PaymentRecoveryClickService {
     });
   }
 
-  private loginRedirect(returnUrl: string | null | undefined, token: string): string {
+  private loginRedirect(
+    returnUrl: string | null | undefined,
+    token: string,
+  ): string {
     const fallbackPath = `/api/payment-recovery/bridge/${token}`;
     const safeReturn = this.sanitizeInternalPath(returnUrl) ?? fallbackPath;
     return this.frontendUrl(
@@ -240,7 +293,9 @@ export class PaymentRecoveryClickService {
     );
   }
 
-  private sanitizeInternalPath(value: string | null | undefined): string | null {
+  private sanitizeInternalPath(
+    value: string | null | undefined,
+  ): string | null {
     if (!value) return null;
     if (!value.startsWith("/")) return null;
     if (value.startsWith("//")) return null;

@@ -7,11 +7,16 @@ import { GUARDS_METADATA } from "@nestjs/common/constants";
 import { INTERNAL_ROLES_KEY } from "../common/roles.decorator";
 import { PaymentRecoveryAdminController } from "./payment-recovery-admin.controller";
 
+type AdminControllerDeps = ConstructorParameters<
+  typeof PaymentRecoveryAdminController
+>;
+
 test("payment recovery admin controller enforces admin/superadmin guards", () => {
   const guards =
     Reflect.getMetadata(GUARDS_METADATA, PaymentRecoveryAdminController) ?? [];
   const roles =
-    Reflect.getMetadata(INTERNAL_ROLES_KEY, PaymentRecoveryAdminController) ?? [];
+    Reflect.getMetadata(INTERNAL_ROLES_KEY, PaymentRecoveryAdminController) ??
+    [];
 
   assert.equal(Array.isArray(guards), true);
   assert.equal(guards.length >= 2, true);
@@ -27,23 +32,26 @@ test("listPending forwards default filters and emits list viewed event", async (
         capturedFilters = filters;
         return { items: [], total: 0, page: 1, pageSize: 20 };
       },
-    } as any,
-    { ignore: async () => [], unignore: async () => undefined } as any,
-    { isAdminEnabled: () => true } as any,
+    } as AdminControllerDeps[0],
+    {
+      ignore: async () => [],
+      unignore: async () => undefined,
+    } as AdminControllerDeps[1],
+    { isAdminEnabled: () => true } as AdminControllerDeps[2],
     {
       listViewed: (input: Record<string, unknown>) => {
         listViewedCall = input;
       },
       ignored: () => undefined,
       unignored: () => undefined,
-    } as any,
-    { send: async () => ({}) } as any,
+    } as AdminControllerDeps[3],
+    { send: async () => ({}) } as AdminControllerDeps[4],
   );
 
   await controller.listPending(
     {
       id: "admin-1",
-    } as any,
+    } as Parameters<PaymentRecoveryAdminController["listPending"]>[0],
     {},
   );
 
@@ -73,15 +81,24 @@ test("listPending supports all requested filters and pagination", async () => {
         capturedFilters = filters;
         return { items: [], total: 0, page: 2, pageSize: 50 };
       },
-    } as any,
-    { ignore: async () => [], unignore: async () => undefined } as any,
-    { isAdminEnabled: () => true } as any,
-    { listViewed: () => undefined, ignored: () => undefined, unignored: () => undefined } as any,
-    { send: async () => ({}) } as any,
+    } as AdminControllerDeps[0],
+    {
+      ignore: async () => [],
+      unignore: async () => undefined,
+    } as AdminControllerDeps[1],
+    { isAdminEnabled: () => true } as AdminControllerDeps[2],
+    {
+      listViewed: () => undefined,
+      ignored: () => undefined,
+      unignored: () => undefined,
+    } as AdminControllerDeps[3],
+    { send: async () => ({}) } as AdminControllerDeps[4],
   );
 
   await controller.listPending(
-    { id: "admin-1" } as any,
+    { id: "admin-1" } as Parameters<
+      PaymentRecoveryAdminController["listPending"]
+    >[0],
     {
       eligibilityStatus: "possibly_resolved",
       originAction: "unlock_cv",
@@ -113,7 +130,9 @@ test("listPending supports all requested filters and pagination", async () => {
 test("ignore and unignore delegate persistence and emit events", async () => {
   const calls: string[] = [];
   const controller = new PaymentRecoveryAdminController(
-    { listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }) } as any,
+    {
+      listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+    } as AdminControllerDeps[0],
     {
       ignore: async (input: Record<string, unknown>) => {
         calls.push(`ignore:${JSON.stringify(input)}`);
@@ -121,8 +140,8 @@ test("ignore and unignore delegate persistence and emit events", async () => {
       unignore: async (input: Record<string, unknown>) => {
         calls.push(`unignore:${JSON.stringify(input)}`);
       },
-    } as any,
-    { isAdminEnabled: () => true } as any,
+    } as AdminControllerDeps[1],
+    { isAdminEnabled: () => true } as AdminControllerDeps[2],
     {
       listViewed: () => undefined,
       ignored: (input: Record<string, unknown>) => {
@@ -131,35 +150,67 @@ test("ignore and unignore delegate persistence and emit events", async () => {
       unignored: (input: Record<string, unknown>) => {
         calls.push(`event-unignored:${JSON.stringify(input)}`);
       },
-    } as any,
-    { send: async () => ({}) } as any,
+    } as AdminControllerDeps[3],
+    { send: async () => ({}) } as AdminControllerDeps[4],
   );
 
   await controller.ignore(
     "purchase-1",
-    { id: "admin-1" } as any,
-    { reason: "false positive" },
+    { id: "admin-1" } as Parameters<
+      PaymentRecoveryAdminController["ignore"]
+    >[1],
+    {
+      reason: "false positive",
+    },
   );
-  await controller.unignore("purchase-1", { id: "admin-1" } as any);
+  await controller.unignore("purchase-1", { id: "admin-1" } as Parameters<
+    PaymentRecoveryAdminController["unignore"]
+  >[1]);
 
-  assert.equal(calls.some((value) => value.includes("ignore")), true);
-  assert.equal(calls.some((value) => value.includes("unignore")), true);
-  assert.equal(calls.some((value) => value.includes("event-ignored")), true);
-  assert.equal(calls.some((value) => value.includes("event-unignored")), true);
+  assert.equal(
+    calls.some((value) => value.includes("ignore")),
+    true,
+  );
+  assert.equal(
+    calls.some((value) => value.includes("unignore")),
+    true,
+  );
+  assert.equal(
+    calls.some((value) => value.includes("event-ignored")),
+    true,
+  );
+  assert.equal(
+    calls.some((value) => value.includes("event-unignored")),
+    true,
+  );
 });
 
 test("listPending fails closed when admin feature is disabled", async () => {
   const controller = new PaymentRecoveryAdminController(
-    { listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }) } as any,
-    { ignore: async () => [], unignore: async () => undefined } as any,
-    { isAdminEnabled: () => false } as any,
-    { listViewed: () => undefined, ignored: () => undefined, unignored: () => undefined } as any,
-    { send: async () => ({}) } as any,
+    {
+      listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+    } as AdminControllerDeps[0],
+    {
+      ignore: async () => [],
+      unignore: async () => undefined,
+    } as AdminControllerDeps[1],
+    { isAdminEnabled: () => false } as AdminControllerDeps[2],
+    {
+      listViewed: () => undefined,
+      ignored: () => undefined,
+      unignored: () => undefined,
+    } as AdminControllerDeps[3],
+    { send: async () => ({}) } as AdminControllerDeps[4],
   );
 
   await assert.rejects(
     async () => {
-      await controller.listPending({ id: "admin-1" } as any, {});
+      await controller.listPending(
+        { id: "admin-1" } as Parameters<
+          PaymentRecoveryAdminController["listPending"]
+        >[0],
+        {},
+      );
     },
     {
       name: "ForbiddenException",
@@ -170,22 +221,29 @@ test("listPending fails closed when admin feature is disabled", async () => {
 test("sendEmail returns required fields and emits events with correct payload", async () => {
   const calls: string[] = [];
   const controller = new PaymentRecoveryAdminController(
-    { listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }) } as any,
-    { ignore: async () => [], unignore: async () => undefined } as any,
-    { isAdminEnabled: () => true } as any,
+    {
+      listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+    } as AdminControllerDeps[0],
+    {
+      ignore: async () => [],
+      unignore: async () => undefined,
+    } as AdminControllerDeps[1],
+    { isAdminEnabled: () => true } as AdminControllerDeps[2],
     {
       listViewed: () => undefined,
       ignored: () => undefined,
       unignored: () => undefined,
       emailSendRequested: (input: Record<string, unknown>) =>
-        calls.push(`payment_recovery_email_send_requested:${JSON.stringify(input)}`),
+        calls.push(
+          `payment_recovery_email_send_requested:${JSON.stringify(input)}`,
+        ),
       emailSent: (input: Record<string, unknown>) =>
         calls.push(`payment_recovery_email_sent:${JSON.stringify(input)}`),
       emailSkipped: (input: Record<string, unknown>) =>
         calls.push(`payment_recovery_email_skipped:${JSON.stringify(input)}`),
       emailFailed: (input: Record<string, unknown>) =>
         calls.push(`payment_recovery_email_failed:${JSON.stringify(input)}`),
-    } as any,
+    } as AdminControllerDeps[3],
     {
       send: async () => ({
         success: true,
@@ -199,10 +257,12 @@ test("sendEmail returns required fields and emits events with correct payload", 
         eligibilityStatus: "eligible",
         eligibilityReason: "pending_unlock_cv_not_unlocked",
       }),
-    } as any,
+    } as AdminControllerDeps[4],
   );
 
-  const result = await controller.sendEmail("purchase-1", { id: "admin-1" } as any);
+  const result = await controller.sendEmail("purchase-1", {
+    id: "admin-1",
+  } as Parameters<PaymentRecoveryAdminController["sendEmail"]>[1]);
 
   assert.deepEqual(result, {
     success: true,
@@ -216,8 +276,24 @@ test("sendEmail returns required fields and emits events with correct payload", 
     eligibilityStatus: "eligible",
     eligibilityReason: "pending_unlock_cv_not_unlocked",
   });
-  assert.equal(calls.some((entry) => entry.includes("payment_recovery_email_send_requested")), true);
-  assert.equal(calls.some((entry) => entry.includes("eligibilityStatus\":\"eligible\"")), true);
-  assert.equal(calls.some((entry) => entry.includes("eligibilityReason\":\"pending_unlock_cv_not_unlocked\"")), true);
-  assert.equal(calls.some((entry) => entry.includes("payment_recovery_email_skipped")), true);
+  assert.equal(
+    calls.some((entry) =>
+      entry.includes("payment_recovery_email_send_requested"),
+    ),
+    true,
+  );
+  assert.equal(
+    calls.some((entry) => entry.includes('eligibilityStatus":"eligible"')),
+    true,
+  );
+  assert.equal(
+    calls.some((entry) =>
+      entry.includes('eligibilityReason":"pending_unlock_cv_not_unlocked"'),
+    ),
+    true,
+  );
+  assert.equal(
+    calls.some((entry) => entry.includes("payment_recovery_email_skipped")),
+    true,
+  );
 });

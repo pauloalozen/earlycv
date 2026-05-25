@@ -14,8 +14,8 @@ import {
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { Response } from "express";
-import { AnalysisTelemetryService } from "../analysis-protection/analysis-telemetry.service";
 import type { ProtectedAnalysisBlockedResult } from "../analysis-protection/analysis-protection.facade";
+import { AnalysisTelemetryService } from "../analysis-protection/analysis-telemetry.service";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
 import {
   extractTextFromCvFile,
@@ -107,7 +107,11 @@ export class CvAdaptationService {
     const normalizedJobDescriptionText = this.validateJobDescription(
       dto.jobDescriptionText,
       {
-        context: this.buildProtectionContext(undefined, userId, "cv-adaptation/create"),
+        context: this.buildProtectionContext(
+          undefined,
+          userId,
+          "cv-adaptation/create",
+        ),
         routeKey: "cv-adaptation/create",
       },
     );
@@ -122,7 +126,11 @@ export class CvAdaptationService {
         masterCvText = await extractTextFromCvFile(file);
       } catch (error) {
         await this.mapFileExtractionError(error, {
-          context: this.buildProtectionContext(undefined, userId, "cv-adaptation/create"),
+          context: this.buildProtectionContext(
+            undefined,
+            userId,
+            "cv-adaptation/create",
+          ),
           file,
           routeKey: "cv-adaptation/create",
         });
@@ -454,10 +462,6 @@ export class CvAdaptationService {
       throw new BadRequestException("PDF file or CV text is required.");
     }
 
-    if (hasTextInput) {
-      this.validateCvTextInput(normalizedMasterCvText);
-    }
-
     if (shouldUseUploadedFile && file) {
       try {
         validateCvFileEnvelope(file);
@@ -488,6 +492,7 @@ export class CvAdaptationService {
           }
 
           if (hasTextInput) {
+            this.validateCvTextInput(normalizedMasterCvText);
             resolvedMasterCvText = normalizedMasterCvText;
             return resolvedMasterCvText;
           }
@@ -1796,9 +1801,9 @@ export class CvAdaptationService {
       throw new Error("Adaptation not found or has no content");
     }
 
-    const output = adaptation.adaptedContentJson as CvAdaptationOutput;
-    const templateSlug = adaptation.template?.slug ?? "classico-simples";
-    const structureJson = (adaptation.template?.structureJson ??
+    const _output = adaptation.adaptedContentJson as CvAdaptationOutput;
+    const _templateSlug = adaptation.template?.slug ?? "classico-simples";
+    const _structureJson = (adaptation.template?.structureJson ??
       null) as TemplateStructureJson | null;
 
     // Create adapted Resume record

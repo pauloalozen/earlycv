@@ -3,10 +3,12 @@ import { test } from "node:test";
 
 import { PaymentRecoveryClickService } from "./payment-recovery-click.service";
 
+type ClickDeps = ConstructorParameters<typeof PaymentRecoveryClickService>;
+
 function createService(overrides?: {
-  findToken?: (where: Record<string, unknown>) => Promise<any>;
-  updateToken?: (args: Record<string, unknown>) => Promise<any>;
-  updateEmail?: (args: Record<string, unknown>) => Promise<any>;
+  findToken?: (where: Record<string, unknown>) => Promise<unknown>;
+  updateToken?: (args: Record<string, unknown>) => Promise<unknown>;
+  updateEmail?: (args: Record<string, unknown>) => Promise<unknown>;
 }) {
   const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
   const database = {
@@ -15,7 +17,11 @@ function createService(overrides?: {
       update: overrides?.updateToken ?? (async () => ({})),
     },
     paymentRecoveryEmail: {
-      findUnique: async () => ({ id: "email-1", clickedAt: null, metadataJson: { keep: "yes" } }),
+      findUnique: async () => ({
+        id: "email-1",
+        clickedAt: null,
+        metadataJson: { keep: "yes" },
+      }),
       update: overrides?.updateEmail ?? (async () => ({})),
     },
     planPurchase: {
@@ -32,24 +38,30 @@ function createService(overrides?: {
     cvAdaptation: {
       findUnique: async () => ({ id: "adapt-1", isUnlocked: false }),
     },
-  } as any;
+  } as ClickDeps[0];
 
   const service = new PaymentRecoveryClickService(database, {
-      emit: (event: string, payload: Record<string, unknown>) => {
-        events.push({ event, payload });
-      },
-    } as any);
+    emit: (event: string, payload: Record<string, unknown>) => {
+      events.push({ event, payload });
+    },
+  } as ClickDeps[1]);
 
   return { service, events };
 }
 
 test("invalid token returns generic redirect and emits invalid event", async () => {
   const { service, events } = createService();
-  const result = await service.handleTokenClick({ token: "bad-token", ip: "1.1.1.1" });
+  const result = await service.handleTokenClick({
+    token: "bad-token",
+    ip: "1.1.1.1",
+  });
 
   assert.equal(result.redirectTarget, "generic");
   assert.match(result.redirectUrl, /\/recuperar-pagamento/);
-  assert.equal(events.some((entry) => entry.event === "payment_recovery_token_invalid"), true);
+  assert.equal(
+    events.some((entry) => entry.event === "payment_recovery_token_invalid"),
+    true,
+  );
 });
 
 test("expired token returns generic redirect, no checkout resume, emits expired", async () => {
@@ -72,7 +84,10 @@ test("expired token returns generic redirect, no checkout resume, emits expired"
   });
 
   assert.equal(result.redirectTarget, "generic");
-  assert.equal(events.some((entry) => entry.event === "payment_recovery_token_expired"), true);
+  assert.equal(
+    events.some((entry) => entry.event === "payment_recovery_token_expired"),
+    true,
+  );
 });
 
 test("pending valid token records click and redirects to bridge", async () => {
@@ -102,7 +117,10 @@ test("pending valid token records click and redirects to bridge", async () => {
   assert.equal(result.redirectTarget, "checkout");
   assert.match(result.redirectUrl, /\/api\/payment-recovery\/bridge\//);
   assert.equal(Boolean(emailUpdatePayload), true);
-  assert.equal(events.some((entry) => entry.event === "payment_recovery_email_clicked"), true);
+  assert.equal(
+    events.some((entry) => entry.event === "payment_recovery_email_clicked"),
+    true,
+  );
 });
 
 test("token is not consumed and multiple clicks update lastClickedAt", async () => {
@@ -138,7 +156,7 @@ test("token is not consumed and multiple clicks update lastClickedAt", async () 
 });
 
 test("click metadata merge preserves existing keys", async () => {
-  let updatePayload: Record<string, any> | null = null;
+  let updatePayload: Record<string, unknown> | null = null;
   const { service } = createService({
     findToken: async () => ({
       id: "tok-1",
@@ -154,9 +172,28 @@ test("click metadata merge preserves existing keys", async () => {
       return {};
     },
   });
-  await service.handleTokenClick({ token: "a".repeat(64), currentUserId: "user-1" });
-  assert.equal(updatePayload?.data?.metadataJson?.set?.keep, "yes");
-  assert.equal(typeof updatePayload?.data?.metadataJson?.set?.lastClickedAt, "string");
+  await service.handleTokenClick({
+    token: "a".repeat(64),
+    currentUserId: "user-1",
+  });
+  assert.equal(
+    (
+      (
+        (updatePayload?.data as Record<string, unknown>)
+          ?.metadataJson as Record<string, unknown>
+      )?.set as Record<string, unknown>
+    )?.keep,
+    "yes",
+  );
+  assert.equal(
+    typeof (
+      (
+        (updatePayload?.data as Record<string, unknown>)
+          ?.metadataJson as Record<string, unknown>
+      )?.set as Record<string, unknown>
+    )?.lastClickedAt,
+    "string",
+  );
 });
 
 test("approved purchase redirects to success when adaptation already unlocked", async () => {
@@ -172,13 +209,16 @@ test("approved purchase redirects to success when adaptation already unlocked", 
     }),
   });
 
-  (service as any).database.planPurchase.findUnique = async () => ({
+  const serviceDb = (
+    service as unknown as { database: Record<string, Record<string, unknown>> }
+  ).database;
+  serviceDb.planPurchase.findUnique = async () => ({
     id: "purchase-1",
     status: "completed",
     userId: "user-1",
     originAction: "unlock_cv",
   });
-  (service as any).database.cvAdaptation.findUnique = async () => ({
+  serviceDb.cvAdaptation.findUnique = async () => ({
     id: "adapt-1",
     isUnlocked: true,
   });
@@ -189,9 +229,14 @@ test("approved purchase redirects to success when adaptation already unlocked", 
     currentUserId: "user-1",
   });
   assert.equal(result.redirectTarget, "completed");
-  assert.match(result.redirectUrl, /\/adaptar\/resultado\?adaptationId=adapt-1/);
+  assert.match(
+    result.redirectUrl,
+    /\/adaptar\/resultado\?adaptationId=adapt-1/,
+  );
   assert.equal(
-    events.some((entry) => entry.event === "payment_recovery_click_redirected_completed"),
+    events.some(
+      (entry) => entry.event === "payment_recovery_click_redirected_completed",
+    ),
     true,
   );
 });
@@ -208,13 +253,19 @@ test("canceled or refunded purchase returns generic", async () => {
       recoveryGroupKey: "g1",
     }),
   });
-  (service as any).database.planPurchase.findUnique = async () => ({
+  const serviceDb = (
+    service as unknown as { database: Record<string, Record<string, unknown>> }
+  ).database;
+  serviceDb.planPurchase.findUnique = async () => ({
     id: "purchase-1",
     status: "refunded",
     userId: "user-1",
     originAction: "unlock_cv",
   });
-  const result = await service.handleTokenClick({ token: "a".repeat(64), ip: "1.1.1.1" });
+  const result = await service.handleTokenClick({
+    token: "a".repeat(64),
+    ip: "1.1.1.1",
+  });
   assert.equal(result.redirectTarget, "generic");
 });
 
@@ -238,7 +289,10 @@ test("logged out redirects to login with safe internal return url", async () => 
     returnUrl: "https://evil.com",
   });
   assert.equal(result.redirectTarget, "login");
-  assert.match(result.redirectUrl, /\/entrar\?tab=entrar&next=%2Fapi%2Fpayment-recovery%2Fbridge%2Fa{64}/);
+  assert.match(
+    result.redirectUrl,
+    /\/entrar\?tab=entrar&next=%2Fapi%2Fpayment-recovery%2Fbridge%2Fa{64}/,
+  );
 });
 
 test("logged in as different user gets blocked and mismatch event emitted", async () => {
@@ -262,7 +316,9 @@ test("logged in as different user gets blocked and mismatch event emitted", asyn
 
   assert.equal(result.redirectTarget, "generic");
   assert.equal(
-    events.some((entry) => entry.event === "payment_recovery_token_user_mismatch"),
+    events.some(
+      (entry) => entry.event === "payment_recovery_token_user_mismatch",
+    ),
     true,
   );
 });

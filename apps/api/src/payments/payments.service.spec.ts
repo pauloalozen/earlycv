@@ -29,7 +29,10 @@ test("getBrickCheckoutData returns checkout summary for valid pending purchase",
         }),
       },
       user: {
-        findUnique: async () => ({ id: "user-1", email: "user-1@earlycv.com.br" }),
+        findUnique: async () => ({
+          id: "user-1",
+          email: "user-1@earlycv.com.br",
+        }),
       },
     } as never,
     {} as never,
@@ -59,7 +62,10 @@ test("getBrickCheckoutData rejects unknown purchase", async () => {
         findFirst: async () => null,
       },
       user: {
-        findUnique: async () => ({ id: "user-1", email: "user-1@earlycv.com.br" }),
+        findUnique: async () => ({
+          id: "user-1",
+          email: "user-1@earlycv.com.br",
+        }),
       },
     } as never,
     {} as never,
@@ -87,7 +93,10 @@ test("getBrickCheckoutData rejects purchase with non-pending status", async () =
         }),
       },
       user: {
-        findUnique: async () => ({ id: "user-1", email: "user-1@earlycv.com.br" }),
+        findUnique: async () => ({
+          id: "user-1",
+          email: "user-1@earlycv.com.br",
+        }),
       },
     } as never,
     {} as never,
@@ -115,7 +124,10 @@ test("getBrickCheckoutData rejects purchase with status none", async () => {
         }),
       },
       user: {
-        findUnique: async () => ({ id: "user-1", email: "user-1@earlycv.com.br" }),
+        findUnique: async () => ({
+          id: "user-1",
+          email: "user-1@earlycv.com.br",
+        }),
       },
     } as never,
     {} as never,
@@ -143,7 +155,10 @@ test("getBrickCheckoutData rejects invalid unlock_cv purchase without adaptation
         }),
       },
       user: {
-        findUnique: async () => ({ id: "user-1", email: "user-1@earlycv.com.br" }),
+        findUnique: async () => ({
+          id: "user-1",
+          email: "user-1@earlycv.com.br",
+        }),
       },
     } as never,
     {} as never,
@@ -164,7 +179,10 @@ test("getBrickCheckoutData rejects when mode is pro", async () => {
     {
       planPurchase: { findFirst: async () => null },
       user: {
-        findUnique: async () => ({ id: "user-1", email: "user-1@earlycv.com.br" }),
+        findUnique: async () => ({
+          id: "user-1",
+          email: "user-1@earlycv.com.br",
+        }),
       },
     } as never,
     {} as never,
@@ -186,7 +204,8 @@ test("submitBrickPayment returns approved redirect when provider approves", asyn
   const originalCreate = Payment.prototype.create;
 
   process.env.PAYMENT_CHECKOUT_MODE = "brick";
-  Payment.prototype.create = async () => ({ id: 101, status: "approved" }) as never;
+  Payment.prototype.create = async () =>
+    ({ id: 101, status: "approved" }) as never;
 
   let updateCalled = false;
   let applyCalled = false;
@@ -289,7 +308,8 @@ test("submitBrickPayment rejects when mode is pro", async () => {
 test("submitBrickPayment blocks concurrent submit when lock is not acquired", async () => {
   process.env.PAYMENT_CHECKOUT_MODE = "brick";
   const originalCreate = Payment.prototype.create;
-  Payment.prototype.create = async () => ({ id: 202, status: "pending" }) as never;
+  Payment.prototype.create = async () =>
+    ({ id: 202, status: "pending" }) as never;
 
   let updateManyCalls = 0;
 
@@ -318,7 +338,11 @@ test("submitBrickPayment blocks concurrent submit when lock is not acquired", as
     {} as never,
   );
 
-  const payload = { token: "tok_123", payment_method_id: "visa", installments: 1 };
+  const payload = {
+    token: "tok_123",
+    payment_method_id: "visa",
+    installments: 1,
+  };
   const first = service.submitBrickPayment("user-1", "purchase-1", payload);
   const second = service.submitBrickPayment("user-1", "purchase-1", payload);
 
@@ -385,7 +409,11 @@ test("submitBrickPayment returns safe rejected error when provider rejects", asy
   process.env.PAYMENT_CHECKOUT_MODE = "brick";
   const originalCreate = Payment.prototype.create;
   Payment.prototype.create = async () =>
-    ({ id: 404, status: "rejected", status_detail: "rejected_insufficient_data" }) as never;
+    ({
+      id: 404,
+      status: "rejected",
+      status_detail: "rejected_insufficient_data",
+    }) as never;
 
   const service = new PaymentsService(
     {
@@ -503,7 +531,9 @@ test("submitBrickPayment uses purchase user email as fallback for card payer", a
   process.env.PAYMENT_CHECKOUT_MODE = "brick";
   const originalCreate = Payment.prototype.create;
   let capturedBody: Record<string, unknown> | null = null;
-  Payment.prototype.create = async (input: { body: Record<string, unknown> }) => {
+  Payment.prototype.create = async (input: {
+    body: Record<string, unknown>;
+  }) => {
     capturedBody = input.body;
     return { id: 606, status: "pending" } as never;
   };
@@ -547,7 +577,9 @@ test("submitBrickPayment sends Mercado Pago quality payload fields for brick", a
   process.env.PAYMENT_CHECKOUT_MODE = "brick";
   const originalCreate = Payment.prototype.create;
   let capturedBody: Record<string, unknown> | null = null;
-  Payment.prototype.create = async (input: { body: Record<string, unknown> }) => {
+  Payment.prototype.create = async (input: {
+    body: Record<string, unknown>;
+  }) => {
     capturedBody = input.body;
     return { id: 707, status: "pending" } as never;
   };
@@ -836,16 +868,19 @@ test("brick client token prefers MERCADOPAGO_BRICK_ACCESS_TOKEN over legacy toke
   ).getBrickAccessToken();
   assert.equal(token, "brick-token");
 
-  if (originalBrickToken === undefined) delete process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN;
+  if (originalBrickToken === undefined)
+    delete process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN;
   else process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN = originalBrickToken;
-  if (originalLegacyToken === undefined) delete process.env.MERCADOPAGO_ACCESS_TOKEN;
+  if (originalLegacyToken === undefined)
+    delete process.env.MERCADOPAGO_ACCESS_TOKEN;
   else process.env.MERCADOPAGO_ACCESS_TOKEN = originalLegacyToken;
 });
 
 test("brick client token uses MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST in non-production", () => {
   const originalMode = process.env.MERCADOPAGO_MODE;
   const originalNodeEnv = process.env.NODE_ENV;
-  const originalBrickTestToken = process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST;
+  const originalBrickTestToken =
+    process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST;
   const originalLegacyTestToken = process.env.MERCADOPAGO_ACCESS_TOKEN_TEST;
 
   process.env.MERCADOPAGO_MODE = "sandbox";

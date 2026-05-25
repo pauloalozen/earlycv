@@ -176,13 +176,11 @@ test("scrubs prohibited metadata fields before persisting and exporting", async 
     baseContext,
   );
 
-  const persisted = (createdData?.metadataJson as Record<string, unknown>) ?? {};
+  const persisted =
+    (createdData?.metadataJson as Record<string, unknown>) ?? {};
   assert.equal(persisted.jobDescription, undefined);
-  assert.equal(
-    ((persisted.nested as Record<string, unknown>) ?? {}).email,
-    undefined,
-  );
-  assert.equal(((persisted.nested as Record<string, unknown>) ?? {}).ok, true);
+  assert.equal((persisted.nested as Record<string, unknown>)?.email, undefined);
+  assert.equal((persisted.nested as Record<string, unknown>)?.ok, true);
 
   const exportedProps = exported[0] ?? {};
   assert.equal(exportedProps.jobDescription, undefined);

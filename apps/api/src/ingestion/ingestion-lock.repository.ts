@@ -47,6 +47,8 @@ export class IngestionLockRepository {
       return;
     }
 
-    await this.database.ingestionSchedulerLock.delete({ where: { id: lockId } });
+    await this.database.ingestionSchedulerLock.delete({
+      where: { id: lockId },
+    });
   }
 }

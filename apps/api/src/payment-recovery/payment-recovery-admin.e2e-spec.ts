@@ -138,11 +138,7 @@ test("payment recovery admin pending route is fail-closed when feature disabled"
 
   const { app, database } = await createApp();
   try {
-    const adminUser = await registerUser(
-      app,
-      database,
-      "pr-admin-off",
-    );
+    const adminUser = await registerUser(app, database, "pr-admin-off");
 
     await database.user.update({
       where: { id: adminUser.userId },

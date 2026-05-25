@@ -57,9 +57,7 @@ export class CompaniesService {
         data: {
           ...dto,
           normalizedName:
-            dto.name === undefined
-              ? undefined
-              : normalizeCompanyName(dto.name),
+            dto.name === undefined ? undefined : normalizeCompanyName(dto.name),
         },
       });
     } catch (error) {

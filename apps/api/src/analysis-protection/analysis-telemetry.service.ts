@@ -107,7 +107,9 @@ export class AnalysisTelemetryService {
       return undefined;
     }
 
-    const scrubbed = this.scrubMetadataValue(sanitizeAnalyticsPayload(metadata));
+    const scrubbed = this.scrubMetadataValue(
+      sanitizeAnalyticsPayload(metadata),
+    );
 
     if (!scrubbed || Array.isArray(scrubbed) || typeof scrubbed !== "object") {
       return undefined;
