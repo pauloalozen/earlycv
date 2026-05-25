@@ -128,7 +128,7 @@ function EmptyState({ filter, onAdd }: { filter: FilterKey; onAdd: () => void })
           justifyContent: "center",
         }}
       >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8a8a85" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8a8a85" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
           <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
         </svg>
@@ -205,6 +205,7 @@ function ApplicationCard({ application }: { application: JobApplicationDto }) {
       href={`/dashboard/candidaturas/${application.id}`}
       style={{ textDecoration: "none", display: "block" }}
     >
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: hover-only visual effect, interaction is via parent Link */}
       <div
         style={{
           ...CARD,
@@ -278,7 +279,7 @@ function ApplicationCard({ application }: { application: JobApplicationDto }) {
                   letterSpacing: "0.5px",
                 }}
               >
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 </svg>
                 CV adaptado
@@ -348,7 +349,7 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
               href="/dashboard"
               style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: MONO, fontSize: 10, color: "#8a8a85", textDecoration: "none", letterSpacing: "0.8px", textTransform: "uppercase" }}
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="15 18 9 12 15 6" />
               </svg>
               Dashboard
@@ -388,7 +389,7 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
                 flexShrink: 0,
               }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>

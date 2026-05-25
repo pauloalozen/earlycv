@@ -52,16 +52,8 @@ function StringList({ items }: { items: string[] }) {
   return (
     <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
       {items.map((item, i) => (
-        <li
-          key={i}
-          style={{
-            display: "flex",
-            gap: 8,
-            fontSize: 13.5,
-            color: "#0a0a0a",
-            lineHeight: 1.55,
-          }}
-        >
+        // biome-ignore lint/suspicious/noArrayIndexKey: list items are strings with no stable keys
+        <li key={i} style={{ display: "flex", gap: 8, fontSize: 13.5, color: "#0a0a0a", lineHeight: 1.55 }}>
           <span style={{ color: "#c6ff3a", flexShrink: 0, marginTop: 2 }}>→</span>
           <span>{item}</span>
         </li>
@@ -143,6 +135,7 @@ function PrepContent({ prep }: { prep: InterviewPrepDto }) {
       {c.questionsTheyMayAsk.length > 0 && (
         <SectionBlock title="Perguntas que podem fazer">
           {c.questionsTheyMayAsk.map((q, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: questions have no stable keys
             <QuestionBlock key={i} q={q} />
           ))}
         </SectionBlock>
@@ -164,10 +157,8 @@ function PrepContent({ prep }: { prep: InterviewPrepDto }) {
         <SectionBlock title="Checklist final">
           <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
             {c.finalChecklist.map((item, i) => (
-              <li
-                key={i}
-                style={{ display: "flex", gap: 8, fontSize: 13.5, color: "#0a0a0a", lineHeight: 1.55 }}
-              >
+              // biome-ignore lint/suspicious/noArrayIndexKey: checklist items have no stable keys
+              <li key={i} style={{ display: "flex", gap: 8, fontSize: 13.5, color: "#0a0a0a", lineHeight: 1.55 }}>
                 <span style={{ color: "#405410", flexShrink: 0 }}>☑</span>
                 <span>{item}</span>
               </li>
@@ -341,7 +332,7 @@ export function InterviewPrepDrawer({
             }}
           >
             <svg
-              aria-hidden
+              aria-hidden="true"
               width="14"
               height="14"
               viewBox="0 0 24 24"
@@ -383,6 +374,7 @@ export function InterviewPrepDrawer({
                 }}
               >
                 <svg
+                  aria-hidden="true"
                   width="22"
                   height="22"
                   viewBox="0 0 24 24"
@@ -464,7 +456,7 @@ export function InterviewPrepDrawer({
                 {pending ? (
                   <>
                     <svg
-                      aria-hidden
+                      aria-hidden="true"
                       width="14"
                       height="14"
                       viewBox="0 0 24 24"
