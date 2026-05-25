@@ -436,6 +436,18 @@ export function AppHeader({
                       ),
                     },
                     {
+                      href: "/dashboard/candidaturas",
+                      label: "Candidaturas",
+                      icon: (
+                        <>
+                          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                          <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                          <path d="M9 12h6" />
+                          <path d="M9 16h6" />
+                        </>
+                      ),
+                    },
+                    {
                       href: "/vagas",
                       label: "Vagas",
                       icon: (
@@ -794,6 +806,18 @@ export function AppHeader({
                   <>
                     <path d="M12 20h9" />
                     <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  </>
+                ),
+              },
+              {
+                href: "/dashboard/candidaturas",
+                label: "Candidaturas",
+                icon: (
+                  <>
+                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                    <path d="M9 12h6" />
+                    <path d="M9 16h6" />
                   </>
                 ),
               },
