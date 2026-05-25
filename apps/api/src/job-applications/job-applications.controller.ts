@@ -17,6 +17,7 @@ import { AddNoteDto } from "./dto/add-note.dto";
 import { CreateJobApplicationDto } from "./dto/create-job-application.dto";
 import { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
+import { JobApplicationInterviewPrepService } from "./interview-prep.service";
 import { JobApplicationsService } from "./job-applications.service";
 
 @Controller("job-applications")
@@ -25,6 +26,8 @@ export class JobApplicationsController {
   constructor(
     @Inject(JobApplicationsService)
     private readonly service: JobApplicationsService,
+    @Inject(JobApplicationInterviewPrepService)
+    private readonly interviewPrepService: JobApplicationInterviewPrepService,
   ) {}
 
   @Get()
@@ -97,5 +100,13 @@ export class JobApplicationsController {
     dto: AddNoteDto,
   ) {
     return this.service.addNote(user.id, id, dto.note);
+  }
+
+  @Post(":id/interview-prep")
+  generateOrGetInterviewPrep(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+  ) {
+    return this.interviewPrepService.generateOrGet(user.id, id);
   }
 }

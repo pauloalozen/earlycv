@@ -1,0 +1,208 @@
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import type OpenAI from "openai";
+
+export type InterviewPrepContent = {
+  strategySummary: string;
+  strengthsToHighlight: string[];
+  likelyRisksOrGaps: string[];
+  questionsTheyMayAsk: Array<{
+    question: string;
+    whyItMatters: string;
+    answerDirection: string;
+  }>;
+  questionsCandidateShouldAsk: string[];
+  recommendedPosture: string[];
+  finalChecklist: string[];
+};
+
+export type InterviewPrepContext = {
+  jobTitle: string;
+  companyName: string;
+  location?: string | null;
+  jobDescriptionText?: string | null;
+  scoreBefore?: number | null;
+  scoreAfter?: number | null;
+  structuredAnalysis?: {
+    pontosFortes: string[];
+    lacunas: string[];
+    melhoriasAplicadas: string[];
+    fitHeadline: string;
+  } | null;
+};
+
+const SYSTEM_PROMPT = `Você é um coach de preparação para entrevistas de emprego. Gere um briefing de entrevista prático e honesto para o candidato.
+
+REGRAS OBRIGATÓRIAS:
+1. Use APENAS as informações fornecidas. Nunca invente experiências, empresas, tecnologias ou resultados.
+2. Se houver análise prévia do currículo, use esses dados — não refaça a análise do zero.
+3. Ao identificar um gap, oriente uma resposta honesta, nunca crie scripts mentirosos.
+4. Se faltar contexto, declare a limitação e gere preparação mais genérica.
+5. Gere direcionamentos e linhas de raciocínio, não respostas decoradas.
+6. Linguagem clara, prática e orientada à ação, em português do Brasil.
+7. Nunca prometa aprovação nem garanta resultados.
+8. Responda APENAS com o JSON estruturado, sem texto adicional.
+
+FORMATO DE RESPOSTA (JSON obrigatório):
+{
+  "strategySummary": "2 a 3 frases sobre a estratégia geral para esta entrevista",
+  "strengthsToHighlight": ["pontos fortes para mencionar ativamente"],
+  "likelyRisksOrGaps": ["gaps ou riscos que o entrevistador provavelmente levantará"],
+  "questionsTheyMayAsk": [
+    {
+      "question": "pergunta provável do entrevistador",
+      "whyItMatters": "por que essa pergunta importa",
+      "answerDirection": "direção de resposta honesta sem inventar fatos"
+    }
+  ],
+  "questionsCandidateShouldAsk": ["perguntas que o candidato deve fazer à empresa"],
+  "recommendedPosture": ["comportamentos e postura recomendados"],
+  "finalChecklist": ["ações concretas para antes da entrevista"]
+}`;
+
+@Injectable()
+export class InterviewPrepAiService {
+  private readonly logger = new Logger(InterviewPrepAiService.name);
+
+  constructor(
+    @Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI,
+  ) {}
+
+  async generate(context: InterviewPrepContext): Promise<InterviewPrepContent> {
+    if (process.env.SKIP_AI === "true") {
+      return this.buildStub(context);
+    }
+
+    const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+    const userPrompt = this.buildUserPrompt(context);
+
+    const response = await this.aiClient.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.4,
+      max_tokens: 2048,
+    });
+
+    const raw = response.choices[0]?.message?.content ?? "{}";
+
+    let parsed: InterviewPrepContent;
+    try {
+      parsed = JSON.parse(raw) as InterviewPrepContent;
+    } catch {
+      this.logger.error("[interview-prep] Failed to parse AI response as JSON");
+      throw new Error("AI returned invalid JSON for interview prep");
+    }
+
+    return parsed;
+  }
+
+  private buildUserPrompt(ctx: InterviewPrepContext): string {
+    const lines: string[] = [
+      "Gere um briefing de preparação para entrevista com base nos seguintes dados:",
+      "",
+      "## DADOS DA CANDIDATURA",
+      `Cargo: ${ctx.jobTitle}`,
+      `Empresa: ${ctx.companyName}`,
+    ];
+
+    if (ctx.location) {
+      lines.push(`Localidade: ${ctx.location}`);
+    }
+
+    const hasScore = ctx.scoreBefore !== null && ctx.scoreBefore !== undefined
+      || ctx.scoreAfter !== null && ctx.scoreAfter !== undefined;
+
+    if (hasScore) {
+      const before = ctx.scoreBefore !== null && ctx.scoreBefore !== undefined
+        ? `${ctx.scoreBefore}%`
+        : "—";
+      const after = ctx.scoreAfter !== null && ctx.scoreAfter !== undefined
+        ? `${ctx.scoreAfter}%`
+        : "—";
+      lines.push("", `Score ATS: ${before} → ${after} (após adaptação do CV)`);
+    }
+
+    if (ctx.structuredAnalysis) {
+      const { pontosFortes, lacunas, melhoriasAplicadas, fitHeadline } =
+        ctx.structuredAnalysis;
+
+      lines.push(
+        "",
+        "## ANÁLISE PRÉVIA DO CURRÍCULO (use estes dados como base — não refaça a análise)",
+      );
+
+      if (pontosFortes.length > 0) {
+        lines.push("", "Pontos fortes identificados:");
+        for (const p of pontosFortes) lines.push(`- ${p}`);
+      }
+
+      if (lacunas.length > 0) {
+        lines.push("", "Lacunas identificadas:");
+        for (const l of lacunas) lines.push(`- ${l}`);
+      }
+
+      if (melhoriasAplicadas.length > 0) {
+        lines.push("", "Melhorias aplicadas no CV adaptado:");
+        for (const m of melhoriasAplicadas) lines.push(`- ${m}`);
+      }
+
+      if (fitHeadline) {
+        lines.push("", `Aderência identificada: ${fitHeadline}`);
+      }
+    }
+
+    if (ctx.jobDescriptionText) {
+      const truncated = ctx.jobDescriptionText.length > 3500
+        ? `${ctx.jobDescriptionText.slice(0, 3500)}…`
+        : ctx.jobDescriptionText;
+      lines.push("", "## DESCRIÇÃO DA VAGA", truncated);
+    } else {
+      lines.push(
+        "",
+        "AVISO: A descrição da vaga não está disponível. Gere a preparação com os dados disponíveis e indique essa limitação no strategySummary.",
+      );
+    }
+
+    lines.push("", "Gere o briefing agora:");
+    return lines.join("\n");
+  }
+
+  private buildStub(ctx: InterviewPrepContext): InterviewPrepContent {
+    return {
+      strategySummary: `Preparação para a vaga de ${ctx.jobTitle} na ${ctx.companyName}. ${
+        ctx.jobDescriptionText
+          ? "Foque nos pontos da descrição da vaga."
+          : "A descrição da vaga não estava disponível — prepare-se com base no cargo e empresa."
+      }`,
+      strengthsToHighlight: ctx.structuredAnalysis?.pontosFortes?.slice(0, 3) ?? [
+        "Experiência relevante para o cargo",
+      ],
+      likelyRisksOrGaps: ctx.structuredAnalysis?.lacunas?.slice(0, 2) ?? [
+        "Possíveis gaps técnicos específicos da vaga",
+      ],
+      questionsTheyMayAsk: [
+        {
+          question: `Por que você quer trabalhar na ${ctx.companyName}?`,
+          whyItMatters: "Avalia motivação e alinhamento com a empresa.",
+          answerDirection: "Seja específico sobre o que te atrai na empresa e na vaga.",
+        },
+      ],
+      questionsCandidateShouldAsk: [
+        "Como é o dia a dia nesta função?",
+        "Quais são os maiores desafios do time?",
+      ],
+      recommendedPosture: [
+        "Seja objetivo e use exemplos concretos",
+        "Mostre entusiasmo genuíno pela oportunidade",
+      ],
+      finalChecklist: [
+        "Pesquise sobre a empresa antes da entrevista",
+        "Revise seu CV adaptado",
+        "Prepare 2-3 perguntas para o entrevistador",
+      ],
+    };
+  }
+}

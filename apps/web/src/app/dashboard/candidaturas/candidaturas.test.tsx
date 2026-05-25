@@ -35,6 +35,7 @@ vi.mock("@/lib/job-applications-api", () => ({
   createJobApplication: vi.fn(),
   updateJobApplicationStatus: vi.fn(),
   addJobApplicationNote: vi.fn(),
+  generateOrGetInterviewPrep: vi.fn(),
 }));
 
 import { CandidaturasClient } from "./candidaturas-client";
@@ -43,8 +44,10 @@ import {
   createJobApplication,
   updateJobApplicationStatus,
   addJobApplicationNote,
+  generateOrGetInterviewPrep,
 } from "@/lib/job-applications-api";
 import type {
+  InterviewPrepDto,
   JobApplicationDetailDto,
   JobApplicationDto,
 } from "@/lib/job-applications-api";
@@ -80,6 +83,30 @@ function makeDetail(
   return {
     ...makeApp(),
     cvAdaptations: [],
+    ...overrides,
+  };
+}
+
+function makePrep(overrides: Partial<InterviewPrepDto> = {}): InterviewPrepDto {
+  return {
+    id: "prep-1",
+    jobApplicationId: "app-1",
+    generatedAt: "2026-05-10T10:00:00Z",
+    generatedContentJson: {
+      strategySummary: "Prepare-se bem para esta entrevista.",
+      strengthsToHighlight: ["Ponto A", "Ponto B"],
+      likelyRisksOrGaps: ["Gap X"],
+      questionsTheyMayAsk: [
+        {
+          question: "Por que quer trabalhar aqui?",
+          whyItMatters: "Avalia motivação.",
+          answerDirection: "Seja específico e genuíno.",
+        },
+      ],
+      questionsCandidateShouldAsk: ["Como é o dia a dia?"],
+      recommendedPosture: ["Seja direto"],
+      finalChecklist: ["Pesquise a empresa"],
+    },
     ...overrides,
   };
 }
@@ -359,5 +386,100 @@ describe("DetailClient", () => {
     render(<DetailClient application={app} header={null} />);
 
     expect(screen.queryByText("Descrição da vaga")).not.toBeInTheDocument();
+  });
+
+  it("13. 'Preparar entrevista' button visible for eligible status (INTERVIEW)", () => {
+    const app = makeDetail({ status: "INTERVIEW" });
+    render(<DetailClient application={app} header={null} />);
+
+    expect(
+      screen.getByRole("button", { name: /Preparar entrevista/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("14. 'Preparar entrevista' button NOT shown for closed status (REJECTED)", () => {
+    const app = makeDetail({ status: "REJECTED" });
+    render(<DetailClient application={app} header={null} />);
+
+    expect(
+      screen.queryByRole("button", { name: /Preparar entrevista/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("15. clicking 'Preparar entrevista' opens the drawer with generate button", async () => {
+    const app = makeDetail({ status: "INTERVIEW", interviewPrep: null });
+    render(<DetailClient application={app} header={null} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Preparar entrevista/ }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Gerar preparação" }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("16. calls generateOrGetInterviewPrep when 'Gerar preparação' is clicked", async () => {
+    vi.mocked(generateOrGetInterviewPrep).mockResolvedValue(makePrep());
+
+    const app = makeDetail({ status: "APPLIED", interviewPrep: null });
+    render(<DetailClient application={app} header={null} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Preparar entrevista/ }),
+    );
+    await waitFor(() => screen.getByRole("button", { name: "Gerar preparação" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Gerar preparação" }));
+
+    await waitFor(() => {
+      expect(generateOrGetInterviewPrep).toHaveBeenCalledWith("app-1");
+    });
+  });
+
+  it("17. renders prep briefing sections when interviewPrep exists", () => {
+    const app = makeDetail({
+      status: "INTERVIEW",
+      interviewPrep: makePrep(),
+    });
+    render(<DetailClient application={app} header={null} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Ver preparação/ }),
+    );
+
+    expect(
+      screen.getByText("Prepare-se bem para esta entrevista."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Ponto A")).toBeInTheDocument();
+    expect(screen.getByText("Gap X")).toBeInTheDocument();
+    expect(
+      screen.getByText("Por que quer trabalhar aqui?"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Pesquise a empresa")).toBeInTheDocument();
+  });
+
+  it("18. shows error message when generation fails", async () => {
+    vi.mocked(generateOrGetInterviewPrep).mockRejectedValue(
+      new Error("Falha ao gerar preparação"),
+    );
+
+    const app = makeDetail({ status: "OFFER", interviewPrep: null });
+    render(<DetailClient application={app} header={null} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Preparar entrevista/ }),
+    );
+    await waitFor(() => screen.getByRole("button", { name: "Gerar preparação" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Gerar preparação" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Falha ao gerar preparação"),
+      ).toBeInTheDocument();
+    });
   });
 });

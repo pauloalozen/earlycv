@@ -41,6 +41,27 @@ export type JobApplicationEvent = {
   createdAt: string;
 };
 
+export type InterviewPrepContent = {
+  strategySummary: string;
+  strengthsToHighlight: string[];
+  likelyRisksOrGaps: string[];
+  questionsTheyMayAsk: Array<{
+    question: string;
+    whyItMatters: string;
+    answerDirection: string;
+  }>;
+  questionsCandidateShouldAsk: string[];
+  recommendedPosture: string[];
+  finalChecklist: string[];
+};
+
+export type InterviewPrepDto = {
+  id: string;
+  jobApplicationId: string;
+  generatedContentJson: InterviewPrepContent;
+  generatedAt: string;
+};
+
 export type JobApplicationDto = {
   id: string;
   userId: string;
@@ -63,7 +84,8 @@ export type JobApplicationDto = {
   interviewPrep: { id: string; generatedAt: string } | null;
 };
 
-export type JobApplicationDetailDto = JobApplicationDto & {
+export type JobApplicationDetailDto = Omit<JobApplicationDto, "interviewPrep"> & {
+  interviewPrep: InterviewPrepDto | null;
   cvAdaptations: Array<{
     id: string;
     status: string;
@@ -148,4 +170,15 @@ export async function addJobApplicationNote(
   );
   if (!response.ok) throw new Error("Falha ao salvar nota");
   return response.json() as Promise<JobApplicationDto>;
+}
+
+export async function generateOrGetInterviewPrep(
+  id: string,
+): Promise<InterviewPrepDto> {
+  const response = await apiRequest(
+    "POST",
+    `/job-applications/${id}/interview-prep`,
+  );
+  if (!response.ok) throw new Error("Falha ao gerar preparação para entrevista");
+  return response.json() as Promise<InterviewPrepDto>;
 }

@@ -15,6 +15,7 @@ import {
 } from "@/lib/job-applications-api";
 import { ALL_STATUSES, getStatusConfig } from "@/lib/job-application-status";
 import { PageShell } from "@/components/page-shell";
+import { InterviewPrepDrawer } from "./interview-prep-drawer";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -327,9 +328,18 @@ type Props = {
   header: ReactNode;
 };
 
+const PREP_ELIGIBLE_STATUSES: JobApplicationStatus[] = [
+  "APPLIED",
+  "IN_PROCESS",
+  "INTERVIEW",
+  "ASSESSMENT",
+  "OFFER",
+];
+
 export function DetailClient({ application, header }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const [showPrep, setShowPrep] = useState(false);
 
   function handleUpdated() {
     startTransition(() => {
@@ -339,6 +349,8 @@ export function DetailClient({ application, header }: Props) {
 
   const hasCvAdaptations = application.cvAdaptations.length > 0;
   const latestCv = application.cvAdaptations[0] ?? null;
+  const isPrepEligible = PREP_ELIGIBLE_STATUSES.includes(application.status);
+  const isInterview = application.status === "INTERVIEW";
 
   return (
     <PageShell>
@@ -433,6 +445,35 @@ export function DetailClient({ application, header }: Props) {
                   </svg>
                   Abrir vaga
                 </a>
+              )}
+
+              {isPrepEligible && (
+                <button
+                  type="button"
+                  onClick={() => setShowPrep(true)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: isInterview ? "5px 14px" : "3px 10px",
+                    borderRadius: 7,
+                    border: isInterview
+                      ? "none"
+                      : "1px solid rgba(10,10,10,0.12)",
+                    background: isInterview ? "#0a0a0a" : "#fafaf6",
+                    color: isInterview ? "#fafaf6" : "#0a0a0a",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                  {application.interviewPrep ? "Ver preparação" : "Preparar entrevista"}
+                </button>
               )}
             </div>
           </div>
@@ -546,6 +587,13 @@ export function DetailClient({ application, header }: Props) {
           }
         `}</style>
       </main>
+
+      <InterviewPrepDrawer
+        applicationId={application.id}
+        initialPrep={application.interviewPrep}
+        open={showPrep}
+        onClose={() => setShowPrep(false)}
+      />
     </PageShell>
   );
 }
