@@ -454,10 +454,6 @@ export class CvAdaptationService {
       throw new BadRequestException("PDF file or CV text is required.");
     }
 
-    if (hasTextInput) {
-      this.validateCvTextInput(normalizedMasterCvText);
-    }
-
     if (shouldUseUploadedFile && file) {
       try {
         validateCvFileEnvelope(file);
@@ -488,6 +484,7 @@ export class CvAdaptationService {
           }
 
           if (hasTextInput) {
+            this.validateCvTextInput(normalizedMasterCvText);
             resolvedMasterCvText = normalizedMasterCvText;
             return resolvedMasterCvText;
           }

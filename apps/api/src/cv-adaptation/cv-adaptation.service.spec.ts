@@ -250,6 +250,55 @@ test("analyzeGuest validates job description before CV text checks", async () =>
   assert.equal(protectedCalls, 0);
 });
 
+test("analyzeGuest prioritizes turnstile blocking before short CV validation", async () => {
+  let protectedCalls = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-1" }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => {
+        protectedCalls += 1;
+        return {
+          message: "blocked",
+          ok: false,
+          reason: "turnstile_missing",
+        };
+      },
+    },
+  );
+
+  await assert.rejects(
+    service.analyzeGuest(
+      "Descricao da vaga para analista com responsabilidades, requisitos, stack tecnica e colaboracao com produto e dados.",
+      undefined,
+      "cv curto",
+      undefined,
+    ),
+    /turnstile/i,
+  );
+
+  assert.equal(protectedCalls, 1);
+});
+
 test("analyzeGuest prioritizes masterCvText and ignores uploaded file", async () => {
   let payloadHasFile = true;
   let payloadCvFingerprint: string | null | undefined;
