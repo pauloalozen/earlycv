@@ -132,6 +132,46 @@ test("payment recovery admin pending route denies common user and allows admin",
   }
 });
 
+test("payment recovery admin pending route accepts whitelisted query filters", async () => {
+  const previousAdminEnabled = process.env.ADMIN_PAYMENT_RECOVERY_ENABLED;
+  process.env.ADMIN_PAYMENT_RECOVERY_ENABLED = "true";
+
+  const { app, database } = await createApp();
+  try {
+    const adminUser = await registerUser(app, database, "pr-admin-filters");
+
+    await database.user.update({
+      where: { id: adminUser.userId },
+      data: { isStaff: true, internalRole: "admin" },
+    });
+
+    await request(app.getHttpServer())
+      .get("/api/admin/payment-recovery/pending")
+      .query({
+        eligibilityStatus: "eligible",
+        ignored: "false",
+        page: "1",
+        pageSize: "20",
+      })
+      .set("Authorization", `Bearer ${adminUser.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        assert.equal(Array.isArray(body.items), true);
+        assert.equal(body.page, 1);
+        assert.equal(body.pageSize, 20);
+      });
+
+    await deleteUserByEmail(database, adminUser.email);
+  } finally {
+    await app.close();
+    if (previousAdminEnabled === undefined) {
+      delete process.env.ADMIN_PAYMENT_RECOVERY_ENABLED;
+    } else {
+      process.env.ADMIN_PAYMENT_RECOVERY_ENABLED = previousAdminEnabled;
+    }
+  }
+});
+
 test("payment recovery admin pending route is fail-closed when feature disabled", async () => {
   const previousAdminEnabled = process.env.ADMIN_PAYMENT_RECOVERY_ENABLED;
   process.env.ADMIN_PAYMENT_RECOVERY_ENABLED = "false";

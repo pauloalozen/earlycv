@@ -19,7 +19,7 @@ import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import { IgnorePaymentRecoveryDto } from "./dto/ignore-payment-recovery.dto";
-import type { ListPaymentRecoveryDto } from "./dto/list-payment-recovery.dto";
+import { ListPaymentRecoveryDto } from "./dto/list-payment-recovery.dto";
 import { SendPaymentRecoveryEmailDto } from "./dto/send-payment-recovery-email.dto";
 import { PaymentRecoveryConfigService } from "./payment-recovery.config";
 import { PaymentRecoveryAdminEventsService } from "./payment-recovery-admin-events.service";
@@ -59,7 +59,12 @@ export class PaymentRecoveryAdminController {
   @Get("pending")
   async listPending(
     @AuthenticatedUser() adminUser: AuthenticatedRequestUser,
-    @Query(new ValidationPipe(paymentRecoveryValidationOptions))
+    @Query(
+      new ValidationPipe({
+        ...paymentRecoveryValidationOptions,
+        expectedType: ListPaymentRecoveryDto,
+      }),
+    )
     query: ListPaymentRecoveryDto,
   ) {
     this.assertAdminFeatureEnabled();
