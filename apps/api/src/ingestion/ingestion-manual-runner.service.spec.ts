@@ -5,12 +5,18 @@ import { IngestionManualRunnerService } from "./ingestion-manual-runner.service"
 
 function createServiceFixture() {
   let beforeMarkRunning: ((itemId: string) => void) | undefined;
-  let onAcquireItemLock: ((itemId: string) => boolean | void) | undefined;
+  let onAcquireItemLock: ((itemId: string) => boolean | undefined) | undefined;
   const runs = new Map<
     string,
     {
       id: string;
-      status: "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
+      status:
+        | "queued"
+        | "running"
+        | "cancelling"
+        | "completed"
+        | "failed"
+        | "cancelled";
       cancelRequestedAt: Date | null;
       succeededCount: number;
       failedCount: number;
@@ -27,7 +33,13 @@ function createServiceFixture() {
       id: string;
       batchRunId: string;
       jobSourceId: string;
-      status: "queued" | "running" | "completed" | "failed" | "skipped" | "cancelled";
+      status:
+        | "queued"
+        | "running"
+        | "completed"
+        | "failed"
+        | "skipped"
+        | "cancelled";
       errorMessage: string | null;
       createdAt: Date;
       startedAt: Date | null;
@@ -57,11 +69,14 @@ function createServiceFixture() {
     ingestionBatchRun: {
       findFirst: async () => {
         const candidates = Array.from(runs.values())
-          .filter((run) => ["queued", "running", "cancelling"].includes(run.status))
+          .filter((run) =>
+            ["queued", "running", "cancelling"].includes(run.status),
+          )
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
         return candidates[0] ?? null;
       },
-      findUnique: async ({ where }: { where: { id: string } }) => runs.get(where.id) ?? null,
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        runs.get(where.id) ?? null,
       update: async ({
         where,
         data,
@@ -81,7 +96,8 @@ function createServiceFixture() {
           ) {
             const current = next[key as keyof typeof next];
             const increment = (value as { increment: number }).increment;
-            (next as Record<string, unknown>)[key] = Number(current ?? 0) + increment;
+            (next as Record<string, unknown>)[key] =
+              Number(current ?? 0) + increment;
             continue;
           }
           (next as Record<string, unknown>)[key] = value;
@@ -98,20 +114,31 @@ function createServiceFixture() {
       }) => {
         const run = runs.get(where.id);
         if (!run) return { count: 0 };
-        if (where.status && !where.status.in.includes(run.status)) return { count: 0 };
+        if (where.status && !where.status.in.includes(run.status))
+          return { count: 0 };
         runs.set(where.id, { ...run, ...data });
         return { count: 1 };
       },
     },
     ingestionBatchItem: {
-      findMany: async ({ where }: { where: { batchRunId: string; status?: { in: string[] } } }) =>
+      findMany: async ({
+        where,
+      }: {
+        where: { batchRunId: string; status?: { in: string[] } };
+      }) =>
         Array.from(items.values())
           .filter((item) => item.batchRunId === where.batchRunId)
           .filter((item) =>
             where.status?.in ? where.status.in.includes(item.status) : true,
           )
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
-      update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
         const item = items.get(where.id);
         assert.ok(item);
         if (data.status === "running") {
@@ -133,7 +160,8 @@ function createServiceFixture() {
         }
         let count = 0;
         for (const item of items.values()) {
-          if (where.batchRunId && item.batchRunId !== where.batchRunId) continue;
+          if (where.batchRunId && item.batchRunId !== where.batchRunId)
+            continue;
           if (where.id && item.id !== where.id) continue;
           if (!where.status.in.includes(item.status)) continue;
           items.set(item.id, { ...item, ...data });
@@ -176,7 +204,7 @@ function createServiceFixture() {
     setBeforeMarkRunning(callback: (itemId: string) => void) {
       beforeMarkRunning = callback;
     },
-    setOnAcquireItemLock(callback: (itemId: string) => boolean | void) {
+    setOnAcquireItemLock(callback: (itemId: string) => boolean | undefined) {
       onAcquireItemLock = callback;
     },
   };
@@ -380,7 +408,11 @@ test("runner ignores item that becomes terminal before start due to race", async
     if (itemId === "item-race") {
       const item = items.get(itemId);
       assert.ok(item);
-      items.set(itemId, { ...item, status: "completed", finishedAt: new Date() });
+      items.set(itemId, {
+        ...item,
+        status: "completed",
+        finishedAt: new Date(),
+      });
     }
   });
 
@@ -471,7 +503,11 @@ test("runner does not double count skipped when item is already cancelled", asyn
     if (itemId === "item-race-cancelled") {
       const item = items.get(itemId);
       assert.ok(item);
-      items.set(itemId, { ...item, status: "cancelled", finishedAt: new Date() });
+      items.set(itemId, {
+        ...item,
+        status: "cancelled",
+        finishedAt: new Date(),
+      });
       return false;
     }
   });
@@ -541,5 +577,8 @@ test("runner clamps aggregate counters to totalSources on finalize", async () =>
 
   const run = runs.get("batch-clamp");
   assert.ok(run);
-  assert.equal(run.succeededCount + run.failedCount + run.skippedCount <= run.totalSources, true);
+  assert.equal(
+    run.succeededCount + run.failedCount + run.skippedCount <= run.totalSources,
+    true,
+  );
 });

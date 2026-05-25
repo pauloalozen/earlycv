@@ -40,15 +40,20 @@ test("repository creates adapter batch with queued items", async () => {
       ],
     },
     ingestionBatchItem: {
-      createMany: async ({ data }: { data: Array<Record<string, unknown>> }) => {
+      createMany: async ({
+        data,
+      }: {
+        data: Array<Record<string, unknown>>;
+      }) => {
         createManyPayload = data;
         return { count: 2 };
       },
     },
   };
   const database = {
-    $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) =>
-      callback(tx),
+    $transaction: async (
+      callback: (transaction: typeof tx) => Promise<unknown>,
+    ) => callback(tx),
   };
 
   const repository = new ManualIngestionBatchRepository(database as never);
@@ -101,7 +106,10 @@ test("repository gets run by id and lists filtered items", async () => {
   await repository.listRunItems("batch-1", { status: "queued" });
 
   assert.deepEqual(run, { id: "batch-1" });
-  assert.deepEqual(capturedItemWhere, { batchRunId: "batch-1", status: "queued" });
+  assert.deepEqual(capturedItemWhere, {
+    batchRunId: "batch-1",
+    status: "queued",
+  });
 });
 
 test("repository marks cancel requested with status transition", async () => {
@@ -115,7 +123,10 @@ test("repository marks cancel requested with status transition", async () => {
         where: Record<string, unknown>;
         data: Record<string, unknown>;
       }) => {
-        assert.deepEqual(where, { id: "batch-1", status: { in: ["queued", "running"] } });
+        assert.deepEqual(where, {
+          id: "batch-1",
+          status: { in: ["queued", "running"] },
+        });
         assert.equal(data.status, "cancelling");
         assert.equal(data.cancelRequestedAt instanceof Date, true);
         return { count: 1 };

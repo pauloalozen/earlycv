@@ -1,3 +1,4 @@
+/* biome-ignore-all lint/suspicious/noExplicitAny: dynamic controller shape assertions in tests */
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
@@ -9,8 +10,10 @@ import { INTERNAL_ROLES_KEY } from "../common/roles.decorator";
 import { IngestionController } from "./ingestion.controller";
 
 test("ingestion controller enforces admin/superadmin guards", () => {
-  const guards = Reflect.getMetadata(GUARDS_METADATA, IngestionController) ?? [];
-  const roles = Reflect.getMetadata(INTERNAL_ROLES_KEY, IngestionController) ?? [];
+  const guards =
+    Reflect.getMetadata(GUARDS_METADATA, IngestionController) ?? [];
+  const roles =
+    Reflect.getMetadata(INTERNAL_ROLES_KEY, IngestionController) ?? [];
 
   assert.equal(Array.isArray(guards), true);
   assert.equal(guards.length >= 2, true);
@@ -91,7 +94,10 @@ test("POST manual adapter run returns queued payload", async () => {
       getRunById: async () => ({}) as never,
       listRunItems: async () => [],
       listRuns: async () => [],
-      startAdapterRun: async (adapterType: string, requestedByUserId: string) => {
+      startAdapterRun: async (
+        adapterType: string,
+        requestedByUserId: string,
+      ) => {
         receivedAdapter = adapterType;
         receivedUserId = requestedByUserId;
         return queued;

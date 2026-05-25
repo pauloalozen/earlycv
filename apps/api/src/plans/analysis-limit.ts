@@ -5,11 +5,15 @@ const SAO_PAULO_TZ = "America/Sao_Paulo";
 function requirePositiveInt(env: NodeJS.ProcessEnv, name: string): number {
   const raw = env[name]?.trim();
   if (!raw || !/^\d+$/.test(raw)) {
-    throw new Error(`Required env var ${name} is not set or is not a positive integer`);
+    throw new Error(
+      `Required env var ${name} is not set or is not a positive integer`,
+    );
   }
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`Env var ${name} must be a positive integer, got: "${raw}"`);
+    throw new Error(
+      `Env var ${name} must be a positive integer, got: "${raw}"`,
+    );
   }
   return parsed;
 }

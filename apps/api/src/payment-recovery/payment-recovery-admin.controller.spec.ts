@@ -1,3 +1,4 @@
+/* biome-ignore-all lint/suspicious/noExplicitAny: test doubles rely on dynamic mocks */
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
@@ -11,7 +12,8 @@ test("payment recovery admin controller enforces admin/superadmin guards", () =>
   const guards =
     Reflect.getMetadata(GUARDS_METADATA, PaymentRecoveryAdminController) ?? [];
   const roles =
-    Reflect.getMetadata(INTERNAL_ROLES_KEY, PaymentRecoveryAdminController) ?? [];
+    Reflect.getMetadata(INTERNAL_ROLES_KEY, PaymentRecoveryAdminController) ??
+    [];
 
   assert.equal(Array.isArray(guards), true);
   assert.equal(guards.length >= 2, true);
@@ -76,25 +78,26 @@ test("listPending supports all requested filters and pagination", async () => {
     } as any,
     { ignore: async () => [], unignore: async () => undefined } as any,
     { isAdminEnabled: () => true } as any,
-    { listViewed: () => undefined, ignored: () => undefined, unignored: () => undefined } as any,
+    {
+      listViewed: () => undefined,
+      ignored: () => undefined,
+      unignored: () => undefined,
+    } as any,
     { send: async () => ({}) } as any,
   );
 
-  await controller.listPending(
-    { id: "admin-1" } as any,
-    {
-      eligibilityStatus: "possibly_resolved",
-      originAction: "unlock_cv",
-      alreadySent: "false",
-      hasAvailableCredits: "true",
-      ignored: "all",
-      dateFrom: "2026-05-01",
-      dateTo: "2026-05-30",
-      search: "john@example.com",
-      page: 2,
-      pageSize: 50,
-    },
-  );
+  await controller.listPending({ id: "admin-1" } as any, {
+    eligibilityStatus: "possibly_resolved",
+    originAction: "unlock_cv",
+    alreadySent: "false",
+    hasAvailableCredits: "true",
+    ignored: "all",
+    dateFrom: "2026-05-01",
+    dateTo: "2026-05-30",
+    search: "john@example.com",
+    page: 2,
+    pageSize: 50,
+  });
 
   assert.deepEqual(capturedFilters, {
     eligibilityStatus: "possibly_resolved",
@@ -113,7 +116,9 @@ test("listPending supports all requested filters and pagination", async () => {
 test("ignore and unignore delegate persistence and emit events", async () => {
   const calls: string[] = [];
   const controller = new PaymentRecoveryAdminController(
-    { listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }) } as any,
+    {
+      listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+    } as any,
     {
       ignore: async (input: Record<string, unknown>) => {
         calls.push(`ignore:${JSON.stringify(input)}`);
@@ -135,25 +140,41 @@ test("ignore and unignore delegate persistence and emit events", async () => {
     { send: async () => ({}) } as any,
   );
 
-  await controller.ignore(
-    "purchase-1",
-    { id: "admin-1" } as any,
-    { reason: "false positive" },
-  );
+  await controller.ignore("purchase-1", { id: "admin-1" } as any, {
+    reason: "false positive",
+  });
   await controller.unignore("purchase-1", { id: "admin-1" } as any);
 
-  assert.equal(calls.some((value) => value.includes("ignore")), true);
-  assert.equal(calls.some((value) => value.includes("unignore")), true);
-  assert.equal(calls.some((value) => value.includes("event-ignored")), true);
-  assert.equal(calls.some((value) => value.includes("event-unignored")), true);
+  assert.equal(
+    calls.some((value) => value.includes("ignore")),
+    true,
+  );
+  assert.equal(
+    calls.some((value) => value.includes("unignore")),
+    true,
+  );
+  assert.equal(
+    calls.some((value) => value.includes("event-ignored")),
+    true,
+  );
+  assert.equal(
+    calls.some((value) => value.includes("event-unignored")),
+    true,
+  );
 });
 
 test("listPending fails closed when admin feature is disabled", async () => {
   const controller = new PaymentRecoveryAdminController(
-    { listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }) } as any,
+    {
+      listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+    } as any,
     { ignore: async () => [], unignore: async () => undefined } as any,
     { isAdminEnabled: () => false } as any,
-    { listViewed: () => undefined, ignored: () => undefined, unignored: () => undefined } as any,
+    {
+      listViewed: () => undefined,
+      ignored: () => undefined,
+      unignored: () => undefined,
+    } as any,
     { send: async () => ({}) } as any,
   );
 
@@ -170,7 +191,9 @@ test("listPending fails closed when admin feature is disabled", async () => {
 test("sendEmail returns required fields and emits events with correct payload", async () => {
   const calls: string[] = [];
   const controller = new PaymentRecoveryAdminController(
-    { listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }) } as any,
+    {
+      listPending: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+    } as any,
     { ignore: async () => [], unignore: async () => undefined } as any,
     { isAdminEnabled: () => true } as any,
     {
@@ -178,7 +201,9 @@ test("sendEmail returns required fields and emits events with correct payload", 
       ignored: () => undefined,
       unignored: () => undefined,
       emailSendRequested: (input: Record<string, unknown>) =>
-        calls.push(`payment_recovery_email_send_requested:${JSON.stringify(input)}`),
+        calls.push(
+          `payment_recovery_email_send_requested:${JSON.stringify(input)}`,
+        ),
       emailSent: (input: Record<string, unknown>) =>
         calls.push(`payment_recovery_email_sent:${JSON.stringify(input)}`),
       emailSkipped: (input: Record<string, unknown>) =>
@@ -202,7 +227,9 @@ test("sendEmail returns required fields and emits events with correct payload", 
     } as any,
   );
 
-  const result = await controller.sendEmail("purchase-1", { id: "admin-1" } as any);
+  const result = await controller.sendEmail("purchase-1", {
+    id: "admin-1",
+  } as any);
 
   assert.deepEqual(result, {
     success: true,
@@ -216,8 +243,24 @@ test("sendEmail returns required fields and emits events with correct payload", 
     eligibilityStatus: "eligible",
     eligibilityReason: "pending_unlock_cv_not_unlocked",
   });
-  assert.equal(calls.some((entry) => entry.includes("payment_recovery_email_send_requested")), true);
-  assert.equal(calls.some((entry) => entry.includes("eligibilityStatus\":\"eligible\"")), true);
-  assert.equal(calls.some((entry) => entry.includes("eligibilityReason\":\"pending_unlock_cv_not_unlocked\"")), true);
-  assert.equal(calls.some((entry) => entry.includes("payment_recovery_email_skipped")), true);
+  assert.equal(
+    calls.some((entry) =>
+      entry.includes("payment_recovery_email_send_requested"),
+    ),
+    true,
+  );
+  assert.equal(
+    calls.some((entry) => entry.includes('eligibilityStatus":"eligible"')),
+    true,
+  );
+  assert.equal(
+    calls.some((entry) =>
+      entry.includes('eligibilityReason":"pending_unlock_cv_not_unlocked"'),
+    ),
+    true,
+  );
+  assert.equal(
+    calls.some((entry) => entry.includes("payment_recovery_email_skipped")),
+    true,
+  );
 });

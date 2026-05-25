@@ -1,3 +1,4 @@
+/* biome-ignore-all lint/suspicious/noExplicitAny: nest execution context mocks are dynamic */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -25,5 +26,8 @@ test("rate limit guard blocks requests above threshold", async () => {
   } as any;
 
   await guard.canActivate(context);
-  await assert.rejects(async () => guard.canActivate(context), TooManyRequestsException);
+  await assert.rejects(
+    async () => guard.canActivate(context),
+    TooManyRequestsException,
+  );
 });

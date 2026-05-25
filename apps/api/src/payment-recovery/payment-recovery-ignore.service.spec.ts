@@ -1,3 +1,4 @@
+/* biome-ignore-all lint/suspicious/noExplicitAny: prisma mock arguments are intentionally open */
 import "reflect-metadata";
 
 import assert from "node:assert/strict";

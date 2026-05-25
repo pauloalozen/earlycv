@@ -7,7 +7,8 @@ import { ResendEmailDeliveryService } from "./resend-email-delivery.service";
 
 test("ResendEmailDeliveryService does not log raw provider body on HTTP error", async () => {
   const service = new ResendEmailDeliveryService();
-  const providerBody = '{"error":"invalid","to":"candidate@example.com","subject":"reset"}';
+  const providerBody =
+    '{"error":"invalid","to":"candidate@example.com","subject":"reset"}';
 
   const text = mock.fn(async () => providerBody);
   const fetchMock = mock.method(globalThis, "fetch", async () => {

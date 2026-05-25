@@ -1,12 +1,17 @@
+/* biome-ignore-all lint/suspicious/noExplicitAny: transaction/provider payload typing pending strict refactor */
 import { createHash, randomBytes } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
-import { buildPaymentRecoveryEmailCopy } from "./payment-recovery-email-copy";
 import { PaymentRecoveryConfigService } from "./payment-recovery.config";
 import { PaymentRecoveryEligibilityService } from "./payment-recovery-eligibility.service";
+import { buildPaymentRecoveryEmailCopy } from "./payment-recovery-email-copy";
 
-type SendInput = { purchaseId: string; adminUserId: string; forceResend?: boolean };
+type SendInput = {
+  purchaseId: string;
+  adminUserId: string;
+  forceResend?: boolean;
+};
 
 export type SendPaymentRecoveryEmailResult = {
   success: boolean;
@@ -33,17 +38,32 @@ export class PaymentRecoveryEmailService {
     private readonly eligibility: PaymentRecoveryEligibilityService,
   ) {}
 
-  private computeGroupKey(userId: string, adaptationId: string | null, originAction: string) {
-    return adaptationId ? `${userId}:${adaptationId}` : `${userId}:${originAction}`;
+  private computeGroupKey(
+    userId: string,
+    adaptationId: string | null,
+    originAction: string,
+  ) {
+    return adaptationId
+      ? `${userId}:${adaptationId}`
+      : `${userId}:${originAction}`;
   }
 
-  private shouldSendReal(emailEnabled: boolean, dryRun: boolean, allowlistMatched: boolean) {
+  private shouldSendReal(
+    emailEnabled: boolean,
+    dryRun: boolean,
+    allowlistMatched: boolean,
+  ) {
     if (!emailEnabled) return false;
     if (dryRun) return false;
     return allowlistMatched;
   }
 
-  private async sendViaResend(to: string, subject: string, text: string, html: string) {
+  private async sendViaResend(
+    to: string,
+    subject: string,
+    text: string,
+    html: string,
+  ) {
     const apiKey = process.env.RESEND_API_KEY ?? "";
     const from = process.env.EMAIL_FROM ?? "EarlyCV <contato@earlycv.com.br>";
     const frontendUrl = process.env.FRONTEND_URL ?? "";
@@ -74,7 +94,10 @@ export class PaymentRecoveryEmailService {
       },
       body: JSON.stringify({ from, to: [to], subject, text, html }),
     });
-    const body = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
+    const body = (await res.json().catch(() => ({}))) as {
+      id?: string;
+      message?: string;
+    };
     if (!res.ok) {
       throw new Error(body.message ?? `provider_http_${res.status}`);
     }
@@ -90,7 +113,7 @@ export class PaymentRecoveryEmailService {
         user: { select: { id: true, name: true, email: true } },
       },
     });
-    if (!purchase || !purchase.user?.email) {
+    if (!purchase?.user?.email) {
       throw new Error("purchase_not_found_or_missing_email");
     }
 
@@ -101,21 +124,28 @@ export class PaymentRecoveryEmailService {
         })
       : null;
 
-    const eligibility = await this.eligibility.evaluateByPurchaseId(input.purchaseId);
+    const eligibility = await this.eligibility.evaluateByPurchaseId(
+      input.purchaseId,
+    );
     const eligibilityItem = eligibility.item;
     const ignored = Boolean(eligibilityItem?.ignored);
-    const eligibilityStatus = eligibilityItem?.eligibilityStatus ?? "not_eligible";
-    const eligibilityReason = eligibilityItem?.eligibilityReason ?? "missing_purchase";
+    const eligibilityStatus =
+      eligibilityItem?.eligibilityStatus ?? "not_eligible";
+    const eligibilityReason =
+      eligibilityItem?.eligibilityReason ?? "missing_purchase";
 
-    const recoveryGroupKey = eligibility.recoveryGroupKey ?? this.computeGroupKey(
-      purchase.userId,
-      purchase.originAdaptationId,
-      purchase.originAction,
-    );
+    const recoveryGroupKey =
+      eligibility.recoveryGroupKey ??
+      this.computeGroupKey(
+        purchase.userId,
+        purchase.originAdaptationId,
+        purchase.originAction,
+      );
 
     const allowlist = this.config.emailAllowlist();
     const allowlistMatched =
-      allowlist.length === 0 || allowlist.includes(purchase.user.email.toLowerCase());
+      allowlist.length === 0 ||
+      allowlist.includes(purchase.user.email.toLowerCase());
     const dryRun = this.config.isDryRun();
     const emailEnabled = this.config.isEmailEnabled();
     const sendRealWhenAllowed = this.shouldSendReal(
@@ -128,18 +158,28 @@ export class PaymentRecoveryEmailService {
     const tokenRaw = randomBytes(32).toString("hex");
     const tokenHash = createHash("sha256").update(tokenRaw).digest("hex");
     const ttlDays = this.config.tokenTtlDays();
-    const tokenExpiresAt = new Date(now.getTime() + ttlDays * 24 * 60 * 60 * 1000);
+    const tokenExpiresAt = new Date(
+      now.getTime() + ttlDays * 24 * 60 * 60 * 1000,
+    );
 
-    const scoreJson = (adaptation?.adaptedContentJson ?? {}) as Record<string, unknown>;
+    const scoreJson = (adaptation?.adaptedContentJson ?? {}) as Record<
+      string,
+      unknown
+    >;
     const firstName = purchase.user.name?.split(" ")[0] ?? null;
     const frontendUrl = process.env.FRONTEND_URL ?? "https://earlycv.com.br";
     const recoveryLink = `${frontendUrl}/recovery/${tokenRaw}`;
     const copy = buildPaymentRecoveryEmailCopy({
       firstName,
       jobTitle: adaptation?.jobTitle ?? null,
-      scoreBefore: typeof scoreJson.scoreBefore === "number" ? scoreJson.scoreBefore : null,
-      scoreAfter: typeof scoreJson.scoreAfter === "number" ? scoreJson.scoreAfter : null,
-      scoreDelta: typeof scoreJson.scoreDelta === "number" ? scoreJson.scoreDelta : null,
+      scoreBefore:
+        typeof scoreJson.scoreBefore === "number"
+          ? scoreJson.scoreBefore
+          : null,
+      scoreAfter:
+        typeof scoreJson.scoreAfter === "number" ? scoreJson.scoreAfter : null,
+      scoreDelta:
+        typeof scoreJson.scoreDelta === "number" ? scoreJson.scoreDelta : null,
       recoveryLink,
     });
 
@@ -155,8 +195,12 @@ export class PaymentRecoveryEmailService {
       });
 
       const cooldownStart = new Date(now.getTime() - 10 * 60 * 1000);
-      const hasCooldown = priorGroupEmails.some((row: any) => row.createdAt >= cooldownStart);
-      const hasRealSent = priorGroupEmails.some((row: any) => row.realEmailSent === true);
+      const hasCooldown = priorGroupEmails.some(
+        (row: any) => row.createdAt >= cooldownStart,
+      );
+      const hasRealSent = priorGroupEmails.some(
+        (row: any) => row.realEmailSent === true,
+      );
 
       let reason = "ok";
       if (ignored) reason = "ignored";

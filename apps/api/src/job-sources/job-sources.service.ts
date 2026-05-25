@@ -99,12 +99,17 @@ export class JobSourcesService {
             _count: { id: true },
           })
         : [];
-    const countMap = new Map(activeCounts.map((r) => [r.jobSourceId, r._count.id]));
+    const countMap = new Map(
+      activeCounts.map((r) => [r.jobSourceId, r._count.id]),
+    );
 
     return {
       page,
       pageSize,
-      rows: rows.map((r) => ({ ...r, activeJobsCount: countMap.get(r.id) ?? 0 })),
+      rows: rows.map((r) => ({
+        ...r,
+        activeJobsCount: countMap.get(r.id) ?? 0,
+      })),
       total,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
     };
@@ -161,9 +166,9 @@ export class JobSourcesService {
         data: {
           ...dto,
           sourceUrl:
-              dto.sourceUrl === undefined
-                ? undefined
-                : canonicalizeSourceUrl(dto.sourceUrl),
+            dto.sourceUrl === undefined
+              ? undefined
+              : canonicalizeSourceUrl(dto.sourceUrl),
         },
         include: {
           company: true,

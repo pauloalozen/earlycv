@@ -65,7 +65,8 @@ test("createIntent builds MP preference using shared return config", async () =>
         assert.deepEqual(capturedBody?.back_urls, {
           success:
             "https://earlycv.com.br/pagamento/concluido?checkoutId=adapt_abc",
-          failure: "https://earlycv.com.br/pagamento/falhou?checkoutId=adapt_abc",
+          failure:
+            "https://earlycv.com.br/pagamento/falhou?checkoutId=adapt_abc",
           pending:
             "https://earlycv.com.br/pagamento/pendente?checkoutId=adapt_abc",
         });

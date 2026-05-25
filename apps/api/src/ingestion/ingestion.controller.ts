@@ -1,8 +1,4 @@
 import {
-  AuthenticatedUser,
-  type AuthenticatedRequestUser,
-} from "../common/authenticated-user.decorator";
-import {
   BadRequestException,
   Body,
   Controller,
@@ -19,18 +15,22 @@ import {
   ValidationPipe,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import {
+  type AuthenticatedRequestUser,
+  AuthenticatedUser,
+} from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import { AdminIngestionImportService } from "./admin-ingestion-import.service";
-import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
-import { IngestionSchedulerService } from "./ingestion-scheduler.service";
-import { IngestionService } from "./ingestion.service";
-import { ManualIngestionService } from "./manual-ingestion.service";
 import { ListManualRunItemsDto } from "./dto/list-manual-run-items.dto";
 import { ListManualRunsDto } from "./dto/list-manual-runs.dto";
 import { StartManualAdapterRunDto } from "./dto/start-manual-adapter-run.dto";
-import { UpdateGlobalSchedulerDto } from "./dto/update-global-scheduler.dto";
+import type { UpdateGlobalSchedulerDto } from "./dto/update-global-scheduler.dto";
+import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
+import { IngestionService } from "./ingestion.service";
+import { IngestionSchedulerService } from "./ingestion-scheduler.service";
+import { ManualIngestionService } from "./manual-ingestion.service";
 
 const ingestionValidationOptions = {
   transform: true,
@@ -119,7 +119,10 @@ export class IngestionController {
     params: StartManualAdapterRunDto,
     @AuthenticatedUser() user: AuthenticatedRequestUser,
   ) {
-    return this.manualIngestionService.startAdapterRun(params.adapterType, user.id);
+    return this.manualIngestionService.startAdapterRun(
+      params.adapterType,
+      user.id,
+    );
   }
 
   @Get("manual")

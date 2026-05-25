@@ -274,8 +274,10 @@ function requireEnvInt(...names: string[]): number {
     const raw = process.env[name];
     if (raw) {
       const value = parseInt(raw, 10);
-      if (isNaN(value)) {
-        throw new Error(`Env var ${name} must be a valid integer, got: "${raw}"`);
+      if (Number.isNaN(value)) {
+        throw new Error(
+          `Env var ${name} must be a valid integer, got: "${raw}"`,
+        );
       }
       return value;
     }

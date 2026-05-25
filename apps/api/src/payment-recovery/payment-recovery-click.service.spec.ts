@@ -1,3 +1,4 @@
+/* biome-ignore-all lint/suspicious/noExplicitAny: test doubles for prisma and service internals */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -15,7 +16,11 @@ function createService(overrides?: {
       update: overrides?.updateToken ?? (async () => ({})),
     },
     paymentRecoveryEmail: {
-      findUnique: async () => ({ id: "email-1", clickedAt: null, metadataJson: { keep: "yes" } }),
+      findUnique: async () => ({
+        id: "email-1",
+        clickedAt: null,
+        metadataJson: { keep: "yes" },
+      }),
       update: overrides?.updateEmail ?? (async () => ({})),
     },
     planPurchase: {
@@ -35,21 +40,27 @@ function createService(overrides?: {
   } as any;
 
   const service = new PaymentRecoveryClickService(database, {
-      emit: (event: string, payload: Record<string, unknown>) => {
-        events.push({ event, payload });
-      },
-    } as any);
+    emit: (event: string, payload: Record<string, unknown>) => {
+      events.push({ event, payload });
+    },
+  } as any);
 
   return { service, events };
 }
 
 test("invalid token returns generic redirect and emits invalid event", async () => {
   const { service, events } = createService();
-  const result = await service.handleTokenClick({ token: "bad-token", ip: "1.1.1.1" });
+  const result = await service.handleTokenClick({
+    token: "bad-token",
+    ip: "1.1.1.1",
+  });
 
   assert.equal(result.redirectTarget, "generic");
   assert.match(result.redirectUrl, /\/recuperar-pagamento/);
-  assert.equal(events.some((entry) => entry.event === "payment_recovery_token_invalid"), true);
+  assert.equal(
+    events.some((entry) => entry.event === "payment_recovery_token_invalid"),
+    true,
+  );
 });
 
 test("expired token returns generic redirect, no checkout resume, emits expired", async () => {
@@ -72,7 +83,10 @@ test("expired token returns generic redirect, no checkout resume, emits expired"
   });
 
   assert.equal(result.redirectTarget, "generic");
-  assert.equal(events.some((entry) => entry.event === "payment_recovery_token_expired"), true);
+  assert.equal(
+    events.some((entry) => entry.event === "payment_recovery_token_expired"),
+    true,
+  );
 });
 
 test("pending valid token records click and redirects to bridge", async () => {
@@ -102,7 +116,10 @@ test("pending valid token records click and redirects to bridge", async () => {
   assert.equal(result.redirectTarget, "checkout");
   assert.match(result.redirectUrl, /\/api\/payment-recovery\/bridge\//);
   assert.equal(Boolean(emailUpdatePayload), true);
-  assert.equal(events.some((entry) => entry.event === "payment_recovery_email_clicked"), true);
+  assert.equal(
+    events.some((entry) => entry.event === "payment_recovery_email_clicked"),
+    true,
+  );
 });
 
 test("token is not consumed and multiple clicks update lastClickedAt", async () => {
@@ -154,9 +171,15 @@ test("click metadata merge preserves existing keys", async () => {
       return {};
     },
   });
-  await service.handleTokenClick({ token: "a".repeat(64), currentUserId: "user-1" });
+  await service.handleTokenClick({
+    token: "a".repeat(64),
+    currentUserId: "user-1",
+  });
   assert.equal(updatePayload?.data?.metadataJson?.set?.keep, "yes");
-  assert.equal(typeof updatePayload?.data?.metadataJson?.set?.lastClickedAt, "string");
+  assert.equal(
+    typeof updatePayload?.data?.metadataJson?.set?.lastClickedAt,
+    "string",
+  );
 });
 
 test("approved purchase redirects to success when adaptation already unlocked", async () => {
@@ -189,9 +212,14 @@ test("approved purchase redirects to success when adaptation already unlocked", 
     currentUserId: "user-1",
   });
   assert.equal(result.redirectTarget, "completed");
-  assert.match(result.redirectUrl, /\/adaptar\/resultado\?adaptationId=adapt-1/);
+  assert.match(
+    result.redirectUrl,
+    /\/adaptar\/resultado\?adaptationId=adapt-1/,
+  );
   assert.equal(
-    events.some((entry) => entry.event === "payment_recovery_click_redirected_completed"),
+    events.some(
+      (entry) => entry.event === "payment_recovery_click_redirected_completed",
+    ),
     true,
   );
 });
@@ -214,7 +242,10 @@ test("canceled or refunded purchase returns generic", async () => {
     userId: "user-1",
     originAction: "unlock_cv",
   });
-  const result = await service.handleTokenClick({ token: "a".repeat(64), ip: "1.1.1.1" });
+  const result = await service.handleTokenClick({
+    token: "a".repeat(64),
+    ip: "1.1.1.1",
+  });
   assert.equal(result.redirectTarget, "generic");
 });
 
@@ -238,7 +269,10 @@ test("logged out redirects to login with safe internal return url", async () => 
     returnUrl: "https://evil.com",
   });
   assert.equal(result.redirectTarget, "login");
-  assert.match(result.redirectUrl, /\/entrar\?tab=entrar&next=%2Fapi%2Fpayment-recovery%2Fbridge%2Fa{64}/);
+  assert.match(
+    result.redirectUrl,
+    /\/entrar\?tab=entrar&next=%2Fapi%2Fpayment-recovery%2Fbridge%2Fa{64}/,
+  );
 });
 
 test("logged in as different user gets blocked and mismatch event emitted", async () => {
@@ -262,7 +296,9 @@ test("logged in as different user gets blocked and mismatch event emitted", asyn
 
   assert.equal(result.redirectTarget, "generic");
   assert.equal(
-    events.some((entry) => entry.event === "payment_recovery_token_user_mismatch"),
+    events.some(
+      (entry) => entry.event === "payment_recovery_token_user_mismatch",
+    ),
     true,
   );
 });

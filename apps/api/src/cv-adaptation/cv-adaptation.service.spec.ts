@@ -1468,7 +1468,9 @@ test("analyzeAuthenticated uses the same normalized text for AI load and snapsho
   assert.equal(result.masterCvText, validMasterCvText);
   assert.equal(
     storedSha,
-    createHash("sha256").update(Buffer.from(validMasterCvText, "utf8")).digest("hex"),
+    createHash("sha256")
+      .update(Buffer.from(validMasterCvText, "utf8"))
+      .digest("hex"),
   );
 });
 
@@ -1768,8 +1770,10 @@ test("analyzeGuest rejects legacy DOC before protected analysis pipeline", async
 
 test("analyzeGuest emits safe payload_invalid telemetry for rejected upload envelope", async () => {
   let protectedCalls = 0;
-  const emitted: Array<{ eventName: string; metadata?: Record<string, unknown> }> =
-    [];
+  const emitted: Array<{
+    eventName: string;
+    metadata?: Record<string, unknown>;
+  }> = [];
 
   const service = new CvAdaptationServiceCtor(
     {

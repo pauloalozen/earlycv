@@ -57,7 +57,12 @@ export class JobsController {
     )
     query: ListJobsAdminDto,
   ) {
-    if (query.page !== undefined || query.search || query.sourceFilter || query.statusFilter) {
+    if (
+      query.page !== undefined ||
+      query.search ||
+      query.sourceFilter ||
+      query.statusFilter
+    ) {
       return this.jobsService.listAdmin(query);
     }
     return this.jobsService.list();

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  UnsupportedCvFileTypeError,
   extractTextFromCvFile,
+  UnsupportedCvFileTypeError,
 } from "./cv-text-extractor";
 
 test("extractTextFromCvFile rejects empty file buffers", async () => {

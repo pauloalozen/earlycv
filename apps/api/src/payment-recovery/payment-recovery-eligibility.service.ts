@@ -1,3 +1,4 @@
+/* biome-ignore-all lint/suspicious/noExplicitAny: legacy prisma enum coercion pending typed normalization */
 import { Inject, Injectable } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
@@ -199,11 +200,13 @@ export class PaymentRecoveryEligibilityService {
       orderBy: { createdAt: "desc" },
     })) as PurchaseRecord[];
 
-    const adaptationIds = [...new Set(
-      purchases
-        .map((purchase) => purchase.originAdaptationId)
-        .filter((id): id is string => Boolean(id)),
-    )];
+    const adaptationIds = [
+      ...new Set(
+        purchases
+          .map((purchase) => purchase.originAdaptationId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
 
     const adaptations = adaptationIds.length
       ? await this.database.cvAdaptation.findMany({
@@ -219,17 +222,21 @@ export class PaymentRecoveryEligibilityService {
         })
       : [];
 
-    const adaptationById = new Map(adaptations.map((adaptation) => [adaptation.id, adaptation]));
+    const adaptationById = new Map(
+      adaptations.map((adaptation) => [adaptation.id, adaptation]),
+    );
     for (const purchase of purchases) {
       purchase.adaptation = purchase.originAdaptationId
-        ? adaptationById.get(purchase.originAdaptationId) ?? null
+        ? (adaptationById.get(purchase.originAdaptationId) ?? null)
         : null;
     }
 
     const grouped = this.groupCandidates(purchases);
     const allGroupedPurchaseIds = [
       ...new Set(
-        grouped.flatMap((entry) => entry.groupPurchases.map((purchase) => purchase.id)),
+        grouped.flatMap((entry) =>
+          entry.groupPurchases.map((purchase) => purchase.id),
+        ),
       ),
     ];
     const indexes = this.buildIndexes(purchases);
@@ -267,66 +274,76 @@ export class PaymentRecoveryEligibilityService {
     );
 
     const items = grouped
-      .map(({ representative, relatedPendingPurchaseCount, groupPurchases }) => {
-      const classification = this.classifyPurchase(representative, indexes);
-      const scores = readScoreFields(representative.adaptation?.adaptedContentJson);
-      let recoveryEmailCount = 0;
-      let lastRecoveryEmailSentAt: string | null = null;
-      let latestSentAt = Number.NEGATIVE_INFINITY;
-      for (const purchase of groupPurchases) {
-        const rows = historyRowsByPurchaseId.get(purchase.id) ?? [];
-        recoveryEmailCount += rows.length;
-        for (const row of rows) {
-          if (row.sentAt && row.sentAt.getTime() > latestSentAt) {
-            latestSentAt = row.sentAt.getTime();
-            lastRecoveryEmailSentAt = row.sentAt.toISOString();
+      .map(
+        ({ representative, relatedPendingPurchaseCount, groupPurchases }) => {
+          const classification = this.classifyPurchase(representative, indexes);
+          const scores = readScoreFields(
+            representative.adaptation?.adaptedContentJson,
+          );
+          let recoveryEmailCount = 0;
+          let lastRecoveryEmailSentAt: string | null = null;
+          let latestSentAt = Number.NEGATIVE_INFINITY;
+          for (const purchase of groupPurchases) {
+            const rows = historyRowsByPurchaseId.get(purchase.id) ?? [];
+            recoveryEmailCount += rows.length;
+            for (const row of rows) {
+              if (row.sentAt && row.sentAt.getTime() > latestSentAt) {
+                latestSentAt = row.sentAt.getTime();
+                lastRecoveryEmailSentAt = row.sentAt.toISOString();
+              }
+            }
           }
-        }
-      }
 
-      const ignoredRowsForGroup = groupPurchases
-        .map((purchase) => ignoredByPurchaseId.get(purchase.id))
-        .filter((row) => Boolean(row));
-      const latestIgnored = ignoredRowsForGroup.sort(
-        (a, b) => b!.ignoredAt.getTime() - a!.ignoredAt.getTime(),
-      )[0];
+          const ignoredRowsForGroup = groupPurchases.flatMap((purchase) => {
+            const row = ignoredByPurchaseId.get(purchase.id);
+            return row ? [row] : [];
+          });
+          const latestIgnored = ignoredRowsForGroup.sort(
+            (a, b) => b.ignoredAt.getTime() - a.ignoredAt.getTime(),
+          )[0];
 
-      return {
-        userId: representative.userId,
-        userName: representative.user?.name ?? "",
-        userEmail: representative.user?.email ?? "",
-        purchaseId: representative.id,
-        purchaseStatus: representative.status,
-        originAction: representative.originAction,
-        originAdaptationId: representative.originAdaptationId,
-        planName: planTypeToLabel(representative.planType),
-        amount: representative.amountInCents / 100,
-        createdAt: representative.createdAt.toISOString(),
-        jobTitle: representative.adaptation?.jobTitle ?? null,
-        companyName: representative.adaptation?.companyName ?? null,
-        scoreBefore: scores.scoreBefore,
-        scoreAfter: scores.scoreAfter,
-        scoreDelta: scores.scoreDelta,
-        currentUserCredits: representative.user?.creditsRemaining ?? 0,
-        hasAvailableCredits: (representative.user?.creditsRemaining ?? 0) > 0,
-        hasApprovedPurchaseAfterPending:
-          classification.hasApprovedPurchaseAfterPending,
-        isAdaptationUnlocked: representative.adaptation?.isUnlocked ?? false,
-        eligibilityStatus: classification.status,
-        eligibilityReason: classification.reason,
-        relatedPendingPurchaseCount,
-        lastRecoveryEmailSentAt,
-        recoveryEmailCount,
-        ignored: Boolean(latestIgnored),
-        ignoredAt: latestIgnored?.ignoredAt.toISOString() ?? null,
-        ignoredByAdminUserId: latestIgnored?.ignoredByAdminId ?? null,
-      } satisfies PaymentRecoveryEligibilityItem;
-      })
+          return {
+            userId: representative.userId,
+            userName: representative.user?.name ?? "",
+            userEmail: representative.user?.email ?? "",
+            purchaseId: representative.id,
+            purchaseStatus: representative.status,
+            originAction: representative.originAction,
+            originAdaptationId: representative.originAdaptationId,
+            planName: planTypeToLabel(representative.planType),
+            amount: representative.amountInCents / 100,
+            createdAt: representative.createdAt.toISOString(),
+            jobTitle: representative.adaptation?.jobTitle ?? null,
+            companyName: representative.adaptation?.companyName ?? null,
+            scoreBefore: scores.scoreBefore,
+            scoreAfter: scores.scoreAfter,
+            scoreDelta: scores.scoreDelta,
+            currentUserCredits: representative.user?.creditsRemaining ?? 0,
+            hasAvailableCredits:
+              (representative.user?.creditsRemaining ?? 0) > 0,
+            hasApprovedPurchaseAfterPending:
+              classification.hasApprovedPurchaseAfterPending,
+            isAdaptationUnlocked:
+              representative.adaptation?.isUnlocked ?? false,
+            eligibilityStatus: classification.status,
+            eligibilityReason: classification.reason,
+            relatedPendingPurchaseCount,
+            lastRecoveryEmailSentAt,
+            recoveryEmailCount,
+            ignored: Boolean(latestIgnored),
+            ignoredAt: latestIgnored?.ignoredAt.toISOString() ?? null,
+            ignoredByAdminUserId: latestIgnored?.ignoredByAdminId ?? null,
+          } satisfies PaymentRecoveryEligibilityItem;
+        },
+      )
       .filter((item) => PENDING_STATUSES.has(item.purchaseStatus));
 
     const filtered = items.filter((item) => {
       const eligibilityStatus = filters.eligibilityStatus ?? "eligible";
-      if (eligibilityStatus !== "all" && item.eligibilityStatus !== eligibilityStatus) {
+      if (
+        eligibilityStatus !== "all" &&
+        item.eligibilityStatus !== eligibilityStatus
+      ) {
         return false;
       }
       const originAction = filters.originAction ?? "all";
@@ -336,7 +353,7 @@ export class PaymentRecoveryEligibilityService {
       const alreadySent = filters.alreadySent ?? "all";
       if (alreadySent !== "all") {
         const expected = alreadySent === "true";
-        if ((item.recoveryEmailCount > 0) !== expected) {
+        if (item.recoveryEmailCount > 0 !== expected) {
           return false;
         }
       }
@@ -612,7 +629,8 @@ export class PaymentRecoveryEligibilityService {
     const completed =
       indexes.completedUnlockByUserAndAdaptation.get(lookupKey) ?? [];
     const hasApprovedSameAdaptation = completed.some(
-      (candidate) => this.referenceDate(candidate) > this.referenceDate(purchase),
+      (candidate) =>
+        this.referenceDate(candidate) > this.referenceDate(purchase),
     );
 
     if (hasApprovedSameAdaptation) {
@@ -709,7 +727,10 @@ export class PaymentRecoveryEligibilityService {
 
   private buildIndexes(purchases: PurchaseRecord[]): EligibilityIndexes {
     const completedByUser = new Map<string, PurchaseRecord[]>();
-    const completedUnlockByUserAndAdaptation = new Map<string, PurchaseRecord[]>();
+    const completedUnlockByUserAndAdaptation = new Map<
+      string,
+      PurchaseRecord[]
+    >();
 
     for (const purchase of purchases) {
       if (purchase.status !== "completed") {
@@ -720,7 +741,10 @@ export class PaymentRecoveryEligibilityService {
       byUser.push(purchase);
       completedByUser.set(purchase.userId, byUser);
 
-      if (purchase.originAction === "unlock_cv" && purchase.originAdaptationId) {
+      if (
+        purchase.originAction === "unlock_cv" &&
+        purchase.originAdaptationId
+      ) {
         const key = `${purchase.userId}:${purchase.originAdaptationId}`;
         const byCtx = completedUnlockByUserAndAdaptation.get(key) ?? [];
         byCtx.push(purchase);

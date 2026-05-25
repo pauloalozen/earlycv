@@ -208,14 +208,14 @@ test("removes prohibited personal/content fields from nested metadata", async ()
       .metadataJson ?? {};
   assert.equal(metadataJson.cv, undefined);
   assert.equal(
-    ((metadataJson.nested as Record<string, unknown>) ?? {}).email,
+    (metadataJson.nested as Record<string, unknown>)?.email,
     undefined,
   );
   assert.equal(
-    ((metadataJson.nested as Record<string, unknown>) ?? {}).previewText,
+    (metadataJson.nested as Record<string, unknown>)?.previewText,
     undefined,
   );
-  assert.equal(((metadataJson.nested as Record<string, unknown>) ?? {}).safe, 1);
+  assert.equal((metadataJson.nested as Record<string, unknown>)?.safe, 1);
 });
 
 test("throws controlled error when event is missing version registry entry", async () => {

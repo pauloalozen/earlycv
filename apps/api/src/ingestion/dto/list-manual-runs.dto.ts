@@ -1,4 +1,7 @@
-import { IngestionBatchRunStatus, IngestionBatchScopeType } from "@prisma/client";
+import {
+  IngestionBatchRunStatus,
+  IngestionBatchScopeType,
+} from "@prisma/client";
 import { IsEnum, IsOptional } from "class-validator";
 
 export class ListManualRunsDto {

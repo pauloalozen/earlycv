@@ -10,9 +10,8 @@ import {
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
-
-import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { summarizeWebhookPayload } from "../common/analytics-sanitization";
+import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { CreatePlanCheckoutDto } from "./dto/create-plan-checkout.dto";
 import { PlansService } from "./plans.service";

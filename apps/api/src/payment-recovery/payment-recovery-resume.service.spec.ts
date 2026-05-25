@@ -1,3 +1,4 @@
+/* biome-ignore-all lint/suspicious/noExplicitAny: unit tests use dynamic service mocks */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -71,14 +72,18 @@ test("bridge service rejects ownership mismatch", async () => {
         }),
       },
     } as any,
-    { resumeCheckout: async () => ({ checkoutUrl: "https://checkout.example/path" }) } as any,
+    {
+      resumeCheckout: async () => ({
+        checkoutUrl: "https://checkout.example/path",
+      }),
+    } as any,
     { emit: () => undefined } as any,
   );
 
-  await assert.rejects(
-    async () => {
-      await service.resumeCheckoutForToken({ token: "a".repeat(64), currentUserId: "user-1" });
-    },
-    NotFoundException,
-  );
+  await assert.rejects(async () => {
+    await service.resumeCheckoutForToken({
+      token: "a".repeat(64),
+      currentUserId: "user-1",
+    });
+  }, NotFoundException);
 });

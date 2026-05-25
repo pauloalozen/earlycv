@@ -1,3 +1,4 @@
+/* biome-ignore-all lint/suspicious/noExplicitAny: http request/response test doubles are partial */
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
@@ -9,13 +10,19 @@ import { PaymentRecoveryPublicController } from "./payment-recovery-public.contr
 
 test("public controller is thin and delegates click orchestration", async () => {
   let called = false;
-  const controller = new PaymentRecoveryPublicController({
-    handleTokenClick: async () => {
-      called = true;
-      return { redirectUrl: "/x", redirectTarget: "generic" };
-    },
-  } as any,
-  { resumeCheckoutForToken: async () => ({ checkoutUrl: "https://checkout.example" }) } as any);
+  const controller = new PaymentRecoveryPublicController(
+    {
+      handleTokenClick: async () => {
+        called = true;
+        return { redirectUrl: "/x", redirectTarget: "generic" };
+      },
+    } as any,
+    {
+      resumeCheckoutForToken: async () => ({
+        checkoutUrl: "https://checkout.example",
+      }),
+    } as any,
+  );
 
   const response = {
     redirect: (url: string) => {
@@ -34,26 +41,37 @@ test("public controller is thin and delegates click orchestration", async () => 
 });
 
 test("public click endpoint enforces optional auth and rate limit guards", () => {
-  const guards = Reflect.getMetadata(
-    GUARDS_METADATA,
-    PaymentRecoveryPublicController.prototype.recover,
-  ) ?? [];
+  const guards =
+    Reflect.getMetadata(
+      GUARDS_METADATA,
+      PaymentRecoveryPublicController.prototype.recover,
+    ) ?? [];
   assert.equal(Array.isArray(guards), true);
   assert.equal(guards.length, 2);
 });
 
 test("bridge endpoint requires jwt auth guard", () => {
-  const guards = Reflect.getMetadata(
-    GUARDS_METADATA,
-    PaymentRecoveryPublicController.prototype.resumeBridge,
-  ) ?? [];
+  const guards =
+    Reflect.getMetadata(
+      GUARDS_METADATA,
+      PaymentRecoveryPublicController.prototype.resumeBridge,
+    ) ?? [];
   assert.equal(guards.includes(JwtAuthGuard), true);
 });
 
 test("bridge endpoint delegates to resume service and redirects", async () => {
   const controller = new PaymentRecoveryPublicController(
-    { handleTokenClick: async () => ({ redirectUrl: "/x", redirectTarget: "generic" }) } as any,
-    { resumeCheckoutForToken: async () => ({ checkoutUrl: "https://checkout.example/path" }) } as any,
+    {
+      handleTokenClick: async () => ({
+        redirectUrl: "/x",
+        redirectTarget: "generic",
+      }),
+    } as any,
+    {
+      resumeCheckoutForToken: async () => ({
+        checkoutUrl: "https://checkout.example/path",
+      }),
+    } as any,
   );
   let redirected = "";
   await controller.resumeBridge(

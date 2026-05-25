@@ -56,10 +56,14 @@ export class AdminIngestionImportService {
       .filter((line) => line.length > 0);
 
     if (lines.length < 2) {
-      throw new BadRequestException("csv must include header and at least one row");
+      throw new BadRequestException(
+        "csv must include header and at least one row",
+      );
     }
 
-    const header = lines[0]?.split(",").map((value) => value.trim().toLowerCase());
+    const header = lines[0]
+      ?.split(",")
+      .map((value) => value.trim().toLowerCase());
 
     if (
       !header ||
@@ -160,16 +164,17 @@ export class AdminIngestionImportService {
           companyId = company.id;
         }
 
-        const existingSource = !input.dryRun && companyId
-          ? await this.database.jobSource.findUnique({
-              where: {
-                companyId_sourceUrl: {
-                  companyId,
-                  sourceUrl: canonicalSourceUrl,
+        const existingSource =
+          !input.dryRun && companyId
+            ? await this.database.jobSource.findUnique({
+                where: {
+                  companyId_sourceUrl: {
+                    companyId,
+                    sourceUrl: canonicalSourceUrl,
+                  },
                 },
-              },
-            })
-          : null;
+              })
+            : null;
 
         const sourceAction = existingSource ? "updated" : "created";
 
@@ -213,8 +218,12 @@ export class AdminIngestionImportService {
           status: "success",
         });
         report.summary.successCount += 1;
-        report.summary[companyAction === "created" ? "companiesCreated" : "companiesUpdated"] += 1;
-        report.summary[sourceAction === "created" ? "sourcesCreated" : "sourcesUpdated"] += 1;
+        report.summary[
+          companyAction === "created" ? "companiesCreated" : "companiesUpdated"
+        ] += 1;
+        report.summary[
+          sourceAction === "created" ? "sourcesCreated" : "sourcesUpdated"
+        ] += 1;
       } catch (error) {
         report.lines.push({
           companyName: nome,

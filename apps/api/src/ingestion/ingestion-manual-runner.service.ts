@@ -1,10 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import { randomUUID } from "node:crypto";
 
 import { DatabaseService } from "../database/database.service";
-import { IngestionLockRepository } from "./ingestion-lock.repository";
 import { IngestionService } from "./ingestion.service";
+import { IngestionLockRepository } from "./ingestion-lock.repository";
 
 const MANUAL_RUNNER_LOCK_ID = "manual-ingestion-batch-runner";
 const MANUAL_RUNNER_LOCK_TTL_MS = 60_000;
@@ -36,7 +36,11 @@ function clampRunAggregate(
     succeeded -= succeededDecrement;
   }
 
-  return { failedCount: failed, skippedCount: skipped, succeededCount: succeeded };
+  return {
+    failedCount: failed,
+    skippedCount: skipped,
+    succeededCount: succeeded,
+  };
 }
 
 function isMissingManualBatchTableError(error: unknown) {
@@ -62,7 +66,8 @@ export class IngestionManualRunnerService {
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(IngestionService) private readonly ingestionService: IngestionService,
+    @Inject(IngestionService)
+    private readonly ingestionService: IngestionService,
     @Inject(IngestionLockRepository)
     private readonly lockRepository: IngestionLockRepository,
   ) {}
@@ -138,7 +143,10 @@ export class IngestionManualRunnerService {
     if (!runBeforeLoop) {
       return;
     }
-    if (runBeforeLoop.cancelRequestedAt || runBeforeLoop.status === "cancelling") {
+    if (
+      runBeforeLoop.cancelRequestedAt ||
+      runBeforeLoop.status === "cancelling"
+    ) {
       await this.finalizeCancelledRun(batchRunId, runBeforeLoop.id);
       return;
     }
@@ -157,10 +165,11 @@ export class IngestionManualRunnerService {
         return;
       }
 
-      const markRunningResult = await this.database.ingestionBatchItem.updateMany({
-        where: { id: item.id, status: { in: ["queued"] } },
-        data: { startedAt: new Date(), status: "running" },
-      });
+      const markRunningResult =
+        await this.database.ingestionBatchItem.updateMany({
+          where: { id: item.id, status: { in: ["queued"] } },
+          data: { startedAt: new Date(), status: "running" },
+        });
       if (markRunningResult.count === 0) {
         continue;
       }
@@ -174,10 +183,11 @@ export class IngestionManualRunnerService {
       );
 
       if (!sourceLockAcquired) {
-        const markSkippedResult = await this.database.ingestionBatchItem.updateMany({
-          where: { id: item.id, status: { in: ["running"] } },
-          data: { finishedAt: new Date(), status: "skipped" },
-        });
+        const markSkippedResult =
+          await this.database.ingestionBatchItem.updateMany({
+            where: { id: item.id, status: { in: ["running"] } },
+            data: { finishedAt: new Date(), status: "skipped" },
+          });
         if (markSkippedResult.count > 0) {
           await this.database.ingestionBatchRun.update({
             where: { id: batchRunId },
@@ -189,14 +199,15 @@ export class IngestionManualRunnerService {
 
       try {
         await this.ingestionService.runJobSource(item.jobSourceId);
-        const markCompletedResult = await this.database.ingestionBatchItem.updateMany({
-          where: { id: item.id, status: { in: ["queued", "running"] } },
-          data: {
-            errorMessage: null,
-            finishedAt: new Date(),
-            status: "completed",
-          },
-        });
+        const markCompletedResult =
+          await this.database.ingestionBatchItem.updateMany({
+            where: { id: item.id, status: { in: ["queued", "running"] } },
+            data: {
+              errorMessage: null,
+              finishedAt: new Date(),
+              status: "completed",
+            },
+          });
         if (markCompletedResult.count > 0) {
           await this.database.ingestionBatchRun.update({
             where: { id: batchRunId },
@@ -204,14 +215,16 @@ export class IngestionManualRunnerService {
           });
         }
       } catch (error) {
-        const markFailedResult = await this.database.ingestionBatchItem.updateMany({
-          where: { id: item.id, status: { in: ["queued", "running"] } },
-          data: {
-            errorMessage: error instanceof Error ? error.message : "ingestion failed",
-            finishedAt: new Date(),
-            status: "failed",
-          },
-        });
+        const markFailedResult =
+          await this.database.ingestionBatchItem.updateMany({
+            where: { id: item.id, status: { in: ["queued", "running"] } },
+            data: {
+              errorMessage:
+                error instanceof Error ? error.message : "ingestion failed",
+              finishedAt: new Date(),
+              status: "failed",
+            },
+          });
         if (markFailedResult.count > 0) {
           await this.database.ingestionBatchRun.update({
             where: { id: batchRunId },
@@ -246,7 +259,11 @@ export class IngestionManualRunnerService {
     await this.finalizeRun(batchRunId, runId, true);
   }
 
-  private async finalizeRun(batchRunId: string, runId: string, cancelled: boolean) {
+  private async finalizeRun(
+    batchRunId: string,
+    runId: string,
+    cancelled: boolean,
+  ) {
     const run = await this.database.ingestionBatchRun.findUnique({
       where: { id: runId },
     });
@@ -254,8 +271,15 @@ export class IngestionManualRunnerService {
       return;
     }
 
-    const counters = await this.recomputeRunCounters(batchRunId, run.totalSources);
-    const status = cancelled ? "cancelled" : counters.failedCount > 0 ? "failed" : "completed";
+    const counters = await this.recomputeRunCounters(
+      batchRunId,
+      run.totalSources,
+    );
+    const status = cancelled
+      ? "cancelled"
+      : counters.failedCount > 0
+        ? "failed"
+        : "completed";
     await this.database.ingestionBatchRun.update({
       where: { id: runId },
       data: {
@@ -284,7 +308,12 @@ export class IngestionManualRunnerService {
       }
     }
 
-    return clampRunAggregate(totalSources, succeededCount, failedCount, skippedCount);
+    return clampRunAggregate(
+      totalSources,
+      succeededCount,
+      failedCount,
+      skippedCount,
+    );
   }
 
   private async cancelRemainingItems(batchRunId: string) {

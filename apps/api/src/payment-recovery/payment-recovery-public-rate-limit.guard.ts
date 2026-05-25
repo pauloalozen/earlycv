@@ -1,5 +1,5 @@
 import {
-  CanActivate,
+  type CanActivate,
   HttpException,
   HttpStatus,
   Inject,
@@ -19,7 +19,9 @@ export class PaymentRecoveryPublicRateLimitGuard implements CanActivate {
     private readonly config: PaymentRecoveryConfigService,
   ) {}
 
-  canActivate(context: { switchToHttp: () => { getRequest: () => { ip?: string } } }): boolean {
+  canActivate(context: {
+    switchToHttp: () => { getRequest: () => { ip?: string } };
+  }): boolean {
     const request = context.switchToHttp().getRequest();
     const ip = (request.ip ?? "unknown").trim() || "unknown";
     const limit = this.config.publicRateLimitPerMinute();
@@ -34,7 +36,10 @@ export class PaymentRecoveryPublicRateLimitGuard implements CanActivate {
     }
 
     if (bucket.count >= limit) {
-      throw new HttpException("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        "Too many requests",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     bucket.count += 1;

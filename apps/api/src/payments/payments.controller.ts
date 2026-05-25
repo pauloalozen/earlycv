@@ -56,7 +56,11 @@ export class PaymentsController {
     @Param("purchaseId") purchaseId: string,
     @Body() payload: unknown,
   ) {
-    return this.paymentsService.submitBrickPayment(user.id, purchaseId, payload);
+    return this.paymentsService.submitBrickPayment(
+      user.id,
+      purchaseId,
+      payload,
+    );
   }
 
   @Get("admin/list")
