@@ -1868,6 +1868,7 @@ export class CvAdaptationService {
       jobTitle: adaptation.jobTitle,
       companyName: adaptation.companyName,
       adaptationNotes,
+      jobApplicationId: adaptation.jobApplicationId,
       jobAnalysisCount: await this.countByJob(
         adaptation.jobTitle,
         adaptation.companyName,

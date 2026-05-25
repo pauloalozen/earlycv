@@ -33,6 +33,7 @@ export type CvAdaptationDto = {
     | "original_file"
     | "markdown_snapshot"
     | "unavailable_legacy";
+  jobApplicationId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -127,6 +128,7 @@ export async function getCvAdaptationContent(id: string): Promise<{
   adaptedContentJson: Record<string, unknown>;
   paymentStatus?: PaymentStatus;
   isUnlocked?: boolean;
+  jobApplicationId?: string | null;
 }> {
   const response = await apiRequest("GET", `/cv-adaptation/${id}/content`);
   if (!response.ok) {
@@ -136,6 +138,7 @@ export async function getCvAdaptationContent(id: string): Promise<{
     adaptedContentJson: Record<string, unknown>;
     paymentStatus?: PaymentStatus;
     isUnlocked?: boolean;
+    jobApplicationId?: string | null;
   }>;
 }
 

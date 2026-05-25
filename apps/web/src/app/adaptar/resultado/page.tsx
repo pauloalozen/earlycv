@@ -522,6 +522,7 @@ export default function ResultadoPage() {
 
   const [jobAnalysisCount, setJobAnalysisCount] = useState<number | null>(null);
   const [finalCvOutput, setFinalCvOutput] = useState<FinalCvOutput | null>(null);
+  const [jobApplicationId, setJobApplicationId] = useState<string | null>(null);
 
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [locked, setLocked] = useState(false);
@@ -630,6 +631,7 @@ export default function ResultadoPage() {
             isUnlocked?: boolean;
             jobAnalysisCount?: number;
             adaptationNotes?: string | null;
+            jobApplicationId?: string | null;
           }>;
         })
         .then((payload) => {
@@ -640,6 +642,7 @@ export default function ResultadoPage() {
             payload.isUnlocked ? "completed" : payload.paymentStatus,
           );
           setJobAnalysisCount(payload.jobAnalysisCount ?? null);
+          setJobApplicationId(payload.jobApplicationId ?? null);
         })
         .catch((error: unknown) => {
           if (!active || controller.signal.aborted) return;
@@ -4110,6 +4113,80 @@ export default function ResultadoPage() {
               </div>
             </div>
           </div>
+          {/* Acompanhe essa oportunidade */}
+          {isAuthenticated === true && reviewAdaptationId && jobApplicationId && (
+            <div
+              style={{
+                marginTop: 32,
+                background: "#fafaf6",
+                border: "1px solid rgba(10,10,10,0.08)",
+                borderRadius: 14,
+                padding: "20px 24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 16,
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    letterSpacing: 1.2,
+                    color: "#8a8a85",
+                    fontWeight: 500,
+                    margin: "0 0 4px",
+                  }}
+                >
+                  ACOMPANHE ESSA OPORTUNIDADE
+                </p>
+                <p
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 500,
+                    color: "#0a0a0a",
+                    margin: "0 0 4px",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Essa vaga foi salva em Minhas Candidaturas.
+                </p>
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: "#6a6560",
+                    margin: 0,
+                    fontFamily: GEIST,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Acompanhe o status e volte ao CV quando precisar.
+                </p>
+              </div>
+              <a
+                href={`/dashboard/candidaturas/${jobApplicationId}`}
+                data-testid="resultado-ver-candidatura"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  background: "#0a0a0a",
+                  color: "#fafaf6",
+                  borderRadius: 10,
+                  padding: "10px 18px",
+                  fontSize: 13.5,
+                  fontWeight: 500,
+                  textDecoration: "none",
+                  flexShrink: 0,
+                  fontFamily: GEIST,
+                }}
+              >
+                Ver candidatura →
+              </a>
+            </div>
+          )}
         </div>
       </main>
 

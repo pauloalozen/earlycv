@@ -795,6 +795,7 @@ export default async function DashboardPage({
                                 resumeTitleById.get(item.masterResumeId) ??
                                 null,
                             }}
+                            jobApplicationId={item.jobApplicationId}
                             hideBaseCvAction
                             removeTopMargin
                           />

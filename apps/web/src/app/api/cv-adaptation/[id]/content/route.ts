@@ -46,6 +46,7 @@ export async function GET(
     jobTitle: string | null;
     companyName: string | null;
     adaptationNotes: string | null;
+    jobApplicationId: string | null;
     jobAnalysisCount: number | null;
   };
   return NextResponse.json(json);

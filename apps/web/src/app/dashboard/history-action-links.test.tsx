@@ -103,6 +103,27 @@ describe("HistoryActionLinks redeem persistence", () => {
     expect(screen.getAllByText("Baixar DOCX").length).toBeGreaterThan(0);
   });
 
+  it("shows 'Ver candidatura' link when jobApplicationId is provided", () => {
+    render(
+      <HistoryActionLinks {...baseProps} jobApplicationId="app-123" />,
+    );
+    const link = screen.getByTestId("ver-candidatura-link");
+    expect(link).toBeTruthy();
+    expect(link.getAttribute("href")).toBe(
+      "/dashboard/candidaturas/app-123",
+    );
+  });
+
+  it("does not show 'Ver candidatura' link when jobApplicationId is null", () => {
+    render(<HistoryActionLinks {...baseProps} jobApplicationId={null} />);
+    expect(screen.queryByTestId("ver-candidatura-link")).toBeNull();
+  });
+
+  it("does not show 'Ver candidatura' link when jobApplicationId is not passed", () => {
+    render(<HistoryActionLinks {...baseProps} />);
+    expect(screen.queryByTestId("ver-candidatura-link")).toBeNull();
+  });
+
   it("shows timeout error and allows close when redeem request hangs", async () => {
     vi.stubGlobal(
       "fetch",
