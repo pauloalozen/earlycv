@@ -482,4 +482,74 @@ describe("DetailClient", () => {
       ).toBeInTheDocument();
     });
   });
+
+  it("19. hides strategySummary section when it is an empty string", () => {
+    const prep = makePrep({
+      generatedContentJson: {
+        ...makePrep().generatedContentJson,
+        strategySummary: "",
+      },
+    });
+    const app = makeDetail({ status: "INTERVIEW", interviewPrep: prep });
+    render(<DetailClient application={app} header={null} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Ver preparação/ }));
+
+    expect(
+      screen.queryByText("Estratégia geral"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("20. hides optional array sections when they are empty", () => {
+    const prep = makePrep({
+      generatedContentJson: {
+        strategySummary: "Resumo presente.",
+        strengthsToHighlight: [],
+        likelyRisksOrGaps: [],
+        questionsTheyMayAsk: [],
+        questionsCandidateShouldAsk: [],
+        recommendedPosture: [],
+        finalChecklist: [],
+      },
+    });
+    const app = makeDetail({ status: "INTERVIEW", interviewPrep: prep });
+    render(<DetailClient application={app} header={null} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Ver preparação/ }));
+
+    expect(screen.queryByText("Pontos fortes para destacar")).not.toBeInTheDocument();
+    expect(screen.queryByText("Riscos ou gaps prováveis")).not.toBeInTheDocument();
+    expect(screen.queryByText("Perguntas que podem fazer")).not.toBeInTheDocument();
+    expect(screen.queryByText("Perguntas para fazer à empresa")).not.toBeInTheDocument();
+    expect(screen.queryByText("Postura recomendada")).not.toBeInTheDocument();
+    expect(screen.queryByText("Checklist final")).not.toBeInTheDocument();
+
+    expect(screen.getByText("Resumo presente.")).toBeInTheDocument();
+  });
+
+  it("21. retry after error — second click calls generateOrGetInterviewPrep again", async () => {
+    vi.mocked(generateOrGetInterviewPrep)
+      .mockRejectedValueOnce(new Error("Timeout"))
+      .mockResolvedValueOnce(makePrep());
+
+    const app = makeDetail({ status: "ASSESSMENT", interviewPrep: null });
+    render(<DetailClient application={app} header={null} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Preparar entrevista/ }));
+    await waitFor(() => screen.getByRole("button", { name: "Gerar preparação" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Gerar preparação" }));
+    await waitFor(() =>
+      expect(screen.getByText("Timeout")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Gerar preparação" }));
+    await waitFor(() =>
+      expect(
+        screen.getByText("Prepare-se bem para esta entrevista."),
+      ).toBeInTheDocument(),
+    );
+
+    expect(generateOrGetInterviewPrep).toHaveBeenCalledTimes(2);
+  });
 });

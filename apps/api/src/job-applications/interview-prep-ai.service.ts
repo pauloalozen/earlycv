@@ -30,6 +30,72 @@ export type InterviewPrepContext = {
   } | null;
 };
 
+export class InterviewPrepValidationError extends Error {
+  constructor(reason: string) {
+    super(`InterviewPrep validation failed: ${reason}`);
+    this.name = "InterviewPrepValidationError";
+  }
+}
+
+export function validateAndNormalizeInterviewPrep(raw: unknown): InterviewPrepContent {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new InterviewPrepValidationError("root value is not an object");
+  }
+
+  const obj = raw as Record<string, unknown>;
+
+  const safeStringArray = (val: unknown): string[] => {
+    if (!Array.isArray(val)) return [];
+    return val
+      .filter((item) => typeof item === "string" && item.trim().length > 0)
+      .map((item) => (item as string).trim());
+  };
+
+  const safeQuestions = (val: unknown): InterviewPrepContent["questionsTheyMayAsk"] => {
+    if (!Array.isArray(val)) return [];
+    const result: InterviewPrepContent["questionsTheyMayAsk"] = [];
+    for (const item of val) {
+      if (typeof item !== "object" || item === null) continue;
+      const q = item as Record<string, unknown>;
+      const question = typeof q.question === "string" ? q.question.trim() : "";
+      const whyItMatters = typeof q.whyItMatters === "string" ? q.whyItMatters.trim() : "";
+      const answerDirection = typeof q.answerDirection === "string" ? q.answerDirection.trim() : "";
+      if (question.length > 0) {
+        result.push({ question, whyItMatters, answerDirection });
+      }
+    }
+    return result;
+  };
+
+  const strategySummary = typeof obj.strategySummary === "string" ? obj.strategySummary.trim() : "";
+  const strengthsToHighlight = safeStringArray(obj.strengthsToHighlight);
+  const likelyRisksOrGaps = safeStringArray(obj.likelyRisksOrGaps);
+  const questionsTheyMayAsk = safeQuestions(obj.questionsTheyMayAsk);
+  const questionsCandidateShouldAsk = safeStringArray(obj.questionsCandidateShouldAsk);
+  const recommendedPosture = safeStringArray(obj.recommendedPosture);
+  const finalChecklist = safeStringArray(obj.finalChecklist);
+
+  const hasContent =
+    strategySummary.length > 0 ||
+    strengthsToHighlight.length > 0 ||
+    questionsTheyMayAsk.length > 0 ||
+    finalChecklist.length > 0;
+
+  if (!hasContent) {
+    throw new InterviewPrepValidationError("content is empty — no usable sections generated");
+  }
+
+  return {
+    strategySummary,
+    strengthsToHighlight,
+    likelyRisksOrGaps,
+    questionsTheyMayAsk,
+    questionsCandidateShouldAsk,
+    recommendedPosture,
+    finalChecklist,
+  };
+}
+
 const SYSTEM_PROMPT = `Você é um coach de preparação para entrevistas de emprego. Gere um briefing de entrevista prático e honesto para o candidato.
 
 REGRAS OBRIGATÓRIAS:
@@ -69,7 +135,8 @@ export class InterviewPrepAiService {
 
   async generate(context: InterviewPrepContext): Promise<InterviewPrepContent> {
     if (process.env.SKIP_AI === "true") {
-      return this.buildStub(context);
+      this.logger.warn("[interview-prep] SKIP_AI=true — returning stub content");
+      return validateAndNormalizeInterviewPrep(this.buildStub(context));
     }
 
     const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
@@ -88,15 +155,15 @@ export class InterviewPrepAiService {
 
     const raw = response.choices[0]?.message?.content ?? "{}";
 
-    let parsed: InterviewPrepContent;
+    let parsedRaw: unknown;
     try {
-      parsed = JSON.parse(raw) as InterviewPrepContent;
+      parsedRaw = JSON.parse(raw);
     } catch {
       this.logger.error("[interview-prep] Failed to parse AI response as JSON");
       throw new Error("AI returned invalid JSON for interview prep");
     }
 
-    return parsed;
+    return validateAndNormalizeInterviewPrep(parsedRaw);
   }
 
   private buildUserPrompt(ctx: InterviewPrepContext): string {

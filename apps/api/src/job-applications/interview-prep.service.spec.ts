@@ -275,6 +275,28 @@ test("propagates AI error without leaving partial state", async () => {
   assert.equal(db._createdEvents.length, 0, "no event must be created on failure");
 });
 
+test("propagates validation error without leaving partial state", async () => {
+  const db = makeDb(makeApp());
+  const emptyAi = {
+    generate: async () => {
+      throw new Error("InterviewPrep validation failed: content is empty");
+    },
+  };
+
+  const service = new InterviewPrepServiceCtor(db, emptyAi);
+
+  await assert.rejects(
+    () => service.generateOrGet("user-1", "app-1"),
+    (err: Error) => {
+      assert.match(err.message, /validation failed/i);
+      return true;
+    },
+  );
+
+  assert.equal(db._createdPreps.length, 0, "no prep must be persisted on validation failure");
+  assert.equal(db._createdEvents.length, 0, "no event must be created on validation failure");
+});
+
 // ─── isolation from existing analysis methods ─────────────────────────────────
 
 test("existing CvAdaptationAiService methods are not called by InterviewPrepService", async () => {

@@ -120,11 +120,13 @@ function PrepContent({ prep }: { prep: InterviewPrepDto }) {
   const c = prep.generatedContentJson;
   return (
     <div>
-      <SectionBlock title="Estratégia geral">
-        <p style={{ margin: 0, fontSize: 13.5, color: "#0a0a0a", lineHeight: 1.65 }}>
-          {c.strategySummary}
-        </p>
-      </SectionBlock>
+      {c.strategySummary && c.strategySummary.trim().length > 0 && (
+        <SectionBlock title="Estratégia geral">
+          <p style={{ margin: 0, fontSize: 13.5, color: "#0a0a0a", lineHeight: 1.65 }}>
+            {c.strategySummary}
+          </p>
+        </SectionBlock>
+      )}
 
       {c.strengthsToHighlight.length > 0 && (
         <SectionBlock title="Pontos fortes para destacar">
