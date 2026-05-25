@@ -205,6 +205,38 @@ enum AnalysisConfigValueType {
   json
 }
 
+enum JobApplicationStatus {
+  SAVED
+  ANALYZED
+  CV_READY
+  APPLIED
+  IN_PROCESS
+  INTERVIEW
+  ASSESSMENT
+  OFFER
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+enum JobApplicationOrigin {
+  analysis_auto
+  optimized_cv_auto
+  manual
+  imported_url
+  job_portal
+}
+
+enum JobApplicationEventType {
+  APPLICATION_CREATED
+  ANALYSIS_COMPLETED
+  CV_READY
+  STATUS_CHANGED
+  NOTE_ADDED
+  MARKED_AS_SENT
+  INTERVIEW_PREP_GENERATED
+}
+
 enum AnalysisConfigRiskLevel {
   low
   medium
@@ -248,6 +280,7 @@ model User {
   analysisCvSnapshots       AnalysisCvSnapshot[]           @relation("AnalysisCvSnapshotOwner")
   claimedAnalysisCvSnapshots AnalysisCvSnapshot[]          @relation("AnalysisCvSnapshotClaimedBy")
   requestedIngestionBatchRuns IngestionBatchRun[]          @relation("IngestionBatchRunRequestedByUser")
+  jobApplications           JobApplication[]
 }
 
 model UserDailyAnalysisUsage {
@@ -558,18 +591,22 @@ model CvAdaptation {
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
+  jobApplicationId     String?
+
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   masterResume  Resume          @relation("CvAdaptationMaster", fields: [masterResumeId], references: [id], onDelete: Cascade)
   template      ResumeTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   adaptedResume Resume?         @relation("CvAdaptationResult", fields: [adaptedResumeId], references: [id], onDelete: SetNull)
   analysisCvSnapshot AnalysisCvSnapshot? @relation(fields: [analysisCvSnapshotId], references: [id], onDelete: SetNull)
   cvUnlock     CvUnlock?
+  jobApplication JobApplication? @relation(fields: [jobApplicationId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([masterResumeId])
   @@index([paymentReference])
   @@index([mpPaymentId])
   @@index([analysisCvSnapshotId])
+  @@index([jobApplicationId])
 }
 
 model CvUnlock {
@@ -1025,4 +1062,60 @@ model Job {
   @@index([companyId])
   @@index([jobSourceId])
   @@index([firstSeenAt])
+}
+
+model JobApplication {
+  id                     String                   @id @default(cuid())
+  userId                 String
+  jobTitle               String
+  companyName            String
+  normalizedJobTitle     String
+  normalizedCompanyName  String
+  location               String?
+  jobUrl                 String?
+  jobDescriptionText     String?
+  status                 JobApplicationStatus     @default(ANALYZED)
+  origin                 JobApplicationOrigin     @default(analysis_auto)
+  currentCvAdaptationId  String?
+  scoreBefore            Int?
+  scoreAfter             Int?
+  notes                  String?
+  appliedAt              DateTime?
+  nextActionAt           DateTime?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cvAdaptations          CvAdaptation[]
+  events                 JobApplicationEvent[]
+  interviewPrep          JobApplicationInterviewPrep?
+
+  @@index([userId, createdAt])
+  @@index([userId, status])
+  @@index([userId, normalizedCompanyName, normalizedJobTitle])
+}
+
+model JobApplicationEvent {
+  id                   String                      @id @default(cuid())
+  jobApplicationId     String
+  eventType            JobApplicationEventType
+  previousStatus       JobApplicationStatus?
+  newStatus            JobApplicationStatus?
+  metadata             Json?
+  createdAt            DateTime                    @default(now())
+
+  jobApplication       JobApplication              @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([jobApplicationId, createdAt])
+}
+
+model JobApplicationInterviewPrep {
+  id                   String         @id @default(cuid())
+  jobApplicationId     String         @unique
+  generatedContentJson Json
+  generatedAt          DateTime       @default(now())
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  jobApplication       JobApplication @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
 }
