@@ -3,6 +3,7 @@ import OpenAI from "openai";
 
 import { AnalysisProtectionModule } from "../analysis-protection/analysis-protection.module";
 import { DatabaseModule } from "../database/database.module";
+import { JobApplicationsModule } from "../job-applications/job-applications.module";
 import { ResumeTemplatesModule } from "../resume-templates/resume-templates.module";
 import { CvAdaptationController } from "./cv-adaptation.controller";
 import { CvAdaptationService } from "./cv-adaptation.service";
@@ -15,7 +16,7 @@ import { CvAdaptationPublicController } from "./cv-adaptation-public.controller"
 import { CvAdaptationSnapshotCleanupScheduler } from "./cv-adaptation-snapshot-cleanup.scheduler";
 
 @Module({
-  imports: [DatabaseModule, ResumeTemplatesModule, AnalysisProtectionModule],
+  imports: [DatabaseModule, ResumeTemplatesModule, AnalysisProtectionModule, JobApplicationsModule],
   controllers: [CvAdaptationController, CvAdaptationPublicController],
   exports: [CvAdaptationService],
   providers: [

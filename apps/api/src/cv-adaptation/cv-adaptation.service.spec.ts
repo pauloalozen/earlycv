@@ -1862,3 +1862,418 @@ test("analyzeGuest emits safe payload_invalid telemetry for rejected upload enve
   assert.equal("cvText" in (emitted[0]?.metadata ?? {}), false);
   assert.equal("jobDescriptionText" in (emitted[0]?.metadata ?? {}), false);
 });
+
+// ─── ETAPA 2: JobApplication hook integration ─────────────────────────────────
+
+const makeAdaptationRecord = (id = "adapt-1") => ({
+  id,
+  userId: "user-1",
+  masterResumeId: "master-1",
+  adaptedResumeId: null,
+  templateId: null,
+  jobApplicationId: null,
+  jobTitle: "Engenheiro de Software",
+  companyName: "Acme Corp",
+  jobDescriptionText: "Descricao com requisitos tecnicos e responsabilidades claras.",
+  adaptedContentJson: { sections: [] },
+  aiAuditJson: { summary: "ok", sections: [] },
+  previewText: "preview",
+  paymentStatus: "none",
+  status: "pending",
+  isUnlocked: false,
+  unlockedAt: null,
+  paidAt: null,
+  analysisCvSnapshotId: "snap-1",
+  mpPaymentId: null,
+  mpMerchantOrderId: null,
+  mpPreferenceId: null,
+  paymentReference: null,
+  paymentAmountInCents: null,
+  paymentCurrency: null,
+  failureReason: null,
+  createdAt: new Date("2026-05-01"),
+  updatedAt: new Date("2026-05-01"),
+  template: null,
+  analysisCvSnapshot: null,
+});
+
+const makeOwnedSnapshot = () => ({
+  id: "snap-1",
+  userId: "user-1",
+  guestSessionHash: null,
+  expiresAt: null,
+  claimedAt: null,
+  claimedByUserId: null,
+});
+
+const makeHookSpy = () => {
+  const calls: unknown[] = [];
+  return {
+    service: {
+      upsertFromCvAdaptation: async (input: unknown) => {
+        calls.push(input);
+      },
+    },
+    calls,
+  };
+};
+
+const noopStorage = {
+  deleteObject: async () => undefined as void,
+  getObject: async () => Buffer.alloc(0),
+  putObject: async () => "",
+};
+
+const noopTelemetry = { emit: async () => {} };
+
+test("saveGuestPreview: chama upsertFromCvAdaptation com ANALYZED ao criar nova adaptação", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord();
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => null,
+        create: async () => adaptation,
+      },
+    },
+    {}, {}, {}, {}, {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV text",
+    jobTitle: adaptation.jobTitle,
+    companyName: adaptation.companyName,
+    jobDescriptionText: adaptation.jobDescriptionText,
+    adaptedContentJson: { sections: [] },
+    previewText: "preview",
+  });
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.targetStatus, "ANALYZED");
+  assert.equal(call.origin, "analysis_auto");
+  assert.equal(call.userId, "user-1");
+  assert.equal(call.cvAdaptationId, "adapt-1");
+});
+
+test("saveGuestPreview: chama upsertFromCvAdaptation com ANALYZED quando adaptação existente é encontrada", async () => {
+  const spy = makeHookSpy();
+  const existing = makeAdaptationRecord("adapt-existing");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => existing,
+      },
+    },
+    {}, {}, {}, {}, {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV text",
+    jobDescriptionText: existing.jobDescriptionText,
+    adaptedContentJson: {},
+  });
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.targetStatus, "ANALYZED");
+  assert.equal(call.origin, "analysis_auto");
+  assert.equal(call.cvAdaptationId, "adapt-existing");
+});
+
+test("claimGuest: chama upsertFromCvAdaptation com CV_READY e origin optimized_cv_auto", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord("adapt-claimed");
+
+  const mockTx = {
+    resume: {
+      findFirst: async () => ({ id: "master-1" }),
+      create: async () => ({ id: "adapted-resume-1" }),
+    },
+    cvAdaptation: {
+      create: async () => adaptation,
+      update: async () => adaptation,
+    },
+    user: { update: async () => ({}) },
+    cvUnlock: { create: async () => ({}) },
+    analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+  };
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      user: { findUnique: async () => ({ creditsRemaining: 5, internalRole: "user" }) },
+      resumeTemplate: { findFirst: async () => null },
+      $transaction: async (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx),
+    },
+    {}, {}, {}, {}, {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  await service.claimGuest("user-1", {
+    adaptedContentJson: { sections: [] },
+    jobDescriptionText: adaptation.jobDescriptionText,
+    masterCvText: "CV text",
+    analysisCvSnapshotId: "snap-1",
+    jobTitle: adaptation.jobTitle,
+    companyName: adaptation.companyName,
+  });
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.targetStatus, "CV_READY");
+  assert.equal(call.origin, "optimized_cv_auto");
+  assert.equal(call.userId, "user-1");
+  assert.equal(call.cvAdaptationId, "adapt-claimed");
+});
+
+test("deliverAdaptation: chama upsertFromCvAdaptation com CV_READY após persistir adaptedResume", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord("adapt-delivered");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findUnique: async () => ({
+          ...adaptation,
+          masterResume: { title: "CV Base", rawText: "CV text" },
+          template: null,
+        }),
+        update: async () => ({}),
+      },
+      resume: { create: async () => ({ id: "adapted-resume-1" }) },
+    },
+    {}, {}, {}, {}, {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  const svc = service as unknown as { deliverAdaptation: (id: string) => Promise<void> };
+  await svc.deliverAdaptation("adapt-delivered");
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.targetStatus, "CV_READY");
+  assert.equal(call.origin, "optimized_cv_auto");
+  assert.equal(call.cvAdaptationId, "adapt-delivered");
+  assert.equal(call.userId, "user-1");
+});
+
+test("deliverAdaptation: chamada repetida chama hook duas vezes — dedup delegado ao JobApplicationsService", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord("adapt-repeat");
+  let resumeCreateCount = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findUnique: async () => ({
+          ...adaptation,
+          masterResume: { title: "CV", rawText: "text" },
+          template: null,
+        }),
+        update: async () => ({}),
+      },
+      resume: {
+        create: async () => ({ id: `adapted-${++resumeCreateCount}` }),
+      },
+    },
+    {}, {}, {}, {}, {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  const svc = service as unknown as { deliverAdaptation: (id: string) => Promise<void> };
+  await svc.deliverAdaptation("adapt-repeat");
+  await svc.deliverAdaptation("adapt-repeat");
+
+  assert.equal(spy.calls.length, 2);
+  const c0 = spy.calls[0] as Record<string, unknown>;
+  const c1 = spy.calls[1] as Record<string, unknown>;
+  assert.equal(c0.cvAdaptationId, "adapt-repeat");
+  assert.equal(c1.cvAdaptationId, "adapt-repeat");
+});
+
+test("hook repassa cvAdaptationId, jobDescriptionText e userId corretos ao JobApplicationsService", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord("adapt-fields");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findUnique: async () => ({
+          ...adaptation,
+          id: "adapt-fields",
+          masterResume: { title: "CV", rawText: "text" },
+          template: null,
+        }),
+        update: async () => ({}),
+      },
+      resume: { create: async () => ({ id: "adapted-1" }) },
+    },
+    {}, {}, {}, {}, {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  const svc = service as unknown as { deliverAdaptation: (id: string) => Promise<void> };
+  await svc.deliverAdaptation("adapt-fields");
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.cvAdaptationId, "adapt-fields");
+  assert.equal(call.userId, "user-1");
+  assert.equal(call.jobDescriptionText, adaptation.jobDescriptionText);
+  assert.equal(call.jobTitle, adaptation.jobTitle);
+  assert.equal(call.companyName, adaptation.companyName);
+});
+
+test("hook envia targetStatus correto — regra de não rebaixar status é responsabilidade do JobApplicationsService", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord();
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => null,
+        create: async () => adaptation,
+      },
+    },
+    {}, {}, {}, {}, {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV",
+    jobDescriptionText: adaptation.jobDescriptionText,
+    adaptedContentJson: {},
+  });
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.targetStatus, "ANALYZED");
+  assert.equal(call.origin, "analysis_auto");
+});
+
+test("falha no upsertFromCvAdaptation não quebra fluxo do deliverAdaptation", async () => {
+  let updateCalled = false;
+  const adaptation = makeAdaptationRecord("adapt-failhook");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findUnique: async () => ({
+          ...adaptation,
+          masterResume: { title: "CV", rawText: "text" },
+          template: null,
+        }),
+        update: async () => {
+          updateCalled = true;
+          return {};
+        },
+      },
+      resume: { create: async () => ({ id: "adapted-1" }) },
+    },
+    {}, {}, {}, {}, {},
+    noopStorage,
+    noopTelemetry,
+    {
+      upsertFromCvAdaptation: async () => {
+        throw new Error("JobApplicationsService indisponivel");
+      },
+    },
+  );
+
+  const svc = service as unknown as { deliverAdaptation: (id: string) => Promise<void> };
+  await svc.deliverAdaptation("adapt-failhook");
+
+  assert.ok(updateCalled, "cvAdaptation.update deve ter sido chamado antes do hook");
+});
+
+test("falha no upsertFromCvAdaptation não quebra fluxo do saveGuestPreview", async () => {
+  const adaptation = makeAdaptationRecord();
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => null,
+        create: async () => adaptation,
+      },
+    },
+    {}, {}, {}, {}, {},
+    noopStorage,
+    noopTelemetry,
+    {
+      upsertFromCvAdaptation: async () => {
+        throw new Error("DB timeout");
+      },
+    },
+  );
+
+  const result = await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV",
+    jobDescriptionText: adaptation.jobDescriptionText,
+    adaptedContentJson: {},
+  });
+
+  assert.ok(result.id, "saveGuestPreview deve retornar adaptação mesmo com falha no hook");
+});
+
+test("service mantém comportamento sem jobApplicationsService explícito — backward compat", async () => {
+  const adaptation = makeAdaptationRecord();
+
+  // Only 8 constructor args — jobApplicationsService uses default no-op
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => null,
+        create: async () => adaptation,
+      },
+    },
+    {}, {}, {}, {}, {},
+    noopStorage,
+    noopTelemetry,
+  );
+
+  const result = await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV",
+    jobDescriptionText: adaptation.jobDescriptionText,
+    adaptedContentJson: {},
+  });
+
+  assert.ok(result.id, "adaptação deve ser retornada sem jobApplicationsService explícito");
+});

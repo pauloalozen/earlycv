@@ -46,6 +46,19 @@ import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 import { createCvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
 import type { RedeemCreditDto } from "./dto/redeem-credit.dto";
 import type { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
+import { JobApplicationsService } from "../job-applications/job-applications.service";
+import type { JobApplicationOrigin, JobApplicationStatus } from "@prisma/client";
+
+type JobApplicationHookInput = {
+  cvAdaptationId: string;
+  userId: string;
+  jobTitle: string | null;
+  companyName: string | null;
+  jobDescriptionText: string | null;
+  targetStatus: JobApplicationStatus;
+  origin: JobApplicationOrigin;
+  callerMethod: string;
+};
 
 type AuditEntry = {
   eventType: string;
@@ -101,7 +114,36 @@ export class CvAdaptationService {
         return;
       },
     },
+    @Inject(JobApplicationsService)
+    private readonly jobApplicationsService: Pick<
+      JobApplicationsService,
+      "upsertFromCvAdaptation"
+    > = {
+      async upsertFromCvAdaptation() {
+        return;
+      },
+    },
   ) {}
+
+  private async triggerJobApplicationHook(
+    input: JobApplicationHookInput,
+  ): Promise<void> {
+    try {
+      await this.jobApplicationsService.upsertFromCvAdaptation({
+        userId: input.userId,
+        cvAdaptationId: input.cvAdaptationId,
+        jobTitle: input.jobTitle,
+        companyName: input.companyName,
+        jobDescriptionText: input.jobDescriptionText,
+        targetStatus: input.targetStatus,
+        origin: input.origin,
+      });
+    } catch (err) {
+      this.logger.error(
+        `[job-application-hook] failed in ${input.callerMethod} — adaptationId=${input.cvAdaptationId} userId=${input.userId} targetStatus=${input.targetStatus}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
 
   async create(userId: string, dto: CreateCvAdaptationDto, file?: FileUpload) {
     const normalizedJobDescriptionText = this.validateJobDescription(
@@ -248,6 +290,16 @@ export class CvAdaptationService {
       })
       .then(async (result) => {
         if (result.ok) {
+          await this.triggerJobApplicationHook({
+            cvAdaptationId: adaptation.id,
+            userId,
+            jobTitle: adaptation.jobTitle,
+            companyName: adaptation.companyName,
+            jobDescriptionText: adaptation.jobDescriptionText,
+            targetStatus: "ANALYZED",
+            origin: "analysis_auto",
+            callerMethod: "create",
+          });
           return;
         }
 
@@ -420,6 +472,17 @@ export class CvAdaptationService {
       });
 
       return linked;
+    });
+
+    await this.triggerJobApplicationHook({
+      cvAdaptationId: adaptation.id,
+      userId,
+      jobTitle: dto.jobTitle ?? null,
+      companyName: dto.companyName ?? null,
+      jobDescriptionText: dto.jobDescriptionText,
+      targetStatus: "CV_READY",
+      origin: "optimized_cv_auto",
+      callerMethod: "claimGuest",
     });
 
     return createCvAdaptationResponseDto(adaptation);
@@ -859,6 +922,16 @@ export class CvAdaptationService {
     });
 
     if (existingAdaptation) {
+      await this.triggerJobApplicationHook({
+        cvAdaptationId: existingAdaptation.id,
+        userId,
+        jobTitle: existingAdaptation.jobTitle,
+        companyName: existingAdaptation.companyName,
+        jobDescriptionText: existingAdaptation.jobDescriptionText,
+        targetStatus: "ANALYZED",
+        origin: "analysis_auto",
+        callerMethod: "saveGuestPreview(existing)",
+      });
       return createCvAdaptationResponseDto(existingAdaptation);
     }
 
@@ -882,6 +955,17 @@ export class CvAdaptationService {
           select: { sourceType: true, originalFileStorageKey: true },
         },
       },
+    });
+
+    await this.triggerJobApplicationHook({
+      cvAdaptationId: adaptation.id,
+      userId,
+      jobTitle: adaptation.jobTitle,
+      companyName: adaptation.companyName,
+      jobDescriptionText: adaptation.jobDescriptionText,
+      targetStatus: "ANALYZED",
+      origin: "analysis_auto",
+      callerMethod: "saveGuestPreview",
     });
 
     return createCvAdaptationResponseDto(adaptation);
@@ -1828,6 +1912,17 @@ export class CvAdaptationService {
         adaptedResumeId: adaptedResume.id,
         status: "delivered",
       },
+    });
+
+    await this.triggerJobApplicationHook({
+      cvAdaptationId: adaptationId,
+      userId: adaptation.userId,
+      jobTitle: adaptation.jobTitle,
+      companyName: adaptation.companyName,
+      jobDescriptionText: adaptation.jobDescriptionText,
+      targetStatus: "CV_READY",
+      origin: "optimized_cv_auto",
+      callerMethod: "deliverAdaptation",
     });
 
     // Pre-generate aiAuditJson (structured CV output) in background so
