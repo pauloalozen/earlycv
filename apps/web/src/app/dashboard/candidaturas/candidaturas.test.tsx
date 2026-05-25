@@ -202,6 +202,64 @@ describe("CandidaturasClient", () => {
     });
   });
 
+  it("6b. create form sends jobDescriptionText when filled", async () => {
+    vi.mocked(createJobApplication).mockResolvedValue(makeApp());
+
+    render(<CandidaturasClient initialApplications={[]} header={null} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Adicionar candidatura/ }),
+    );
+    await waitFor(() => screen.getByText("Nova candidatura"));
+
+    fireEvent.change(
+      screen.getByPlaceholderText(/Engenheiro de Software Sênior/),
+      { target: { value: "PM" } },
+    );
+    fireEvent.change(screen.getByPlaceholderText(/Acme Corp/), {
+      target: { value: "Corp" },
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText(/Cole a descrição/),
+      { target: { value: "Responsável por roadmap e entregas da squad." } },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() => {
+      expect(createJobApplication).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobDescriptionText: "Responsável por roadmap e entregas da squad.",
+        }),
+      );
+    });
+  });
+
+  it("6c. create form omits jobDescriptionText when field is empty", async () => {
+    vi.mocked(createJobApplication).mockResolvedValue(makeApp());
+
+    render(<CandidaturasClient initialApplications={[]} header={null} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Adicionar candidatura/ }),
+    );
+    await waitFor(() => screen.getByText("Nova candidatura"));
+
+    fireEvent.change(
+      screen.getByPlaceholderText(/Engenheiro de Software Sênior/),
+      { target: { value: "Analista" } },
+    );
+    fireEvent.change(screen.getByPlaceholderText(/Acme Corp/), {
+      target: { value: "Corp" },
+    });
+    // description field intentionally left empty
+
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() => {
+      const call = vi.mocked(createJobApplication).mock.calls[0][0];
+      expect(call).not.toHaveProperty("jobDescriptionText");
+    });
+  });
+
   it("9. status badges show correct labels per status", () => {
     const apps = [
       makeApp({ id: "s1", jobTitle: "Job Salva", status: "SAVED" }),
@@ -282,5 +340,24 @@ describe("DetailClient", () => {
         "Entrevista agendada para quinta",
       );
     });
+  });
+
+  it("11. shows job description section when jobDescriptionText exists", () => {
+    const app = makeDetail({
+      jobDescriptionText: "Você será responsável pelo desenvolvimento de APIs REST.",
+    });
+    render(<DetailClient application={app} header={null} />);
+
+    expect(screen.getByText("Descrição da vaga")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Você será responsável pelo desenvolvimento de APIs REST/),
+    ).toBeInTheDocument();
+  });
+
+  it("12. hides job description section when jobDescriptionText is null", () => {
+    const app = makeDetail({ jobDescriptionText: null });
+    render(<DetailClient application={app} header={null} />);
+
+    expect(screen.queryByText("Descrição da vaga")).not.toBeInTheDocument();
   });
 });

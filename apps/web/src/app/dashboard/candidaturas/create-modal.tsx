@@ -48,6 +48,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
   const [companyName, setCompanyName] = useState("");
   const [location, setLocation] = useState("");
   const [jobUrl, setJobUrl] = useState("");
+  const [jobDescriptionText, setJobDescriptionText] = useState("");
   const [notes, setNotes] = useState("");
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -69,6 +70,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
       setCompanyName("");
       setLocation("");
       setJobUrl("");
+      setJobDescriptionText("");
       setNotes("");
     }
   }, [open]);
@@ -128,6 +130,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
         companyName: companyName.trim(),
         ...(location.trim() ? { location: location.trim() } : {}),
         ...(jobUrl.trim() ? { jobUrl: jobUrl.trim() } : {}),
+        ...(jobDescriptionText.trim() ? { jobDescriptionText: jobDescriptionText.trim() } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       });
       onCreated();
@@ -259,6 +262,25 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
               onChange={(e) => setJobUrl(e.target.value)}
               style={inputStyle}
               autoComplete="off"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="cm-description" style={labelStyle}>
+              Descrição da vaga
+            </label>
+            <textarea
+              id="cm-description"
+              placeholder="Cole a descrição se quiser usar a preparação para entrevista depois."
+              value={jobDescriptionText}
+              onChange={(e) => setJobDescriptionText(e.target.value)}
+              rows={4}
+              style={{
+                ...inputStyle,
+                resize: "vertical",
+                minHeight: 88,
+                lineHeight: 1.5,
+              }}
             />
           </div>
 

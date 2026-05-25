@@ -439,6 +439,7 @@ export function DetailClient({ application, header }: Props) {
 
           {/* Main grid */}
           <div
+            className="candidatura-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 300px",
