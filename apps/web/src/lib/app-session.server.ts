@@ -28,8 +28,17 @@ function getApiBaseUrl() {
 }
 
 function buildCookieOptions() {
+  const parsedRefreshTtl = Number.parseInt(
+    process.env.JWT_REFRESH_TTL ?? "2592000",
+    10,
+  );
+  const maxAge = Number.isFinite(parsedRefreshTtl)
+    ? Math.max(parsedRefreshTtl, 900)
+    : 2_592_000;
+
   return {
     httpOnly: true,
+    maxAge,
     path: "/",
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
