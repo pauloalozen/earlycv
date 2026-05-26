@@ -361,7 +361,7 @@ function CandRow({ application }: { application: JobApplicationDto }) {
       style={{
         ...CARD,
         display: "grid",
-        gridTemplateColumns: "1fr 160px 200px",
+        gridTemplateColumns: "1fr 190px 240px",
         gap: 0,
         alignItems: "stretch",
         overflow: "hidden",
@@ -374,7 +374,7 @@ function CandRow({ application }: { application: JobApplicationDto }) {
         style={{
           textDecoration: "none",
           display: "block",
-          padding: "18px 22px",
+          padding: "22px 26px",
         }}
       >
         <div
@@ -594,7 +594,7 @@ function CandRow({ application }: { application: JobApplicationDto }) {
           alignItems: "flex-end",
           justifyContent: "center",
           textAlign: "right",
-          padding: "18px 22px 18px 16px",
+          padding: "22px 24px 22px 20px",
           borderLeft: "1px solid rgba(10,10,10,0.06)",
         }}
       >
@@ -605,48 +605,142 @@ function CandRow({ application }: { application: JobApplicationDto }) {
             letterSpacing: 1,
             color: "#8a8a85",
             fontWeight: 500,
-            marginBottom: 4,
+            marginBottom: 6,
           }}
         >
-          {hasScoreAfter ? "SCORE APÓS" : "SCORE"}
+          SCORE
         </div>
-        <div
-          style={{
-            fontSize: 32,
-            fontWeight: 500,
-            letterSpacing: -1.4,
-            color: hasScoreAfter
-              ? "#2a6a10"
-              : hasScoreBefore
-                ? "#8a8a85"
-                : "#c0beb4",
-            lineHeight: 1,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {hasScoreAfter
-            ? application.scoreAfter
-            : hasScoreBefore
-              ? application.scoreBefore
-              : "—"}
-          {(hasScoreAfter || hasScoreBefore) && (
-            <span style={{ fontSize: 18, marginLeft: 1 }}>%</span>
-          )}
-        </div>
-        <div
-          style={{
-            fontFamily: MONO,
-            fontSize: 10,
-            marginTop: 4,
-            color: hasScoreAfter ? "#2a6a10" : "#a8a6a0",
-          }}
-        >
-          {hasScoreAfter && application.scoreBefore !== null
-            ? `+${(application.scoreAfter as number) - application.scoreBefore} vs original`
-            : hasScoreBefore
-              ? "antes de adaptar"
-              : "analisar para gerar"}
-        </div>
+
+        {hasScoreAfter && hasScoreBefore ? (
+          /* Both scores — show before → after */
+          <>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: 5,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 20,
+                  fontWeight: 400,
+                  letterSpacing: -0.6,
+                  color: "#a8a6a0",
+                }}
+              >
+                {application.scoreBefore}%
+              </span>
+              <span style={{ fontSize: 11, color: "#c0beb4", lineHeight: 1 }}>
+                →
+              </span>
+              <span
+                style={{
+                  fontSize: 28,
+                  fontWeight: 600,
+                  letterSpacing: -1,
+                  color: "#2a6a10",
+                  lineHeight: 1,
+                }}
+              >
+                {application.scoreAfter}%
+              </span>
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                marginTop: 4,
+                color: "#4a8a20",
+              }}
+            >
+              +
+              {(application.scoreAfter as number) -
+                (application.scoreBefore as number)}{" "}
+              pts
+            </div>
+          </>
+        ) : hasScoreAfter ? (
+          /* Only after */
+          <>
+            <div
+              style={{
+                fontSize: 32,
+                fontWeight: 500,
+                letterSpacing: -1.4,
+                color: "#2a6a10",
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {application.scoreAfter}
+              <span style={{ fontSize: 18, marginLeft: 1 }}>%</span>
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                marginTop: 4,
+                color: "#4a8a20",
+              }}
+            >
+              adaptado
+            </div>
+          </>
+        ) : hasScoreBefore ? (
+          /* Only before */
+          <>
+            <div
+              style={{
+                fontSize: 32,
+                fontWeight: 500,
+                letterSpacing: -1.4,
+                color: "#8a8a85",
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {application.scoreBefore}
+              <span style={{ fontSize: 18, marginLeft: 1 }}>%</span>
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                marginTop: 4,
+                color: "#a8a6a0",
+              }}
+            >
+              antes de adaptar
+            </div>
+          </>
+        ) : (
+          /* Neither */
+          <>
+            <div
+              style={{
+                fontSize: 32,
+                fontWeight: 500,
+                letterSpacing: -1.4,
+                color: "#c0beb4",
+                lineHeight: 1,
+              }}
+            >
+              —
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                marginTop: 4,
+                color: "#a8a6a0",
+              }}
+            >
+              analisar para gerar
+            </div>
+          </>
+        )}
       </Link>
 
       {/* Col 3 — CTA contextual */}
@@ -657,7 +751,7 @@ function CandRow({ application }: { application: JobApplicationDto }) {
           gap: 6,
           alignItems: "stretch",
           justifyContent: "center",
-          padding: "18px 22px",
+          padding: "22px 24px",
           borderLeft: "1px solid rgba(10,10,10,0.06)",
         }}
       >
@@ -696,10 +790,22 @@ function CandRow({ application }: { application: JobApplicationDto }) {
                   }),
           }}
         >
-          <span>{cta.label}</span>
+          <span
+            style={{
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {cta.label}
+          </span>
           {cta.tone !== "ghost" && (
             <span
-              style={{ fontSize: 12, opacity: cta.tone === "dark" ? 0.7 : 1 }}
+              style={{
+                fontSize: 12,
+                opacity: cta.tone === "dark" ? 0.7 : 1,
+                flexShrink: 0,
+              }}
             >
               →
             </span>
@@ -793,9 +899,9 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
 
         <div
           style={{
-            maxWidth: 980,
+            maxWidth: 1100,
             margin: "0 auto",
-            padding: "12px 24px 80px",
+            padding: "12px 32px 80px",
             position: "relative",
             zIndex: 2,
           }}
@@ -988,7 +1094,7 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
           {filteredApplications.length === 0 ? (
             <EmptyState filter={filter} onAdd={() => setShowCreate(true)} />
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {filteredApplications.map((app) => (
                 <CandRow key={app.id} application={app} />
               ))}
