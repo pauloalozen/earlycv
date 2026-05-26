@@ -39,49 +39,46 @@ const FILTERS: {
   { key: "finalizadas", label: "Finalizadas", statuses: CLOSED_STATUSES },
 ];
 
+type CtaTone = "green" | "dark" | "ghost";
+type Cta = { label: string; tone: CtaTone; href: string };
+
+function ctaForStatus(status: JobApplicationStatus, detailUrl: string): Cta {
+  switch (status) {
+    case "SAVED":
+      return { label: "Analisar vaga", tone: "dark", href: "/adaptar" };
+    case "ANALYZED":
+      return { label: "Gerar CV adaptado", tone: "dark", href: "/adaptar" };
+    case "CV_READY":
+      return { label: "Marcar como enviada", tone: "dark", href: detailUrl };
+    case "APPLIED":
+      return {
+        label: "Registrar próximo passo",
+        tone: "dark",
+        href: detailUrl,
+      };
+    case "IN_PROCESS":
+      return { label: "Preparar entrevista", tone: "green", href: detailUrl };
+    case "INTERVIEW":
+      return { label: "Preparar entrevista", tone: "green", href: detailUrl };
+    case "ASSESSMENT":
+      return { label: "Registrar teste/case", tone: "dark", href: detailUrl };
+    case "OFFER":
+      return { label: "Registrar decisão", tone: "green", href: detailUrl };
+    case "HIRED":
+    case "REJECTED":
+    case "WITHDRAWN":
+      return { label: "Ver histórico", tone: "ghost", href: detailUrl };
+    default:
+      return { label: "Ver detalhes", tone: "ghost", href: detailUrl };
+  }
+}
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cfg = getStatusConfig(status);
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        background: cfg.bg,
-        color: cfg.color,
-        border: `1px solid ${cfg.border}`,
-        borderRadius: 999,
-        padding: "5px 11px 5px 9px",
-        fontFamily: MONO,
-        fontSize: 11.5,
-        fontWeight: 500,
-        letterSpacing: 0.3,
-        lineHeight: 1,
-        whiteSpace: "nowrap",
-        flexShrink: 0,
-      }}
-    >
-      <span
-        style={{
-          width: 5,
-          height: 5,
-          borderRadius: "50%",
-          background: cfg.dot,
-          flexShrink: 0,
-          boxShadow: cfg.dotGlow ? `0 0 6px ${cfg.dot}` : "none",
-        }}
-      />
-      {cfg.label.toUpperCase()}
-    </span>
-  );
 }
 
 function EmptyState({
@@ -91,394 +88,642 @@ function EmptyState({
   filter: FilterKey;
   onAdd: () => void;
 }) {
-  const isFiltered = filter !== "todas";
-  const steps = ["Análise", "CV adaptado", "Envio", "Entrevista"];
+  if (filter !== "todas") {
+    return (
+      <div
+        style={{
+          border: "1.5px dashed rgba(10,10,10,0.14)",
+          borderRadius: 18,
+          padding: "52px 40px 44px",
+          textAlign: "center",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+        }}
+      >
+        <p
+          style={{
+            fontSize: 15,
+            fontWeight: 500,
+            color: "#45443e",
+            margin: "0 0 8px",
+          }}
+        >
+          Nenhuma candidatura nesta categoria
+        </p>
+        <p
+          style={{ fontSize: 13.5, color: "#8a8a85", margin: 0, maxWidth: 360 }}
+        >
+          As candidaturas desta categoria ainda não foram criadas ou estão em
+          outra categoria.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div
-      style={{
-        border: "1.5px dashed rgba(10,10,10,0.14)",
-        borderRadius: 18,
-        padding: "52px 40px 44px",
-        textAlign: "center",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-      }}
-    >
-      {isFiltered ? (
-        <>
-          <p
-            style={{
-              fontSize: 15,
-              fontWeight: 500,
-              color: "#45443e",
-              margin: "0 0 8px",
-            }}
+    <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+      <div
+        style={{
+          background: "#fafaf6",
+          border: "1.5px dashed rgba(10,10,10,0.14)",
+          borderRadius: 18,
+          padding: "52px 40px 44px",
+          textAlign: "center",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+        }}
+      >
+        <svg
+          width="40"
+          height="32"
+          viewBox="0 0 40 32"
+          fill="none"
+          aria-hidden="true"
+          style={{ marginBottom: 22, opacity: 0.9 }}
+        >
+          <rect x="0" y="0" width="11" height="8" fill="rgba(10,10,10,0.18)" />
+          <rect x="14" y="0" width="11" height="8" fill="#c6ff3a" />
+          <rect x="28" y="0" width="11" height="8" fill="rgba(10,10,10,0.45)" />
+          <rect x="0" y="12" width="11" height="8" fill="rgba(10,10,10,0.45)" />
+          <rect
+            x="14"
+            y="12"
+            width="11"
+            height="8"
+            fill="rgba(10,10,10,0.18)"
+          />
+          <rect x="28" y="12" width="11" height="8" fill="#c6ff3a" />
+          <rect x="0" y="24" width="11" height="8" fill="#c6ff3a" />
+          <rect
+            x="14"
+            y="24"
+            width="11"
+            height="8"
+            fill="rgba(10,10,10,0.45)"
+          />
+          <rect
+            x="28"
+            y="24"
+            width="11"
+            height="8"
+            fill="rgba(10,10,10,0.18)"
+          />
+        </svg>
+
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            letterSpacing: 1.2,
+            color: "#8a8a85",
+            fontWeight: 500,
+            marginBottom: 14,
+          }}
+        >
+          NADA POR AQUI AINDA
+        </div>
+
+        <p
+          style={{
+            margin: "0 0 14px",
+            fontSize: 36,
+            fontWeight: 500,
+            letterSpacing: -1.4,
+            lineHeight: 1.05,
+            color: "#0a0a0a",
+          }}
+        >
+          Toda análise concluída vira{" "}
+          <em
+            style={{ fontFamily: SERIF, fontStyle: "italic", fontWeight: 400 }}
           >
-            Nenhuma candidatura nesta categoria
-          </p>
-          <p
+            uma candidatura.
+          </em>
+        </p>
+        <p
+          style={{
+            margin: "0 auto 24px",
+            fontSize: 15,
+            color: "#5a5a55",
+            maxWidth: 540,
+            lineHeight: 1.55,
+          }}
+        >
+          Quando você termina uma análise de vaga, a candidatura é criada
+          automaticamente — com score, link da vaga e o CV adaptado já
+          vinculados.
+        </p>
+
+        <div style={{ display: "inline-flex", gap: 10 }}>
+          <Link
+            href="/adaptar"
             style={{
+              background: "#0a0a0a",
+              color: "#fff",
+              borderRadius: 10,
+              padding: "12px 20px",
               fontSize: 13.5,
-              color: "#8a8a85",
-              margin: 0,
-              maxWidth: 360,
-            }}
-          >
-            As candidaturas desta categoria ainda não foram criadas ou estão em
-            outra categoria.
-          </p>
-        </>
-      ) : (
-        <>
-          <svg
-            width="40"
-            height="32"
-            viewBox="0 0 40 32"
-            fill="none"
-            aria-hidden="true"
-            style={{ marginBottom: 22 }}
-          >
-            <rect
-              x="0"
-              y="0"
-              width="13"
-              height="4"
-              rx="1.5"
-              fill="rgba(10,10,10,0.45)"
-            />
-            <rect
-              x="17"
-              y="0"
-              width="10"
-              height="4"
-              rx="1.5"
-              fill="rgba(10,10,10,0.45)"
-            />
-            <rect x="31" y="0" width="9" height="4" rx="1.5" fill="#c6ff3a" />
-            <rect x="0" y="14" width="15" height="4" rx="1.5" fill="#c6ff3a" />
-            <rect
-              x="19"
-              y="14"
-              width="21"
-              height="4"
-              rx="1.5"
-              fill="rgba(10,10,10,0.45)"
-            />
-            <rect
-              x="0"
-              y="28"
-              width="8"
-              height="4"
-              rx="1.5"
-              fill="rgba(10,10,10,0.45)"
-            />
-            <rect x="12" y="28" width="15" height="4" rx="1.5" fill="#c6ff3a" />
-            <rect
-              x="31"
-              y="28"
-              width="9"
-              height="4"
-              rx="1.5"
-              fill="rgba(10,10,10,0.18)"
-            />
-          </svg>
-
-          <p
-            style={{
-              margin: "0 0 10px",
-              fontSize: 36,
               fontWeight: 500,
-              letterSpacing: -1.4,
+              fontFamily: GEIST,
+              textDecoration: "none",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+            }}
+          >
+            Analisar uma vaga →
+          </Link>
+          <button
+            type="button"
+            onClick={onAdd}
+            style={{
+              background: "#fff",
               color: "#0a0a0a",
-              lineHeight: 1.1,
+              border: "1px solid rgba(10,10,10,0.15)",
+              borderRadius: 10,
+              padding: "12px 18px",
+              fontSize: 13.5,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: GEIST,
             }}
           >
-            Ainda nada por aqui.
-          </p>
-          <p
-            style={{
-              margin: "0 0 28px",
-              fontSize: 15.5,
-              color: "#5a5a55",
-              maxWidth: 440,
-              lineHeight: 1.6,
-            }}
-          >
-            Cada vaga analisada no EarlyCV aparecerá aqui automaticamente — com
-            score, gaps e CV adaptado vinculado.
-          </p>
+            + Adicionar manualmente
+          </button>
+        </div>
+      </div>
 
+      {/* Flow steps */}
+      <div style={{ display: "flex", gap: 10 }}>
+        {(
+          [
+            {
+              n: "01",
+              title: "Análise",
+              body: "Cole a vaga ou importe pelo link. Score e gaps são gerados em segundos.",
+              accent: false,
+            },
+            {
+              n: "02",
+              title: "CV adaptado",
+              body: "Gere a versão otimizada do seu CV. O score sobe e fica vinculado.",
+              accent: false,
+            },
+            {
+              n: "03",
+              title: "Envio",
+              body: "Marque como enviada quando se candidatar. O EarlyCV registra a data.",
+              accent: false,
+            },
+            {
+              n: "04",
+              title: "Entrevista",
+              body: "Em processo ou entrevista? Prepare-se com IA usando vaga + CV.",
+              accent: true,
+            },
+          ] as const
+        ).flatMap((step, i, arr) => [
           <div
+            key={step.n}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 32,
-              flexWrap: "wrap",
-              justifyContent: "center",
+              flex: 1,
+              background: "#fafaf6",
+              border: step.accent
+                ? "1px solid rgba(110,150,20,0.32)"
+                : "1px solid rgba(10,10,10,0.06)",
+              borderRadius: 12,
+              padding: "14px 16px",
+              boxShadow: step.accent
+                ? "inset 0 0 0 1px rgba(198,255,58,0.22)"
+                : "none",
             }}
           >
-            {steps.flatMap((step, i) => [
-              <span
-                key={step}
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 11,
-                  color: "#8a8a85",
-                  letterSpacing: 0.5,
-                }}
-              >
-                {step}
-              </span>,
-              ...(i < steps.length - 1
-                ? [
-                    <span
-                      key={`after-${step}`}
-                      style={{ color: "#c6ff3a", fontSize: 12, lineHeight: 1 }}
-                    >
-                      →
-                    </span>,
-                  ]
-                : []),
-            ])}
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 10,
-              flexWrap: "wrap",
-              justifyContent: "center",
-            }}
-          >
-            <Link
-              href="/adaptar"
+            <div
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "10px 20px",
-                borderRadius: 10,
-                background: "#0a0a0a",
-                color: "#fafaf6",
-                fontSize: 13,
+                fontFamily: MONO,
+                fontSize: 10,
+                letterSpacing: 1,
+                color: step.accent ? "#3a5008" : "#8a8a85",
                 fontWeight: 500,
-                textDecoration: "none",
-                fontFamily: GEIST,
+                marginBottom: 6,
               }}
             >
-              Analisar uma vaga
-            </Link>
-            <button
-              type="button"
-              onClick={onAdd}
+              {step.n}
+            </div>
+            <div
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "10px 20px",
-                borderRadius: 10,
-                background: "#fff",
-                border: "1px solid rgba(10,10,10,0.15)",
+                fontSize: 14,
+                fontWeight: 500,
+                letterSpacing: -0.2,
+                marginBottom: 4,
                 color: "#0a0a0a",
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: "pointer",
-                fontFamily: GEIST,
               }}
             >
-              Adicionar manualmente
-            </button>
-          </div>
-        </>
-      )}
+              {step.title}
+            </div>
+            <div style={{ fontSize: 12.5, color: "#5a5a55", lineHeight: 1.5 }}>
+              {step.body}
+            </div>
+          </div>,
+          ...(i < arr.length - 1
+            ? [
+                <div
+                  key={`arrow-${step.n}`}
+                  style={{
+                    flex: "0 0 auto",
+                    color: "#c0beb4",
+                    fontSize: 14,
+                    alignSelf: "center",
+                  }}
+                >
+                  →
+                </div>,
+              ]
+            : []),
+        ])}
+      </div>
     </div>
   );
 }
 
-function ApplicationCard({ application }: { application: JobApplicationDto }) {
+function CandRow({ application }: { application: JobApplicationDto }) {
+  const detailUrl = `/dashboard/candidaturas/${application.id}`;
+  const cta = ctaForStatus(application.status, detailUrl);
   const hasCv = Boolean(application.currentCvAdaptationId);
-  const hasScore =
-    application.scoreBefore !== null || application.scoreAfter !== null;
-  const displayScore = application.scoreAfter ?? application.scoreBefore;
-  const isScoreImproved = application.scoreAfter !== null;
+  const hasScoreAfter = application.scoreAfter !== null;
+  const hasScoreBefore = application.scoreBefore !== null;
+  const shortId = `#${application.id.slice(-5).toUpperCase()}`;
+  const cfg = getStatusConfig(application.status);
 
   return (
-    <Link
-      href={`/dashboard/candidaturas/${application.id}`}
-      style={{ textDecoration: "none", display: "block" }}
+    <div
+      className="cand-row"
+      style={{
+        ...CARD,
+        display: "grid",
+        gridTemplateColumns: "1fr 160px 200px",
+        gap: 0,
+        alignItems: "stretch",
+        overflow: "hidden",
+        transition: "border-color 140ms ease, box-shadow 140ms ease",
+      }}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: hover-only visual effect, interaction is via parent Link */}
-      <div
+      {/* Col 1 — main info */}
+      <Link
+        href={detailUrl}
         style={{
-          ...CARD,
-          display: "grid",
-          gridTemplateColumns: hasScore ? "1fr 130px" : "1fr",
-          gap: 0,
-          alignItems: "stretch",
-          overflow: "hidden",
-          cursor: "pointer",
-          transition: "border-color 140ms ease, box-shadow 140ms ease",
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLDivElement).style.borderColor =
-            "rgba(10,10,10,0.16)";
-          (e.currentTarget as HTMLDivElement).style.boxShadow =
-            "0 4px 20px -4px rgba(10,10,10,0.12)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLDivElement).style.borderColor =
-            "rgba(10,10,10,0.08)";
-          (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
+          textDecoration: "none",
+          display: "block",
+          padding: "18px 22px",
         }}
       >
-        {/* Col 1: main info */}
-        <div style={{ padding: "18px 22px" }}>
-          <p
-            style={{
-              margin: "0 0 4px",
-              fontSize: 16,
-              fontWeight: 500,
-              letterSpacing: -0.3,
-              color: "#0a0a0a",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {application.jobTitle}
-          </p>
-          <p
-            style={{
-              margin: "0 0 12px",
-              fontSize: 13.5,
-              fontWeight: 500,
-              color: "#3a3a36",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            color: "#8a8a85",
+            letterSpacing: 0.4,
+            marginBottom: 4,
+          }}
+        >
+          {shortId}
+        </div>
+        <div
+          style={{
+            fontSize: 16,
+            fontWeight: 500,
+            letterSpacing: -0.3,
+            color: "#0a0a0a",
+            marginBottom: 4,
+            lineHeight: 1.25,
+            textOverflow: "ellipsis",
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {application.jobTitle}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            marginBottom: 12,
+          }}
+        >
+          <span style={{ fontSize: 13.5, fontWeight: 500, color: "#3a3a36" }}>
             {application.companyName}
-            {application.location ? (
-              <span style={{ color: "#8a8a85", fontWeight: 400 }}>
-                {" "}
-                · {application.location}
+          </span>
+          {application.location && (
+            <>
+              <span style={{ color: "#c0beb4" }}>·</span>
+              <span style={{ fontSize: 13, color: "#6a6a66" }}>
+                {application.location}
               </span>
-            ) : null}
-          </p>
-          {/* Badges row */}
-          <div
+            </>
+          )}
+        </div>
+        {/* Bottom row */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          {/* Status pill (sm) */}
+          <span
             style={{
-              display: "flex",
+              display: "inline-flex",
               alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
+              gap: 6,
+              background: cfg.bg,
+              color: cfg.color,
+              border: `1px solid ${cfg.border}`,
+              borderRadius: 999,
+              padding: "3px 8px 3px 7px",
+              fontFamily: MONO,
+              fontSize: 10.5,
+              fontWeight: 500,
+              letterSpacing: 0.3,
+              lineHeight: 1,
+              whiteSpace: "nowrap",
             }}
           >
-            <StatusBadge status={application.status} />
-            {hasCv && (
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  color: "#3a5008",
-                  background: "rgba(198,255,58,0.18)",
-                  padding: "3px 9px 3px 7px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(110,150,20,0.22)",
-                  letterSpacing: 0.3,
-                  lineHeight: 1,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <span
-                  style={{
-                    width: 4,
-                    height: 4,
-                    borderRadius: "50%",
-                    background: "#7aa811",
-                    flexShrink: 0,
-                  }}
-                />
-                CV ADAPTADO
-              </span>
-            )}
             <span
               style={{
+                width: 5,
+                height: 5,
+                borderRadius: "50%",
+                background: cfg.dot,
+                flexShrink: 0,
+                boxShadow: cfg.dotGlow ? `0 0 6px ${cfg.dot}` : "none",
+              }}
+            />
+            {cfg.label.toUpperCase()}
+          </span>
+
+          {/* CV adaptado badge */}
+          {hasCv && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
                 fontFamily: MONO,
-                fontSize: 10,
-                color: "#8a8a85",
-                letterSpacing: 0.5,
-                whiteSpace: "nowrap",
-                marginLeft: "auto",
+                fontSize: 10.5,
+                letterSpacing: 0.3,
+                color: "#3a5008",
+                background: "rgba(198,255,58,0.22)",
+                border: "1px solid rgba(110,150,20,0.25)",
+                padding: "3px 8px 3px 7px",
+                borderRadius: 999,
+                fontWeight: 500,
               }}
             >
-              {formatDate(application.updatedAt)}
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2 5l2 2 4-4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              CV adaptado
             </span>
-          </div>
-        </div>
+          )}
 
-        {/* Col 2: score */}
-        {hasScore && displayScore !== null && (
-          <div
+          {/* Link badge */}
+          {application.jobUrl && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                fontFamily: MONO,
+                fontSize: 10.5,
+                color: "#8a8a85",
+                padding: "3px 7px",
+                borderRadius: 999,
+                border: "1px solid rgba(10,10,10,0.08)",
+              }}
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                aria-hidden="true"
+              >
+                <path
+                  d="M4.5 7.5L7.5 4.5M5 3h-1.5a2 2 0 100 4H5M7 9h1.5a2 2 0 100-4H7"
+                  strokeLinecap="round"
+                />
+              </svg>
+              link
+            </span>
+          )}
+
+          {/* Interview date badge */}
+          {application.nextActionAt && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                fontFamily: MONO,
+                fontSize: 10.5,
+                color: "#7a5a04",
+                background: "rgba(245,197,24,0.16)",
+                border: "1px solid rgba(180,140,10,0.22)",
+                padding: "3px 8px 3px 7px",
+                borderRadius: 999,
+                fontWeight: 500,
+              }}
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                aria-hidden="true"
+              >
+                <rect x="2" y="3" width="8" height="7" rx="1" />
+                <path d="M2 5h8M5 2v2M7 2v2" strokeLinecap="round" />
+              </svg>
+              {new Date(application.nextActionAt).toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "short",
+              })}
+            </span>
+          )}
+
+          <span
             style={{
-              borderLeft: "1px solid rgba(10,10,10,0.06)",
-              padding: "18px 16px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              textAlign: "center",
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: "#8a8a85",
+              marginLeft: "auto",
+              whiteSpace: "nowrap",
             }}
           >
-            <div
-              style={{
-                fontFamily: MONO,
-                fontSize: 9.5,
-                letterSpacing: 1,
-                color: "#8a8a85",
-                fontWeight: 500,
-                marginBottom: 4,
-              }}
+            {formatDate(application.updatedAt)}
+          </span>
+        </div>
+      </Link>
+
+      {/* Col 2 — score */}
+      <Link
+        href={detailUrl}
+        style={{
+          textDecoration: "none",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          justifyContent: "center",
+          textAlign: "right",
+          padding: "18px 22px 18px 16px",
+          borderLeft: "1px solid rgba(10,10,10,0.06)",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 9.5,
+            letterSpacing: 1,
+            color: "#8a8a85",
+            fontWeight: 500,
+            marginBottom: 4,
+          }}
+        >
+          {hasScoreAfter ? "SCORE APÓS" : "SCORE"}
+        </div>
+        <div
+          style={{
+            fontSize: 32,
+            fontWeight: 500,
+            letterSpacing: -1.4,
+            color: hasScoreAfter
+              ? "#2a6a10"
+              : hasScoreBefore
+                ? "#8a8a85"
+                : "#c0beb4",
+            lineHeight: 1,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {hasScoreAfter
+            ? application.scoreAfter
+            : hasScoreBefore
+              ? application.scoreBefore
+              : "—"}
+          {(hasScoreAfter || hasScoreBefore) && (
+            <span style={{ fontSize: 18, marginLeft: 1 }}>%</span>
+          )}
+        </div>
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            marginTop: 4,
+            color: hasScoreAfter ? "#2a6a10" : "#a8a6a0",
+          }}
+        >
+          {hasScoreAfter && application.scoreBefore !== null
+            ? `+${(application.scoreAfter as number) - application.scoreBefore} vs original`
+            : hasScoreBefore
+              ? "antes de adaptar"
+              : "analisar para gerar"}
+        </div>
+      </Link>
+
+      {/* Col 3 — CTA contextual */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          alignItems: "stretch",
+          justifyContent: "center",
+          padding: "18px 22px",
+          borderLeft: "1px solid rgba(10,10,10,0.06)",
+        }}
+      >
+        <Link
+          href={cta.href}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: cta.tone !== "ghost" ? "space-between" : "center",
+            gap: 6,
+            borderRadius: 8,
+            padding: "10px 14px",
+            fontSize: 12.5,
+            fontWeight: cta.tone === "green" ? 600 : 500,
+            cursor: "pointer",
+            fontFamily: GEIST,
+            textDecoration: "none",
+            ...(cta.tone === "green"
+              ? {
+                  background: "#c6ff3a",
+                  color: "#0a0a0a",
+                  border: "1px solid rgba(110,150,20,0.35)",
+                  boxShadow: "0 4px 12px rgba(198,255,58,0.18)",
+                }
+              : cta.tone === "dark"
+                ? {
+                    background: "#0a0a0a",
+                    color: "#fff",
+                    border: "1px solid #0a0a0a",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.10)",
+                  }
+                : {
+                    background: "#fff",
+                    color: "#5a5a55",
+                    border: "1px solid rgba(10,10,10,0.12)",
+                  }),
+          }}
+        >
+          <span>{cta.label}</span>
+          {cta.tone !== "ghost" && (
+            <span
+              style={{ fontSize: 12, opacity: cta.tone === "dark" ? 0.7 : 1 }}
             >
-              {isScoreImproved ? "COMPAT." : "SCORE"}
-            </div>
-            <div
-              style={{
-                fontSize: 30,
-                fontWeight: 500,
-                letterSpacing: -1.2,
-                color: isScoreImproved ? "#2a6a10" : "#6a6560",
-                lineHeight: 1,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {displayScore}
-              <span style={{ fontSize: 16, marginLeft: 1 }}>%</span>
-            </div>
-            {application.scoreBefore !== null &&
-              application.scoreAfter !== null && (
-                <div
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 10,
-                    color: "#8a8a85",
-                    marginTop: 4,
-                  }}
-                >
-                  antes {application.scoreBefore}%
-                </div>
-              )}
-          </div>
-        )}
+              →
+            </span>
+          )}
+        </Link>
+        <Link
+          href={detailUrl}
+          style={{
+            display: "block",
+            textAlign: "center",
+            background: "transparent",
+            color: "#5a5a55",
+            borderRadius: 8,
+            padding: "6px 14px",
+            fontSize: 12,
+            fontWeight: 500,
+            fontFamily: GEIST,
+            textDecoration: "none",
+          }}
+        >
+          Detalhes ↗
+        </Link>
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -548,165 +793,128 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
 
         <div
           style={{
-            maxWidth: 900,
+            maxWidth: 980,
             margin: "0 auto",
             padding: "12px 24px 80px",
             position: "relative",
             zIndex: 2,
           }}
         >
-          {/* Back link */}
-          <div style={{ paddingTop: 72, paddingBottom: 4 }}>
-            <Link
-              href="/dashboard"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                fontFamily: MONO,
-                fontSize: 10,
-                color: "#8a8a85",
-                textDecoration: "none",
-                letterSpacing: "0.8px",
-                textTransform: "uppercase",
-              }}
-            >
-              <svg
-                aria-hidden="true"
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-              Dashboard
-            </Link>
-          </div>
+          <div style={{ paddingTop: 72 }} />
 
           {/* Page header */}
-          <div style={{ marginBottom: 24 }}>
-            {/* Kicker chip */}
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 7,
-                fontFamily: MONO,
-                fontSize: 10.5,
-                letterSpacing: 1.2,
-                background: "rgba(10,10,10,0.04)",
-                borderRadius: 999,
-                padding: "4px 12px 4px 8px",
-                fontWeight: 500,
-                color: "#0a0a0a",
-                marginBottom: 10,
-              }}
-            >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "#c6ff3a",
-                  boxShadow: "0 0 6px #c6ff3a",
-                  flexShrink: 0,
-                }}
-              />
-              MINHAS CANDIDATURAS
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-end",
-                justifyContent: "space-between",
-                gap: 16,
-                flexWrap: "wrap",
-              }}
-            >
-              <div>
-                <h1
-                  style={{
-                    fontSize: "clamp(32px, 4vw, 48px)",
-                    fontWeight: 500,
-                    letterSpacing: -2,
-                    margin: "0 0 6px",
-                    color: "#0a0a0a",
-                    lineHeight: 1.05,
-                  }}
-                >
-                  Minhas{" "}
-                  <em
-                    style={{
-                      fontFamily: SERIF,
-                      fontStyle: "italic",
-                      fontWeight: 400,
-                    }}
-                  >
-                    candidaturas.
-                  </em>
-                </h1>
-                {initialApplications.length > 0 && (
-                  <p style={{ margin: 0, fontSize: 15.5, color: "#5a5a55" }}>
-                    {initialApplications.length} candidatura
-                    {initialApplications.length !== 1 ? "s" : ""}
-                    {counts.processo > 0
-                      ? ` · ${counts.processo} em processo`
-                      : ""}
-                    {counts.abertas > 0 ? ` · ${counts.abertas} em aberto` : ""}
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCreate(true)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "10px 18px",
-                  borderRadius: 10,
-                  background: "#0a0a0a",
-                  color: "#fafaf6",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  border: "none",
-                  fontFamily: GEIST,
-                  flexShrink: 0,
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-                }}
-              >
-                <svg
-                  aria-hidden="true"
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                Adicionar candidatura
-              </button>
-            </div>
-          </div>
-
-          {/* Filters */}
           <div
             style={{
               display: "flex",
-              gap: 6,
-              marginBottom: 20,
+              justifyContent: "space-between",
+              alignItems: "flex-end",
+              gap: 16,
+              flexWrap: "wrap",
+              marginBottom: 28,
+            }}
+          >
+            <div>
+              {/* Kicker chip */}
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  letterSpacing: 1.2,
+                  background: "rgba(10,10,10,0.04)",
+                  border: "1px solid rgba(10,10,10,0.06)",
+                  borderRadius: 999,
+                  padding: "5px 12px 5px 10px",
+                  fontWeight: 500,
+                  color: "#555",
+                  marginBottom: 14,
+                }}
+              >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "#c6ff3a",
+                    boxShadow: "0 0 6px #c6ff3a",
+                    flexShrink: 0,
+                  }}
+                />
+                {initialApplications.length === 0
+                  ? "0 CANDIDATURAS"
+                  : `${initialApplications.length} CANDIDATURAS${counts.processo > 0 ? ` · ${counts.processo} EM PROCESSO` : ""}`}
+              </div>
+
+              <h1
+                style={{
+                  fontSize: "clamp(32px, 4vw, 48px)",
+                  fontWeight: 500,
+                  letterSpacing: -2,
+                  margin: "0 0 10px",
+                  color: "#0a0a0a",
+                  lineHeight: 1,
+                }}
+              >
+                Minhas{" "}
+                <em
+                  style={{
+                    fontFamily: SERIF,
+                    fontStyle: "italic",
+                    fontWeight: 400,
+                  }}
+                >
+                  candidaturas.
+                </em>
+              </h1>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 15.5,
+                  color: "#5a5a55",
+                  maxWidth: 620,
+                  lineHeight: 1.5,
+                }}
+              >
+                Cada vaga analisada vira uma candidatura. Acompanhe etapas,
+                recupere o CV adaptado e prepare suas entrevistas.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "12px 18px",
+                borderRadius: 10,
+                background: "#0a0a0a",
+                color: "#fafaf6",
+                fontSize: 13.5,
+                fontWeight: 500,
+                cursor: "pointer",
+                border: "none",
+                fontFamily: GEIST,
+                flexShrink: 0,
+                boxShadow:
+                  "0 4px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
+              }}
+            >
+              <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+              Adicionar candidatura
+            </button>
+          </div>
+
+          {/* Filters + sort */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 16,
               flexWrap: "wrap",
             }}
           >
@@ -741,8 +949,8 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
                     style={{
                       fontFamily: MONO,
                       fontSize: 10.5,
-                      color: isActive ? "rgba(250,250,246,0.7)" : "#8a8a85",
                       fontWeight: 500,
+                      color: isActive ? "rgba(250,250,246,0.7)" : "#8a8a85",
                     }}
                   >
                     {count}
@@ -750,19 +958,54 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
                 </button>
               );
             })}
+            <div style={{ flex: 1 }} />
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontFamily: MONO,
+                fontSize: 11,
+                color: "#5a5a55",
+                background: "#fff",
+                border: "1px solid rgba(10,10,10,0.08)",
+                borderRadius: 8,
+                padding: "7px 12px",
+                cursor: "default",
+              }}
+            >
+              <span style={{ color: "#8a8a85", letterSpacing: 0.5 }}>
+                ORDENAR:
+              </span>
+              <span style={{ color: "#0a0a0a", fontWeight: 500 }}>
+                Mais recente
+              </span>
+              <span style={{ fontSize: 9, color: "#8a8a85" }}>▾</span>
+            </div>
           </div>
 
           {/* List */}
           {filteredApplications.length === 0 ? (
             <EmptyState filter={filter} onAdd={() => setShowCreate(true)} />
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {filteredApplications.map((app) => (
-                <ApplicationCard key={app.id} application={app} />
+                <CandRow key={app.id} application={app} />
               ))}
             </div>
           )}
         </div>
+
+        <style>{`
+          @media (max-width: 700px) {
+            .cand-row { grid-template-columns: 1fr !important; }
+            .cand-row > * { border-left: none !important; }
+          }
+          .cand-row:hover {
+            border-color: rgba(10,10,10,0.16) !important;
+            box-shadow: 0 4px 20px -4px rgba(10,10,10,0.12) !important;
+          }
+        `}</style>
       </main>
 
       <CreateApplicationModal
