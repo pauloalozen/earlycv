@@ -916,7 +916,7 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
               alignItems: "flex-end",
               gap: 16,
               flexWrap: "wrap",
-              marginBottom: 28,
+              marginBottom: 44,
             }}
           >
             <div>
@@ -935,7 +935,7 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
                   padding: "5px 12px 5px 10px",
                   fontWeight: 500,
                   color: "#555",
-                  marginBottom: 14,
+                  marginBottom: 18,
                 }}
               >
                 <span
@@ -958,7 +958,7 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
                   fontSize: "clamp(32px, 4vw, 48px)",
                   fontWeight: 500,
                   letterSpacing: -2,
-                  margin: "0 0 10px",
+                  margin: "0 0 14px",
                   color: "#0a0a0a",
                   lineHeight: 1,
                 }}
@@ -1020,7 +1020,7 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
               display: "flex",
               alignItems: "center",
               gap: 8,
-              marginBottom: 16,
+              marginBottom: 24,
               flexWrap: "wrap",
             }}
           >

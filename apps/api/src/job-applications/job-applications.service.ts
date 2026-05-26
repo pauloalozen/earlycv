@@ -38,6 +38,31 @@ function normalize(value: string): string {
 
 const RECENT_WINDOW_DAYS = 60;
 
+function extractScoreBeforeFromContent(content: unknown): number | null {
+  if (!content || typeof content !== "object") return null;
+  const c = content as Record<string, unknown>;
+  if (typeof c.scoreBefore === "number") return c.scoreBefore;
+  const proj = c.projecao_melhoria;
+  if (proj && typeof proj === "object") {
+    const p = proj as Record<string, unknown>;
+    if (typeof p.score_atual === "number") return p.score_atual;
+  }
+  return null;
+}
+
+function extractScoreAfterFromContent(content: unknown): number | null {
+  if (!content || typeof content !== "object") return null;
+  const c = content as Record<string, unknown>;
+  if (typeof c.scoreAfter === "number") return c.scoreAfter;
+  const proj = c.projecao_melhoria;
+  if (proj && typeof proj === "object") {
+    const p = proj as Record<string, unknown>;
+    if (typeof p.score_pos_otimizacao === "number")
+      return p.score_pos_otimizacao;
+  }
+  return null;
+}
+
 @Injectable()
 export class JobApplicationsService {
   private readonly logger = new Logger(JobApplicationsService.name);
@@ -153,7 +178,11 @@ export class JobApplicationsService {
     return application;
   }
 
-  async updateStatus(userId: string, id: string, newStatus: JobApplicationStatus) {
+  async updateStatus(
+    userId: string,
+    id: string,
+    newStatus: JobApplicationStatus,
+  ) {
     const application = await this.database.jobApplication.findFirst({
       where: { id, userId },
     });
@@ -223,7 +252,9 @@ export class JobApplicationsService {
     return updated;
   }
 
-  async upsertFromCvAdaptation(input: UpsertFromAdaptationInput): Promise<void> {
+  async upsertFromCvAdaptation(
+    input: UpsertFromAdaptationInput,
+  ): Promise<void> {
     const {
       userId,
       cvAdaptationId,
@@ -250,7 +281,7 @@ export class JobApplicationsService {
       // Check if CvAdaptation already has a jobApplicationId
       const adaptation = await tx.cvAdaptation.findUnique({
         where: { id: cvAdaptationId },
-        select: { jobApplicationId: true },
+        select: { jobApplicationId: true, adaptedContentJson: true },
       });
 
       if (!adaptation) {
@@ -260,7 +291,18 @@ export class JobApplicationsService {
         return;
       }
 
-      let application: { id: string; status: JobApplicationStatus } | null = null;
+      // Resolve scores: prefer explicit input, fall back to adaptedContentJson
+      const resolvedScoreBefore =
+        scoreBefore !== undefined && scoreBefore !== null
+          ? scoreBefore
+          : extractScoreBeforeFromContent(adaptation.adaptedContentJson);
+      const resolvedScoreAfter =
+        scoreAfter !== undefined && scoreAfter !== null
+          ? scoreAfter
+          : extractScoreAfterFromContent(adaptation.adaptedContentJson);
+
+      let application: { id: string; status: JobApplicationStatus } | null =
+        null;
 
       // 1. Already linked
       if (adaptation.jobApplicationId) {
@@ -293,17 +335,20 @@ export class JobApplicationsService {
 
       if (application) {
         // Advance status only if new status is "later" in the funnel
-        const shouldAdvance = this.isLaterStatus(application.status, targetStatus);
+        const shouldAdvance = this.isLaterStatus(
+          application.status,
+          targetStatus,
+        );
 
         await tx.jobApplication.update({
           where: { id: application.id },
           data: {
             currentCvAdaptationId: cvAdaptationId,
-            ...(scoreBefore !== undefined && scoreBefore !== null
-              ? { scoreBefore }
+            ...(resolvedScoreBefore !== null
+              ? { scoreBefore: resolvedScoreBefore }
               : {}),
-            ...(scoreAfter !== undefined && scoreAfter !== null
-              ? { scoreAfter }
+            ...(resolvedScoreAfter !== null
+              ? { scoreAfter: resolvedScoreAfter }
               : {}),
             ...(shouldAdvance ? { status: targetStatus } : {}),
           },
@@ -338,8 +383,8 @@ export class JobApplicationsService {
             status: targetStatus,
             origin,
             currentCvAdaptationId: cvAdaptationId,
-            scoreBefore: scoreBefore ?? null,
-            scoreAfter: scoreAfter ?? null,
+            scoreBefore: resolvedScoreBefore,
+            scoreAfter: resolvedScoreAfter,
           },
         });
 
