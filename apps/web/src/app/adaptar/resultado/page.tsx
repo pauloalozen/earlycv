@@ -4113,78 +4113,92 @@ export default function ResultadoPage() {
               </div>
             </div>
           </div>
-          {/* Acompanhe essa oportunidade */}
+          {/* Candidatura criada — acompanhe essa oportunidade */}
           {isAuthenticated === true && reviewAdaptationId && jobApplicationId && (
             <div
               style={{
                 marginTop: 32,
+                display: "grid",
+                gridTemplateColumns: "1fr auto",
+                gap: 32,
+                alignItems: "center",
                 background: "#fafaf6",
                 border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 14,
-                padding: "20px 24px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 16,
+                borderRadius: 16,
+                padding: "24px 28px",
+                boxShadow: "0 12px 40px -16px rgba(10,10,10,0.15)",
                 flexWrap: "wrap",
               }}
             >
-              <div>
-                <p
+              <div style={{ minWidth: 0 }}>
+                <div
                   style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 7,
                     fontFamily: MONO,
-                    fontSize: 10,
+                    fontSize: 10.5,
                     letterSpacing: 1.2,
-                    color: "#8a8a85",
+                    color: "#0a0a0a",
                     fontWeight: 500,
-                    margin: "0 0 4px",
+                    marginBottom: 12,
                   }}
                 >
-                  ACOMPANHE ESSA OPORTUNIDADE
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#c6ff3a", boxShadow: "0 0 6px #c6ff3a", flexShrink: 0 }} />
+                  CANDIDATURA CRIADA
+                </div>
+                <p
+                  style={{
+                    fontSize: 26,
+                    fontWeight: 500,
+                    letterSpacing: -1,
+                    lineHeight: 1.1,
+                    margin: "0 0 8px",
+                    color: "#0a0a0a",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Salvamos esta vaga em{" "}
+                  <em style={{ fontFamily: SERIF_ITALIC, fontStyle: "italic", fontWeight: 400 }}>Minhas candidaturas.</em>
                 </p>
                 <p
                   style={{
                     fontSize: 14,
-                    fontWeight: 500,
-                    color: "#0a0a0a",
-                    margin: "0 0 4px",
-                    fontFamily: GEIST,
-                  }}
-                >
-                  Essa vaga foi salva em Minhas Candidaturas.
-                </p>
-                <p
-                  style={{
-                    fontSize: 13,
-                    color: "#6a6560",
+                    color: "#5a5a55",
                     margin: 0,
                     fontFamily: GEIST,
-                    lineHeight: 1.5,
+                    lineHeight: 1.55,
+                    maxWidth: 560,
                   }}
                 >
-                  Acompanhe o status e volte ao CV quando precisar.
+                  Score, gaps e link da vaga já ficaram vinculados à candidatura.
+                  Continue para gerar o CV adaptado — ele será anexado automaticamente.
                 </p>
               </div>
-              <a
-                href={`/dashboard/candidaturas/${jobApplicationId}`}
-                data-testid="resultado-ver-candidatura"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: "#0a0a0a",
-                  color: "#fafaf6",
-                  borderRadius: 10,
-                  padding: "10px 18px",
-                  fontSize: 13.5,
-                  fontWeight: 500,
-                  textDecoration: "none",
-                  flexShrink: 0,
-                  fontFamily: GEIST,
-                }}
-              >
-                Ver candidatura →
-              </a>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 8, flexShrink: 0 }}>
+                <a
+                  href={`/dashboard/candidaturas/${jobApplicationId}`}
+                  data-testid="resultado-ver-candidatura"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    background: "#fff",
+                    color: "#0a0a0a",
+                    border: "1px solid rgba(10,10,10,0.15)",
+                    borderRadius: 10,
+                    padding: "11px 16px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    textDecoration: "none",
+                    fontFamily: GEIST,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Ver candidatura ↗
+                </a>
+              </div>
             </div>
           )}
         </div>

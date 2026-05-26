@@ -29,7 +29,7 @@ function SectionBlock({
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ ...CARD, padding: "14px 18px", marginBottom: 10 }}>
+    <div style={{ ...CARD, padding: "16px 18px", marginBottom: 12 }}>
       <p
         style={{
           margin: "0 0 10px",
@@ -358,8 +358,8 @@ export function InterviewPrepDrawer({
                 flexDirection: "column",
                 alignItems: "center",
                 textAlign: "center",
-                padding: "48px 24px",
-                gap: 16,
+                padding: "56px 24px 48px",
+                gap: 18,
               }}
             >
               <div

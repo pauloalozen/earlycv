@@ -5,74 +5,91 @@ export type StatusConfig = {
   bg: string;
   color: string;
   border: string;
+  dot: string;
+  dotGlow?: boolean;
 };
 
 export const STATUS_CONFIG: Record<JobApplicationStatus, StatusConfig> = {
   SAVED: {
     label: "Salva",
-    bg: "rgba(10,10,10,0.05)",
-    color: "#6a6560",
-    border: "transparent",
+    bg: "#fff",
+    color: "#3a3a36",
+    border: "rgba(10,10,10,0.10)",
+    dot: "#a8a6a0",
   },
   ANALYZED: {
     label: "Analisada",
-    bg: "rgba(10,10,10,0.05)",
-    color: "#6a6560",
-    border: "transparent",
+    bg: "#fff",
+    color: "#3a3a36",
+    border: "rgba(10,10,10,0.10)",
+    dot: "#a8a6a0",
   },
   CV_READY: {
-    label: "CV Pronto",
-    bg: "rgba(198,255,58,0.16)",
-    color: "#405410",
-    border: "rgba(110,150,20,0.20)",
+    label: "CV pronto",
+    bg: "rgba(198,255,58,0.28)",
+    color: "#3a5008",
+    border: "rgba(110,150,20,0.30)",
+    dot: "#7aa811",
+    dotGlow: true,
   },
   APPLIED: {
     label: "Enviada",
-    bg: "rgba(10,10,10,0.07)",
-    color: "#0a0a0a",
-    border: "rgba(10,10,10,0.12)",
+    bg: "#0a0a0a",
+    color: "#fafaf6",
+    border: "#0a0a0a",
+    dot: "#c6ff3a",
+    dotGlow: true,
   },
   IN_PROCESS: {
-    label: "Em Processo",
-    bg: "rgba(245,158,11,0.10)",
-    color: "#78450c",
-    border: "rgba(180,100,10,0.20)",
+    label: "Em processo",
+    bg: "rgba(245,197,24,0.18)",
+    color: "#7a5a04",
+    border: "rgba(180,140,10,0.25)",
+    dot: "#f5c518",
   },
   INTERVIEW: {
     label: "Entrevista",
-    bg: "rgba(245,158,11,0.13)",
-    color: "#78450c",
-    border: "rgba(180,100,10,0.22)",
+    bg: "rgba(245,197,24,0.18)",
+    color: "#7a5a04",
+    border: "rgba(180,140,10,0.25)",
+    dot: "#f5c518",
   },
   ASSESSMENT: {
-    label: "Avaliação",
-    bg: "rgba(245,158,11,0.10)",
-    color: "#78450c",
-    border: "rgba(180,100,10,0.20)",
+    label: "Teste / case",
+    bg: "rgba(245,197,24,0.18)",
+    color: "#7a5a04",
+    border: "rgba(180,140,10,0.25)",
+    dot: "#f5c518",
   },
   OFFER: {
-    label: "Proposta",
-    bg: "rgba(16,185,129,0.10)",
-    color: "#065f46",
-    border: "rgba(16,185,129,0.22)",
+    label: "Oferta",
+    bg: "rgba(198,255,58,0.28)",
+    color: "#3a5008",
+    border: "rgba(110,150,20,0.30)",
+    dot: "#7aa811",
+    dotGlow: true,
   },
   HIRED: {
     label: "Contratado",
-    bg: "rgba(198,255,58,0.18)",
-    color: "#2a5a08",
-    border: "rgba(110,150,20,0.25)",
+    bg: "rgba(198,255,58,0.28)",
+    color: "#3a5008",
+    border: "rgba(110,150,20,0.30)",
+    dot: "#7aa811",
+    dotGlow: true,
   },
   REJECTED: {
-    label: "Rejeitada",
+    label: "Recusada",
     bg: "rgba(10,10,10,0.04)",
     color: "#8a8a85",
-    border: "transparent",
+    border: "rgba(10,10,10,0.08)",
+    dot: "#c0beb4",
   },
   WITHDRAWN: {
-    label: "Desistência",
+    label: "Desisti",
     bg: "rgba(10,10,10,0.04)",
     color: "#8a8a85",
-    border: "transparent",
+    border: "rgba(10,10,10,0.08)",
+    dot: "#c0beb4",
   },
 };
 
@@ -114,9 +131,10 @@ export function getStatusConfig(status: string): StatusConfig {
   return (
     STATUS_CONFIG[status as JobApplicationStatus] ?? {
       label: status,
-      bg: "rgba(10,10,10,0.05)",
-      color: "#6a6560",
-      border: "transparent",
+      bg: "#fff",
+      color: "#3a3a36",
+      border: "rgba(10,10,10,0.10)",
+      dot: "#a8a6a0",
     }
   );
 }

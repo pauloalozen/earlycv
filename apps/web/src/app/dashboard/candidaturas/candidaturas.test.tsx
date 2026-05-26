@@ -294,9 +294,9 @@ describe("CandidaturasClient", () => {
     ];
     render(<CandidaturasClient initialApplications={apps} header={null} />);
 
-    expect(screen.getByText("Salva")).toBeInTheDocument();
-    expect(screen.getByText("Proposta")).toBeInTheDocument();
-    expect(screen.getByText("Contratado")).toBeInTheDocument();
+    expect(screen.getByText("SALVA")).toBeInTheDocument();
+    expect(screen.getByText("OFERTA")).toBeInTheDocument();
+    expect(screen.getByText("CONTRATADO")).toBeInTheDocument();
   });
 });
 

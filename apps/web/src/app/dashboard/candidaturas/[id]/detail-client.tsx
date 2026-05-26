@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useId, useState, useTransition } from "react";
-
+import { PageShell } from "@/components/page-shell";
+import { ALL_STATUSES, getStatusConfig } from "@/lib/job-application-status";
 import type {
   JobApplicationDetailDto,
   JobApplicationEvent,
@@ -13,8 +14,6 @@ import {
   addJobApplicationNote,
   updateJobApplicationStatus,
 } from "@/lib/job-applications-api";
-import { ALL_STATUSES, getStatusConfig } from "@/lib/job-application-status";
-import { PageShell } from "@/components/page-shell";
 import { InterviewPrepDrawer } from "./interview-prep-drawer";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -28,10 +27,10 @@ const CARD: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: "9px 12px",
-  borderRadius: 9,
-  border: "1px solid rgba(10,10,10,0.14)",
-  background: "#fafaf6",
+  padding: "10px 13px",
+  borderRadius: 10,
+  border: "1px solid rgba(10,10,10,0.10)",
+  background: "#fff",
   fontSize: 13.5,
   color: "#0a0a0a",
   fontFamily: GEIST,
@@ -74,20 +73,70 @@ function StatusBadge({ status }: { status: string }) {
       style={{
         display: "inline-flex",
         alignItems: "center",
-        borderRadius: 5,
-        padding: "3px 10px",
-        fontFamily: MONO,
-        fontSize: 10.5,
-        fontWeight: 500,
-        letterSpacing: "0.9px",
-        textTransform: "uppercase",
+        gap: 6,
         background: cfg.bg,
         color: cfg.color,
         border: `1px solid ${cfg.border}`,
+        borderRadius: 999,
+        padding: "5px 11px 5px 9px",
+        fontFamily: MONO,
+        fontSize: 11.5,
+        fontWeight: 500,
+        letterSpacing: 0.3,
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+        flexShrink: 0,
       }}
     >
-      {cfg.label}
+      <span
+        style={{
+          width: 5,
+          height: 5,
+          borderRadius: "50%",
+          background: cfg.dot,
+          flexShrink: 0,
+          boxShadow: cfg.dotGlow ? `0 0 6px ${cfg.dot}` : "none",
+        }}
+      />
+      {cfg.label.toUpperCase()}
     </span>
+  );
+}
+
+function SectionCard({
+  title,
+  right,
+  children,
+}: {
+  title: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ marginBottom: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: 8,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            letterSpacing: 1.2,
+            color: "#8a8a85",
+            fontWeight: 500,
+          }}
+        >
+          {title}
+        </div>
+        {right && <div>{right}</div>}
+      </div>
+      <div style={{ ...CARD, padding: "18px 22px" }}>{children}</div>
+    </div>
   );
 }
 
@@ -95,65 +144,127 @@ function Timeline({ events }: { events: JobApplicationEvent[] }) {
   if (events.length === 0) return null;
 
   return (
-    <div style={{ ...CARD, padding: "16px 20px" }}>
-      <p style={{ margin: "0 0 14px", fontFamily: MONO, fontSize: 10, letterSpacing: "0.9px", color: "#8a8a85", fontWeight: 500, textTransform: "uppercase" }}>
-        Histórico
-      </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+    <SectionCard
+      title="HISTÓRICO"
+      right={
+        <span style={{ fontFamily: MONO, fontSize: 10.5, color: "#8a8a85" }}>
+          {events.length} eventos
+        </span>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column" }}>
         {events.map((event, idx) => {
           const cfg = event.newStatus ? getStatusConfig(event.newStatus) : null;
           const isLast = idx === events.length - 1;
+          const isAccent =
+            event.eventType === "CV_READY" ||
+            event.eventType === "ANALYSIS_COMPLETED";
           return (
-            <div key={event.id} style={{ display: "flex", gap: 12, position: "relative" }}>
-              {/* Line */}
-              {!isLast && (
-                <div
-                  style={{
-                    position: "absolute",
-                    left: 7,
-                    top: 22,
-                    bottom: 0,
-                    width: 1,
-                    background: "rgba(10,10,10,0.08)",
-                  }}
-                />
-              )}
+            <div
+              key={event.id}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "110px 18px 1fr",
+                gap: 12,
+                alignItems: "flex-start",
+                paddingBottom: isLast ? 0 : 14,
+                position: "relative",
+              }}
+            >
+              {/* Date col */}
+              <div
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  color: "#8a8a85",
+                  letterSpacing: 0.3,
+                  paddingTop: 1,
+                }}
+              >
+                {formatDateTime(event.createdAt)}
+              </div>
 
-              {/* Dot */}
-              <div style={{ flexShrink: 0, marginTop: 4 }}>
+              {/* Dot col */}
+              <div style={{ position: "relative", alignSelf: "stretch" }}>
+                {!isLast && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 7,
+                      top: 16,
+                      bottom: -14,
+                      width: 1,
+                      background: "rgba(10,10,10,0.08)",
+                    }}
+                  />
+                )}
                 <div
                   style={{
+                    position: "relative",
                     width: 15,
                     height: 15,
                     borderRadius: "50%",
-                    background: cfg ? cfg.bg : "rgba(10,10,10,0.07)",
-                    border: `1.5px solid ${cfg ? cfg.border : "rgba(10,10,10,0.15)"}`,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    background: isAccent ? "#c6ff3a" : "#fff",
+                    border: isAccent
+                      ? "1px solid rgba(110,150,20,0.4)"
+                      : "1px solid rgba(10,10,10,0.18)",
+                    boxShadow: isAccent
+                      ? "0 0 0 3px rgba(198,255,58,0.18)"
+                      : "0 0 0 3px #fafaf6",
                   }}
                 />
               </div>
 
-              {/* Content */}
-              <div style={{ flex: 1, paddingBottom: isLast ? 0 : 14 }}>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "#0a0a0a", fontFamily: GEIST }}>
+              {/* Content col */}
+              <div style={{ flex: 1 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 13.5,
+                    color: "#0a0a0a",
+                    lineHeight: 1.5,
+                    marginBottom: 3,
+                    fontFamily: GEIST,
+                  }}
+                >
                   {EVENT_LABELS[event.eventType] ?? event.eventType}
                 </p>
                 {event.newStatus && (
-                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#6a6560", fontFamily: GEIST }}>
-                    Status: <span style={{ color: cfg?.color ?? "#6a6560", fontWeight: 500 }}>{getStatusConfig(event.newStatus).label}</span>
+                  <p
+                    style={{
+                      margin: "1px 0 3px",
+                      fontSize: 12,
+                      color: "#6a6560",
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    Status:{" "}
+                    <span
+                      style={{
+                        color: cfg?.color ?? "#6a6560",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {getStatusConfig(event.newStatus).label}
+                    </span>
                   </p>
                 )}
-                <p style={{ margin: "2px 0 0", fontFamily: MONO, fontSize: 10, color: "#8a8a85", letterSpacing: "0.5px" }}>
-                  {formatDateTime(event.createdAt)}
-                </p>
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    letterSpacing: 0.5,
+                    color: "#8a8a85",
+                  }}
+                >
+                  {event.eventType.toLowerCase().replace(/_/g, ".")}
+                </span>
               </div>
             </div>
           );
         })}
       </div>
-    </div>
+    </SectionCard>
   );
 }
 
@@ -191,20 +302,27 @@ function UpdateStatusPanel({
   }
 
   return (
-    <div style={{ ...CARD, padding: "16px 20px" }}>
-      <p style={{ margin: "0 0 12px", fontFamily: MONO, fontSize: 10, letterSpacing: "0.9px", color: "#8a8a85", fontWeight: 500, textTransform: "uppercase" }}>
-        Atualizar status
+    <div style={{ ...CARD, padding: "18px 20px" }}>
+      <p
+        style={{
+          margin: "0 0 12px",
+          fontFamily: MONO,
+          fontSize: 10,
+          letterSpacing: 1.2,
+          color: "#8a8a85",
+          fontWeight: 500,
+        }}
+      >
+        ATUALIZAR STATUS
       </p>
-      <label htmlFor={selectId} style={{ display: "none" }}>Status da candidatura</label>
+      <label htmlFor={selectId} style={{ display: "none" }}>
+        Status da candidatura
+      </label>
       <select
         id={selectId}
         value={selected}
         onChange={(e) => handleChange(e.target.value as JobApplicationStatus)}
-        style={{
-          ...inputStyle,
-          marginBottom: 10,
-          cursor: "pointer",
-        }}
+        style={{ ...inputStyle, marginBottom: 10, cursor: "pointer" }}
       >
         {ALL_STATUSES.map((s) => (
           <option key={s} value={s}>
@@ -214,7 +332,16 @@ function UpdateStatusPanel({
       </select>
 
       {error && (
-        <p style={{ margin: "0 0 10px", fontSize: 12, color: "#991b1b", background: "#fee2e2", padding: "7px 10px", borderRadius: 7 }}>
+        <p
+          style={{
+            margin: "0 0 10px",
+            fontSize: 12,
+            color: "#991b1b",
+            background: "#fee2e2",
+            padding: "7px 10px",
+            borderRadius: 7,
+          }}
+        >
           {error}
         </p>
       )}
@@ -225,8 +352,8 @@ function UpdateStatusPanel({
         disabled={!isDirty || pending}
         style={{
           width: "100%",
-          padding: "9px 0",
-          borderRadius: 9,
+          padding: "11px 0",
+          borderRadius: 10,
           border: "none",
           background: isDirty && !pending ? "#0a0a0a" : "rgba(10,10,10,0.08)",
           color: isDirty && !pending ? "#fafaf6" : "#8a8a85",
@@ -275,27 +402,71 @@ function NotesPanel({
   }
 
   return (
-    <div style={{ ...CARD, padding: "16px 20px" }}>
-      <p style={{ margin: "0 0 12px", fontFamily: MONO, fontSize: 10, letterSpacing: "0.9px", color: "#8a8a85", fontWeight: 500, textTransform: "uppercase" }}>
-        Notas
+    <div style={{ ...CARD, padding: "18px 20px" }}>
+      <p
+        style={{
+          margin: "0 0 12px",
+          fontFamily: MONO,
+          fontSize: 10,
+          letterSpacing: 1.2,
+          color: "#8a8a85",
+          fontWeight: 500,
+        }}
+      >
+        NOTAS
       </p>
-      <label htmlFor={textareaId} style={{ display: "none" }}>Notas da candidatura</label>
+      <label htmlFor={textareaId} style={{ display: "none" }}>
+        Notas da candidatura
+      </label>
       <textarea
         id={textareaId}
         value={note}
-        onChange={(e) => { setNote(e.target.value); setError(null); setSaved(false); }}
+        onChange={(e) => {
+          setNote(e.target.value);
+          setError(null);
+          setSaved(false);
+        }}
         placeholder="Anotações sobre a vaga, contatos, próximos passos..."
         rows={4}
-        style={{ ...inputStyle, resize: "vertical", minHeight: 90, lineHeight: 1.55, marginBottom: 10 }}
+        style={{
+          ...inputStyle,
+          resize: "vertical",
+          minHeight: 90,
+          lineHeight: 1.55,
+          marginBottom: 10,
+        }}
       />
       {error && (
-        <p style={{ margin: "0 0 10px", fontSize: 12, color: "#991b1b", background: "#fee2e2", padding: "7px 10px", borderRadius: 7 }}>
+        <p
+          style={{
+            margin: "0 0 10px",
+            fontSize: 12,
+            color: "#991b1b",
+            background: "#fee2e2",
+            padding: "7px 10px",
+            borderRadius: 7,
+          }}
+        >
           {error}
         </p>
       )}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: 10,
+        }}
+      >
         {saved && (
-          <span style={{ fontSize: 12, color: "#405410", fontFamily: MONO, letterSpacing: "0.5px" }}>
+          <span
+            style={{
+              fontSize: 12,
+              color: "#405410",
+              fontFamily: MONO,
+              letterSpacing: "0.5px",
+            }}
+          >
             ✔ Salvo
           </span>
         )}
@@ -305,13 +476,17 @@ function NotesPanel({
           disabled={!note.trim() || !isDirty || pending}
           style={{
             padding: "8px 16px",
-            borderRadius: 9,
+            borderRadius: 10,
             border: "none",
-            background: note.trim() && isDirty && !pending ? "#0a0a0a" : "rgba(10,10,10,0.08)",
+            background:
+              note.trim() && isDirty && !pending
+                ? "#0a0a0a"
+                : "rgba(10,10,10,0.08)",
             color: note.trim() && isDirty && !pending ? "#fafaf6" : "#8a8a85",
             fontSize: 12.5,
             fontWeight: 500,
-            cursor: note.trim() && isDirty && !pending ? "pointer" : "not-allowed",
+            cursor:
+              note.trim() && isDirty && !pending ? "pointer" : "not-allowed",
             fontFamily: GEIST,
             transition: "all 140ms ease",
           }}
@@ -354,127 +529,237 @@ export function DetailClient({ application, header }: Props) {
 
   return (
     <PageShell>
-      <div aria-hidden style={{ position: "fixed", inset: 0, pointerEvents: "none", opacity: 0.4, mixBlendMode: "multiply", zIndex: 0, backgroundImage: `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.03 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")` }} />
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: 0.4,
+          mixBlendMode: "multiply",
+          zIndex: 0,
+          backgroundImage: `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.03 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`,
+        }}
+      />
 
-      <main style={{ fontFamily: GEIST, minHeight: "100dvh", background: "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)", color: "#0a0a0a", position: "relative" }}>
+      <main
+        style={{
+          fontFamily: GEIST,
+          minHeight: "100dvh",
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+          color: "#0a0a0a",
+          position: "relative",
+        }}
+      >
         {header}
 
-        <div style={{ maxWidth: 900, margin: "0 auto", padding: "12px 24px 80px", position: "relative", zIndex: 2 }}>
-          {/* Back link */}
+        <div
+          style={{
+            maxWidth: 900,
+            margin: "0 auto",
+            padding: "12px 24px 80px",
+            position: "relative",
+            zIndex: 2,
+          }}
+        >
+          {/* Back link / breadcrumb */}
           <div style={{ paddingTop: 72, paddingBottom: 4 }}>
-            <Link
-              href="/dashboard/candidaturas"
-              style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: MONO, fontSize: 10, color: "#8a8a85", textDecoration: "none", letterSpacing: "0.8px", textTransform: "uppercase" }}
+            <div
+              style={{
+                display: "flex",
+                gap: 7,
+                fontFamily: MONO,
+                fontSize: 11,
+                letterSpacing: 0.4,
+              }}
             >
-              <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-              Candidaturas
-            </Link>
+              <Link
+                href="/dashboard/candidaturas"
+                style={{ color: "#8a8a85", textDecoration: "none" }}
+              >
+                Minhas candidaturas
+              </Link>
+              <span style={{ color: "#c0beb4" }}>/</span>
+              <span style={{ color: "#0a0a0a" }}>{application.jobTitle}</span>
+            </div>
           </div>
 
-          {/* Hero card */}
-          <div style={{ ...CARD, padding: "20px 24px", marginBottom: 16, marginTop: 8 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          {/* Hero — company + title + meta + actions */}
+          <div style={{ marginBottom: 24, marginTop: 14 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 24,
+                flexWrap: "wrap",
+              }}
+            >
               <div style={{ minWidth: 0, flex: 1 }}>
-                <h1 style={{ margin: 0, fontSize: "clamp(18px, 2.5vw, 24px)", fontWeight: 500, letterSpacing: -0.6, color: "#0a0a0a" }}>
+                <p
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 11,
+                    color: "#5a5a55",
+                    letterSpacing: 0.5,
+                    marginBottom: 8,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {application.companyName}
+                  {application.location ? ` · ${application.location}` : ""}
+                </p>
+                <h1
+                  style={{
+                    margin: "0 0 14px",
+                    fontSize: "clamp(22px, 3vw, 38px)",
+                    fontWeight: 500,
+                    letterSpacing: -1.5,
+                    lineHeight: 1.05,
+                    color: "#0a0a0a",
+                  }}
+                >
                   {application.jobTitle}
                 </h1>
-                <p style={{ margin: "4px 0 0", fontSize: 14.5, color: "#6a6560" }}>
-                  {application.companyName}
-                  {application.location ? (
-                    <span style={{ color: "#8a8a85" }}> · {application.location}</span>
-                  ) : null}
-                </p>
-              </div>
-              <StatusBadge status={application.status} />
-            </div>
-
-            {/* Meta row */}
-            <div style={{ display: "flex", gap: 12, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ fontFamily: MONO, fontSize: 10, color: "#8a8a85", letterSpacing: "0.5px" }}>
-                Atualizado em {formatDate(application.updatedAt)}
-              </span>
-              {application.appliedAt && (
-                <>
-                  <span style={{ color: "rgba(10,10,10,0.2)", fontSize: 10 }}>·</span>
-                  <span style={{ fontFamily: MONO, fontSize: 10, color: "#8a8a85", letterSpacing: "0.5px" }}>
-                    Enviada em {formatDate(application.appliedAt)}
+                {/* Meta row */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <StatusBadge status={application.status} />
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 12.5,
+                      color: "#5a5a55",
+                    }}
+                  >
+                    Atualizado em{" "}
+                    <strong>{formatDate(application.updatedAt)}</strong>
                   </span>
-                </>
-              )}
-              {(application.scoreBefore !== null || application.scoreAfter !== null) && (
-                <>
-                  <span style={{ color: "rgba(10,10,10,0.2)", fontSize: 10 }}>·</span>
-                  <span style={{ fontFamily: MONO, fontSize: 10, color: "#6a6560", display: "flex", alignItems: "center", gap: 4 }}>
-                    {application.scoreBefore !== null && <span>{application.scoreBefore}% ATS</span>}
-                    {application.scoreBefore !== null && application.scoreAfter !== null && <span style={{ color: "#c6ff3a" }}>→</span>}
-                    {application.scoreAfter !== null && (
-                      <span style={{ color: "#405410", background: "rgba(198,255,58,0.14)", padding: "1px 5px", borderRadius: 4 }}>
-                        {application.scoreAfter}%
+                  {application.appliedAt && (
+                    <>
+                      <span style={{ color: "#c0beb4" }}>·</span>
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 12.5,
+                          color: "#5a5a55",
+                        }}
+                      >
+                        Enviada em{" "}
+                        <strong>{formatDate(application.appliedAt)}</strong>
                       </span>
-                    )}
-                  </span>
-                </>
-              )}
+                    </>
+                  )}
+                  {(application.scoreBefore !== null ||
+                    application.scoreAfter !== null) && (
+                    <>
+                      <span style={{ color: "#c0beb4" }}>·</span>
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          color: "#8a8a85",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        {application.scoreBefore !== null && (
+                          <span>{application.scoreBefore}%</span>
+                        )}
+                        {application.scoreBefore !== null &&
+                          application.scoreAfter !== null && (
+                            <span style={{ color: "#c6ff3a" }}>→</span>
+                          )}
+                        {application.scoreAfter !== null && (
+                          <span
+                            style={{
+                              color: "#3a5008",
+                              background: "rgba(198,255,58,0.22)",
+                              padding: "1px 6px",
+                              borderRadius: 999,
+                              border: "1px solid rgba(110,150,20,0.22)",
+                            }}
+                          >
+                            {application.scoreAfter}%
+                          </span>
+                        )}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
 
-              {application.jobUrl && (
-                <a
-                  href={application.jobUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    padding: "3px 10px",
-                    borderRadius: 7,
-                    border: "1px solid rgba(10,10,10,0.12)",
-                    background: "#fafaf6",
-                    color: "#0a0a0a",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    textDecoration: "none",
-                    fontFamily: GEIST,
-                  }}
-                >
-                  <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                    <polyline points="15 3 21 3 21 9" />
-                    <line x1="10" y1="14" x2="21" y2="3" />
-                  </svg>
-                  Abrir vaga
-                </a>
-              )}
-
-              {isPrepEligible && (
-                <button
-                  type="button"
-                  onClick={() => setShowPrep(true)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    padding: isInterview ? "5px 14px" : "3px 10px",
-                    borderRadius: 7,
-                    border: isInterview
-                      ? "none"
-                      : "1px solid rgba(10,10,10,0.12)",
-                    background: isInterview ? "#0a0a0a" : "#fafaf6",
-                    color: isInterview ? "#fafaf6" : "#0a0a0a",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    fontFamily: GEIST,
-                  }}
-                >
-                  <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 11l3 3L22 4" />
-                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                  </svg>
-                  {application.interviewPrep ? "Ver preparação" : "Preparar entrevista"}
-                </button>
-              )}
+              {/* Actions */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexShrink: 0,
+                  flexWrap: "wrap",
+                }}
+              >
+                {application.jobUrl && (
+                  <a
+                    href={application.jobUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      padding: "10px 14px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(10,10,10,0.15)",
+                      background: "#fff",
+                      color: "#0a0a0a",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      textDecoration: "none",
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    Abrir vaga ↗
+                  </a>
+                )}
+                {isPrepEligible && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPrep(true)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      padding: "10px 16px",
+                      borderRadius: 8,
+                      border: isInterview
+                        ? "1px solid rgba(110,150,20,0.35)"
+                        : "1px solid rgba(10,10,10,0.15)",
+                      background: isInterview ? "#c6ff3a" : "#fff",
+                      color: "#0a0a0a",
+                      fontSize: 13,
+                      fontWeight: isInterview ? 600 : 500,
+                      cursor: "pointer",
+                      fontFamily: GEIST,
+                      boxShadow: isInterview
+                        ? "0 6px 14px rgba(198,255,58,0.2)"
+                        : "none",
+                    }}
+                  >
+                    {application.interviewPrep
+                      ? "Ver preparação"
+                      : "Preparar entrevista"}
+                    {isInterview && " →"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -489,27 +774,32 @@ export function DetailClient({ application, header }: Props) {
             }}
           >
             {/* Left column */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {/* Job description */}
               {application.jobDescriptionText && (
-                <div style={{ ...CARD, padding: "16px 20px" }}>
-                  <p style={{ margin: "0 0 10px", fontFamily: MONO, fontSize: 10, letterSpacing: "0.9px", color: "#8a8a85", fontWeight: 500, textTransform: "uppercase" }}>
-                    Descrição da vaga
-                  </p>
-                  <p style={{ margin: 0, fontSize: 13.5, color: "#45443e", lineHeight: 1.65, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                <SectionCard title="DESCRIÇÃO DA VAGA">
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 13.5,
+                      color: "#45443e",
+                      lineHeight: 1.65,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
                     {application.jobDescriptionText.length > 800
                       ? `${application.jobDescriptionText.slice(0, 800)}…`
                       : application.jobDescriptionText}
                   </p>
-                </div>
+                </SectionCard>
               )}
 
               {/* CV Adaptations */}
               {hasCvAdaptations && latestCv && (
-                <div style={{ ...CARD, padding: "16px 20px" }}>
-                  <p style={{ margin: "0 0 12px", fontFamily: MONO, fontSize: 10, letterSpacing: "0.9px", color: "#8a8a85", fontWeight: 500, textTransform: "uppercase" }}>
-                    CV adaptado ({application.cvAdaptations.length})
-                  </p>
+                <SectionCard
+                  title={`CV ADAPTADO (${application.cvAdaptations.length})`}
+                >
                   {application.cvAdaptations.slice(0, 3).map((cv) => (
                     <div
                       key={cv.id}
@@ -519,18 +809,34 @@ export function DetailClient({ application, header }: Props) {
                         justifyContent: "space-between",
                         gap: 12,
                         padding: "10px 12px",
-                        borderRadius: 9,
-                        background: "rgba(10,10,10,0.03)",
+                        borderRadius: 10,
+                        background: "#fff",
                         border: "1px solid rgba(10,10,10,0.06)",
                         marginBottom: 6,
                       }}
                     >
                       <div>
-                        <p style={{ margin: 0, fontSize: 12.5, color: "#0a0a0a", fontWeight: 500 }}>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 12.5,
+                            color: "#0a0a0a",
+                            fontWeight: 500,
+                          }}
+                        >
                           {cv.jobTitle ?? "Adaptação"} · {cv.companyName ?? ""}
                         </p>
-                        <p style={{ margin: "2px 0 0", fontFamily: MONO, fontSize: 10, color: "#8a8a85", letterSpacing: "0.5px" }}>
-                          {cv.isUnlocked ? "Desbloqueado" : "Aguardando"} · {formatDate(cv.createdAt)}
+                        <p
+                          style={{
+                            margin: "2px 0 0",
+                            fontFamily: MONO,
+                            fontSize: 10,
+                            color: "#8a8a85",
+                            letterSpacing: "0.5px",
+                          }}
+                        >
+                          {cv.isUnlocked ? "Desbloqueado" : "Aguardando"} ·{" "}
+                          {formatDate(cv.createdAt)}
                         </p>
                       </div>
                       {cv.isUnlocked && (
@@ -541,7 +847,7 @@ export function DetailClient({ application, header }: Props) {
                             alignItems: "center",
                             gap: 4,
                             padding: "5px 12px",
-                            borderRadius: 7,
+                            borderRadius: 8,
                             border: "1px solid rgba(10,10,10,0.12)",
                             background: "#fafaf6",
                             color: "#0a0a0a",
@@ -557,7 +863,140 @@ export function DetailClient({ application, header }: Props) {
                       )}
                     </div>
                   ))}
-                </div>
+                </SectionCard>
+              )}
+
+              {/* Score summary */}
+              {(application.scoreBefore !== null ||
+                application.scoreAfter !== null) && (
+                <SectionCard title="RESUMO DA ANÁLISE">
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "100px 22px 100px 1fr",
+                      gap: 14,
+                      alignItems: "stretch",
+                    }}
+                  >
+                    <div
+                      style={{
+                        background: "#fff",
+                        border: "1px solid rgba(10,10,10,0.08)",
+                        borderRadius: 10,
+                        padding: "12px",
+                        textAlign: "center",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 9.5,
+                          letterSpacing: 1,
+                          color: "#8a8a85",
+                          fontWeight: 500,
+                          marginBottom: 6,
+                        }}
+                      >
+                        ANTES
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 34,
+                          fontWeight: 400,
+                          letterSpacing: -1.4,
+                          lineHeight: 1,
+                          color: "#a8a6a0",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {application.scoreBefore ?? "—"}
+                        {application.scoreBefore !== null && (
+                          <span style={{ fontSize: 18 }}>%</span>
+                        )}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 16,
+                        color: "#c0beb4",
+                        alignSelf: "center",
+                        textAlign: "center",
+                      }}
+                    >
+                      →
+                    </div>
+                    <div
+                      style={{
+                        background: "rgba(198,255,58,0.18)",
+                        border: "1px solid rgba(110,150,20,0.25)",
+                        borderRadius: 10,
+                        padding: "12px",
+                        textAlign: "center",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 9.5,
+                          letterSpacing: 1,
+                          color: "#405410",
+                          fontWeight: 500,
+                          marginBottom: 6,
+                        }}
+                      >
+                        DEPOIS
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 34,
+                          fontWeight: 500,
+                          letterSpacing: -1.4,
+                          lineHeight: 1,
+                          color: "#2a6a10",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {application.scoreAfter ?? "—"}
+                        {application.scoreAfter !== null && (
+                          <span style={{ fontSize: 18 }}>%</span>
+                        )}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        background: "#fff",
+                        border: "1px solid rgba(10,10,10,0.06)",
+                        borderRadius: 10,
+                        padding: "11px 13px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 9.5,
+                          letterSpacing: 1,
+                          color: "#8a8a85",
+                          fontWeight: 500,
+                          marginBottom: 5,
+                        }}
+                      >
+                        EVOLUÇÃO
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 12.5,
+                          lineHeight: 1.55,
+                          color: "#2a2a28",
+                        }}
+                      >
+                        {application.scoreAfter !== null &&
+                        application.scoreBefore !== null
+                          ? `+${application.scoreAfter - application.scoreBefore} pontos de compatibilidade.`
+                          : "Score disponível após análise."}
+                      </div>
+                    </div>
+                  </div>
+                </SectionCard>
               )}
 
               {/* Timeline */}

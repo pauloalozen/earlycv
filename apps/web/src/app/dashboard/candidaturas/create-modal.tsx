@@ -10,10 +10,10 @@ const MONO = "var(--font-geist-mono), monospace";
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: "9px 12px",
-  borderRadius: 9,
-  border: "1px solid rgba(10,10,10,0.14)",
-  background: "#fafaf6",
+  padding: "10px 13px",
+  borderRadius: 10,
+  border: "1px solid rgba(10,10,10,0.10)",
+  background: "#fff",
   fontSize: 13.5,
   color: "#0a0a0a",
   fontFamily: GEIST,
@@ -26,10 +26,9 @@ const labelStyle: React.CSSProperties = {
   fontFamily: MONO,
   fontSize: 10,
   fontWeight: 500,
-  letterSpacing: "0.9px",
-  textTransform: "uppercase",
+  letterSpacing: "1px",
   color: "#8a8a85",
-  marginBottom: 6,
+  marginBottom: 7,
 };
 
 type Props = {
@@ -89,7 +88,9 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
     lastFocusedRef.current = document.activeElement as HTMLElement | null;
     const root = dialogRef.current;
     if (!root) return;
-    const first = root.querySelector<HTMLElement>("input, textarea, button:not([disabled])");
+    const first = root.querySelector<HTMLElement>(
+      "input, textarea, button:not([disabled])",
+    );
     first?.focus();
   }, [isClient, open, visible]);
 
@@ -130,12 +131,16 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
         companyName: companyName.trim(),
         ...(location.trim() ? { location: location.trim() } : {}),
         ...(jobUrl.trim() ? { jobUrl: jobUrl.trim() } : {}),
-        ...(jobDescriptionText.trim() ? { jobDescriptionText: jobDescriptionText.trim() } : {}),
+        ...(jobDescriptionText.trim()
+          ? { jobDescriptionText: jobDescriptionText.trim() }
+          : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       });
       onCreated();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao criar candidatura");
+      setError(
+        err instanceof Error ? err.message : "Erro ao criar candidatura",
+      );
       setPending(false);
     }
   }
@@ -180,27 +185,76 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
           background: "#fafaf6",
           border: "1px solid rgba(10,10,10,0.10)",
           borderRadius: 18,
-          padding: "28px 28px 24px",
+          padding: "24px 28px 22px",
           width: "100%",
-          maxWidth: 500,
-          boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 24px 60px -20px rgba(10,10,10,0.22)",
-          transform: visible ? "translateY(0) scale(1)" : "translateY(6px) scale(0.98)",
-          transition: "transform 240ms cubic-bezier(0.22,1,0.36,1), opacity 200ms ease",
+          maxWidth: 660,
+          boxShadow: "0 32px 80px -20px rgba(10,10,10,0.5)",
+          transform: visible
+            ? "translateY(0) scale(1)"
+            : "translateY(6px) scale(0.98)",
+          transition:
+            "transform 240ms cubic-bezier(0.22,1,0.36,1), opacity 200ms ease",
           maxHeight: "90dvh",
           overflowY: "auto",
         }}
       >
         {/* Header */}
-        <div style={{ marginBottom: 22 }}>
-          <p id={headingId} style={{ margin: 0, fontSize: 16, fontWeight: 500, color: "#0a0a0a", fontFamily: GEIST }}>
-            Nova candidatura
-          </p>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#8a8a85", fontFamily: GEIST }}>
-            Adicione uma candidatura manualmente ao seu acompanhamento.
-          </p>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 16,
+            marginBottom: 22,
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: "0 0 6px",
+                fontFamily: MONO,
+                fontSize: 10,
+                letterSpacing: 1.2,
+                color: "#8a8a85",
+                fontWeight: 500,
+              }}
+            >
+              NOVA CANDIDATURA
+            </p>
+            <p
+              id={headingId}
+              style={{
+                margin: "0 0 6px",
+                fontSize: 24,
+                fontWeight: 500,
+                letterSpacing: -0.8,
+                color: "#0a0a0a",
+                fontFamily: GEIST,
+                lineHeight: 1.1,
+              }}
+            >
+              Adicionar manualmente
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 13.5,
+                color: "#5a5a55",
+                fontFamily: GEIST,
+                lineHeight: 1.5,
+                maxWidth: 480,
+              }}
+            >
+              Use para vagas que você não analisou no EarlyCV. Pode rodar a
+              análise depois para gerar score e CV adaptado.
+            </p>
+          </div>
         </div>
 
-        <form onSubmit={(e) => void handleSubmit(e)} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <form
+          onSubmit={(e) => void handleSubmit(e)}
+          style={{ display: "flex", flexDirection: "column", gap: 14 }}
+        >
           {/* Required fields */}
           <div>
             <label htmlFor="cm-job-title" style={labelStyle}>
@@ -304,22 +358,40 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
           </div>
 
           {error && (
-            <p style={{ margin: 0, fontSize: 12.5, color: "#991b1b", background: "#fee2e2", padding: "8px 12px", borderRadius: 8 }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 12.5,
+                color: "#991b1b",
+                background: "#fee2e2",
+                padding: "8px 12px",
+                borderRadius: 8,
+              }}
+            >
               {error}
             </p>
           )}
 
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingTop: 16,
+              borderTop: "1px solid rgba(10,10,10,0.08)",
+              marginTop: 4,
+            }}
+          >
             <button
               type="button"
               onClick={onClose}
               disabled={pending}
               style={{
-                padding: "9px 18px",
-                borderRadius: 9,
-                border: "1px solid rgba(10,10,10,0.14)",
+                padding: "10px 8px",
+                borderRadius: 10,
+                border: "none",
                 background: "transparent",
-                color: "#45443e",
+                color: "#5a5a55",
                 fontSize: 13,
                 fontWeight: 500,
                 cursor: "pointer",
@@ -333,19 +405,24 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
               type="submit"
               disabled={pending || !jobTitle.trim() || !companyName.trim()}
               style={{
-                padding: "9px 20px",
-                borderRadius: 9,
+                padding: "11px 18px",
+                borderRadius: 10,
                 border: "none",
                 background: "#0a0a0a",
                 color: "#fafaf6",
                 fontSize: 13,
                 fontWeight: 500,
-                cursor: pending || !jobTitle.trim() || !companyName.trim() ? "not-allowed" : "pointer",
+                cursor:
+                  pending || !jobTitle.trim() || !companyName.trim()
+                    ? "not-allowed"
+                    : "pointer",
                 fontFamily: GEIST,
-                opacity: pending || !jobTitle.trim() || !companyName.trim() ? 0.5 : 1,
+                opacity:
+                  pending || !jobTitle.trim() || !companyName.trim() ? 0.5 : 1,
+                boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
               }}
             >
-              {pending ? "Salvando…" : "Adicionar"}
+              {pending ? "Salvando…" : "Salvar candidatura"}
             </button>
           </div>
         </form>
