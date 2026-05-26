@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useId, useState, useTransition } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useState,
+  useTransition,
+} from "react";
 import { PageShell } from "@/components/page-shell";
 import { ALL_STATUSES, getStatusConfig } from "@/lib/job-application-status";
 import type {
@@ -38,14 +44,33 @@ const inputStyle: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
-const EVENT_LABELS: Record<string, string> = {
-  APPLICATION_CREATED: "Candidatura criada",
-  ANALYSIS_COMPLETED: "Análise concluída",
-  CV_READY: "CV adaptado pronto",
-  STATUS_CHANGED: "Status atualizado",
-  NOTE_ADDED: "Nota adicionada",
-  MARKED_AS_SENT: "Candidatura enviada",
-  INTERVIEW_PREP_GENERATED: "Preparação para entrevista gerada",
+const ORIGIN_LABELS: Record<string, string> = {
+  analysis_auto: "analysis.auto",
+  optimized_cv_auto: "cv.auto",
+  manual: "manual",
+  imported_url: "url.import",
+  job_portal: "job.portal",
+};
+
+const NEXT_ACTION_BODY: Record<string, string> = {
+  SAVED:
+    "Analise a vaga e adapte seu CV para melhorar a compatibilidade antes de se candidatar.",
+  ANALYZED:
+    "Adapte seu CV para esta vaga para aumentar suas chances de ser chamado.",
+  CV_READY:
+    "Seu CV adaptado está pronto. Candidate-se à vaga quando estiver preparado.",
+  APPLIED: "Candidatura enviada. Aguarde o retorno do recrutador.",
+  IN_PROCESS:
+    "Você está em processo seletivo. Acompanhe os próximos passos com atenção.",
+  INTERVIEW:
+    "Entrevista agendada. Gere uma preparação com IA usando a vaga, análise e CV adaptado.",
+  ASSESSMENT:
+    "Você está na fase de testes. Revise os requisitos técnicos da vaga com atenção.",
+  OFFER: "Você recebeu uma oferta! Revise os termos antes de aceitar.",
+  HIRED: "Parabéns! Você foi contratado nesta vaga.",
+  REJECTED:
+    "Esta candidatura não avançou. Use as lições para as próximas vagas.",
+  WITHDRAWN: "Você desistiu desta candidatura.",
 };
 
 function formatDate(iso: string) {
@@ -113,7 +138,7 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ marginBottom: 0 }}>
+    <div>
       <div
         style={{
           display: "flex",
@@ -140,8 +165,176 @@ function SectionCard({
   );
 }
 
-function Timeline({ events }: { events: JobApplicationEvent[] }) {
+function InterviewBanner({
+  nextActionAt,
+  onPrepClick,
+}: {
+  nextActionAt: string;
+  onPrepClick: () => void;
+}) {
+  const date = new Date(nextActionAt);
+  const dateStr = date.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+  });
+  const timeStr = date.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return (
+    <div
+      style={{
+        background:
+          "linear-gradient(95deg, rgba(245,197,24,0.12) 0%, rgba(245,197,24,0.04) 100%)",
+        border: "1px solid rgba(180,140,10,0.28)",
+        borderRadius: 14,
+        padding: "18px 22px",
+        display: "flex",
+        alignItems: "center",
+        gap: 16,
+      }}
+    >
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 10,
+          background: "#fff",
+          border: "1px solid rgba(180,140,10,0.22)",
+          color: "#7a5a04",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          aria-label="Calendário"
+          role="img"
+        >
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M3 9h18M8 3v4M16 3v4" strokeLinecap="round" />
+        </svg>
+      </div>
+      <div style={{ flex: 1 }}>
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            letterSpacing: 1.2,
+            color: "#7a5a04",
+            fontWeight: 500,
+            marginBottom: 4,
+          }}
+        >
+          ENTREVISTA AGENDADA
+        </div>
+        <div
+          style={{
+            fontSize: 15.5,
+            fontWeight: 600,
+            color: "#0a0a0a",
+            letterSpacing: -0.2,
+            marginBottom: 4,
+          }}
+        >
+          {dateStr} · {timeStr}
+        </div>
+        <div style={{ fontSize: 12.5, color: "#5a5a55", lineHeight: 1.5 }}>
+          Prepare-se com IA usando a vaga, sua análise e seu CV adaptado.
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onPrepClick}
+        style={{
+          background: "#c6ff3a",
+          color: "#0a0a0a",
+          border: "1px solid rgba(110,150,20,0.35)",
+          borderRadius: 10,
+          padding: "11px 16px",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+          fontFamily: GEIST,
+          boxShadow: "0 6px 14px rgba(198,255,58,0.2)",
+          flexShrink: 0,
+          whiteSpace: "nowrap",
+        }}
+      >
+        Preparar com IA →
+      </button>
+    </div>
+  );
+}
+
+function Timeline({
+  events,
+  scoreBefore,
+  scoreAfter,
+}: {
+  events: JobApplicationEvent[];
+  scoreBefore: number | null;
+  scoreAfter: number | null;
+}) {
   if (events.length === 0) return null;
+
+  function getEventBody(event: JobApplicationEvent): React.ReactNode {
+    switch (event.eventType) {
+      case "APPLICATION_CREATED":
+        return "Candidatura criada automaticamente.";
+      case "ANALYSIS_COMPLETED":
+        return scoreBefore !== null ? (
+          <>
+            Análise concluída. Score inicial <strong>{scoreBefore}%</strong>.
+          </>
+        ) : (
+          "Análise da vaga concluída."
+        );
+      case "CV_READY":
+        if (scoreAfter !== null && scoreBefore !== null) {
+          return (
+            <>
+              CV adaptado gerado. Score subiu para{" "}
+              <strong>{scoreAfter}%</strong> (+
+              {scoreAfter - scoreBefore} pontos).
+            </>
+          );
+        }
+        if (scoreAfter !== null) {
+          return (
+            <>
+              CV adaptado gerado. Score: <strong>{scoreAfter}%</strong>.
+            </>
+          );
+        }
+        return "CV adaptado gerado.";
+      case "STATUS_CHANGED":
+        return event.newStatus ? (
+          <>
+            Status atualizado para{" "}
+            <strong>{getStatusConfig(event.newStatus).label}</strong>.
+          </>
+        ) : (
+          "Status atualizado."
+        );
+      case "MARKED_AS_SENT":
+        return "Você marcou como enviada.";
+      case "NOTE_ADDED":
+        return "Nota adicionada.";
+      case "INTERVIEW_PREP_GENERATED":
+        return "Preparação para entrevista gerada com IA.";
+      default:
+        return event.eventType;
+    }
+  }
 
   return (
     <SectionCard
@@ -154,7 +347,6 @@ function Timeline({ events }: { events: JobApplicationEvent[] }) {
     >
       <div style={{ display: "flex", flexDirection: "column" }}>
         {events.map((event, idx) => {
-          const cfg = event.newStatus ? getStatusConfig(event.newStatus) : null;
           const isLast = idx === events.length - 1;
           const isAccent =
             event.eventType === "CV_READY" ||
@@ -171,7 +363,6 @@ function Timeline({ events }: { events: JobApplicationEvent[] }) {
                 position: "relative",
               }}
             >
-              {/* Date col */}
               <div
                 style={{
                   fontFamily: MONO,
@@ -184,7 +375,6 @@ function Timeline({ events }: { events: JobApplicationEvent[] }) {
                 {formatDateTime(event.createdAt)}
               </div>
 
-              {/* Dot col */}
               <div style={{ position: "relative", alignSelf: "stretch" }}>
                 {!isLast && (
                   <div
@@ -215,7 +405,6 @@ function Timeline({ events }: { events: JobApplicationEvent[] }) {
                 />
               </div>
 
-              {/* Content col */}
               <div style={{ flex: 1 }}>
                 <p
                   style={{
@@ -227,28 +416,8 @@ function Timeline({ events }: { events: JobApplicationEvent[] }) {
                     fontFamily: GEIST,
                   }}
                 >
-                  {EVENT_LABELS[event.eventType] ?? event.eventType}
+                  {getEventBody(event)}
                 </p>
-                {event.newStatus && (
-                  <p
-                    style={{
-                      margin: "1px 0 3px",
-                      fontSize: 12,
-                      color: "#6a6560",
-                      fontFamily: GEIST,
-                    }}
-                  >
-                    Status:{" "}
-                    <span
-                      style={{
-                        color: cfg?.color ?? "#6a6560",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {getStatusConfig(event.newStatus).label}
-                    </span>
-                  </p>
-                )}
                 <span
                   style={{
                     fontFamily: MONO,
@@ -268,123 +437,174 @@ function Timeline({ events }: { events: JobApplicationEvent[] }) {
   );
 }
 
-function UpdateStatusPanel({
-  applicationId,
-  currentStatus,
-  onUpdated,
+function ScoreSection({
+  scoreBefore,
+  scoreAfter,
+  currentCvAdaptationId,
 }: {
-  applicationId: string;
-  currentStatus: JobApplicationStatus;
-  onUpdated: () => void;
+  scoreBefore: number | null;
+  scoreAfter: number | null;
+  currentCvAdaptationId: string | null;
 }) {
-  const [selected, setSelected] = useState<JobApplicationStatus>(currentStatus);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const selectId = useId();
+  if (scoreBefore === null && scoreAfter === null) return null;
 
-  const isDirty = selected !== currentStatus;
-
-  function handleChange(status: JobApplicationStatus) {
-    setSelected(status);
-    setError(null);
-  }
-
-  function handleSave() {
-    if (!isDirty || pending) return;
-    startTransition(async () => {
-      try {
-        await updateJobApplicationStatus(applicationId, selected);
-        onUpdated();
-      } catch {
-        setError("Falha ao atualizar status. Tente novamente.");
-      }
-    });
-  }
+  const rightLink = currentCvAdaptationId ? (
+    <Link
+      href={`/adaptar/resultado?adaptationId=${currentCvAdaptationId}`}
+      style={{
+        fontFamily: MONO,
+        fontSize: 11,
+        color: "#0a0a0a",
+        textDecoration: "underline",
+        textUnderlineOffset: 3,
+      }}
+    >
+      Ver análise completa ↗
+    </Link>
+  ) : undefined;
 
   return (
-    <div style={{ ...CARD, padding: "18px 20px" }}>
-      <p
+    <SectionCard title="RESUMO DA ANÁLISE" right={rightLink}>
+      <div
         style={{
-          margin: "0 0 12px",
-          fontFamily: MONO,
-          fontSize: 10,
-          letterSpacing: 1.2,
-          color: "#8a8a85",
-          fontWeight: 500,
+          display: "grid",
+          gridTemplateColumns: "100px 22px 100px 1fr",
+          gap: 14,
+          alignItems: "stretch",
         }}
       >
-        ATUALIZAR STATUS
-      </p>
-      <label htmlFor={selectId} style={{ display: "none" }}>
-        Status da candidatura
-      </label>
-      <select
-        id={selectId}
-        value={selected}
-        onChange={(e) => handleChange(e.target.value as JobApplicationStatus)}
-        style={{ ...inputStyle, marginBottom: 10, cursor: "pointer" }}
-      >
-        {ALL_STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {getStatusConfig(s).label}
-          </option>
-        ))}
-      </select>
-
-      {error && (
-        <p
+        <div
           style={{
-            margin: "0 0 10px",
-            fontSize: 12,
-            color: "#991b1b",
-            background: "#fee2e2",
-            padding: "7px 10px",
-            borderRadius: 7,
+            background: "#fff",
+            border: "1px solid rgba(10,10,10,0.08)",
+            borderRadius: 10,
+            padding: "12px",
+            textAlign: "center",
           }}
         >
-          {error}
-        </p>
-      )}
-
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={!isDirty || pending}
-        style={{
-          width: "100%",
-          padding: "11px 0",
-          borderRadius: 10,
-          border: "none",
-          background: isDirty && !pending ? "#0a0a0a" : "rgba(10,10,10,0.08)",
-          color: isDirty && !pending ? "#fafaf6" : "#8a8a85",
-          fontSize: 13,
-          fontWeight: 500,
-          cursor: isDirty && !pending ? "pointer" : "not-allowed",
-          fontFamily: GEIST,
-          transition: "all 140ms ease",
-        }}
-      >
-        {pending ? "Salvando…" : "Salvar status"}
-      </button>
-    </div>
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 9.5,
+              letterSpacing: 1,
+              color: "#8a8a85",
+              fontWeight: 500,
+              marginBottom: 6,
+            }}
+          >
+            ANTES
+          </div>
+          <div
+            style={{
+              fontSize: 34,
+              fontWeight: 400,
+              letterSpacing: -1.4,
+              lineHeight: 1,
+              color: "#a8a6a0",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {scoreBefore ?? "—"}
+            {scoreBefore !== null && <span style={{ fontSize: 18 }}>%</span>}
+          </div>
+        </div>
+        <div
+          style={{
+            fontSize: 16,
+            color: "#c0beb4",
+            alignSelf: "center",
+            textAlign: "center",
+          }}
+        >
+          →
+        </div>
+        <div
+          style={{
+            background: "rgba(198,255,58,0.18)",
+            border: "1px solid rgba(110,150,20,0.25)",
+            borderRadius: 10,
+            padding: "12px",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 9.5,
+              letterSpacing: 1,
+              color: "#405410",
+              fontWeight: 500,
+              marginBottom: 6,
+            }}
+          >
+            DEPOIS
+          </div>
+          <div
+            style={{
+              fontSize: 34,
+              fontWeight: 500,
+              letterSpacing: -1.4,
+              lineHeight: 1,
+              color: "#2a6a10",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {scoreAfter ?? "—"}
+            {scoreAfter !== null && <span style={{ fontSize: 18 }}>%</span>}
+          </div>
+        </div>
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid rgba(10,10,10,0.06)",
+            borderRadius: 10,
+            padding: "11px 13px",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 9.5,
+              letterSpacing: 1,
+              color: "#8a8a85",
+              fontWeight: 500,
+              marginBottom: 5,
+            }}
+          >
+            O QUE MUDOU
+          </div>
+          <div style={{ fontSize: 12.5, lineHeight: 1.55, color: "#2a2a28" }}>
+            {scoreAfter !== null && scoreBefore !== null
+              ? `+${scoreAfter - scoreBefore} pontos de compatibilidade após adaptação do CV.`
+              : "Score disponível após análise e adaptação do CV."}
+          </div>
+        </div>
+      </div>
+    </SectionCard>
   );
 }
 
-function NotesPanel({
+function NotesSection({
   applicationId,
   currentNotes,
+  events,
   onUpdated,
 }: {
   applicationId: string;
   currentNotes: string | null;
+  events: JobApplicationEvent[];
   onUpdated: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
   const [note, setNote] = useState(currentNotes ?? "");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const textareaId = useId();
 
+  const lastNoteEvent = [...events]
+    .reverse()
+    .find((e) => e.eventType === "NOTE_ADDED");
   const isDirty = note.trim() !== (currentNotes ?? "").trim();
 
   function handleSave() {
@@ -393,6 +613,7 @@ function NotesPanel({
       try {
         await addJobApplicationNote(applicationId, note.trim());
         setSaved(true);
+        setEditing(false);
         onUpdated();
         setTimeout(() => setSaved(false), 2500);
       } catch {
@@ -402,6 +623,238 @@ function NotesPanel({
   }
 
   return (
+    <SectionCard
+      title="NOTAS"
+      right={
+        editing ? (
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(false);
+              setNote(currentNotes ?? "");
+              setError(null);
+            }}
+            style={{
+              fontFamily: MONO,
+              fontSize: 11,
+              color: "#8a8a85",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            Cancelar
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            style={{
+              fontFamily: MONO,
+              fontSize: 11,
+              color: "#0a0a0a",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+              textDecoration: "underline",
+              textUnderlineOffset: 3,
+            }}
+          >
+            {currentNotes ? "Editar nota" : "+ Adicionar nota"}
+          </button>
+        )
+      }
+    >
+      {editing ? (
+        <div>
+          <label htmlFor={textareaId} style={{ display: "none" }}>
+            Notas da candidatura
+          </label>
+          <textarea
+            id={textareaId}
+            value={note}
+            onChange={(e) => {
+              setNote(e.target.value);
+              setError(null);
+              setSaved(false);
+            }}
+            placeholder="Anotações sobre a vaga, contatos, próximos passos..."
+            rows={4}
+            style={{
+              ...inputStyle,
+              resize: "vertical",
+              minHeight: 90,
+              lineHeight: 1.55,
+              marginBottom: 10,
+            }}
+          />
+          {error && (
+            <p
+              style={{
+                margin: "0 0 10px",
+                fontSize: 12,
+                color: "#991b1b",
+                background: "#fee2e2",
+                padding: "7px 10px",
+                borderRadius: 7,
+              }}
+            >
+              {error}
+            </p>
+          )}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              gap: 10,
+            }}
+          >
+            {saved && (
+              <span
+                style={{
+                  fontSize: 12,
+                  color: "#405410",
+                  fontFamily: MONO,
+                  letterSpacing: "0.5px",
+                }}
+              >
+                ✔ Salvo
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!note.trim() || !isDirty || pending}
+              style={{
+                padding: "8px 16px",
+                borderRadius: 10,
+                border: "none",
+                background:
+                  note.trim() && isDirty && !pending
+                    ? "#0a0a0a"
+                    : "rgba(10,10,10,0.08)",
+                color:
+                  note.trim() && isDirty && !pending ? "#fafaf6" : "#8a8a85",
+                fontSize: 12.5,
+                fontWeight: 500,
+                cursor:
+                  note.trim() && isDirty && !pending
+                    ? "pointer"
+                    : "not-allowed",
+                fontFamily: GEIST,
+                transition: "all 140ms ease",
+              }}
+            >
+              {pending ? "Salvando…" : "Salvar nota"}
+            </button>
+          </div>
+        </div>
+      ) : currentNotes ? (
+        <div>
+          <div
+            style={{
+              padding: "12px 0",
+              borderBottom: "1px dashed rgba(10,10,10,0.08)",
+            }}
+          >
+            {lastNoteEvent && (
+              <div
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#8a8a85",
+                  letterSpacing: 0.3,
+                  marginBottom: 4,
+                }}
+              >
+                {formatDateTime(lastNoteEvent.createdAt)}
+              </div>
+            )}
+            <div
+              style={{
+                fontSize: 13,
+                color: "#2a2a28",
+                lineHeight: 1.55,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
+            >
+              {currentNotes}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p
+          style={{
+            margin: 0,
+            fontSize: 13,
+            color: "#8a8a85",
+            fontFamily: GEIST,
+            lineHeight: 1.5,
+          }}
+        >
+          Nenhuma nota adicionada ainda.
+        </p>
+      )}
+    </SectionCard>
+  );
+}
+
+// ---- Sidebar ----
+
+function ProximaAcaoCard({
+  applicationId,
+  status,
+  jobUrl,
+  showStatusEdit,
+  onSetShowStatusEdit,
+  onPrepClick,
+  onUpdated,
+}: {
+  applicationId: string;
+  status: JobApplicationStatus;
+  jobUrl: string | null;
+  showStatusEdit: boolean;
+  onSetShowStatusEdit: (v: boolean) => void;
+  onPrepClick: () => void;
+  onUpdated: () => void;
+}) {
+  const [selected, setSelected] = useState<JobApplicationStatus>(status);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const selectId = useId();
+
+  useEffect(() => {
+    setSelected(status);
+  }, [status]);
+
+  const isDirty = selected !== status;
+  const isGreen = status === "INTERVIEW" || status === "OFFER";
+  const isDone =
+    status === "HIRED" || status === "REJECTED" || status === "WITHDRAWN";
+  const showOpenJob =
+    jobUrl &&
+    (status === "SAVED" || status === "ANALYZED" || status === "CV_READY");
+  const showDarkCta =
+    status === "APPLIED" || status === "IN_PROCESS" || status === "ASSESSMENT";
+
+  function handleSave() {
+    if (!isDirty || pending) return;
+    startTransition(async () => {
+      try {
+        await updateJobApplicationStatus(applicationId, selected);
+        onSetShowStatusEdit(false);
+        onUpdated();
+      } catch {
+        setError("Falha ao atualizar. Tente novamente.");
+      }
+    });
+  }
+
+  return (
     <div style={{ ...CARD, padding: "18px 20px" }}>
       <p
         style={{
@@ -413,86 +866,435 @@ function NotesPanel({
           fontWeight: 500,
         }}
       >
-        NOTAS
+        PRÓXIMA AÇÃO
       </p>
-      <label htmlFor={textareaId} style={{ display: "none" }}>
-        Notas da candidatura
-      </label>
-      <textarea
-        id={textareaId}
-        value={note}
-        onChange={(e) => {
-          setNote(e.target.value);
-          setError(null);
-          setSaved(false);
-        }}
-        placeholder="Anotações sobre a vaga, contatos, próximos passos..."
-        rows={4}
+      <div style={{ marginBottom: 12 }}>
+        <StatusBadge status={status} />
+      </div>
+      <p
         style={{
-          ...inputStyle,
-          resize: "vertical",
-          minHeight: 90,
+          margin: "0 0 14px",
+          fontSize: 13,
+          color: "#5a5a55",
           lineHeight: 1.55,
-          marginBottom: 10,
+          fontFamily: GEIST,
         }}
-      />
-      {error && (
-        <p
+      >
+        {NEXT_ACTION_BODY[status]}
+      </p>
+
+      {!isDone && (
+        <>
+          {isGreen && (
+            <button
+              type="button"
+              onClick={onPrepClick}
+              style={{
+                width: "100%",
+                background: "#c6ff3a",
+                color: "#0a0a0a",
+                border: "1px solid rgba(110,150,20,0.35)",
+                borderRadius: 10,
+                padding: "12px 14px",
+                fontSize: 13.5,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: GEIST,
+                boxShadow: "0 6px 14px rgba(198,255,58,0.2)",
+                marginBottom: 10,
+              }}
+            >
+              Preparar entrevista →
+            </button>
+          )}
+          {showDarkCta && (
+            <button
+              type="button"
+              onClick={() => onSetShowStatusEdit(!showStatusEdit)}
+              style={{
+                width: "100%",
+                background: "#0a0a0a",
+                color: "#fff",
+                border: "none",
+                borderRadius: 10,
+                padding: "11px 14px",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: GEIST,
+                marginBottom: 10,
+              }}
+            >
+              Atualizar status
+            </button>
+          )}
+          {showOpenJob && (
+            <a
+              href={jobUrl as string}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "block",
+                textAlign: "center",
+                padding: "11px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(10,10,10,0.15)",
+                background: "#fff",
+                color: "#0a0a0a",
+                fontSize: 13,
+                fontWeight: 500,
+                textDecoration: "none",
+                fontFamily: GEIST,
+                marginBottom: 10,
+              }}
+            >
+              Abrir vaga ↗
+            </a>
+          )}
+        </>
+      )}
+
+      <div style={{ textAlign: "center" }}>
+        <button
+          type="button"
+          onClick={() => onSetShowStatusEdit(!showStatusEdit)}
           style={{
-            margin: "0 0 10px",
-            fontSize: 12,
-            color: "#991b1b",
-            background: "#fee2e2",
-            padding: "7px 10px",
-            borderRadius: 7,
+            fontFamily: MONO,
+            fontSize: 10.5,
+            color: "#5a5a55",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
           }}
         >
-          {error}
-        </p>
+          Mudar status ▾
+        </button>
+      </div>
+
+      {showStatusEdit && (
+        <div
+          style={{
+            marginTop: 14,
+            paddingTop: 14,
+            borderTop: "1px solid rgba(10,10,10,0.06)",
+          }}
+        >
+          <label htmlFor={selectId} style={{ display: "none" }}>
+            Status da candidatura
+          </label>
+          <select
+            id={selectId}
+            value={selected}
+            onChange={(e) => {
+              setSelected(e.target.value as JobApplicationStatus);
+              setError(null);
+            }}
+            style={{ ...inputStyle, marginBottom: 10, cursor: "pointer" }}
+          >
+            {ALL_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {getStatusConfig(s).label}
+              </option>
+            ))}
+          </select>
+          {error && (
+            <p
+              style={{
+                margin: "0 0 10px",
+                fontSize: 12,
+                color: "#991b1b",
+                background: "#fee2e2",
+                padding: "7px 10px",
+                borderRadius: 7,
+              }}
+            >
+              {error}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!isDirty || pending}
+            style={{
+              width: "100%",
+              padding: "10px 0",
+              borderRadius: 10,
+              border: "none",
+              background:
+                isDirty && !pending ? "#0a0a0a" : "rgba(10,10,10,0.08)",
+              color: isDirty && !pending ? "#fafaf6" : "#8a8a85",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: isDirty && !pending ? "pointer" : "not-allowed",
+              fontFamily: GEIST,
+              transition: "all 140ms ease",
+            }}
+          >
+            {pending ? "Salvando…" : "Salvar status"}
+          </button>
+        </div>
       )}
+    </div>
+  );
+}
+
+function CvAdaptadoCard({
+  cvAdaptations,
+  companyName,
+  jobTitle,
+  scoreAfter,
+}: {
+  cvAdaptations: JobApplicationDetailDto["cvAdaptations"];
+  companyName: string;
+  jobTitle: string;
+  scoreAfter: number | null;
+}) {
+  if (cvAdaptations.length === 0) return null;
+  const latest = cvAdaptations[0];
+  const cvName = `CV-${companyName.replace(/\s+/g, "-")}-${jobTitle.replace(/\s+/g, "-")}.pdf`;
+
+  return (
+    <div style={{ ...CARD, padding: "18px 20px" }}>
+      <p
+        style={{
+          margin: "0 0 12px",
+          fontFamily: MONO,
+          fontSize: 10,
+          letterSpacing: 1.2,
+          color: "#8a8a85",
+          fontWeight: 500,
+        }}
+      >
+        CV ADAPTADO
+      </p>
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "flex-end",
-          gap: 10,
+          gap: 12,
+          marginBottom: 12,
+          background: "#fff",
+          border: "1px solid rgba(10,10,10,0.06)",
+          borderRadius: 10,
+          padding: "10px 12px",
         }}
       >
-        {saved && (
-          <span
-            style={{
-              fontSize: 12,
-              color: "#405410",
-              fontFamily: MONO,
-              letterSpacing: "0.5px",
-            }}
-          >
-            ✔ Salvo
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!note.trim() || !isDirty || pending}
+        <div
           style={{
-            padding: "8px 16px",
-            borderRadius: 10,
-            border: "none",
-            background:
-              note.trim() && isDirty && !pending
-                ? "#0a0a0a"
-                : "rgba(10,10,10,0.08)",
-            color: note.trim() && isDirty && !pending ? "#fafaf6" : "#8a8a85",
-            fontSize: 12.5,
-            fontWeight: 500,
-            cursor:
-              note.trim() && isDirty && !pending ? "pointer" : "not-allowed",
-            fontFamily: GEIST,
-            transition: "all 140ms ease",
+            width: 36,
+            height: 44,
+            background: "#0a0a0a",
+            color: "#c6ff3a",
+            borderRadius: 4,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: MONO,
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: 0.5,
+            flexShrink: 0,
           }}
         >
-          {pending ? "Salvando…" : "Salvar nota"}
-        </button>
+          PDF
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            style={{
+              fontSize: 12.5,
+              fontWeight: 500,
+              color: "#0a0a0a",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontFamily: GEIST,
+            }}
+          >
+            {cvName}
+          </div>
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              color: "#8a8a85",
+              marginTop: 2,
+            }}
+          >
+            Gerado{" "}
+            {new Date(latest.createdAt).toLocaleDateString("pt-BR", {
+              day: "2-digit",
+              month: "short",
+            })}
+            {scoreAfter !== null && ` · score ${scoreAfter}%`}
+          </div>
+        </div>
+      </div>
+      {latest.isUnlocked ? (
+        <Link
+          href={`/adaptar/resultado?adaptationId=${latest.id}`}
+          style={{
+            display: "block",
+            textAlign: "center",
+            padding: "9px 12px",
+            borderRadius: 8,
+            border: "1px solid rgba(10,10,10,0.12)",
+            background: "#fff",
+            color: "#0a0a0a",
+            fontSize: 12.5,
+            fontWeight: 500,
+            textDecoration: "none",
+            fontFamily: GEIST,
+          }}
+        >
+          Ver resultado
+        </Link>
+      ) : (
+        <p
+          style={{
+            margin: 0,
+            fontFamily: MONO,
+            fontSize: 10,
+            color: "#8a8a85",
+            textAlign: "center",
+            letterSpacing: 0.4,
+          }}
+        >
+          AGUARDANDO DESBLOQUEIO
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DetalhesCard({
+  application,
+}: {
+  application: JobApplicationDetailDto;
+}) {
+  const origin = ORIGIN_LABELS[application.origin] ?? application.origin;
+
+  type Row = { k: string; v: React.ReactNode };
+  const rows: Row[] = [
+    { k: "Empresa", v: application.companyName },
+    ...(application.location ? [{ k: "Local", v: application.location }] : []),
+    ...(application.jobUrl
+      ? [
+          {
+            k: "Link",
+            v: (
+              <a
+                href={application.jobUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  color: "#0a0a0a",
+                  textDecoration: "underline",
+                  textUnderlineOffset: 2,
+                  wordBreak: "break-all" as const,
+                }}
+              >
+                {application.jobUrl.replace(/^https?:\/\//, "").slice(0, 38)}
+              </a>
+            ),
+          },
+        ]
+      : []),
+    {
+      k: "Origem",
+      v: (
+        <span style={{ fontFamily: MONO, fontSize: 11, color: "#5a5a55" }}>
+          {origin}
+        </span>
+      ),
+    },
+    { k: "Criada", v: formatDate(application.createdAt) },
+    ...(application.appliedAt
+      ? [{ k: "Enviada", v: formatDate(application.appliedAt) }]
+      : []),
+    ...(application.nextActionAt
+      ? [
+          {
+            k: "Entrevista",
+            v: (
+              <strong style={{ color: "#0a0a0a" }}>
+                {new Date(application.nextActionAt).toLocaleDateString(
+                  "pt-BR",
+                  {
+                    day: "2-digit",
+                    month: "short",
+                  },
+                )}{" "}
+                ·{" "}
+                {new Date(application.nextActionAt).toLocaleTimeString(
+                  "pt-BR",
+                  {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  },
+                )}
+              </strong>
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <div style={{ ...CARD, padding: "18px 20px" }}>
+      <p
+        style={{
+          margin: "0 0 8px",
+          fontFamily: MONO,
+          fontSize: 10,
+          letterSpacing: 1.2,
+          color: "#8a8a85",
+          fontWeight: 500,
+        }}
+      >
+        DETALHES
+      </p>
+      <div>
+        {rows.map((row, idx) => (
+          <div
+            key={row.k}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 8,
+              padding: "8px 0",
+              borderBottom:
+                idx < rows.length - 1
+                  ? "1px solid rgba(10,10,10,0.05)"
+                  : "none",
+            }}
+          >
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                color: "#8a8a85",
+                letterSpacing: 0.4,
+                flexShrink: 0,
+              }}
+            >
+              {row.k}
+            </span>
+            <span
+              style={{
+                fontSize: 12.5,
+                color: "#2a2a28",
+                textAlign: "right",
+                fontFamily: GEIST,
+              }}
+            >
+              {row.v}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -515,6 +1317,7 @@ export function DetailClient({ application, header }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [showPrep, setShowPrep] = useState(false);
+  const [showStatusEdit, setShowStatusEdit] = useState(false);
 
   function handleUpdated() {
     startTransition(() => {
@@ -523,9 +1326,9 @@ export function DetailClient({ application, header }: Props) {
   }
 
   const hasCvAdaptations = application.cvAdaptations.length > 0;
-  const latestCv = application.cvAdaptations[0] ?? null;
   const isPrepEligible = PREP_ELIGIBLE_STATUSES.includes(application.status);
   const isInterview = application.status === "INTERVIEW";
+  const origin = ORIGIN_LABELS[application.origin] ?? application.origin;
 
   return (
     <PageShell>
@@ -556,14 +1359,14 @@ export function DetailClient({ application, header }: Props) {
 
         <div
           style={{
-            maxWidth: 900,
+            maxWidth: 980,
             margin: "0 auto",
             padding: "12px 24px 80px",
             position: "relative",
             zIndex: 2,
           }}
         >
-          {/* Back link / breadcrumb */}
+          {/* Breadcrumb */}
           <div style={{ paddingTop: 72, paddingBottom: 4 }}>
             <div
               style={{
@@ -585,7 +1388,7 @@ export function DetailClient({ application, header }: Props) {
             </div>
           </div>
 
-          {/* Hero — company + title + meta + actions */}
+          {/* Hero */}
           <div style={{ marginBottom: 24, marginTop: 14 }}>
             <div
               style={{
@@ -639,7 +1442,18 @@ export function DetailClient({ application, header }: Props) {
                       color: "#5a5a55",
                     }}
                   >
-                    Atualizado em{" "}
+                    Criada em{" "}
+                    <strong>{formatDate(application.createdAt)}</strong>
+                  </span>
+                  <span style={{ color: "#c0beb4" }}>·</span>
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 12.5,
+                      color: "#5a5a55",
+                    }}
+                  >
+                    Atualizada{" "}
                     <strong>{formatDate(application.updatedAt)}</strong>
                   </span>
                   {application.appliedAt && (
@@ -657,6 +1471,17 @@ export function DetailClient({ application, header }: Props) {
                       </span>
                     </>
                   )}
+                  <span style={{ color: "#c0beb4" }}>·</span>
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10.5,
+                      color: "#8a8a85",
+                      letterSpacing: 0.4,
+                    }}
+                  >
+                    {origin}
+                  </span>
                   {(application.scoreBefore !== null ||
                     application.scoreAfter !== null) && (
                     <>
@@ -729,6 +1554,26 @@ export function DetailClient({ application, header }: Props) {
                     Abrir vaga ↗
                   </a>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setShowStatusEdit((v) => !v)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(10,10,10,0.15)",
+                    background: showStatusEdit ? "#f0f0ea" : "#fff",
+                    color: "#0a0a0a",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Atualizar status ▾
+                </button>
                 {isPrepEligible && (
                   <button
                     type="button"
@@ -768,258 +1613,66 @@ export function DetailClient({ application, header }: Props) {
             className="candidatura-grid"
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 300px",
-              gap: 16,
+              gridTemplateColumns: "1fr 380px",
+              gap: 24,
               alignItems: "start",
             }}
           >
             {/* Left column */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {/* Job description */}
-              {application.jobDescriptionText && (
-                <SectionCard title="DESCRIÇÃO DA VAGA">
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 13.5,
-                      color: "#45443e",
-                      lineHeight: 1.65,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {application.jobDescriptionText.length > 800
-                      ? `${application.jobDescriptionText.slice(0, 800)}…`
-                      : application.jobDescriptionText}
-                  </p>
-                </SectionCard>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              {application.nextActionAt && (
+                <InterviewBanner
+                  nextActionAt={application.nextActionAt}
+                  onPrepClick={() => setShowPrep(true)}
+                />
               )}
 
-              {/* CV Adaptations */}
-              {hasCvAdaptations && latestCv && (
-                <SectionCard
-                  title={`CV ADAPTADO (${application.cvAdaptations.length})`}
-                >
-                  {application.cvAdaptations.slice(0, 3).map((cv) => (
-                    <div
-                      key={cv.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        padding: "10px 12px",
-                        borderRadius: 10,
-                        background: "#fff",
-                        border: "1px solid rgba(10,10,10,0.06)",
-                        marginBottom: 6,
-                      }}
-                    >
-                      <div>
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: 12.5,
-                            color: "#0a0a0a",
-                            fontWeight: 500,
-                          }}
-                        >
-                          {cv.jobTitle ?? "Adaptação"} · {cv.companyName ?? ""}
-                        </p>
-                        <p
-                          style={{
-                            margin: "2px 0 0",
-                            fontFamily: MONO,
-                            fontSize: 10,
-                            color: "#8a8a85",
-                            letterSpacing: "0.5px",
-                          }}
-                        >
-                          {cv.isUnlocked ? "Desbloqueado" : "Aguardando"} ·{" "}
-                          {formatDate(cv.createdAt)}
-                        </p>
-                      </div>
-                      {cv.isUnlocked && (
-                        <Link
-                          href={`/adaptar/resultado?adaptationId=${cv.id}`}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 4,
-                            padding: "5px 12px",
-                            borderRadius: 8,
-                            border: "1px solid rgba(10,10,10,0.12)",
-                            background: "#fafaf6",
-                            color: "#0a0a0a",
-                            fontSize: 11.5,
-                            fontWeight: 500,
-                            textDecoration: "none",
-                            fontFamily: GEIST,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Ver resultado
-                        </Link>
-                      )}
-                    </div>
-                  ))}
-                </SectionCard>
-              )}
+              <Timeline
+                events={application.events}
+                scoreBefore={application.scoreBefore}
+                scoreAfter={application.scoreAfter}
+              />
 
-              {/* Score summary */}
-              {(application.scoreBefore !== null ||
-                application.scoreAfter !== null) && (
-                <SectionCard title="RESUMO DA ANÁLISE">
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "100px 22px 100px 1fr",
-                      gap: 14,
-                      alignItems: "stretch",
-                    }}
-                  >
-                    <div
-                      style={{
-                        background: "#fff",
-                        border: "1px solid rgba(10,10,10,0.08)",
-                        borderRadius: 10,
-                        padding: "12px",
-                        textAlign: "center",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 9.5,
-                          letterSpacing: 1,
-                          color: "#8a8a85",
-                          fontWeight: 500,
-                          marginBottom: 6,
-                        }}
-                      >
-                        ANTES
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 34,
-                          fontWeight: 400,
-                          letterSpacing: -1.4,
-                          lineHeight: 1,
-                          color: "#a8a6a0",
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      >
-                        {application.scoreBefore ?? "—"}
-                        {application.scoreBefore !== null && (
-                          <span style={{ fontSize: 18 }}>%</span>
-                        )}
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 16,
-                        color: "#c0beb4",
-                        alignSelf: "center",
-                        textAlign: "center",
-                      }}
-                    >
-                      →
-                    </div>
-                    <div
-                      style={{
-                        background: "rgba(198,255,58,0.18)",
-                        border: "1px solid rgba(110,150,20,0.25)",
-                        borderRadius: 10,
-                        padding: "12px",
-                        textAlign: "center",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 9.5,
-                          letterSpacing: 1,
-                          color: "#405410",
-                          fontWeight: 500,
-                          marginBottom: 6,
-                        }}
-                      >
-                        DEPOIS
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 34,
-                          fontWeight: 500,
-                          letterSpacing: -1.4,
-                          lineHeight: 1,
-                          color: "#2a6a10",
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      >
-                        {application.scoreAfter ?? "—"}
-                        {application.scoreAfter !== null && (
-                          <span style={{ fontSize: 18 }}>%</span>
-                        )}
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        background: "#fff",
-                        border: "1px solid rgba(10,10,10,0.06)",
-                        borderRadius: 10,
-                        padding: "11px 13px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 9.5,
-                          letterSpacing: 1,
-                          color: "#8a8a85",
-                          fontWeight: 500,
-                          marginBottom: 5,
-                        }}
-                      >
-                        EVOLUÇÃO
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 12.5,
-                          lineHeight: 1.55,
-                          color: "#2a2a28",
-                        }}
-                      >
-                        {application.scoreAfter !== null &&
-                        application.scoreBefore !== null
-                          ? `+${application.scoreAfter - application.scoreBefore} pontos de compatibilidade.`
-                          : "Score disponível após análise."}
-                      </div>
-                    </div>
-                  </div>
-                </SectionCard>
-              )}
+              <ScoreSection
+                scoreBefore={application.scoreBefore}
+                scoreAfter={application.scoreAfter}
+                currentCvAdaptationId={application.currentCvAdaptationId}
+              />
 
-              {/* Timeline */}
-              <Timeline events={application.events} />
+              <NotesSection
+                applicationId={application.id}
+                currentNotes={application.notes}
+                events={application.events}
+                onUpdated={handleUpdated}
+              />
             </div>
 
             {/* Right column */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <UpdateStatusPanel
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <ProximaAcaoCard
                 applicationId={application.id}
-                currentStatus={application.status}
+                status={application.status}
+                jobUrl={application.jobUrl}
+                showStatusEdit={showStatusEdit}
+                onSetShowStatusEdit={setShowStatusEdit}
+                onPrepClick={() => setShowPrep(true)}
                 onUpdated={handleUpdated}
               />
-              <NotesPanel
-                applicationId={application.id}
-                currentNotes={application.notes}
-                onUpdated={handleUpdated}
-              />
+
+              {hasCvAdaptations && (
+                <CvAdaptadoCard
+                  cvAdaptations={application.cvAdaptations}
+                  companyName={application.companyName}
+                  jobTitle={application.jobTitle}
+                  scoreAfter={application.scoreAfter}
+                />
+              )}
+
+              <DetalhesCard application={application} />
             </div>
           </div>
         </div>
 
-        {/* Responsive override */}
         <style>{`
           @media (max-width: 700px) {
             .candidatura-grid { grid-template-columns: 1fr !important; }
