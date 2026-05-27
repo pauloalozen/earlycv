@@ -119,7 +119,22 @@ export async function listJobApplications(
     limit: String(limit),
   });
   const response = await apiRequest("GET", `/job-applications?${qs}`);
-  if (!response.ok) throw new Error("Falha ao carregar candidaturas");
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(
+      `Falha ao carregar candidaturas (status ${response.status})${detail ? `: ${detail}` : ""}`,
+    );
+  }
   return response.json() as Promise<{
     items: JobApplicationDto[];
     total: number;

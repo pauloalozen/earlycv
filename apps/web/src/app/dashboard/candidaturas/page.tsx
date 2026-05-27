@@ -35,6 +35,12 @@ export default async function CandidaturasPage() {
     applicationsResult.status === "fulfilled"
       ? applicationsResult.value.items
       : [];
+  const applicationsLoadError =
+    applicationsResult.status === "rejected"
+      ? applicationsResult.reason instanceof Error
+        ? applicationsResult.reason.message
+        : "Nao foi possivel carregar suas candidaturas agora. Tente novamente."
+      : null;
 
   const planInfo = planResult.status === "fulfilled" ? planResult.value : null;
   const availableCredits = toHeaderAvailableCredits(planInfo);
@@ -42,6 +48,7 @@ export default async function CandidaturasPage() {
   return (
     <CandidaturasClient
       initialApplications={applications}
+      applicationsLoadError={applicationsLoadError}
       header={
         <AppHeader
           userName={user.name}
