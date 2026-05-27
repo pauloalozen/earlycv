@@ -37,7 +37,9 @@ export class InterviewPrepValidationError extends Error {
   }
 }
 
-export function validateAndNormalizeInterviewPrep(raw: unknown): InterviewPrepContent {
+export function validateAndNormalizeInterviewPrep(
+  raw: unknown,
+): InterviewPrepContent {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new InterviewPrepValidationError("root value is not an object");
   }
@@ -51,15 +53,19 @@ export function validateAndNormalizeInterviewPrep(raw: unknown): InterviewPrepCo
       .map((item) => (item as string).trim());
   };
 
-  const safeQuestions = (val: unknown): InterviewPrepContent["questionsTheyMayAsk"] => {
+  const safeQuestions = (
+    val: unknown,
+  ): InterviewPrepContent["questionsTheyMayAsk"] => {
     if (!Array.isArray(val)) return [];
     const result: InterviewPrepContent["questionsTheyMayAsk"] = [];
     for (const item of val) {
       if (typeof item !== "object" || item === null) continue;
       const q = item as Record<string, unknown>;
       const question = typeof q.question === "string" ? q.question.trim() : "";
-      const whyItMatters = typeof q.whyItMatters === "string" ? q.whyItMatters.trim() : "";
-      const answerDirection = typeof q.answerDirection === "string" ? q.answerDirection.trim() : "";
+      const whyItMatters =
+        typeof q.whyItMatters === "string" ? q.whyItMatters.trim() : "";
+      const answerDirection =
+        typeof q.answerDirection === "string" ? q.answerDirection.trim() : "";
       if (question.length > 0) {
         result.push({ question, whyItMatters, answerDirection });
       }
@@ -67,11 +73,14 @@ export function validateAndNormalizeInterviewPrep(raw: unknown): InterviewPrepCo
     return result;
   };
 
-  const strategySummary = typeof obj.strategySummary === "string" ? obj.strategySummary.trim() : "";
+  const strategySummary =
+    typeof obj.strategySummary === "string" ? obj.strategySummary.trim() : "";
   const strengthsToHighlight = safeStringArray(obj.strengthsToHighlight);
   const likelyRisksOrGaps = safeStringArray(obj.likelyRisksOrGaps);
   const questionsTheyMayAsk = safeQuestions(obj.questionsTheyMayAsk);
-  const questionsCandidateShouldAsk = safeStringArray(obj.questionsCandidateShouldAsk);
+  const questionsCandidateShouldAsk = safeStringArray(
+    obj.questionsCandidateShouldAsk,
+  );
   const recommendedPosture = safeStringArray(obj.recommendedPosture);
   const finalChecklist = safeStringArray(obj.finalChecklist);
 
@@ -82,7 +91,9 @@ export function validateAndNormalizeInterviewPrep(raw: unknown): InterviewPrepCo
     finalChecklist.length > 0;
 
   if (!hasContent) {
-    throw new InterviewPrepValidationError("content is empty — no usable sections generated");
+    throw new InterviewPrepValidationError(
+      "content is empty — no usable sections generated",
+    );
   }
 
   return {
@@ -129,13 +140,13 @@ FORMATO DE RESPOSTA (JSON obrigatório):
 export class InterviewPrepAiService {
   private readonly logger = new Logger(InterviewPrepAiService.name);
 
-  constructor(
-    @Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI,
-  ) {}
+  constructor(@Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI) {}
 
   async generate(context: InterviewPrepContext): Promise<InterviewPrepContent> {
     if (process.env.SKIP_AI === "true") {
-      this.logger.warn("[interview-prep] SKIP_AI=true — returning stub content");
+      this.logger.warn(
+        "[interview-prep] SKIP_AI=true — returning stub content",
+      );
       return validateAndNormalizeInterviewPrep(this.buildStub(context));
     }
 
@@ -149,8 +160,6 @@ export class InterviewPrepAiService {
         { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.4,
-      max_tokens: 2048,
     });
 
     const raw = response.choices[0]?.message?.content ?? "{}";
@@ -179,16 +188,19 @@ export class InterviewPrepAiService {
       lines.push(`Localidade: ${ctx.location}`);
     }
 
-    const hasScore = ctx.scoreBefore !== null && ctx.scoreBefore !== undefined
-      || ctx.scoreAfter !== null && ctx.scoreAfter !== undefined;
+    const hasScore =
+      (ctx.scoreBefore !== null && ctx.scoreBefore !== undefined) ||
+      (ctx.scoreAfter !== null && ctx.scoreAfter !== undefined);
 
     if (hasScore) {
-      const before = ctx.scoreBefore !== null && ctx.scoreBefore !== undefined
-        ? `${ctx.scoreBefore}%`
-        : "—";
-      const after = ctx.scoreAfter !== null && ctx.scoreAfter !== undefined
-        ? `${ctx.scoreAfter}%`
-        : "—";
+      const before =
+        ctx.scoreBefore !== null && ctx.scoreBefore !== undefined
+          ? `${ctx.scoreBefore}%`
+          : "—";
+      const after =
+        ctx.scoreAfter !== null && ctx.scoreAfter !== undefined
+          ? `${ctx.scoreAfter}%`
+          : "—";
       lines.push("", `Score ATS: ${before} → ${after} (após adaptação do CV)`);
     }
 
@@ -222,9 +234,10 @@ export class InterviewPrepAiService {
     }
 
     if (ctx.jobDescriptionText) {
-      const truncated = ctx.jobDescriptionText.length > 3500
-        ? `${ctx.jobDescriptionText.slice(0, 3500)}…`
-        : ctx.jobDescriptionText;
+      const truncated =
+        ctx.jobDescriptionText.length > 3500
+          ? `${ctx.jobDescriptionText.slice(0, 3500)}…`
+          : ctx.jobDescriptionText;
       lines.push("", "## DESCRIÇÃO DA VAGA", truncated);
     } else {
       lines.push(
@@ -244,9 +257,10 @@ export class InterviewPrepAiService {
           ? "Foque nos pontos da descrição da vaga."
           : "A descrição da vaga não estava disponível — prepare-se com base no cargo e empresa."
       }`,
-      strengthsToHighlight: ctx.structuredAnalysis?.pontosFortes?.slice(0, 3) ?? [
-        "Experiência relevante para o cargo",
-      ],
+      strengthsToHighlight: ctx.structuredAnalysis?.pontosFortes?.slice(
+        0,
+        3,
+      ) ?? ["Experiência relevante para o cargo"],
       likelyRisksOrGaps: ctx.structuredAnalysis?.lacunas?.slice(0, 2) ?? [
         "Possíveis gaps técnicos específicos da vaga",
       ],
@@ -254,7 +268,8 @@ export class InterviewPrepAiService {
         {
           question: `Por que você quer trabalhar na ${ctx.companyName}?`,
           whyItMatters: "Avalia motivação e alinhamento com a empresa.",
-          answerDirection: "Seja específico sobre o que te atrai na empresa e na vaga.",
+          answerDirection:
+            "Seja específico sobre o que te atrai na empresa e na vaga.",
         },
       ],
       questionsCandidateShouldAsk: [
