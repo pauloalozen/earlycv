@@ -2,8 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useCallback, useState, useTransition } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useState,
+  useTransition,
+} from "react";
 import { PageShell } from "@/components/page-shell";
+import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import {
   CLOSED_STATUSES,
   getStatusConfig,
@@ -346,12 +353,20 @@ function EmptyState({
   );
 }
 
-function CandRow({ application }: { application: JobApplicationDto }) {
+function CandRow({
+  application,
+  derivedScore,
+}: {
+  application: JobApplicationDto;
+  derivedScore?: { scoreBefore: number | null; scoreAfter: number | null };
+}) {
   const detailUrl = `/dashboard/candidaturas/${application.id}`;
   const cta = ctaForStatus(application.status, detailUrl);
   const hasCv = Boolean(application.currentCvAdaptationId);
-  const hasScoreAfter = application.scoreAfter !== null;
-  const hasScoreBefore = application.scoreBefore !== null;
+  const scoreBefore = application.scoreBefore ?? derivedScore?.scoreBefore ?? null;
+  const scoreAfter = application.scoreAfter ?? derivedScore?.scoreAfter ?? null;
+  const hasScoreAfter = scoreAfter !== null;
+  const hasScoreBefore = scoreBefore !== null;
   const shortId = `#${application.id.slice(-5).toUpperCase()}`;
   const cfg = getStatusConfig(application.status);
 
@@ -630,7 +645,7 @@ function CandRow({ application }: { application: JobApplicationDto }) {
                   color: "#a8a6a0",
                 }}
               >
-                {application.scoreBefore}%
+                {scoreBefore}%
               </span>
               <span style={{ fontSize: 11, color: "#c0beb4", lineHeight: 1 }}>
                 →
@@ -644,7 +659,7 @@ function CandRow({ application }: { application: JobApplicationDto }) {
                   lineHeight: 1,
                 }}
               >
-                {application.scoreAfter}%
+                {scoreAfter}%
               </span>
             </div>
             <div
@@ -656,8 +671,7 @@ function CandRow({ application }: { application: JobApplicationDto }) {
               }}
             >
               +
-              {(application.scoreAfter as number) -
-                (application.scoreBefore as number)}{" "}
+              {(scoreAfter as number) - (scoreBefore as number)}{" "}
               pts
             </div>
           </>
@@ -674,7 +688,7 @@ function CandRow({ application }: { application: JobApplicationDto }) {
                 fontVariantNumeric: "tabular-nums",
               }}
             >
-              {application.scoreAfter}
+              {scoreAfter}
               <span style={{ fontSize: 18, marginLeft: 1 }}>%</span>
             </div>
             <div
@@ -701,7 +715,7 @@ function CandRow({ application }: { application: JobApplicationDto }) {
                 fontVariantNumeric: "tabular-nums",
               }}
             >
-              {application.scoreBefore}
+              {scoreBefore}
               <span style={{ fontSize: 18, marginLeft: 1 }}>%</span>
             </div>
             <div
@@ -835,14 +849,78 @@ function CandRow({ application }: { application: JobApplicationDto }) {
 
 type Props = {
   initialApplications: JobApplicationDto[];
+  applicationsLoadError?: string | null;
   header: ReactNode;
 };
 
-export function CandidaturasClient({ initialApplications, header }: Props) {
+export function CandidaturasClient({
+  initialApplications,
+  applicationsLoadError = null,
+  header,
+}: Props) {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterKey>("todas");
   const [showCreate, setShowCreate] = useState(false);
   const [, startTransition] = useTransition();
+  const [derivedScores, setDerivedScores] = useState<
+    Record<string, { scoreBefore: number | null; scoreAfter: number | null }>
+  >({});
+
+  useEffect(() => {
+    const targets = initialApplications.filter(
+      (application) =>
+        application.scoreBefore === null &&
+        application.scoreAfter === null &&
+        Boolean(application.currentCvAdaptationId),
+    );
+
+    if (targets.length === 0) return;
+
+    let mounted = true;
+
+    const loadDerivedScores = async () => {
+      const updates: Record<
+        string,
+        { scoreBefore: number | null; scoreAfter: number | null }
+      > = {};
+
+      await Promise.all(
+        targets.map(async (application) => {
+          try {
+            const adaptationId = application.currentCvAdaptationId;
+            if (!adaptationId) return;
+
+            const response = await fetch(
+              `/api/cv-adaptation/${adaptationId}/content`,
+              { cache: "no-store" },
+            );
+            if (!response.ok) return;
+
+            const payload = (await response.json()) as {
+              adaptedContentJson?: unknown;
+            };
+            const signal = extractDashboardAnalysisSignal(
+              payload.adaptedContentJson,
+            );
+            updates[application.id] = {
+              scoreBefore: signal.adjustments.scoreBefore,
+              scoreAfter: signal.adjustments.scoreFinal,
+            };
+          } catch {
+            // no-op
+          }
+        }),
+      );
+
+      if (!mounted || Object.keys(updates).length === 0) return;
+      setDerivedScores((current) => ({ ...current, ...updates }));
+    };
+
+    void loadDerivedScores();
+    return () => {
+      mounted = false;
+    };
+  }, [initialApplications]);
 
   const filteredApplications = initialApplications.filter((app) => {
     const group = FILTERS.find((f) => f.key === filter);
@@ -907,6 +985,45 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
           }}
         >
           <div style={{ paddingTop: 72 }} />
+
+          {applicationsLoadError && (
+            <div
+              style={{
+                marginBottom: 18,
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(185,28,28,0.25)",
+                background: "rgba(254,242,242,0.9)",
+                color: "#7f1d1d",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                fontSize: 13,
+                fontFamily: GEIST,
+              }}
+            >
+              <span>{applicationsLoadError}</span>
+              <button
+                type="button"
+                onClick={() => router.refresh()}
+                style={{
+                  border: "1px solid rgba(127,29,29,0.3)",
+                  background: "#fff",
+                  color: "#7f1d1d",
+                  borderRadius: 8,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: GEIST,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Tentar novamente
+              </button>
+            </div>
+          )}
 
           {/* Page header */}
           <div
@@ -1096,7 +1213,11 @@ export function CandidaturasClient({ initialApplications, header }: Props) {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {filteredApplications.map((app) => (
-                <CandRow key={app.id} application={app} />
+                <CandRow
+                  key={app.id}
+                  application={app}
+                  derivedScore={derivedScores[app.id]}
+                />
               ))}
             </div>
           )}

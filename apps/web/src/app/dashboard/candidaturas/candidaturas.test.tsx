@@ -120,6 +120,7 @@ describe("CandidaturasClient", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("1. empty state when no applications exist", () => {
@@ -311,12 +312,49 @@ describe("CandidaturasClient", () => {
     expect(screen.getByText("OFERTA")).toBeInTheDocument();
     expect(screen.getByText("CONTRATADO")).toBeInTheDocument();
   });
+
+  it("10. shows derived scores when application scores are null", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        adaptedContentJson: {
+          projecao_melhoria: {
+            score_atual: 55,
+            score_pos_otimizacao: 75,
+          },
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const apps = [
+      makeApp({
+        id: "a1",
+        jobTitle: "Dev Fullstack",
+        companyName: "Delta",
+        status: "INTERVIEW",
+        currentCvAdaptationId: "adapt-1",
+        scoreBefore: null,
+        scoreAfter: null,
+      }),
+    ];
+
+    render(<CandidaturasClient initialApplications={apps} header={null} />);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/cv-adaptation/adapt-1/content",
+        { cache: "no-store" },
+      );
+    });
+  });
 });
 
 describe("DetailClient", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("7. update status panel calls updateJobApplicationStatus with correct args", async () => {
