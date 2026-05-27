@@ -22,6 +22,7 @@ import {
   getGuestAnalysisRaw,
 } from "@/lib/guest-analysis-storage";
 import { getAuthStatus } from "@/lib/session-actions";
+import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
 import { getAtsScoreColors } from "./ats-score-colors";
 import { buildContentFetchErrorMessage } from "./content-fetch-error";
 import { shouldPersistGuestAnalysis } from "./guest-analysis-persistence";
@@ -1163,20 +1164,11 @@ export default function ResultadoPage() {
     : [];
   const effectiveSelected =
     frozenKeywords.length > 0 ? new Set(frozenKeywords) : selecionadas;
-  const planosBuyCreditsHref = (() => {
-    if (!reviewAdaptationId) return "/planos";
-    const params = new URLSearchParams({
-      aid: reviewAdaptationId,
-      source: "resultado-buy-credits",
-    });
-    for (const keyword of effectiveSelected) {
-      const sanitized = keyword.trim();
-      if (sanitized.length > 0) {
-        params.append("kw", sanitized);
-      }
-    }
-    return `/planos?${params.toString()}`;
-  })();
+  const planosBuyCreditsHref = buildCvUnlockPlansHref({
+    adaptationId: reviewAdaptationId,
+    source: "resultado-buy-credits",
+    keywords: Array.from(effectiveSelected),
+  });
   const isKeywordsFrozen = frozenKeywords.length > 0;
   const isGuestView = isAuthenticated !== true && !isDemo;
   const vagaSeed = `${data.vaga.cargo}::${data.vaga.empresa}`;

@@ -9,6 +9,12 @@ import {
   useState,
   useTransition,
 } from "react";
+import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
+import {
+  type DownloadProgressStage,
+  downloadFromApi,
+} from "@/lib/client-download";
+import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
 import { PageShell } from "@/components/page-shell";
 import { ALL_STATUSES, getStatusConfig } from "@/lib/job-application-status";
 import type {
@@ -1040,11 +1046,13 @@ function ProximaAcaoCard({
 }
 
 function CvAdaptadoCard({
+  applicationId,
   cvAdaptations,
   companyName,
   jobTitle,
   scoreAfter,
 }: {
+  applicationId: string;
   cvAdaptations: JobApplicationDetailDto["cvAdaptations"];
   companyName: string;
   jobTitle: string;
@@ -1053,6 +1061,102 @@ function CvAdaptadoCard({
   if (cvAdaptations.length === 0) return null;
   const latest = cvAdaptations[0];
   const cvName = `CV-${companyName.replace(/\s+/g, "-")}-${jobTitle.replace(/\s+/g, "-")}.pdf`;
+  const [hasCredits, setHasCredits] = useState<boolean | null>(null);
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+  const [wasUnlockedInSession, setWasUnlockedInSession] = useState(false);
+  const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
+  const [downloadStage, setDownloadStage] =
+    useState<DownloadProgressStage | null>(null);
+
+  const plansHref = buildCvUnlockPlansHref({
+    adaptationId: latest.id,
+    source: "dashboard-candidatura-unlock",
+    nextPath: `/dashboard/candidaturas/${applicationId}`,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadCredits = async () => {
+      try {
+        const response = await fetch("/api/plans/me", { cache: "no-store" });
+        if (!response.ok) return;
+        const plan = (await response.json()) as { creditsRemaining?: number | null };
+        if (!mounted) return;
+        if (plan.creditsRemaining === null || plan.creditsRemaining === undefined) {
+          setHasCredits(true);
+          return;
+        }
+        setHasCredits(plan.creditsRemaining > 0);
+      } catch {
+        if (mounted) {
+          setHasCredits(null);
+        }
+      }
+    };
+
+    void loadCredits();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const isUnlocked = latest.isUnlocked || wasUnlockedInSession;
+
+  const handleDownload = async (format: "pdf" | "docx") => {
+    if (!isUnlocked) return;
+    setDownloading(format);
+    setDownloadStage("preparing");
+    try {
+      await downloadFromApi({
+        url: `/api/cv-adaptation/${latest.id}/download?format=${format}`,
+        fallbackFilename: cvName.replace(/\.pdf$/i, format === "pdf" ? ".pdf" : ".docx"),
+        onStageChange: setDownloadStage,
+      });
+    } finally {
+      setDownloading(null);
+      setDownloadStage(null);
+    }
+  };
+
+  const handleRedeem = async () => {
+    if (redeeming) return;
+    setRedeeming(true);
+    setRedeemError(null);
+    try {
+      const response = await fetch(`/api/cv-adaptation/${latest.id}/redeem-credit`, {
+        method: "POST",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        let apiMessage = "Nao foi possivel liberar o CV agora. Tente novamente.";
+        try {
+          const body = (await response.json()) as { message?: string };
+          if (typeof body.message === "string" && body.message.trim()) {
+            apiMessage = body.message;
+          }
+        } catch {
+          // no-op
+        }
+        throw new Error(apiMessage);
+      }
+      setWasUnlockedInSession(true);
+      setHasCredits((current) => (current === true ? false : current));
+    } catch (error) {
+      if (error instanceof TypeError) {
+        setRedeemError(
+          "Nao foi possivel conectar ao servidor. Verifique sua internet e tente novamente.",
+        );
+      } else if (error instanceof Error && error.message) {
+        setRedeemError(error.message);
+      } else {
+        setRedeemError("Nao foi possivel liberar o CV agora. Tente novamente.");
+      }
+    } finally {
+      setRedeeming(false);
+    }
+  };
 
   return (
     <div style={{ ...CARD, padding: "18px 20px" }}>
@@ -1130,9 +1234,54 @@ function CvAdaptadoCard({
           </div>
         </div>
       </div>
-      {latest.isUnlocked ? (
+      {isUnlocked ? (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => void handleDownload("pdf")}
+            disabled={downloading !== null}
+            style={{
+              flex: 1,
+              textAlign: "center",
+              padding: "9px 12px",
+              borderRadius: 8,
+              border: "1px solid rgba(10,10,10,0.12)",
+              background: "#fff",
+              color: "#0a0a0a",
+              fontSize: 12.5,
+              fontWeight: 500,
+              textDecoration: "none",
+              fontFamily: GEIST,
+              cursor: downloading ? "not-allowed" : "pointer",
+            }}
+          >
+            Baixar PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleDownload("docx")}
+            disabled={downloading !== null}
+            style={{
+              flex: 1,
+              textAlign: "center",
+              padding: "9px 12px",
+              borderRadius: 8,
+              border: "1px solid rgba(10,10,10,0.12)",
+              background: "#fff",
+              color: "#0a0a0a",
+              fontSize: 12.5,
+              fontWeight: 500,
+              textDecoration: "none",
+              fontFamily: GEIST,
+              cursor: downloading ? "not-allowed" : "pointer",
+            }}
+          >
+            Baixar DOCX
+          </button>
+        </div>
+      ) : hasCredits === false ? (
         <Link
-          href={`/adaptar/resultado?adaptationId=${latest.id}`}
+          href={plansHref}
           style={{
             display: "block",
             textAlign: "center",
@@ -1147,22 +1296,48 @@ function CvAdaptadoCard({
             fontFamily: GEIST,
           }}
         >
-          Ver resultado
+          Liberar CV
         </Link>
       ) : (
-        <p
+        <button
+          type="button"
+          onClick={() => void handleRedeem()}
+          disabled={redeeming}
           style={{
-            margin: 0,
-            fontFamily: MONO,
-            fontSize: 10,
-            color: "#8a8a85",
+            width: "100%",
             textAlign: "center",
-            letterSpacing: 0.4,
+            padding: "9px 12px",
+            borderRadius: 8,
+            border: "1px solid rgba(10,10,10,0.12)",
+            background: "#fff",
+            color: "#0a0a0a",
+            fontSize: 12.5,
+            fontWeight: 500,
+            textDecoration: "none",
+            fontFamily: GEIST,
+            cursor: redeeming ? "not-allowed" : "pointer",
           }}
         >
-          AGUARDANDO DESBLOQUEIO
+          {redeeming ? "Liberando..." : "Liberar CV"}
+        </button>
+      )}
+      {redeemError && (
+        <p
+          style={{
+            margin: "10px 0 0",
+            fontFamily: GEIST,
+            fontSize: 12,
+            color: "#991b1b",
+          }}
+        >
+          {redeemError}
         </p>
       )}
+      <DownloadProgressOverlay
+        open={downloadStage !== null}
+        stage={downloadStage}
+        format={downloading}
+      />
     </div>
   );
 }
@@ -1661,6 +1836,7 @@ export function DetailClient({ application, header }: Props) {
 
               {hasCvAdaptations && (
                 <CvAdaptadoCard
+                  applicationId={application.id}
                   cvAdaptations={application.cvAdaptations}
                   companyName={application.companyName}
                   jobTitle={application.jobTitle}
