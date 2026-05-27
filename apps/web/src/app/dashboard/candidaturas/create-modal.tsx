@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -35,10 +36,18 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  hasMasterResume: boolean;
 };
 
-export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
+export function CreateApplicationModal({
+  open,
+  onClose,
+  onCreated,
+  hasMasterResume,
+}: Props) {
+  const router = useRouter();
   const [isClient, setIsClient] = useState(false);
+  const [shouldRender, setShouldRender] = useState(false);
   const [visible, setVisible] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +57,6 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
   const [location, setLocation] = useState("");
   const [jobUrl, setJobUrl] = useState("");
   const [jobDescriptionText, setJobDescriptionText] = useState("");
-  const [notes, setNotes] = useState("");
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
@@ -60,9 +68,11 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
 
   useEffect(() => {
     if (open) {
+      setShouldRender(true);
       setTimeout(() => setVisible(true), 10);
     } else {
       setVisible(false);
+      const timeout = setTimeout(() => setShouldRender(false), 220);
       setError(null);
       setPending(false);
       setJobTitle("");
@@ -70,7 +80,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
       setLocation("");
       setJobUrl("");
       setJobDescriptionText("");
-      setNotes("");
+      return () => clearTimeout(timeout);
     }
   }, [open]);
 
@@ -134,7 +144,6 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
         ...(jobDescriptionText.trim()
           ? { jobDescriptionText: jobDescriptionText.trim() }
           : {}),
-        ...(notes.trim() ? { notes: notes.trim() } : {}),
       });
       onCreated();
     } catch (err) {
@@ -145,7 +154,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
     }
   }
 
-  if (!isClient || !open) return null;
+  if (!isClient || !shouldRender) return null;
 
   return createPortal(
     <div
@@ -162,6 +171,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
         padding: "16px",
         opacity: visible ? 1 : 0,
         transition: "opacity 200ms ease",
+        pointerEvents: visible ? "auto" : "none",
       }}
     >
       {/* Backdrop */}
@@ -194,7 +204,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
             : "translateY(6px) scale(0.98)",
           transition:
             "transform 240ms cubic-bezier(0.22,1,0.36,1), opacity 200ms ease",
-          maxHeight: "90dvh",
+          maxHeight: "95dvh",
           overflowY: "auto",
         }}
       >
@@ -249,11 +259,27 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
               análise depois para gerar score e CV adaptado.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            style={{
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 16,
+              color: "#8a8a85",
+              padding: 4,
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
         </div>
 
         <form
           onSubmit={(e) => void handleSubmit(e)}
-          style={{ display: "flex", flexDirection: "column", gap: 14 }}
+          style={{ display: "flex", flexDirection: "column", gap: 12 }}
         >
           {/* Required fields */}
           <div>
@@ -331,31 +357,84 @@ export function CreateApplicationModal({ open, onClose, onCreated }: Props) {
               rows={4}
               style={{
                 ...inputStyle,
-                resize: "vertical",
-                minHeight: 88,
-                lineHeight: 1.5,
-              }}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="cm-notes" style={labelStyle}>
-              Notas iniciais
-            </label>
-            <textarea
-              id="cm-notes"
-              placeholder="Observações sobre a vaga ou processo..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              style={{
-                ...inputStyle,
-                resize: "vertical",
+                resize: "none",
                 minHeight: 72,
                 lineHeight: 1.5,
               }}
             />
           </div>
+
+          {hasMasterResume ? (
+            <div
+              style={{
+                background: "rgba(198,255,58,0.15)",
+                border: "1px solid rgba(110,150,20,0.22)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  letterSpacing: 1,
+                  color: "#3a5008",
+                  fontWeight: 500,
+                  flexShrink: 0,
+                }}
+              >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "#7aa811",
+                    boxShadow: "0 0 6px rgba(198,255,58,0.8)",
+                  }}
+                />
+                SUGESTAO
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  fontSize: 13,
+                  color: "#2a3a08",
+                  lineHeight: 1.5,
+                  fontFamily: GEIST,
+                }}
+              >
+                Quer ja <b>analisar essa vaga</b> com seu CV master? Leva ~24s e
+                a candidatura ganha score, gaps e CV adaptado vinculado.
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  router.push("/adaptar");
+                }}
+                style={{
+                  background: "#0a0a0a",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "9px 14px",
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: GEIST,
+                  flexShrink: 0,
+                }}
+              >
+                Analisar agora →
+              </button>
+            </div>
+          ) : null}
 
           {error && (
             <p

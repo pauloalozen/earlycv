@@ -10,6 +10,7 @@ import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { listJobApplications } from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
+import { getMasterResumeFromList, listMyResumes } from "@/lib/resumes-api";
 import { CandidaturasClient } from "./candidaturas-client";
 
 export const metadata: Metadata = {
@@ -26,10 +27,12 @@ export default async function CandidaturasPage() {
   if (redirectPath) redirect(redirectPath);
   if (!user) redirect(getDefaultAppRedirectPath(null));
 
-  const [applicationsResult, planResult] = await Promise.allSettled([
-    listJobApplications(1, 100),
-    getMyPlan(),
-  ]);
+  const [applicationsResult, planResult, resumesResult] =
+    await Promise.allSettled([
+      listJobApplications(1, 100),
+      getMyPlan(),
+      listMyResumes(),
+    ]);
 
   const applications =
     applicationsResult.status === "fulfilled"
@@ -44,11 +47,16 @@ export default async function CandidaturasPage() {
 
   const planInfo = planResult.status === "fulfilled" ? planResult.value : null;
   const availableCredits = toHeaderAvailableCredits(planInfo);
+  const hasMasterResume =
+    resumesResult.status === "fulfilled"
+      ? Boolean(await getMasterResumeFromList(resumesResult.value))
+      : false;
 
   return (
     <CandidaturasClient
       initialApplications={applications}
       applicationsLoadError={applicationsLoadError}
+      hasMasterResume={hasMasterResume}
       header={
         <AppHeader
           userName={user.name}

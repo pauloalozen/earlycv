@@ -363,7 +363,8 @@ function CandRow({
   const detailUrl = `/dashboard/candidaturas/${application.id}`;
   const cta = ctaForStatus(application.status, detailUrl);
   const hasCv = Boolean(application.currentCvAdaptationId);
-  const scoreBefore = application.scoreBefore ?? derivedScore?.scoreBefore ?? null;
+  const scoreBefore =
+    application.scoreBefore ?? derivedScore?.scoreBefore ?? null;
   const scoreAfter = application.scoreAfter ?? derivedScore?.scoreAfter ?? null;
   const hasScoreAfter = scoreAfter !== null;
   const hasScoreBefore = scoreBefore !== null;
@@ -670,9 +671,7 @@ function CandRow({
                 color: "#4a8a20",
               }}
             >
-              +
-              {(scoreAfter as number) - (scoreBefore as number)}{" "}
-              pts
+              +{(scoreAfter as number) - (scoreBefore as number)} pts
             </div>
           </>
         ) : hasScoreAfter ? (
@@ -850,12 +849,14 @@ function CandRow({
 type Props = {
   initialApplications: JobApplicationDto[];
   applicationsLoadError?: string | null;
+  hasMasterResume: boolean;
   header: ReactNode;
 };
 
 export function CandidaturasClient({
   initialApplications,
   applicationsLoadError = null,
+  hasMasterResume,
   header,
 }: Props) {
   const router = useRouter();
@@ -1239,6 +1240,7 @@ export function CandidaturasClient({
         open={showCreate}
         onClose={() => setShowCreate(false)}
         onCreated={handleCreated}
+        hasMasterResume={hasMasterResume}
       />
     </PageShell>
   );
