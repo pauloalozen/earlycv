@@ -2,190 +2,659 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 
-import type { InterviewPrepContent, InterviewPrepDto } from "@/lib/job-applications-api";
+import type { InterviewPrepDto } from "@/lib/job-applications-api";
 import { generateOrGetInterviewPrep } from "@/lib/job-applications-api";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
-
-const CARD: React.CSSProperties = {
-  background: "#fafaf6",
-  border: "1px solid rgba(10,10,10,0.08)",
-  borderRadius: 12,
-};
 
 type Props = {
   applicationId: string;
   initialPrep: InterviewPrepDto | null;
   open: boolean;
   onClose: () => void;
+  jobTitle: string;
+  company: string;
+  scoreAfter?: number | null;
+  nextActionAt?: string | null;
 };
 
-function SectionBlock({
+function PrepChip({ label }: { label: string }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        background: "#fff",
+        border: "1px solid rgba(10,10,10,0.10)",
+        borderRadius: 999,
+        padding: "4px 9px",
+        fontFamily: MONO,
+        fontSize: 10,
+        color: "#3a3a36",
+        letterSpacing: 0.3,
+        fontWeight: 500,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function PrepSection({
+  n,
   title,
+  tone,
   children,
 }: {
+  n: string;
   title: string;
+  tone?: "green" | "yellow";
   children: React.ReactNode;
 }) {
+  const accent =
+    tone === "green"
+      ? {
+          color: "#3a5008",
+          border: "1px solid rgba(110,150,20,0.22)",
+          bg: "rgba(198,255,58,0.06)",
+        }
+      : tone === "yellow"
+        ? {
+            color: "#7a5a04",
+            border: "1px solid rgba(180,140,10,0.22)",
+            bg: "rgba(245,197,24,0.06)",
+          }
+        : {
+            color: "#0a0a0a",
+            border: "1px solid rgba(10,10,10,0.08)",
+            bg: "#fafaf6",
+          };
   return (
-    <div style={{ ...CARD, padding: "16px 18px", marginBottom: 12 }}>
-      <p
+    <div style={{ marginBottom: 22 }}>
+      <div
         style={{
-          margin: "0 0 10px",
-          fontFamily: MONO,
-          fontSize: 10,
-          letterSpacing: "0.9px",
-          color: "#8a8a85",
-          fontWeight: 500,
-          textTransform: "uppercase",
+          display: "flex",
+          alignItems: "baseline",
+          gap: 12,
+          marginBottom: 10,
         }}
       >
-        {title}
-      </p>
-      {children}
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            letterSpacing: 1.2,
+            color: "#8a8a85",
+            fontWeight: 500,
+          }}
+        >
+          {n}
+        </span>
+        <span
+          style={{
+            fontSize: 18,
+            fontWeight: 500,
+            letterSpacing: -0.4,
+            color: accent.color,
+          }}
+        >
+          {title}
+        </span>
+      </div>
+      <div
+        style={{
+          background: accent.bg,
+          border: accent.border,
+          borderRadius: 14,
+          padding: "18px 22px",
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
 
-function StringList({ items }: { items: string[] }) {
+function PrepBullet({
+  kicker,
+  body,
+  last,
+}: {
+  kicker: string;
+  body: string;
+  last?: boolean;
+}) {
   return (
-    <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
-      {items.map((item, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: list items are strings with no stable keys
-        <li key={i} style={{ display: "flex", gap: 8, fontSize: 13.5, color: "#0a0a0a", lineHeight: 1.55 }}>
-          <span style={{ color: "#c6ff3a", flexShrink: 0, marginTop: 2 }}>→</span>
-          <span>{item}</span>
+    <div
+      style={{
+        padding: "10px 0",
+        borderBottom: last ? "none" : "1px dashed rgba(10,10,10,0.08)",
+      }}
+    >
+      <div
+        style={{
+          marginBottom: 3,
+          fontFamily: MONO,
+          fontSize: 9.5,
+          letterSpacing: 1,
+          color: "#8a8a85",
+          fontWeight: 500,
+        }}
+      >
+        {kicker}
+      </div>
+      <div style={{ fontSize: 13, color: "#3a3a36", lineHeight: 1.55 }}>
+        {body}
+      </div>
+    </div>
+  );
+}
+
+function PrepQA({
+  q,
+  why,
+  direction,
+  last,
+}: {
+  q: string;
+  why: string;
+  direction: string;
+  last?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        padding: "12px 0",
+        borderBottom: last ? "none" : "1px dashed rgba(10,10,10,0.08)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 600,
+          color: "#0a0a0a",
+          marginBottom: why ? 5 : 7,
+          letterSpacing: -0.2,
+          display: "flex",
+          gap: 8,
+        }}
+      >
+        <span style={{ color: "#8a8a85", flexShrink: 0 }}>›</span>
+        <span>{q}</span>
+      </div>
+      {why && (
+        <div
+          style={{
+            fontSize: 12,
+            color: "#6a6560",
+            fontStyle: "italic",
+            marginBottom: 7,
+            paddingLeft: 16,
+            lineHeight: 1.5,
+          }}
+        >
+          {why}
+        </div>
+      )}
+      <div
+        style={{
+          background: "#fff",
+          border: "1px solid rgba(10,10,10,0.06)",
+          borderRadius: 8,
+          padding: "10px 12px",
+        }}
+      >
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 9.5,
+            letterSpacing: 1,
+            color: "#7aa811",
+            fontWeight: 500,
+            marginRight: 8,
+          }}
+        >
+          LINHA
+        </span>
+        <span style={{ fontSize: 12.5, color: "#3a3a36", lineHeight: 1.55 }}>
+          {direction}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function BulletList({ items }: { items: string[] }) {
+  return (
+    <ul
+      style={{
+        listStyle: "none",
+        padding: 0,
+        margin: 0,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      {items.map((item) => (
+        <li
+          key={item}
+          style={{
+            fontSize: 13.5,
+            color: "#2a2a28",
+            lineHeight: 1.55,
+            paddingLeft: 14,
+            position: "relative",
+          }}
+        >
+          <span
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 9,
+              width: 6,
+              height: 1,
+              background: "rgba(10,10,10,0.3)",
+            }}
+          />
+          {item}
         </li>
       ))}
     </ul>
   );
 }
 
-function QuestionBlock({ q }: { q: InterviewPrepContent["questionsTheyMayAsk"][number] }) {
-  return (
-    <div
-      style={{
-        padding: "10px 12px",
-        borderRadius: 9,
-        background: "rgba(10,10,10,0.03)",
-        border: "1px solid rgba(10,10,10,0.06)",
-        marginBottom: 8,
-      }}
-    >
-      <p
-        style={{
-          margin: "0 0 6px",
-          fontSize: 13.5,
-          fontWeight: 500,
-          color: "#0a0a0a",
-          lineHeight: 1.45,
-        }}
-      >
-        {q.question}
-      </p>
-      <p
-        style={{
-          margin: "0 0 4px",
-          fontSize: 12,
-          color: "#6a6560",
-          fontStyle: "italic",
-        }}
-      >
-        {q.whyItMatters}
-      </p>
-      <p
-        style={{
-          margin: 0,
-          fontSize: 13,
-          color: "#45443e",
-          lineHeight: 1.55,
-        }}
-      >
-        {q.answerDirection}
-      </p>
-    </div>
-  );
-}
-
-function PrepContent({ prep }: { prep: InterviewPrepDto }) {
+function PrepContent({
+  prep,
+  jobTitle,
+  company,
+  scoreAfter,
+  nextActionAt,
+  onClose,
+}: {
+  prep: InterviewPrepDto;
+  jobTitle: string;
+  company: string;
+  scoreAfter?: number | null;
+  nextActionAt?: string | null;
+  onClose: () => void;
+}) {
   const c = prep.generatedContentJson;
+
+  const chips = [
+    "Vaga + JD",
+    "Análise",
+    ...(scoreAfter != null ? [`CV adaptado (score ${scoreAfter}%)`] : []),
+    ...(c.likelyRisksOrGaps.length > 0
+      ? [`Gaps (${c.likelyRisksOrGaps.length})`]
+      : []),
+  ];
+
+  let sectionN = 0;
+  const nextN = () => {
+    sectionN += 1;
+    return String(sectionN).padStart(2, "0");
+  };
+
   return (
     <div>
+      {/* Rich header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 20,
+          marginBottom: 20,
+          paddingBottom: 20,
+          borderBottom: "1px solid rgba(10,10,10,0.07)",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          {/* Kicker */}
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              fontFamily: MONO,
+              fontSize: 10.5,
+              letterSpacing: 1.2,
+              color: "#3a5008",
+              fontWeight: 500,
+              marginBottom: 10,
+              background: "rgba(198,255,58,0.18)",
+              padding: "4px 9px 4px 8px",
+              borderRadius: 999,
+              border: "1px solid rgba(110,150,20,0.22)",
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#7aa811",
+                boxShadow: "0 0 6px rgba(198,255,58,0.7)",
+                flexShrink: 0,
+              }}
+            />
+            PREPARAÇÃO COM IA · BASEADA NO SEU CV
+          </div>
+
+          {/* H1 */}
+          <div
+            style={{
+              fontSize: 30,
+              fontWeight: 500,
+              letterSpacing: -1.1,
+              lineHeight: 1.05,
+              marginBottom: 9,
+              fontFamily: GEIST,
+            }}
+          >
+            Preparar{" "}
+            <em
+              style={{
+                fontStyle: "italic",
+                fontWeight: 400,
+              }}
+            >
+              entrevista.
+            </em>
+          </div>
+
+          {/* Sub */}
+          <div
+            style={{
+              fontSize: 13.5,
+              color: "#5a5a55",
+              lineHeight: 1.5,
+              marginBottom: 12,
+              fontFamily: GEIST,
+            }}
+          >
+            <strong style={{ color: "#0a0a0a" }}>
+              {jobTitle} · {company}
+            </strong>
+            {nextActionAt &&
+              (() => {
+                const d = new Date(nextActionAt);
+                const date = d.toLocaleDateString("pt-BR", {
+                  day: "2-digit",
+                  month: "short",
+                });
+                const time = d.toLocaleTimeString("pt-BR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+                return ` · ${date} · ${time}`;
+              })()}
+          </div>
+
+          {/* Chips */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {chips.map((chip) => (
+              <PrepChip key={chip} label={chip} />
+            ))}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexShrink: 0,
+          }}
+        >
+          <button
+            type="button"
+            style={{
+              background: "#fff",
+              color: "#0a0a0a",
+              border: "1px solid rgba(10,10,10,0.15)",
+              borderRadius: 8,
+              padding: "8px 12px",
+              fontSize: 12.5,
+              fontWeight: 500,
+              cursor: "default",
+              fontFamily: GEIST,
+            }}
+          >
+            Exportar PDF
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar preparação"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              border: "1px solid rgba(10,10,10,0.10)",
+              background: "transparent",
+              cursor: "pointer",
+              color: "#6a6560",
+              fontSize: 16,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {/* Safety notice */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          background: "#fff",
+          border: "1px solid rgba(10,10,10,0.08)",
+          borderRadius: 10,
+          padding: "11px 14px",
+          marginBottom: 26,
+        }}
+      >
+        <div
+          style={{
+            width: 20,
+            height: 20,
+            borderRadius: "50%",
+            background: "#0a0a0a",
+            color: "#fafaf6",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 11,
+            fontWeight: 600,
+            fontStyle: "italic",
+            flexShrink: 0,
+          }}
+        >
+          i
+        </div>
+        <div style={{ fontSize: 12.5, color: "#5a5a55", lineHeight: 1.5 }}>
+          Não inventamos experiências. Linhas de resposta são sugestões baseadas
+          em pontos reais do seu CV — adapte ao tom da entrevista.
+        </div>
+      </div>
+
+      {/* 01 · Estratégia */}
       {c.strategySummary && c.strategySummary.trim().length > 0 && (
-        <SectionBlock title="Estratégia geral">
-          <p style={{ margin: 0, fontSize: 13.5, color: "#0a0a0a", lineHeight: 1.65 }}>
+        <PrepSection n={nextN()} title="Estratégia">
+          <div style={{ fontSize: 14, color: "#2a2a28", lineHeight: 1.65 }}>
             {c.strategySummary}
-          </p>
-        </SectionBlock>
+          </div>
+        </PrepSection>
       )}
 
+      {/* 02 · Pontos fortes */}
       {c.strengthsToHighlight.length > 0 && (
-        <SectionBlock title="Pontos fortes para destacar">
-          <StringList items={c.strengthsToHighlight} />
-        </SectionBlock>
-      )}
-
-      {c.likelyRisksOrGaps.length > 0 && (
-        <SectionBlock title="Riscos ou gaps prováveis">
-          <StringList items={c.likelyRisksOrGaps} />
-        </SectionBlock>
-      )}
-
-      {c.questionsTheyMayAsk.length > 0 && (
-        <SectionBlock title="Perguntas que podem fazer">
-          {c.questionsTheyMayAsk.map((q, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: questions have no stable keys
-            <QuestionBlock key={i} q={q} />
+        <PrepSection
+          n={nextN()}
+          title="Pontos fortes para destacar"
+          tone="green"
+        >
+          {c.strengthsToHighlight.map((item, i) => (
+            <PrepBullet
+              key={item}
+              kicker="PONTO"
+              body={item}
+              last={i === c.strengthsToHighlight.length - 1}
+            />
           ))}
-        </SectionBlock>
+        </PrepSection>
       )}
 
+      {/* 03 · Riscos / gaps */}
+      {c.likelyRisksOrGaps.length > 0 && (
+        <PrepSection n={nextN()} title="Riscos / gaps prováveis" tone="yellow">
+          {c.likelyRisksOrGaps.map((item, i) => (
+            <PrepBullet
+              key={item}
+              kicker="GAP"
+              body={item}
+              last={i === c.likelyRisksOrGaps.length - 1}
+            />
+          ))}
+        </PrepSection>
+      )}
+
+      {/* 04 · Perguntas que podem fazer */}
+      {c.questionsTheyMayAsk.length > 0 && (
+        <PrepSection n={nextN()} title="Perguntas que podem te fazer">
+          {c.questionsTheyMayAsk.map((q, i) => (
+            <PrepQA
+              key={q.question}
+              q={q.question}
+              why={q.whyItMatters}
+              direction={q.answerDirection}
+              last={i === c.questionsTheyMayAsk.length - 1}
+            />
+          ))}
+        </PrepSection>
+      )}
+
+      {/* 05 · Perguntas para você fazer */}
       {c.questionsCandidateShouldAsk.length > 0 && (
-        <SectionBlock title="Perguntas para fazer à empresa">
-          <StringList items={c.questionsCandidateShouldAsk} />
-        </SectionBlock>
+        <PrepSection n={nextN()} title="Perguntas que você pode fazer">
+          <BulletList items={c.questionsCandidateShouldAsk} />
+        </PrepSection>
       )}
 
+      {/* 06 · Postura recomendada */}
       {c.recommendedPosture.length > 0 && (
-        <SectionBlock title="Postura recomendada">
-          <StringList items={c.recommendedPosture} />
-        </SectionBlock>
+        <PrepSection n={nextN()} title="Postura recomendada">
+          <BulletList items={c.recommendedPosture} />
+        </PrepSection>
       )}
 
+      {/* 07 · Checklist final */}
       {c.finalChecklist.length > 0 && (
-        <SectionBlock title="Checklist final">
-          <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
-            {c.finalChecklist.map((item, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: checklist items have no stable keys
-              <li key={i} style={{ display: "flex", gap: 8, fontSize: 13.5, color: "#0a0a0a", lineHeight: 1.55 }}>
+        <PrepSection n={nextN()} title="Checklist final">
+          <ul
+            style={{
+              listStyle: "none",
+              padding: 0,
+              margin: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+            }}
+          >
+            {c.finalChecklist.map((item) => (
+              <li
+                key={item}
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  fontSize: 13.5,
+                  color: "#0a0a0a",
+                  lineHeight: 1.55,
+                }}
+              >
                 <span style={{ color: "#405410", flexShrink: 0 }}>☑</span>
                 <span>{item}</span>
               </li>
             ))}
           </ul>
-        </SectionBlock>
+        </PrepSection>
       )}
 
-      <p
+      {/* Footer */}
+      <div
         style={{
-          margin: "16px 0 0",
-          fontFamily: MONO,
-          fontSize: 10,
-          color: "#8a8a85",
-          letterSpacing: "0.5px",
-          textAlign: "center",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          paddingTop: 16,
+          borderTop: "1px solid rgba(10,10,10,0.08)",
+          marginTop: 8,
+          flexWrap: "wrap",
+          gap: 10,
         }}
       >
-        Gerado em{" "}
-        {new Date(prep.generatedAt).toLocaleDateString("pt-BR", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })}
-      </p>
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            color: "#8a8a85",
+            letterSpacing: 0.3,
+          }}
+        >
+          Gerado em{" "}
+          {new Date(prep.generatedAt).toLocaleDateString("pt-BR", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            style={{
+              background: "#fff",
+              color: "#0a0a0a",
+              border: "1px solid rgba(10,10,10,0.15)",
+              borderRadius: 8,
+              padding: "8px 12px",
+              fontSize: 12.5,
+              fontWeight: 500,
+              cursor: "default",
+              fontFamily: GEIST,
+            }}
+          >
+            Salvar como nota
+          </button>
+          <button
+            type="button"
+            style={{
+              background: "#0a0a0a",
+              color: "#fff",
+              border: "none",
+              borderRadius: 10,
+              padding: "10px 16px",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "default",
+              fontFamily: GEIST,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+            }}
+          >
+            Marcar entrevista como feita →
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -195,20 +664,57 @@ export function InterviewPrepDrawer({
   initialPrep,
   open,
   onClose,
+  jobTitle,
+  company,
+  scoreAfter,
+  nextActionAt,
 }: Props) {
+  const TRANSITION_MS = 280;
+
   const [prep, setPrep] = useState<InterviewPrepDto | null>(initialPrep);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [isRendered, setIsRendered] = useState(false);
   const [visible, setVisible] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => setVisible(true), 10);
-    } else {
-      setVisible(false);
-      setError(null);
+      // Compensate scrollbar width before hiding to avoid layout shift
+      const scrollW = window.innerWidth - document.documentElement.clientWidth;
+      if (scrollW > 0) {
+        document.body.style.paddingRight = `${scrollW}px`;
+      }
+      document.documentElement.style.overflow = "hidden";
+      document.documentElement.style.scrollbarWidth = "none";
+      setIsRendered(true);
+      // Double rAF ensures the browser has committed the initial paint
+      // (opacity:0, translateX(100%)) before starting the transition in
+      let raf1: number;
+      let raf2: number;
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setVisible(true));
+      });
+      return () => {
+        cancelAnimationFrame(raf1);
+        cancelAnimationFrame(raf2);
+      };
     }
+    // Exit: animate out first, then unmount and restore scroll
+    setVisible(false);
+    setError(null);
+    const t = setTimeout(() => {
+      setIsRendered(false);
+      document.documentElement.style.overflow = "";
+      document.documentElement.style.scrollbarWidth = "";
+      document.body.style.paddingRight = "";
+    }, TRANSITION_MS);
+    return () => {
+      clearTimeout(t);
+      document.documentElement.style.overflow = "";
+      document.documentElement.style.scrollbarWidth = "";
+      document.body.style.paddingRight = "";
+    };
   }, [open]);
 
   useEffect(() => {
@@ -236,7 +742,7 @@ export function InterviewPrepDrawer({
     });
   }
 
-  if (!open) return null;
+  if (!isRendered) return null;
 
   return (
     <>
@@ -249,9 +755,10 @@ export function InterviewPrepDrawer({
           inset: 0,
           zIndex: 100,
           background: "rgba(10,10,10,0.45)",
-          backdropFilter: "blur(4px)",
+          backdropFilter: visible ? "blur(3px)" : "none",
           opacity: visible ? 1 : 0,
-          transition: "opacity 200ms ease",
+          pointerEvents: visible ? "auto" : "none",
+          transition: "opacity 200ms ease, backdrop-filter 200ms ease",
         }}
       />
 
@@ -267,220 +774,308 @@ export function InterviewPrepDrawer({
           right: 0,
           bottom: 0,
           zIndex: 101,
-          width: "min(520px, 96vw)",
-          background: "#f4f3ed",
+          width: "min(780px, 96vw)",
+          background: "#fafaf6",
           borderLeft: "1px solid rgba(10,10,10,0.10)",
-          boxShadow: "-8px 0 40px -10px rgba(10,10,10,0.20)",
+          boxShadow: "-24px 0 60px -10px rgba(10,10,10,0.28)",
           display: "flex",
           flexDirection: "column",
           transform: visible ? "translateX(0)" : "translateX(100%)",
           transition: "transform 280ms cubic-bezier(0.22,1,0.36,1)",
         }}
       >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "16px 20px",
-            borderBottom: "1px solid rgba(10,10,10,0.08)",
-            flexShrink: 0,
-          }}
-        >
-          <div>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 15,
-                fontWeight: 500,
-                color: "#0a0a0a",
-                fontFamily: GEIST,
-              }}
-            >
-              Preparação para entrevista
-            </p>
-            {prep && (
-              <p
-                style={{
-                  margin: "2px 0 0",
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  color: "#8a8a85",
-                  letterSpacing: "0.5px",
-                }}
-              >
-                Briefing gerado
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar preparação"
+        {prep ? (
+          /* Filled state — rich content with header embedded */
+          <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              border: "1px solid rgba(10,10,10,0.10)",
-              background: "transparent",
-              cursor: "pointer",
-              color: "#6a6560",
+              flex: 1,
+              overflowY: "auto",
+              padding: "28px 32px 32px",
             }}
           >
-            <svg
-              aria-hidden="true"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Body */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
-          {prep ? (
-            <PrepContent prep={prep} />
-          ) : (
+            <PrepContent
+              prep={prep}
+              jobTitle={jobTitle}
+              company={company}
+              scoreAfter={scoreAfter}
+              nextActionAt={nextActionAt}
+              onClose={onClose}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Minimal header for empty state */}
             <div
               style={{
                 display: "flex",
-                flexDirection: "column",
                 alignItems: "center",
-                textAlign: "center",
-                padding: "56px 24px 48px",
-                gap: 18,
+                justifyContent: "space-between",
+                padding: "16px 24px",
+                borderBottom: "1px solid rgba(10,10,10,0.08)",
+                flexShrink: 0,
               }}
             >
-              <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: "50%",
-                  background: "rgba(10,10,10,0.06)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <svg
-                  aria-hidden="true"
-                  width="22"
-                  height="22"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#8a8a85"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M9 11l3 3L22 4" />
-                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                </svg>
-              </div>
-
               <div>
                 <p
                   style={{
                     margin: 0,
-                    fontSize: 15,
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    letterSpacing: 1.2,
+                    color: "#8a8a85",
+                    fontWeight: 500,
+                  }}
+                >
+                  PREPARAÇÃO COM IA
+                </p>
+                <p
+                  style={{
+                    margin: "3px 0 0",
+                    fontSize: 14,
                     fontWeight: 500,
                     color: "#0a0a0a",
                     fontFamily: GEIST,
                   }}
                 >
-                  Gerar preparação para entrevista
-                </p>
-                <p
-                  style={{
-                    margin: "6px 0 0",
-                    fontSize: 13.5,
-                    color: "#6a6560",
-                    lineHeight: 1.6,
-                    maxWidth: 340,
-                    fontFamily: GEIST,
-                  }}
-                >
-                  Usamos os dados da sua candidatura e análise de CV para gerar
-                  um briefing prático: pontos fortes, gaps, perguntas prováveis
-                  e checklist final.
+                  {jobTitle} · {company}
                 </p>
               </div>
-
-              {error && (
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 12.5,
-                    color: "#991b1b",
-                    background: "#fee2e2",
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    maxWidth: 340,
-                  }}
-                >
-                  {error}
-                </p>
-              )}
-
               <button
                 type="button"
-                onClick={handleGenerate}
-                disabled={pending}
+                onClick={onClose}
+                aria-label="Fechar preparação"
                 style={{
-                  display: "inline-flex",
+                  display: "flex",
                   alignItems: "center",
-                  gap: 8,
-                  padding: "10px 22px",
-                  borderRadius: 10,
-                  border: "none",
-                  background: pending ? "rgba(10,10,10,0.12)" : "#0a0a0a",
-                  color: pending ? "#8a8a85" : "#fafaf6",
-                  fontSize: 13.5,
-                  fontWeight: 500,
-                  cursor: pending ? "not-allowed" : "pointer",
-                  fontFamily: GEIST,
-                  transition: "all 140ms ease",
+                  justifyContent: "center",
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  border: "1px solid rgba(10,10,10,0.10)",
+                  background: "transparent",
+                  cursor: "pointer",
+                  color: "#6a6560",
                 }}
               >
-                {pending ? (
-                  <>
-                    <svg
-                      aria-hidden="true"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      style={{ animation: "spin 1s linear infinite" }}
-                    >
-                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                    </svg>
-                    Gerando…
-                  </>
-                ) : (
-                  "Gerar preparação"
-                )}
+                <svg
+                  aria-hidden="true"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
               </button>
-
-              <style>{`
-                @keyframes spin { to { transform: rotate(360deg); } }
-              `}</style>
             </div>
-          )}
-        </div>
+
+            {/* Empty state body */}
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                padding: "0 32px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: 460,
+                  textAlign: "center",
+                  padding: "48px 0",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 20,
+                }}
+              >
+                {/* Icon */}
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: "50%",
+                    background: "rgba(198,255,58,0.14)",
+                    border: "1px solid rgba(110,150,20,0.22)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#7aa811"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                </div>
+
+                {/* Kicker */}
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    letterSpacing: 1.2,
+                    color: "#8a8a85",
+                    fontWeight: 500,
+                  }}
+                >
+                  6 SEÇÕES · BASEADO EM VAGA + CV + ANÁLISE
+                </div>
+
+                <div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 22,
+                      fontWeight: 500,
+                      letterSpacing: -0.6,
+                      color: "#0a0a0a",
+                      fontFamily: GEIST,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    Gerar preparação para entrevista
+                  </p>
+                  <p
+                    style={{
+                      margin: "10px 0 0",
+                      fontSize: 13.5,
+                      color: "#6a6560",
+                      lineHeight: 1.65,
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    Estratégia, pontos fortes, gaps prováveis, perguntas com
+                    linhas de resposta e checklist final — baseado nos dados
+                    reais da sua candidatura.
+                  </p>
+                </div>
+
+                {/* Safety note */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 9,
+                    background: "#fff",
+                    border: "1px solid rgba(10,10,10,0.08)",
+                    borderRadius: 10,
+                    padding: "10px 13px",
+                    textAlign: "left",
+                    width: "100%",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: "50%",
+                      background: "#0a0a0a",
+                      color: "#fafaf6",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fontStyle: "italic",
+                      flexShrink: 0,
+                      marginTop: 1,
+                    }}
+                  >
+                    i
+                  </div>
+                  <div
+                    style={{ fontSize: 12, color: "#5a5a55", lineHeight: 1.5 }}
+                  >
+                    Não inventamos experiências. Linhas de resposta são
+                    sugestões baseadas em pontos reais do seu CV.
+                  </div>
+                </div>
+
+                {error && (
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 12.5,
+                      color: "#991b1b",
+                      background: "#fee2e2",
+                      padding: "8px 14px",
+                      borderRadius: 8,
+                      width: "100%",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={pending}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "12px 28px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: pending ? "rgba(10,10,10,0.12)" : "#0a0a0a",
+                    color: pending ? "#8a8a85" : "#fafaf6",
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: pending ? "not-allowed" : "pointer",
+                    fontFamily: GEIST,
+                    transition: "all 140ms ease",
+                    boxShadow: pending ? "none" : "0 4px 14px rgba(0,0,0,0.14)",
+                  }}
+                >
+                  {pending ? (
+                    <>
+                      <svg
+                        aria-hidden="true"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        style={{ animation: "spin 1s linear infinite" }}
+                      >
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                      </svg>
+                      Gerando…
+                    </>
+                  ) : (
+                    "Gerar preparação →"
+                  )}
+                </button>
+
+                <style>{`
+                  @keyframes spin { to { transform: rotate(360deg); } }
+                `}</style>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </>
   );

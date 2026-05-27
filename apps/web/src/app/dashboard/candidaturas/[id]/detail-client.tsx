@@ -1685,6 +1685,10 @@ export function DetailClient({ application, header }: Props) {
         initialPrep={application.interviewPrep}
         open={showPrep}
         onClose={() => setShowPrep(false)}
+        jobTitle={application.jobTitle}
+        company={application.companyName}
+        scoreAfter={application.scoreAfter}
+        nextActionAt={application.nextActionAt}
       />
     </PageShell>
   );
