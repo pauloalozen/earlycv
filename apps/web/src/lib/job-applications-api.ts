@@ -84,7 +84,10 @@ export type JobApplicationDto = {
   interviewPrep: { id: string; generatedAt: string } | null;
 };
 
-export type JobApplicationDetailDto = Omit<JobApplicationDto, "interviewPrep"> & {
+export type JobApplicationDetailDto = Omit<
+  JobApplicationDto,
+  "interviewPrep"
+> & {
   interviewPrep: InterviewPrepDto | null;
   cvAdaptations: Array<{
     id: string;
@@ -117,7 +120,10 @@ export async function listJobApplications(
   });
   const response = await apiRequest("GET", `/job-applications?${qs}`);
   if (!response.ok) throw new Error("Falha ao carregar candidaturas");
-  return response.json() as Promise<{ items: JobApplicationDto[]; total: number }>;
+  return response.json() as Promise<{
+    items: JobApplicationDto[];
+    total: number;
+  }>;
 }
 
 export async function getJobApplication(
@@ -135,8 +141,12 @@ export async function createJobApplication(
     jobTitle: input.jobTitle,
     companyName: input.companyName,
     ...(input.location ? { location: input.location } : {}),
-    ...(input.jobUrl ? { jobUrl: input.jobUrl, origin: "imported_url" as const } : { origin: input.origin ?? "manual" }),
-    ...(input.jobDescriptionText ? { jobDescriptionText: input.jobDescriptionText } : {}),
+    ...(input.jobUrl
+      ? { jobUrl: input.jobUrl, origin: "imported_url" as const }
+      : { origin: input.origin ?? "manual" }),
+    ...(input.jobDescriptionText
+      ? { jobDescriptionText: input.jobDescriptionText }
+      : {}),
     ...(input.notes ? { notes: input.notes } : {}),
   });
   if (!response.ok) {
@@ -150,11 +160,9 @@ export async function updateJobApplicationStatus(
   id: string,
   status: JobApplicationStatus,
 ): Promise<JobApplicationDto> {
-  const response = await apiRequest(
-    "PATCH",
-    `/job-applications/${id}/status`,
-    { status },
-  );
+  const response = await apiRequest("PATCH", `/job-applications/${id}/status`, {
+    status,
+  });
   if (!response.ok) throw new Error("Falha ao atualizar status");
   return response.json() as Promise<JobApplicationDto>;
 }
@@ -163,11 +171,9 @@ export async function addJobApplicationNote(
   id: string,
   note: string,
 ): Promise<JobApplicationDto> {
-  const response = await apiRequest(
-    "POST",
-    `/job-applications/${id}/notes`,
-    { note },
-  );
+  const response = await apiRequest("POST", `/job-applications/${id}/notes`, {
+    note,
+  });
   if (!response.ok) throw new Error("Falha ao salvar nota");
   return response.json() as Promise<JobApplicationDto>;
 }
@@ -179,6 +185,7 @@ export async function generateOrGetInterviewPrep(
     "POST",
     `/job-applications/${id}/interview-prep`,
   );
-  if (!response.ok) throw new Error("Falha ao gerar preparação para entrevista");
+  if (!response.ok)
+    throw new Error("Falha ao gerar preparação para entrevista");
   return response.json() as Promise<InterviewPrepDto>;
 }

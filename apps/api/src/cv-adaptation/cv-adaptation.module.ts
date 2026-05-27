@@ -16,7 +16,12 @@ import { CvAdaptationPublicController } from "./cv-adaptation-public.controller"
 import { CvAdaptationSnapshotCleanupScheduler } from "./cv-adaptation-snapshot-cleanup.scheduler";
 
 @Module({
-  imports: [DatabaseModule, ResumeTemplatesModule, AnalysisProtectionModule, JobApplicationsModule],
+  imports: [
+    DatabaseModule,
+    ResumeTemplatesModule,
+    AnalysisProtectionModule,
+    JobApplicationsModule,
+  ],
   controllers: [CvAdaptationController, CvAdaptationPublicController],
   exports: [CvAdaptationService],
   providers: [

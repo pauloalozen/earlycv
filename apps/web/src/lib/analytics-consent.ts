@@ -66,7 +66,10 @@ export function readAnalyticsConsentState(): AnalyticsConsentState {
       return "unknown";
     }
 
-    if (typeof parsed.expiresAt === "number" && parsed.expiresAt <= Date.now()) {
+    if (
+      typeof parsed.expiresAt === "number" &&
+      parsed.expiresAt <= Date.now()
+    ) {
       storage.removeItem(CONSENT_STORAGE_KEY);
       return "unknown";
     }
@@ -100,7 +103,9 @@ function applyGoogleConsent(state: AnalyticsConsentState) {
   });
 }
 
-export function setAnalyticsConsentState(state: Exclude<AnalyticsConsentState, "unknown">) {
+export function setAnalyticsConsentState(
+  state: Exclude<AnalyticsConsentState, "unknown">,
+) {
   if (!isBrowser()) {
     return;
   }
@@ -159,13 +164,16 @@ export function openAnalyticsConsentPreferences() {
   window.dispatchEvent(new CustomEvent(CONSENT_PREFERENCES_OPEN_EVENT));
 }
 
-export function onAnalyticsConsentPreferencesOpen(listener: () => void): () => void {
+export function onAnalyticsConsentPreferencesOpen(
+  listener: () => void,
+): () => void {
   if (!isBrowser()) {
     return () => {};
   }
 
   window.addEventListener(CONSENT_PREFERENCES_OPEN_EVENT, listener);
-  return () => window.removeEventListener(CONSENT_PREFERENCES_OPEN_EVENT, listener);
+  return () =>
+    window.removeEventListener(CONSENT_PREFERENCES_OPEN_EVENT, listener);
 }
 
 declare global {

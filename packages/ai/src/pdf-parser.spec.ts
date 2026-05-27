@@ -21,7 +21,10 @@ describe("extractTextFromPdf", () => {
     const body = Buffer.alloc(5 * 1024 * 1024 + 1, 0x20);
     const oversized = Buffer.concat([header, body]);
 
-    await assert.rejects(() => extractTextFromPdf(oversized), /limite de tamanho/i);
+    await assert.rejects(
+      () => extractTextFromPdf(oversized),
+      /limite de tamanho/i,
+    );
   });
 
   it("handles successful extraction when pdf-parse works", async () => {

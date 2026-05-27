@@ -1,3 +1,4 @@
+import type { JobApplicationOrigin } from "@prisma/client";
 import {
   IsEnum,
   IsOptional,
@@ -7,8 +8,6 @@ import {
   MinLength,
   ValidateIf,
 } from "class-validator";
-
-import type { JobApplicationOrigin } from "@prisma/client";
 
 export class CreateJobApplicationDto {
   @IsString()

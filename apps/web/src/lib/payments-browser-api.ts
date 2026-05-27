@@ -109,9 +109,9 @@ export async function getBrickCheckoutClient(
   });
 
   if (!response.ok) {
-    const error = (new Error(
+    const error = new Error(
       "Nao foi possivel carregar os dados do checkout.",
-    ) as CheckoutApiError);
+    ) as CheckoutApiError;
     error.status = response.status;
     try {
       const payload = (await response.json()) as {
@@ -141,9 +141,9 @@ export async function submitBrickPaymentClient(
   });
 
   if (!response.ok) {
-    const error = (new Error(
+    const error = new Error(
       "Nao foi possivel validar o pagamento.",
-    ) as CheckoutApiError);
+    ) as CheckoutApiError;
     error.status = response.status;
     try {
       const parsed = (await response.json()) as {

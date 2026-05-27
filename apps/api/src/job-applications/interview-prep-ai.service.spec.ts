@@ -11,7 +11,11 @@ const VALID_INPUT = {
   strengthsToHighlight: ["Node.js sênior", "Experiência em microsserviços"],
   likelyRisksOrGaps: ["Pouca experiência com Go"],
   questionsTheyMayAsk: [
-    { question: "Por que esta empresa?", whyItMatters: "Avalia motivação.", answerDirection: "Seja específico." },
+    {
+      question: "Por que esta empresa?",
+      whyItMatters: "Avalia motivação.",
+      answerDirection: "Seja específico.",
+    },
   ],
   questionsCandidateShouldAsk: ["Como é o time?"],
   recommendedPosture: ["Seja objetivo"],
@@ -23,7 +27,10 @@ const VALID_INPUT = {
 test("accepts a fully valid input without modification", () => {
   const result = validateAndNormalizeInterviewPrep(VALID_INPUT);
   assert.equal(result.strategySummary, "Prepare-se bem.");
-  assert.deepEqual(result.strengthsToHighlight, ["Node.js sênior", "Experiência em microsserviços"]);
+  assert.deepEqual(result.strengthsToHighlight, [
+    "Node.js sênior",
+    "Experiência em microsserviços",
+  ]);
   assert.equal(result.questionsTheyMayAsk.length, 1);
 });
 
@@ -82,7 +89,11 @@ test("removes questions with empty question field", () => {
     strategySummary: "OK.",
     questionsTheyMayAsk: [
       { question: "", whyItMatters: "motivo", answerDirection: "direção" },
-      { question: "Pergunta válida?", whyItMatters: "motivo", answerDirection: "direção" },
+      {
+        question: "Pergunta válida?",
+        whyItMatters: "motivo",
+        answerDirection: "direção",
+      },
     ],
   });
   assert.equal(result.questionsTheyMayAsk.length, 1);
@@ -92,9 +103,7 @@ test("removes questions with empty question field", () => {
 test("fills missing whyItMatters and answerDirection with empty string", () => {
   const result = validateAndNormalizeInterviewPrep({
     strategySummary: "OK.",
-    questionsTheyMayAsk: [
-      { question: "Pergunta?" },
-    ],
+    questionsTheyMayAsk: [{ question: "Pergunta?" }],
   });
   assert.equal(result.questionsTheyMayAsk[0].whyItMatters, "");
   assert.equal(result.questionsTheyMayAsk[0].answerDirection, "");
@@ -112,12 +121,13 @@ test("skips non-object items in questionsTheyMayAsk", () => {
 
 test("throws InterviewPrepValidationError when all sections are empty", () => {
   assert.throws(
-    () => validateAndNormalizeInterviewPrep({
-      strategySummary: "",
-      strengthsToHighlight: [],
-      questionsTheyMayAsk: [],
-      finalChecklist: [],
-    }),
+    () =>
+      validateAndNormalizeInterviewPrep({
+        strategySummary: "",
+        strengthsToHighlight: [],
+        questionsTheyMayAsk: [],
+        finalChecklist: [],
+      }),
     (err: Error) => {
       assert.ok(err instanceof InterviewPrepValidationError);
       assert.match(err.message, /empty/i);
@@ -127,7 +137,9 @@ test("throws InterviewPrepValidationError when all sections are empty", () => {
 });
 
 test("accepts input with only strategySummary filled", () => {
-  const result = validateAndNormalizeInterviewPrep({ strategySummary: "Suficiente." });
+  const result = validateAndNormalizeInterviewPrep({
+    strategySummary: "Suficiente.",
+  });
   assert.equal(result.strategySummary, "Suficiente.");
 });
 
@@ -141,7 +153,9 @@ test("accepts input with no strategySummary but has strengthsToHighlight", () =>
 });
 
 test("accepts input with only finalChecklist filled", () => {
-  const result = validateAndNormalizeInterviewPrep({ finalChecklist: ["Pesquise a empresa."] });
+  const result = validateAndNormalizeInterviewPrep({
+    finalChecklist: ["Pesquise a empresa."],
+  });
   assert.deepEqual(result.finalChecklist, ["Pesquise a empresa."]);
 });
 

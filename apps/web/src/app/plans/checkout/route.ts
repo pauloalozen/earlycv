@@ -31,7 +31,10 @@ async function createCheckoutRedirect(
 
     return Response.redirect(checkout.checkoutUrl, 303);
   } catch {
-    return createPostRedirectResponse(requestUrl, "/planos?error=checkout-failed");
+    return createPostRedirectResponse(
+      requestUrl,
+      "/planos?error=checkout-failed",
+    );
   }
 }
 
@@ -40,7 +43,10 @@ export async function GET(request: Request) {
   const planId = String(url.searchParams.get("plan") ?? "").trim();
 
   if (!isPlanId(planId)) {
-    return createPostRedirectResponse(request.url, "/planos?error=plano-invalido");
+    return createPostRedirectResponse(
+      request.url,
+      "/planos?error=plano-invalido",
+    );
   }
 
   const user = await getCurrentAppUserFromCookies();

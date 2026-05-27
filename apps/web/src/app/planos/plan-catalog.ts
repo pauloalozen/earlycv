@@ -39,7 +39,7 @@ function formatCents(cents: number): { whole: string; decimal: string } {
   return { whole: `R$${reais}`, decimal: `,${centavos}` };
 }
 
-function unitPriceLabel(totalCents: number, qty: number): string {
+function _unitPriceLabel(totalCents: number, qty: number): string {
   const unitReais = (Math.round(totalCents / qty) / 100)
     .toFixed(2)
     .replace(".", ",");

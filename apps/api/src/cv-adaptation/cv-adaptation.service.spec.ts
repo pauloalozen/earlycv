@@ -1874,7 +1874,8 @@ const makeAdaptationRecord = (id = "adapt-1") => ({
   jobApplicationId: null,
   jobTitle: "Engenheiro de Software",
   companyName: "Acme Corp",
-  jobDescriptionText: "Descricao com requisitos tecnicos e responsabilidades claras.",
+  jobDescriptionText:
+    "Descricao com requisitos tecnicos e responsabilidades claras.",
   adaptedContentJson: { sections: [] },
   aiAuditJson: { summary: "ok", sections: [] },
   previewText: "preview",
@@ -1919,7 +1920,7 @@ const makeHookSpy = () => {
 };
 
 const noopStorage = {
-  deleteObject: async () => undefined as void,
+  deleteObject: async () => undefined as undefined,
   getObject: async () => Buffer.alloc(0),
   putObject: async () => "",
 };
@@ -1940,7 +1941,11 @@ test("saveGuestPreview: chama upsertFromCvAdaptation com ANALYZED ao criar nova 
         create: async () => adaptation,
       },
     },
-    {}, {}, {}, {}, {},
+    {},
+    {},
+    {},
+    {},
+    {},
     noopStorage,
     noopTelemetry,
     spy.service,
@@ -1977,7 +1982,11 @@ test("saveGuestPreview: chama upsertFromCvAdaptation com ANALYZED quando adapta�
         findFirst: async () => existing,
       },
     },
-    {}, {}, {}, {}, {},
+    {},
+    {},
+    {},
+    {},
+    {},
     noopStorage,
     noopTelemetry,
     spy.service,
@@ -2017,11 +2026,18 @@ test("claimGuest: chama upsertFromCvAdaptation com CV_READY e origin optimized_c
 
   const service = new CvAdaptationServiceCtor(
     {
-      user: { findUnique: async () => ({ creditsRemaining: 5, internalRole: "user" }) },
+      user: {
+        findUnique: async () => ({ creditsRemaining: 5, internalRole: "user" }),
+      },
       resumeTemplate: { findFirst: async () => null },
-      $transaction: async (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx),
+      $transaction: async (fn: (tx: typeof mockTx) => Promise<unknown>) =>
+        fn(mockTx),
     },
-    {}, {}, {}, {}, {},
+    {},
+    {},
+    {},
+    {},
+    {},
     noopStorage,
     noopTelemetry,
     spy.service,
@@ -2060,13 +2076,19 @@ test("deliverAdaptation: chama upsertFromCvAdaptation com CV_READY após persist
       },
       resume: { create: async () => ({ id: "adapted-resume-1" }) },
     },
-    {}, {}, {}, {}, {},
+    {},
+    {},
+    {},
+    {},
+    {},
     noopStorage,
     noopTelemetry,
     spy.service,
   );
 
-  const svc = service as unknown as { deliverAdaptation: (id: string) => Promise<void> };
+  const svc = service as unknown as {
+    deliverAdaptation: (id: string) => Promise<void>;
+  };
   await svc.deliverAdaptation("adapt-delivered");
 
   assert.equal(spy.calls.length, 1);
@@ -2096,13 +2118,19 @@ test("deliverAdaptation: chamada repetida chama hook duas vezes — dedup delega
         create: async () => ({ id: `adapted-${++resumeCreateCount}` }),
       },
     },
-    {}, {}, {}, {}, {},
+    {},
+    {},
+    {},
+    {},
+    {},
     noopStorage,
     noopTelemetry,
     spy.service,
   );
 
-  const svc = service as unknown as { deliverAdaptation: (id: string) => Promise<void> };
+  const svc = service as unknown as {
+    deliverAdaptation: (id: string) => Promise<void>;
+  };
   await svc.deliverAdaptation("adapt-repeat");
   await svc.deliverAdaptation("adapt-repeat");
 
@@ -2130,13 +2158,19 @@ test("hook repassa cvAdaptationId, jobDescriptionText e userId corretos ao JobAp
       },
       resume: { create: async () => ({ id: "adapted-1" }) },
     },
-    {}, {}, {}, {}, {},
+    {},
+    {},
+    {},
+    {},
+    {},
     noopStorage,
     noopTelemetry,
     spy.service,
   );
 
-  const svc = service as unknown as { deliverAdaptation: (id: string) => Promise<void> };
+  const svc = service as unknown as {
+    deliverAdaptation: (id: string) => Promise<void>;
+  };
   await svc.deliverAdaptation("adapt-fields");
 
   assert.equal(spy.calls.length, 1);
@@ -2162,7 +2196,11 @@ test("hook envia targetStatus correto — regra de não rebaixar status é respo
         create: async () => adaptation,
       },
     },
-    {}, {}, {}, {}, {},
+    {},
+    {},
+    {},
+    {},
+    {},
     noopStorage,
     noopTelemetry,
     spy.service,
@@ -2200,7 +2238,11 @@ test("falha no upsertFromCvAdaptation não quebra fluxo do deliverAdaptation", a
       },
       resume: { create: async () => ({ id: "adapted-1" }) },
     },
-    {}, {}, {}, {}, {},
+    {},
+    {},
+    {},
+    {},
+    {},
     noopStorage,
     noopTelemetry,
     {
@@ -2210,10 +2252,15 @@ test("falha no upsertFromCvAdaptation não quebra fluxo do deliverAdaptation", a
     },
   );
 
-  const svc = service as unknown as { deliverAdaptation: (id: string) => Promise<void> };
+  const svc = service as unknown as {
+    deliverAdaptation: (id: string) => Promise<void>;
+  };
   await svc.deliverAdaptation("adapt-failhook");
 
-  assert.ok(updateCalled, "cvAdaptation.update deve ter sido chamado antes do hook");
+  assert.ok(
+    updateCalled,
+    "cvAdaptation.update deve ter sido chamado antes do hook",
+  );
 });
 
 test("falha no upsertFromCvAdaptation não quebra fluxo do saveGuestPreview", async () => {
@@ -2229,7 +2276,11 @@ test("falha no upsertFromCvAdaptation não quebra fluxo do saveGuestPreview", as
         create: async () => adaptation,
       },
     },
-    {}, {}, {}, {}, {},
+    {},
+    {},
+    {},
+    {},
+    {},
     noopStorage,
     noopTelemetry,
     {
@@ -2246,7 +2297,10 @@ test("falha no upsertFromCvAdaptation não quebra fluxo do saveGuestPreview", as
     adaptedContentJson: {},
   });
 
-  assert.ok(result.id, "saveGuestPreview deve retornar adaptação mesmo com falha no hook");
+  assert.ok(
+    result.id,
+    "saveGuestPreview deve retornar adaptação mesmo com falha no hook",
+  );
 });
 
 test("service mantém comportamento sem jobApplicationsService explícito — backward compat", async () => {
@@ -2263,7 +2317,11 @@ test("service mantém comportamento sem jobApplicationsService explícito — ba
         create: async () => adaptation,
       },
     },
-    {}, {}, {}, {}, {},
+    {},
+    {},
+    {},
+    {},
+    {},
     noopStorage,
     noopTelemetry,
   );
@@ -2275,5 +2333,8 @@ test("service mantém comportamento sem jobApplicationsService explícito — ba
     adaptedContentJson: {},
   });
 
-  assert.ok(result.id, "adaptação deve ser retornada sem jobApplicationsService explícito");
+  assert.ok(
+    result.id,
+    "adaptação deve ser retornada sem jobApplicationsService explícito",
+  );
 });

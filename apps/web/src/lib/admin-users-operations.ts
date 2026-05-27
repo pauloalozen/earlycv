@@ -26,11 +26,20 @@ const adminNavItems: BackofficeNavItem[] = [
     label: "Recuperacao",
     section: "negocio",
   },
-  { href: "/admin/liberacoes-cv", label: "Liberacoes de CV", section: "negocio" },
+  {
+    href: "/admin/liberacoes-cv",
+    label: "Liberacoes de CV",
+    section: "negocio",
+  },
   { href: "/admin/ingestion", label: "Ingestao", section: "ingestion" },
   { href: "/admin/templates", label: "Templates de CV", section: "sistema" },
   { href: "/admin/configuracoes", label: "Configuracoes", section: "sistema" },
-  { href: "/admin/eventos-e-logs", label: "Eventos e logs", phase: "fase 4", section: "sistema" },
+  {
+    href: "/admin/eventos-e-logs",
+    label: "Eventos e logs",
+    phase: "fase 4",
+    section: "sistema",
+  },
 ];
 
 const superadminNavItems: BackofficeNavItem[] = [

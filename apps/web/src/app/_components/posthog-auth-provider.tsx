@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { trackEvent } from "@/lib/analytics-tracking";
 import {
   isAnalyticsConsentGateEnabled,
   onAnalyticsConsentChanged,
   readAnalyticsConsentState,
 } from "@/lib/analytics-consent";
+import { trackEvent } from "@/lib/analytics-tracking";
 import { persistPosthogSessionId } from "@/lib/posthog-session";
 
 const AUTH_ANALYTICS_STORAGE_KEY = "analytics_auth_context";

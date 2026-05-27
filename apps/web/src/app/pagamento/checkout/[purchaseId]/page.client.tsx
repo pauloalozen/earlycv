@@ -8,12 +8,12 @@ import { Logo } from "@/components/logo";
 import { PageShell } from "@/components/page-shell";
 import { trackEvent } from "@/lib/analytics-tracking";
 import {
-  getCheckoutStatusClient,
-  getBrickCheckoutClient,
-  submitBrickPaymentClient,
-  type CheckoutApiError,
-  type BrickPayResponse,
   type BrickCheckoutResponse,
+  type BrickPayResponse,
+  type CheckoutApiError,
+  getBrickCheckoutClient,
+  getCheckoutStatusClient,
+  submitBrickPaymentClient,
 } from "@/lib/payments-browser-api";
 
 type Props = {
@@ -33,7 +33,9 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
     qrCodeText: string | null;
   } | null>(null);
   const [pixCopied, setPixCopied] = useState(false);
-  const [brickRuntimeError, setBrickRuntimeError] = useState<string | null>(null);
+  const [brickRuntimeError, setBrickRuntimeError] = useState<string | null>(
+    null,
+  );
   const brickControlRef = useRef<{ unmount?: () => void } | null>(null);
   const brickInitializedRef = useRef(false);
   const submitAttemptedRef = useRef(false);
@@ -143,49 +145,58 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
         const mp = new MercadoPagoCtor(publicKey, { locale: "pt-BR" });
         const bricksBuilder = mp.bricks();
 
-        const control = await bricksBuilder.create("payment", "payment-brick-container", {
-          initialization: {
-            amount: data.amount,
-            ...(data.payerEmail ? { payer: { email: data.payerEmail } } : {}),
-          },
+        const control = await bricksBuilder.create(
+          "payment",
+          "payment-brick-container",
+          {
+            initialization: {
+              amount: data.amount,
+              ...(data.payerEmail ? { payer: { email: data.payerEmail } } : {}),
+            },
             customization: {
               paymentMethods: {
                 creditCard: "all",
                 bankTransfer: "all",
               },
             },
-          callbacks: {
-            onReady: () => {
-              void trackEvent({
-                eventName: "checkout_brick_ready",
-                properties: {
-                  purchaseId: data.purchaseId,
-                  originAction: data.originAction,
-                  originAdaptationId: data.originAdaptationId,
-                  checkoutMode: "brick",
-                  amount: data.amount,
-                },
-              });
-            },
-            onSubmit: async (submitPayload: unknown) => {
-              submitAttemptedRef.current = true;
-              setBrickRuntimeError(null);
-              setSubmitLoading(true);
-              setSubmitError(null);
+            callbacks: {
+              onReady: () => {
                 void trackEvent({
-                eventName: "checkout_brick_submit_started",
-                properties: {
-                  purchaseId: data.purchaseId,
-                  originAction: data.originAction,
-                  originAdaptationId: data.originAdaptationId,
-                  checkoutMode: "brick",
-                  amount: data.amount,
-                },
-              });
+                  eventName: "checkout_brick_ready",
+                  properties: {
+                    purchaseId: data.purchaseId,
+                    originAction: data.originAction,
+                    originAdaptationId: data.originAdaptationId,
+                    checkoutMode: "brick",
+                    amount: data.amount,
+                  },
+                });
+              },
+              onSubmit: async (submitPayload: unknown) => {
+                submitAttemptedRef.current = true;
+                setBrickRuntimeError(null);
+                setSubmitLoading(true);
+                setSubmitError(null);
+                void trackEvent({
+                  eventName: "checkout_brick_submit_started",
+                  properties: {
+                    purchaseId: data.purchaseId,
+                    originAction: data.originAction,
+                    originAdaptationId: data.originAdaptationId,
+                    checkoutMode: "brick",
+                    amount: data.amount,
+                  },
+                });
 
                 try {
-                  const payload = resolveBrickSubmitPayload(submitPayload, data.payerEmail);
-                  const response = await submitBrickPaymentClient(data.purchaseId, payload);
+                  const payload = resolveBrickSubmitPayload(
+                    submitPayload,
+                    data.payerEmail,
+                  );
+                  const response = await submitBrickPaymentClient(
+                    data.purchaseId,
+                    payload,
+                  );
                   handleBrickSubmitResponse(
                     response,
                     router,
@@ -200,39 +211,40 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                       ? checkoutError.message
                       : "Nao foi possivel validar o pagamento. Tente novamente.";
                   setSubmitError(submitMessage);
-                void trackEvent({
-                  eventName: "checkout_brick_submit_failed",
-                  properties: {
-                    purchaseId: data.purchaseId,
-                    originAction: data.originAction,
-                    originAdaptationId: data.originAdaptationId,
-                    checkoutMode: "brick",
-                    amount: data.amount,
-                  },
-                });
-                throw new Error("submit_failed");
-              } finally {
-                setSubmitLoading(false);
-              }
-            },
-            onError: (error) => {
-              const detail = extractBrickErrorMessage(error);
-              setBrickRuntimeError(detail);
-              if (
-                submitAttemptedRef.current === false &&
-                /No payment type was selected/i.test(detail)
-              ) {
-                setSubmitError(
-                  "Nao foi possivel carregar os meios de pagamento no Mercado Pago. Tente novamente em instantes.",
-                );
-                return;
-              }
-              if (submitAttemptedRef.current) {
-                setSubmitError("Erro ao processar os dados de pagamento.");
-              }
+                  void trackEvent({
+                    eventName: "checkout_brick_submit_failed",
+                    properties: {
+                      purchaseId: data.purchaseId,
+                      originAction: data.originAction,
+                      originAdaptationId: data.originAdaptationId,
+                      checkoutMode: "brick",
+                      amount: data.amount,
+                    },
+                  });
+                  throw new Error("submit_failed");
+                } finally {
+                  setSubmitLoading(false);
+                }
+              },
+              onError: (error) => {
+                const detail = extractBrickErrorMessage(error);
+                setBrickRuntimeError(detail);
+                if (
+                  submitAttemptedRef.current === false &&
+                  /No payment type was selected/i.test(detail)
+                ) {
+                  setSubmitError(
+                    "Nao foi possivel carregar os meios de pagamento no Mercado Pago. Tente novamente em instantes.",
+                  );
+                  return;
+                }
+                if (submitAttemptedRef.current) {
+                  setSubmitError("Erro ao processar os dados de pagamento.");
+                }
+              },
             },
           },
-        });
+        );
 
         brickControlRef.current = control as { unmount?: () => void };
       } catch (error) {
@@ -257,7 +269,7 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
       brickControlRef.current = null;
       brickInitializedRef.current = false;
     };
-  }, [data, sdkReady, applyUiError, router]);
+  }, [data, sdkReady, applyUiError, router, isProduction]);
 
   useEffect(() => {
     if (!awaitingApproval) return;
@@ -400,9 +412,27 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
               background: "rgba(255,255,255,0.5)",
             }}
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-              <rect x="4" y="11" width="16" height="10" rx="1.5" stroke="#3a3a38" strokeWidth="1.6" />
-              <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#3a3a38" strokeWidth="1.6" />
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <rect
+                x="4"
+                y="11"
+                width="16"
+                height="10"
+                rx="1.5"
+                stroke="#3a3a38"
+                strokeWidth="1.6"
+              />
+              <path
+                d="M8 11V7a4 4 0 0 1 8 0v4"
+                stroke="#3a3a38"
+                strokeWidth="1.6"
+              />
             </svg>
             <span>conexão segura · ssl/tls</span>
           </div>
@@ -422,7 +452,9 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
             data-testid="brick-checkout-loading"
           >
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111]" />
-            <p style={{ fontSize: 14, color: "#8a8a85" }}>Carregando checkout...</p>
+            <p style={{ fontSize: 14, color: "#8a8a85" }}>
+              Carregando checkout...
+            </p>
           </div>
         )}
 
@@ -460,7 +492,9 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
               >
                 Finalizar pagamento
               </h1>
-              <p style={{ fontSize: 14, color: "#5a5a55", marginBottom: 20 }}>{error}</p>
+              <p style={{ fontSize: 14, color: "#5a5a55", marginBottom: 20 }}>
+                {error}
+              </p>
               <Link
                 href="/compras"
                 style={{
@@ -487,7 +521,11 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
             {/* ── LEFT: Order summary ── */}
             <aside
               className="md:border-r border-[rgba(10,10,10,0.06)]"
-              style={{ padding: "40px 36px 32px", display: "flex", flexDirection: "column" }}
+              style={{
+                padding: "40px 36px 32px",
+                display: "flex",
+                flexDirection: "column",
+              }}
             >
               <div
                 style={{
@@ -512,7 +550,13 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                 }}
               >
                 Finalizar{" "}
-                <em style={{ fontFamily: SERIF, fontWeight: 400, fontStyle: "italic" }}>
+                <em
+                  style={{
+                    fontFamily: SERIF,
+                    fontWeight: 400,
+                    fontStyle: "italic",
+                  }}
+                >
                   pagamento.
                 </em>
               </div>
@@ -526,7 +570,8 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                   maxWidth: 380,
                 }}
               >
-                Acesso liberado em segundos após a confirmação. Sem cobrança recorrente.
+                Acesso liberado em segundos após a confirmação. Sem cobrança
+                recorrente.
               </div>
 
               {/* Item card */}
@@ -612,7 +657,12 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "baseline",
-                    marginBottom: data.unitPrice && data.unitsIncluded && data.unitsIncluded > 1 ? 4 : 12,
+                    marginBottom:
+                      data.unitPrice &&
+                      data.unitsIncluded &&
+                      data.unitsIncluded > 1
+                        ? 4
+                        : 12,
                   }}
                 >
                   <span
@@ -657,30 +707,32 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                 </div>
 
                 {/* Unit price — secondary line, only shown when package has multiple units */}
-                {data.unitPrice && data.unitsIncluded && data.unitsIncluded > 1 && (
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "flex-end",
-                      marginBottom: 12,
-                    }}
-                  >
-                    <span
+                {data.unitPrice &&
+                  data.unitsIncluded &&
+                  data.unitsIncluded > 1 && (
+                    <div
                       style={{
-                        fontFamily: MONO,
-                        fontSize: 10,
-                        color: "#a0a098",
-                        letterSpacing: "0.04em",
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        marginBottom: 12,
                       }}
                     >
-                      {new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: data.currency,
-                      }).format(data.unitPrice)}
-                      /adaptação
-                    </span>
-                  </div>
-                )}
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          color: "#a0a098",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        {new Intl.NumberFormat("pt-BR", {
+                          style: "currency",
+                          currency: data.currency,
+                        }).format(data.unitPrice)}
+                        /adaptação
+                      </span>
+                    </div>
+                  )}
 
                 <div
                   style={{
@@ -742,11 +794,19 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
               >
                 <TrustItem val="7 dias" label="garantia de reembolso" />
                 <div
-                  style={{ width: 1, height: 28, background: "rgba(10,10,10,0.08)" }}
+                  style={{
+                    width: 1,
+                    height: 28,
+                    background: "rgba(10,10,10,0.08)",
+                  }}
                 />
                 <TrustItem val="LGPD" label="dados criptografados" />
                 <div
-                  style={{ width: 1, height: 28, background: "rgba(10,10,10,0.08)" }}
+                  style={{
+                    width: 1,
+                    height: 28,
+                    background: "rgba(10,10,10,0.08)",
+                  }}
                 />
                 <TrustItem val="Mercado Pago" label="processador" />
               </div>
@@ -817,9 +877,16 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                     >
                       AGUARDANDO PIX
                     </div>
-                    <p style={{ fontSize: 12, color: "#5a5a55", lineHeight: 1.5, marginBottom: 14 }}>
-                      Pague com o QR Code ou copie o código. Você será redirecionado
-                      automaticamente após a confirmação.
+                    <p
+                      style={{
+                        fontSize: 12,
+                        color: "#5a5a55",
+                        lineHeight: 1.5,
+                        marginBottom: 14,
+                      }}
+                    >
+                      Pague com o QR Code ou copie o código. Você será
+                      redirecionado automaticamente após a confirmação.
                     </p>
                     {pixPending.qrCodeBase64 && (
                       <img
@@ -868,7 +935,9 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                           </span>
                           <button
                             type="button"
-                            onClick={() => { void copyPixCode(); }}
+                            onClick={() => {
+                              void copyPixCode();
+                            }}
                             style={{
                               display: "flex",
                               alignItems: "center",
@@ -886,9 +955,27 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                               flexShrink: 0,
                             }}
                           >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                              <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.6" />
-                              <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" stroke="currentColor" strokeWidth="1.6" />
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              aria-hidden="true"
+                            >
+                              <rect
+                                x="8"
+                                y="8"
+                                width="12"
+                                height="12"
+                                rx="2"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                              />
+                              <path
+                                d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                              />
                             </svg>
                             copiar
                           </button>
@@ -919,12 +1006,21 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                   }}
                   data-testid="payment-processing-panel"
                 >
-                  <p style={{ fontSize: 13, fontWeight: 500, color: "#0a0a0a", marginBottom: 4 }}>
+                  <p
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "#0a0a0a",
+                      marginBottom: 4,
+                    }}
+                  >
                     Pagamento em processamento
                   </p>
-                  <p style={{ fontSize: 12, color: "#5a5a55", lineHeight: 1.5 }}>
-                    Aguardando confirmação. Você será redirecionado automaticamente
-                    quando aprovado.
+                  <p
+                    style={{ fontSize: 12, color: "#5a5a55", lineHeight: 1.5 }}
+                  >
+                    Aguardando confirmação. Você será redirecionado
+                    automaticamente quando aprovado.
                   </p>
                 </div>
               )}
@@ -951,7 +1047,9 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                   }}
                   data-testid="brick-submit-error"
                 >
-                  <p style={{ fontSize: 13, color: "#b91c1c" }}>{submitError}</p>
+                  <p style={{ fontSize: 13, color: "#b91c1c" }}>
+                    {submitError}
+                  </p>
                 </div>
               )}
 
@@ -1155,7 +1253,10 @@ function resolveBrickSubmitPayload(
   ) {
     const payer =
       payload.payer && typeof payload.payer === "object"
-        ? ({ ...(payload.payer as Record<string, unknown>) } as Record<string, unknown>)
+        ? ({ ...(payload.payer as Record<string, unknown>) } as Record<
+            string,
+            unknown
+          >)
         : {};
     if (typeof payer.email !== "string" || payer.email.trim().length === 0) {
       payer.email = fallbackPayerEmail;
@@ -1170,7 +1271,9 @@ function handleBrickSubmitResponse(
   response: BrickPayResponse,
   router: ReturnType<typeof useRouter>,
   setAwaitingApproval: (value: boolean) => void,
-  setPixPending: (value: { qrCodeBase64: string | null; qrCodeText: string | null } | null) => void,
+  setPixPending: (
+    value: { qrCodeBase64: string | null; qrCodeText: string | null } | null,
+  ) => void,
   setPixCopied: (value: boolean) => void,
 ) {
   if (response.status === "approved") {
@@ -1182,8 +1285,10 @@ function handleBrickSubmitResponse(
 
   setAwaitingApproval(true);
   const hasPixData =
-    (typeof response.qrCodeBase64 === "string" && response.qrCodeBase64.trim().length > 0) ||
-    (typeof response.qrCodeText === "string" && response.qrCodeText.trim().length > 0);
+    (typeof response.qrCodeBase64 === "string" &&
+      response.qrCodeBase64.trim().length > 0) ||
+    (typeof response.qrCodeText === "string" &&
+      response.qrCodeText.trim().length > 0);
 
   if (!hasPixData) {
     setPixPending(null);
@@ -1241,7 +1346,11 @@ function getCheckoutValidationError(
     return "purchaseId ausente";
   }
 
-  if (typeof data.amount !== "number" || !Number.isFinite(data.amount) || data.amount <= 0) {
+  if (
+    typeof data.amount !== "number" ||
+    !Number.isFinite(data.amount) ||
+    data.amount <= 0
+  ) {
     return "Amount invalido";
   }
 

@@ -12,7 +12,11 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import type {
+  JobApplicationOrigin,
+  JobApplicationStatus,
+  Prisma,
+} from "@prisma/client";
 import type { Response } from "express";
 import type { ProtectedAnalysisBlockedResult } from "../analysis-protection/analysis-protection.facade";
 import { AnalysisTelemetryService } from "../analysis-protection/analysis-telemetry.service";
@@ -22,9 +26,9 @@ import {
   validateCvFileEnvelope,
 } from "../common/cv-text-extractor";
 import { DatabaseService } from "../database/database.service";
+import { JobApplicationsService } from "../job-applications/job-applications.service";
 import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
 import { StorageService } from "../storage/storage.service";
-
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
 import {
@@ -46,8 +50,6 @@ import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 import { createCvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
 import type { RedeemCreditDto } from "./dto/redeem-credit.dto";
 import type { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
-import { JobApplicationsService } from "../job-applications/job-applications.service";
-import type { JobApplicationOrigin, JobApplicationStatus } from "@prisma/client";
 
 type JobApplicationHookInput = {
   cvAdaptationId: string;

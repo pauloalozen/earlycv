@@ -104,14 +104,10 @@ describe("HistoryActionLinks redeem persistence", () => {
   });
 
   it("shows 'Ver candidatura' link when jobApplicationId is provided", () => {
-    render(
-      <HistoryActionLinks {...baseProps} jobApplicationId="app-123" />,
-    );
+    render(<HistoryActionLinks {...baseProps} jobApplicationId="app-123" />);
     const link = screen.getByTestId("ver-candidatura-link");
     expect(link).toBeTruthy();
-    expect(link.getAttribute("href")).toBe(
-      "/dashboard/candidaturas/app-123",
-    );
+    expect(link.getAttribute("href")).toBe("/dashboard/candidaturas/app-123");
   });
 
   it("does not show 'Ver candidatura' link when jobApplicationId is null", () => {

@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 
 import { APP_ACCESS_TOKEN_COOKIE_NAME } from "@/lib/app-session";
 
@@ -46,7 +46,11 @@ export async function GET(
     return NextResponse.redirect(location, response.status);
   }
 
-  if (response.status === 401 || response.status === 403 || response.status === 404) {
+  if (
+    response.status === 401 ||
+    response.status === 403 ||
+    response.status === 404
+  ) {
     return new NextResponse("Not Found", { status: 404 });
   }
 
@@ -54,7 +58,8 @@ export async function GET(
   return new NextResponse(text, {
     status: response.status,
     headers: {
-      "content-type": response.headers.get("content-type") ?? "application/json",
+      "content-type":
+        response.headers.get("content-type") ?? "application/json",
     },
   });
 }

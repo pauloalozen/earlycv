@@ -15,7 +15,7 @@ import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { AddNoteDto } from "./dto/add-note.dto";
 import { CreateJobApplicationDto } from "./dto/create-job-application.dto";
-import { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
+import type { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
 import { JobApplicationInterviewPrepService } from "./interview-prep.service";
 import { JobApplicationsService } from "./job-applications.service";
@@ -45,10 +45,7 @@ export class JobApplicationsController {
   }
 
   @Get(":id")
-  getById(
-    @AuthenticatedUser() user: { id: string },
-    @Param("id") id: string,
-  ) {
+  getById(@AuthenticatedUser() user: { id: string }, @Param("id") id: string) {
     return this.service.getById(user.id, id);
   }
 

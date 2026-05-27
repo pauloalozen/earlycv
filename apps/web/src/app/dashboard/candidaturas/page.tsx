@@ -7,8 +7,8 @@ import {
   getRouteAccessRedirectPath,
 } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
-import { listJobApplications } from "@/lib/job-applications-api";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
+import { listJobApplications } from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
 import { CandidaturasClient } from "./candidaturas-client";
 
@@ -19,7 +19,10 @@ export const metadata: Metadata = {
 
 export default async function CandidaturasPage() {
   const user = await getCurrentAppUserFromCookies();
-  const redirectPath = getRouteAccessRedirectPath("/dashboard/candidaturas", user);
+  const redirectPath = getRouteAccessRedirectPath(
+    "/dashboard/candidaturas",
+    user,
+  );
   if (redirectPath) redirect(redirectPath);
   if (!user) redirect(getDefaultAppRedirectPath(null));
 

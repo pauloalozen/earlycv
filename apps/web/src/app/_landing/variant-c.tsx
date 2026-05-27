@@ -575,7 +575,6 @@ export function LandingVariantC() {
               </div>
             ))}
           </div>
-
         </div>
       </section>
 
@@ -839,7 +838,11 @@ export function LandingVariantC() {
 
                 {plan.checkoutPlanId ? (
                   <form action="/plans/checkout" method="post">
-                    <input type="hidden" name="planId" value={plan.checkoutPlanId} />
+                    <input
+                      type="hidden"
+                      name="planId"
+                      value={plan.checkoutPlanId}
+                    />
                     <button
                       type="submit"
                       style={{
@@ -1025,7 +1028,6 @@ export function LandingVariantC() {
             Testar grátis agora
             <span className="lp-cta-arrow">→</span>
           </Link>
-
         </div>
       </section>
 

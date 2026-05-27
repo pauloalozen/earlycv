@@ -5,8 +5,8 @@ import { PageShell } from "@/components/page-shell";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getCvAdaptationContent } from "@/lib/cv-adaptation-api";
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
-import { buildPlanCatalog } from "./plan-catalog";
 import { PaidPlanCheckoutForm } from "./paid-plan-checkout-form";
+import { buildPlanCatalog } from "./plan-catalog";
 import { ScoreIndicator } from "./score-indicator";
 
 export const dynamic = "force-dynamic";
@@ -66,9 +66,12 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   if (showScoreIndicator && adaptationId) {
     try {
       const payload = await getCvAdaptationContent(adaptationId);
-      const signal = extractDashboardAnalysisSignal(payload.adaptedContentJson, {
-        selectedMissingKeywords,
-      });
+      const signal = extractDashboardAnalysisSignal(
+        payload.adaptedContentJson,
+        {
+          selectedMissingKeywords,
+        },
+      );
       initialScore = signal.adjustments.scoreBefore;
       initialProjectedScore = signal.adjustments.scoreFinal;
     } catch {
@@ -105,7 +108,10 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
           flexDirection: "column",
         }}
       >
-        <AppHeader userName={user?.name} userRole={user?.internalRole ?? null} />
+        <AppHeader
+          userName={user?.name}
+          userRole={user?.internalRole ?? null}
+        />
 
         <div
           className="planos-content"
@@ -496,7 +502,9 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                         }}
                       >
                         Neste pacote o download de CV sai a R${" "}
-                        {(plan.unitPriceCents / 100).toFixed(2).replace(".", ",")}
+                        {(plan.unitPriceCents / 100)
+                          .toFixed(2)
+                          .replace(".", ",")}
                       </span>
                     </div>
                   )}

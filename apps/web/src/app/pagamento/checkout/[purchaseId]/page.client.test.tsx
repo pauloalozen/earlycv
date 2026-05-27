@@ -53,7 +53,8 @@ describe("BrickCheckoutClientPage", () => {
       };
     }
 
-    window.MercadoPago = MercadoPagoMock as unknown as typeof window.MercadoPago;
+    window.MercadoPago =
+      MercadoPagoMock as unknown as typeof window.MercadoPago;
     mockCreateBrick.mockResolvedValue({ unmount: vi.fn() });
     mockGetCheckoutStatusClient.mockResolvedValue({ status: "pending" });
   });
@@ -422,12 +423,17 @@ describe("BrickCheckoutClientPage", () => {
     });
     await capturedOnSubmit?.({
       selectedPaymentMethod: "pix",
-      formData: { payment_method_id: "pix", payer: { email: "user@example.com" } },
+      formData: {
+        payment_method_id: "pix",
+        payer: { email: "user@example.com" },
+      },
     });
 
     await waitFor(() => {
       expect(screen.getByTestId("pix-pending-panel")).toBeTruthy();
-      expect(screen.getByTestId("pix-copy-code").textContent).toContain("000201010212");
+      expect(screen.getByTestId("pix-copy-code").textContent).toContain(
+        "000201010212",
+      );
     });
     expect(screen.getByTestId("payment-brick-container").className).toContain(
       "pointer-events-none",
@@ -543,7 +549,8 @@ describe("BrickCheckoutClientPage", () => {
       autoUnlockError: null,
       adaptationUnlocked: false,
       paymentId: null,
-      message: "Pagamento recusado. Verifique os dados ou tente outro meio de pagamento.",
+      message:
+        "Pagamento recusado. Verifique os dados ou tente outro meio de pagamento.",
     });
 
     render(<BrickCheckoutClientPage purchaseId="purchase-1" />);
@@ -564,11 +571,14 @@ describe("BrickCheckoutClientPage", () => {
       expect(screen.getByTestId("payment-processing-panel")).toBeTruthy();
     });
 
-    await waitFor(() => {
-      expect(screen.queryByTestId("payment-processing-panel")).toBeNull();
-      expect(screen.getByTestId("brick-submit-error").textContent).toContain(
-        "Pagamento recusado",
-      );
-    }, { timeout: 7000 });
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId("payment-processing-panel")).toBeNull();
+        expect(screen.getByTestId("brick-submit-error").textContent).toContain(
+          "Pagamento recusado",
+        );
+      },
+      { timeout: 7000 },
+    );
   }, 12000);
 });

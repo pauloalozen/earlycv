@@ -211,7 +211,7 @@ test("POST /job-applications fails for imported_url without jobUrl", async () =>
 });
 
 test("POST /job-applications requires authentication", async () => {
-  const { app, database } = await createApp();
+  const { app } = await createApp();
 
   const res = await request(app.getHttpServer())
     .post("/api/job-applications")
@@ -245,7 +245,11 @@ test("GET /job-applications returns only the authenticated user's applications",
 
   assert.equal(res.status, 200);
   assert.ok(Array.isArray(res.body.items));
-  assert.ok(res.body.items.every((item: { userId: string }) => item.userId === user1.userId));
+  assert.ok(
+    res.body.items.every(
+      (item: { userId: string }) => item.userId === user1.userId,
+    ),
+  );
 
   await deleteUserByEmail(database, user1.email);
   await deleteUserByEmail(database, user2.email);
@@ -253,7 +257,7 @@ test("GET /job-applications returns only the authenticated user's applications",
 });
 
 test("GET /job-applications requires authentication", async () => {
-  const { app, database } = await createApp();
+  const { app } = await createApp();
 
   const res = await request(app.getHttpServer()).get("/api/job-applications");
   assert.equal(res.status, 401);

@@ -3,13 +3,13 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import {
-  captureAndPersistUtmParams,
-  trackEvent,
-} from "@/lib/analytics-tracking";
-import {
   isAnalyticsConsentGateEnabled,
   readAnalyticsConsentState,
 } from "@/lib/analytics-consent";
+import {
+  captureAndPersistUtmParams,
+  trackEvent,
+} from "@/lib/analytics-tracking";
 import {
   consumeSessionEngagedOnce,
   consumeSessionStartedOnce,

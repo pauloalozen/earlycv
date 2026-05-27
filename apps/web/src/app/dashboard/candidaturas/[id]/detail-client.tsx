@@ -10,12 +10,12 @@ import {
   useTransition,
 } from "react";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
+import { PageShell } from "@/components/page-shell";
 import {
   type DownloadProgressStage,
   downloadFromApi,
 } from "@/lib/client-download";
 import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
-import { PageShell } from "@/components/page-shell";
 import { ALL_STATUSES, getStatusConfig } from "@/lib/job-application-status";
 import type {
   JobApplicationDetailDto,
@@ -1058,8 +1058,7 @@ function CvAdaptadoCard({
   jobTitle: string;
   scoreAfter: number | null;
 }) {
-  if (cvAdaptations.length === 0) return null;
-  const latest = cvAdaptations[0];
+  const latest = cvAdaptations[0] ?? null;
   const cvName = `CV-${companyName.replace(/\s+/g, "-")}-${jobTitle.replace(/\s+/g, "-")}.pdf`;
   const [hasCredits, setHasCredits] = useState<boolean | null>(null);
   const [redeeming, setRedeeming] = useState(false);
@@ -1070,7 +1069,7 @@ function CvAdaptadoCard({
     useState<DownloadProgressStage | null>(null);
 
   const plansHref = buildCvUnlockPlansHref({
-    adaptationId: latest.id,
+    adaptationId: latest?.id,
     source: "dashboard-candidatura-unlock",
     nextPath: `/dashboard/candidaturas/${applicationId}`,
   });
@@ -1079,12 +1078,18 @@ function CvAdaptadoCard({
     let mounted = true;
 
     const loadCredits = async () => {
+      if (!latest) return;
       try {
         const response = await fetch("/api/plans/me", { cache: "no-store" });
         if (!response.ok) return;
-        const plan = (await response.json()) as { creditsRemaining?: number | null };
+        const plan = (await response.json()) as {
+          creditsRemaining?: number | null;
+        };
         if (!mounted) return;
-        if (plan.creditsRemaining === null || plan.creditsRemaining === undefined) {
+        if (
+          plan.creditsRemaining === null ||
+          plan.creditsRemaining === undefined
+        ) {
           setHasCredits(true);
           return;
         }
@@ -1100,18 +1105,21 @@ function CvAdaptadoCard({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [latest]);
 
-  const isUnlocked = latest.isUnlocked || wasUnlockedInSession;
+  const isUnlocked = (latest?.isUnlocked ?? false) || wasUnlockedInSession;
 
   const handleDownload = async (format: "pdf" | "docx") => {
-    if (!isUnlocked) return;
+    if (!latest || !isUnlocked) return;
     setDownloading(format);
     setDownloadStage("preparing");
     try {
       await downloadFromApi({
         url: `/api/cv-adaptation/${latest.id}/download?format=${format}`,
-        fallbackFilename: cvName.replace(/\.pdf$/i, format === "pdf" ? ".pdf" : ".docx"),
+        fallbackFilename: cvName.replace(
+          /\.pdf$/i,
+          format === "pdf" ? ".pdf" : ".docx",
+        ),
         onStageChange: setDownloadStage,
       });
     } finally {
@@ -1121,16 +1129,20 @@ function CvAdaptadoCard({
   };
 
   const handleRedeem = async () => {
-    if (redeeming) return;
+    if (!latest || redeeming) return;
     setRedeeming(true);
     setRedeemError(null);
     try {
-      const response = await fetch(`/api/cv-adaptation/${latest.id}/redeem-credit`, {
-        method: "POST",
-        cache: "no-store",
-      });
+      const response = await fetch(
+        `/api/cv-adaptation/${latest.id}/redeem-credit`,
+        {
+          method: "POST",
+          cache: "no-store",
+        },
+      );
       if (!response.ok) {
-        let apiMessage = "Nao foi possivel liberar o CV agora. Tente novamente.";
+        let apiMessage =
+          "Nao foi possivel liberar o CV agora. Tente novamente.";
         try {
           const body = (await response.json()) as { message?: string };
           if (typeof body.message === "string" && body.message.trim()) {
@@ -1157,6 +1169,8 @@ function CvAdaptadoCard({
       setRedeeming(false);
     }
   };
+
+  if (!latest) return null;
 
   return (
     <div style={{ ...CARD, padding: "18px 20px" }}>

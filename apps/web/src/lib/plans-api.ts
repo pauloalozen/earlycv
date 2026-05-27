@@ -15,7 +15,14 @@ export type PurchaseItem = {
   planName: string | null;
   amountInCents: number;
   currency: string;
-  status: "none" | "pending" | "processing_payment" | "pending_payment" | "completed" | "failed" | "refunded";
+  status:
+    | "none"
+    | "pending"
+    | "processing_payment"
+    | "pending_payment"
+    | "completed"
+    | "failed"
+    | "refunded";
   paidAt: string | null;
   creditsGranted: number;
   analysisCreditsGranted: number;
@@ -50,9 +57,7 @@ export async function createPlanCheckout(
   const response = await apiRequest("POST", "/plans/checkout", {
     planId,
     ...(adaptationId ? { adaptationId } : {}),
-    ...(selectedMissingKeywords.length > 0
-      ? { selectedMissingKeywords }
-      : {}),
+    ...(selectedMissingKeywords.length > 0 ? { selectedMissingKeywords } : {}),
   });
   if (!response.ok) {
     const err = await response.text();

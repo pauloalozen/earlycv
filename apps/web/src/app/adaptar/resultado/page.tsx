@@ -16,13 +16,13 @@ import {
 } from "@/lib/client-download";
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 import { saveGuestPreview } from "@/lib/cv-adaptation-api";
+import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
 import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
 import {
   clearGuestAnalysisRaw,
   getGuestAnalysisRaw,
 } from "@/lib/guest-analysis-storage";
 import { getAuthStatus } from "@/lib/session-actions";
-import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
 import { getAtsScoreColors } from "./ats-score-colors";
 import { buildContentFetchErrorMessage } from "./content-fetch-error";
 import { shouldPersistGuestAnalysis } from "./guest-analysis-persistence";
@@ -407,14 +407,18 @@ type FinalCvOutput = {
   sections?: UnlockedOutputSection[];
 };
 
-function extractProfessionalSummaryFromFinalOutput(output: FinalCvOutput | null): string {
+function extractProfessionalSummaryFromFinalOutput(
+  output: FinalCvOutput | null,
+): string {
   if (!output) return "";
   const maybeOutput = output as {
     sections?: UnlockedOutputSection[];
     summary?: string;
   };
 
-  const sections = Array.isArray(maybeOutput.sections) ? maybeOutput.sections : [];
+  const sections = Array.isArray(maybeOutput.sections)
+    ? maybeOutput.sections
+    : [];
   const summarySection = sections.find((section) => {
     const title = (section.title ?? "").toLowerCase();
     const type = (section.sectionType ?? "").toLowerCase();
@@ -445,7 +449,8 @@ function extractProfessionalSummaryFromFinalOutput(output: FinalCvOutput | null)
 
 function hasFinalGeneratedCv(output: FinalCvOutput | null): boolean {
   if (!output) return false;
-  const sections = (output as { sections?: Array<{ sectionType?: string }> }).sections ?? [];
+  const sections =
+    (output as { sections?: Array<{ sectionType?: string }> }).sections ?? [];
   return sections.some((s) => s.sectionType && s.sectionType !== "other");
 }
 
@@ -521,8 +526,12 @@ export default function ResultadoPage() {
     "none" | "pending" | "completed" | "failed" | "refunded" | null
   >(null);
 
-  const [jobAnalysisCount, setJobAnalysisCount] = useState<number | null>(null);
-  const [finalCvOutput, setFinalCvOutput] = useState<FinalCvOutput | null>(null);
+  const [_jobAnalysisCount, setJobAnalysisCount] = useState<number | null>(
+    null,
+  );
+  const [finalCvOutput, setFinalCvOutput] = useState<FinalCvOutput | null>(
+    null,
+  );
   const [jobApplicationId, setJobApplicationId] = useState<string | null>(null);
 
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
@@ -1073,7 +1082,11 @@ export default function ResultadoPage() {
       void fetch(`/api/cv-adaptation/${reviewAdaptationId}/content`, {
         cache: "no-store",
       })
-        .then((r) => (r.ok ? (r.json() as Promise<{ finalCvOutput?: FinalCvOutput | null }>) : null))
+        .then((r) =>
+          r.ok
+            ? (r.json() as Promise<{ finalCvOutput?: FinalCvOutput | null }>)
+            : null,
+        )
         .then((payload) => {
           if (payload?.finalCvOutput) setFinalCvOutput(payload.finalCvOutput);
         })
@@ -1217,14 +1230,14 @@ export default function ResultadoPage() {
     reviewAdaptationId !== null && reviewPaymentStatus === "completed";
   const isKeywordSelectionLocked =
     locked || isKeywordsFrozen || isDownloadReady;
-  const unlockedProfessionalSummary =
-    isDownloadReady
-      ? extractProfessionalSummaryFromFinalOutput(finalCvOutput)
-      : "";
+  const unlockedProfessionalSummary = isDownloadReady
+    ? extractProfessionalSummaryFromFinalOutput(finalCvOutput)
+    : "";
   const previewAntesText = data.preview?.antes ?? "";
-  const previewDepoisText = (isDownloadReady && hasFinalGeneratedCv(finalCvOutput))
-    ? unlockedProfessionalSummary
-    : data.preview?.depois ?? "";
+  const previewDepoisText =
+    isDownloadReady && hasFinalGeneratedCv(finalCvOutput)
+      ? unlockedProfessionalSummary
+      : (data.preview?.depois ?? "");
   const hasPreviewSection = Boolean(data.preview) || Boolean(isDownloadReady);
 
   const adaptationNotes = rawData?.adaptation_notes ?? null;
@@ -3961,7 +3974,7 @@ export default function ResultadoPage() {
                           : "Liberar CV com 1 crédito"}
                       </button>
                     ) : (
-                        <a
+                      <a
                         href={planosBuyCreditsHref}
                         onClick={() => {
                           emitResultadoEvent("buy_credits_clicked", {
@@ -4106,93 +4119,121 @@ export default function ResultadoPage() {
             </div>
           </div>
           {/* Candidatura criada — acompanhe essa oportunidade */}
-          {isAuthenticated === true && reviewAdaptationId && jobApplicationId && (
-            <div
-              style={{
-                marginTop: 32,
-                display: "grid",
-                gridTemplateColumns: "1fr auto",
-                gap: 32,
-                alignItems: "center",
-                background: "#fafaf6",
-                border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 16,
-                padding: "24px 28px",
-                boxShadow: "0 12px 40px -16px rgba(10,10,10,0.15)",
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
+          {isAuthenticated === true &&
+            reviewAdaptationId &&
+            jobApplicationId && (
+              <div
+                style={{
+                  marginTop: 32,
+                  display: "grid",
+                  gridTemplateColumns: "1fr auto",
+                  gap: 32,
+                  alignItems: "center",
+                  background: "#fafaf6",
+                  border: "1px solid rgba(10,10,10,0.08)",
+                  borderRadius: 16,
+                  padding: "24px 28px",
+                  boxShadow: "0 12px 40px -16px rgba(10,10,10,0.15)",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 7,
+                      fontFamily: MONO,
+                      fontSize: 10.5,
+                      letterSpacing: 1.2,
+                      color: "#0a0a0a",
+                      fontWeight: 500,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: "#c6ff3a",
+                        boxShadow: "0 0 6px #c6ff3a",
+                        flexShrink: 0,
+                      }}
+                    />
+                    CANDIDATURA CRIADA
+                  </div>
+                  <p
+                    style={{
+                      fontSize: 26,
+                      fontWeight: 500,
+                      letterSpacing: -1,
+                      lineHeight: 1.1,
+                      margin: "0 0 8px",
+                      color: "#0a0a0a",
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    Salvamos esta vaga em{" "}
+                    <em
+                      style={{
+                        fontFamily: SERIF_ITALIC,
+                        fontStyle: "italic",
+                        fontWeight: 400,
+                      }}
+                    >
+                      Minhas candidaturas.
+                    </em>
+                  </p>
+                  <p
+                    style={{
+                      fontSize: 14,
+                      color: "#5a5a55",
+                      margin: 0,
+                      fontFamily: GEIST,
+                      lineHeight: 1.55,
+                      maxWidth: 560,
+                    }}
+                  >
+                    Score, gaps e link da vaga já ficaram vinculados à
+                    candidatura. Continue para gerar o CV adaptado — ele será
+                    anexado automaticamente.
+                  </p>
+                </div>
                 <div
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 7,
-                    fontFamily: MONO,
-                    fontSize: 10.5,
-                    letterSpacing: 1.2,
-                    color: "#0a0a0a",
-                    fontWeight: 500,
-                    marginBottom: 12,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "stretch",
+                    gap: 8,
+                    flexShrink: 0,
                   }}
                 >
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#c6ff3a", boxShadow: "0 0 6px #c6ff3a", flexShrink: 0 }} />
-                  CANDIDATURA CRIADA
+                  <a
+                    href={`/dashboard/candidaturas/${jobApplicationId}`}
+                    data-testid="resultado-ver-candidatura"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                      background: "#fff",
+                      color: "#0a0a0a",
+                      border: "1px solid rgba(10,10,10,0.15)",
+                      borderRadius: 10,
+                      padding: "11px 16px",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      textDecoration: "none",
+                      fontFamily: GEIST,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Ver candidatura ↗
+                  </a>
                 </div>
-                <p
-                  style={{
-                    fontSize: 26,
-                    fontWeight: 500,
-                    letterSpacing: -1,
-                    lineHeight: 1.1,
-                    margin: "0 0 8px",
-                    color: "#0a0a0a",
-                    fontFamily: GEIST,
-                  }}
-                >
-                  Salvamos esta vaga em{" "}
-                  <em style={{ fontFamily: SERIF_ITALIC, fontStyle: "italic", fontWeight: 400 }}>Minhas candidaturas.</em>
-                </p>
-                <p
-                  style={{
-                    fontSize: 14,
-                    color: "#5a5a55",
-                    margin: 0,
-                    fontFamily: GEIST,
-                    lineHeight: 1.55,
-                    maxWidth: 560,
-                  }}
-                >
-                  Score, gaps e link da vaga já ficaram vinculados à candidatura.
-                  Continue para gerar o CV adaptado — ele será anexado automaticamente.
-                </p>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 8, flexShrink: 0 }}>
-                <a
-                  href={`/dashboard/candidaturas/${jobApplicationId}`}
-                  data-testid="resultado-ver-candidatura"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                    background: "#fff",
-                    color: "#0a0a0a",
-                    border: "1px solid rgba(10,10,10,0.15)",
-                    borderRadius: 10,
-                    padding: "11px 16px",
-                    fontSize: 13,
-                    fontWeight: 500,
-                    textDecoration: "none",
-                    fontFamily: GEIST,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Ver candidatura ↗
-                </a>
-              </div>
-            </div>
-          )}
+            )}
         </div>
       </main>
 

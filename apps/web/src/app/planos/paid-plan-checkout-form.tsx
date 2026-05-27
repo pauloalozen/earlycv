@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { type CSSProperties, type FormEvent, useMemo, useState } from "react";
 
 type PaidPlanCheckoutFormProps = {
   adaptationId?: string;
@@ -76,7 +76,10 @@ export function PaidPlanCheckoutForm({
       if (payload.checkoutMode === "brick") {
         router.push(`/pagamento/checkout/${payload.purchaseId}`);
       } else if (payload.checkoutUrl) {
-        const pendingUrl = new URL("/pagamento/pendente", window.location.origin);
+        const pendingUrl = new URL(
+          "/pagamento/pendente",
+          window.location.origin,
+        );
         pendingUrl.searchParams.set("checkoutId", payload.purchaseId);
 
         try {
@@ -90,7 +93,9 @@ export function PaidPlanCheckoutForm({
         }
 
         window.open(payload.checkoutUrl, "_blank", "noopener,noreferrer");
-        router.push(`${pendingUrl.pathname}?${pendingUrl.searchParams.toString()}`);
+        router.push(
+          `${pendingUrl.pathname}?${pendingUrl.searchParams.toString()}`,
+        );
       } else {
         throw new Error("invalid-checkout-payload");
       }
@@ -114,7 +119,12 @@ export function PaidPlanCheckoutForm({
           <input type="hidden" name="adaptationId" value={adaptationId} />
         )}
         {selectedMissingKeywords.map((keyword) => (
-          <input key={keyword} type="hidden" name="selectedMissingKeywords" value={keyword} />
+          <input
+            key={keyword}
+            type="hidden"
+            name="selectedMissingKeywords"
+            value={keyword}
+          />
         ))}
         <button
           type="submit"

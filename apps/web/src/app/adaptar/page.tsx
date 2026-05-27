@@ -1,13 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
-import type { AppInternalRole } from "@/lib/app-session";
 import { trackEvent } from "@/lib/analytics-tracking";
+import type { AppInternalRole } from "@/lib/app-session";
 import {
   analyzeAuthenticatedCv,
   analyzeGuestCv,

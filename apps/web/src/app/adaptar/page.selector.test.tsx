@@ -74,7 +74,9 @@ describe("AdaptarPage selector defaults", () => {
     render(<AdaptarPage />);
 
     expect(
-      await screen.findByText(/evite enviar dados sens[ií]veis desnecess[áa]rios/i),
+      await screen.findByText(
+        /evite enviar dados sens[ií]veis desnecess[áa]rios/i,
+      ),
     ).toBeTruthy();
     expect(
       screen.getByRole("link", { name: /pol[ií]tica de privacidade/i }),

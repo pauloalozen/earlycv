@@ -20,24 +20,22 @@ describe("GET /api/payment-recovery/[token]", () => {
     cookiesMock.mockResolvedValueOnce({
       get: vi.fn().mockReturnValue({ value: "access-token-1" }),
     });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(null, {
-          status: 302,
-          headers: {
-            location: "https://earlycv.com.br/entrar?tab=entrar&next=%2Ffoo",
-          },
-        }),
-      );
-    vi.stubGlobal(
-      "fetch",
-      fetchMock,
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: {
+          location: "https://earlycv.com.br/entrar?tab=entrar&next=%2Ffoo",
+        },
+      }),
     );
+    vi.stubGlobal("fetch", fetchMock);
 
-    const response = await GET(new Request("http://localhost/api/payment-recovery/token-1"), {
-      params: Promise.resolve({ token: "token-1" }),
-    });
+    const response = await GET(
+      new Request("http://localhost/api/payment-recovery/token-1"),
+      {
+        params: Promise.resolve({ token: "token-1" }),
+      },
+    );
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(
@@ -70,9 +68,12 @@ describe("GET /api/payment-recovery/[token]", () => {
       ),
     );
 
-    const response = await GET(new Request("http://localhost/api/payment-recovery/token-1"), {
-      params: Promise.resolve({ token: "token-1" }),
-    });
+    const response = await GET(
+      new Request("http://localhost/api/payment-recovery/token-1"),
+      {
+        params: Promise.resolve({ token: "token-1" }),
+      },
+    );
 
     expect(response.status).toBe(404);
   });

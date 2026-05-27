@@ -222,7 +222,10 @@ test("resume migration guards master and adapted invariants", () => {
 });
 
 test("Payment recovery models and enums exist", () => {
-  const eligibilityStatus = getBlock("enum", "PaymentRecoveryEligibilityStatus");
+  const eligibilityStatus = getBlock(
+    "enum",
+    "PaymentRecoveryEligibilityStatus",
+  );
 
   assert.match(eligibilityStatus, /^\s*eligible$/m);
   assert.match(eligibilityStatus, /^\s*possibly_resolved$/m);

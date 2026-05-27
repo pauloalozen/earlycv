@@ -1,6 +1,5 @@
-import { IsEnum } from "class-validator";
-
 import type { JobApplicationStatus } from "@prisma/client";
+import { IsEnum } from "class-validator";
 
 export class UpdateJobApplicationStatusDto {
   @IsEnum([

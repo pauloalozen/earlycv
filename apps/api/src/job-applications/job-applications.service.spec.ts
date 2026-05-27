@@ -5,10 +5,9 @@ import { JobApplicationsService } from "./job-applications.service";
 
 type DbMock = Record<string, Record<string, unknown>>;
 
-const JobApplicationsServiceCtor =
-  JobApplicationsService as unknown as new (
-    db: unknown,
-  ) => JobApplicationsService;
+const JobApplicationsServiceCtor = JobApplicationsService as unknown as new (
+  db: unknown,
+) => JobApplicationsService;
 
 function makeDb(overrides: Partial<DbMock> = {}): DbMock {
   const createdEvents: unknown[] = [];
@@ -31,7 +30,13 @@ function makeDb(overrides: Partial<DbMock> = {}): DbMock {
         }
         return null;
       },
-      update: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      update: async ({
+        where,
+        data,
+      }: {
+        where: Record<string, unknown>;
+        data: Record<string, unknown>;
+      }) => {
         const existing = jobApplications.get(where.id as string);
         if (!existing) return null;
         const updated = { ...existing, ...data };
@@ -43,7 +48,10 @@ function makeDb(overrides: Partial<DbMock> = {}): DbMock {
     jobApplicationEvent: {
       create: async ({ data }: { data: unknown }) => {
         createdEvents.push(data);
-        return { id: `event-${createdEvents.length}`, ...data as Record<string, unknown> };
+        return {
+          id: `event-${createdEvents.length}`,
+          ...(data as Record<string, unknown>),
+        };
       },
       createMany: async ({ data }: { data: unknown[] }) => {
         for (const item of data) {
@@ -55,7 +63,13 @@ function makeDb(overrides: Partial<DbMock> = {}): DbMock {
     cvAdaptation: {
       findUnique: async ({ where }: { where: Record<string, unknown> }) =>
         cvAdaptations.get(where.id as string) ?? null,
-      update: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      update: async ({
+        where,
+        data,
+      }: {
+        where: Record<string, unknown>;
+        data: Record<string, unknown>;
+      }) => {
         const existing = cvAdaptations.get(where.id as string) ?? {};
         const updated = { ...existing, ...data };
         cvAdaptations.set(where.id as string, updated);
@@ -152,9 +166,16 @@ test("updateStatus records STATUS_CHANGED event", async () => {
 test("updateStatus sets appliedAt when status changes to APPLIED", async () => {
   const db = makeDb();
 
-  let appliedAtSet: unknown = undefined;
-  const originalUpdate = (db.jobApplication as Record<string, unknown>).update as (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => Promise<unknown>;
-  (db.jobApplication as Record<string, unknown>).update = async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+  let appliedAtSet: unknown;
+  const originalUpdate = (db.jobApplication as Record<string, unknown>)
+    .update as (args: {
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  }) => Promise<unknown>;
+  (db.jobApplication as Record<string, unknown>).update = async (args: {
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  }) => {
     appliedAtSet = args.data.appliedAt;
     return originalUpdate(args);
   };
@@ -185,8 +206,15 @@ test("updateStatus does not overwrite existing appliedAt", async () => {
   });
 
   let capturedData: Record<string, unknown> = {};
-  const originalUpdate = (db.jobApplication as Record<string, unknown>).update as (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => Promise<unknown>;
-  (db.jobApplication as Record<string, unknown>).update = async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+  const originalUpdate = (db.jobApplication as Record<string, unknown>)
+    .update as (args: {
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  }) => Promise<unknown>;
+  (db.jobApplication as Record<string, unknown>).update = async (args: {
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  }) => {
     capturedData = args.data;
     return originalUpdate(args);
   };
@@ -316,15 +344,25 @@ test("upsertFromCvAdaptation links second CvAdaptation to existing JobApplicatio
   let findFirstCallCount = 0;
   let createdAppId: string | null = null;
 
-  const originalCreate = (db.jobApplication as Record<string, unknown>).create as (args: { data: Record<string, unknown> }) => Promise<Record<string, unknown>>;
-  (db.jobApplication as Record<string, unknown>).create = async (args: { data: Record<string, unknown> }) => {
+  const originalCreate = (db.jobApplication as Record<string, unknown>)
+    .create as (args: {
+    data: Record<string, unknown>;
+  }) => Promise<Record<string, unknown>>;
+  (db.jobApplication as Record<string, unknown>).create = async (args: {
+    data: Record<string, unknown>;
+  }) => {
     const result = await originalCreate(args);
     createdAppId = result.id as string;
     return result;
   };
 
-  const originalFindFirst = (db.jobApplication as Record<string, unknown>).findFirst as (args: { where: Record<string, unknown> }) => Promise<Record<string, unknown> | null>;
-  (db.jobApplication as Record<string, unknown>).findFirst = async (args: { where: Record<string, unknown> }) => {
+  const _originalFindFirst = (db.jobApplication as Record<string, unknown>)
+    .findFirst as (args: {
+    where: Record<string, unknown>;
+  }) => Promise<Record<string, unknown> | null>;
+  (db.jobApplication as Record<string, unknown>).findFirst = async (_args: {
+    where: Record<string, unknown>;
+  }) => {
     findFirstCallCount++;
     // Second call should find the already-created app
     if (createdAppId && findFirstCallCount > 1) {
@@ -370,22 +408,39 @@ test("upsertFromCvAdaptation updates currentCvAdaptationId to latest adaptation"
   let capturedUpdateData: Record<string, unknown> | null = null;
   let createdAppId: string | null = null;
 
-  const originalCreate = (db.jobApplication as Record<string, unknown>).create as (args: { data: Record<string, unknown> }) => Promise<Record<string, unknown>>;
-  (db.jobApplication as Record<string, unknown>).create = async (args: { data: Record<string, unknown> }) => {
+  const originalCreate = (db.jobApplication as Record<string, unknown>)
+    .create as (args: {
+    data: Record<string, unknown>;
+  }) => Promise<Record<string, unknown>>;
+  (db.jobApplication as Record<string, unknown>).create = async (args: {
+    data: Record<string, unknown>;
+  }) => {
     const result = await originalCreate(args);
     createdAppId = result.id as string;
     return result;
   };
 
-  const originalUpdate = (db.jobApplication as Record<string, unknown>).update as (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => Promise<Record<string, unknown>>;
-  (db.jobApplication as Record<string, unknown>).update = async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+  const originalUpdate = (db.jobApplication as Record<string, unknown>)
+    .update as (args: {
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  }) => Promise<Record<string, unknown>>;
+  (db.jobApplication as Record<string, unknown>).update = async (args: {
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  }) => {
     capturedUpdateData = args.data;
     return originalUpdate(args);
   };
 
-  const originalFindFirst = (db.jobApplication as Record<string, unknown>).findFirst as (args: { where: Record<string, unknown> }) => Promise<Record<string, unknown> | null>;
+  const _originalFindFirst = (db.jobApplication as Record<string, unknown>)
+    .findFirst as (args: {
+    where: Record<string, unknown>;
+  }) => Promise<Record<string, unknown> | null>;
   let findFirstCallCount = 0;
-  (db.jobApplication as Record<string, unknown>).findFirst = async (args: { where: Record<string, unknown> }) => {
+  (db.jobApplication as Record<string, unknown>).findFirst = async (_args: {
+    where: Record<string, unknown>;
+  }) => {
     findFirstCallCount++;
     if (createdAppId && findFirstCallCount > 1) {
       const apps = db._jobApplications as Map<string, Record<string, unknown>>;
@@ -443,8 +498,15 @@ test("upsertFromCvAdaptation does not override user-set statuses", async () => {
   });
 
   let capturedStatus: unknown = null;
-  const originalUpdate = (db.jobApplication as Record<string, unknown>).update as (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => Promise<Record<string, unknown>>;
-  (db.jobApplication as Record<string, unknown>).update = async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+  const originalUpdate = (db.jobApplication as Record<string, unknown>)
+    .update as (args: {
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  }) => Promise<Record<string, unknown>>;
+  (db.jobApplication as Record<string, unknown>).update = async (args: {
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  }) => {
     capturedStatus = args.data.status;
     return originalUpdate(args);
   };

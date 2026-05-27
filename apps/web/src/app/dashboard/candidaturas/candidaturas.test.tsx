@@ -1,5 +1,11 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -25,9 +31,7 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/components/page-shell", () => ({
-  PageShell: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
+  PageShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("@/lib/job-applications-api", () => ({
@@ -37,21 +41,23 @@ vi.mock("@/lib/job-applications-api", () => ({
   generateOrGetInterviewPrep: vi.fn(),
 }));
 
-import { CandidaturasClient } from "./candidaturas-client";
-import { DetailClient } from "./[id]/detail-client";
-import {
-  createJobApplication,
-  updateJobApplicationStatus,
-  addJobApplicationNote,
-  generateOrGetInterviewPrep,
-} from "@/lib/job-applications-api";
 import type {
   InterviewPrepDto,
   JobApplicationDetailDto,
   JobApplicationDto,
 } from "@/lib/job-applications-api";
+import {
+  addJobApplicationNote,
+  createJobApplication,
+  generateOrGetInterviewPrep,
+  updateJobApplicationStatus,
+} from "@/lib/job-applications-api";
+import { DetailClient } from "./[id]/detail-client";
+import { CandidaturasClient } from "./candidaturas-client";
 
-function makeApp(overrides: Partial<JobApplicationDto> = {}): JobApplicationDto {
+function makeApp(
+  overrides: Partial<JobApplicationDto> = {},
+): JobApplicationDto {
   return {
     id: "app-1",
     userId: "user-1",
@@ -119,9 +125,7 @@ describe("CandidaturasClient", () => {
   it("1. empty state when no applications exist", () => {
     render(<CandidaturasClient initialApplications={[]} header={null} />);
 
-    expect(
-      screen.getByText("Ainda não há candidaturas"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Ainda não há candidaturas")).toBeInTheDocument();
     expect(screen.getByText("Analisar uma vaga")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Adicionar manualmente" }),
@@ -130,8 +134,18 @@ describe("CandidaturasClient", () => {
 
   it("2. renders application cards with title and company", () => {
     const apps = [
-      makeApp({ id: "a1", jobTitle: "Dev Frontend", companyName: "Beta Inc", status: "SAVED" }),
-      makeApp({ id: "a2", jobTitle: "Dev Backend", companyName: "Gamma Ltd", status: "INTERVIEW" }),
+      makeApp({
+        id: "a1",
+        jobTitle: "Dev Frontend",
+        companyName: "Beta Inc",
+        status: "SAVED",
+      }),
+      makeApp({
+        id: "a2",
+        jobTitle: "Dev Backend",
+        companyName: "Gamma Ltd",
+        status: "INTERVIEW",
+      }),
     ];
     render(<CandidaturasClient initialApplications={apps} header={null} />);
 
@@ -244,10 +258,9 @@ describe("CandidaturasClient", () => {
     fireEvent.change(screen.getByPlaceholderText(/Acme Corp/), {
       target: { value: "Corp" },
     });
-    fireEvent.change(
-      screen.getByPlaceholderText(/Cole a descrição/),
-      { target: { value: "Responsável por roadmap e entregas da squad." } },
-    );
+    fireEvent.change(screen.getByPlaceholderText(/Cole a descrição/), {
+      target: { value: "Responsável por roadmap e entregas da squad." },
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
 
@@ -351,9 +364,7 @@ describe("DetailClient", () => {
     const app = makeDetail({ id: "app-42", notes: null });
     render(<DetailClient application={app} header={null} />);
 
-    const textarea = screen.getByPlaceholderText(
-      /Anotações sobre a vaga/,
-    );
+    const textarea = screen.getByPlaceholderText(/Anotações sobre a vaga/);
     fireEvent.change(textarea, {
       target: { value: "Entrevista agendada para quinta" },
     });
@@ -370,13 +381,16 @@ describe("DetailClient", () => {
 
   it("11. shows job description section when jobDescriptionText exists", () => {
     const app = makeDetail({
-      jobDescriptionText: "Você será responsável pelo desenvolvimento de APIs REST.",
+      jobDescriptionText:
+        "Você será responsável pelo desenvolvimento de APIs REST.",
     });
     render(<DetailClient application={app} header={null} />);
 
     expect(screen.getByText("Descrição da vaga")).toBeInTheDocument();
     expect(
-      screen.getByText(/Você será responsável pelo desenvolvimento de APIs REST/),
+      screen.getByText(
+        /Você será responsável pelo desenvolvimento de APIs REST/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -429,7 +443,9 @@ describe("DetailClient", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Preparar entrevista/ }),
     );
-    await waitFor(() => screen.getByRole("button", { name: "Gerar preparação" }));
+    await waitFor(() =>
+      screen.getByRole("button", { name: "Gerar preparação" }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Gerar preparação" }));
 
@@ -445,9 +461,7 @@ describe("DetailClient", () => {
     });
     render(<DetailClient application={app} header={null} />);
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /Ver preparação/ }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /Ver preparação/ }));
 
     expect(
       screen.getByText("Prepare-se bem para esta entrevista."),
@@ -471,14 +485,14 @@ describe("DetailClient", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Preparar entrevista/ }),
     );
-    await waitFor(() => screen.getByRole("button", { name: "Gerar preparação" }));
+    await waitFor(() =>
+      screen.getByRole("button", { name: "Gerar preparação" }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Gerar preparação" }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText("Falha ao gerar preparação"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Falha ao gerar preparação")).toBeInTheDocument();
     });
   });
 
@@ -494,9 +508,7 @@ describe("DetailClient", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Ver preparação/ }));
 
-    expect(
-      screen.queryByText("Estratégia geral"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Estratégia geral")).not.toBeInTheDocument();
   });
 
   it("20. hides optional array sections when they are empty", () => {
@@ -516,10 +528,18 @@ describe("DetailClient", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Ver preparação/ }));
 
-    expect(screen.queryByText("Pontos fortes para destacar")).not.toBeInTheDocument();
-    expect(screen.queryByText("Riscos ou gaps prováveis")).not.toBeInTheDocument();
-    expect(screen.queryByText("Perguntas que podem fazer")).not.toBeInTheDocument();
-    expect(screen.queryByText("Perguntas para fazer à empresa")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Pontos fortes para destacar"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Riscos ou gaps prováveis"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Perguntas que podem fazer"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Perguntas para fazer à empresa"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Postura recomendada")).not.toBeInTheDocument();
     expect(screen.queryByText("Checklist final")).not.toBeInTheDocument();
 
@@ -534,8 +554,12 @@ describe("DetailClient", () => {
     const app = makeDetail({ status: "ASSESSMENT", interviewPrep: null });
     render(<DetailClient application={app} header={null} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Preparar entrevista/ }));
-    await waitFor(() => screen.getByRole("button", { name: "Gerar preparação" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Preparar entrevista/ }),
+    );
+    await waitFor(() =>
+      screen.getByRole("button", { name: "Gerar preparação" }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Gerar preparação" }));
     await waitFor(() =>

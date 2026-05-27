@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  AT,
   AdminPill,
-  AdminStatCard,
   AdminStatsRow,
+  AT,
 } from "@/app/admin/_components/admin-primitives";
 
 type PausedSource = {
@@ -114,20 +113,20 @@ function SourceRow({ label, sub }: { label: string; sub?: string }) {
 export function IngestionDashboardCards() {
   const [data, setData] = useState<Dashboard | null>(null);
 
-  async function fetchDashboard() {
+  const fetchDashboard = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/ingestion/dashboard");
       if (res.ok) setData(await res.json());
     } catch {
       // silently ignore polling errors
     }
-  }
+  }, []);
 
   useEffect(() => {
     fetchDashboard();
     const id = setInterval(fetchDashboard, 30_000);
     return () => clearInterval(id);
-  }, []);
+  }, [fetchDashboard]);
 
   const pausedCount = data?.pausedSources.length ?? 0;
   const count403 = data?.sources403.length ?? 0;
@@ -297,9 +296,7 @@ export function IngestionDashboardCards() {
             Últimas 24h
           </div>
           {!s ? (
-            <div
-              style={{ fontSize: 13, color: AT.muted, marginTop: 8 }}
-            >
+            <div style={{ fontSize: 13, color: AT.muted, marginTop: 8 }}>
               Carregando...
             </div>
           ) : (
@@ -311,15 +308,14 @@ export function IngestionDashboardCards() {
                 marginTop: 10,
               }}
             >
-              <div
-                style={{ display: "flex", gap: 6, alignItems: "center" }}
-              >
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <AdminPill tone={s.runningNow > 0 ? "warn" : "neutral"} mono>
                   {s.runningNow} rodando agora
                 </AdminPill>
               </div>
               <div style={{ fontSize: 12, color: AT.ink2 }}>
-                {s.totalRuns} runs · {s.newJobs} novas · {s.staleJobs} inativas · {s.dedupSkipped} dedup
+                {s.totalRuns} runs · {s.newJobs} novas · {s.staleJobs} inativas
+                · {s.dedupSkipped} dedup
               </div>
             </div>
           )}

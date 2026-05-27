@@ -137,9 +137,8 @@ export function parseJobSourceFormData(
     throw new Error("Preencha os campos obrigatorios da fonte.");
   }
 
-  const effectiveSourceType = sourceUrl && inferGupySourceTypeFromUrl(sourceUrl)
-    ? "gupy"
-    : sourceType;
+  const effectiveSourceType =
+    sourceUrl && inferGupySourceTypeFromUrl(sourceUrl) ? "gupy" : sourceType;
   const defaults = getSourceDefaults(effectiveSourceType);
   const checkIntervalMinutes = Number(intervalRaw);
 
@@ -155,7 +154,8 @@ export function parseJobSourceFormData(
     ...(formData.get("scheduleEnabled") === "on"
       ? {
           scheduleEnabled: true,
-          scheduleCron: getTrimmedValue(formData, "scheduleCron") ?? "*/30 * * * *",
+          scheduleCron:
+            getTrimmedValue(formData, "scheduleCron") ?? "*/30 * * * *",
           scheduleTimezone: "America/Sao_Paulo" as const,
         }
       : {}),
@@ -177,7 +177,9 @@ export function isRedirectControlFlowError(error: unknown) {
   );
 }
 
-export function parseManualAdapterType(value: FormDataEntryValue | null): ManualAdapterType {
+export function parseManualAdapterType(
+  value: FormDataEntryValue | null,
+): ManualAdapterType {
   const adapterType = String(value ?? "").trim();
   if (!adapterType) {
     throw new Error("Informe o tipo de adaptador para execucao manual.");
@@ -190,7 +192,9 @@ export function parseManualAdapterType(value: FormDataEntryValue | null): Manual
   return adapterType as ManualAdapterType;
 }
 
-export function parseManualBatchRunId(value: FormDataEntryValue | null): string {
+export function parseManualBatchRunId(
+  value: FormDataEntryValue | null,
+): string {
   const batchRunId = String(value ?? "").trim();
   if (!batchRunId) {
     throw new Error("Informe o lote manual.");

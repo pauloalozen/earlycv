@@ -9,7 +9,9 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-function buildApplication(overrides?: Partial<JobApplicationDetailDto>): JobApplicationDetailDto {
+function buildApplication(
+  overrides?: Partial<JobApplicationDetailDto>,
+): JobApplicationDetailDto {
   return {
     id: "app_123",
     userId: "user_1",

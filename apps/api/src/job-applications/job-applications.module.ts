@@ -2,8 +2,8 @@ import { Module } from "@nestjs/common";
 import OpenAI from "openai";
 
 import { DatabaseModule } from "../database/database.module";
-import { InterviewPrepAiService } from "./interview-prep-ai.service";
 import { JobApplicationInterviewPrepService } from "./interview-prep.service";
+import { InterviewPrepAiService } from "./interview-prep-ai.service";
 import { JobApplicationsController } from "./job-applications.controller";
 import { JobApplicationsService } from "./job-applications.service";
 

@@ -48,9 +48,9 @@ function Confetti({ active }: { active: boolean }) {
         dur: 1.8 + r4 * 1.4,
         delay: r1 * 0.4,
         size: 6 + r2 * 8,
-        color: (["#c6ff3a", "#0a0a0a", "#f5c518", "#fafaf6", "#c6ff3a"] as const)[
-          Math.floor(r3 * 5)
-        ],
+        color: (
+          ["#c6ff3a", "#0a0a0a", "#f5c518", "#fafaf6", "#c6ff3a"] as const
+        )[Math.floor(r3 * 5)],
         shape: r4 > 0.5 ? "rect" : "circle",
       });
     }
@@ -352,7 +352,9 @@ function ConcluidoContent() {
           }}
         >
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111]" />
-          <p style={{ fontSize: 14, color: "#8a8a85" }}>Confirmando pagamento...</p>
+          <p style={{ fontSize: 14, color: "#8a8a85" }}>
+            Confirmando pagamento...
+          </p>
         </div>
       </div>
     );
@@ -504,7 +506,13 @@ function ConcluidoContent() {
                   zIndex: 2,
                 }}
               >
-                <svg width="38" height="38" viewBox="0 0 24 24" fill="none">
+                <svg
+                  width="38"
+                  height="38"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
                   <path
                     d="M5 12.5l4.5 4.5L19 7"
                     stroke="#0a0a0a"
@@ -548,11 +556,46 @@ function ConcluidoContent() {
                   marginBottom: 14,
                 }}
               >
-                {result?.originAction === "unlock_cv"
-                  ? <>Seu CV já está <em style={{ fontFamily: SERIF, fontWeight: 400, fontStyle: "italic" }}>liberado.</em></>
-                  : result?.type === "plan"
-                  ? <>Créditos <em style={{ fontFamily: SERIF, fontWeight: 400, fontStyle: "italic" }}>ativados.</em></>
-                  : <>Pagamento <em style={{ fontFamily: SERIF, fontWeight: 400, fontStyle: "italic" }}>confirmado.</em></>}
+                {result?.originAction === "unlock_cv" ? (
+                  <>
+                    Seu CV já está{" "}
+                    <em
+                      style={{
+                        fontFamily: SERIF,
+                        fontWeight: 400,
+                        fontStyle: "italic",
+                      }}
+                    >
+                      liberado.
+                    </em>
+                  </>
+                ) : result?.type === "plan" ? (
+                  <>
+                    Créditos{" "}
+                    <em
+                      style={{
+                        fontFamily: SERIF,
+                        fontWeight: 400,
+                        fontStyle: "italic",
+                      }}
+                    >
+                      ativados.
+                    </em>
+                  </>
+                ) : (
+                  <>
+                    Pagamento{" "}
+                    <em
+                      style={{
+                        fontFamily: SERIF,
+                        fontWeight: 400,
+                        fontStyle: "italic",
+                      }}
+                    >
+                      confirmado.
+                    </em>
+                  </>
+                )}
               </div>
             </Stagger>
 
@@ -588,8 +631,8 @@ function ConcluidoContent() {
                     width: "100%",
                   }}
                 >
-                  Seu pagamento foi aprovado e os créditos foram adicionados. Não
-                  conseguimos liberar automaticamente este CV, mas você pode
+                  Seu pagamento foi aprovado e os créditos foram adicionados.
+                  Não conseguimos liberar automaticamente este CV, mas você pode
                   liberá-lo manualmente.
                 </div>
               </Stagger>
@@ -614,14 +657,15 @@ function ConcluidoContent() {
                 >
                   {planName && <ReceiptCell label="PACOTE" value={planName} />}
                   {credits && (
-                    <ReceiptCell
-                      label="CRÉDITOS"
-                      value={String(credits)}
-                    />
+                    <ReceiptCell label="CRÉDITOS" value={String(credits)} />
                   )}
                   <ReceiptCell label="MÉTODO" value="Mercado Pago" />
                   {paymentIdShort && (
-                    <ReceiptCell label="ID" value={`···${paymentIdShort}`} mono />
+                    <ReceiptCell
+                      label="ID"
+                      value={`···${paymentIdShort}`}
+                      mono
+                    />
                   )}
                 </div>
               </Stagger>
@@ -630,7 +674,12 @@ function ConcluidoContent() {
             {/* CTAs */}
             <Stagger mounted={approvedMounted} delay={0.66}>
               <div
-                style={{ display: "flex", gap: 10, width: "100%", marginBottom: 14 }}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  width: "100%",
+                  marginBottom: 14,
+                }}
               >
                 {showCvUnlock && result.originAdaptationId && (
                   <>
@@ -660,7 +709,13 @@ function ConcluidoContent() {
                         cursor: "pointer",
                       }}
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden="true"
+                      >
                         <path
                           d="M12 4v12m0 0l-5-5m5 5l5-5M5 20h14"
                           stroke="#fafaf6"
@@ -695,7 +750,13 @@ function ConcluidoContent() {
                         cursor: "pointer",
                       }}
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden="true"
+                      >
                         <path
                           d="M12 4v12m0 0l-5-5m5 5l5-5M5 20h14"
                           stroke="#0a0a0a"
@@ -844,6 +905,7 @@ function ConcluidoContent() {
                 height="30"
                 viewBox="0 0 24 24"
                 fill="none"
+                aria-hidden="true"
                 stroke="#7a6b15"
                 strokeWidth="2"
                 strokeLinecap="round"
@@ -875,7 +937,13 @@ function ConcluidoContent() {
               }}
             >
               Aguardando{" "}
-              <em style={{ fontFamily: SERIF, fontWeight: 400, fontStyle: "italic" }}>
+              <em
+                style={{
+                  fontFamily: SERIF,
+                  fontWeight: 400,
+                  fontStyle: "italic",
+                }}
+              >
                 confirmação.
               </em>
             </div>
@@ -956,6 +1024,7 @@ function ConcluidoContent() {
                 height="28"
                 viewBox="0 0 24 24"
                 fill="none"
+                aria-hidden="true"
                 stroke="#b91c1c"
                 strokeWidth="2"
                 strokeLinecap="round"
@@ -987,7 +1056,13 @@ function ConcluidoContent() {
               }}
             >
               Não foi{" "}
-              <em style={{ fontFamily: SERIF, fontWeight: 400, fontStyle: "italic" }}>
+              <em
+                style={{
+                  fontFamily: SERIF,
+                  fontWeight: 400,
+                  fontStyle: "italic",
+                }}
+              >
                 aprovado.
               </em>
             </div>
@@ -999,8 +1074,8 @@ function ConcluidoContent() {
                 marginBottom: 28,
               }}
             >
-              O pagamento foi recusado. Verifique os dados do cartão ou tente outro
-              método de pagamento.
+              O pagamento foi recusado. Verifique os dados do cartão ou tente
+              outro método de pagamento.
             </p>
             <Link
               href="/planos"

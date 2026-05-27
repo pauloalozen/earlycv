@@ -7,8 +7,8 @@ import {
   getRouteAccessRedirectPath,
 } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
-import { getJobApplication } from "@/lib/job-applications-api";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
+import { getJobApplication } from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
 import { DetailClient } from "./detail-client";
 
@@ -23,7 +23,10 @@ type Props = {
 
 export default async function CandidaturaDetailPage({ params }: Props) {
   const user = await getCurrentAppUserFromCookies();
-  const redirectPath = getRouteAccessRedirectPath("/dashboard/candidaturas", user);
+  const redirectPath = getRouteAccessRedirectPath(
+    "/dashboard/candidaturas",
+    user,
+  );
   if (redirectPath) redirect(redirectPath);
   if (!user) redirect(getDefaultAppRedirectPath(null));
 

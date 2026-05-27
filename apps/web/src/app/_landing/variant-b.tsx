@@ -772,7 +772,11 @@ export function LandingVariantB() {
 
                 {plan.checkoutPlanId ? (
                   <form action="/plans/checkout" method="post">
-                    <input type="hidden" name="planId" value={plan.checkoutPlanId} />
+                    <input
+                      type="hidden"
+                      name="planId"
+                      value={plan.checkoutPlanId}
+                    />
                     <button
                       type="submit"
                       style={{

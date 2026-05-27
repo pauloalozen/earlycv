@@ -59,7 +59,8 @@ export function extractDashboardAnalysisSignal(
         )
       : [];
     const selectedMissingKeywords =
-      options.selectedMissingKeywords && options.selectedMissingKeywords.length > 0
+      options.selectedMissingKeywords &&
+      options.selectedMissingKeywords.length > 0
         ? options.selectedMissingKeywords
             .filter(
               (value): value is string =>

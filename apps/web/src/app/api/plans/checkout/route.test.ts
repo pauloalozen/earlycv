@@ -41,7 +41,9 @@ describe("POST /api/plans/checkout", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ message: "plano-invalido" });
+    await expect(response.json()).resolves.toEqual({
+      message: "plano-invalido",
+    });
     expect(createPlanCheckoutMock).not.toHaveBeenCalled();
   });
 
@@ -107,6 +109,8 @@ describe("POST /api/plans/checkout", () => {
     );
 
     expect(response.status).toBe(502);
-    await expect(response.json()).resolves.toEqual({ message: "checkout-failed" });
+    await expect(response.json()).resolves.toEqual({
+      message: "checkout-failed",
+    });
   });
 });

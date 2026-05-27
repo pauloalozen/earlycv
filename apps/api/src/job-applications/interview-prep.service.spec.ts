@@ -14,7 +14,11 @@ const STUB_CONTENT = {
   strengthsToHighlight: ["Ponto A"],
   likelyRisksOrGaps: ["Gap X"],
   questionsTheyMayAsk: [
-    { question: "Por que?", whyItMatters: "Motivo.", answerDirection: "Direcao." },
+    {
+      question: "Por que?",
+      whyItMatters: "Motivo.",
+      answerDirection: "Direcao.",
+    },
   ],
   questionsCandidateShouldAsk: ["O que esperam?"],
   recommendedPosture: ["Seja direto"],
@@ -59,7 +63,13 @@ function makeDb(app: ReturnType<typeof makeApp> | null = makeApp()) {
     },
     jobApplicationInterviewPrep: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        const record = { id: "prep-1", createdAt: new Date(), updatedAt: new Date(), generatedAt: new Date(), ...data };
+        const record = {
+          id: "prep-1",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          generatedAt: new Date(),
+          ...data,
+        };
         createdPreps.push(record);
         return record;
       },
@@ -67,7 +77,7 @@ function makeDb(app: ReturnType<typeof makeApp> | null = makeApp()) {
     jobApplicationEvent: {
       create: async ({ data }: { data: unknown }) => {
         createdEvents.push(data);
-        return { id: "evt-1", ...data as Record<string, unknown> };
+        return { id: "evt-1", ...(data as Record<string, unknown>) };
       },
     },
     $transaction: async <T>(fn: (tx: typeof db) => Promise<T>): Promise<T> => {
@@ -140,7 +150,9 @@ test("creates INTERVIEW_PREP_GENERATED event after generation", async () => {
   await service.generateOrGet("user-1", "app-1");
 
   const events = db._createdEvents as Array<Record<string, unknown>>;
-  const prepEvent = events.find((e) => e.eventType === "INTERVIEW_PREP_GENERATED");
+  const prepEvent = events.find(
+    (e) => e.eventType === "INTERVIEW_PREP_GENERATED",
+  );
   assert.ok(prepEvent, "INTERVIEW_PREP_GENERATED event must be created");
   assert.equal(prepEvent.jobApplicationId, "app-1");
 });
@@ -230,7 +242,9 @@ test("uses adaptedContentJson from CvAdaptation as structured context", async ()
     "Forte em Node.js",
     "Experiência com microsserviços",
   ]);
-  assert.deepEqual(ctx.structuredAnalysis.lacunas, ["Pouca experiência com Go"]);
+  assert.deepEqual(ctx.structuredAnalysis.lacunas, [
+    "Pouca experiência com Go",
+  ]);
 
   const event = (db._createdEvents as Array<Record<string, unknown>>).find(
     (e) => e.eventType === "INTERVIEW_PREP_GENERATED",
@@ -248,7 +262,10 @@ test("does not pass jobUrl to AI context (no scraping)", async () => {
 
   await service.generateOrGet("user-1", "app-1");
 
-  assert.ok(!("jobUrl" in (aiCalls[0] as object)), "jobUrl must NOT be passed to AI");
+  assert.ok(
+    !("jobUrl" in (aiCalls[0] as object)),
+    "jobUrl must NOT be passed to AI",
+  );
 });
 
 // ─── failure isolation ────────────────────────────────────────────────────────
@@ -271,8 +288,16 @@ test("propagates AI error without leaving partial state", async () => {
     },
   );
 
-  assert.equal(db._createdPreps.length, 0, "no prep must be persisted on failure");
-  assert.equal(db._createdEvents.length, 0, "no event must be created on failure");
+  assert.equal(
+    db._createdPreps.length,
+    0,
+    "no prep must be persisted on failure",
+  );
+  assert.equal(
+    db._createdEvents.length,
+    0,
+    "no event must be created on failure",
+  );
 });
 
 test("propagates validation error without leaving partial state", async () => {
@@ -293,8 +318,16 @@ test("propagates validation error without leaving partial state", async () => {
     },
   );
 
-  assert.equal(db._createdPreps.length, 0, "no prep must be persisted on validation failure");
-  assert.equal(db._createdEvents.length, 0, "no event must be created on validation failure");
+  assert.equal(
+    db._createdPreps.length,
+    0,
+    "no prep must be persisted on validation failure",
+  );
+  assert.equal(
+    db._createdEvents.length,
+    0,
+    "no event must be created on validation failure",
+  );
 });
 
 // ─── isolation from existing analysis methods ─────────────────────────────────

@@ -1,13 +1,11 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from "@nestjs/common";
+import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
-import type { InterviewPrepContent, InterviewPrepContext } from "./interview-prep-ai.service";
+import type {
+  InterviewPrepContent,
+  InterviewPrepContext,
+} from "./interview-prep-ai.service";
 import { InterviewPrepAiService } from "./interview-prep-ai.service";
 
 type AdaptedContentJson = {
@@ -23,7 +21,9 @@ function extractStructuredAnalysis(
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const json = raw as AdaptedContentJson;
 
-  const pontosFortes = Array.isArray(json.pontos_fortes) ? json.pontos_fortes : [];
+  const pontosFortes = Array.isArray(json.pontos_fortes)
+    ? json.pontos_fortes
+    : [];
   const lacunas = Array.isArray(json.lacunas) ? json.lacunas : [];
   const melhoriasAplicadas = Array.isArray(json.melhorias_aplicadas)
     ? json.melhorias_aplicadas
@@ -83,9 +83,9 @@ export class JobApplicationInterviewPrepService {
     }
 
     const currentAdaptation = application.currentCvAdaptationId
-      ? application.cvAdaptations.find(
+      ? (application.cvAdaptations.find(
           (cv) => cv.id === application.currentCvAdaptationId,
-        ) ?? application.cvAdaptations[0]
+        ) ?? application.cvAdaptations[0])
       : application.cvAdaptations[0];
 
     const jobDescriptionText =

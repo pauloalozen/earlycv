@@ -82,7 +82,9 @@ describe("PagamentoConcluido", () => {
 
     expect(await screen.findByText(/Baixar PDF/i)).toBeTruthy();
     expect(screen.getByText(/Baixar DOCX/i)).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Ir para o painel/i })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /Ir para o painel/i }),
+    ).toBeTruthy();
     expect(screen.queryByText(/Adaptar meu CV agora/i)).toBeNull();
     expect(screen.queryByText(/Ver análise do CV/i)).toBeNull();
   });

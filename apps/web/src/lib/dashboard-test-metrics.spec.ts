@@ -151,7 +151,10 @@ test("extractDashboardAnalysisSignal matches selected keywords case-insensitivel
 test("extractDashboardAnalysisSignal applies selected keywords from runtime override", () => {
   const payload = makeAnalysisPayload();
   const normalized = normalizeData(payload);
-  const expectedFinal = Math.min(100, normalized.score.scoreAposLiberarBase + 15);
+  const expectedFinal = Math.min(
+    100,
+    normalized.score.scoreAposLiberarBase + 15,
+  );
 
   const signal = extractDashboardAnalysisSignal(payload, {
     selectedMissingKeywords: ["Python"],

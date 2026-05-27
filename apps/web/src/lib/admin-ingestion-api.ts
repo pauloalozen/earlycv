@@ -258,7 +258,10 @@ export async function listJobSourcesPaginated(
   if (params.search) qs.set("search", params.search);
   if (params.statusFilter) qs.set("statusFilter", params.statusFilter);
   if (params.typeFilter) qs.set("typeFilter", params.typeFilter);
-  return apiRequest<JobSourcePagedResult>(`/job-sources/paginated?${qs}`, token);
+  return apiRequest<JobSourcePagedResult>(
+    `/job-sources/paginated?${qs}`,
+    token,
+  );
 }
 
 export async function listCompanies(token?: string) {

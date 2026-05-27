@@ -40,7 +40,7 @@ vi.mock("@/lib/dashboard-test-metrics", () => ({
 }));
 
 extractDashboardAnalysisSignalMock.mockImplementation(() => ({
-    adjustments: { scoreBefore: null, scoreFinal: null },
+  adjustments: { scoreBefore: null, scoreFinal: null },
 }));
 
 vi.mock("./score-indicator", () => ({

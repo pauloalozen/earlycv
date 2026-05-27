@@ -120,9 +120,7 @@ describe("AdaptarPage submit analytics flow", () => {
 
     const { container } = render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
 
@@ -173,9 +171,7 @@ describe("AdaptarPage submit analytics flow", () => {
 
     const { container } = render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
 
@@ -211,9 +207,7 @@ describe("AdaptarPage submit analytics flow", () => {
   it("emits analyze_submit_clicked but not analysis_started for guest submit without file", async () => {
     render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
 
     trackEventMock.mockClear();
 
@@ -256,9 +250,7 @@ describe("AdaptarPage submit analytics flow", () => {
 
     const { container } = render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
 
@@ -308,9 +300,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const cvTextarea = screen.getByPlaceholderText(
       /Cole seu currículo em texto/i,
     );
-    const jobTextarea = screen.getByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const jobTextarea = screen.getByPlaceholderText("Cole a vaga completa");
 
     fireEvent.change(cvTextarea, {
       target: { value: "oi" },
@@ -342,9 +332,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const cvTextarea = screen.getByPlaceholderText(
       /Cole seu currículo em texto/i,
     );
-    const jobTextarea = screen.getByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const jobTextarea = screen.getByPlaceholderText("Cole a vaga completa");
 
     fireEvent.change(cvTextarea, {
       target: {
@@ -375,9 +363,7 @@ describe("AdaptarPage submit analytics flow", () => {
   it("persists guest analysis in sessionStorage and localStorage before redirect", async () => {
     const { container } = render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
 
@@ -427,9 +413,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const cvTextarea = screen.getByPlaceholderText(
       /Cole seu currículo em texto/i,
     );
-    const jobTextarea = screen.getByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const jobTextarea = screen.getByPlaceholderText("Cole a vaga completa");
 
     fireEvent.change(cvTextarea, {
       target: {
@@ -462,9 +446,7 @@ describe("AdaptarPage submit analytics flow", () => {
   it("emits job_description_focus and job_description_paste only once per page visit", async () => {
     render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
 
     trackEventMock.mockClear();
 
@@ -549,9 +531,7 @@ describe("AdaptarPage submit analytics flow", () => {
 
     const { container } = render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
 
