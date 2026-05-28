@@ -1362,6 +1362,287 @@ test("applyApprovedPurchase applies pending purchase once", async () => {
   assert.equal(applyCalls, 1);
 });
 
+test("webhook approved records payment_approved business funnel event", async () => {
+  const recordedEvents: Array<{
+    eventName: string;
+    idempotencyKey?: string;
+    metadata?: Record<string, unknown>;
+    source: string;
+  }> = [];
+
+  const service = new PlansService(
+    {
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          planPurchase: {
+            findUnique: async () => ({
+              id: "purchase-approved-1",
+              userId: "user-1",
+              planType: "pro",
+              amountInCents: 2990,
+              currency: "BRL",
+              paymentReference: "pay-ref-approved-1",
+              status: "pending",
+              creditsGranted: 3,
+              analysisCreditsGranted: 0,
+              originAction: "unlock_cv",
+              originAdaptationId: "adapt-1",
+              mpPaymentId: null,
+              mpMerchantOrderId: null,
+              mpPreferenceId: "pref-1",
+            }),
+            update: async () => ({ ok: true }),
+          },
+          user: { update: async () => ({ ok: true }) },
+          cvUnlock: { upsert: async () => ({ ok: true }) },
+          cvAdaptation: {
+            findUnique: async () => ({
+              id: "adapt-1",
+              userId: "user-1",
+              isUnlocked: false,
+              adaptedContentJson: { summary: "ok" },
+            }),
+            update: async () => ({ ok: true }),
+          },
+        }),
+      paymentAuditLog: { create: async () => ({ id: "audit-approved-1" }) },
+      planPurchase: {
+        findUnique: async () => ({
+          id: "purchase-approved-1",
+          userId: "user-1",
+          planType: "pro",
+          amountInCents: 2990,
+          currency: "BRL",
+          paymentReference: "pay-ref-approved-1",
+          status: "pending",
+          creditsGranted: 3,
+          analysisCreditsGranted: 0,
+          originAction: "unlock_cv",
+          originAdaptationId: "adapt-1",
+          mpPaymentId: null,
+          mpMerchantOrderId: null,
+          mpPreferenceId: "pref-1",
+        }),
+      },
+    } as never,
+    {
+      record: async (
+        input: {
+          eventName: string;
+          idempotencyKey?: string;
+          metadata?: Record<string, unknown>;
+        },
+        _context: unknown,
+        source: string,
+      ) => {
+        recordedEvents.push({
+          eventName: input.eventName,
+          idempotencyKey: input.idempotencyKey,
+          metadata: input.metadata,
+          source,
+        });
+        return { event: { id: "evt-approved-1" }, ingested: true };
+      },
+    } as never,
+  );
+
+  (
+    service as {
+      resolveMercadoPagoPayment: (body: unknown) => Promise<unknown>;
+    }
+  ).resolveMercadoPagoPayment = async () => ({
+    paymentReference: "pay-ref-approved-1",
+    paymentId: "mp-approved-1",
+    preferenceId: "pref-1",
+    merchantOrderId: "ord-1",
+    status: "approved",
+    rawStatus: "approved",
+  });
+
+  await service.handleWebhook("mercadopago", {
+    data: { id: "mp-approved-1" },
+    type: "payment",
+  });
+
+  const approvedEvent = recordedEvents.find(
+    (event) => event.eventName === "payment_approved",
+  );
+
+  assert.ok(approvedEvent);
+  assert.equal(approvedEvent.source, "backend");
+  assert.equal(
+    approvedEvent.idempotencyKey,
+    "payment_approved:purchase:purchase-approved-1",
+  );
+  assert.equal(approvedEvent.metadata?.purchaseId, "purchase-approved-1");
+  assert.equal(approvedEvent.metadata?.paymentId, "mp-approved-1");
+  assert.equal(approvedEvent.metadata?.paymentProvider, "mercado_pago");
+  assert.equal(approvedEvent.metadata?.paymentReference, "pay-ref-approved-1");
+  assert.equal(approvedEvent.metadata?.checkoutMode, "checkout_pro");
+});
+
+test("applyApprovedPurchase records payment_approved only once across repeated confirmations", async () => {
+  const idempotencyKeys = new Set<string>();
+  const ingestedEvents: string[] = [];
+  let currentStatus = "pending_payment";
+
+  const service = new PlansService(
+    {
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          planPurchase: {
+            findUnique: async () => ({
+              id: "purchase-dedupe-1",
+              userId: "user-1",
+              planType: "starter",
+              amountInCents: 1190,
+              currency: "BRL",
+              paymentReference: "pay-ref-dedupe-1",
+              status: currentStatus,
+              creditsGranted: 1,
+              analysisCreditsGranted: 0,
+              originAction: "buy_credits",
+              originAdaptationId: null,
+              mpPaymentId: "mp-dedupe-1",
+              mpMerchantOrderId: null,
+              mpPreferenceId: null,
+            }),
+            update: async () => {
+              currentStatus = "completed";
+              return { ok: true };
+            },
+          },
+          user: { update: async () => ({ ok: true }) },
+          cvUnlock: { upsert: async () => ({ ok: true }) },
+          cvAdaptation: {
+            findUnique: async () => null,
+            update: async () => ({ ok: true }),
+          },
+        }),
+      paymentAuditLog: { create: async () => ({ id: "audit-dedupe-1" }) },
+      planPurchase: {
+        findUnique: async () => ({
+          id: "purchase-dedupe-1",
+          userId: "user-1",
+          planType: "starter",
+          amountInCents: 1190,
+          currency: "BRL",
+          paymentReference: "pay-ref-dedupe-1",
+          status: currentStatus,
+          creditsGranted: 1,
+          analysisCreditsGranted: 0,
+          originAction: "buy_credits",
+          originAdaptationId: null,
+          mpPaymentId: "mp-dedupe-1",
+          mpMerchantOrderId: null,
+          mpPreferenceId: null,
+        }),
+      },
+    } as never,
+    {
+      record: async (input: { eventName: string; idempotencyKey?: string }) => {
+        if (input.eventName === "payment_approved" && input.idempotencyKey) {
+          if (!idempotencyKeys.has(input.idempotencyKey)) {
+            idempotencyKeys.add(input.idempotencyKey);
+            ingestedEvents.push(input.idempotencyKey);
+            return { event: { id: "evt-dedupe-1" }, ingested: true };
+          }
+          return { event: { id: "evt-dedupe-1" }, ingested: false };
+        }
+        return { event: { id: "evt-other" }, ingested: true };
+      },
+    } as never,
+  );
+
+  const first = await service.applyApprovedPurchase("purchase-dedupe-1");
+  const second = await service.applyApprovedPurchase("purchase-dedupe-1");
+
+  assert.equal(first, true);
+  assert.equal(second, false);
+  assert.equal(ingestedEvents.length, 1);
+  assert.equal(
+    ingestedEvents[0],
+    "payment_approved:purchase:purchase-dedupe-1",
+  );
+});
+
+test("payment_approved stays deduplicated when first attempt has paymentId and second has paymentReference", async () => {
+  const ingestedKeys = new Set<string>();
+  const ingestedEvents: string[] = [];
+
+  const service = new PlansService(
+    {
+      paymentAuditLog: { create: async () => ({ id: "audit-dedupe-mixed" }) },
+    } as never,
+    {
+      record: async (input: { eventName: string; idempotencyKey?: string }) => {
+        if (input.eventName !== "payment_approved" || !input.idempotencyKey) {
+          return { event: { id: "evt-other" }, ingested: true };
+        }
+
+        if (ingestedKeys.has(input.idempotencyKey)) {
+          return { event: { id: "evt-approved" }, ingested: false };
+        }
+
+        ingestedKeys.add(input.idempotencyKey);
+        ingestedEvents.push(input.idempotencyKey);
+        return { event: { id: "evt-approved" }, ingested: true };
+      },
+    } as never,
+  );
+
+  const serviceWithPrivateMethod = service as unknown as {
+    recordPaymentApprovedBusinessEvent: (input: {
+      purchase: {
+        id: string;
+        userId: string;
+        planType: string;
+        amountInCents: number;
+        currency: string;
+        paymentReference: string;
+        creditsGranted: number;
+        originAction: "buy_credits" | "unlock_cv";
+        originAdaptationId: string | null;
+        mpPaymentId: string | null;
+        mpPreferenceId: string | null;
+      };
+      paymentId?: string | null;
+      paymentReference?: string | null;
+      checkoutMode?: "brick" | "checkout_pro" | null;
+    }) => Promise<void>;
+  };
+
+  const purchase = {
+    id: "purchase-mixed-1",
+    userId: "user-1",
+    planType: "pro",
+    amountInCents: 2990,
+    currency: "BRL",
+    paymentReference: "pay-ref-mixed-1",
+    creditsGranted: 3,
+    originAction: "buy_credits" as const,
+    originAdaptationId: null,
+    mpPaymentId: null,
+    mpPreferenceId: "pref-mixed-1",
+  };
+
+  await serviceWithPrivateMethod.recordPaymentApprovedBusinessEvent({
+    purchase,
+    paymentId: "mp-mixed-1",
+    checkoutMode: "checkout_pro",
+  });
+
+  await serviceWithPrivateMethod.recordPaymentApprovedBusinessEvent({
+    purchase,
+    paymentId: null,
+    paymentReference: "pay-ref-mixed-1",
+    checkoutMode: "checkout_pro",
+  });
+
+  assert.equal(ingestedEvents.length, 1);
+  assert.equal(ingestedEvents[0], "payment_approved:purchase:purchase-mixed-1");
+});
+
 test("applyApprovedPurchase applies processing statuses once", async () => {
   const statuses = ["processing_payment", "pending_payment"];
 
