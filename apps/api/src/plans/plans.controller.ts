@@ -43,6 +43,7 @@ export class PlansController {
       dto.planId,
       dto.adaptationId,
       dto.selectedMissingKeywords,
+      dto.gaClientId,
     );
   }
 

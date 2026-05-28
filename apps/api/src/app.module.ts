@@ -14,6 +14,7 @@ import { EnvModule } from "./config/env.module";
 import { CvAdaptationModule } from "./cv-adaptation/cv-adaptation.module";
 import { CvUnlocksModule } from "./cv-unlocks/cv-unlocks.module";
 import { DatabaseModule } from "./database/database.module";
+import { Ga4Module } from "./ga4/ga4.module";
 import { HealthModule } from "./health/health.module";
 import { InfraModule } from "./infra/infra.module";
 import { JobSourcesModule } from "./job-sources/job-sources.module";
@@ -38,6 +39,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     DatabaseModule,
     InfraModule,
     StorageModule,
+    Ga4Module,
     HealthModule,
     AuthModule,
     AdminUsersModule,

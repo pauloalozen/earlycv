@@ -15,6 +15,8 @@ const BUSINESS_FUNNEL_EVENTS_PATH =
 const JOURNEY_SESSION_KEY = "journey_session_internal_id";
 const JOURNEY_ROUTE_VISIT_KEY = "journey_current_route_visit_id";
 const JOURNEY_PREVIOUS_ROUTE_KEY = "journey_previous_route";
+const GA_CLIENT_ID_STORAGE_KEY = "analytics_ga_client_id";
+const GA_MEASUREMENT_ID = "G-FGMKXL50XR";
 
 const PROHIBITED_KEYWORDS = [
   "cv",
@@ -59,6 +61,68 @@ let transientFirstTouchUtm: UtmParams = {};
 
 export function __resetAnalyticsTrackingForTests() {
   transientFirstTouchUtm = {};
+}
+
+function normalizeGaClientId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^[A-Za-z0-9._-]{8,128}$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+function getStoredGaClientId(): string | null {
+  if (typeof window === "undefined") return null;
+  return normalizeGaClientId(sessionStorage.getItem(GA_CLIENT_ID_STORAGE_KEY));
+}
+
+function storeGaClientId(clientId: string): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(GA_CLIENT_ID_STORAGE_KEY, clientId);
+}
+
+function getGaMeasurementId(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim();
+  return fromEnv && fromEnv.length > 0 ? fromEnv : GA_MEASUREMENT_ID;
+}
+
+export async function getOrCaptureGaClientId(): Promise<string | null> {
+  const cached = getStoredGaClientId();
+  if (cached) return cached;
+
+  if (typeof window === "undefined") return null;
+  if (typeof window.gtag !== "function") return null;
+
+  const measurementId = getGaMeasurementId();
+
+  const captured = await new Promise<string | null>((resolve) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(null);
+    }, 700);
+
+    try {
+      window.gtag?.("get", measurementId, "client_id", (value: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(normalizeGaClientId(value));
+      });
+    } catch {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(null);
+    }
+  });
+
+  if (captured) {
+    storeGaClientId(captured);
+  }
+
+  return captured;
 }
 
 function isPosthogSessionRequired() {

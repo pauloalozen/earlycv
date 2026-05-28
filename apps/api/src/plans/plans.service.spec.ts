@@ -1308,6 +1308,55 @@ test("createCheckout updates existing none purchase to pending before returning 
   }
 });
 
+test("createCheckout stores gaClientId in purchase metadata when provided", async () => {
+  const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
+  process.env.PAYMENT_CHECKOUT_MODE = "brick";
+
+  let createdData: Record<string, unknown> | null = null;
+
+  const service = new PlansService(
+    {
+      planPurchase: {
+        findFirst: async () => null,
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          createdData = data;
+          return {
+            id: "purchase-ga-1",
+            paymentReference: "pay-ref-ga-1",
+          };
+        },
+        update: async () => ({ ok: true }),
+      },
+      user: {
+        findUnique: async () => ({
+          email: "user-1@earlycv.com.br",
+          name: "User One",
+        }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-ga-1" }, ingested: true }),
+    } as never,
+  );
+
+  try {
+    const result = await service.createCheckout(
+      "user-1",
+      "starter",
+      undefined,
+      [],
+      "1234567890.1234567890",
+    );
+
+    assert.equal(result.purchaseId, "purchase-ga-1");
+    const metadataJson = createdData?.metadataJson as Record<string, unknown>;
+    assert.equal(metadataJson.gaClientId, "1234567890.1234567890");
+  } finally {
+    if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
+    else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
+  }
+});
+
 test("applyApprovedPurchase applies pending purchase once", async () => {
   let applyCalls = 0;
   const service = new PlansService(
@@ -1369,6 +1418,7 @@ test("webhook approved records payment_approved business funnel event", async ()
     metadata?: Record<string, unknown>;
     source: string;
   }> = [];
+  const ga4Calls: Array<Record<string, unknown>> = [];
 
   const service = new PlansService(
     {
@@ -1444,6 +1494,11 @@ test("webhook approved records payment_approved business funnel event", async ()
         return { event: { id: "evt-approved-1" }, ingested: true };
       },
     } as never,
+    {
+      sendPurchaseEvent: async (payload: Record<string, unknown>) => {
+        ga4Calls.push(payload);
+      },
+    } as never,
   );
 
   (
@@ -1479,11 +1534,15 @@ test("webhook approved records payment_approved business funnel event", async ()
   assert.equal(approvedEvent.metadata?.paymentProvider, "mercado_pago");
   assert.equal(approvedEvent.metadata?.paymentReference, "pay-ref-approved-1");
   assert.equal(approvedEvent.metadata?.checkoutMode, "checkout_pro");
+  assert.equal(ga4Calls.length, 1);
+  assert.equal(ga4Calls[0]?.purchaseId, "purchase-approved-1");
+  assert.equal(ga4Calls[0]?.currency, "BRL");
 });
 
 test("applyApprovedPurchase records payment_approved only once across repeated confirmations", async () => {
   const idempotencyKeys = new Set<string>();
   const ingestedEvents: string[] = [];
+  const ga4Calls: Array<Record<string, unknown>> = [];
   let currentStatus = "pending_payment";
 
   const service = new PlansService(
@@ -1552,6 +1611,11 @@ test("applyApprovedPurchase records payment_approved only once across repeated c
         return { event: { id: "evt-other" }, ingested: true };
       },
     } as never,
+    {
+      sendPurchaseEvent: async (payload: Record<string, unknown>) => {
+        ga4Calls.push(payload);
+      },
+    } as never,
   );
 
   const first = await service.applyApprovedPurchase("purchase-dedupe-1");
@@ -1564,6 +1628,72 @@ test("applyApprovedPurchase records payment_approved only once across repeated c
     ingestedEvents[0],
     "payment_approved:purchase:purchase-dedupe-1",
   );
+  assert.equal(ga4Calls.length, 1);
+});
+
+test("ga4 failure does not break approved purchase flow", async () => {
+  const service = new PlansService(
+    {
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          planPurchase: {
+            findUnique: async () => ({
+              id: "purchase-ga4-failure-1",
+              userId: "user-1",
+              planType: "starter",
+              amountInCents: 1190,
+              currency: "BRL",
+              paymentReference: "pay-ref-ga4-failure-1",
+              status: "pending",
+              creditsGranted: 1,
+              analysisCreditsGranted: 0,
+              originAction: "buy_credits",
+              originAdaptationId: null,
+              mpPaymentId: "mp-ga4-failure-1",
+              mpMerchantOrderId: null,
+              mpPreferenceId: null,
+            }),
+            update: async () => ({ ok: true }),
+          },
+          user: { update: async () => ({ ok: true }) },
+          cvUnlock: { upsert: async () => ({ ok: true }) },
+          cvAdaptation: {
+            findUnique: async () => null,
+            update: async () => ({ ok: true }),
+          },
+        }),
+      paymentAuditLog: { create: async () => ({ id: "audit-ga4-failure-1" }) },
+      planPurchase: {
+        findUnique: async () => ({
+          id: "purchase-ga4-failure-1",
+          userId: "user-1",
+          planType: "starter",
+          amountInCents: 1190,
+          currency: "BRL",
+          paymentReference: "pay-ref-ga4-failure-1",
+          status: "pending",
+          creditsGranted: 1,
+          analysisCreditsGranted: 0,
+          originAction: "buy_credits",
+          originAdaptationId: null,
+          mpPaymentId: "mp-ga4-failure-1",
+          mpMerchantOrderId: null,
+          mpPreferenceId: null,
+        }),
+      },
+    } as never,
+    {
+      record: async () => ({ event: { id: "evt-ga4-failure-1" }, ingested: true }),
+    } as never,
+    {
+      sendPurchaseEvent: async () => {
+        throw new Error("ga4 unavailable");
+      },
+    } as never,
+  );
+
+  const result = await service.applyApprovedPurchase("purchase-ga4-failure-1");
+  assert.equal(result, true);
 });
 
 test("payment_approved stays deduplicated when first attempt has paymentId and second has paymentReference", async () => {

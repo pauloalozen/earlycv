@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from "@nestjs/common";
 import type { Prisma, UserPlanType } from "@prisma/client";
@@ -19,6 +20,7 @@ import {
   buildMercadoPagoReturnConfig,
 } from "../payments/mercado-pago-return-config";
 import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
+import { Ga4MeasurementService } from "../ga4/ga4-measurement.service";
 
 type PlanId = "starter" | "pro" | "turbo";
 
@@ -56,6 +58,7 @@ type ApprovedPaymentEventInput = {
     originAdaptationId: string | null;
     mpPaymentId?: string | null;
     mpPreferenceId?: string | null;
+    metadataJson?: unknown;
   };
   paymentId?: string | null;
   paymentReference?: string | null;
@@ -152,6 +155,9 @@ export class PlansService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(BusinessFunnelEventService)
     private readonly businessFunnelEventService: BusinessFunnelEventService,
+    @Optional()
+    @Inject(Ga4MeasurementService)
+    private readonly ga4MeasurementService?: Ga4MeasurementService,
   ) {}
 
   async listMyPurchases(userId: string): Promise<
@@ -234,6 +240,7 @@ export class PlansService {
     planId: PlanId,
     adaptationId?: string,
     selectedMissingKeywords: string[] = [],
+    _gaClientId?: string,
   ): Promise<{
     checkoutUrl: string;
     purchaseId: string;
@@ -811,8 +818,8 @@ export class PlansService {
       userId: input.purchase.userId,
     };
 
-    await this.businessFunnelEventService
-      .record(
+    try {
+      const result = await this.businessFunnelEventService.record(
         {
           eventName: "payment_approved",
           eventVersion: 1,
@@ -822,12 +829,32 @@ export class PlansService {
         },
         context,
         "backend",
-      )
-      .catch((error) => {
-        this.logger.warn(
-          `Failed to record payment_approved funnel event: ${error}`,
-        );
-      });
+      );
+
+      if (!result.ingested) {
+        return;
+      }
+
+      try {
+        await this.ga4MeasurementService?.sendPurchaseEvent({
+          purchaseId: input.purchase.id,
+          userId: input.purchase.userId,
+          value: (input.purchase.amountInCents ?? 0) / 100,
+          currency: input.purchase.currency ?? "BRL",
+          planId: input.purchase.planType,
+          planName: planTypeToDisplayName(input.purchase.planType),
+          credits: input.purchase.creditsGranted,
+          originAction: input.purchase.originAction,
+          paymentId,
+          paymentReference,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`[ga4] payment_approved purchase sync failed: ${message}`);
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to record payment_approved funnel event: ${error}`);
+    }
   }
 
   private async recordPaymentFailed(

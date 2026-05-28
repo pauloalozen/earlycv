@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { getOrCaptureGaClientId } from "@/lib/analytics-tracking";
 
 type PaidPlanCheckoutFormProps = {
   adaptationId?: string;
@@ -48,12 +49,14 @@ export function PaidPlanCheckoutForm({
         .map((keyword) => keyword.trim())
         .filter((keyword) => keyword.length > 0)
         .slice(0, 80);
+      const gaClientId = await getOrCaptureGaClientId();
       const response = await fetch("/api/plans/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           adaptationId,
           planId,
+          ...(gaClientId ? { gaClientId } : {}),
           ...(sanitizedSelectedMissingKeywords.length > 0
             ? { selectedMissingKeywords: sanitizedSelectedMissingKeywords }
             : {}),

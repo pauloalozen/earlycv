@@ -14,6 +14,7 @@ const useRouterMock = vi.hoisted(() => vi.fn());
 const pushMock = vi.hoisted(() => vi.fn());
 const openMock = vi.hoisted(() => vi.fn());
 const extractDashboardAnalysisSignalMock = vi.hoisted(() => vi.fn());
+const getOrCaptureGaClientIdMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useRouter: () => useRouterMock(),
@@ -33,6 +34,10 @@ vi.mock("@/lib/app-session.server", () => ({
 
 vi.mock("@/lib/cv-adaptation-api", () => ({
   getCvAdaptationContent: vi.fn(),
+}));
+
+vi.mock("@/lib/analytics-tracking", () => ({
+  getOrCaptureGaClientId: getOrCaptureGaClientIdMock,
 }));
 
 vi.mock("@/lib/dashboard-test-metrics", () => ({
@@ -59,6 +64,8 @@ describe("PlanosPage checkout", () => {
       name: "Alo",
     });
     extractDashboardAnalysisSignalMock.mockClear();
+    getOrCaptureGaClientIdMock.mockReset();
+    getOrCaptureGaClientIdMock.mockResolvedValue("1234567890.1234567890");
     process.env.PRICE_PLAN_STARTER = "1190";
     process.env.PRICE_PLAN_PRO = "2990";
     process.env.PRICE_PLAN_TURBO = "5990";
@@ -201,12 +208,14 @@ describe("PlanosPage checkout", () => {
     ];
     const body = JSON.parse(String(requestInit?.body ?? "{}")) as {
       adaptationId?: string;
+      gaClientId?: string;
       planId?: string;
       selectedMissingKeywords?: string[];
     };
 
     expect(body.planId).toBe("pro");
     expect(body.adaptationId).toBe("adapt-123");
+    expect(body.gaClientId).toBe("1234567890.1234567890");
     expect(body.selectedMissingKeywords).toEqual(["Python", "SQL"]);
   });
 
