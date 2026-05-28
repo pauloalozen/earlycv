@@ -46,6 +46,9 @@ export class Ga4MeasurementService {
       return;
     }
 
+    const resolvedClientId =
+      payload.clientId ?? buildFallbackClientId(payload.purchaseId, payload.userId);
+
     const endpoint = this.isDebugMode() ? GOOGLE_MP_DEBUG_URL : GOOGLE_MP_COLLECT_URL;
     const params = new URLSearchParams({
       measurement_id: measurementId,
@@ -74,7 +77,7 @@ export class Ga4MeasurementService {
     };
 
     const requestBody = {
-      ...(payload.clientId ? { client_id: payload.clientId } : {}),
+      client_id: resolvedClientId,
       user_id: payload.userId ?? undefined,
       events: [
         {
@@ -90,7 +93,7 @@ export class Ga4MeasurementService {
     try {
       if (!payload.clientId) {
         this.logger.warn(
-          `[ga4] purchase ${payload.purchaseId} missing client_id; sending with user_id only`,
+          `[ga4] purchase ${payload.purchaseId} missing client_id; using fallback client_id`,
         );
       }
       const response = await fetch(url, {
@@ -105,6 +108,14 @@ export class Ga4MeasurementService {
         this.logger.warn(
           `[ga4] purchase event rejected status=${response.status} body=${details.slice(0, 300)}`,
         );
+        return;
+      }
+
+      if (this.isDebugMode()) {
+        const details = await response.text().catch(() => "");
+        if (details) {
+          this.logger.log(`[ga4] debug response: ${details.slice(0, 400)}`);
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -128,4 +139,17 @@ export class Ga4MeasurementService {
     const value = process.env.GA4_API_SECRET?.trim();
     return value && value.length > 0 ? value : null;
   }
+}
+
+function buildFallbackClientId(purchaseId: string, userId?: string | null): string {
+  const seed = `${purchaseId}:${userId ?? ""}`;
+  let hash = 0;
+
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  }
+
+  const left = String(hash || 1);
+  const right = String(Date.now());
+  return `${left}.${right}`;
 }

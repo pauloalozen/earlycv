@@ -31,7 +31,7 @@ test("does not send when GA4 is disabled", async () => {
   assert.equal(calls, 0);
 });
 
-test("sends purchase payload with transaction_id value currency and items", async () => {
+test("sends purchase payload with fallback client_id transaction_id value currency and items", async () => {
   process.env.GA4_ENABLED = "true";
   process.env.GA4_MEASUREMENT_ID = "G-TEST123";
   process.env.GA4_API_SECRET = "secret";
@@ -65,7 +65,7 @@ test("sends purchase payload with transaction_id value currency and items", asyn
     client_id?: string;
     events: Array<{ name: string; params: Record<string, unknown> }>;
   };
-  assert.equal(parsed.client_id, undefined);
+  assert.match(parsed.client_id ?? "", /^\d+\.\d+$/);
   assert.equal(parsed.events[0]?.name, "purchase");
   assert.equal(parsed.events[0]?.params.transaction_id, "purchase-2");
   assert.equal(parsed.events[0]?.params.value, 59.9);
