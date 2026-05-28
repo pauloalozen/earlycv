@@ -68,6 +68,7 @@ export class Ga4MeasurementService {
       value: payload.value,
       currency: payload.currency,
       items: [item],
+      ...(this.isDebugMode() ? { debug_mode: 1 } : {}),
       payment_provider: "mercado_pago",
       plan_name: payload.planName ?? undefined,
       credits: payload.credits ?? undefined,

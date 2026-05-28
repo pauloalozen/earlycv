@@ -98,3 +98,29 @@ test("includes client_id when provided", async () => {
   };
   assert.equal(parsed.client_id, "1234567890.1234567890");
 });
+
+test("includes debug_mode param when GA4 debug mode is enabled", async () => {
+  process.env.GA4_ENABLED = "true";
+  process.env.GA4_MEASUREMENT_ID = "G-TEST123";
+  process.env.GA4_API_SECRET = "secret";
+  process.env.GA4_DEBUG_MODE = "true";
+
+  let requestBody = "";
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = String(init?.body ?? "");
+    return new Response('{"validationMessages":[]}', { status: 200 });
+  }) as typeof fetch;
+
+  const service = new Ga4MeasurementService();
+  await service.sendPurchaseEvent({
+    purchaseId: "purchase-4",
+    userId: "user-4",
+    value: 19.9,
+    currency: "BRL",
+  });
+
+  const parsed = JSON.parse(requestBody) as {
+    events: Array<{ params: Record<string, unknown> }>;
+  };
+  assert.equal(parsed.events[0]?.params.debug_mode, 1);
+});
