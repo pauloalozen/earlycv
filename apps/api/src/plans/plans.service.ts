@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from "@nestjs/common";
 import type { Prisma, UserPlanType } from "@prisma/client";
@@ -19,6 +20,7 @@ import {
   buildMercadoPagoReturnConfig,
 } from "../payments/mercado-pago-return-config";
 import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
+import { Ga4MeasurementService } from "../ga4/ga4-measurement.service";
 
 type PlanId = "starter" | "pro" | "turbo";
 
@@ -41,6 +43,30 @@ type PaymentFailureEnrichmentInput = {
   preferenceId: string | null;
   rawStatus: string | null;
   statusDetail: string | null;
+};
+
+type ApprovedPaymentEventInput = {
+  purchase: {
+    id: string;
+    userId: string;
+    planType: string;
+    amountInCents?: number;
+    currency?: string;
+    paymentReference: string;
+    creditsGranted: number;
+    originAction: PurchaseOriginAction;
+    originAdaptationId: string | null;
+    mpPaymentId?: string | null;
+    mpPreferenceId?: string | null;
+    metadataJson?: unknown;
+  };
+  paymentId?: string | null;
+  paymentReference?: string | null;
+  checkoutMode?: "brick" | "checkout_pro" | null;
+  correlationId?: string;
+  requestId?: string;
+  routePath?: string;
+  routeKey?: string;
 };
 
 type WebhookPurchaseRecord = {
@@ -129,6 +155,9 @@ export class PlansService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(BusinessFunnelEventService)
     private readonly businessFunnelEventService: BusinessFunnelEventService,
+    @Optional()
+    @Inject(Ga4MeasurementService)
+    private readonly ga4MeasurementService?: Ga4MeasurementService,
   ) {}
 
   async listMyPurchases(userId: string): Promise<
@@ -211,6 +240,7 @@ export class PlansService {
     planId: PlanId,
     adaptationId?: string,
     selectedMissingKeywords: string[] = [],
+    _gaClientId?: string,
   ): Promise<{
     checkoutUrl: string;
     purchaseId: string;
@@ -642,6 +672,8 @@ export class PlansService {
     }
 
     // Atomic: re-check inside transaction to prevent double-credit on concurrent webhooks
+    let purchaseApproved = false;
+
     await this.database.$transaction(async (tx) => {
       const current = await tx.planPurchase.findUnique({
         where: { id: purchase.id },
@@ -664,7 +696,25 @@ export class PlansService {
         mpPaymentId: resolution.paymentId,
         mpPreferenceId: resolution.preferenceId,
       });
+
+      purchaseApproved = true;
     });
+
+    if (purchaseApproved) {
+      await this.recordPaymentApprovedBusinessEvent({
+        purchase,
+        paymentId: resolution.paymentId,
+        paymentReference: resolution.paymentReference,
+        checkoutMode:
+          purchase.mpPreferenceId || resolution.preferenceId
+            ? "checkout_pro"
+            : "brick",
+        correlationId: `plans-webhook:${purchase.id}`,
+        requestId: `plans-webhook:${purchase.id}`,
+        routePath: "/api/plans/webhook/mercadopago",
+        routeKey: "api/plans/webhook/mercadopago",
+      });
+    }
 
     this.logger.log(
       `[webhook:plans] payment approved — purchase ${purchase.id}`,
@@ -701,6 +751,17 @@ export class PlansService {
       return false;
     }
 
+    await this.recordPaymentApprovedBusinessEvent({
+      purchase: appliedPurchase,
+      paymentId: appliedPurchase.mpPaymentId,
+      paymentReference: appliedPurchase.paymentReference,
+      checkoutMode: appliedPurchase.mpPreferenceId ? "checkout_pro" : "brick",
+      correlationId: `plans-approval:${appliedPurchase.id}`,
+      requestId: `plans-approval:${appliedPurchase.id}`,
+      routePath: "/api/plans/apply-approved",
+      routeKey: "api/plans/apply-approved",
+    });
+
     this.logAuditEvent({
       eventType: "reconciliation_approved",
       actionTaken: "approved",
@@ -710,6 +771,90 @@ export class PlansService {
     });
 
     return true;
+  }
+
+  private async recordPaymentApprovedBusinessEvent(
+    input: ApprovedPaymentEventInput,
+  ): Promise<void> {
+    const paymentId = input.paymentId ?? input.purchase.mpPaymentId ?? null;
+    const paymentReference =
+      input.paymentReference ?? input.purchase.paymentReference;
+
+    if (!input.purchase.id) return;
+
+    const metadata: Record<string, unknown> = {
+      purchaseId: input.purchase.id,
+      paymentId,
+      paymentProvider: "mercado_pago",
+      paymentReference,
+      externalReference: paymentReference,
+      userId: input.purchase.userId,
+      user_id: input.purchase.userId,
+      sessionId: null,
+      planId: input.purchase.planType,
+      planName: planTypeToDisplayName(input.purchase.planType),
+      credits: input.purchase.creditsGranted,
+      amount: input.purchase.amountInCents ?? null,
+      currency: input.purchase.currency ?? "BRL",
+      originAction: input.purchase.originAction,
+      originAdaptationId: input.purchase.originAdaptationId,
+      checkoutMode:
+        input.checkoutMode ??
+        (input.purchase.mpPreferenceId ? "checkout_pro" : "brick"),
+      approvedAt: new Date().toISOString(),
+      requestId: input.requestId ?? null,
+      correlationId: input.correlationId ?? null,
+    };
+
+    const context: AnalysisRequestContext = {
+      correlationId:
+        input.correlationId ?? `plans-approval:${input.purchase.id}`,
+      ip: null,
+      requestId: input.requestId ?? `plans-approval:${input.purchase.id}`,
+      routePath: input.routePath ?? "/api/plans",
+      sessionInternalId: null,
+      sessionPublicToken: null,
+      userAgentHash: null,
+      userId: input.purchase.userId,
+    };
+
+    try {
+      const result = await this.businessFunnelEventService.record(
+        {
+          eventName: "payment_approved",
+          eventVersion: 1,
+          idempotencyKey: `payment_approved:purchase:${input.purchase.id}`,
+          metadata,
+          routeKey: input.routeKey ?? "api/plans",
+        },
+        context,
+        "backend",
+      );
+
+      if (!result.ingested) {
+        return;
+      }
+
+      try {
+        await this.ga4MeasurementService?.sendPurchaseEvent({
+          purchaseId: input.purchase.id,
+          userId: input.purchase.userId,
+          value: (input.purchase.amountInCents ?? 0) / 100,
+          currency: input.purchase.currency ?? "BRL",
+          planId: input.purchase.planType,
+          planName: planTypeToDisplayName(input.purchase.planType),
+          credits: input.purchase.creditsGranted,
+          originAction: input.purchase.originAction,
+          paymentId,
+          paymentReference,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`[ga4] payment_approved purchase sync failed: ${message}`);
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to record payment_approved funnel event: ${error}`);
+    }
   }
 
   private async recordPaymentFailed(

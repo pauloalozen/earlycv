@@ -20,4 +20,9 @@ export class CreatePlanCheckoutDto {
   @IsString({ each: true })
   @MaxLength(80, { each: true })
   selectedMissingKeywords?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  gaClientId?: string;
 }

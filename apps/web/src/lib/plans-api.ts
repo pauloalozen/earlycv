@@ -49,6 +49,7 @@ export async function createPlanCheckout(
   planId: "starter" | "pro" | "turbo",
   adaptationId?: string,
   selectedMissingKeywords: string[] = [],
+  gaClientId?: string,
 ): Promise<{
   checkoutUrl: string;
   purchaseId: string;
@@ -57,7 +58,10 @@ export async function createPlanCheckout(
   const response = await apiRequest("POST", "/plans/checkout", {
     planId,
     ...(adaptationId ? { adaptationId } : {}),
-    ...(selectedMissingKeywords.length > 0 ? { selectedMissingKeywords } : {}),
+    ...(selectedMissingKeywords.length > 0
+      ? { selectedMissingKeywords }
+      : {}),
+    ...(gaClientId ? { gaClientId } : {}),
   });
   if (!response.ok) {
     const err = await response.text();

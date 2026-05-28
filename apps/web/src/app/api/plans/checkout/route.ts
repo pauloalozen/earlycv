@@ -10,6 +10,7 @@ type CheckoutPayload = {
   planId?: string;
   adaptationId?: string;
   selectedMissingKeywords?: string[];
+  gaClientId?: string;
 };
 
 export async function POST(request: Request) {
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       payload.planId as CheckoutPlanId,
       payload.adaptationId?.trim() || undefined,
       payload.selectedMissingKeywords,
+      payload.gaClientId?.trim() || undefined,
     );
 
     return NextResponse.json({
