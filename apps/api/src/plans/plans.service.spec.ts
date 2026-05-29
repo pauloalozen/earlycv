@@ -1308,7 +1308,7 @@ test("createCheckout updates existing none purchase to pending before returning 
   }
 });
 
-test("createCheckout stores gaClientId in purchase metadata when provided", async () => {
+test("createCheckout accepts gaClientId input without persisting metadata", async () => {
   const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
   process.env.PAYMENT_CHECKOUT_MODE = "brick";
 
@@ -1349,8 +1349,7 @@ test("createCheckout stores gaClientId in purchase metadata when provided", asyn
     );
 
     assert.equal(result.purchaseId, "purchase-ga-1");
-    const metadataJson = createdData?.metadataJson as Record<string, unknown>;
-    assert.equal(metadataJson.gaClientId, "1234567890.1234567890");
+    assert.equal(createdData?.metadataJson, undefined);
   } finally {
     if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
     else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
