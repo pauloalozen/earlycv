@@ -49,6 +49,7 @@ import type {
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 import { createCvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
 import type { RedeemCreditDto } from "./dto/redeem-credit.dto";
+import type { SaveApplicationIdentityDto } from "./dto/save-application-identity.dto";
 import type { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
 
 type JobApplicationHookInput = {
@@ -1004,6 +1005,53 @@ export class CvAdaptationService {
       items: items.map((a) => createCvAdaptationResponseDto(a)),
       total,
     };
+  }
+
+  async persistApplicationIdentity(
+    userId: string,
+    adaptationId: string,
+    dto: SaveApplicationIdentityDto,
+  ) {
+    const adaptation = await this.database.cvAdaptation.findFirst({
+      where: { id: adaptationId, userId },
+      select: {
+        id: true,
+        userId: true,
+        jobTitle: true,
+        companyName: true,
+        jobDescriptionText: true,
+        status: true,
+      },
+    });
+
+    if (!adaptation) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    const jobTitle = dto.jobTitle.trim();
+    const companyName = dto.companyName.trim();
+
+    if (
+      adaptation.jobTitle !== jobTitle ||
+      adaptation.companyName !== companyName
+    ) {
+      await this.database.cvAdaptation.update({
+        where: { id: adaptation.id },
+        data: { jobTitle, companyName },
+      });
+    }
+
+    await this.jobApplicationsService.upsertFromCvAdaptation({
+      userId,
+      cvAdaptationId: adaptation.id,
+      jobTitle,
+      companyName,
+      jobDescriptionText: adaptation.jobDescriptionText,
+      targetStatus: adaptation.status === "delivered" ? "CV_READY" : "ANALYZED",
+      origin: "optimized_cv_auto",
+    });
+
+    return { ok: true };
   }
 
   async cleanupExpiredGuestSnapshots(now = new Date()) {

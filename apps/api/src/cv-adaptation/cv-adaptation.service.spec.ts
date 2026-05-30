@@ -2006,6 +2006,103 @@ test("saveGuestPreview: chama upsertFromCvAdaptation com ANALYZED quando adapta�
   assert.equal(call.cvAdaptationId, "adapt-existing");
 });
 
+test("saveGuestPreview retorna adaptação mesmo sem jobTitle/companyName e não bloqueia entrega da análise", async () => {
+  const spy = makeHookSpy();
+  const adaptation = {
+    ...makeAdaptationRecord("adapt-no-identity"),
+    jobTitle: null,
+    companyName: null,
+  };
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => null,
+        create: async () => adaptation,
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  const result = await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV text",
+    jobDescriptionText: adaptation.jobDescriptionText,
+    adaptedContentJson: { sections: [] },
+    previewText: "preview",
+  });
+
+  assert.equal(result.id, "adapt-no-identity");
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.jobTitle, null);
+  assert.equal(call.companyName, null);
+  assert.equal(call.targetStatus, "ANALYZED");
+});
+
+test("persistApplicationIdentity atualiza identidade ausente e chama upsert manual", async () => {
+  const spy = makeHookSpy();
+  const updateCalls: Array<Record<string, unknown>> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findFirst: async () => ({
+          ...makeAdaptationRecord("adapt-identity"),
+          jobTitle: null,
+          companyName: null,
+          status: "pending",
+        }),
+        update: async (input: Record<string, unknown>) => {
+          updateCalls.push(input);
+          return {
+            ...makeAdaptationRecord("adapt-identity"),
+            jobTitle: "Senior Engineer",
+            companyName: "Acme",
+            status: "pending",
+          };
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  await service.persistApplicationIdentity("user-1", "adapt-identity", {
+    jobTitle: "  Senior Engineer  ",
+    companyName: "  Acme  ",
+  });
+
+  assert.equal(updateCalls.length, 1);
+  const updateData = updateCalls[0]?.data as Record<string, unknown>;
+  assert.equal(updateData.jobTitle, "Senior Engineer");
+  assert.equal(updateData.companyName, "Acme");
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.cvAdaptationId, "adapt-identity");
+  assert.equal(call.jobTitle, "Senior Engineer");
+  assert.equal(call.companyName, "Acme");
+  assert.equal(call.targetStatus, "ANALYZED");
+  assert.equal(call.origin, "optimized_cv_auto");
+});
+
 test("claimGuest: chama upsertFromCvAdaptation com CV_READY e origin optimized_cv_auto", async () => {
   const spy = makeHookSpy();
   const adaptation = makeAdaptationRecord("adapt-claimed");

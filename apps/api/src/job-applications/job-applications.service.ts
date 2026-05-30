@@ -26,6 +26,25 @@ type UpsertFromAdaptationInput = {
   origin: JobApplicationOrigin;
 };
 
+type CvState = "ready" | "locked" | "missing";
+type ScorePresentation = "scored" | "not_analyzed";
+
+type DerivedSummary = {
+  bestScore: number | null;
+  bestCvAdaptationId: string | null;
+  bestCvState: CvState;
+  scorePresentation: ScorePresentation;
+};
+
+type AdaptationSummaryView = {
+  id: string;
+  status: string;
+  createdAt: Date;
+  adaptedResumeId: string | null;
+  isUnlocked?: boolean;
+  adaptedContentJson?: unknown;
+};
+
 function normalize(value: string): string {
   return value
     .toLowerCase()
@@ -54,6 +73,11 @@ function extractScoreAfterFromContent(content: unknown): number | null {
   if (!content || typeof content !== "object") return null;
   const c = content as Record<string, unknown>;
   if (typeof c.scoreAfter === "number") return c.scoreAfter;
+  const atsScore = c.atsScore;
+  if (atsScore && typeof atsScore === "object") {
+    const ats = atsScore as Record<string, unknown>;
+    if (typeof ats.after === "number") return ats.after;
+  }
   const proj = c.projecao_melhoria;
   if (proj && typeof proj === "object") {
     const p = proj as Record<string, unknown>;
@@ -61,6 +85,63 @@ function extractScoreAfterFromContent(content: unknown): number | null {
       return p.score_pos_otimizacao;
   }
   return null;
+}
+
+function deriveSummaryFromAdaptations(
+  adaptations: AdaptationSummaryView[],
+): DerivedSummary {
+  const scored = adaptations
+    .map((adaptation) => {
+      const scoreAfter = extractScoreAfterFromContent(
+        adaptation.adaptedContentJson,
+      );
+      const isUnlocked =
+        adaptation.isUnlocked ?? adaptation.status === "delivered";
+      const isReady = isUnlocked;
+
+      return {
+        id: adaptation.id,
+        createdAt: adaptation.createdAt,
+        scoreAfter,
+        isReady,
+        isUnlocked,
+      };
+    })
+    .filter(
+      (
+        item,
+      ): item is {
+        id: string;
+        createdAt: Date;
+        scoreAfter: number;
+        isReady: boolean;
+        isUnlocked: boolean;
+      } => item.scoreAfter !== null,
+    );
+
+  if (scored.length === 0) {
+    return {
+      bestScore: null,
+      bestCvAdaptationId: null,
+      bestCvState: "missing",
+      scorePresentation: "not_analyzed",
+    };
+  }
+
+  scored.sort((a, b) => {
+    if (b.scoreAfter !== a.scoreAfter) return b.scoreAfter - a.scoreAfter;
+    if (a.isReady !== b.isReady) return a.isReady ? -1 : 1;
+    return b.createdAt.getTime() - a.createdAt.getTime();
+  });
+
+  const best = scored[0];
+
+  return {
+    bestScore: best.scoreAfter,
+    bestCvAdaptationId: best.id,
+    bestCvState: best.isUnlocked ? "ready" : "locked",
+    scorePresentation: "scored",
+  };
 }
 
 @Injectable()
@@ -87,6 +168,16 @@ export class JobApplicationsService {
       this.database.jobApplication.findMany({
         where,
         include: {
+          cvAdaptations: {
+            select: {
+              id: true,
+              status: true,
+              createdAt: true,
+              adaptedResumeId: true,
+              isUnlocked: true,
+              adaptedContentJson: true,
+            },
+          },
           events: {
             orderBy: { createdAt: "desc" },
             take: 5,
@@ -100,7 +191,62 @@ export class JobApplicationsService {
       this.database.jobApplication.count({ where }),
     ]);
 
-    return { items, total };
+    return {
+      items: items.map((item) => ({
+        ...item,
+        ...deriveSummaryFromAdaptations(
+          item.cvAdaptations as AdaptationSummaryView[],
+        ),
+      })),
+      total,
+    };
+  }
+
+  async listHighlights(userId: string, limit = 3) {
+    const items = await this.database.jobApplication.findMany({
+      where: { userId },
+      include: {
+        cvAdaptations: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            adaptedResumeId: true,
+            isUnlocked: true,
+            adaptedContentJson: true,
+          },
+        },
+        events: {
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        },
+        interviewPrep: { select: { id: true, generatedAt: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    return items
+      .map((item) => ({
+        ...item,
+        ...deriveSummaryFromAdaptations(
+          item.cvAdaptations as AdaptationSummaryView[],
+        ),
+      }))
+      .sort((a, b) => {
+        const groupDelta =
+          this.relevanceGroupRank(a.status) - this.relevanceGroupRank(b.status);
+        if (groupDelta !== 0) return groupDelta;
+
+        if (a.scorePresentation !== b.scorePresentation) {
+          return a.scorePresentation === "scored" ? -1 : 1;
+        }
+
+        const scoreDelta = (b.bestScore ?? -1) - (a.bestScore ?? -1);
+        if (scoreDelta !== 0) return scoreDelta;
+
+        return b.updatedAt.getTime() - a.updatedAt.getTime();
+      })
+      .slice(0, Math.max(1, limit));
   }
 
   async getById(userId: string, id: string) {
@@ -117,6 +263,7 @@ export class JobApplicationsService {
             companyName: true,
             isUnlocked: true,
             adaptedResumeId: true,
+            adaptedContentJson: true,
             createdAt: true,
           },
           orderBy: { createdAt: "desc" },
@@ -128,7 +275,12 @@ export class JobApplicationsService {
       throw new NotFoundException("job application not found");
     }
 
-    return application;
+    return {
+      ...application,
+      ...deriveSummaryFromAdaptations(
+        application.cvAdaptations as AdaptationSummaryView[],
+      ),
+    };
   }
 
   async createManual(userId: string, dto: CreateJobApplicationDto) {
@@ -269,7 +421,7 @@ export class JobApplicationsService {
 
     if (!jobTitle || !companyName) {
       this.logger.warn(
-        `[job-applications] upsertFromCvAdaptation skipped — missing jobTitle or companyName for adaptation ${cvAdaptationId}`,
+        `[job-applications] missing jobTitle or companyName for adaptation ${cvAdaptationId}; persistence deferred`,
       );
       return;
     }
@@ -413,6 +565,128 @@ export class JobApplicationsService {
     });
   }
 
+  async splitAnalysisIntoNewApplication(
+    userId: string,
+    applicationId: string,
+    adaptationId: string,
+  ): Promise<{ newApplicationId: string }> {
+    return this.database.$transaction(async (tx) => {
+      const sourceApplication = await tx.jobApplication.findFirst({
+        where: { id: applicationId, userId },
+      });
+
+      if (!sourceApplication) {
+        throw new NotFoundException("job application not found");
+      }
+
+      const adaptation = await tx.cvAdaptation.findUnique({
+        where: { id: adaptationId },
+      });
+
+      if (!adaptation) {
+        throw new NotFoundException("cv adaptation not found");
+      }
+
+      if (adaptation.userId !== userId) {
+        throw new NotFoundException("cv adaptation not found");
+      }
+
+      if (adaptation.jobApplicationId !== sourceApplication.id) {
+        throw new BadRequestException(
+          "cv adaptation does not belong to the source application",
+        );
+      }
+
+      const nextJobTitle = adaptation.jobTitle ?? sourceApplication.jobTitle;
+      const nextCompanyName =
+        adaptation.companyName ?? sourceApplication.companyName;
+      const normalizedJobTitle = normalize(nextJobTitle);
+      const normalizedCompanyName = normalize(nextCompanyName);
+      const splitTargetStatus: JobApplicationStatus =
+        adaptation.isUnlocked || adaptation.status === "delivered"
+          ? "CV_READY"
+          : "ANALYZED";
+
+      const createdApplication = await tx.jobApplication.create({
+        data: {
+          userId,
+          jobTitle: nextJobTitle,
+          companyName: nextCompanyName,
+          normalizedJobTitle,
+          normalizedCompanyName,
+          jobDescriptionText:
+            adaptation.jobDescriptionText ??
+            sourceApplication.jobDescriptionText,
+          origin: sourceApplication.origin,
+          status: splitTargetStatus,
+          currentCvAdaptationId: adaptation.id,
+          scoreBefore: extractScoreBeforeFromContent(
+            adaptation.adaptedContentJson,
+          ),
+          scoreAfter: extractScoreAfterFromContent(
+            adaptation.adaptedContentJson,
+          ),
+        },
+      });
+
+      await tx.cvAdaptation.update({
+        where: { id: adaptation.id },
+        data: {
+          jobApplicationId: createdApplication.id,
+        },
+      });
+
+      let nextCurrentCvAdaptationId = sourceApplication.currentCvAdaptationId;
+      if (sourceApplication.currentCvAdaptationId === adaptation.id) {
+        const remainingAdaptations = await tx.cvAdaptation.findMany({
+          where: {
+            jobApplicationId: sourceApplication.id,
+            id: { not: adaptation.id },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true },
+        });
+
+        nextCurrentCvAdaptationId = remainingAdaptations[0]?.id ?? null;
+      }
+
+      await tx.jobApplication.update({
+        where: { id: sourceApplication.id },
+        data: {
+          currentCvAdaptationId: nextCurrentCvAdaptationId,
+        },
+      });
+
+      await tx.jobApplicationEvent.createMany({
+        data: [
+          {
+            jobApplicationId: sourceApplication.id,
+            eventType: "NOTE_ADDED",
+            metadata: {
+              action: "analysis_split_out",
+              separatedCvAdaptationId: adaptation.id,
+              destinationJobApplicationId: createdApplication.id,
+              currentCvAdaptationIdAfterSplit: nextCurrentCvAdaptationId,
+            },
+          },
+          {
+            jobApplicationId: createdApplication.id,
+            eventType: "APPLICATION_CREATED",
+            newStatus: splitTargetStatus,
+            metadata: {
+              action: "analysis_split_in",
+              sourceJobApplicationId: sourceApplication.id,
+              separatedCvAdaptationId: adaptation.id,
+            },
+          },
+        ],
+      });
+
+      return { newApplicationId: createdApplication.id };
+    });
+  }
+
   // Returns true if nextStatus represents a later stage in the funnel than current.
   // User-driven statuses (APPLIED, IN_PROCESS etc.) are never overridden by automatic hooks.
   private isLaterStatus(
@@ -424,5 +698,13 @@ export class JobApplicationsService {
     const nextIdx = autoOrder.indexOf(next);
     // Only advance within automatic statuses; never overwrite user-set statuses
     return currentIdx !== -1 && nextIdx > currentIdx;
+  }
+
+  private relevanceGroupRank(status: JobApplicationStatus): number {
+    if (status === "IN_PROCESS" || status === "INTERVIEW") return 0;
+    if (status === "HIRED" || status === "REJECTED" || status === "WITHDRAWN") {
+      return 2;
+    }
+    return 1;
   }
 }

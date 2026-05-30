@@ -15,7 +15,8 @@ import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { AddNoteDto } from "./dto/add-note.dto";
 import { CreateJobApplicationDto } from "./dto/create-job-application.dto";
-import { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
+import type { ListJobApplicationHighlightsDto } from "./dto/list-job-application-highlights.dto";
+import type { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
 import { JobApplicationInterviewPrepService } from "./interview-prep.service";
 import { JobApplicationsService } from "./job-applications.service";
@@ -42,6 +43,15 @@ export class JobApplicationsController {
       query.limit ?? 20,
       query.status,
     );
+  }
+
+  @Get("highlights")
+  listHighlights(
+    @AuthenticatedUser() user: { id: string },
+    @Query(new ValidationPipe({ transform: true, whitelist: true }))
+    query: ListJobApplicationHighlightsDto,
+  ) {
+    return this.service.listHighlights(user.id, query.limit ?? 3);
   }
 
   @Get(":id")
@@ -105,5 +115,18 @@ export class JobApplicationsController {
     @Param("id") id: string,
   ) {
     return this.interviewPrepService.generateOrGet(user.id, id);
+  }
+
+  @Post(":id/analyses/:adaptationId/split")
+  splitAnalysis(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+    @Param("adaptationId") adaptationId: string,
+  ) {
+    return this.service.splitAnalysisIntoNewApplication(
+      user.id,
+      id,
+      adaptationId,
+    );
   }
 }

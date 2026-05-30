@@ -8,6 +8,7 @@ import {
   Inject,
   Logger,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -35,6 +36,7 @@ import {
   type FileUpload,
 } from "./dto/create-cv-adaptation.dto";
 import { RedeemCreditDto } from "./dto/redeem-credit.dto";
+import { SaveApplicationIdentityDto } from "./dto/save-application-identity.dto";
 import { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
 
 const claimGuestValidationPipe = new ValidationPipe({
@@ -226,6 +228,26 @@ export class CvAdaptationController {
     dto: RedeemCreditDto,
   ) {
     return this.cvAdaptationService.redeemWithCredit(user.id, id, dto);
+  }
+
+  @Patch(":adaptationId/application-identity")
+  saveApplicationIdentity(
+    @AuthenticatedUser() user: { id: string },
+    @Param("adaptationId") adaptationId: string,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        expectedType: SaveApplicationIdentityDto,
+      }),
+    )
+    dto: SaveApplicationIdentityDto,
+  ) {
+    return this.cvAdaptationService.persistApplicationIdentity(
+      user.id,
+      adaptationId,
+      dto,
+    );
   }
 
   @Get(":id/download")

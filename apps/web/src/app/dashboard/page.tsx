@@ -8,28 +8,25 @@ import {
   getRouteAccessRedirectPath,
 } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
-import { getHistoryActions } from "@/lib/cv-adaptation-actions";
 import {
   getCvAdaptationContent,
   listCvAdaptations,
 } from "@/lib/cv-adaptation-api";
-import type { DashboardAdjustmentsData } from "@/lib/dashboard-adjustments";
 import { DASHBOARD_METRIC_LABELS } from "@/lib/dashboard-copy";
 import {
-  buildDashboardTestHistoryView,
   buildDashboardTestMetrics,
   extractDashboardAnalysisSignal,
   getDashboardScoreColor,
 } from "@/lib/dashboard-test-metrics";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
-import { hasAvailableCredits } from "@/lib/plan-credits";
+import { getStatusConfig } from "@/lib/job-application-status";
+import { listJobApplicationHighlights } from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMasterResumeFromList, listMyResumes } from "@/lib/resumes-api";
 import { AvailableDownloadCredits } from "./available-download-credits";
 import { CvMasterCard } from "./cv-master-card";
 import { DeleteAccountDangerZone } from "./delete-account-danger-zone";
 import { GuestAnalysisClaimer } from "./guest-analysis-claimer";
-import { HistoryActionLinks } from "./history-action-links";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -46,45 +43,9 @@ const CARD: React.CSSProperties = {
   borderRadius: 14,
 };
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 type DashboardPageProps = {
-  searchParams: Promise<{ plan?: string; page?: string; limit?: string }>;
+  searchParams: Promise<{ plan?: string }>;
 };
-
-const DASHBOARD_PAGE_SIZES = [10, 20, 50] as const;
-
-function parsePage(value: string | undefined) {
-  const parsed = Number.parseInt(value ?? "1", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
-}
-
-function parseLimit(value: string | undefined) {
-  const parsed = Number.parseInt(value ?? "10", 10);
-  return DASHBOARD_PAGE_SIZES.includes(
-    parsed as (typeof DASHBOARD_PAGE_SIZES)[number],
-  )
-    ? parsed
-    : 10;
-}
-
-function buildDashboardQuery(params: {
-  plan?: string;
-  page: number;
-  limit: number;
-}) {
-  const query = new URLSearchParams();
-  if (params.plan) query.set("plan", params.plan);
-  query.set("page", String(params.page));
-  query.set("limit", String(params.limit));
-  return `/dashboard?${query.toString()}`;
-}
 
 export default async function DashboardPage({
   searchParams,
@@ -96,41 +57,29 @@ export default async function DashboardPage({
 
   const params = await searchParams;
   const showPlanActivated = params.plan === "activated";
-  const currentPage = parsePage(params.page);
-  const currentLimit = parseLimit(params.limit);
 
-  const [plan, adaptations, resumesResponse] = await Promise.allSettled([
-    getMyPlan(),
-    listCvAdaptations(currentPage, currentLimit),
-    listMyResumes(),
-  ]);
+  const [plan, adaptations, resumesResponse, highlightsResponse] =
+    await Promise.allSettled([
+      getMyPlan(),
+      listCvAdaptations(1, 10),
+      listMyResumes(),
+      listJobApplicationHighlights(3),
+    ]);
 
   const planInfo = plan.status === "fulfilled" ? plan.value : null;
-  const hasCredits =
-    plan.status === "fulfilled" ? hasAvailableCredits(plan.value) : null;
   const adaptationList =
     adaptations.status === "fulfilled" ? adaptations.value.items : [];
-  const adaptationTotal =
-    adaptations.status === "fulfilled" ? adaptations.value.total : 0;
-  const totalPages = Math.max(1, Math.ceil(adaptationTotal / currentLimit));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startItem =
-    adaptationTotal === 0 ? 0 : (safeCurrentPage - 1) * currentLimit + 1;
-  const endItem = Math.min(adaptationTotal, safeCurrentPage * currentLimit);
+  const applicationHighlights =
+    highlightsResponse.status === "fulfilled" ? highlightsResponse.value : [];
   const resumeList =
     resumesResponse.status === "fulfilled" ? resumesResponse.value : [];
   const masterResume = await getMasterResumeFromList(resumeList);
-  const resumeTitleById = new Map(
-    resumeList.map((resume) => [resume.id, resume.title]),
-  );
 
   const availableDownloadCredits = toHeaderAvailableCredits(planInfo);
 
   const analysisSignalsById = new Map<
     string,
     {
-      adjustments: DashboardAdjustmentsData;
-      selectedMissingKeywords: string[];
       score: number | null;
       improvement: number | null;
     }
@@ -488,7 +437,7 @@ export default async function DashboardPage({
             {[
               {
                 label: DASHBOARD_METRIC_LABELS.matchCount,
-                value: String(adaptationTotal),
+                value: String(adaptationList.length),
                 color: "#0a0a0a",
               },
               {
@@ -529,9 +478,8 @@ export default async function DashboardPage({
             ))}
           </div>
 
-          {/* History */}
+          {/* Applications highlights */}
           <div style={{ ...CARD, overflow: "hidden" }}>
-            {/* Header */}
             <div
               style={{
                 display: "flex",
@@ -554,59 +502,35 @@ export default async function DashboardPage({
                     margin: "0 0 3px",
                   }}
                 >
-                  HISTÓRICO DE ANÁLISES
+                  Suas candidaturas
                 </p>
                 <p style={{ fontSize: 12.5, color: "#8a8a85", margin: 0 }}>
-                  {adaptationTotal === 0
-                    ? "Nenhuma análise registrada"
-                    : `Mostrando ${startItem}–${endItem} de ${adaptationTotal}`}
+                  Destaques recentes para você acompanhar seus próximos passos.
                 </p>
               </div>
 
-              {/* Page size selector */}
-              <div
+              <a
+                href="/dashboard/candidaturas"
                 style={{
-                  display: "flex",
+                  display: "inline-flex",
                   alignItems: "center",
-                  gap: 4,
-                  background: "rgba(10,10,10,0.04)",
-                  border: "1px solid rgba(10,10,10,0.08)",
-                  borderRadius: 8,
-                  padding: "3px",
+                  gap: 6,
+                  textDecoration: "none",
+                  border: "1px solid rgba(10,10,10,0.1)",
+                  borderRadius: 10,
+                  padding: "8px 12px",
+                  background: "#fff",
+                  color: "#0a0a0a",
+                  fontSize: 12.5,
+                  fontWeight: 500,
                 }}
+                className="dash-btn-outline"
               >
-                {DASHBOARD_PAGE_SIZES.map((size) => {
-                  const isActive = currentLimit === size;
-                  return (
-                    <a
-                      key={size}
-                      href={buildDashboardQuery({
-                        plan: params.plan,
-                        page: 1,
-                        limit: size,
-                      })}
-                      style={{
-                        display: "block",
-                        padding: "4px 10px",
-                        borderRadius: 6,
-                        fontFamily: MONO,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        textDecoration: "none",
-                        background: isActive ? "#0a0a0a" : "transparent",
-                        color: isActive ? "#fafaf6" : "#6a6560",
-                        transition: "all 150ms",
-                      }}
-                    >
-                      {size}
-                    </a>
-                  );
-                })}
-              </div>
+                Ver todas as candidaturas
+              </a>
             </div>
 
-            {/* Items */}
-            {adaptationList.length === 0 ? (
+            {applicationHighlights.length === 0 ? (
               <div
                 style={{
                   display: "flex",
@@ -625,10 +549,11 @@ export default async function DashboardPage({
                     margin: 0,
                   }}
                 >
-                  Nenhuma análise ainda
+                  Você ainda não tem candidaturas
                 </p>
                 <p style={{ fontSize: 13.5, color: "#6a6560", margin: 0 }}>
-                  Envie seu CV e a descrição de uma vaga para começar.
+                  Crie sua primeira adaptação para começar a organizar seu
+                  funil.
                 </p>
                 <a
                   href="/adaptar"
@@ -649,294 +574,118 @@ export default async function DashboardPage({
                 </a>
               </div>
             ) : (
-              <div style={{ padding: "10px" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  {adaptationList.map((item) => {
-                    const actions = getHistoryActions(
-                      item,
-                      analysisSignalsById.get(item.id)?.selectedMissingKeywords,
-                    );
-                    const history = buildDashboardTestHistoryView({
-                      id: item.id,
-                      score: analysisSignalsById.get(item.id)?.score ?? null,
-                      improvement:
-                        analysisSignalsById.get(item.id)?.improvement ?? null,
-                    });
-                    const adjustments = analysisSignalsById.get(item.id)
-                      ?.adjustments ?? {
-                      notes: null,
-                      scoreBefore: null,
-                      scoreFinal: null,
-                    };
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 10,
+                  padding: 10,
+                }}
+                className="dash-candidaturas-grid"
+              >
+                {applicationHighlights.map((item) => {
+                  const status = getStatusConfig(item.status);
+                  const scoreText =
+                    item.scorePresentation === "scored" &&
+                    typeof item.bestScore === "number"
+                      ? `${item.bestScore}%`
+                      : "Ainda não analisada";
 
-                    return (
-                      <article
-                        key={item.id}
-                        style={{
-                          background: "#fff",
-                          border: "1px solid rgba(10,10,10,0.06)",
-                          borderRadius: 12,
-                          padding: "16px 18px",
-                        }}
-                      >
-                        <div
-                          className="dash-history-row"
-                          style={{
-                            display: "flex",
-                            alignItems: "flex-start",
-                            justifyContent: "space-between",
-                            gap: 12,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <div style={{ minWidth: 0 }}>
-                            <p
-                              style={{
-                                fontSize: 13.5,
-                                fontWeight: 500,
-                                color: "#0a0a0a",
-                                margin: "0 0 3px",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {item.jobTitle ?? "Vaga sem título"}
-                              {item.companyName ? ` · ${item.companyName}` : ""}
-                            </p>
-                            <p
-                              style={{
-                                fontFamily: MONO,
-                                fontSize: 10.5,
-                                color: "#8a8a85",
-                                margin: 0,
-                              }}
-                            >
-                              {formatDate(item.createdAt)}
-                            </p>
-                          </div>
-
-                          <div
-                            className="dash-history-score"
-                            style={{
-                              textAlign: "right",
-                              flexShrink: 0,
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "flex-end",
-                              gap: 2,
-                            }}
-                          >
-                            <p
-                              style={{
-                                fontFamily: MONO,
-                                fontSize: 10,
-                                color: "#8a8a85",
-                                margin: "0 0 2px",
-                              }}
-                            >
-                              SCORE
-                            </p>
-                            <p
-                              style={{
-                                fontSize: 22,
-                                fontWeight: 500,
-                                letterSpacing: -0.8,
-                                margin: "0 0 2px",
-                                fontVariantNumeric: "tabular-nums",
-                                color:
-                                  history.score !== null
-                                    ? getDashboardScoreColor(history.score)
-                                    : "#0a0a0a",
-                              }}
-                            >
-                              {history.score !== null
-                                ? `${history.score}%`
-                                : "—"}
-                            </p>
-                            {history.improvement !== null && (
-                              <p
-                                style={{
-                                  fontFamily: MONO,
-                                  fontSize: 10.5,
-                                  fontWeight: 600,
-                                  color: "#405410",
-                                  margin: "-7px 0 10px",
-                                }}
-                              >
-                                +{history.improvement}% após ajustes
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "flex-end",
-                            justifyContent: "space-between",
-                            gap: 12,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <HistoryActionLinks
-                            actions={actions}
-                            hasCredits={hasCredits}
-                            adjustments={adjustments}
-                            analysisContext={{
-                              jobTitle: item.jobTitle,
-                              masterResumeTitle:
-                                resumeTitleById.get(item.masterResumeId) ??
-                                null,
-                            }}
-                            jobApplicationId={item.jobApplicationId}
-                            hideBaseCvAction
-                            removeTopMargin
-                          />
-
-                          {actions.canDownloadBaseCv ? (
-                            <a
-                              href={actions.baseCvHref}
-                              title="Baixa o CV base usado na analise e adaptacao (apenas para conferencia)."
-                              className="inline-flex h-8 w-full appearance-none items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border border-[#DADADA] bg-white px-3 [font-family:var(--font-sans)] text-xs leading-none font-semibold text-[#757570] transition-colors hover:border-[#BEBEBE] sm:w-auto"
-                              style={{ color: "#757570" }}
-                            >
-                              <span
-                                aria-hidden="true"
-                                style={{ display: "inline-flex" }}
-                              >
-                                <svg
-                                  width="12"
-                                  height="12"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                >
-                                  <title>Download</title>
-                                  <path d="M12 3v12" />
-                                  <path d="m7 10 5 5 5-5" />
-                                  <path d="M5 21h14" />
-                                </svg>
-                              </span>
-                              <span>CV usado na análise</span>
-                            </a>
-                          ) : null}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "flex-end",
-                      gap: 8,
-                      padding: "12px 4px 4px",
-                    }}
-                  >
-                    {safeCurrentPage > 1 ? (
-                      <a
-                        href={buildDashboardQuery({
-                          plan: params.plan,
-                          page: safeCurrentPage - 1,
-                          limit: currentLimit,
-                        })}
-                        style={{
-                          background: "#fafaf6",
-                          border: "1px solid rgba(10,10,10,0.1)",
-                          borderRadius: 8,
-                          padding: "6px 14px",
-                          fontFamily: MONO,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          color: "#0a0a0a",
-                          textDecoration: "none",
-                        }}
-                        className="dash-page-btn"
-                      >
-                        ← Anterior
-                      </a>
-                    ) : (
-                      <span
-                        style={{
-                          background: "rgba(10,10,10,0.03)",
-                          border: "1px solid rgba(10,10,10,0.06)",
-                          borderRadius: 8,
-                          padding: "6px 14px",
-                          fontFamily: MONO,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          color: "#c0beb4",
-                        }}
-                      >
-                        ← Anterior
-                      </span>
-                    )}
-
-                    <span
+                  return (
+                    <a
+                      key={item.id}
+                      href={`/dashboard/candidaturas/${item.id}`}
                       style={{
-                        fontFamily: MONO,
-                        fontSize: 11,
-                        color: "#8a8a85",
-                        padding: "0 4px",
+                        background: "#fff",
+                        border: "1px solid rgba(10,10,10,0.06)",
+                        borderRadius: 12,
+                        padding: "14px 14px 12px",
+                        textDecoration: "none",
+                        color: "#0a0a0a",
+                        minWidth: 0,
                       }}
                     >
-                      {safeCurrentPage} / {totalPages}
-                    </span>
+                      <p
+                        style={{
+                          margin: "0 0 8px",
+                          fontSize: 13.5,
+                          fontWeight: 500,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {item.jobTitle}
+                      </p>
+                      <p
+                        style={{
+                          margin: "0 0 10px",
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#8a8a85",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {item.companyName}
+                      </p>
 
-                    {safeCurrentPage < totalPages ? (
-                      <a
-                        href={buildDashboardQuery({
-                          plan: params.plan,
-                          page: safeCurrentPage + 1,
-                          limit: currentLimit,
-                        })}
+                      <div
                         style={{
-                          background: "#fafaf6",
-                          border: "1px solid rgba(10,10,10,0.1)",
-                          borderRadius: 8,
-                          padding: "6px 14px",
-                          fontFamily: MONO,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          border: `1px solid ${status.border}`,
+                          borderRadius: 999,
+                          background: status.bg,
+                          color: status.color,
+                          padding: "4px 8px",
                           fontSize: 11,
                           fontWeight: 600,
-                          color: "#0a0a0a",
-                          textDecoration: "none",
+                          marginBottom: 12,
                         }}
-                        className="dash-page-btn"
                       >
-                        Próxima →
-                      </a>
-                    ) : (
-                      <span
+                        <span
+                          aria-hidden
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: 999,
+                            background: status.dot,
+                          }}
+                        />
+                        {status.label}
+                      </div>
+
+                      <p
                         style={{
-                          background: "rgba(10,10,10,0.03)",
-                          border: "1px solid rgba(10,10,10,0.06)",
-                          borderRadius: 8,
-                          padding: "6px 14px",
+                          margin: 0,
                           fontFamily: MONO,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          color: "#c0beb4",
+                          fontSize: 10,
+                          color: "#8a8a85",
                         }}
                       >
-                        Próxima →
-                      </span>
-                    )}
-                  </div>
-                )}
+                        MELHOR SCORE
+                      </p>
+                      <p
+                        style={{
+                          margin: "4px 0 0",
+                          fontSize: 19,
+                          fontWeight: 500,
+                          letterSpacing: -0.6,
+                          color:
+                            item.scorePresentation === "scored" &&
+                            typeof item.bestScore === "number"
+                              ? getDashboardScoreColor(item.bestScore)
+                              : "#6a6560",
+                        }}
+                      >
+                        {scoreText}
+                      </p>
+                    </a>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -961,15 +710,14 @@ export default async function DashboardPage({
         .dash-cta-btn:hover { opacity: 0.88; }
         .dash-cta-arrow { display: inline-block; transition: transform 220ms cubic-bezier(.3,.9,.4,1); }
         .dash-cta-btn:hover .dash-cta-arrow { transform: translateX(4px); }
-        .dash-page-btn:hover { background: rgba(10,10,10,0.05) !important; }
         @media (max-width: 768px) {
           .dashboard-content { padding: 12px 16px 60px !important; }
+          .dash-candidaturas-grid { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 680px) {
           .dash-top-grid { grid-template-columns: 1fr !important; }
           .dash-metrics-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .dash-history-row { align-items: flex-start !important; }
-          .dash-history-score { margin-left: auto !important; text-align: right !important; }
+          .dash-candidaturas-grid { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 420px) {
           .dash-metrics-grid { grid-template-columns: 1fr !important; }

@@ -20,7 +20,8 @@
       "!**/out",
       "!**/build",
       "!**/dist",
-      "!**/cv-adaptation/templates"
+      "!**/cv-adaptation/templates",
+      "!docs/designs"
     ]
   },
   "overrides": [

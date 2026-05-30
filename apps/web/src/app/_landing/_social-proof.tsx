@@ -105,41 +105,40 @@ export function SocialProofSection() {
 
     function paint(i: number) {
       const d = DATA[i];
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: hardcoded content, no user input
-      quoteEl!.innerHTML = d.q;
-      nameEl!.textContent = d.name;
-      avEl!.textContent = d.av;
-      idxEl!.textContent = String(i + 1).padStart(2, "0");
+      quoteEl.innerHTML = d.q;
+      nameEl.textContent = d.name;
+      avEl.textContent = d.av;
+      idxEl.textContent = String(i + 1).padStart(2, "0");
       for (const c of chips) {
         const on = Number(c.getAttribute("data-i")) === i;
         c.classList.toggle("is-active", on);
         c.setAttribute("aria-selected", on ? "true" : "false");
       }
-      featStars!.classList.remove("reveal");
-      void featStars!.offsetWidth;
-      featStars!.classList.add("reveal");
+      featStars.classList.remove("reveal");
+      void featStars.offsetWidth;
+      featStars.classList.add("reveal");
     }
 
     function restartBar() {
       if (reduce) {
-        bar!.style.width = "0";
+        bar.style.width = "0";
         return;
       }
-      bar!.style.transition = "none";
-      bar!.style.width = "0";
+      bar.style.transition = "none";
+      bar.style.width = "0";
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (paused) return;
-          bar!.style.transition = `width ${INTERVAL}ms linear`;
-          bar!.style.width = "100%";
+          bar.style.transition = `width ${INTERVAL}ms linear`;
+          bar.style.width = "100%";
         });
       });
     }
 
     function pauseBar() {
-      const w = getComputedStyle(bar!).width;
-      bar!.style.transition = "none";
-      bar!.style.width = w;
+      const w = getComputedStyle(bar).width;
+      bar.style.transition = "none";
+      bar.style.width = w;
     }
 
     function schedule() {
@@ -162,10 +161,10 @@ export function SocialProofSection() {
         schedule();
         return;
       }
-      inner!.classList.add("is-leaving");
+      inner.classList.add("is-leaving");
       setTimeout(() => {
         paint(idx);
-        inner!.classList.remove("is-leaving");
+        inner.classList.remove("is-leaving");
       }, 300);
       restartBar();
       schedule();
@@ -281,7 +280,7 @@ export function SocialProofSection() {
             style={{ transitionDelay: "0s" }}
           >
             <div className="sp-feature-top">
-              <span ref={starsRef} className="sp-stars" aria-label="5 de 5" />
+              <span ref={starsRef} className="sp-stars" aria-hidden="true" />
               <span className="sp-index">
                 <b ref={idxRef}>01</b> /{" "}
                 <span>{String(DATA.length).padStart(2, "0")}</span>

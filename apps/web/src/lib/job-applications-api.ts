@@ -75,6 +75,10 @@ export type JobApplicationDto = {
   currentCvAdaptationId: string | null;
   scoreBefore: number | null;
   scoreAfter: number | null;
+  bestScore: number | null;
+  bestCvAdaptationId: string | null;
+  bestCvState: "ready" | "locked" | "missing";
+  scorePresentation: "scored" | "not_analyzed";
   notes: string | null;
   appliedAt: string | null;
   nextActionAt: string | null;
@@ -82,6 +86,18 @@ export type JobApplicationDto = {
   updatedAt: string;
   events: JobApplicationEvent[];
   interviewPrep: { id: string; generatedAt: string } | null;
+};
+
+export type JobApplicationHighlightsDto = {
+  id: string;
+  userId: string;
+  jobTitle: string;
+  companyName: string;
+  status: JobApplicationStatus;
+  bestScore: number | null;
+  bestCvAdaptationId: string | null;
+  bestCvState: "ready" | "locked" | "missing";
+  scorePresentation: "scored" | "not_analyzed";
 };
 
 export type JobApplicationDetailDto = Omit<
@@ -203,4 +219,44 @@ export async function generateOrGetInterviewPrep(
   if (!response.ok)
     throw new Error("Falha ao gerar preparação para entrevista");
   return response.json() as Promise<InterviewPrepDto>;
+}
+
+export async function splitJobApplicationAnalysis(
+  id: string,
+  adaptationId: string,
+): Promise<{ newApplicationId: string }> {
+  const response = await apiRequest(
+    "POST",
+    `/job-applications/${id}/analyses/${adaptationId}/split`,
+  );
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(
+      `Falha ao separar análise em candidatura${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  return response.json() as Promise<{ newApplicationId: string }>;
+}
+
+export async function listJobApplicationHighlights(
+  limit = 3,
+): Promise<JobApplicationHighlightsDto[]> {
+  const qs = new URLSearchParams({ limit: String(limit) });
+  const response = await apiRequest(
+    "GET",
+    `/job-applications/highlights?${qs}`,
+  );
+  if (!response.ok)
+    throw new Error("Falha ao carregar destaques das candidaturas");
+  return response.json() as Promise<JobApplicationHighlightsDto[]>;
 }

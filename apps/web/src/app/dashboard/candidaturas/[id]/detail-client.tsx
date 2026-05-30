@@ -24,6 +24,7 @@ import type {
 } from "@/lib/job-applications-api";
 import {
   addJobApplicationNote,
+  splitJobApplicationAnalysis,
   updateJobApplicationStatus,
 } from "@/lib/job-applications-api";
 import { InterviewPrepDrawer } from "./interview-prep-drawer";
@@ -1048,16 +1049,21 @@ function ProximaAcaoCard({
 function CvAdaptadoCard({
   applicationId,
   cvAdaptations,
+  currentCvAdaptationId,
+  bestCvAdaptationId,
   companyName,
   jobTitle,
   scoreAfter,
 }: {
   applicationId: string;
   cvAdaptations: JobApplicationDetailDto["cvAdaptations"];
+  currentCvAdaptationId: string | null;
+  bestCvAdaptationId: string | null;
   companyName: string;
   jobTitle: string;
   scoreAfter: number | null;
 }) {
+  const router = useRouter();
   const latest = cvAdaptations[0] ?? null;
   const cvName = `CV-${companyName.replace(/\s+/g, "-")}-${jobTitle.replace(/\s+/g, "-")}.pdf`;
   const [hasCredits, setHasCredits] = useState<boolean | null>(null);
@@ -1067,6 +1073,8 @@ function CvAdaptadoCard({
   const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
   const [downloadStage, setDownloadStage] =
     useState<DownloadProgressStage | null>(null);
+  const [splittingId, setSplittingId] = useState<string | null>(null);
+  const [splitError, setSplitError] = useState<string | null>(null);
 
   const plansHref = buildCvUnlockPlansHref({
     adaptationId: latest?.id,
@@ -1170,6 +1178,32 @@ function CvAdaptadoCard({
     }
   };
 
+  const handleSplit = async (adaptationId: string) => {
+    if (splittingId) return;
+    const shouldSplit = globalThis.confirm(
+      "Separar esta analise em uma nova candidatura?",
+    );
+    if (!shouldSplit) return;
+    setSplittingId(adaptationId);
+    setSplitError(null);
+    try {
+      const { newApplicationId } = await splitJobApplicationAnalysis(
+        applicationId,
+        adaptationId,
+      );
+      router.refresh();
+      router.push(`/dashboard/candidaturas/${newApplicationId}`);
+    } catch (error) {
+      if (error instanceof Error && error.message.trim()) {
+        setSplitError(error.message);
+      } else {
+        setSplitError("Nao foi possivel separar a analise agora.");
+      }
+    } finally {
+      setSplittingId(null);
+    }
+  };
+
   if (!latest) return null;
 
   return (
@@ -1247,6 +1281,104 @@ function CvAdaptadoCard({
             {scoreAfter !== null && ` · score ${scoreAfter}%`}
           </div>
         </div>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          marginBottom: 12,
+        }}
+      >
+        {cvAdaptations.map((adaptation) => {
+          const isCurrent = adaptation.id === currentCvAdaptationId;
+          const isBest = adaptation.id === bestCvAdaptationId;
+
+          return (
+            <div
+              key={adaptation.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 10,
+                background: "#fff",
+                border: "1px solid rgba(10,10,10,0.06)",
+                borderRadius: 10,
+                padding: "9px 10px",
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    color: "#8a8a85",
+                    marginBottom: 3,
+                  }}
+                >
+                  {new Date(adaptation.createdAt).toLocaleDateString("pt-BR", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {isBest && (
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        fontFamily: MONO,
+                        color: "#3a5008",
+                        border: "1px solid rgba(110,150,20,0.35)",
+                        background: "rgba(198,255,58,0.2)",
+                        borderRadius: 999,
+                        padding: "2px 7px",
+                      }}
+                    >
+                      Melhor versão
+                    </span>
+                  )}
+                  {isCurrent && (
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        fontFamily: MONO,
+                        color: "#0a0a0a",
+                        border: "1px solid rgba(10,10,10,0.2)",
+                        background: "#f6f6f2",
+                        borderRadius: 999,
+                        padding: "2px 7px",
+                      }}
+                    >
+                      Versão atual
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleSplit(adaptation.id)}
+                disabled={splittingId !== null}
+                style={{
+                  border: "1px solid rgba(10,10,10,0.14)",
+                  borderRadius: 8,
+                  background: "#fff",
+                  color: "#0a0a0a",
+                  padding: "7px 10px",
+                  fontSize: 12,
+                  fontFamily: GEIST,
+                  cursor: splittingId ? "not-allowed" : "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {splittingId === adaptation.id
+                  ? "Separando..."
+                  : "Separar em nova candidatura"}
+              </button>
+            </div>
+          );
+        })}
       </div>
       {isUnlocked ? (
         <div style={{ display: "flex", gap: 8 }}>
@@ -1345,6 +1477,18 @@ function CvAdaptadoCard({
           }}
         >
           {redeemError}
+        </p>
+      )}
+      {splitError && (
+        <p
+          style={{
+            margin: "10px 0 0",
+            fontFamily: GEIST,
+            fontSize: 12,
+            color: "#991b1b",
+          }}
+        >
+          {splitError}
         </p>
       )}
       <DownloadProgressOverlay
@@ -1852,6 +1996,8 @@ export function DetailClient({ application, header }: Props) {
                 <CvAdaptadoCard
                   applicationId={application.id}
                   cvAdaptations={application.cvAdaptations}
+                  currentCvAdaptationId={application.currentCvAdaptationId}
+                  bestCvAdaptationId={application.bestCvAdaptationId}
                   companyName={application.companyName}
                   jobTitle={application.jobTitle}
                   scoreAfter={application.scoreAfter}

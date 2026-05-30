@@ -47,9 +47,12 @@ export class Ga4MeasurementService {
     }
 
     const resolvedClientId =
-      payload.clientId ?? buildFallbackClientId(payload.purchaseId, payload.userId);
+      payload.clientId ??
+      buildFallbackClientId(payload.purchaseId, payload.userId);
 
-    const endpoint = this.isDebugMode() ? GOOGLE_MP_DEBUG_URL : GOOGLE_MP_COLLECT_URL;
+    const endpoint = this.isDebugMode()
+      ? GOOGLE_MP_DEBUG_URL
+      : GOOGLE_MP_COLLECT_URL;
     const params = new URLSearchParams({
       measurement_id: measurementId,
       api_secret: apiSecret,
@@ -142,7 +145,10 @@ export class Ga4MeasurementService {
   }
 }
 
-function buildFallbackClientId(purchaseId: string, userId?: string | null): string {
+function buildFallbackClientId(
+  purchaseId: string,
+  userId?: string | null,
+): string {
   const seed = `${purchaseId}:${userId ?? ""}`;
   let hash = 0;
 

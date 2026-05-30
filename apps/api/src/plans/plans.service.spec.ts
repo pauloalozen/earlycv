@@ -1682,7 +1682,10 @@ test("ga4 failure does not break approved purchase flow", async () => {
       },
     } as never,
     {
-      record: async () => ({ event: { id: "evt-ga4-failure-1" }, ingested: true }),
+      record: async () => ({
+        event: { id: "evt-ga4-failure-1" },
+        ingested: true,
+      }),
     } as never,
     {
       sendPurchaseEvent: async () => {

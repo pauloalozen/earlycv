@@ -1,13 +1,35 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JobApplicationDetailDto } from "@/lib/job-applications-api";
+import { splitJobApplicationAnalysis } from "@/lib/job-applications-api";
 import { DetailClient } from "./detail-client";
+
+const routerRefreshMock = vi.fn();
+const routerPushMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
-    refresh: vi.fn(),
+    refresh: routerRefreshMock,
+    push: routerPushMock,
   }),
 }));
+
+vi.mock("@/lib/job-applications-api", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/job-applications-api")
+  >("@/lib/job-applications-api");
+
+  return {
+    ...actual,
+    splitJobApplicationAnalysis: vi.fn(),
+  };
+});
 
 function buildApplication(
   overrides?: Partial<JobApplicationDetailDto>,
@@ -25,6 +47,10 @@ function buildApplication(
     currentCvAdaptationId: "adp_123",
     scoreBefore: 55,
     scoreAfter: 78,
+    bestCvAdaptationId: "adp_123",
+    bestScore: 78,
+    bestCvState: "ready",
+    scorePresentation: "scored",
     notes: null,
     appliedAt: null,
     nextActionAt: null,
@@ -48,6 +74,147 @@ function buildApplication(
 }
 
 describe("DetailClient - CV ADAPTADO card", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows version badges for best and current adaptations", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          currentCvAdaptationId: "adp_current",
+          bestCvAdaptationId: "adp_best",
+          cvAdaptations: [
+            {
+              id: "adp_current",
+              status: "completed",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_123",
+              createdAt: "2026-05-02T00:00:00.000Z",
+            },
+            {
+              id: "adp_best",
+              status: "completed",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_124",
+              createdAt: "2026-05-01T00:00:00.000Z",
+            },
+          ],
+        })}
+        header={<div />}
+      />,
+    );
+
+    expect(screen.getByText("Versão atual")).toBeTruthy();
+    expect(screen.getByText("Melhor versão")).toBeTruthy();
+  });
+
+  it("splits an analysis into a new application and navigates", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+    vi.mocked(splitJobApplicationAnalysis).mockResolvedValue({
+      newApplicationId: "app_new_123",
+    });
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
+
+    render(<DetailClient application={buildApplication()} header={<div />} />);
+
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: /separar em nova candidatura/i,
+      })[0],
+    );
+
+    await waitFor(() => {
+      expect(splitJobApplicationAnalysis).toHaveBeenCalledWith(
+        "app_123",
+        "adp_123",
+      );
+      expect(routerPushMock).toHaveBeenCalledWith(
+        "/dashboard/candidaturas/app_new_123",
+      );
+    });
+  });
+
+  it("does not split when user cancels confirmation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => false),
+    );
+
+    render(<DetailClient application={buildApplication()} header={<div />} />);
+
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: /separar em nova candidatura/i,
+      })[0],
+    );
+
+    await waitFor(() => {
+      expect(globalThis.confirm).toHaveBeenCalledTimes(1);
+    });
+    expect(splitJobApplicationAnalysis).not.toHaveBeenCalled();
+    expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
+  it("shows split inline error feedback", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+    vi.mocked(splitJobApplicationAnalysis).mockRejectedValue(
+      new Error("Falha ao separar análise"),
+    );
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
+
+    render(<DetailClient application={buildApplication()} header={<div />} />);
+
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: /separar em nova candidatura/i,
+      })[0],
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Falha ao separar análise")).toBeTruthy();
+    });
+  });
+
   it("shows unlock button when adaptation is locked", () => {
     vi.stubGlobal(
       "fetch",
@@ -143,9 +310,11 @@ describe("DetailClient - CV ADAPTADO card", () => {
     render(<DetailClient application={buildApplication()} header={<div />} />);
 
     const unlockButton = screen.getByRole("button", { name: /liberar cv/i });
-    unlockButton.click();
+    fireEvent.click(unlockButton);
 
-    expect(screen.getByRole("button", { name: "Liberando..." })).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Liberando..." })).toBeTruthy();
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/cv-adaptation/adp_123/redeem-credit",
       {

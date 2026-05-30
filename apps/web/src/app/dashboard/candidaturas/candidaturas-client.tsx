@@ -360,16 +360,61 @@ function CandRow({
   application: JobApplicationDto;
   derivedScore?: { scoreBefore: number | null; scoreAfter: number | null };
 }) {
+  const router = useRouter();
+  const [confirmUnlock, setConfirmUnlock] = useState(false);
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
   const detailUrl = `/dashboard/candidaturas/${application.id}`;
   const cta = ctaForStatus(application.status, detailUrl);
-  const hasCv = Boolean(application.currentCvAdaptationId);
   const scoreBefore =
     application.scoreBefore ?? derivedScore?.scoreBefore ?? null;
   const scoreAfter = application.scoreAfter ?? derivedScore?.scoreAfter ?? null;
-  const hasScoreAfter = scoreAfter !== null;
-  const hasScoreBefore = scoreBefore !== null;
   const shortId = `#${application.id.slice(-5).toUpperCase()}`;
   const cfg = getStatusConfig(application.status);
+  const bestScore = application.bestScore ?? scoreAfter;
+  const hasCv = application.bestCvState === "ready";
+
+  const handleRedeem = async () => {
+    if (!application.bestCvAdaptationId || redeeming) return;
+    setRedeeming(true);
+    setRedeemError(null);
+    try {
+      const response = await fetch(
+        `/api/cv-adaptation/${application.bestCvAdaptationId}/redeem-credit`,
+        {
+          method: "POST",
+          cache: "no-store",
+        },
+      );
+      if (!response.ok) {
+        let apiMessage =
+          "Nao foi possivel liberar o CV agora. Tente novamente.";
+        try {
+          const body = (await response.json()) as { message?: string };
+          if (typeof body.message === "string" && body.message.trim()) {
+            apiMessage = body.message;
+          }
+        } catch {
+          // no-op
+        }
+        throw new Error(apiMessage);
+      }
+      setConfirmUnlock(false);
+      router.refresh();
+    } catch (error) {
+      if (error instanceof TypeError) {
+        setRedeemError(
+          "Nao foi possivel conectar ao servidor. Verifique sua internet e tente novamente.",
+        );
+      } else if (error instanceof Error && error.message) {
+        setRedeemError(error.message);
+      } else {
+        setRedeemError("Nao foi possivel liberar o CV agora. Tente novamente.");
+      }
+    } finally {
+      setRedeeming(false);
+    }
+  };
 
   return (
     <div
@@ -627,7 +672,54 @@ function CandRow({
           SCORE
         </div>
 
-        {hasScoreAfter && hasScoreBefore ? (
+        {application.scorePresentation === "not_analyzed" ? (
+          <>
+            <div
+              style={{
+                fontSize: 16,
+                fontWeight: 500,
+                color: "#6a6963",
+                lineHeight: 1.2,
+              }}
+            >
+              Ainda não analisada
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                marginTop: 4,
+                color: "#a8a6a0",
+              }}
+            >
+              analise a vaga para ver o score
+            </div>
+          </>
+        ) : bestScore !== null ? (
+          <>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 500,
+                letterSpacing: -0.2,
+                color: "#6a6963",
+                lineHeight: 1.2,
+              }}
+            >
+              seu melhor score: {bestScore}%
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                marginTop: 4,
+                color: "#4a8a20",
+              }}
+            >
+              com CV adaptado
+            </div>
+          </>
+        ) : scoreAfter !== null && scoreBefore !== null ? (
           /* Both scores — show before → after */
           <>
             <div
@@ -674,7 +766,7 @@ function CandRow({
               +{(scoreAfter as number) - (scoreBefore as number)} pts
             </div>
           </>
-        ) : hasScoreAfter ? (
+        ) : scoreAfter !== null ? (
           /* Only after */
           <>
             <div
@@ -701,7 +793,7 @@ function CandRow({
               adaptado
             </div>
           </>
-        ) : hasScoreBefore ? (
+        ) : scoreBefore !== null ? (
           /* Only before */
           <>
             <div
@@ -768,6 +860,142 @@ function CandRow({
           borderLeft: "1px solid rgba(10,10,10,0.06)",
         }}
       >
+        {application.bestCvState === "ready" &&
+        application.bestCvAdaptationId ? (
+          <a
+            href={`/api/cv-adaptation/${application.bestCvAdaptationId}/download?format=pdf`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 6,
+              borderRadius: 8,
+              padding: "10px 14px",
+              fontSize: 12.5,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: GEIST,
+              textDecoration: "none",
+              background: "#fff",
+              color: "#0a0a0a",
+              border: "1px solid rgba(10,10,10,0.12)",
+            }}
+          >
+            <span>Baixar melhor CV</span>
+            <span style={{ fontSize: 12, flexShrink: 0 }}>↓</span>
+          </a>
+        ) : application.bestCvState === "locked" &&
+          application.bestCvAdaptationId ? (
+          confirmUnlock ? (
+            <div
+              style={{
+                border: "1px solid rgba(10,10,10,0.12)",
+                borderRadius: 8,
+                padding: "10px 10px 8px",
+                background: "#fff",
+              }}
+            >
+              <p style={{ margin: "0 0 8px", fontSize: 12, color: "#3a3a36" }}>
+                Confirmar liberação de 1 crédito para baixar este CV?
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmUnlock(false);
+                    setRedeemError(null);
+                  }}
+                  style={{
+                    flex: 1,
+                    borderRadius: 8,
+                    border: "1px solid rgba(10,10,10,0.12)",
+                    background: "#fff",
+                    padding: "8px 10px",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRedeem()}
+                  disabled={redeeming}
+                  style={{
+                    flex: 1,
+                    borderRadius: 8,
+                    border: "1px solid #0a0a0a",
+                    background: "#0a0a0a",
+                    color: "#fff",
+                    padding: "8px 10px",
+                    fontSize: 12,
+                    cursor: redeeming ? "not-allowed" : "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  {redeeming ? "Liberando..." : "Confirmar liberação"}
+                </button>
+              </div>
+              {redeemError ? (
+                <p
+                  style={{
+                    margin: "8px 0 0",
+                    fontSize: 11.5,
+                    color: "#991b1b",
+                  }}
+                >
+                  {redeemError}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmUnlock(true);
+                setRedeemError(null);
+              }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 6,
+                borderRadius: 8,
+                padding: "10px 14px",
+                fontSize: 12.5,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: GEIST,
+                textDecoration: "none",
+                background: "#fff",
+                color: "#0a0a0a",
+                border: "1px solid rgba(10,10,10,0.12)",
+              }}
+            >
+              <span>Liberar CV · 1 crédito</span>
+            </button>
+          )
+        ) : application.bestCvState === "missing" ? (
+          <button
+            type="button"
+            disabled
+            style={{
+              borderRadius: 8,
+              padding: "10px 14px",
+              fontSize: 12.5,
+              fontWeight: 500,
+              fontFamily: GEIST,
+              border: "1px solid rgba(10,10,10,0.08)",
+              background: "#f4f4f2",
+              color: "#9a9993",
+              cursor: "not-allowed",
+            }}
+          >
+            CV adaptado indisponível
+          </button>
+        ) : null}
+
         <Link
           href={cta.href}
           style={{
