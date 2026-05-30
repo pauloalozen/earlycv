@@ -4,6 +4,7 @@ import { resolveLandingVariant } from "./_landing/variant";
 import { LandingVariantA } from "./_landing/variant-a";
 import { LandingVariantB } from "./_landing/variant-b";
 import { LandingVariantC } from "./_landing/variant-c";
+import { LandingVariantD } from "./_landing/variant-d";
 
 export const metadata: Metadata = {
   title: "Seu CV ajustado para cada vaga",
@@ -45,6 +46,10 @@ export default function Home() {
 
   if (variant === "C") {
     return <LandingVariantC />;
+  }
+
+  if (variant === "D") {
+    return <LandingVariantD />;
   }
 
   return <LandingVariantA />;
