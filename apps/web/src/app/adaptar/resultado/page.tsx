@@ -4210,7 +4210,7 @@ export default function ResultadoPage() {
                   }}
                 >
                   <a
-                    href={`/dashboard/candidaturas/${jobApplicationId}`}
+                    href={`/candidaturas/${jobApplicationId}`}
                     data-testid="resultado-ver-candidatura"
                     style={{
                       display: "inline-flex",

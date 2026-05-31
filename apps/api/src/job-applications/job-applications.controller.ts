@@ -15,8 +15,8 @@ import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { AddNoteDto } from "./dto/add-note.dto";
 import { CreateJobApplicationDto } from "./dto/create-job-application.dto";
-import type { ListJobApplicationHighlightsDto } from "./dto/list-job-application-highlights.dto";
-import type { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
+import { ListJobApplicationHighlightsDto } from "./dto/list-job-application-highlights.dto";
+import { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
 import { JobApplicationInterviewPrepService } from "./interview-prep.service";
 import { JobApplicationsService } from "./job-applications.service";
@@ -34,13 +34,21 @@ export class JobApplicationsController {
   @Get()
   list(
     @AuthenticatedUser() user: { id: string },
-    @Query(new ValidationPipe({ transform: true, whitelist: true }))
+    @Query(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        expectedType: ListJobApplicationsDto,
+      }),
+    )
     query: ListJobApplicationsDto,
   ) {
     return this.service.list(
       user.id,
       query.page ?? 1,
       query.limit ?? 20,
+      query.archived ?? false,
       query.status,
     );
   }
@@ -48,7 +56,14 @@ export class JobApplicationsController {
   @Get("highlights")
   listHighlights(
     @AuthenticatedUser() user: { id: string },
-    @Query(new ValidationPipe({ transform: true, whitelist: true }))
+    @Query(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        expectedType: ListJobApplicationHighlightsDto,
+      }),
+    )
     query: ListJobApplicationHighlightsDto,
   ) {
     return this.service.listHighlights(user.id, query.limit ?? 3);
@@ -107,6 +122,21 @@ export class JobApplicationsController {
     dto: AddNoteDto,
   ) {
     return this.service.addNote(user.id, id, dto.note);
+  }
+
+  @Post(":id/archive")
+  archive(@AuthenticatedUser() user: { id: string }, @Param("id") id: string) {
+    return this.service.archive(user.id, id);
+  }
+
+  @Post(":id/restore")
+  restore(@AuthenticatedUser() user: { id: string }, @Param("id") id: string) {
+    return this.service.restore(user.id, id);
+  }
+
+  @Post(":id/delete")
+  delete(@AuthenticatedUser() user: { id: string }, @Param("id") id: string) {
+    return this.service.delete(user.id, id);
   }
 
   @Post(":id/interview-prep")

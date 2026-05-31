@@ -436,7 +436,7 @@ export function AppHeader({
                       ),
                     },
                     {
-                      href: "/dashboard/candidaturas",
+                      href: "/candidaturas",
                       label: "Candidaturas",
                       icon: (
                         <>
@@ -817,7 +817,7 @@ export function AppHeader({
                 ),
               },
               {
-                href: "/dashboard/candidaturas",
+                href: "/candidaturas",
                 label: "Candidaturas",
                 icon: (
                   <>

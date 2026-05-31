@@ -1082,6 +1082,8 @@ model JobApplication {
   notes                  String?
   appliedAt              DateTime?
   nextActionAt           DateTime?
+  archivedAt             DateTime?
+  deletedAt              DateTime?
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { JobApplicationsController } from "./job-applications.controller";
@@ -66,6 +67,16 @@ const interviewPrepStub = {
   generateOrGet: async () => ({ id: "prep-1" }),
 };
 
+test("controller query pipes pin expectedType for pagination DTOs", () => {
+  const source = readFileSync(
+    new URL("./job-applications.controller.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /expectedType: ListJobApplicationsDto/);
+  assert.match(source, /expectedType: ListJobApplicationHighlightsDto/);
+});
+
 test("list/controller payload includes derived best-version fields", async () => {
   const db = makeDb();
   const service = new JobApplicationsServiceCtor(db);
@@ -73,7 +84,7 @@ test("list/controller payload includes derived best-version fields", async () =>
 
   const response = await controller.list(
     { id: "user-1" },
-    { page: 1, limit: 20, status: undefined },
+    { page: 1, limit: 20, archived: false, status: undefined },
   );
   const item = response.items[0] as Record<string, unknown>;
 
@@ -132,4 +143,62 @@ test("split/controller delegates to service with authenticated user", async () =
 
   assert.deepEqual(captured, ["user-1", "app-1", "adapt-1"]);
   assert.deepEqual(result, { newApplicationId: "app-new" });
+});
+
+test("archive and restore/controller delegates with authenticated user", async () => {
+  const db = makeDb();
+  const service = new JobApplicationsServiceCtor(db);
+  const controller = new JobApplicationsController(service, interviewPrepStub);
+
+  let archiveCaptured: string[] = [];
+  let restoreCaptured: string[] = [];
+
+  (
+    service as unknown as {
+      archive: (userId: string, id: string) => Promise<{ id: string }>;
+      restore: (userId: string, id: string) => Promise<{ id: string }>;
+    }
+  ).archive = async (userId: string, id: string) => {
+    archiveCaptured = [userId, id];
+    return { id };
+  };
+
+  (
+    service as unknown as {
+      archive: (userId: string, id: string) => Promise<{ id: string }>;
+      restore: (userId: string, id: string) => Promise<{ id: string }>;
+    }
+  ).restore = async (userId: string, id: string) => {
+    restoreCaptured = [userId, id];
+    return { id };
+  };
+
+  const archived = await controller.archive({ id: "user-1" }, "app-1");
+  const restored = await controller.restore({ id: "user-1" }, "app-1");
+
+  assert.deepEqual(archiveCaptured, ["user-1", "app-1"]);
+  assert.deepEqual(restoreCaptured, ["user-1", "app-1"]);
+  assert.deepEqual(archived, { id: "app-1" });
+  assert.deepEqual(restored, { id: "app-1" });
+});
+
+test("delete/controller delegates with authenticated user", async () => {
+  const db = makeDb();
+  const service = new JobApplicationsServiceCtor(db);
+  const controller = new JobApplicationsController(service, interviewPrepStub);
+
+  let captured: string[] = [];
+  (
+    service as unknown as {
+      delete: (userId: string, id: string) => Promise<{ id: string }>;
+    }
+  ).delete = async (userId: string, id: string) => {
+    captured = [userId, id];
+    return { id };
+  };
+
+  const result = await controller.delete({ id: "user-1" }, "app-1");
+
+  assert.deepEqual(captured, ["user-1", "app-1"]);
+  assert.deepEqual(result, { id: "app-1" });
 });

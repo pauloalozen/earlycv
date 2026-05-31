@@ -510,7 +510,7 @@ export default async function DashboardPage({
               </div>
 
               <a
-                href="/dashboard/candidaturas"
+                href="/candidaturas"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -594,7 +594,7 @@ export default async function DashboardPage({
                   return (
                     <a
                       key={item.id}
-                      href={`/dashboard/candidaturas/${item.id}`}
+                      href={`/candidaturas/${item.id}`}
                       style={{
                         background: "#fff",
                         border: "1px solid rgba(10,10,10,0.06)",

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { ConflictException } from "@nestjs/common";
 
 import { JobApplicationsService } from "./job-applications.service";
 
@@ -27,6 +28,10 @@ function makeDb(overrides: Partial<DbMock> = {}): DbMock {
         for (const [, app] of jobApplications) {
           if (where.id && app.id !== where.id) continue;
           if (where.userId && app.userId !== where.userId) continue;
+          if (Object.hasOwn(where, "deletedAt")) {
+            if (where.deletedAt === null && (app.deletedAt ?? null) !== null)
+              continue;
+          }
           return app;
         }
         return null;
@@ -64,6 +69,32 @@ function makeDb(overrides: Partial<DbMock> = {}): DbMock {
     cvAdaptation: {
       findUnique: async ({ where }: { where: Record<string, unknown> }) =>
         cvAdaptations.get(where.id as string) ?? null,
+      findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+        for (const [, adaptation] of cvAdaptations) {
+          if (
+            where.jobApplicationId !== undefined &&
+            adaptation.jobApplicationId !== where.jobApplicationId
+          ) {
+            continue;
+          }
+
+          if (where.OR && Array.isArray(where.OR)) {
+            const matchesAny = where.OR.some((clause) => {
+              if (!clause || typeof clause !== "object") return false;
+              const entry = clause as Record<string, unknown>;
+              return Object.entries(entry).every(
+                ([key, value]) => adaptation[key] === value,
+              );
+            });
+
+            if (!matchesAny) continue;
+          }
+
+          return adaptation;
+        }
+
+        return null;
+      },
       findMany: async ({ where }: { where: Record<string, unknown> }) => {
         const rows = Array.from(cvAdaptations.values()).filter((adaptation) => {
           if (
@@ -665,6 +696,63 @@ test("derives best adaptation preferring CV_READY when scores tie", async () => 
   assert.equal(item.scorePresentation, "scored");
 });
 
+test("list scopes by archived flag and always excludes deleted", async () => {
+  let capturedWhere: Record<string, unknown> | null = null;
+
+  const db = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        capturedWhere = where;
+        return [];
+      },
+      count: async () => 0,
+    },
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+
+  await service.list("user-1", 1, 20, false, "INTERVIEW");
+  assert.deepEqual(capturedWhere, {
+    userId: "user-1",
+    deletedAt: null,
+    archivedAt: null,
+    status: "INTERVIEW",
+  });
+
+  await service.list("user-1", 1, 20, true, "INTERVIEW");
+  assert.deepEqual(capturedWhere, {
+    userId: "user-1",
+    deletedAt: null,
+    archivedAt: { not: null },
+    status: "INTERVIEW",
+  });
+});
+
+test("listHighlights queries active-only visibility scope", async () => {
+  let capturedWhere: Record<string, unknown> | null = null;
+
+  const db = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        capturedWhere = where;
+        return [];
+      },
+      count: async () => 0,
+    },
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+  await service.listHighlights("user-1", 3);
+
+  assert.deepEqual(capturedWhere, {
+    userId: "user-1",
+    archivedAt: null,
+    deletedAt: null,
+  });
+});
+
 test("listHighlights ranks applications by relevance groups and score", async () => {
   const db = makeDb({
     jobApplication: {
@@ -827,6 +915,183 @@ test("getById keeps strict CV_READY precedence when scores tie", async () => {
   assert.equal(response.bestScore, 82);
   assert.equal(response.bestCvState, "ready");
   assert.equal(response.scorePresentation, "scored");
+});
+
+test("archive and restore are idempotent and keep status unchanged", async () => {
+  const db = makeDb();
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+
+  apps.set("app-archive", {
+    id: "app-archive",
+    userId: "user-1",
+    jobTitle: "Role",
+    companyName: "Company",
+    normalizedJobTitle: "role",
+    normalizedCompanyName: "company",
+    status: "INTERVIEW",
+    archivedAt: null,
+    deletedAt: null,
+    cvAdaptations: [],
+    events: [],
+    interviewPrep: null,
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+
+  await service.archive("user-1", "app-archive");
+  const afterArchive = apps.get("app-archive");
+  assert.equal(afterArchive?.status, "INTERVIEW");
+  assert.ok(afterArchive?.archivedAt instanceof Date);
+
+  await service.archive("user-1", "app-archive");
+  const afterArchiveAgain = apps.get("app-archive");
+  assert.equal(afterArchiveAgain?.status, "INTERVIEW");
+  assert.ok(afterArchiveAgain?.archivedAt instanceof Date);
+
+  await service.restore("user-1", "app-archive");
+  const afterRestore = apps.get("app-archive");
+  assert.equal(afterRestore?.status, "INTERVIEW");
+  assert.equal(afterRestore?.archivedAt, null);
+
+  await service.restore("user-1", "app-archive");
+  const afterRestoreAgain = apps.get("app-archive");
+  assert.equal(afterRestoreAgain?.status, "INTERVIEW");
+  assert.equal(afterRestoreAgain?.archivedAt, null);
+});
+
+test("status changed while archived persists after restore", async () => {
+  const db = makeDb();
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+
+  apps.set("app-archived", {
+    id: "app-archived",
+    userId: "user-1",
+    jobTitle: "Role",
+    companyName: "Company",
+    normalizedJobTitle: "role",
+    normalizedCompanyName: "company",
+    status: "APPLIED",
+    archivedAt: null,
+    deletedAt: null,
+    cvAdaptations: [],
+    events: [],
+    interviewPrep: null,
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+
+  await service.archive("user-1", "app-archived");
+  await service.updateStatus("user-1", "app-archived", "INTERVIEW");
+  await service.restore("user-1", "app-archived");
+
+  const app = apps.get("app-archived");
+  assert.equal(app?.status, "INTERVIEW");
+  assert.equal(app?.archivedAt, null);
+});
+
+test("deleted applications are treated as not found in user-facing reads", async () => {
+  const db = makeDb();
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+
+  apps.set("app-deleted", {
+    id: "app-deleted",
+    userId: "user-1",
+    jobTitle: "Role",
+    companyName: "Company",
+    normalizedJobTitle: "role",
+    normalizedCompanyName: "company",
+    status: "INTERVIEW",
+    archivedAt: null,
+    deletedAt: new Date("2026-01-01T00:00:00Z"),
+    cvAdaptations: [],
+    events: [],
+    interviewPrep: null,
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+
+  await assert.rejects(
+    () => service.getById("user-1", "app-deleted"),
+    /job application not found/,
+  );
+  await assert.rejects(
+    () => service.archive("user-1", "app-deleted"),
+    /job application not found/,
+  );
+  await assert.rejects(
+    () => service.restore("user-1", "app-deleted"),
+    /job application not found/,
+  );
+});
+
+test("delete marks deletedAt when archived and no unlocked adaptation", async () => {
+  const db = makeDb();
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+
+  apps.set("app-eligible", {
+    id: "app-eligible",
+    userId: "user-1",
+    status: "INTERVIEW",
+    archivedAt: new Date("2026-01-02T00:00:00.000Z"),
+    deletedAt: null,
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+
+  await service.delete("user-1", "app-eligible");
+
+  const app = apps.get("app-eligible");
+  assert.ok(app?.deletedAt instanceof Date);
+});
+
+test("delete rejects when application is not archived", async () => {
+  const db = makeDb();
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+
+  apps.set("app-active", {
+    id: "app-active",
+    userId: "user-1",
+    status: "INTERVIEW",
+    archivedAt: null,
+    deletedAt: null,
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+
+  await assert.rejects(
+    () => service.delete("user-1", "app-active"),
+    (error: unknown) =>
+      error instanceof ConflictException && error.message.includes("arquivada"),
+  );
+});
+
+test("delete rejects when there is unlocked adaptation", async () => {
+  const db = makeDb();
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+  const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
+
+  apps.set("app-with-unlocked", {
+    id: "app-with-unlocked",
+    userId: "user-1",
+    status: "INTERVIEW",
+    archivedAt: new Date("2026-01-02T00:00:00.000Z"),
+    deletedAt: null,
+  });
+  adaptations.set("adapt-unlocked", {
+    id: "adapt-unlocked",
+    jobApplicationId: "app-with-unlocked",
+    isUnlocked: true,
+    status: "delivered",
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+
+  await assert.rejects(
+    () => service.delete("user-1", "app-with-unlocked"),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      error.message.includes("CV liberado"),
+  );
 });
 
 test("splitAnalysisIntoNewApplication moves adaptation and repoints current IDs", async () => {

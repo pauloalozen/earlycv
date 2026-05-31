@@ -77,11 +77,13 @@ export type JobApplicationDto = {
   scoreAfter: number | null;
   bestScore: number | null;
   bestCvAdaptationId: string | null;
-  bestCvState: "ready" | "locked" | "missing";
+  bestCvState: "ready" | "locked" | "unlocked" | "missing";
   scorePresentation: "scored" | "not_analyzed";
   notes: string | null;
   appliedAt: string | null;
   nextActionAt: string | null;
+  archivedAt: string | null;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
   events: JobApplicationEvent[];
@@ -96,7 +98,7 @@ export type JobApplicationHighlightsDto = {
   status: JobApplicationStatus;
   bestScore: number | null;
   bestCvAdaptationId: string | null;
-  bestCvState: "ready" | "locked" | "missing";
+  bestCvState: "ready" | "locked" | "unlocked" | "missing";
   scorePresentation: "scored" | "not_analyzed";
 };
 
@@ -129,10 +131,12 @@ export type CreateJobApplicationInput = {
 export async function listJobApplications(
   page = 1,
   limit = 50,
+  archived = false,
 ): Promise<{ items: JobApplicationDto[]; total: number }> {
   const qs = new URLSearchParams({
     page: String(page),
     limit: String(limit),
+    archived: String(archived),
   });
   const response = await apiRequest("GET", `/job-applications?${qs}`);
   if (!response.ok) {
@@ -155,6 +159,75 @@ export async function listJobApplications(
     items: JobApplicationDto[];
     total: number;
   }>;
+}
+
+export async function archiveJobApplication(
+  id: string,
+): Promise<JobApplicationDto> {
+  const response = await apiRequest("POST", `/job-applications/${id}/archive`);
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(
+      `Falha ao arquivar candidatura${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  return response.json() as Promise<JobApplicationDto>;
+}
+
+export async function restoreJobApplication(
+  id: string,
+): Promise<JobApplicationDto> {
+  const response = await apiRequest("POST", `/job-applications/${id}/restore`);
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(
+      `Falha ao restaurar candidatura${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  return response.json() as Promise<JobApplicationDto>;
+}
+
+export async function deleteJobApplication(
+  id: string,
+): Promise<JobApplicationDto> {
+  const response = await apiRequest("POST", `/job-applications/${id}/delete`);
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(
+      `Falha ao excluir candidatura${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  return response.json() as Promise<JobApplicationDto>;
 }
 
 export async function getJobApplication(

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   Logger,
@@ -156,11 +157,14 @@ export class JobApplicationsService {
     userId: string,
     page: number = 1,
     limit: number = 20,
+    archived = false,
     status?: JobApplicationStatus,
   ) {
     const skip = (page - 1) * limit;
     const where: Prisma.JobApplicationWhereInput = {
       userId,
+      deletedAt: null,
+      archivedAt: archived ? { not: null } : null,
       ...(status ? { status } : {}),
     };
 
@@ -204,7 +208,7 @@ export class JobApplicationsService {
 
   async listHighlights(userId: string, limit = 3) {
     const items = await this.database.jobApplication.findMany({
-      where: { userId },
+      where: { userId, archivedAt: null, deletedAt: null },
       include: {
         cvAdaptations: {
           select: {
@@ -251,7 +255,7 @@ export class JobApplicationsService {
 
   async getById(userId: string, id: string) {
     const application = await this.database.jobApplication.findFirst({
-      where: { id, userId },
+      where: { id, userId, deletedAt: null },
       include: {
         events: { orderBy: { createdAt: "asc" } },
         interviewPrep: true,
@@ -336,7 +340,7 @@ export class JobApplicationsService {
     newStatus: JobApplicationStatus,
   ) {
     const application = await this.database.jobApplication.findFirst({
-      where: { id, userId },
+      where: { id, userId, deletedAt: null },
     });
 
     if (!application) {
@@ -377,7 +381,7 @@ export class JobApplicationsService {
 
   async addNote(userId: string, id: string, note: string) {
     const application = await this.database.jobApplication.findFirst({
-      where: { id, userId },
+      where: { id, userId, deletedAt: null },
     });
 
     if (!application) {
@@ -402,6 +406,82 @@ export class JobApplicationsService {
     });
 
     return updated;
+  }
+
+  async archive(userId: string, id: string) {
+    const application = await this.database.jobApplication.findFirst({
+      where: { id, userId, deletedAt: null },
+      select: { id: true, archivedAt: true },
+    });
+
+    if (!application) {
+      throw new NotFoundException("job application not found");
+    }
+
+    if (application.archivedAt === null) {
+      await this.database.jobApplication.update({
+        where: { id },
+        data: { archivedAt: new Date() },
+      });
+    }
+
+    return this.getById(userId, id);
+  }
+
+  async restore(userId: string, id: string) {
+    const application = await this.database.jobApplication.findFirst({
+      where: { id, userId, deletedAt: null },
+      select: { id: true, archivedAt: true },
+    });
+
+    if (!application) {
+      throw new NotFoundException("job application not found");
+    }
+
+    if (application.archivedAt !== null) {
+      await this.database.jobApplication.update({
+        where: { id },
+        data: { archivedAt: null },
+      });
+    }
+
+    return this.getById(userId, id);
+  }
+
+  async delete(userId: string, id: string) {
+    const application = await this.database.jobApplication.findFirst({
+      where: { id, userId, deletedAt: null },
+      select: { id: true, archivedAt: true },
+    });
+
+    if (!application) {
+      throw new NotFoundException("job application not found");
+    }
+
+    if (application.archivedAt === null) {
+      throw new ConflictException(
+        "A candidatura precisa estar arquivada para ser excluida.",
+      );
+    }
+
+    const unlockedAdaptation = await this.database.cvAdaptation.findFirst({
+      where: {
+        jobApplicationId: id,
+        OR: [{ isUnlocked: true }, { status: "delivered" }],
+      },
+      select: { id: true },
+    });
+
+    if (unlockedAdaptation) {
+      throw new ConflictException(
+        "Nao e possivel excluir candidatura com CV liberado.",
+      );
+    }
+
+    return this.database.jobApplication.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 
   async upsertFromCvAdaptation(

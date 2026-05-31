@@ -410,7 +410,7 @@ export function HistoryActionLinks({
 
       {jobApplicationId && (
         <a
-          href={`/dashboard/candidaturas/${jobApplicationId}`}
+          href={`/candidaturas/${jobApplicationId}`}
           style={{ color: "#405410", ...sharedChipTextStyle }}
           className="inline-flex h-8 w-full appearance-none items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border border-[rgba(110,150,20,0.3)] bg-[rgba(198,255,58,0.12)] px-3 text-xs leading-none font-semibold transition-colors hover:bg-[rgba(198,255,58,0.2)] sm:w-auto"
           data-testid="ver-candidatura-link"
