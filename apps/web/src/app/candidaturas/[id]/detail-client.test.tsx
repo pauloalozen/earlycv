@@ -367,6 +367,18 @@ describe("DetailClient - CV ADAPTADO card", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Excluir" })).toBeNull();
+
+    rerender(
+      <DetailClient
+        application={buildApplication({
+          archivedAt: "2026-05-01T00:00:00.000Z",
+          bestCvState: "ready",
+        })}
+        header={<div />}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Excluir" })).toBeNull();
   });
 
   it("deletes archived application and redirects to archived view", async () => {
@@ -395,6 +407,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar exclusao" }));
 
     await waitFor(() => {
       expect(deleteJobApplication).toHaveBeenCalledWith("app_123");

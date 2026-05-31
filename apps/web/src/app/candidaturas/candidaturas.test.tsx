@@ -522,11 +522,20 @@ describe("CandidaturasClient", () => {
       archivedAt: "2026-05-10T10:00:00Z",
       bestCvState: "unlocked",
     });
+    const archivedReady = makeApp({
+      id: "arch-ready",
+      archivedAt: "2026-05-10T10:00:00Z",
+      bestCvState: "ready",
+    });
 
     render(
       <CandidaturasClient
         initialApplications={[]}
-        initialArchivedApplications={[archivedLocked, archivedUnlocked]}
+        initialArchivedApplications={[
+          archivedLocked,
+          archivedUnlocked,
+          archivedReady,
+        ]}
         initialView="arquivadas"
         header={null}
       />,
@@ -560,6 +569,7 @@ describe("CandidaturasClient", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar exclusao" }));
 
     await waitFor(() => {
       expect(deleteJobApplication).toHaveBeenCalledWith("arch-delete");

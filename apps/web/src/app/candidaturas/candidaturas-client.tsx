@@ -6,6 +6,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useRef,
   useState,
   useTransition,
 } from "react";
@@ -413,7 +414,10 @@ function CandRow({
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const detailUrl = `/candidaturas/${application.id}`;
   const cta = ctaForStatus(application.status, detailUrl);
   const scoreBefore =
@@ -432,8 +436,15 @@ function CandRow({
     application.bestCvAdaptationId ?? application.currentCvAdaptationId;
   const canDownloadCv =
     cvAdaptationIdForActions !== null && application.bestCvState !== "locked";
-  const canDelete =
-    application.archivedAt !== null && application.bestCvState !== "unlocked";
+  const hasUnlockedCv =
+    application.bestCvState === "unlocked" ||
+    application.bestCvState === "ready" ||
+    (application.cvAdaptations?.some(
+      (adaptation) =>
+        adaptation.isUnlocked || adaptation.status === "delivered",
+    ) ??
+      false);
+  const canDelete = application.archivedAt !== null && !hasUnlockedCv;
 
   const handleRestore = async () => {
     if (restoring) return;
@@ -510,8 +521,34 @@ function CandRow({
       }
     } finally {
       setDeleting(false);
+      closeDeleteModal();
     }
   };
+
+  const openDeleteModal = () => {
+    setConfirmDelete(true);
+    setConfirmDeleteVisible(false);
+    window.requestAnimationFrame(() => setConfirmDeleteVisible(true));
+  };
+
+  const closeDeleteModal = () => {
+    setConfirmDeleteVisible(false);
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      setConfirmDelete(false);
+      closeTimerRef.current = null;
+    }, 180);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div
@@ -889,6 +926,18 @@ function CandRow({
                 boxShadow: "0 4px 12px rgba(198,255,58,0.18)",
               }}
             >
+              <svg
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <path d="M3 12a9 9 0 1 0 3-6.7" strokeLinecap="round" />
+                <path d="M3 4v3h3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
               <span>{restoring ? "Restaurando..." : "Restaurar"}</span>
             </button>
             {restoreError ? (
@@ -906,7 +955,10 @@ function CandRow({
               <>
                 <button
                   type="button"
-                  onClick={() => void handleDelete()}
+                  onClick={() => {
+                    setDeleteError(null);
+                    openDeleteModal();
+                  }}
                   disabled={deleting}
                   style={{
                     display: "inline-flex",
@@ -925,6 +977,19 @@ function CandRow({
                     border: "1px solid rgba(185,28,28,0.28)",
                   }}
                 >
+                  <svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="M3 6h18" strokeLinecap="round" />
+                    <path d="M8 6V4h8v2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M6 6l1 14h10l1-14" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                   <span>{deleting ? "Excluindo..." : "Excluir"}</span>
                 </button>
                 {deleteError ? (
@@ -963,6 +1028,19 @@ function CandRow({
               border: "1px solid rgba(10,10,10,0.12)",
             }}
           >
+            <svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M12 4v11" strokeLinecap="round" />
+              <path d="m8 11 4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M5 20h14" strokeLinecap="round" />
+            </svg>
             <span>Baixar melhor CV</span>
             <span style={{ fontSize: 12, flexShrink: 0 }}>↓</span>
           </a>
@@ -1054,6 +1132,18 @@ function CandRow({
                 border: "1px solid rgba(10,10,10,0.12)",
               }}
             >
+              <svg
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <rect x="4" y="11" width="16" height="9" rx="2" />
+                <path d="M8 11V8a4 4 0 1 1 8 0" strokeLinecap="round" />
+              </svg>
               <span>Liberar CV · 1 crédito</span>
             </button>
           )
@@ -1112,6 +1202,18 @@ function CandRow({
                   }),
           }}
         >
+          <svg
+            aria-hidden="true"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <path d="M7 17 17 7" strokeLinecap="round" />
+            <path d="M8 7h9v9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
           <span
             style={{
               whiteSpace: "nowrap",
@@ -1134,6 +1236,85 @@ function CandRow({
           )}
         </Link>
       </div>
+
+      {confirmDelete ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 70,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(10,10,10,0.35)",
+            padding: "0 16px",
+            transition: "opacity 180ms ease",
+            opacity: confirmDeleteVisible ? 1 : 0,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 460,
+              background: "#fff",
+              border: "1px solid rgba(10,10,10,0.12)",
+              borderRadius: 16,
+              padding: "20px 18px",
+              boxShadow: "0 24px 60px -20px rgba(10,10,10,0.35)",
+              transition: "opacity 180ms ease, transform 180ms ease",
+              opacity: confirmDeleteVisible ? 1 : 0,
+              transform: confirmDeleteVisible
+                ? "translateY(0) scale(1)"
+                : "translateY(6px) scale(0.98)",
+            }}
+          >
+            <p style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 600, color: "#0a0a0a" }}>
+              Confirmar exclusao
+            </p>
+            <p style={{ margin: "0 0 14px", fontSize: 13.5, color: "#55524d", lineHeight: 1.45 }}>
+              Esta candidatura sera removida da sua visao e nao podera ser restaurada por voce.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                onClick={() => closeDeleteModal()}
+                style={{
+                  borderRadius: 8,
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  background: "#fff",
+                  color: "#0a0a0a",
+                  fontSize: 12,
+                  padding: "8px 10px",
+                  cursor: "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+                style={{
+                  borderRadius: 8,
+                  border: "1px solid #7f1d1d",
+                  background: "#7f1d1d",
+                  color: "#fff",
+                  fontSize: 12,
+                  padding: "8px 10px",
+                  cursor: deleting ? "not-allowed" : "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                {deleting ? "Excluindo..." : "Confirmar exclusao"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

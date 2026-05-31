@@ -87,6 +87,13 @@ export type JobApplicationDto = {
   createdAt: string;
   updatedAt: string;
   events: JobApplicationEvent[];
+  cvAdaptations?: Array<{
+    id: string;
+    status: string;
+    isUnlocked: boolean;
+    adaptedResumeId: string | null;
+    createdAt: string;
+  }>;
   interviewPrep: { id: string; generatedAt: string } | null;
 };
 

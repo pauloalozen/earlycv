@@ -6,6 +6,7 @@ import {
   type ReactNode,
   useEffect,
   useId,
+  useRef,
   useState,
   useTransition,
 } from "react";
@@ -1657,7 +1658,10 @@ export function DetailClient({ application, header }: Props) {
   const [archiving, setArchiving] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
 
   function handleUpdated() {
     startTransition(() => {
@@ -1669,7 +1673,14 @@ export function DetailClient({ application, header }: Props) {
   const isPrepEligible = PREP_ELIGIBLE_STATUSES.includes(application.status);
   const isInterview = application.status === "INTERVIEW";
   const isArchived = application.archivedAt !== null;
-  const canDelete = isArchived && application.bestCvState !== "unlocked";
+  const hasUnlockedCv =
+    application.bestCvState === "unlocked" ||
+    application.bestCvState === "ready" ||
+    application.cvAdaptations.some(
+      (adaptation) =>
+        adaptation.isUnlocked || adaptation.status === "delivered",
+    );
+  const canDelete = isArchived && !hasUnlockedCv;
   const origin = ORIGIN_LABELS[application.origin] ?? application.origin;
 
   const handleArchive = async () => {
@@ -1714,6 +1725,7 @@ export function DetailClient({ application, header }: Props) {
     setDeleting(true);
     try {
       await deleteJobApplication(application.id);
+      closeDeleteModal();
       router.push("/candidaturas?view=arquivadas");
       router.refresh();
     } catch (error) {
@@ -1726,6 +1738,31 @@ export function DetailClient({ application, header }: Props) {
       setDeleting(false);
     }
   };
+
+  const openDeleteModal = () => {
+    setConfirmDelete(true);
+    setConfirmDeleteVisible(false);
+    window.requestAnimationFrame(() => setConfirmDeleteVisible(true));
+  };
+
+  const closeDeleteModal = () => {
+    setConfirmDeleteVisible(false);
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      setConfirmDelete(false);
+      closeTimerRef.current = null;
+    }, 180);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <PageShell>
@@ -1969,6 +2006,17 @@ export function DetailClient({ application, header }: Props) {
                     fontFamily: GEIST,
                   }}
                 >
+                  <svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                   Atualizar status ▾
                 </button>
                 {isPrepEligible && (
@@ -1995,6 +2043,18 @@ export function DetailClient({ application, header }: Props) {
                         : "none",
                     }}
                   >
+                    <svg
+                      aria-hidden="true"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    >
+                      <circle cx="12" cy="12" r="8" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
                     {application.interviewPrep
                       ? "Ver preparação"
                       : "Preparar entrevista"}
@@ -2025,6 +2085,27 @@ export function DetailClient({ application, header }: Props) {
                     fontFamily: GEIST,
                   }}
                 >
+                  <svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    {isArchived ? (
+                      <>
+                        <path d="M3 12a9 9 0 1 0 3-6.7" strokeLinecap="round" />
+                        <path d="M3 4v3h3" strokeLinecap="round" strokeLinejoin="round" />
+                      </>
+                    ) : (
+                      <>
+                        <path d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                        <path d="M3 7V5a2 2 0 0 1 2-2h4" />
+                      </>
+                    )}
+                  </svg>
                   {isArchived
                     ? restoring
                       ? "Restaurando..."
@@ -2036,7 +2117,10 @@ export function DetailClient({ application, header }: Props) {
                 {canDelete ? (
                   <button
                     type="button"
-                    onClick={() => void handleDelete()}
+                    onClick={() => {
+                      setArchiveError(null);
+                      openDeleteModal();
+                    }}
                     disabled={deleting || archiving || restoring}
                     style={{
                       display: "inline-flex",
@@ -2056,10 +2140,100 @@ export function DetailClient({ application, header }: Props) {
                       fontFamily: GEIST,
                     }}
                   >
+                    <svg
+                      aria-hidden="true"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    >
+                      <path d="M3 6h18" strokeLinecap="round" />
+                      <path d="M8 6V4h8v2" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M6 6l1 14h10l1-14" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                     {deleting ? "Excluindo..." : "Excluir"}
                   </button>
                 ) : null}
               </div>
+              {confirmDelete ? (
+                <div
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    zIndex: 70,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "rgba(10,10,10,0.35)",
+                    padding: "0 16px",
+                    transition: "opacity 180ms ease",
+                    opacity: confirmDeleteVisible ? 1 : 0,
+                  }}
+                >
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    style={{
+                      width: "100%",
+                      maxWidth: 460,
+                      background: "#fff",
+                      border: "1px solid rgba(10,10,10,0.12)",
+                      borderRadius: 16,
+                      padding: "20px 18px",
+                      boxShadow: "0 24px 60px -20px rgba(10,10,10,0.35)",
+                      transition: "opacity 180ms ease, transform 180ms ease",
+                      opacity: confirmDeleteVisible ? 1 : 0,
+                      transform: confirmDeleteVisible
+                        ? "translateY(0) scale(1)"
+                        : "translateY(6px) scale(0.98)",
+                    }}
+                  >
+                    <p style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 600, color: "#0a0a0a" }}>
+                      Confirmar exclusao
+                    </p>
+                    <p style={{ margin: "0 0 14px", fontSize: 13.5, color: "#55524d", lineHeight: 1.45 }}>
+                      Esta candidatura sera removida da sua visao e nao podera ser restaurada por voce.
+                    </p>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => closeDeleteModal()}
+                        style={{
+                          borderRadius: 8,
+                          border: "1px solid rgba(10,10,10,0.12)",
+                          background: "#fff",
+                          color: "#0a0a0a",
+                          fontSize: 12,
+                          padding: "8px 10px",
+                          cursor: "pointer",
+                          fontFamily: GEIST,
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete()}
+                        disabled={deleting}
+                        style={{
+                          borderRadius: 8,
+                          border: "1px solid #7f1d1d",
+                          background: "#7f1d1d",
+                          color: "#fff",
+                          fontSize: 12,
+                          padding: "8px 10px",
+                          cursor: deleting ? "not-allowed" : "pointer",
+                          fontFamily: GEIST,
+                        }}
+                      >
+                        {deleting ? "Excluindo..." : "Confirmar exclusao"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               {archiveError ? (
                 <p
                   style={{
