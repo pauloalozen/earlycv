@@ -497,6 +497,155 @@ test("create delegates async analysis through protected boundary instead of dire
   assert.equal(protectedCalls, 1);
 });
 
+test("create rejects profile mode when file upload is provided", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      userProfile: {
+        findUnique: async () => ({ profileReadinessStatus: "ready" }),
+      },
+      resume: {
+        findFirst: async () => ({ id: "resume-1", rawText: "CV base" }),
+      },
+      cvAdaptation: {
+        create: async () => {
+          throw new Error("cvAdaptation.create should not be called");
+        },
+      },
+    },
+    {},
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: undefined,
+      }),
+    },
+  );
+
+  await assert.rejects(
+    service.create(
+      "user-1",
+      {
+        inputMode: "profile",
+        jobDescriptionText:
+          "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+      },
+      makeFile(Buffer.from("resume")),
+    ),
+    /modo profile/i,
+  );
+});
+
+test("create rejects profile mode when profile readiness is not ready", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      userProfile: {
+        findUnique: async () => ({ profileReadinessStatus: "partial" }),
+      },
+      cvAdaptation: {
+        create: async () => {
+          throw new Error("cvAdaptation.create should not be called");
+        },
+      },
+    },
+    {},
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: undefined,
+      }),
+    },
+  );
+
+  await assert.rejects(
+    service.create("user-1", {
+      inputMode: "profile",
+      jobDescriptionText:
+        "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+      masterResumeId: "resume-1",
+    }),
+    /perfil salvo ainda nao esta pronto/i,
+  );
+});
+
+test("create persists inferred adaptationSource and inputMode", async () => {
+  const now = new Date();
+  const createCalls: Array<Record<string, unknown>> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: {
+        findFirst: async () => ({ id: "resume-1", rawText: "CV base" }),
+      },
+      cvAdaptation: {
+        create: async (args: Record<string, unknown>) => {
+          createCalls.push(args);
+          return {
+            adaptedResumeId: null,
+            companyName: null,
+            createdAt: now,
+            id: "adapt-1",
+            jobDescriptionText:
+              "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+            jobTitle: null,
+            masterResumeId: "resume-1",
+            paidAt: null,
+            paymentStatus: "none",
+            previewText: null,
+            status: "analyzing",
+            template: null,
+            templateId: null,
+            updatedAt: now,
+            userId: "user-1",
+          };
+        },
+        update: async () => ({}),
+      },
+    },
+    {},
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: undefined,
+      }),
+    },
+  );
+
+  await service.create("user-1", {
+    inputMode: "file_upload",
+    jobDescriptionText:
+      "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+    masterResumeId: "resume-1",
+  });
+
+  const createData = createCalls[0]?.data as Record<string, unknown>;
+  assert.equal(createData.inputMode, "file_upload");
+  assert.equal(createData.adaptationSource, "uploaded_content");
+});
+
 test("create marks adaptation as failed when protected boundary blocks analysis", async () => {
   const updates: Array<Record<string, unknown>> = [];
   const now = new Date();

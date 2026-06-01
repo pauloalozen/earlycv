@@ -161,6 +161,29 @@ export class CvAdaptationService {
       },
     );
 
+    const inputMode = dto.inputMode ?? (file ? "file_upload" : "text_paste");
+    const adaptationSource =
+      inputMode === "profile" ? "user_profile" : "uploaded_content";
+
+    if (inputMode === "profile" && file) {
+      throw new BadRequestException(
+        "Modo profile nao aceita upload de arquivo no mesmo envio.",
+      );
+    }
+
+    if (inputMode === "profile") {
+      const profile = await this.database.userProfile.findUnique({
+        where: { userId },
+        select: { profileReadinessStatus: true },
+      });
+
+      if (profile?.profileReadinessStatus !== "ready") {
+        throw new BadRequestException(
+          "Perfil salvo ainda nao esta pronto para analise no modo profile.",
+        );
+      }
+    }
+
     let masterResumeId = dto.masterResumeId;
     let masterCvText: string | null = null;
 
@@ -256,6 +279,8 @@ export class CvAdaptationService {
         jobDescriptionText: normalizedJobDescriptionText,
         jobTitle: dto.jobTitle || null,
         companyName: dto.companyName || null,
+        adaptationSource,
+        inputMode,
         status: "analyzing",
       },
       include: {

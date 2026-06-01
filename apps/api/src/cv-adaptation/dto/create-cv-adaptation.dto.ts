@@ -1,7 +1,17 @@
 import { Transform } from "class-transformer";
-import { IsBoolean, IsOptional, IsString, MaxLength } from "class-validator";
+import {
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from "class-validator";
 
 export class CreateCvAdaptationDto {
+  @IsOptional()
+  @IsIn(["file_upload", "text_paste", "profile"])
+  inputMode?: "file_upload" | "text_paste" | "profile";
+
   @IsOptional()
   @IsString()
   masterResumeId?: string;
