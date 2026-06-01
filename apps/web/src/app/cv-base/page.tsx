@@ -33,6 +33,7 @@ export default function MeusCvsPage() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [profileSyncNotice, setProfileSyncNotice] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function MeusCvsPage() {
     setPendingFile(file);
     setError(null);
     setSuccess(null);
+    setProfileSyncNotice(null);
   };
 
   const handleUpload = async () => {
@@ -68,6 +70,9 @@ export default function MeusCvsPage() {
       setPendingFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setSuccess("CV Master salvo com sucesso.");
+      setProfileSyncNotice(
+        "Atualizamos seu perfil com base no CV enviado. Revise se quiser antes da proxima adaptacao.",
+      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -91,6 +96,7 @@ export default function MeusCvsPage() {
       await deleteMasterResume(masterResume.id);
       setMasterResume(null);
       setSuccess("CV removido.");
+      setProfileSyncNotice(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao remover o CV.");
     } finally {
@@ -153,6 +159,21 @@ export default function MeusCvsPage() {
           {success && (
             <div className="rounded-xl border border-lime-200 bg-lime-50 px-4 py-3 text-sm text-lime-700">
               {success}
+            </div>
+          )}
+
+          {profileSyncNotice && (
+            <div className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#333333]">
+              <p className="font-medium text-[#111111]">
+                Atualizamos seu perfil com base no CV enviado
+              </p>
+              <p className="mt-1 text-[#666666]">{profileSyncNotice}</p>
+              <a
+                href="/perfil"
+                className="mt-2 inline-flex text-sm font-medium text-[#111111] underline underline-offset-2"
+              >
+                Revisar perfil
+              </a>
             </div>
           )}
 
