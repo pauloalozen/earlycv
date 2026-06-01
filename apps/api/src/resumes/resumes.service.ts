@@ -137,7 +137,7 @@ export class ResumesService {
       incoming,
       source: "base_cv_upload",
       sourceCvId: input.sourceCvId,
-      fieldMeta: this.parseRecord(profile.profileFieldMetaJson),
+      fieldMeta: this.parseFieldMeta(profile.profileFieldMetaJson),
       suggestions: this.parseSuggestions(profile.profileSuggestionsJson),
     });
 
@@ -224,8 +224,8 @@ export class ResumesService {
     return {
       city: profile.city ?? undefined,
       country: profile.country ?? undefined,
-      education: this.parseArray(profile.educationJson),
-      experiences: this.parseArray(profile.experiencesJson),
+      education: this.parseEducationArray(profile.educationJson),
+      experiences: this.parseExperienceArray(profile.experiencesJson),
       fullName: profile.fullName ?? undefined,
       headline: profile.headline ?? undefined,
       linkedinUrl: profile.linkedinUrl ?? undefined,
@@ -240,13 +240,31 @@ export class ResumesService {
     };
   }
 
-  private parseArray(value: unknown): Array<Record<string, unknown>> {
+  private parseExperienceArray(
+    value: unknown,
+  ): CanonicalProfileData["experiences"] {
     if (!Array.isArray(value)) {
       return [];
     }
     return value.filter(
-      (item): item is Record<string, unknown> =>
-        typeof item === "object" && item !== null,
+      (item): item is CanonicalProfileData["experiences"][number] =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as { id?: unknown }).id === "string",
+    );
+  }
+
+  private parseEducationArray(
+    value: unknown,
+  ): CanonicalProfileData["education"] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.filter(
+      (item): item is CanonicalProfileData["education"][number] =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as { id?: unknown }).id === "string",
     );
   }
 
@@ -262,6 +280,62 @@ export class ResumesService {
       return {};
     }
     return value as Record<string, unknown>;
+  }
+
+  private parseFieldMeta(value: unknown): Record<
+    string,
+    {
+      source: "analysis_upload" | "base_cv_upload" | "manual_edit";
+      manuallyEdited?: boolean;
+      lastEditedAt?: string;
+      sourceCvId?: string | null;
+    }
+  > {
+    const record = this.parseRecord(value);
+    const parsed: Record<
+      string,
+      {
+        source: "analysis_upload" | "base_cv_upload" | "manual_edit";
+        manuallyEdited?: boolean;
+        lastEditedAt?: string;
+        sourceCvId?: string | null;
+      }
+    > = {};
+
+    for (const [key, entry] of Object.entries(record)) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+
+      const source = (entry as { source?: unknown }).source;
+      if (
+        source !== "analysis_upload" &&
+        source !== "base_cv_upload" &&
+        source !== "manual_edit"
+      ) {
+        continue;
+      }
+
+      parsed[key] = {
+        source,
+        manuallyEdited:
+          typeof (entry as { manuallyEdited?: unknown }).manuallyEdited ===
+          "boolean"
+            ? (entry as { manuallyEdited: boolean }).manuallyEdited
+            : undefined,
+        lastEditedAt:
+          typeof (entry as { lastEditedAt?: unknown }).lastEditedAt === "string"
+            ? (entry as { lastEditedAt: string }).lastEditedAt
+            : undefined,
+        sourceCvId:
+          typeof (entry as { sourceCvId?: unknown }).sourceCvId === "string" ||
+          (entry as { sourceCvId?: unknown }).sourceCvId === null
+            ? ((entry as { sourceCvId?: string | null }).sourceCvId ?? null)
+            : undefined,
+      };
+    }
+
+    return parsed;
   }
 
   private parseSuggestions(value: unknown) {

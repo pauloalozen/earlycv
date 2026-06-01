@@ -936,7 +936,11 @@ function CandRow({
                 strokeWidth="1.8"
               >
                 <path d="M3 12a9 9 0 1 0 3-6.7" strokeLinecap="round" />
-                <path d="M3 4v3h3" strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                  d="M3 4v3h3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
               <span>{restoring ? "Restaurando..." : "Restaurar"}</span>
             </button>
@@ -987,8 +991,16 @@ function CandRow({
                     strokeWidth="1.8"
                   >
                     <path d="M3 6h18" strokeLinecap="round" />
-                    <path d="M8 6V4h8v2" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="M6 6l1 14h10l1-14" strokeLinecap="round" strokeLinejoin="round" />
+                    <path
+                      d="M8 6V4h8v2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M6 6l1 14h10l1-14"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                   <span>{deleting ? "Excluindo..." : "Excluir"}</span>
                 </button>
@@ -1038,7 +1050,11 @@ function CandRow({
               strokeWidth="1.8"
             >
               <path d="M12 4v11" strokeLinecap="round" />
-              <path d="m8 11 4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="m8 11 4 4 4-4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
               <path d="M5 20h14" strokeLinecap="round" />
             </svg>
             <span>Baixar melhor CV</span>
@@ -1270,16 +1286,32 @@ function CandRow({
                 : "translateY(6px) scale(0.98)",
             }}
           >
-            <p style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 600, color: "#0a0a0a" }}>
+            <p
+              style={{
+                margin: "0 0 6px",
+                fontSize: 16,
+                fontWeight: 600,
+                color: "#0a0a0a",
+              }}
+            >
               Confirmar exclusao
             </p>
-            <p style={{ margin: "0 0 14px", fontSize: 13.5, color: "#55524d", lineHeight: 1.45 }}>
-              Esta candidatura sera removida da sua visao e nao podera ser restaurada por voce.
+            <p
+              style={{
+                margin: "0 0 14px",
+                fontSize: 13.5,
+                color: "#55524d",
+                lineHeight: 1.45,
+              }}
+            >
+              Esta candidatura sera removida da sua visao e nao podera ser
+              restaurada por voce.
             </p>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <div
+              style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+            >
               <button
                 type="button"
-                onClick={() => setConfirmDelete(false)}
                 onClick={() => closeDeleteModal()}
                 style={{
                   borderRadius: 8,

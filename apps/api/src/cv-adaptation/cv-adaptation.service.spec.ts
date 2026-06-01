@@ -1487,10 +1487,13 @@ test("ensureLegacyStructuredOutput persists immutable generation snapshot with n
   });
 
   assert.equal(updateManyCalls.length, 1);
-  assert.deepEqual(updateManyCalls[0]?.where, {
-    id: "adapt-1",
-    generationInputSnapshotJson: null,
-  });
+  const where = updateManyCalls[0]?.where as Record<string, unknown>;
+  assert.equal(where?.id, "adapt-1");
+  assert.equal(
+    typeof (where?.generationInputSnapshotJson as { equals?: unknown })
+      ?.equals,
+    "object",
+  );
 });
 
 test("analyzeGuest persists snapshot hash from stored markdown content", async () => {

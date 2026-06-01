@@ -23,6 +23,16 @@ type MergeResult = {
   suggestions: ProfileSuggestion[];
 };
 
+type ScalarFieldPath =
+  | "fullName"
+  | "phone"
+  | "linkedinUrl"
+  | "city"
+  | "state"
+  | "country"
+  | "headline"
+  | "professionalSummary";
+
 @Injectable()
 export class ProfileCanonicalMergeService {
   merge(input: MergeInput): MergeResult {
@@ -158,7 +168,7 @@ export class ProfileCanonicalMergeService {
   }
 
   private mergeScalar(input: {
-    fieldPath: keyof CanonicalProfileData;
+    fieldPath: ScalarFieldPath;
     next: Partial<CanonicalProfileData>;
     incoming: string | undefined;
     source: MergeSource;

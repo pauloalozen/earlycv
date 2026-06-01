@@ -2015,7 +2015,11 @@ export function DetailClient({ application, header }: Props) {
                     stroke="currentColor"
                     strokeWidth="1.8"
                   >
-                    <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                    <path
+                      d="m6 9 6 6 6-6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                   Atualizar status ▾
                 </button>
@@ -2097,7 +2101,11 @@ export function DetailClient({ application, header }: Props) {
                     {isArchived ? (
                       <>
                         <path d="M3 12a9 9 0 1 0 3-6.7" strokeLinecap="round" />
-                        <path d="M3 4v3h3" strokeLinecap="round" strokeLinejoin="round" />
+                        <path
+                          d="M3 4v3h3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
                       </>
                     ) : (
                       <>
@@ -2150,8 +2158,16 @@ export function DetailClient({ application, header }: Props) {
                       strokeWidth="1.8"
                     >
                       <path d="M3 6h18" strokeLinecap="round" />
-                      <path d="M8 6V4h8v2" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M6 6l1 14h10l1-14" strokeLinecap="round" strokeLinejoin="round" />
+                      <path
+                        d="M8 6V4h8v2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M6 6l1 14h10l1-14"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </svg>
                     {deleting ? "Excluindo..." : "Excluir"}
                   </button>
@@ -2190,13 +2206,34 @@ export function DetailClient({ application, header }: Props) {
                         : "translateY(6px) scale(0.98)",
                     }}
                   >
-                    <p style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 600, color: "#0a0a0a" }}>
+                    <p
+                      style={{
+                        margin: "0 0 6px",
+                        fontSize: 16,
+                        fontWeight: 600,
+                        color: "#0a0a0a",
+                      }}
+                    >
                       Confirmar exclusao
                     </p>
-                    <p style={{ margin: "0 0 14px", fontSize: 13.5, color: "#55524d", lineHeight: 1.45 }}>
-                      Esta candidatura sera removida da sua visao e nao podera ser restaurada por voce.
+                    <p
+                      style={{
+                        margin: "0 0 14px",
+                        fontSize: 13.5,
+                        color: "#55524d",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      Esta candidatura sera removida da sua visao e nao podera
+                      ser restaurada por voce.
                     </p>
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        gap: 8,
+                      }}
+                    >
                       <button
                         type="button"
                         onClick={() => closeDeleteModal()}

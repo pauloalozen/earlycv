@@ -15,8 +15,8 @@ import {
 import type {
   JobApplicationOrigin,
   JobApplicationStatus,
-  Prisma,
 } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { Response } from "express";
 import type { ProtectedAnalysisBlockedResult } from "../analysis-protection/analysis-protection.facade";
 import { AnalysisTelemetryService } from "../analysis-protection/analysis-telemetry.service";
@@ -326,7 +326,7 @@ export class CvAdaptationService {
                 masterCvText,
                 masterResumeId,
               }) as Prisma.InputJsonValue)
-            : null,
+            : undefined,
         status: "analyzing",
       },
       include: {
@@ -2237,7 +2237,10 @@ export class CvAdaptationService {
 
     if (typeof this.database.cvAdaptation.updateMany === "function") {
       await this.database.cvAdaptation.updateMany({
-        where: { id: adaptation.id, generationInputSnapshotJson: null },
+        where: {
+          id: adaptation.id,
+          generationInputSnapshotJson: { equals: Prisma.AnyNull },
+        },
         data: {
           generationInputSnapshotJson: snapshot as Prisma.InputJsonValue,
         },
@@ -2404,7 +2407,7 @@ export class CvAdaptationService {
     }
 
     const existing = this.mapProfileRecordToCanonicalData(profile);
-    const fieldMeta = this.parseRecord(profile.profileFieldMetaJson);
+    const fieldMeta = this.parseFieldMeta(profile.profileFieldMetaJson);
     const suggestions = this.parseSuggestions(profile.profileSuggestionsJson);
 
     const merged = this.profileMergeService.merge({
@@ -2543,8 +2546,8 @@ export class CvAdaptationService {
     return {
       city: profile.city ?? undefined,
       country: profile.country ?? undefined,
-      education: this.parseArray(profile.educationJson),
-      experiences: this.parseArray(profile.experiencesJson),
+      education: this.parseEducationArray(profile.educationJson),
+      experiences: this.parseExperienceArray(profile.experiencesJson),
       fullName: profile.fullName ?? undefined,
       headline: profile.headline ?? undefined,
       linkedinUrl: profile.linkedinUrl ?? undefined,
@@ -2559,13 +2562,31 @@ export class CvAdaptationService {
     };
   }
 
-  private parseArray(value: unknown): Array<Record<string, unknown>> {
+  private parseExperienceArray(
+    value: unknown,
+  ): CanonicalProfileData["experiences"] {
     if (!Array.isArray(value)) {
       return [];
     }
     return value.filter(
-      (item): item is Record<string, unknown> =>
-        typeof item === "object" && item !== null,
+      (item): item is CanonicalProfileData["experiences"][number] =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as { id?: unknown }).id === "string",
+    );
+  }
+
+  private parseEducationArray(
+    value: unknown,
+  ): CanonicalProfileData["education"] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.filter(
+      (item): item is CanonicalProfileData["education"][number] =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as { id?: unknown }).id === "string",
     );
   }
 
@@ -2581,6 +2602,62 @@ export class CvAdaptationService {
       return {};
     }
     return value as Record<string, unknown>;
+  }
+
+  private parseFieldMeta(value: unknown): Record<
+    string,
+    {
+      source: "analysis_upload" | "base_cv_upload" | "manual_edit";
+      manuallyEdited?: boolean;
+      lastEditedAt?: string;
+      sourceCvId?: string | null;
+    }
+  > {
+    const record = this.parseRecord(value);
+    const parsed: Record<
+      string,
+      {
+        source: "analysis_upload" | "base_cv_upload" | "manual_edit";
+        manuallyEdited?: boolean;
+        lastEditedAt?: string;
+        sourceCvId?: string | null;
+      }
+    > = {};
+
+    for (const [key, entry] of Object.entries(record)) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+
+      const source = (entry as { source?: unknown }).source;
+      if (
+        source !== "analysis_upload" &&
+        source !== "base_cv_upload" &&
+        source !== "manual_edit"
+      ) {
+        continue;
+      }
+
+      parsed[key] = {
+        source,
+        manuallyEdited:
+          typeof (entry as { manuallyEdited?: unknown }).manuallyEdited ===
+          "boolean"
+            ? ((entry as { manuallyEdited: boolean }).manuallyEdited as boolean)
+            : undefined,
+        lastEditedAt:
+          typeof (entry as { lastEditedAt?: unknown }).lastEditedAt === "string"
+            ? ((entry as { lastEditedAt: string }).lastEditedAt as string)
+            : undefined,
+        sourceCvId:
+          typeof (entry as { sourceCvId?: unknown }).sourceCvId === "string" ||
+          (entry as { sourceCvId?: unknown }).sourceCvId === null
+            ? ((entry as { sourceCvId?: string | null }).sourceCvId ?? null)
+            : undefined,
+      };
+    }
+
+    return parsed;
   }
 
   private parseSuggestions(value: unknown) {
