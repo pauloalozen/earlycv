@@ -644,6 +644,12 @@ test("create persists inferred adaptationSource and inputMode", async () => {
   const createData = createCalls[0]?.data as Record<string, unknown>;
   assert.equal(createData.inputMode, "file_upload");
   assert.equal(createData.adaptationSource, "uploaded_content");
+  assert.equal(typeof createData.analysisInputSnapshotJson, "object");
+  assert.equal(typeof createData.uploadedContentSnapshotJson, "object");
+  assert.notDeepEqual(
+    createData.analysisInputSnapshotJson,
+    createData.uploadedContentSnapshotJson,
+  );
 });
 
 test("create marks adaptation as failed when protected boundary blocks analysis", async () => {
@@ -1235,7 +1241,14 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
   assert.equal(protectedCalls, 1);
   assert.equal(directCalls, 0);
   assert.equal(output.summary, "Resumo");
-  assert.deepEqual(updates[0], {
+  const aiAuditUpdate = updates.find(
+    (entry) =>
+      typeof entry === "object" &&
+      entry !== null &&
+      "data" in entry &&
+      (entry as { data?: Record<string, unknown> }).data?.aiAuditJson,
+  );
+  assert.deepEqual(aiAuditUpdate, {
     where: { id: "adapt-1" },
     data: {
       aiAuditJson: {
@@ -1254,6 +1267,7 @@ test("ensureLegacyStructuredOutput returns null when protected boundary blocks",
   const service = new CvAdaptationServiceCtor(
     {
       cvAdaptation: {
+        updateMany: async () => ({ count: 1 }),
         update: async () => {
           throw new Error("cvAdaptation.update should not be called");
         },
@@ -1318,6 +1332,81 @@ test("ensureLegacyStructuredOutput returns null when protected boundary blocks",
 
   assert.equal(protectedCalls, 1);
   assert.equal(output, null);
+});
+
+test("ensureLegacyStructuredOutput persists immutable generation snapshot with null-guard", async () => {
+  const updateManyCalls: Array<Record<string, unknown>> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        updateMany: async (args: Record<string, unknown>) => {
+          updateManyCalls.push(args);
+          return { count: 1 };
+        },
+        update: async () => ({}),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => {
+        throw new Error("buildPaidCvOutputFromGuest should not be called");
+      },
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: undefined,
+      }),
+      executeProtectedBuildPaidCvOutputFromGuest: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: {
+          summary: "Resumo",
+          sections: [],
+          highlightedSkills: [],
+          removedSections: [],
+        },
+      }),
+    },
+  );
+
+  // biome-ignore lint/suspicious/noExplicitAny: test access to private method
+  await (service as any).ensureLegacyStructuredOutput({
+    adaptedContentJson: { fit: { headline: "headline" } },
+    aiAuditJson: null,
+    analysisCvSnapshotId: null,
+    companyName: "Acme",
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    generationInputSnapshotJson: null,
+    id: "adapt-1",
+    inputMode: "file_upload",
+    jobDescriptionText:
+      "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+    jobTitle: "Engenheiro",
+    masterResume: { rawText: "CV" },
+    masterResumeId: "resume-1",
+    userId: "user-1",
+  });
+
+  assert.equal(updateManyCalls.length, 1);
+  assert.deepEqual(updateManyCalls[0]?.where, {
+    id: "adapt-1",
+    generationInputSnapshotJson: null,
+  });
 });
 
 test("analyzeGuest persists snapshot hash from stored markdown content", async () => {

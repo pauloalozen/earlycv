@@ -281,6 +281,20 @@ export class CvAdaptationService {
         companyName: dto.companyName || null,
         adaptationSource,
         inputMode,
+        analysisInputSnapshotJson: this.buildAnalysisInputSnapshot({
+          adaptationSource,
+          inputMode,
+          masterCvText,
+          masterResumeId,
+        }) as Prisma.InputJsonValue,
+        uploadedContentSnapshotJson:
+          adaptationSource === "uploaded_content"
+            ? (this.buildUploadedContentSnapshot({
+                inputMode,
+                masterCvText,
+                masterResumeId,
+              }) as Prisma.InputJsonValue)
+            : null,
         status: "analyzing",
       },
       include: {
@@ -2057,6 +2071,10 @@ export class CvAdaptationService {
     userId: string;
     createdAt: Date;
     analysisCvSnapshotId: string | null;
+    masterResumeId?: string;
+    adaptationSource?: "uploaded_content" | "user_profile";
+    inputMode?: "file_upload" | "text_paste" | "profile";
+    generationInputSnapshotJson?: unknown;
     masterResume: { rawText: string | null };
   }): Promise<CvAdaptationOutput | null> {
     if (
@@ -2071,6 +2089,8 @@ export class CvAdaptationService {
     const masterCvText = await this.resolveGenerationMasterCvText(adaptation);
 
     if (!masterCvText) return null;
+
+    await this.persistGenerationSnapshotIfMissing(adaptation, masterCvText);
 
     try {
       const protectionResult =
@@ -2114,6 +2134,87 @@ export class CvAdaptationService {
     } catch {
       return null;
     }
+  }
+
+  private buildContentSha256(text: string): string {
+    return createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
+  }
+
+  private buildAnalysisInputSnapshot(input: {
+    adaptationSource: "uploaded_content" | "user_profile";
+    inputMode: "file_upload" | "text_paste" | "profile";
+    masterCvText: string;
+    masterResumeId: string;
+  }) {
+    return {
+      adaptationSource: input.adaptationSource,
+      contentSha256: this.buildContentSha256(input.masterCvText),
+      inputMode: input.inputMode,
+      resumeRef: { resumeId: input.masterResumeId },
+      stage: "analysis",
+      structuredInput: {
+        hasContent: true,
+      },
+    };
+  }
+
+  private buildUploadedContentSnapshot(input: {
+    inputMode: "file_upload" | "text_paste" | "profile";
+    masterCvText: string;
+    masterResumeId: string;
+  }) {
+    return {
+      contentSha256: this.buildContentSha256(input.masterCvText),
+      inputMode: input.inputMode,
+      resumeRef: { resumeId: input.masterResumeId },
+      stage: "uploaded_content",
+    };
+  }
+
+  private async persistGenerationSnapshotIfMissing(
+    adaptation: {
+      id: string;
+      jobDescriptionText: string;
+      jobTitle: string | null;
+      companyName: string | null;
+      masterResumeId?: string;
+      adaptationSource?: "uploaded_content" | "user_profile";
+      inputMode?: "file_upload" | "text_paste" | "profile";
+      generationInputSnapshotJson?: unknown;
+    },
+    masterCvText: string,
+  ) {
+    if (adaptation.generationInputSnapshotJson) {
+      return;
+    }
+
+    const snapshot = {
+      adaptationSource: adaptation.adaptationSource ?? "uploaded_content",
+      contentSha256: this.buildContentSha256(masterCvText),
+      inputMode: adaptation.inputMode ?? "file_upload",
+      masterResumeRef: adaptation.masterResumeId
+        ? { resumeId: adaptation.masterResumeId }
+        : null,
+      stage: "generation",
+      structuredInput: {
+        companyName: adaptation.companyName,
+        jobDescriptionLength: adaptation.jobDescriptionText.length,
+        jobTitle: adaptation.jobTitle,
+      },
+    };
+
+    if (typeof this.database.cvAdaptation.updateMany === "function") {
+      await this.database.cvAdaptation.updateMany({
+        where: { id: adaptation.id, generationInputSnapshotJson: null },
+        data: { generationInputSnapshotJson: snapshot as Prisma.InputJsonValue },
+      });
+      return;
+    }
+
+    await this.database.cvAdaptation.update({
+      where: { id: adaptation.id },
+      data: { generationInputSnapshotJson: snapshot as Prisma.InputJsonValue },
+    });
   }
 
   private synthesizeMasterCvTextFromGuestAnalysis(
