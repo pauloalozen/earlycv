@@ -373,7 +373,9 @@ describe("AdaptarPage submit analytics flow", () => {
     });
     fireEvent.click(textModeButton);
 
-    const cvTextarea = screen.getByPlaceholderText(/Cole seu curr[ií]culo em texto/i);
+    const cvTextarea = screen.getByPlaceholderText(
+      /Cole seu curr[ií]culo em texto/i,
+    );
     const jobTextarea = screen.getByPlaceholderText("Cole a vaga completa");
 
     fireEvent.change(cvTextarea, {

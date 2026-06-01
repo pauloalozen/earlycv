@@ -121,7 +121,10 @@ test("uses stable id paths after experience reorder", () => {
   });
 
   assert.equal(result.next.experiences[0]?.id, "exp_xyz");
-  assert.equal(result.fieldMeta["experiences.exp_abc.role"] !== undefined, true);
+  assert.equal(
+    result.fieldMeta["experiences.exp_abc.role"] !== undefined,
+    true,
+  );
   assert.equal(
     result.fieldMeta["experiences.exp_abc.role"]?.source,
     "analysis_upload",
@@ -131,9 +134,7 @@ test("uses stable id paths after experience reorder", () => {
 test("does not overwrite manually edited nested experience field and creates suggestion", () => {
   const result = mergeService.merge({
     existing: {
-      experiences: [
-        { id: "exp_abc", role: "Staff Analyst", company: "A" },
-      ],
+      experiences: [{ id: "exp_abc", role: "Staff Analyst", company: "A" }],
       education: [],
       skills: { technical: [], business: [], soft: [] },
     },
@@ -199,7 +200,10 @@ test("deduplicates repeated pending suggestions for same field/value/source", ()
   };
 
   const first = mergeService.merge(input);
-  const second = mergeService.merge({ ...input, suggestions: first.suggestions });
+  const second = mergeService.merge({
+    ...input,
+    suggestions: first.suggestions,
+  });
 
   assert.equal(second.suggestions.length, 1);
 });

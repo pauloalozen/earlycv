@@ -327,7 +327,9 @@ export default function AdaptarPage() {
       const readiness = (status as { profileReadinessStatus?: unknown })
         .profileReadinessStatus;
       setProfileReadinessStatus(
-        readiness === "empty" || readiness === "partial" || readiness === "ready"
+        readiness === "empty" ||
+          readiness === "partial" ||
+          readiness === "ready"
           ? readiness
           : null,
       );
@@ -834,54 +836,64 @@ export default function AdaptarPage() {
                             padding: 3,
                           }}
                         >
-                          {(["profile", "upload", "text"] as CvMode[]).map((mode) => (
-                            <button
-                              key={mode}
-                              type="button"
-                              disabled={mode === "profile" && !isProfileModeAvailable}
-                              onClick={() => {
-                                if (mode === "profile" && !isProfileModeAvailable) {
-                                  return;
+                          {(["profile", "upload", "text"] as CvMode[]).map(
+                            (mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                disabled={
+                                  mode === "profile" && !isProfileModeAvailable
                                 }
-                                setCvMode(mode);
-                                if (mode === "profile") clearSelectedFile();
-                                if (mode === "text") clearSelectedFile();
-                                setError(null);
-                              }}
-                              style={{
-                                fontFamily: MONO,
-                                fontSize: 10,
-                                fontWeight: 500,
-                                letterSpacing: 0.3,
-                                padding: "4px 10px",
-                                borderRadius: 6,
-                                border: "none",
-                                cursor:
-                                  mode === "profile" && !isProfileModeAvailable
-                                    ? "not-allowed"
-                                    : "pointer",
-                                background:
-                                  cvMode === mode ? "#0a0a0a" : "transparent",
-                                color:
-                                  mode === "profile" && !isProfileModeAvailable
-                                    ? "#a7a79f"
-                                    : cvMode === mode
-                                      ? "#fafaf6"
-                                      : "#7a7a74",
-                                opacity:
-                                  mode === "profile" && !isProfileModeAvailable
-                                    ? 0.7
-                                    : 1,
-                                transition: "all 120ms",
-                              }}
-                            >
-                              {mode === "profile"
-                                ? "Meu perfil"
-                                : mode === "upload"
-                                  ? "Upload"
-                                  : "Digitar texto"}
-                            </button>
-                          ))}
+                                onClick={() => {
+                                  if (
+                                    mode === "profile" &&
+                                    !isProfileModeAvailable
+                                  ) {
+                                    return;
+                                  }
+                                  setCvMode(mode);
+                                  if (mode === "profile") clearSelectedFile();
+                                  if (mode === "text") clearSelectedFile();
+                                  setError(null);
+                                }}
+                                style={{
+                                  fontFamily: MONO,
+                                  fontSize: 10,
+                                  fontWeight: 500,
+                                  letterSpacing: 0.3,
+                                  padding: "4px 10px",
+                                  borderRadius: 6,
+                                  border: "none",
+                                  cursor:
+                                    mode === "profile" &&
+                                    !isProfileModeAvailable
+                                      ? "not-allowed"
+                                      : "pointer",
+                                  background:
+                                    cvMode === mode ? "#0a0a0a" : "transparent",
+                                  color:
+                                    mode === "profile" &&
+                                    !isProfileModeAvailable
+                                      ? "#a7a79f"
+                                      : cvMode === mode
+                                        ? "#fafaf6"
+                                        : "#7a7a74",
+                                  opacity:
+                                    mode === "profile" &&
+                                    !isProfileModeAvailable
+                                      ? 0.7
+                                      : 1,
+                                  transition: "all 120ms",
+                                }}
+                              >
+                                {mode === "profile"
+                                  ? "Meu perfil"
+                                  : mode === "upload"
+                                    ? "Upload"
+                                    : "Digitar texto"}
+                              </button>
+                            ),
+                          )}
                         </div>
                         {!isProfileModeAvailable ? (
                           <p
@@ -893,7 +905,8 @@ export default function AdaptarPage() {
                               letterSpacing: 0.2,
                             }}
                           >
-                            Modo perfil indisponivel enquanto seu perfil nao estiver pronto.
+                            Modo perfil indisponivel enquanto seu perfil nao
+                            estiver pronto.
                           </p>
                         ) : null}
                       </div>
@@ -996,7 +1009,7 @@ export default function AdaptarPage() {
                         }}
                       >
                         {hasMaster
-                          ? masterResume.sourceFileName ?? masterResume.title
+                          ? (masterResume.sourceFileName ?? masterResume.title)
                           : "Usando dados do seu perfil canonico"}
                       </div>
                       <div

@@ -9,7 +9,11 @@ import { ProfilesService } from "./profiles.service";
 @Module({
   imports: [DatabaseModule],
   controllers: [ProfilesController],
-  providers: [ProfilesService, ProfileCanonicalMergeService, ProfileReadinessService],
+  providers: [
+    ProfilesService,
+    ProfileCanonicalMergeService,
+    ProfileReadinessService,
+  ],
   exports: [ProfileCanonicalMergeService, ProfileReadinessService],
 })
 export class ProfilesModule {}

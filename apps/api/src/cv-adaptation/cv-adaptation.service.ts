@@ -27,10 +27,10 @@ import {
 } from "../common/cv-text-extractor";
 import { DatabaseService } from "../database/database.service";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
+import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
+import type { CanonicalProfileData } from "../profiles/profile-canonical.types";
 import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merge.service";
 import { ProfileReadinessService } from "../profiles/profile-readiness.service";
-import type { CanonicalProfileData } from "../profiles/profile-canonical.types";
-import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
 import { StorageService } from "../storage/storage.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
@@ -2238,7 +2238,9 @@ export class CvAdaptationService {
     if (typeof this.database.cvAdaptation.updateMany === "function") {
       await this.database.cvAdaptation.updateMany({
         where: { id: adaptation.id, generationInputSnapshotJson: null },
-        data: { generationInputSnapshotJson: snapshot as Prisma.InputJsonValue },
+        data: {
+          generationInputSnapshotJson: snapshot as Prisma.InputJsonValue,
+        },
       });
       return;
     }
@@ -2363,7 +2365,7 @@ export class CvAdaptationService {
           s.items.length > 0 &&
           s.items.some((item) => itemHasContent(item, s.title)),
       ),
-      };
+    };
   }
 
   private async mergeCanonicalProfileFromText(input: {
@@ -2426,7 +2428,8 @@ export class CvAdaptationService {
       data: {
         city: merged.next.city ?? profile.city,
         country: merged.next.country ?? profile.country,
-        experiencesJson: (merged.next.experiences ?? []) as Prisma.InputJsonValue,
+        experiencesJson: (merged.next.experiences ??
+          []) as Prisma.InputJsonValue,
         fullName: merged.next.fullName ?? profile.fullName,
         headline: merged.next.headline ?? profile.headline,
         linkedinUrl: merged.next.linkedinUrl ?? profile.linkedinUrl,
@@ -2436,26 +2439,31 @@ export class CvAdaptationService {
         profileFieldMetaJson: merged.fieldMeta as Prisma.InputJsonValue,
         profileReadinessStatus: readiness,
         profileSuggestionsJson: merged.suggestions as Prisma.InputJsonValue,
-        skillsJson:
-          (merged.next.skills ?? {
-            technical: [],
-            business: [],
-            soft: [],
-          }) as Prisma.InputJsonValue,
+        skillsJson: (merged.next.skills ?? {
+          technical: [],
+          business: [],
+          soft: [],
+        }) as Prisma.InputJsonValue,
         state: merged.next.state ?? profile.state,
       },
     });
   }
 
-  private extractCanonicalProfileFromText(text: string): Partial<CanonicalProfileData> {
+  private extractCanonicalProfileFromText(
+    text: string,
+  ): Partial<CanonicalProfileData> {
     const lines = text
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
 
     const firstLine = lines[0];
-    const phoneMatch = text.match(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?\d{4,5}[-\s]?\d{4}/);
-    const linkedinMatch = text.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9\-_.%]+\/?/i);
+    const phoneMatch = text.match(
+      /(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?\d{4,5}[-\s]?\d{4}/,
+    );
+    const linkedinMatch = text.match(
+      /https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9\-_.%]+\/?/i,
+    );
 
     const skills = this.extractSkillsFromText(text);
 
@@ -2555,8 +2563,9 @@ export class CvAdaptationService {
     if (!Array.isArray(value)) {
       return [];
     }
-    return value.filter((item): item is Record<string, unknown> =>
-      typeof item === "object" && item !== null,
+    return value.filter(
+      (item): item is Record<string, unknown> =>
+        typeof item === "object" && item !== null,
     );
   }
 
@@ -2579,7 +2588,9 @@ export class CvAdaptationService {
       return [];
     }
     return value.filter(
-      (item): item is {
+      (
+        item,
+      ): item is {
         fieldPath: string;
         currentValue: unknown;
         suggestedValue: unknown;

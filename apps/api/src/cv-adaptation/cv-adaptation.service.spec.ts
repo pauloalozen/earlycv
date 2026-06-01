@@ -658,7 +658,10 @@ test("create merges canonical profile from uploaded/text content", async () => {
   const service = new CvAdaptationServiceCtor(
     {
       resume: {
-        findFirst: async () => ({ id: "resume-1", rawText: "Ana Silva\nAnalista\n" }),
+        findFirst: async () => ({
+          id: "resume-1",
+          rawText: "Ana Silva\nAnalista\n",
+        }),
       },
       userProfile: {
         findUnique: async () => ({

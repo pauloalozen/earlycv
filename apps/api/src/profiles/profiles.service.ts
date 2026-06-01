@@ -48,7 +48,9 @@ export class ProfilesService {
     });
   }
 
-  private parseFieldMeta(value: unknown): Record<string, ProfileFieldMetaEntry> {
+  private parseFieldMeta(
+    value: unknown,
+  ): Record<string, ProfileFieldMetaEntry> {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       return {};
     }

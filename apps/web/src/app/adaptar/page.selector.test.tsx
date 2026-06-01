@@ -61,7 +61,9 @@ describe("AdaptarPage selector defaults", () => {
     expect(profileButton).toBeTruthy();
     expect(profileButton).toBeDisabled();
     expect(
-      screen.getByText(/modo perfil indisponivel enquanto seu perfil nao estiver pronto/i),
+      screen.getByText(
+        /modo perfil indisponivel enquanto seu perfil nao estiver pronto/i,
+      ),
     ).toBeTruthy();
   });
 

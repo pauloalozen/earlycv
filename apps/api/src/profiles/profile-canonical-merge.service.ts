@@ -31,7 +31,11 @@ export class ProfileCanonicalMergeService {
       ...input.existing,
       experiences: input.existing.experiences ?? [],
       education: input.existing.education ?? [],
-      skills: input.existing.skills ?? { technical: [], business: [], soft: [] },
+      skills: input.existing.skills ?? {
+        technical: [],
+        business: [],
+        soft: [],
+      },
     };
     const fieldMeta = { ...(input.fieldMeta ?? {}) };
     const suggestions = [...(input.suggestions ?? [])];
@@ -242,7 +246,8 @@ export class ProfileCanonicalMergeService {
         }
 
         const fieldPath = `experiences.${incomingExperience.id}.${field}`;
-        const currentValue = currentExperience[field as keyof typeof currentExperience];
+        const currentValue =
+          currentExperience[field as keyof typeof currentExperience];
         if (rawValue === undefined || rawValue === null) {
           continue;
         }
@@ -275,7 +280,10 @@ export class ProfileCanonicalMergeService {
           continue;
         }
 
-        if (input.source === "base_cv_upload" || input.source === "manual_edit") {
+        if (
+          input.source === "base_cv_upload" ||
+          input.source === "manual_edit"
+        ) {
           currentExperience[field as keyof typeof currentExperience] =
             incomingComparable as never;
           input.fieldMeta[fieldPath] = {
@@ -292,7 +300,8 @@ export class ProfileCanonicalMergeService {
       .map((experience) => byId.get(experience.id) ?? experience)
       .concat(
         input.existing.filter(
-          (experience) => !input.incoming.some((item) => item.id === experience.id),
+          (experience) =>
+            !input.incoming.some((item) => item.id === experience.id),
         ),
       );
   }

@@ -33,7 +33,9 @@ export default function MeusCvsPage() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [profileSyncNotice, setProfileSyncNotice] = useState<string | null>(null);
+  const [profileSyncNotice, setProfileSyncNotice] = useState<string | null>(
+    null,
+  );
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   useEffect(() => {

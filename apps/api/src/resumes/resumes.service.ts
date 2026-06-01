@@ -9,9 +9,9 @@ import type { Response } from "express";
 import { extractTextFromCvFile } from "../common/cv-text-extractor";
 import type { FileUpload } from "../cv-adaptation/dto/create-cv-adaptation.dto";
 import { DatabaseService } from "../database/database.service";
+import type { CanonicalProfileData } from "../profiles/profile-canonical.types";
 import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merge.service";
 import { ProfileReadinessService } from "../profiles/profile-readiness.service";
-import type { CanonicalProfileData } from "../profiles/profile-canonical.types";
 import { StorageService } from "../storage/storage.service";
 import type { CreateResumeDto } from "./dto/create-resume.dto";
 import type { UpdateResumeDto } from "./dto/update-resume.dto";
@@ -160,25 +160,30 @@ export class ResumesService {
         profileFieldMetaJson: merged.fieldMeta as Prisma.InputJsonValue,
         profileSuggestionsJson: merged.suggestions as Prisma.InputJsonValue,
         profileReadinessStatus: readiness,
-        skillsJson:
-          (merged.next.skills ?? {
-            technical: [],
-            business: [],
-            soft: [],
-          }) as Prisma.InputJsonValue,
+        skillsJson: (merged.next.skills ?? {
+          technical: [],
+          business: [],
+          soft: [],
+        }) as Prisma.InputJsonValue,
       },
     });
   }
 
-  private extractCanonicalProfileFromText(text: string): Partial<CanonicalProfileData> {
+  private extractCanonicalProfileFromText(
+    text: string,
+  ): Partial<CanonicalProfileData> {
     const lines = text
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
 
     const firstLine = lines[0];
-    const phoneMatch = text.match(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?\d{4,5}[-\s]?\d{4}/);
-    const linkedinMatch = text.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9\-_.%]+\/?/i);
+    const phoneMatch = text.match(
+      /(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?\d{4,5}[-\s]?\d{4}/,
+    );
+    const linkedinMatch = text.match(
+      /https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9\-_.%]+\/?/i,
+    );
 
     return {
       fullName:
@@ -264,7 +269,9 @@ export class ResumesService {
       return [];
     }
     return value.filter(
-      (item): item is {
+      (
+        item,
+      ): item is {
         fieldPath: string;
         currentValue: unknown;
         suggestedValue: unknown;
