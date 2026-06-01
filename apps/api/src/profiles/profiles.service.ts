@@ -2,6 +2,7 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
 import type { UpdateProfileDto } from "./dto/update-profile.dto";
+import type { ProfileFieldMetaEntry } from "./profile-canonical.types";
 
 @Injectable()
 export class ProfilesService {
@@ -22,11 +23,36 @@ export class ProfilesService {
   }
 
   async update(userId: string, dto: UpdateProfileDto) {
-    await this.getByUserId(userId);
+    const profile = await this.getByUserId(userId);
+    const nowIso = new Date().toISOString();
+    const touchedFieldPaths = Object.keys(dto).filter(
+      (key) => dto[key as keyof UpdateProfileDto] !== undefined,
+    );
+    const existingMeta = this.parseFieldMeta(profile.profileFieldMetaJson);
+
+    for (const fieldPath of touchedFieldPaths) {
+      existingMeta[fieldPath] = {
+        ...existingMeta[fieldPath],
+        source: "manual_edit",
+        manuallyEdited: true,
+        lastEditedAt: nowIso,
+      };
+    }
 
     return this.database.userProfile.update({
       where: { userId },
-      data: dto,
+      data: {
+        ...dto,
+        profileFieldMetaJson: existingMeta,
+      },
     });
+  }
+
+  private parseFieldMeta(value: unknown): Record<string, ProfileFieldMetaEntry> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return {};
+    }
+
+    return value as Record<string, ProfileFieldMetaEntry>;
   }
 }
