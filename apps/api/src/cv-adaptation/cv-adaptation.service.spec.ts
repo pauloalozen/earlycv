@@ -652,6 +652,87 @@ test("create persists inferred adaptationSource and inputMode", async () => {
   );
 });
 
+test("create merges canonical profile from uploaded/text content", async () => {
+  const profileUpdates: Array<Record<string, unknown>> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: {
+        findFirst: async () => ({ id: "resume-1", rawText: "Ana Silva\nAnalista\n" }),
+      },
+      userProfile: {
+        findUnique: async () => ({
+          userId: "user-1",
+          city: null,
+          country: null,
+          educationJson: [],
+          experiencesJson: [],
+          fullName: null,
+          headline: null,
+          linkedinUrl: null,
+          phone: null,
+          professionalSummary: null,
+          profileFieldMetaJson: {},
+          profileSuggestionsJson: [],
+          skillsJson: { technical: [], business: [], soft: [] },
+          state: null,
+        }),
+        update: async (args: Record<string, unknown>) => {
+          profileUpdates.push(args);
+          return {};
+        },
+      },
+      cvAdaptation: {
+        create: async () => ({
+          adaptedResumeId: null,
+          companyName: null,
+          createdAt: new Date(),
+          id: "adapt-1",
+          jobDescriptionText:
+            "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+          jobTitle: null,
+          masterResumeId: "resume-1",
+          paidAt: null,
+          paymentStatus: "none",
+          previewText: null,
+          status: "analyzing",
+          template: null,
+          templateId: null,
+          updatedAt: new Date(),
+          userId: "user-1",
+        }),
+        update: async () => ({}),
+      },
+    },
+    {},
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: undefined,
+      }),
+    },
+  );
+
+  await service.create("user-1", {
+    inputMode: "text_paste",
+    jobDescriptionText:
+      "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+    masterResumeId: "resume-1",
+  });
+
+  assert.equal(profileUpdates.length, 1);
+  const data = profileUpdates[0]?.data as Record<string, unknown>;
+  assert.equal(data.profileReadinessStatus, "partial");
+});
+
 test("create marks adaptation as failed when protected boundary blocks analysis", async () => {
   const updates: Array<Record<string, unknown>> = [];
   const now = new Date();

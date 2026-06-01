@@ -9,6 +9,9 @@ import type { Response } from "express";
 import { extractTextFromCvFile } from "../common/cv-text-extractor";
 import type { FileUpload } from "../cv-adaptation/dto/create-cv-adaptation.dto";
 import { DatabaseService } from "../database/database.service";
+import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merge.service";
+import { ProfileReadinessService } from "../profiles/profile-readiness.service";
+import type { CanonicalProfileData } from "../profiles/profile-canonical.types";
 import { StorageService } from "../storage/storage.service";
 import type { CreateResumeDto } from "./dto/create-resume.dto";
 import type { UpdateResumeDto } from "./dto/update-resume.dto";
@@ -19,6 +22,16 @@ export class ResumesService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(StorageService)
     private readonly storage: Pick<StorageService, "getObject" | "putObject">,
+    @Inject(ProfileCanonicalMergeService)
+    private readonly profileMergeService: Pick<
+      ProfileCanonicalMergeService,
+      "merge"
+    >,
+    @Inject(ProfileReadinessService)
+    private readonly profileReadinessService: Pick<
+      ProfileReadinessService,
+      "compute"
+    >,
   ) {}
 
   list(userId: string) {
@@ -72,7 +85,7 @@ export class ResumesService {
         await this.demoteOtherResumes(tx, userId);
       }
 
-      return tx.resume.create({
+      const createdResume = await tx.resume.create({
         data: {
           userId,
           title: dto.title,
@@ -85,7 +98,182 @@ export class ResumesService {
           isMaster: shouldBecomeMaster,
         },
       });
+
+      if (rawText && shouldBecomeMaster) {
+        await this.mergeCanonicalProfileFromBaseCv(tx, {
+          sourceCvId: createdResume.id,
+          text: rawText,
+          userId,
+        });
+      }
+
+      return createdResume;
     });
+  }
+
+  private async mergeCanonicalProfileFromBaseCv(
+    tx: Prisma.TransactionClient,
+    input: {
+      userId: string;
+      text: string;
+      sourceCvId: string;
+    },
+  ) {
+    const profile = await tx.userProfile.findUnique({
+      where: { userId: input.userId },
+    });
+    if (!profile) {
+      return;
+    }
+
+    const incoming = this.extractCanonicalProfileFromText(input.text);
+    if (!incoming.fullName && !incoming.phone && !incoming.linkedinUrl) {
+      return;
+    }
+
+    const existing = this.mapProfileRecordToCanonicalData(profile);
+    const merged = this.profileMergeService.merge({
+      existing,
+      incoming,
+      source: "base_cv_upload",
+      sourceCvId: input.sourceCvId,
+      fieldMeta: this.parseRecord(profile.profileFieldMetaJson),
+      suggestions: this.parseSuggestions(profile.profileSuggestionsJson),
+    });
+
+    const readiness = this.profileReadinessService.compute({
+      ...merged.next,
+      experiences: merged.next.experiences ?? [],
+      education: merged.next.education ?? [],
+      skills: merged.next.skills ?? { technical: [], business: [], soft: [] },
+    });
+
+    await tx.userProfile.update({
+      where: { userId: input.userId },
+      data: {
+        fullName: merged.next.fullName ?? profile.fullName,
+        headline: merged.next.headline ?? profile.headline,
+        linkedinUrl: merged.next.linkedinUrl ?? profile.linkedinUrl,
+        phone: merged.next.phone ?? profile.phone,
+        professionalSummary:
+          merged.next.professionalSummary ?? profile.professionalSummary,
+        profileFieldMetaJson: merged.fieldMeta as Prisma.InputJsonValue,
+        profileSuggestionsJson: merged.suggestions as Prisma.InputJsonValue,
+        profileReadinessStatus: readiness,
+        skillsJson:
+          (merged.next.skills ?? {
+            technical: [],
+            business: [],
+            soft: [],
+          }) as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  private extractCanonicalProfileFromText(text: string): Partial<CanonicalProfileData> {
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    const firstLine = lines[0];
+    const phoneMatch = text.match(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?\d{4,5}[-\s]?\d{4}/);
+    const linkedinMatch = text.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9\-_.%]+\/?/i);
+
+    return {
+      fullName:
+        firstLine && /^[A-Za-zÀ-ÖØ-öø-ÿ'\-\s]{3,80}$/.test(firstLine)
+          ? firstLine
+          : undefined,
+      headline: lines[1],
+      linkedinUrl: linkedinMatch?.[0],
+      phone: phoneMatch?.[0],
+      professionalSummary: lines.slice(2, 6).join(" ").slice(0, 400),
+      skills: {
+        technical: [],
+        business: [],
+        soft: [],
+      },
+    };
+  }
+
+  private mapProfileRecordToCanonicalData(profile: {
+    fullName: string | null;
+    phone: string | null;
+    linkedinUrl: string | null;
+    city: string | null;
+    state: string | null;
+    country: string | null;
+    headline: string | null;
+    professionalSummary: string | null;
+    experiencesJson: unknown;
+    educationJson: unknown;
+    skillsJson: unknown;
+  }): CanonicalProfileData {
+    const parsedSkills = this.parseRecord(profile.skillsJson) as {
+      technical?: unknown;
+      business?: unknown;
+      soft?: unknown;
+    };
+
+    return {
+      city: profile.city ?? undefined,
+      country: profile.country ?? undefined,
+      education: this.parseArray(profile.educationJson),
+      experiences: this.parseArray(profile.experiencesJson),
+      fullName: profile.fullName ?? undefined,
+      headline: profile.headline ?? undefined,
+      linkedinUrl: profile.linkedinUrl ?? undefined,
+      phone: profile.phone ?? undefined,
+      professionalSummary: profile.professionalSummary ?? undefined,
+      skills: {
+        business: this.parseStringArray(parsedSkills.business),
+        soft: this.parseStringArray(parsedSkills.soft),
+        technical: this.parseStringArray(parsedSkills.technical),
+      },
+      state: profile.state ?? undefined,
+    };
+  }
+
+  private parseArray(value: unknown): Array<Record<string, unknown>> {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.filter(
+      (item): item is Record<string, unknown> =>
+        typeof item === "object" && item !== null,
+    );
+  }
+
+  private parseStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  private parseRecord(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return {};
+    }
+    return value as Record<string, unknown>;
+  }
+
+  private parseSuggestions(value: unknown) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.filter(
+      (item): item is {
+        fieldPath: string;
+        currentValue: unknown;
+        suggestedValue: unknown;
+        status: "pending" | "accepted" | "rejected";
+        source: "analysis_upload" | "base_cv_upload" | "manual_edit";
+        sourceCvId?: string | null;
+        createdAt: string;
+      } => typeof item === "object" && item !== null,
+    );
   }
 
   async update(userId: string, resumeId: string, dto: UpdateResumeDto) {

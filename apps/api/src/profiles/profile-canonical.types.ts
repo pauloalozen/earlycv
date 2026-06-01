@@ -32,6 +32,9 @@ export type CanonicalProfileData = {
   fullName?: string;
   phone?: string;
   linkedinUrl?: string;
+  city?: string;
+  state?: string;
+  country?: string;
   headline?: string;
   professionalSummary?: string;
   experiences: ProfileExperience[];

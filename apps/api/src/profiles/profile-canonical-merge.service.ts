@@ -69,6 +69,36 @@ export class ProfileCanonicalMergeService {
       normalize: this.normalizeLinkedin,
     });
     this.mergeScalar({
+      fieldPath: "city",
+      next,
+      incoming: input.incoming.city,
+      source: input.source,
+      sourceCvId: input.sourceCvId,
+      fieldMeta,
+      suggestions,
+      nowIso,
+    });
+    this.mergeScalar({
+      fieldPath: "state",
+      next,
+      incoming: input.incoming.state,
+      source: input.source,
+      sourceCvId: input.sourceCvId,
+      fieldMeta,
+      suggestions,
+      nowIso,
+    });
+    this.mergeScalar({
+      fieldPath: "country",
+      next,
+      incoming: input.incoming.country,
+      source: input.source,
+      sourceCvId: input.sourceCvId,
+      fieldMeta,
+      suggestions,
+      nowIso,
+    });
+    this.mergeScalar({
       fieldPath: "headline",
       next,
       incoming: input.incoming.headline,

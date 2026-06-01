@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { AnalysisProtectionModule } from "../analysis-protection/analysis-protection.module";
 import { DatabaseModule } from "../database/database.module";
 import { JobApplicationsModule } from "../job-applications/job-applications.module";
+import { ProfilesModule } from "../profiles/profiles.module";
 import { ResumeTemplatesModule } from "../resume-templates/resume-templates.module";
 import { CvAdaptationController } from "./cv-adaptation.controller";
 import { CvAdaptationService } from "./cv-adaptation.service";
@@ -21,6 +22,7 @@ import { CvAdaptationSnapshotCleanupScheduler } from "./cv-adaptation-snapshot-c
     ResumeTemplatesModule,
     AnalysisProtectionModule,
     JobApplicationsModule,
+    ProfilesModule,
   ],
   controllers: [CvAdaptationController, CvAdaptationPublicController],
   exports: [CvAdaptationService],
