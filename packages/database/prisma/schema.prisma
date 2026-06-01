@@ -145,6 +145,23 @@ enum CvAdaptationStatus {
   failed
 }
 
+enum CvAdaptationSource {
+  uploaded_content
+  user_profile
+}
+
+enum CvAdaptationInputMode {
+  file_upload
+  text_paste
+  profile
+}
+
+enum ProfileReadinessStatus {
+  empty
+  partial
+  ready
+}
+
 enum PaymentStatus {
   none
   pending
@@ -446,6 +463,10 @@ model EmailVerificationChallenge {
 model UserProfile {
   id                    String            @id @default(cuid())
   userId                String            @unique
+  fullName              String?
+  phone                 String?
+  linkedinUrl           String?
+  professionalSummary   String?
   headline              String?
   currentTitle          String?
   summary               String?
@@ -458,6 +479,14 @@ model UserProfile {
   targetSalaryMin       Int?
   targetSalaryMax       Int?
   preferredLanguage     String?
+  experiencesJson       Json?
+  educationJson         Json?
+  skillsJson            Json?
+  languagesJson         Json?
+  certificationsJson    Json?
+  profileFieldMetaJson  Json?
+  profileSuggestionsJson Json?
+  profileReadinessStatus ProfileReadinessStatus @default(empty)
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
   user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -567,6 +596,8 @@ model CvAdaptation {
   userId               String
   masterResumeId       String
   templateId           String?
+  adaptationSource     CvAdaptationSource  @default(uploaded_content)
+  inputMode            CvAdaptationInputMode @default(file_upload)
   jobDescriptionText   String
   jobTitle             String?
   companyName          String?
@@ -588,6 +619,10 @@ model CvAdaptation {
   isUnlocked           Boolean             @default(false)
   unlockedAt           DateTime?
   analysisCvSnapshotId String?             @unique
+  userProfileSnapshotJson Json?
+  uploadedContentSnapshotJson Json?
+  analysisInputSnapshotJson Json?
+  generationInputSnapshotJson Json?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
