@@ -360,6 +360,82 @@ describe("AdaptarPage submit analytics flow", () => {
     expect(formDataArg?.get("file")).toBeNull();
   });
 
+  it("sends inputMode=text_paste for authenticated text mode", async () => {
+    getAuthStatusMock.mockResolvedValue({
+      userName: "Ana",
+      profileReadinessStatus: "ready",
+    });
+
+    render(<AdaptarPage />);
+
+    const textModeButton = await screen.findByRole("button", {
+      name: /Digitar texto/i,
+    });
+    fireEvent.click(textModeButton);
+
+    const cvTextarea = screen.getByPlaceholderText(/Cole seu curr[ií]culo em texto/i);
+    const jobTextarea = screen.getByPlaceholderText("Cole a vaga completa");
+
+    fireEvent.change(cvTextarea, {
+      target: {
+        value:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL e Python",
+      },
+    });
+    fireEvent.change(jobTextarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeAuthenticatedCvMock).toHaveBeenCalledTimes(1);
+    });
+
+    const formDataArg = analyzeAuthenticatedCvMock.mock.calls[0]?.[0] as
+      | FormData
+      | undefined;
+    expect(formDataArg?.get("inputMode")).toBe("text_paste");
+  });
+
+  it("sends inputMode=profile for authenticated profile mode when readiness is ready", async () => {
+    getAuthStatusMock.mockResolvedValue({
+      userName: "Ana",
+      profileReadinessStatus: "ready",
+    });
+
+    render(<AdaptarPage />);
+
+    const profileModeButton = await screen.findByRole("button", {
+      name: /Meu perfil/i,
+    });
+    fireEvent.click(profileModeButton);
+
+    const jobTextarea = screen.getByPlaceholderText("Cole a vaga completa");
+    fireEvent.change(jobTextarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeAuthenticatedCvMock).toHaveBeenCalledTimes(1);
+    });
+
+    const formDataArg = analyzeAuthenticatedCvMock.mock.calls[0]?.[0] as
+      | FormData
+      | undefined;
+    expect(formDataArg?.get("inputMode")).toBe("profile");
+    expect(formDataArg?.get("file")).toBeNull();
+    expect(formDataArg?.get("masterCvText")).toBeNull();
+  });
+
   it("persists guest analysis in sessionStorage and localStorage before redirect", async () => {
     const { container } = render(<AdaptarPage />);
 

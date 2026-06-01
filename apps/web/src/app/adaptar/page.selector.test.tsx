@@ -48,12 +48,21 @@ describe("AdaptarPage selector defaults", () => {
   });
 
   it("shows upload/text selector for authenticated user without master CV", async () => {
-    getAuthStatusMock.mockResolvedValue({ userName: "Ana" });
+    getAuthStatusMock.mockResolvedValue({
+      userName: "Ana",
+      profileReadinessStatus: "partial",
+    });
 
     render(<AdaptarPage />);
 
     expect(await screen.findByRole("button", { name: "Upload" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Digitar texto" })).toBeTruthy();
+    const profileButton = screen.getByRole("button", { name: "Meu perfil" });
+    expect(profileButton).toBeTruthy();
+    expect(profileButton).toBeDisabled();
+    expect(
+      screen.getByText(/modo perfil indisponivel enquanto seu perfil nao estiver pronto/i),
+    ).toBeTruthy();
   });
 
   it("defaults guest selector to upload mode", async () => {
@@ -66,6 +75,20 @@ describe("AdaptarPage selector defaults", () => {
     expect(uploadButton.getAttribute("style") ?? "").toContain(
       "background: rgb(10, 10, 10)",
     );
+  });
+
+  it("enables profile mode when readiness is ready", async () => {
+    getAuthStatusMock.mockResolvedValue({
+      userName: "Ana",
+      profileReadinessStatus: "ready",
+    });
+
+    render(<AdaptarPage />);
+
+    const profileButton = await screen.findByRole("button", {
+      name: "Meu perfil",
+    });
+    expect(profileButton).toBeEnabled();
   });
 
   it("renders legal links and sensitive-data warning in adaptation flow", async () => {

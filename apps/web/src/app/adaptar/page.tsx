@@ -63,7 +63,7 @@ Diferenciais:
 
 Local: Remoto (Brasil) | Regime: CLT | Área: Dados & Analytics`;
 
-type CvMode = "master" | "upload" | "text";
+type CvMode = "profile" | "upload" | "text";
 
 const ADAPT_FLOW_SESSION_ID_KEY = "adaptFlowSessionId";
 
@@ -152,6 +152,9 @@ export default function AdaptarPage() {
     ((token: string | null) => void) | null
   >(null);
   const [turnstileScriptReady, setTurnstileScriptReady] = useState(false);
+  const [profileReadinessStatus, setProfileReadinessStatus] = useState<
+    "empty" | "partial" | "ready" | null
+  >(null);
 
   const clearSelectedFile = useCallback(() => {
     setFile(null);
@@ -321,9 +324,16 @@ export default function AdaptarPage() {
       setUserName(status.userName ?? null);
       setUserRole(status.internalRole ?? null);
       setAvailableCredits(status.availableCreditsDisplay);
+      const readiness = (status as { profileReadinessStatus?: unknown })
+        .profileReadinessStatus;
+      setProfileReadinessStatus(
+        readiness === "empty" || readiness === "partial" || readiness === "ready"
+          ? readiness
+          : null,
+      );
       setMasterResume(resume ?? null);
-      if (status.userName && resume) {
-        setCvMode("master");
+      if (status.userName) {
+        setCvMode("profile");
       } else {
         setCvMode("upload");
       }
@@ -365,6 +375,8 @@ export default function AdaptarPage() {
 
   const isAuthenticated = !!userName;
   const hasMaster = !!masterResume;
+  const isProfileModeReady = profileReadinessStatus === "ready";
+  const isProfileModeAvailable = isAuthenticated && isProfileModeReady;
 
   const validateCvTextInput = (input: string): string | null => {
     const normalized = input.trim();
@@ -445,8 +457,14 @@ export default function AdaptarPage() {
       const turnstileToken = await requestTurnstileToken();
       appendTurnstileTokenToAnalyzeFormData(formData, turnstileToken);
       let analyzeResult: Awaited<ReturnType<typeof analyzeAuthenticatedCv>>;
-      if (isAuthenticated && cvMode === "master" && masterResume) {
-        formData.append("masterResumeId", masterResume.id);
+      if (isAuthenticated && cvMode === "profile") {
+        if (!isProfileModeReady) {
+          setError(
+            "Seu perfil ainda nao esta pronto para essa opcao. Complete o CV base para liberar o modo perfil.",
+          );
+          setLoading(false);
+          return;
+        }
         emitUiFunnelEvent("analysis_started", {
           attemptId: submitAttemptId,
           metadata: {
@@ -454,7 +472,7 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const result = await analyzeAuthenticatedCv(formData);
+        const result = await analyzeAuthenticatedCv(formData, "profile");
         await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
         analyzeResult = result;
       } else if (isAuthenticated && cvMode === "upload" && file) {
@@ -467,7 +485,7 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const result = await analyzeAuthenticatedCv(formData);
+        const result = await analyzeAuthenticatedCv(formData, "file_upload");
         await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
         analyzeResult = result;
       } else if (isAuthenticated && cvMode === "text") {
@@ -478,7 +496,7 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const result = await analyzeAuthenticatedCv(formData);
+        const result = await analyzeAuthenticatedCv(formData, "text_paste");
         await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
         analyzeResult = result;
       } else {
@@ -816,16 +834,17 @@ export default function AdaptarPage() {
                             padding: 3,
                           }}
                         >
-                          {(hasMaster
-                            ? (["master", "upload", "text"] as CvMode[])
-                            : (["upload", "text"] as CvMode[])
-                          ).map((mode) => (
+                          {(["profile", "upload", "text"] as CvMode[]).map((mode) => (
                             <button
                               key={mode}
                               type="button"
+                              disabled={mode === "profile" && !isProfileModeAvailable}
                               onClick={() => {
+                                if (mode === "profile" && !isProfileModeAvailable) {
+                                  return;
+                                }
                                 setCvMode(mode);
-                                if (mode === "master") clearSelectedFile();
+                                if (mode === "profile") clearSelectedFile();
                                 if (mode === "text") clearSelectedFile();
                                 setError(null);
                               }}
@@ -837,23 +856,46 @@ export default function AdaptarPage() {
                                 padding: "4px 10px",
                                 borderRadius: 6,
                                 border: "none",
-                                cursor: "pointer",
+                                cursor:
+                                  mode === "profile" && !isProfileModeAvailable
+                                    ? "not-allowed"
+                                    : "pointer",
                                 background:
                                   cvMode === mode ? "#0a0a0a" : "transparent",
-                                color: cvMode === mode ? "#fafaf6" : "#7a7a74",
+                                color:
+                                  mode === "profile" && !isProfileModeAvailable
+                                    ? "#a7a79f"
+                                    : cvMode === mode
+                                      ? "#fafaf6"
+                                      : "#7a7a74",
+                                opacity:
+                                  mode === "profile" && !isProfileModeAvailable
+                                    ? 0.7
+                                    : 1,
                                 transition: "all 120ms",
                               }}
                             >
-                              {mode === "master"
-                                ? "CV base"
+                              {mode === "profile"
+                                ? "Meu perfil"
                                 : mode === "upload"
-                                  ? hasMaster
-                                    ? "Outro CV"
-                                    : "Upload"
+                                  ? "Upload"
                                   : "Digitar texto"}
                             </button>
                           ))}
                         </div>
+                        {!isProfileModeAvailable ? (
+                          <p
+                            style={{
+                              marginTop: 8,
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#7a7a74",
+                              letterSpacing: 0.2,
+                            }}
+                          >
+                            Modo perfil indisponivel enquanto seu perfil nao estiver pronto.
+                          </p>
+                        ) : null}
                       </div>
                     )}
                     {!isAuthenticated && (
@@ -901,7 +943,7 @@ export default function AdaptarPage() {
                   </div>
 
                   {/* Master selected */}
-                  {isAuthenticated && hasMaster && cvMode === "master" ? (
+                  {isAuthenticated && cvMode === "profile" ? (
                     <div
                       style={{
                         background: "#fafaf6",
@@ -953,7 +995,9 @@ export default function AdaptarPage() {
                           marginBottom: 4,
                         }}
                       >
-                        {masterResume.sourceFileName ?? masterResume.title}
+                        {hasMaster
+                          ? masterResume.sourceFileName ?? masterResume.title
+                          : "Usando dados do seu perfil canonico"}
                       </div>
                       <div
                         style={{
@@ -962,7 +1006,7 @@ export default function AdaptarPage() {
                           color: "#8a8a85",
                         }}
                       >
-                        CV base carregado ·{" "}
+                        Perfil salvo carregado ·{" "}
                         <span style={{ color: "#405410" }}>✓ pronto</span>
                       </div>
                     </div>

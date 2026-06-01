@@ -357,7 +357,11 @@ export async function saveGuestPreview(payload: {
 
 export async function analyzeAuthenticatedCv(
   formData: FormData,
+  inputMode?: "file_upload" | "text_paste" | "profile",
 ): Promise<AnalyzeResult> {
+  if (inputMode) {
+    formData.set("inputMode", inputMode);
+  }
   const response = await apiRequest("POST", "/cv-adaptation/analyze", formData);
   if (!response.ok) {
     const raw = await response.text();
