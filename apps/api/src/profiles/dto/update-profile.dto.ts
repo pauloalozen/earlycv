@@ -78,4 +78,19 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(40)
   preferredLanguage?: string;
+
+  @IsOptional()
+  experiencesJson?: unknown;
+
+  @IsOptional()
+  educationJson?: unknown;
+
+  @IsOptional()
+  skillsJson?: unknown;
+
+  @IsOptional()
+  languagesJson?: unknown;
+
+  @IsOptional()
+  certificationsJson?: unknown;
 }

@@ -415,7 +415,7 @@ export function AppHeader({
                   {[
                     {
                       href: "/dashboard",
-                      label: "Dashboard",
+                      label: "Meu Perfil",
                       icon: (
                         <>
                           <rect x="3" y="3" width="7" height="7" />
@@ -796,7 +796,7 @@ export function AppHeader({
             {[
               {
                 href: "/dashboard",
-                label: "Dashboard",
+                label: "Meu Perfil",
                 icon: (
                   <>
                     <rect x="3" y="3" width="7" height="7" />

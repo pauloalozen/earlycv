@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
@@ -21,6 +22,7 @@ function formatDate(iso: string) {
 }
 
 export default function MeusCvsPage() {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [userName, setUserName] = useState<string | null | undefined>(
     undefined,
@@ -57,6 +59,7 @@ export default function MeusCvsPage() {
   const handleUpload = async () => {
     if (!pendingFile) return;
 
+    const isFirstMasterUpload = !masterResume;
     setUploading(true);
     setError(null);
     setSuccess(null);
@@ -75,6 +78,9 @@ export default function MeusCvsPage() {
       setProfileSyncNotice(
         "Atualizamos seu perfil com base no CV enviado. Revise se quiser antes da proxima adaptacao.",
       );
+      if (isFirstMasterUpload) {
+        router.push("/meu-cv-master");
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -136,7 +142,7 @@ export default function MeusCvsPage() {
               style={{ color: "#666666" }}
               className="text-sm hover:text-[#111111] transition-colors"
             >
-              ← Dashboard
+              ← Meu Perfil
             </a>
           </div>
 
@@ -171,7 +177,7 @@ export default function MeusCvsPage() {
               </p>
               <p className="mt-1 text-[#666666]">{profileSyncNotice}</p>
               <a
-                href="/perfil"
+                href="/meu-perfil"
                 className="mt-2 inline-flex text-sm font-medium text-[#111111] underline underline-offset-2"
               >
                 Revisar perfil
