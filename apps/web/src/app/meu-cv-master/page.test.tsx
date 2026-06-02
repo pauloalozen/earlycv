@@ -108,10 +108,8 @@ describe("/meu-cv-master", () => {
     expect(
       screen.getByRole("heading", { name: /meu cv master/i }),
     ).toBeTruthy();
-    expect(screen.getByText(/revisão e edição do perfil/i)).toBeTruthy();
-    expect(screen.getByText(/cv master ativo/i)).toBeTruthy();
-    expect(screen.getByText(/atualizado em/i)).toBeTruthy();
-    expect(screen.getByText(/revisão/i)).toBeTruthy();
+    // PDF strip shows the CV title
+    expect(screen.getByText("CV Base Ana")).toBeTruthy();
     expect(screen.getByText(/blocos com lacunas/i)).toBeTruthy();
     expect(
       screen.getByRole("link", { name: /abrir bloco sugerido/i }),
@@ -130,23 +128,23 @@ describe("/meu-cv-master", () => {
     );
 
     expect(
-      screen.getByRole("textbox", { name: /habilidades e competências json/i }),
+      screen.getByRole("textbox", { name: /habilidades e competências/i }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("textbox", { name: /resumo profissional/i }),
     ).toBeNull();
   });
 
-  it("shows edit block affordances in the closed state", async () => {
+  it("shows the block list in collapsed state by default", async () => {
     render(
       await MeuCvMasterPage({
-        searchParams: Promise.resolve({ focus: "identity" }),
+        searchParams: Promise.resolve({}),
       }),
     );
 
     expect(
       screen.getByRole("button", { name: /identidade profissional/i }),
     ).toBeTruthy();
-    expect(screen.getByText(/focar lacuna/i)).toBeTruthy();
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 });

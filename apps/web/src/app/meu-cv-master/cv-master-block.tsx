@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { cn } from "@/lib/cn";
@@ -19,8 +18,48 @@ type CvMasterBlockProps = {
   defaultOpen?: boolean;
   gapHint: string;
   hasGap: boolean;
+  index: number;
   profile: UserProfileRecord;
 };
+
+type BlockState = "completo" | "lacuna";
+
+const STATE_META: Record<
+  BlockState,
+  { label: string; dot: string; text: string; bg: string; border: string }
+> = {
+  completo: {
+    label: "Completo",
+    dot: "#2a6a10",
+    text: "#2a6a10",
+    bg: "transparent",
+    border: "rgba(10,10,10,0.12)",
+  },
+  lacuna: {
+    label: "Lacuna",
+    dot: "#e0a90c",
+    text: "#a07a0a",
+    bg: "rgba(245,197,24,0.13)",
+    border: "rgba(220,170,20,0.30)",
+  },
+};
+
+function StateChip({ state }: { state: BlockState }) {
+  const m = STATE_META[state];
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-[9px] py-[3px] font-mono text-[10px] font-medium tracking-[0.03em]"
+      style={{
+        color: m.text,
+        background: m.bg,
+        border: `1px solid ${m.border}`,
+      }}
+    >
+      <span className="size-1.5 rounded-full" style={{ background: m.dot }} />
+      {m.label}
+    </span>
+  );
+}
 
 function getFieldId(blockId: string, fieldName: string) {
   return `${blockId}-${fieldName}`;
@@ -30,84 +69,68 @@ export function CvMasterBlock({
   action,
   block,
   defaultOpen = false,
-  gapHint,
   hasGap,
+  index,
   profile,
 }: CvMasterBlockProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const state: BlockState = hasGap ? "lacuna" : "completo";
+  const idx = String(index).padStart(2, "0");
 
   return (
-    <section
-      aria-labelledby={`${block.id}-title`}
+    <div
       className={cn(
-        "rounded-[20px] border border-[#E5E5E5] bg-white shadow-[0_18px_50px_-30px_rgba(28,25,23,0.18)]",
-        hasGap ? "ring-1 ring-[#DADADA]" : undefined,
+        "overflow-hidden rounded-[12px] border bg-[#fafaf6] transition-[border-color,box-shadow] duration-150",
+        open
+          ? "border-[rgba(10,10,10,0.16)] shadow-[0_10px_28px_-16px_rgba(10,10,10,0.18)]"
+          : "border-[rgba(10,10,10,0.08)]",
       )}
       id={block.id}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#F0F0F0] p-5 md:p-6">
-        <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#AAAAAA]">
-              {block.id}
-            </p>
-            <span className="rounded-full border border-[#E7E7E7] bg-[#FAFAFA] px-2.5 py-1 text-[11px] font-semibold text-[#111111]">
-              {gapHint}
-            </span>
-          </div>
-          <h2
-            id={`${block.id}-title`}
-            className="text-lg font-semibold tracking-tight text-[#111111]"
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={`${block.id}-panel`}
+        onClick={() => setOpen((cur) => !cur)}
+        className="flex w-full items-center gap-3.5 px-[18px] py-[15px] text-left"
+      >
+        <span className="w-[18px] shrink-0 font-mono text-[11px] font-medium text-[#8a8a85]">
+          {idx}
+        </span>
+        <span className="flex-1 text-[15px] font-medium tracking-[-0.01em] text-[#0a0a0a]">
+          {block.title}
+        </span>
+        <StateChip state={state} />
+        <span
+          className="text-[#8a8a85] transition-transform duration-150"
+          style={{ transform: open ? "rotate(180deg)" : "none" }}
+          aria-hidden="true"
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            aria-hidden="true"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            {block.title}
-          </h2>
-          <p className="max-w-2xl text-sm text-[#666666]">
-            {block.description}
-          </p>
-        </div>
+            <path d="M2 4l5 5 5-5" />
+          </svg>
+        </span>
+      </button>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {!open ? (
-            <Link
-              href={`/meu-cv-master?focus=${block.id}`}
-              className="inline-flex h-10 items-center rounded-full border border-[#E5E5E5] bg-white px-4 text-xs font-semibold uppercase tracking-[0.18em] text-[#111111] transition-colors hover:bg-[#F5F5F5]"
-            >
-              Focar lacuna
-            </Link>
-          ) : null}
-          <button
-            aria-expanded={open}
-            aria-controls={`${block.id}-panel`}
-            className="inline-flex h-10 items-center rounded-full border border-[#111111] bg-[#111111] px-4 text-xs font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-[#1A1A1A]"
-            type="button"
-            onClick={() => setOpen((current) => !current)}
-          >
-            <span>{block.title}</span>
-            <span className="ml-2 text-[10px] tracking-[0.24em]">
-              {open ? "Fechar" : "Abrir"}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {!open ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 p-5 md:p-6">
-          <p className="text-sm text-[#666666]">
-            {hasGap ? "Revisar agora." : "Bloco conferido."}
-          </p>
-          <span className="text-sm font-medium text-[#111111] underline underline-offset-4">
-            {hasGap ? "Editar inline" : "Ver detalhes"}
-          </span>
-        </div>
-      ) : (
+      {open && (
         <form
           action={action}
           id={`${block.id}-panel`}
-          className="space-y-5 p-5 md:p-6"
+          className="border-t border-[rgba(10,10,10,0.06)]"
         >
           <input name="focus" type="hidden" value={block.id} />
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 p-5 md:grid-cols-2 md:p-6">
             {block.fields.map((field) => {
               const id = getFieldId(block.id, field.name);
 
@@ -116,7 +139,7 @@ export function CvMasterBlock({
                   <label
                     key={field.name}
                     htmlFor={id}
-                    className="flex items-center gap-3 rounded-2xl border border-[#EAEAEA] bg-[#FAFAFA] p-4 text-sm text-[#111111]"
+                    className="flex items-center gap-3 rounded-[10px] border border-[rgba(10,10,10,0.08)] bg-white p-4 text-sm text-[#0a0a0a]"
                   >
                     <input
                       defaultChecked={Boolean(
@@ -136,7 +159,7 @@ export function CvMasterBlock({
                 return (
                   <div key={field.name} className="space-y-2 md:col-span-1">
                     <label
-                      className="text-sm font-medium text-[#111111]"
+                      className="text-sm font-medium text-[#0a0a0a]"
                       htmlFor={id}
                     >
                       {field.label}
@@ -147,7 +170,7 @@ export function CvMasterBlock({
                       )}
                       id={id}
                       name={field.name}
-                      className="h-12 w-full rounded-xl border border-[#E5E5E5] bg-white px-4 text-sm text-[#111111] outline-none transition-colors focus:border-[#111111]"
+                      className="h-12 w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 text-sm text-[#0a0a0a] outline-none transition-colors focus:border-[#0a0a0a]"
                     >
                       <option value="">Selecione</option>
                       {field.options?.map((option) => (
@@ -164,7 +187,7 @@ export function CvMasterBlock({
                 return (
                   <div key={field.name} className="space-y-2 md:col-span-2">
                     <label
-                      className="text-sm font-medium text-[#111111]"
+                      className="text-sm font-medium text-[#0a0a0a]"
                       htmlFor={id}
                     >
                       {field.label}
@@ -177,10 +200,10 @@ export function CvMasterBlock({
                       name={field.name}
                       rows={field.rows ?? 8}
                       spellCheck={false}
-                      className="w-full rounded-2xl border border-[#E5E5E5] bg-white px-4 py-3 font-mono text-[13px] leading-6 text-[#111111] outline-none transition-colors placeholder:text-[#AAAAAA] focus:border-[#111111]"
+                      className="w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 py-3 font-mono text-[13px] leading-6 text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
                     />
                     {field.helpText ? (
-                      <p className="text-xs text-[#888888]">{field.helpText}</p>
+                      <p className="text-xs text-[#8a8a85]">{field.helpText}</p>
                     ) : null}
                   </div>
                 );
@@ -195,7 +218,7 @@ export function CvMasterBlock({
                   )}
                 >
                   <label
-                    className="text-sm font-medium text-[#111111]"
+                    className="text-sm font-medium text-[#0a0a0a]"
                     htmlFor={id}
                   >
                     {field.label}
@@ -208,7 +231,7 @@ export function CvMasterBlock({
                       id={id}
                       name={field.name}
                       rows={field.rows ?? 4}
-                      className="w-full rounded-2xl border border-[#E5E5E5] bg-white px-4 py-3 text-sm text-[#111111] outline-none transition-colors placeholder:text-[#AAAAAA] focus:border-[#111111]"
+                      className="w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 py-3 text-sm text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
                     />
                   ) : (
                     <input
@@ -218,7 +241,7 @@ export function CvMasterBlock({
                       id={id}
                       name={field.name}
                       type={field.type === "number" ? "number" : "text"}
-                      className="h-12 w-full rounded-xl border border-[#E5E5E5] bg-white px-4 text-sm text-[#111111] outline-none transition-colors placeholder:text-[#AAAAAA] focus:border-[#111111]"
+                      className="h-12 w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 text-sm text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
                     />
                   )}
                 </div>
@@ -226,22 +249,22 @@ export function CvMasterBlock({
             })}
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#F0F0F0] pt-4">
-            <p className="text-sm text-[#666666]">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[rgba(10,10,10,0.06)] px-5 py-4 md:px-6">
+            <p className="text-[13px] text-[#5a5a55]">
               {hasGap
                 ? "Salve este bloco para atualizar o perfil."
                 : "Edite apenas o bloco que deseja revisar."}
             </p>
             <div className="flex items-center gap-2">
               <button
-                className="inline-flex h-11 items-center rounded-full border border-[#E5E5E5] bg-white px-4 text-xs font-semibold uppercase tracking-[0.18em] text-[#111111] transition-colors hover:bg-[#F5F5F5]"
+                className="inline-flex h-10 items-center rounded-full border border-[rgba(10,10,10,0.12)] bg-white px-4 text-xs font-semibold uppercase tracking-[0.18em] text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
                 type="button"
                 onClick={() => setOpen(false)}
               >
                 Cancelar
               </button>
               <button
-                className="inline-flex h-11 items-center rounded-full bg-[#111111] px-5 text-xs font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-[#1A1A1A]"
+                className="inline-flex h-10 items-center rounded-full bg-[#0a0a0a] px-5 text-xs font-semibold uppercase tracking-[0.18em] text-[#fafaf6] transition-colors hover:bg-[#1a1a1a]"
                 type="submit"
               >
                 Salvar bloco
@@ -250,6 +273,6 @@ export function CvMasterBlock({
           </div>
         </form>
       )}
-    </section>
+    </div>
   );
 }

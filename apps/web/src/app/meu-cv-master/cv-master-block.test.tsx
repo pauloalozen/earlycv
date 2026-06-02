@@ -18,7 +18,8 @@ describe("CvMasterBlock", () => {
         defaultOpen={false}
         hasGap
         gapHint="3 campos pendentes"
-        onSave={vi.fn()}
+        index={1}
+        action={vi.fn()}
         profile={{
           city: "São Paulo",
           country: "Brasil",
@@ -55,7 +56,7 @@ describe("CvMasterBlock", () => {
     expect(
       screen.getByRole("button", { name: /identidade profissional/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText("3 campos pendentes")).toBeInTheDocument();
+    expect(screen.getByText(/lacuna/i)).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
 
     fireEvent.click(

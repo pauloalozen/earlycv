@@ -118,14 +118,14 @@ describe("/meu-perfil", () => {
     ).toBe("/planos");
     expect(
       screen
-        .getByRole("link", { name: /abrir cv master/i })
+        .getByRole("link", { name: /abrir meu cv master/i })
         .getAttribute("href"),
     ).toBe("/meu-cv-master");
     expect(
-      screen.getByRole("link", { name: /adaptar cv/i }).getAttribute("href"),
+      screen.getByRole("link", { name: /adaptar meu cv/i }).getAttribute("href"),
     ).toBe("/adaptar");
     expect(screen.getByText(/status do perfil/i)).toBeTruthy();
-    expect(screen.getByText(/pronto/i)).toBeTruthy();
+    expect(screen.getAllByText(/completo/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/vagas analisadas/i)).toBeTruthy();
     expect(screen.getByText(/melhoria recente/i)).toBeTruthy();
     expect(screen.getByText(/score médio/i)).toBeTruthy();
@@ -135,7 +135,7 @@ describe("/meu-perfil", () => {
         .getByRole("link", { name: /analista de dados/i })
         .getAttribute("href"),
     ).toBe("/candidaturas/app-1");
-    expect(screen.getByText(/excluir conta/i)).toBeTruthy();
+    expect(screen.getAllByText(/excluir conta/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/zona de perigo/i)).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
   });

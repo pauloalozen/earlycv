@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
-import { Card } from "@/components/ui/card";
+import { ProgressRing } from "@/components/progress-ring";
 import { apiRequest } from "@/lib/api-request";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
@@ -41,21 +41,30 @@ async function loadMyProfile(): Promise<UserProfileRecord | null> {
   }
 }
 
-function formatDateTime(value: string | null | undefined) {
-  if (!value) return "—";
-
-  return new Date(value).toLocaleString("pt-BR", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 type MeuCvMasterPageProps = {
   searchParams: Promise<{ focus?: string }>;
 };
+
+const STATE_LEGEND = [
+  {
+    key: "completo",
+    label: "Completo",
+    desc: "extração ok",
+    dot: "#2a6a10",
+    text: "#2a6a10",
+    bg: "transparent",
+    border: "rgba(10,10,10,0.12)",
+  },
+  {
+    key: "lacuna",
+    label: "Lacuna",
+    desc: "falta um dado",
+    dot: "#e0a90c",
+    text: "#a07a0a",
+    bg: "rgba(245,197,24,0.13)",
+    border: "rgba(220,170,20,0.30)",
+  },
+] as const;
 
 export default async function MeuCvMasterPage({
   searchParams,
@@ -120,113 +129,163 @@ export default async function MeuCvMasterPage({
 
   return (
     <PageShell>
-      <main className="min-h-screen bg-[#FAFAFA] text-[#111111]">
+      <main
+        className="min-h-screen text-[#0a0a0a]"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 40% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+        }}
+      >
         <AppHeader
           userName={user?.name ?? undefined}
           userRole={user?.internalRole ?? null}
         />
 
         <div className="mx-auto max-w-[1100px] px-6 pb-20 pt-[88px] md:px-8 lg:px-10">
-          <div className="space-y-6">
-            <section className="grid gap-4 lg:grid-cols-[1fr_0.75fr]">
-              <Card className="space-y-5">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#AAAAAA]">
-                    Meu CV Master
-                  </p>
-                  <h1 className="mt-3 text-[clamp(28px,3.5vw,40px)] font-medium tracking-[-0.06em] text-[#111111]">
-                    Revisão e edição do perfil
-                  </h1>
-                  <p className="mt-2 max-w-2xl text-sm text-[#666666] md:text-base">
-                    Revise blocos fechados, abra apenas o que precisa de correção e mantenha o CV Master como base única do seu perfil.
-                  </p>
-                </div>
+          <div className="space-y-4">
+            {/* Breadcrumb */}
+            <Link
+              href="/meu-perfil"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#5a5a55] transition-colors hover:text-[#0a0a0a]"
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M9 2L4 7l5 5" />
+              </svg>
+              Meu Perfil
+            </Link>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[18px] border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#AAAAAA]">
-                      Revisão
-                    </p>
-                    <p className="mt-2 text-lg font-medium tracking-[-0.03em] text-[#111111]">
-                      {gapCount > 0
-                        ? `${gapCount} blocos com lacunas`
-                        : "Perfil pronto para conferência"}
-                    </p>
-                    <p className="mt-1 text-sm text-[#666666]">
-                      {gapCount > 0
-                        ? `${missingFieldCount} campos pendentes em revisão.`
-                        : "Nenhuma lacuna aberta no momento."}
-                    </p>
-                  </div>
-
-                  <div className="rounded-[18px] border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#AAAAAA]">
-                      Status do CV
-                    </p>
-                    <p className="mt-2 text-lg font-medium tracking-[-0.03em] text-[#111111]">
-                      {masterResume ? masterResume.title : "Nenhum CV Master ativo"}
-                    </p>
-                    <p className="mt-1 text-sm text-[#666666]">
-                      {masterResume
-                        ? (masterResume.sourceFileName ?? "Arquivo sem nome de origem")
-                        : "Vá para o fluxo de upload para cadastrar o PDF base."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#F0F0F0] pt-4">
-                  <div>
-                    <p className="text-sm text-[#666666]">Atualizado em</p>
-                    <p className="text-base font-medium text-[#111111]">{formatDateTime(masterResume?.updatedAt)}</p>
-                  </div>
-                  <Link
-                    href="/cv-base"
-                    className="inline-flex h-11 items-center rounded-full border border-[#E5E5E5] bg-white px-4 text-xs font-semibold uppercase tracking-[0.18em] text-[#111111] transition-colors hover:bg-[#F5F5F5]"
+            {/* Cabeçalho */}
+            <div className="flex flex-wrap items-start justify-between gap-6">
+              <div className="flex-1">
+                <h1 className="text-[clamp(28px,3.5vw,36px)] font-medium leading-tight tracking-[-0.04em]">
+                  Meu{" "}
+                  <em
+                    className="not-italic font-normal"
+                    style={{ fontFamily: "var(--font-instrument-serif)" }}
                   >
-                    Abrir CV Base
-                  </Link>
-                </div>
-              </Card>
+                    CV Master.
+                  </em>
+                </h1>
+                <p className="mt-2 max-w-[520px] text-[14px] leading-relaxed text-[#5a5a55]">
+                  A IA já preencheu tudo a partir do seu PDF. Você confere e
+                  corrige, nunca começa do zero. Toque num bloco para editar, só
+                  ele abre.
+                </p>
+              </div>
 
-              <Card variant={gapCount > 0 ? "muted" : "default"} className="space-y-4">
+              {/* Pill de completude */}
+              <div className="flex shrink-0 items-center gap-3 rounded-[12px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] p-3 pr-4">
+                <ProgressRing value={statusCompletion} size={62} stroke={6} />
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#AAAAAA]">
-                    Status do perfil
+                  <p className="text-[15px] font-semibold leading-tight tracking-[-0.01em] text-[#0a0a0a]">
+                    {statusCompletion}% completo
                   </p>
-                  <h2 className="mt-2 text-[28px] font-medium tracking-[-0.05em] text-[#111111]">
-                    Perfil {statusCompletion}% completo
-                  </h2>
-                  <p className="mt-1 text-sm text-[#666666]">
-                    {suggestionCount} sugestões
+                  <p className="mt-0.5 font-mono text-[10.5px] text-[#8a8a85]">
+                    {gapCount} lacunas · {suggestionCount} sugestões
                   </p>
                 </div>
+              </div>
+            </div>
 
-                <div className="rounded-[18px] border border-[#E5E5E5] bg-white p-4">
-                  <p className="text-sm text-[#666666]">
-                    Clique para abrir a edição já no bloco com lacuna.
+            {/* Strip do PDF */}
+            <div className="flex flex-wrap items-center justify-between gap-5 rounded-[14px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] px-5 py-4">
+              <div className="flex items-center gap-3.5">
+                <div className="flex h-[52px] w-11 shrink-0 items-center justify-center rounded-[8px] bg-[#0a0a0a] font-mono text-[11px] font-semibold text-[#c6ff3a]">
+                  PDF
+                </div>
+                <div>
+                  <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-[#8a8a85]">
+                    CV Base
                   </p>
-                  <p className="mt-2 text-base font-medium text-[#111111]">
-                    {blockStates.find((block) => block.id === primaryGapBlockId)?.title ??
-                      "Primeiro bloco com lacuna"}
+                  <p className="mt-0.5 text-[14.5px] font-medium tracking-[-0.01em] text-[#0a0a0a]">
+                    {masterResume
+                      ? masterResume.title
+                      : "Nenhum CV Master ativo"}
                   </p>
+                  <p className="mt-0.5 font-mono text-[10.5px] text-[#8a8a85]">
+                    {masterResume
+                      ? (masterResume.sourceFileName ?? "extraído pela IA")
+                      : "Vá para o fluxo de upload para cadastrar o PDF base."}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {gapCount > 0 && primaryGapBlockId && (
                   <Link
-                    href={
-                      primaryGapBlockId
-                        ? `/meu-cv-master?focus=${primaryGapBlockId}`
-                        : "/meu-cv-master"
-                    }
-                    className="mt-4 inline-flex h-11 items-center rounded-full bg-[#111111] px-4 text-xs font-semibold uppercase tracking-[0.18em] text-white transition-colors hover:bg-[#1A1A1A]"
+                    href={`/meu-cv-master?focus=${primaryGapBlockId}`}
+                    className="inline-flex h-10 items-center rounded-full border border-[rgba(10,10,10,0.12)] bg-white px-4 text-xs font-semibold uppercase tracking-[0.18em] text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
                   >
                     Abrir bloco sugerido
                   </Link>
-                </div>
-              </Card>
-            </section>
+                )}
+                <Link
+                  href="/cv-base"
+                  className="inline-flex h-10 items-center rounded-full bg-[#0a0a0a] px-4 text-xs font-semibold uppercase tracking-[0.18em] text-[#fafaf6] transition-colors hover:bg-[#1a1a1a]"
+                >
+                  {masterResume ? "Substituir PDF" : "Enviar CV Base"}
+                </Link>
+              </div>
+            </div>
 
-            <section className="space-y-4">
-              {blockStates.map((blockState) => (
+            {/* Revisão: gaps summary */}
+            {gapCount > 0 && (
+              <div className="flex flex-wrap items-center gap-3 rounded-[10px] border border-[rgba(220,170,20,0.30)] bg-[rgba(245,197,24,0.08)] px-4 py-3">
+                <span className="rounded-[4px] bg-[#e0a90c] px-[5px] py-[2px] font-mono text-[9px] font-semibold text-white">
+                  IA
+                </span>
+                <p className="text-[13px] text-[#45443e]">
+                  <span className="font-medium text-[#a07a0a]">
+                    {gapCount}{" "}
+                    {gapCount === 1 ? "bloco com lacuna" : "blocos com lacunas"}
+                  </span>{" "}
+                  — {missingFieldCount}{" "}
+                  {missingFieldCount === 1
+                    ? "campo pendente"
+                    : "campos pendentes"}
+                  . Preencha para melhorar as adaptações.
+                </p>
+              </div>
+            )}
+
+            {/* Legenda dos estados */}
+            <div className="flex flex-wrap items-center gap-5 px-1">
+              {STATE_LEGEND.map((s) => (
+                <div key={s.key} className="inline-flex items-center gap-2">
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full px-[9px] py-[3px] font-mono text-[10px] font-medium tracking-[0.03em]"
+                    style={{
+                      color: s.text,
+                      background: s.bg,
+                      border: `1px solid ${s.border}`,
+                    }}
+                  >
+                    <span
+                      className="size-1.5 rounded-full"
+                      style={{ background: s.dot }}
+                    />
+                    {s.label}
+                  </span>
+                  <span className="text-[11.5px] text-[#8a8a85]">{s.desc}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Blocos editáveis */}
+            <div className="space-y-2">
+              {blockStates.map((blockState, index) => (
                 <CvMasterBlock
                   key={blockState.id}
+                  index={index + 1}
                   action={saveProfileBlockAction.bind(null, blockState.id)}
                   block={blockState}
                   defaultOpen={focusedBlockId === blockState.id}
@@ -235,7 +294,7 @@ export default async function MeuCvMasterPage({
                   profile={profileData}
                 />
               ))}
-            </section>
+            </div>
           </div>
         </div>
       </main>
