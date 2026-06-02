@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { test } from "node:test";
 
 import { MasterCvCanonicalExtractionService } from "./master-cv-canonical-extraction.service";
@@ -45,81 +44,6 @@ function buildExtractionOutput() {
     },
   };
 }
-
-test("enqueueFromMasterResumeUpload reuses existing extraction by resumeId+inputHash", async () => {
-  const created = {
-    id: "ext-1",
-    resumeId: "resume-1",
-    inputHash: "hash-1",
-  };
-
-  const findFirstCalls: Array<unknown> = [];
-  const createCalls: Array<unknown> = [];
-
-  const service = new MasterCvCanonicalExtractionService(
-    {
-      masterCvCanonicalExtraction: {
-        findFirst: async (args: unknown) => {
-          findFirstCalls.push(args);
-          return created;
-        },
-        create: async (args: unknown) => {
-          createCalls.push(args);
-          return args;
-        },
-      },
-    } as never,
-    {} as never,
-    {} as never,
-    {} as never,
-  );
-
-  const result = await service.enqueueFromMasterResumeUpload({
-    userId: "user-1",
-    resumeId: "resume-1",
-    rawText: "texto base do cv",
-  });
-
-  assert.equal(result, created);
-  assert.equal(findFirstCalls.length, 1);
-  assert.equal(createCalls.length, 0);
-
-  const hash = createHash("sha256").update("texto base do cv").digest("hex");
-  const where = (findFirstCalls[0] as { where: { inputHash: string } }).where;
-  assert.equal(where.inputHash, hash);
-});
-
-test("enqueueFromMasterResumeUpload handles unique conflict and reuses persisted row", async () => {
-  const reused = { id: "ext-reused", resumeId: "resume-1", inputHash: "h" };
-  let findFirstCount = 0;
-
-  const service = new MasterCvCanonicalExtractionService(
-    {
-      masterCvCanonicalExtraction: {
-        findFirst: async () => {
-          findFirstCount += 1;
-          return findFirstCount === 1 ? null : reused;
-        },
-        create: async () => {
-          const err = new Error("Unique constraint failed");
-          (err as Error & { code?: string }).code = "P2002";
-          throw err;
-        },
-      },
-    } as never,
-    {} as never,
-    {} as never,
-    {} as never,
-  );
-
-  const result = await service.enqueueFromMasterResumeUpload({
-    userId: "user-1",
-    resumeId: "resume-1",
-    rawText: "texto base do cv",
-  });
-
-  assert.equal(result, reused);
-});
 
 test("processJob marks extraction as failed when payload validation fails", async () => {
   const updates: Array<unknown> = [];
@@ -530,6 +454,97 @@ test("processJob persists payload and merges canonical profile on success", asyn
   assert.deepEqual(mergeConfidence, extractionOutput.confidence);
   assert.equal(Boolean(mergeExtractedAt), true);
   assert.equal(profileUpdates.length, 1);
+});
+
+test("processJob uses the raw file payload when one is supplied", async () => {
+  const updates: Array<unknown> = [];
+  const extractionOutput = buildExtractionOutput();
+  let receivedFile: {
+    originalname: string;
+    mimetype: string;
+    size: number;
+    buffer: Buffer;
+  } | null = null;
+
+  const service = new MasterCvCanonicalExtractionService(
+    {
+      masterCvCanonicalExtraction: {
+        findUnique: async () => ({
+          id: "ext-file",
+          userId: "user-1",
+          resumeId: "resume-1",
+          status: "pending",
+          resume: { rawText: "texto do cv" },
+        }),
+        update: async (args: unknown) => {
+          updates.push(args);
+          return args;
+        },
+      },
+      userProfile: {
+        findUnique: async () => ({
+          userId: "user-1",
+          fullName: null,
+          headline: null,
+          linkedinUrl: null,
+          phone: null,
+          professionalSummary: null,
+          city: null,
+          state: null,
+          country: null,
+          experiencesJson: [],
+          educationJson: [],
+          skillsJson: { technical: [], business: [], soft: [] },
+          profileFieldMetaJson: {},
+          profileSuggestionsJson: [],
+        }),
+        update: async () => ({}),
+      },
+    } as never,
+    {
+      merge: () => ({
+        next: {
+          fullName: "Ana Souza",
+          experiences: [],
+          education: [],
+          skills: { technical: ["SQL"], business: [], soft: [] },
+        },
+        fieldMeta: { fullName: { source: "base_cv_ai_extraction" } },
+        suggestions: [],
+      }),
+    } as never,
+    {
+      compute: () => "ready",
+    } as never,
+    {} as never,
+    {
+      extract: async (input: unknown) => {
+        receivedFile = (input as { file?: typeof receivedFile }).file ?? null;
+        return extractionOutput;
+      },
+    } as never,
+  );
+
+  await service.processJob({
+    extractionId: "ext-file",
+    file: {
+      buffer: Buffer.from("%PDF-1.7 raw bytes"),
+      originalname: "cv.pdf",
+      mimetype: "application/pdf",
+      size: 18,
+    },
+  });
+
+  assert.equal(receivedFile?.originalname, "cv.pdf");
+  assert.equal(receivedFile?.mimetype, "application/pdf");
+  assert.equal(receivedFile?.size, 18);
+  assert.equal(
+    updates.some(
+      (entry) =>
+        (entry as { data?: { status?: string } }).data?.status === "succeeded",
+    ),
+    true,
+  );
 });
 
 test("worker retries transient failures up to max attempts", async () => {

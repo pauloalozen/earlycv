@@ -16,13 +16,16 @@ import { parseMasterCvCanonicalExtractionPayload } from "./master-cv-canonical-e
 import type {
   EnqueueMasterCvCanonicalExtractionInput,
   MasterCvCanonicalExtractionOutput,
+  MasterCvFilePayload,
   ProcessMasterCvCanonicalExtractionJobInput,
 } from "./master-cv-canonical-extraction.types";
 
 type ExtractionClient = {
-  extract(input: {
-    masterCvText: string;
-  }): Promise<MasterCvCanonicalExtractionOutput>;
+  extract(
+    input:
+      | { masterCvText: string }
+      | { file: MasterCvFilePayload; locale?: string },
+  ): Promise<MasterCvCanonicalExtractionOutput>;
 };
 
 @Injectable()
@@ -46,49 +49,27 @@ export class MasterCvCanonicalExtractionService {
   async enqueueFromMasterResumeUpload(
     input: EnqueueMasterCvCanonicalExtractionInput,
   ) {
-    const inputHash = createHash("sha256").update(input.rawText).digest("hex");
+    if (!input.file) {
+      throw new Error(
+        "Master CV file payload is required for synchronous extraction",
+      );
+    }
+
+    const inputHash = createHash("sha256")
+      .update(input.file.buffer)
+      .digest("hex");
     const table = this.database.masterCvCanonicalExtraction;
 
-    const existing = await table.findFirst({
-      where: {
+    const created = await table.create({
+      data: {
+        userId: input.userId,
         resumeId: input.resumeId,
         inputHash,
-      },
-      orderBy: {
-        createdAt: "desc",
+        status: "pending",
       },
     });
-    if (existing) {
-      return existing;
-    }
 
-    try {
-      return await table.create({
-        data: {
-          userId: input.userId,
-          resumeId: input.resumeId,
-          inputHash,
-          status: "pending",
-        },
-      });
-    } catch (error) {
-      if (!this.isUniqueConstraintError(error)) {
-        throw error;
-      }
-      const reused = await table.findFirst({
-        where: {
-          resumeId: input.resumeId,
-          inputHash,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
-      if (reused) {
-        return reused;
-      }
-      throw error;
-    }
+    return this.processJob({ extractionId: created.id, file: input.file });
   }
 
   async processJob(input: ProcessMasterCvCanonicalExtractionJobInput) {
@@ -117,7 +98,9 @@ export class MasterCvCanonicalExtractionService {
 
     try {
       const rawText = extraction.resume?.rawText ?? "";
-      const output = await this.extractCanonical({ masterCvText: rawText });
+      const output = await this.extractCanonical(
+        input.file ? { file: input.file } : { masterCvText: rawText },
+      );
       const payload = parseMasterCvCanonicalExtractionPayload(output);
 
       await this.mergeIntoUserProfile({
@@ -166,7 +149,11 @@ export class MasterCvCanonicalExtractionService {
     });
   }
 
-  private async extractCanonical(input: { masterCvText: string }) {
+  private async extractCanonical(
+    input:
+      | { masterCvText: string }
+      | { file: MasterCvFilePayload; locale?: string },
+  ) {
     if (this.extractionClient) {
       return this.extractionClient.extract(input);
     }
@@ -459,13 +446,5 @@ export class MasterCvCanonicalExtractionService {
       return "";
     }
     return value.trim().toLowerCase().replace(/\s+/g, " ");
-  }
-
-  private isUniqueConstraintError(error: unknown): boolean {
-    if (typeof error !== "object" || error === null) {
-      return false;
-    }
-    const maybeCode = (error as { code?: unknown }).code;
-    return maybeCode === "P2002";
   }
 }

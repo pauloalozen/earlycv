@@ -1,11 +1,19 @@
+export type MasterCvFilePayload = {
+  buffer: Buffer;
+  originalname: string;
+  mimetype: string;
+  size: number;
+};
+
 export type EnqueueMasterCvCanonicalExtractionInput = {
   userId: string;
   resumeId: string;
-  rawText: string;
+  file?: MasterCvFilePayload;
 };
 
 export type ProcessMasterCvCanonicalExtractionJobInput = {
   extractionId: string;
+  file?: MasterCvFilePayload;
 };
 
 export type MasterCvCanonicalExtractionOutput = {

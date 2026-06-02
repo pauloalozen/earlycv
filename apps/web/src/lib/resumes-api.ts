@@ -71,7 +71,11 @@ export async function getMyMasterCvExtractionStatus(): Promise<MasterCvExtractio
     if (!response.ok) {
       return null;
     }
-    return response.json() as Promise<MasterCvExtractionStatusDto>;
+    const payload = await response.text();
+    if (!payload.trim()) {
+      return null;
+    }
+    return JSON.parse(payload) as MasterCvExtractionStatusDto;
   } catch {
     return null;
   }

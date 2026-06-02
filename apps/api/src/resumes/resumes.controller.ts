@@ -74,7 +74,7 @@ export class ResumesController {
     )
     dto: CreateResumeDto,
   ) {
-    return this.resumesService.create(user.id, dto, file);
+    return this.resumesService.create(user.id, dto, file, dto.turnstileToken);
   }
 
   @Get()

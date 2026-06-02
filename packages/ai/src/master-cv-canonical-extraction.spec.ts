@@ -68,123 +68,145 @@ function createValidOutput(): MasterCvCanonicalExtractionOutput {
   };
 }
 
+function createFileInput(
+  buffer = Buffer.from("%PDF-1.7 fake cv bytes"),
+): NonNullable<MasterCvCanonicalExtractionInput["file"]> {
+  return {
+    buffer,
+    originalname: "ana-silva.pdf",
+    mimetype: "application/pdf",
+    size: buffer.length,
+  };
+}
+
 describe("extractMasterCvCanonicalProfile", () => {
-  it("returns structured canonicalProfile output", async () => {
+  it("returns structured canonicalProfile output from a raw file payload", async () => {
     const mockOutput = createValidOutput();
+    const file = createFileInput();
+    const responsesCreate = mock.fn(async () => ({
+      output_text: JSON.stringify(mockOutput),
+    }));
 
     const mockClient = {
-      chat: {
-        completions: {
-          create: mock.fn(async () => ({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify(mockOutput),
-                },
-              },
-            ],
-          })),
-        },
+      responses: {
+        create: responsesCreate,
       },
     } as unknown as OpenAI;
-
-    const input: MasterCvCanonicalExtractionInput = {
-      masterCvText: "Ana Silva...",
-      locale: "pt-BR",
-    };
 
     const { output } = await extractMasterCvCanonicalProfile(
       mockClient,
       "gpt-4.1-mini",
-      input,
+      { file, locale: "pt-BR" },
     );
 
     assert.equal(output.canonicalProfile.fullName, "Ana Silva");
     assert.equal(output.extractionCoverage.fieldStatus.fullName, "filled");
     assert.deepEqual(output.canonicalProfile.skills.technical, ["SQL"]);
+    assert.equal(responsesCreate.mock.calls.length, 1);
+
+    const request = responsesCreate.mock.calls[0]?.arguments[0] as {
+      input: Array<{
+        role: string;
+        content: Array<{
+          type: string;
+          filename?: string;
+          file_data?: string;
+          text?: string;
+        }>;
+      }>;
+      text?: { format?: { type?: string } };
+    };
+
+    assert.equal(request.text?.format?.type, "json_object");
+    assert.equal(request.input[0]?.content[0]?.type, "input_file");
+    assert.equal(request.input[0]?.content[0]?.filename, "ana-silva.pdf");
+    assert.equal(request.input[0]?.content[1]?.type, "input_text");
   });
 
-  it("stores both original and sent input in audit", async () => {
+  it("stores file metadata in the audit payload", async () => {
     const mockOutput = createValidOutput();
-    const veryLongCv = "x".repeat(30_500);
+    const file = createFileInput(
+      Buffer.from("%PDF-1.7 fake cv bytes for audit"),
+    );
+    const responsesCreate = mock.fn(async () => ({
+      output_text: JSON.stringify(mockOutput),
+    }));
 
     const mockClient = {
-      chat: {
-        completions: {
-          create: mock.fn(async () => ({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify(mockOutput),
-                },
-              },
-            ],
-          })),
-        },
+      responses: {
+        create: responsesCreate,
       },
     } as unknown as OpenAI;
 
     const { audit } = await extractMasterCvCanonicalProfile(
       mockClient,
       "gpt-4.1-mini",
-      { masterCvText: veryLongCv, locale: "pt-BR" },
+      { file, locale: "pt-BR" },
     );
 
     const requestInput = JSON.parse(audit.request.input) as {
-      originalInput: MasterCvCanonicalExtractionInput;
-      sentToModel: { locale: string; masterCvText: string };
+      originalInput: {
+        locale: string;
+        file: { originalname: string; mimetype: string; size: number } | null;
+      };
+      sentToModel: {
+        locale: string;
+        file: {
+          filename: string;
+          mimetype: string;
+          size: number;
+          fileDataLength: number;
+        } | null;
+      };
     };
 
-    assert.equal(requestInput.originalInput.masterCvText.length, 30_500);
+    assert.equal(
+      requestInput.originalInput.file?.originalname,
+      "ana-silva.pdf",
+    );
     assert.equal(requestInput.sentToModel.locale, "pt-BR");
-    assert.equal(requestInput.sentToModel.masterCvText.length, 24_000);
+    assert.equal(requestInput.sentToModel.file?.filename, "ana-silva.pdf");
+    assert.equal(
+      requestInput.sentToModel.file?.fileDataLength,
+      file.buffer.toString("base64").length,
+    );
   });
 
   it("accepts only filled|partial|missing fieldStatus values", async () => {
     const mockClient = {
-      chat: {
-        completions: {
-          create: mock.fn(async () => ({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    canonicalProfile: {
-                      fullName: null,
-                      headline: null,
-                      email: null,
-                      phone: null,
-                      linkedinUrl: null,
-                      location: { city: null, state: null, country: null },
-                      professionalSummary: null,
-                      experiences: [],
-                      education: [],
-                      skills: { technical: [], business: [], soft: [] },
-                      languages: [],
-                      certifications: [],
-                    },
-                    extractionCoverage: {
-                      identifiedFields: [],
-                      missingFields: ["fullName"],
-                      fieldStatus: {
-                        fullName: "unknown",
-                      },
-                    },
-                    confidence: {},
-                    evidence: {},
-                  }),
-                },
-              },
-            ],
-          })),
-        },
+      responses: {
+        create: mock.fn(async () => ({
+          output_text: JSON.stringify({
+            canonicalProfile: {
+              fullName: null,
+              headline: null,
+              email: null,
+              phone: null,
+              linkedinUrl: null,
+              location: { city: null, state: null, country: null },
+              professionalSummary: null,
+              experiences: [],
+              education: [],
+              skills: { technical: [], business: [], soft: [] },
+              languages: [],
+              certifications: [],
+            },
+            extractionCoverage: {
+              identifiedFields: [],
+              missingFields: ["fullName"],
+              fieldStatus: { fullName: "unknown" },
+            },
+            confidence: {},
+            evidence: {},
+          }),
+        })),
       },
     } as unknown as OpenAI;
 
     await assert.rejects(
       () =>
         extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-          masterCvText: "test",
+          file: createFileInput(),
         }),
       /fieldStatus|filled|partial|missing/i,
     );
@@ -192,25 +214,17 @@ describe("extractMasterCvCanonicalProfile", () => {
 
   it("rejects malformed JSON responses", async () => {
     const mockClient = {
-      chat: {
-        completions: {
-          create: mock.fn(async () => ({
-            choices: [
-              {
-                message: {
-                  content: "{ invalid json",
-                },
-              },
-            ],
-          })),
-        },
+      responses: {
+        create: mock.fn(async () => ({
+          output_text: "{ invalid json",
+        })),
       },
     } as unknown as OpenAI;
 
     await assert.rejects(
       () =>
         extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-          masterCvText: "test",
+          file: createFileInput(),
         }),
       /JSON|parse/i,
     );
@@ -227,25 +241,17 @@ describe("extractMasterCvCanonicalProfile", () => {
       invalidOutput.confidence.fullName = invalidValue;
 
       const mockClient = {
-        chat: {
-          completions: {
-            create: mock.fn(async () => ({
-              choices: [
-                {
-                  message: {
-                    content: JSON.stringify(invalidOutput),
-                  },
-                },
-              ],
-            })),
-          },
+        responses: {
+          create: mock.fn(async () => ({
+            output_text: JSON.stringify(invalidOutput),
+          })),
         },
       } as unknown as OpenAI;
 
       await assert.rejects(
         () =>
           extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-            masterCvText: "test",
+            file: createFileInput(),
           }),
         /confidence|0|1|finite/i,
       );
@@ -257,25 +263,17 @@ describe("extractMasterCvCanonicalProfile", () => {
     invalidOutput.extractionCoverage.fieldStatus["not.a.real.field"] = "filled";
 
     const mockClient = {
-      chat: {
-        completions: {
-          create: mock.fn(async () => ({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify(invalidOutput),
-                },
-              },
-            ],
-          })),
-        },
+      responses: {
+        create: mock.fn(async () => ({
+          output_text: JSON.stringify(invalidOutput),
+        })),
       },
     } as unknown as OpenAI;
 
     await assert.rejects(
       () =>
         extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-          masterCvText: "test",
+          file: createFileInput(),
         }),
       /fieldStatus|unknown/i,
     );
@@ -288,25 +286,17 @@ describe("extractMasterCvCanonicalProfile", () => {
     invalidOutput.evidence.fullName = ["Ana Silva", 123];
 
     const mockClient = {
-      chat: {
-        completions: {
-          create: mock.fn(async () => ({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify(invalidOutput),
-                },
-              },
-            ],
-          })),
-        },
+      responses: {
+        create: mock.fn(async () => ({
+          output_text: JSON.stringify(invalidOutput),
+        })),
       },
     } as unknown as OpenAI;
 
     await assert.rejects(
       () =>
         extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-          masterCvText: "test",
+          file: createFileInput(),
         }),
       /evidence|string\[\]/i,
     );

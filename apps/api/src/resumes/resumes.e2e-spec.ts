@@ -10,6 +10,7 @@ import request from "supertest";
 
 import { AppModule } from "../app.module";
 import { DatabaseService } from "../database/database.service";
+import { ResumesService } from "./resumes.service";
 
 type DeleteManyDelegate = {
   deleteMany: (args?: unknown) => Promise<unknown>;
@@ -31,6 +32,31 @@ async function createApp() {
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
+
+  const app: INestApplication = moduleRef.createNestApplication();
+  app.setGlobalPrefix("api");
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
+  await app.init();
+
+  return {
+    app,
+    database: app.get(DatabaseService),
+  };
+}
+
+async function createAppWithResumesServiceStub(resumesService: ResumesService) {
+  const moduleRef = await Test.createTestingModule({
+    imports: [AppModule],
+  })
+    .overrideProvider(ResumesService)
+    .useValue(resumesService)
+    .compile();
 
   const app: INestApplication = moduleRef.createNestApplication();
   app.setGlobalPrefix("api");
@@ -173,6 +199,64 @@ test("resume endpoints stay scoped to the authenticated user", async () => {
   } finally {
     await deleteUserByEmail(database, firstUser.email);
     await deleteUserByEmail(database, secondUser.email);
+    await app.close();
+  }
+});
+
+test("POST /api/resumes accepts turnstileToken for master CV uploads", async () => {
+  const capturedCalls: Array<{
+    dto: { title: string };
+    file: { originalname: string } | undefined;
+    turnstileToken: string | undefined;
+    userId: string;
+  }> = [];
+  const { app, database } = await createAppWithResumesServiceStub({
+    create: async (userId, dto, file, turnstileToken) => {
+      capturedCalls.push({
+        userId,
+        dto: { title: dto.title },
+        file: file ? { originalname: file.originalname } : undefined,
+        turnstileToken,
+      });
+
+      return {
+        id: "resume-stub",
+        title: dto.title,
+        sourceFileName: file?.originalname ?? null,
+        isMaster: true,
+        updatedAt: new Date("2026-06-02T12:00:00.000Z").toISOString(),
+      };
+    },
+  } as unknown as ResumesService);
+  const user = await registerUser(app, database, "resume-turnstile");
+
+  try {
+    const response = await request(app.getHttpServer())
+      .post("/api/resumes")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .attach("file", Buffer.from("%PDF-1.4\n%mock"), {
+        contentType: "application/pdf",
+        filename: "cv-base.pdf",
+      })
+      .field("title", "CV Master")
+      .field("isPrimary", "true")
+      .field("turnstileToken", "turnstile-upload-token")
+      .expect(201);
+
+    assert.equal(response.body.id, "resume-stub");
+    assert.equal(response.body.title, "CV Master");
+    assert.equal(response.body.isMaster, true);
+    assert.equal(response.body.updatedAt, "2026-06-02T12:00:00.000Z");
+    assert.deepEqual(capturedCalls, [
+      {
+        userId: user.userId,
+        dto: { title: "CV Master" },
+        file: { originalname: "cv-base.pdf" },
+        turnstileToken: "turnstile-upload-token",
+      },
+    ]);
+  } finally {
+    await deleteUserByEmail(database, user.email);
     await app.close();
   }
 });

@@ -34,4 +34,10 @@ export class CreateResumeDto {
   })
   @IsBoolean()
   isPrimary?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  turnstileToken?: string;
 }

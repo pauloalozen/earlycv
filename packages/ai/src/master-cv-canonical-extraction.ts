@@ -24,8 +24,16 @@ const ALLOWED_CANONICAL_FIELD_PATHS = [
 
 export type FieldStatus = (typeof ALLOWED_FIELD_STATUS)[number];
 
+type MasterCvFileInput = {
+  buffer: Buffer;
+  originalname: string;
+  mimetype: string;
+  size: number;
+};
+
 export type MasterCvCanonicalExtractionInput = {
-  masterCvText: string;
+  masterCvText?: string;
+  file?: MasterCvFileInput;
   locale?: string;
 };
 
@@ -124,10 +132,25 @@ function createAuditRecord(params: {
   traceId: string;
   model: string;
   request: {
-    originalInput: MasterCvCanonicalExtractionInput;
+    originalInput: {
+      locale: string;
+      masterCvText: string | null;
+      file: {
+        originalname: string;
+        mimetype: string;
+        size: number;
+      } | null;
+    };
     sentToModel: {
       locale: string;
-      masterCvText: string;
+      prompt: string;
+      masterCvText: string | null;
+      file: {
+        filename: string;
+        mimetype: string;
+        size: number;
+        fileDataLength: number;
+      } | null;
     };
   };
   result: {
@@ -156,6 +179,63 @@ function createAuditRecord(params: {
       usage: params.result.usage,
     },
   };
+}
+
+function buildPrompt(input: MasterCvCanonicalExtractionInput) {
+  const locale = input.locale ?? "pt-BR";
+  const masterCvText = input.masterCvText
+    ? input.masterCvText.slice(0, MASTER_CV_MAX_CHARS)
+    : null;
+
+  const prompt = input.file
+    ? [
+        `<LOCALE>${locale}</LOCALE>`,
+        `<TASK>Extract canonical profile data from the attached CV file.</TASK>`,
+        `<FILE_METADATA>`,
+        `name: ${input.file.originalname}`,
+        `mimeType: ${input.file.mimetype}`,
+        `sizeBytes: ${input.file.size}`,
+        `</FILE_METADATA>`,
+      ].join("\n")
+    : `<LOCALE>${locale}</LOCALE>\n<MASTER_CV>\n${masterCvText ?? ""}\n</MASTER_CV>`;
+
+  return { locale, masterCvText, prompt };
+}
+
+function buildResponseInput(
+  input: MasterCvCanonicalExtractionInput,
+  prompt: string,
+) {
+  if (input.file) {
+    return [
+      {
+        role: "user" as const,
+        content: [
+          {
+            type: "input_file" as const,
+            file_data: input.file.buffer.toString("base64"),
+            filename: input.file.originalname,
+          },
+          {
+            type: "input_text" as const,
+            text: prompt,
+          },
+        ],
+      },
+    ];
+  }
+
+  return [
+    {
+      role: "user" as const,
+      content: [
+        {
+          type: "input_text" as const,
+          text: prompt,
+        },
+      ],
+    },
+  ];
 }
 
 function validateString(value: unknown, path: string): string {
@@ -465,20 +545,15 @@ export async function extractMasterCvCanonicalProfile(
   audit: ReturnType<typeof createAuditRecord>;
 }> {
   const traceId = randomUUID();
-  const locale = input.locale ?? "pt-BR";
-  const trimmedMasterCvText = input.masterCvText.slice(0, MASTER_CV_MAX_CHARS);
-  const userPrompt = `<LOCALE>${locale}</LOCALE>\n<MASTER_CV>\n${trimmedMasterCvText}\n</MASTER_CV>`;
-
-  const response = await client.chat.completions.create({
+  const { locale, masterCvText, prompt } = buildPrompt(input);
+  const response = await client.responses.create({
     model,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ],
-    response_format: { type: "json_object" },
+    instructions: SYSTEM_PROMPT,
+    input: buildResponseInput(input, prompt),
+    text: { format: { type: "json_object" } },
   });
 
-  const content = response.choices[0]?.message.content;
+  const content = response.output_text;
   if (!content) throw new Error("No response content from AI model");
 
   let parsed: unknown;
@@ -496,17 +571,36 @@ export async function extractMasterCvCanonicalProfile(
     traceId,
     model,
     request: {
-      originalInput: input,
+      originalInput: {
+        locale,
+        masterCvText,
+        file: input.file
+          ? {
+              originalname: input.file.originalname,
+              mimetype: input.file.mimetype,
+              size: input.file.size,
+            }
+          : null,
+      },
       sentToModel: {
         locale,
-        masterCvText: trimmedMasterCvText,
+        prompt,
+        masterCvText,
+        file: input.file
+          ? {
+              filename: input.file.originalname,
+              mimetype: input.file.mimetype,
+              size: input.file.size,
+              fileDataLength: input.file.buffer.toString("base64").length,
+            }
+          : null,
       },
     },
     result: {
       content: JSON.stringify(output),
       usage: {
-        promptTokens: response.usage?.prompt_tokens,
-        completionTokens: response.usage?.completion_tokens,
+        promptTokens: response.usage?.input_tokens,
+        completionTokens: response.usage?.output_tokens,
         totalTokens: response.usage?.total_tokens,
       },
     },
