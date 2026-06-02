@@ -1490,8 +1490,7 @@ test("ensureLegacyStructuredOutput persists immutable generation snapshot with n
   const where = updateManyCalls[0]?.where as Record<string, unknown>;
   assert.equal(where?.id, "adapt-1");
   assert.equal(
-    typeof (where?.generationInputSnapshotJson as { equals?: unknown })
-      ?.equals,
+    typeof (where?.generationInputSnapshotJson as { equals?: unknown })?.equals,
     "object",
   );
 });

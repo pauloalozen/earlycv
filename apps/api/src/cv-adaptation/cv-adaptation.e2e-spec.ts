@@ -1004,6 +1004,7 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
       .post("/api/cv-adaptation/analyze")
       .set("Authorization", `Bearer ${user.accessToken}`)
       .send({
+        inputMode: "profile",
         masterResumeId: masterResume.id,
         jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
         turnstileToken: "token-test",

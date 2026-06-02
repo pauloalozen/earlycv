@@ -82,6 +82,13 @@ export class ResumesController {
     return this.resumesService.list(user.id);
   }
 
+  @Get("master-cv-extraction-status")
+  getMasterCvExtractionStatus(
+    @AuthenticatedUser() user: AuthenticatedRequestUser,
+  ) {
+    return this.resumesService.getMasterCvExtractionStatus(user.id);
+  }
+
   @Get(":id")
   getById(
     @AuthenticatedUser() user: AuthenticatedRequestUser,

@@ -43,10 +43,16 @@ export type CanonicalProfileData = {
 };
 
 export type ProfileFieldMetaEntry = {
-  source: "analysis_upload" | "base_cv_upload" | "manual_edit";
+  source:
+    | "analysis_upload"
+    | "base_cv_upload"
+    | "base_cv_ai_extraction"
+    | "manual_edit";
   manuallyEdited?: boolean;
   lastEditedAt?: string;
   sourceCvId?: string | null;
+  sourceConfidence?: number;
+  sourceExtractedAt?: string;
 };
 
 export type ProfileSuggestionStatus = "pending" | "accepted" | "rejected";
@@ -56,7 +62,11 @@ export type ProfileSuggestion = {
   currentValue: unknown;
   suggestedValue: unknown;
   status: ProfileSuggestionStatus;
-  source: "analysis_upload" | "base_cv_upload" | "manual_edit";
+  source:
+    | "analysis_upload"
+    | "base_cv_upload"
+    | "base_cv_ai_extraction"
+    | "manual_edit";
   sourceCvId?: string | null;
   createdAt: string;
 };

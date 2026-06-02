@@ -20,6 +20,7 @@ import { InfraModule } from "./infra/infra.module";
 import { JobApplicationsModule } from "./job-applications/job-applications.module";
 import { JobSourcesModule } from "./job-sources/job-sources.module";
 import { JobsModule } from "./jobs/jobs.module";
+import { MasterCvCanonicalExtractionModule } from "./master-cv-canonical-extraction/master-cv-canonical-extraction.module";
 import { PaymentRecoveryModule } from "./payment-recovery/payment-recovery.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { PlansModule } from "./plans/plans.module";
@@ -53,6 +54,9 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     CompaniesModule,
     JobSourcesModule,
     JobsModule,
+    ...(process.env.MASTER_CV_CANONICAL_EXTRACTION_ENABLED === "true"
+      ? [MasterCvCanonicalExtractionModule]
+      : []),
     AnalysisProtectionModule,
     AnalysisObservabilityModule,
     CvAdaptationModule,

@@ -505,3 +505,47 @@ test("enum values use lowercase API-aligned identifiers", () => {
     );
   }
 });
+
+test("MasterCvCanonicalExtraction schema exists with status enum, payload fields, and indexes", () => {
+  const statusEnum = getBlock("enum", "MasterCvCanonicalExtractionStatus");
+  const extraction = getBlock("model", "MasterCvCanonicalExtraction");
+
+  for (const expectedValue of [
+    "pending",
+    "processing",
+    "succeeded",
+    "failed",
+  ]) {
+    assertContains(
+      statusEnum,
+      expectedValue,
+      `MasterCvCanonicalExtractionStatus should include ${expectedValue}`,
+    );
+  }
+
+  assert.match(extraction, /^\s*resumeId\s+String$/m);
+  assert.match(extraction, /^\s*inputHash\s+String$/m);
+  assert.match(
+    extraction,
+    /^\s*status\s+MasterCvCanonicalExtractionStatus\s+@default\(pending\)$/m,
+  );
+  assert.match(extraction, /^\s*coverageJson\s+Json\?$/m);
+  assert.match(extraction, /^\s*canonicalJson\s+Json\?$/m);
+  assert.match(extraction, /^\s*confidenceJson\s+Json\?$/m);
+  assert.match(extraction, /^\s*evidenceJson\s+Json\?$/m);
+  assertContains(
+    extraction,
+    "@@unique([resumeId, inputHash])",
+    "MasterCvCanonicalExtraction should enforce idempotency by resumeId+inputHash",
+  );
+  assertContains(
+    extraction,
+    "@@index([userId, createdAt(sort: Desc)])",
+    "MasterCvCanonicalExtraction should index userId+createdAt desc for latest lookup",
+  );
+  assertContains(
+    extraction,
+    "@@index([status, updatedAt])",
+    "MasterCvCanonicalExtraction should index status+updatedAt for monitoring",
+  );
+});

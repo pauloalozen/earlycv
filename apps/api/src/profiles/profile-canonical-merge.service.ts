@@ -6,7 +6,11 @@ import type {
   ProfileSuggestion,
 } from "./profile-canonical.types";
 
-type MergeSource = "analysis_upload" | "base_cv_upload" | "manual_edit";
+type MergeSource =
+  | "analysis_upload"
+  | "base_cv_upload"
+  | "base_cv_ai_extraction"
+  | "manual_edit";
 
 type MergeInput = {
   existing: Partial<CanonicalProfileData>;
@@ -15,6 +19,10 @@ type MergeInput = {
   sourceCvId?: string | null;
   fieldMeta?: Record<string, ProfileFieldMetaEntry>;
   suggestions?: ProfileSuggestion[];
+  extractionContext?: {
+    confidence?: Record<string, number>;
+    extractedAt?: string;
+  };
 };
 
 type MergeResult = {
@@ -59,6 +67,7 @@ export class ProfileCanonicalMergeService {
       fieldMeta,
       suggestions,
       nowIso,
+      extractionContext: input.extractionContext,
     });
     this.mergeScalar({
       fieldPath: "phone",
@@ -70,6 +79,7 @@ export class ProfileCanonicalMergeService {
       suggestions,
       nowIso,
       normalize: this.normalizePhone,
+      extractionContext: input.extractionContext,
     });
     this.mergeScalar({
       fieldPath: "linkedinUrl",
@@ -81,6 +91,7 @@ export class ProfileCanonicalMergeService {
       suggestions,
       nowIso,
       normalize: this.normalizeLinkedin,
+      extractionContext: input.extractionContext,
     });
     this.mergeScalar({
       fieldPath: "city",
@@ -91,6 +102,7 @@ export class ProfileCanonicalMergeService {
       fieldMeta,
       suggestions,
       nowIso,
+      extractionContext: input.extractionContext,
     });
     this.mergeScalar({
       fieldPath: "state",
@@ -101,6 +113,7 @@ export class ProfileCanonicalMergeService {
       fieldMeta,
       suggestions,
       nowIso,
+      extractionContext: input.extractionContext,
     });
     this.mergeScalar({
       fieldPath: "country",
@@ -111,6 +124,7 @@ export class ProfileCanonicalMergeService {
       fieldMeta,
       suggestions,
       nowIso,
+      extractionContext: input.extractionContext,
     });
     this.mergeScalar({
       fieldPath: "headline",
@@ -121,6 +135,7 @@ export class ProfileCanonicalMergeService {
       fieldMeta,
       suggestions,
       nowIso,
+      extractionContext: input.extractionContext,
     });
     this.mergeScalar({
       fieldPath: "professionalSummary",
@@ -131,34 +146,70 @@ export class ProfileCanonicalMergeService {
       fieldMeta,
       suggestions,
       nowIso,
+      extractionContext: input.extractionContext,
     });
 
     if (input.incoming.experiences) {
-      next.experiences = this.mergeExperiences({
-        existing: next.experiences ?? [],
-        incoming: input.incoming.experiences,
-        source: input.source,
-        sourceCvId: input.sourceCvId,
-        fieldMeta,
-        suggestions,
-        nowIso,
-      });
+      const shouldGateExperiences =
+        input.source === "base_cv_ai_extraction" &&
+        this.isLowConfidence(input.extractionContext, "experiences") &&
+        (next.experiences ?? []).length > 0;
+      if (!shouldGateExperiences) {
+        next.experiences = this.mergeExperiences({
+          existing: next.experiences ?? [],
+          incoming: input.incoming.experiences,
+          source: input.source,
+          sourceCvId: input.sourceCvId,
+          fieldMeta,
+          suggestions,
+          nowIso,
+        });
+      }
+    }
+
+    if (input.incoming.education) {
+      const shouldGateEducation =
+        input.source === "base_cv_ai_extraction" &&
+        this.isLowConfidence(input.extractionContext, "education") &&
+        (next.education ?? []).length > 0;
+      if (!shouldGateEducation) {
+        next.education = [...input.incoming.education];
+      }
     }
 
     if (input.incoming.skills) {
+      const shouldGateTechnical =
+        input.source === "base_cv_ai_extraction" &&
+        this.isLowConfidence(input.extractionContext, "skills.technical") &&
+        (next.skills?.technical?.length ?? 0) > 0;
+      const shouldGateBusiness =
+        input.source === "base_cv_ai_extraction" &&
+        this.isLowConfidence(input.extractionContext, "skills.business") &&
+        (next.skills?.business?.length ?? 0) > 0;
+      const shouldGateSoft =
+        input.source === "base_cv_ai_extraction" &&
+        this.isLowConfidence(input.extractionContext, "skills.soft") &&
+        (next.skills?.soft?.length ?? 0) > 0;
+
       const mergedSkills = {
-        technical: this.mergeSkillsBucket(
-          next.skills?.technical ?? [],
-          input.incoming.skills.technical ?? [],
-        ),
-        business: this.mergeSkillsBucket(
-          next.skills?.business ?? [],
-          input.incoming.skills.business ?? [],
-        ),
-        soft: this.mergeSkillsBucket(
-          next.skills?.soft ?? [],
-          input.incoming.skills.soft ?? [],
-        ),
+        technical: shouldGateTechnical
+          ? (next.skills?.technical ?? [])
+          : this.mergeSkillsBucket(
+              next.skills?.technical ?? [],
+              input.incoming.skills.technical ?? [],
+            ),
+        business: shouldGateBusiness
+          ? (next.skills?.business ?? [])
+          : this.mergeSkillsBucket(
+              next.skills?.business ?? [],
+              input.incoming.skills.business ?? [],
+            ),
+        soft: shouldGateSoft
+          ? (next.skills?.soft ?? [])
+          : this.mergeSkillsBucket(
+              next.skills?.soft ?? [],
+              input.incoming.skills.soft ?? [],
+            ),
       };
 
       next.skills = mergedSkills;
@@ -177,6 +228,10 @@ export class ProfileCanonicalMergeService {
     suggestions: ProfileSuggestion[];
     nowIso: string;
     normalize?: (value: string) => string;
+    extractionContext?: {
+      confidence?: Record<string, number>;
+      extractedAt?: string;
+    };
   }) {
     if (typeof input.incoming !== "string") {
       return;
@@ -203,7 +258,15 @@ export class ProfileCanonicalMergeService {
       input.fieldMeta[key] = {
         source: input.source,
         sourceCvId: input.sourceCvId ?? null,
+        ...this.buildExtractionMeta(input.extractionContext, key),
       };
+      return;
+    }
+
+    if (
+      input.source === "base_cv_ai_extraction" &&
+      this.isLowConfidence(input.extractionContext, key)
+    ) {
       return;
     }
 
@@ -221,13 +284,52 @@ export class ProfileCanonicalMergeService {
       return;
     }
 
-    if (input.source === "base_cv_upload" || input.source === "manual_edit") {
+    if (
+      input.source === "base_cv_upload" ||
+      input.source === "base_cv_ai_extraction" ||
+      input.source === "manual_edit"
+    ) {
       input.next[input.fieldPath] = trimmedIncoming;
       input.fieldMeta[key] = {
         source: input.source,
         sourceCvId: input.sourceCvId ?? null,
+        ...this.buildExtractionMeta(input.extractionContext, key),
       };
     }
+  }
+
+  private isLowConfidence(
+    extractionContext: { confidence?: Record<string, number> } | undefined,
+    fieldPath: string,
+  ): boolean {
+    const score = extractionContext?.confidence?.[fieldPath];
+    if (typeof score !== "number") {
+      return false;
+    }
+    return score < 0.6;
+  }
+
+  private buildExtractionMeta(
+    extractionContext:
+      | {
+          confidence?: Record<string, number>;
+          extractedAt?: string;
+        }
+      | undefined,
+    fieldPath: string,
+  ): Pick<ProfileFieldMetaEntry, "sourceConfidence" | "sourceExtractedAt"> {
+    const meta: Pick<
+      ProfileFieldMetaEntry,
+      "sourceConfidence" | "sourceExtractedAt"
+    > = {};
+    const confidence = extractionContext?.confidence?.[fieldPath];
+    if (typeof confidence === "number") {
+      meta.sourceConfidence = confidence;
+    }
+    if (typeof extractionContext?.extractedAt === "string") {
+      meta.sourceExtractedAt = extractionContext.extractedAt;
+    }
+    return meta;
   }
 
   private mergeExperiences(input: {
@@ -292,6 +394,7 @@ export class ProfileCanonicalMergeService {
 
         if (
           input.source === "base_cv_upload" ||
+          input.source === "base_cv_ai_extraction" ||
           input.source === "manual_edit"
         ) {
           currentExperience[field as keyof typeof currentExperience] =

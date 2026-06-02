@@ -24,6 +24,14 @@ export type {
 } from "./cv-adaptation.js";
 export { adaptCv, analyzeAndAdaptCv } from "./cv-adaptation.js";
 export {
+  type CanonicalProfile,
+  type ExtractionCoverage,
+  extractMasterCvCanonicalProfile,
+  type FieldStatus,
+  type MasterCvCanonicalExtractionInput,
+  type MasterCvCanonicalExtractionOutput,
+} from "./master-cv-canonical-extraction.js";
+export {
   extractTextFromPdf,
   NotACvError,
   PasswordProtectedPdfError,

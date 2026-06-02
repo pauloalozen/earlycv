@@ -18,8 +18,11 @@ import {
   buildFunnelEventIdempotencyKey,
 } from "@/lib/cv-adaptation-flow-helpers";
 import { setGuestAnalysisRaw } from "@/lib/guest-analysis-storage";
-import type { ResumeDto } from "@/lib/resumes-api";
-import { getMyMasterResume } from "@/lib/resumes-api";
+import type { MasterCvExtractionStatusDto, ResumeDto } from "@/lib/resumes-api";
+import {
+  getMyMasterCvExtractionStatus,
+  getMyMasterResume,
+} from "@/lib/resumes-api";
 import { getAuthStatus } from "@/lib/session-actions";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -155,6 +158,8 @@ export default function AdaptarPage() {
   const [profileReadinessStatus, setProfileReadinessStatus] = useState<
     "empty" | "partial" | "ready" | null
   >(null);
+  const [masterCvExtractionStatus, setMasterCvExtractionStatus] =
+    useState<MasterCvExtractionStatusDto>(null);
 
   const clearSelectedFile = useCallback(() => {
     setFile(null);
@@ -320,7 +325,10 @@ export default function AdaptarPage() {
     Promise.all([
       getAuthStatus(),
       getMyMasterResume().catch(() => null as ResumeDto | null),
-    ]).then(([status, resume]) => {
+      getMyMasterCvExtractionStatus().catch(
+        () => null as MasterCvExtractionStatusDto,
+      ),
+    ]).then(([status, resume, extractionStatus]) => {
       setUserName(status.userName ?? null);
       setUserRole(status.internalRole ?? null);
       setAvailableCredits(status.availableCreditsDisplay);
@@ -334,6 +342,7 @@ export default function AdaptarPage() {
           : null,
       );
       setMasterResume(resume ?? null);
+      setMasterCvExtractionStatus(extractionStatus ?? null);
       if (status.userName) {
         setCvMode("profile");
       } else {
@@ -461,11 +470,15 @@ export default function AdaptarPage() {
       let analyzeResult: Awaited<ReturnType<typeof analyzeAuthenticatedCv>>;
       if (isAuthenticated && cvMode === "profile") {
         if (!isProfileModeReady) {
-          setError(
-            "Seu perfil ainda nao esta pronto para essa opcao. Complete o CV base para liberar o modo perfil.",
-          );
-          setLoading(false);
-          return;
+          if (masterResume?.id) {
+            formData.append("masterResumeId", masterResume.id);
+          } else {
+            setError(
+              "Seu perfil ainda nao esta pronto para essa opcao. Complete o CV base para liberar o modo perfil.",
+            );
+            setLoading(false);
+            return;
+          }
         }
         emitUiFunnelEvent("analysis_started", {
           attemptId: submitAttemptId,
@@ -957,72 +970,127 @@ export default function AdaptarPage() {
 
                   {/* Master selected */}
                   {isAuthenticated && cvMode === "profile" ? (
-                    <div
-                      style={{
-                        background: "#fafaf6",
-                        border: "1px solid rgba(10,10,10,0.08)",
-                        borderRadius: 14,
-                        padding: "28px 20px",
-                        textAlign: "center",
-                        minHeight: CV_INPUT_BOX_MIN_HEIGHT,
-                        display: "flex",
-                        flexDirection: "column",
-                        justifyContent: "center",
-                      }}
-                    >
+                    <>
                       <div
                         style={{
+                          background: "#fafaf6",
+                          border: "1px solid rgba(10,10,10,0.08)",
+                          borderRadius: 14,
+                          padding: "28px 20px",
+                          textAlign: "center",
+                          minHeight: CV_INPUT_BOX_MIN_HEIGHT,
                           display: "flex",
+                          flexDirection: "column",
                           justifyContent: "center",
-                          marginBottom: 10,
                         }}
                       >
-                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
-                        <svg
-                          width="22"
-                          height="22"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          aria-hidden
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "center",
+                            marginBottom: 10,
+                          }}
                         >
-                          <path
-                            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                            stroke="#0a0a0a"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <polyline
-                            points="14 2 14 8 20 8"
-                            stroke="#0a0a0a"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                          {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                          <svg
+                            width="22"
+                            height="22"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden
+                          >
+                            <path
+                              d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                              stroke="#0a0a0a"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <polyline
+                              points="14 2 14 8 20 8"
+                              stroke="#0a0a0a"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 500,
+                            marginBottom: 4,
+                          }}
+                        >
+                          {hasMaster
+                            ? (masterResume.sourceFileName ??
+                              masterResume.title)
+                            : "Usando dados do seu perfil canonico"}
+                        </div>
+                        <div
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 10.5,
+                            color: "#8a8a85",
+                          }}
+                        >
+                          Perfil salvo carregado ·{" "}
+                          <span style={{ color: "#405410" }}>✓ pronto</span>
+                        </div>
                       </div>
-                      <div
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 500,
-                          marginBottom: 4,
-                        }}
-                      >
-                        {hasMaster
-                          ? (masterResume.sourceFileName ?? masterResume.title)
-                          : "Usando dados do seu perfil canonico"}
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 10.5,
-                          color: "#8a8a85",
-                        }}
-                      >
-                        Perfil salvo carregado ·{" "}
-                        <span style={{ color: "#405410" }}>✓ pronto</span>
-                      </div>
-                    </div>
+                      {masterCvExtractionStatus?.extractionCoverage ? (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            background: "rgba(10,10,10,0.03)",
+                            border: "1px solid rgba(10,10,10,0.08)",
+                            borderRadius: 12,
+                            padding: "10px 12px",
+                            display: "grid",
+                            gap: 6,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#555",
+                            }}
+                          >
+                            Dados extraidos:{" "}
+                            {masterCvExtractionStatus.extractionCoverage.identifiedFields.join(
+                              ", ",
+                            ) || "nenhum"}
+                          </div>
+                          <div
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#7a7a74",
+                            }}
+                          >
+                            Campos faltando:{" "}
+                            {masterCvExtractionStatus.extractionCoverage.missingFields.join(
+                              ", ",
+                            ) || "nenhum"}
+                          </div>
+                          {masterCvExtractionStatus.extractionCoverage
+                            .missingFields.length > 0 ? (
+                            <Link
+                              href="/cv-base"
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: 10.5,
+                                color: "#0a0a0a",
+                                textDecoration: "underline",
+                              }}
+                            >
+                              Completar CV base manualmente
+                            </Link>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </>
                   ) : cvMode === "text" ? (
                     <div
                       style={{

@@ -3,17 +3,23 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { type Prisma, ResumeKind } from "@prisma/client";
 import type { Response } from "express";
 import { extractTextFromCvFile } from "../common/cv-text-extractor";
 import type { FileUpload } from "../cv-adaptation/dto/create-cv-adaptation.dto";
 import { DatabaseService } from "../database/database.service";
+import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
 import type { CanonicalProfileData } from "../profiles/profile-canonical.types";
 import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merge.service";
 import { ProfileReadinessService } from "../profiles/profile-readiness.service";
 import { StorageService } from "../storage/storage.service";
 import type { CreateResumeDto } from "./dto/create-resume.dto";
+import type {
+  MasterCvExtractionCoverageDto,
+  MasterCvExtractionStatusDto,
+} from "./dto/master-cv-extraction-status.dto";
 import type { UpdateResumeDto } from "./dto/update-resume.dto";
 
 @Injectable()
@@ -31,6 +37,12 @@ export class ResumesService {
     private readonly profileReadinessService: Pick<
       ProfileReadinessService,
       "compute"
+    >,
+    @Optional()
+    @Inject(MasterCvCanonicalExtractionService)
+    private readonly masterCvCanonicalExtractionService?: Pick<
+      MasterCvCanonicalExtractionService,
+      "enqueueFromMasterResumeUpload"
     >,
   ) {}
 
@@ -56,13 +68,42 @@ export class ResumesService {
     return resume;
   }
 
+  async getMasterCvExtractionStatus(
+    userId: string,
+  ): Promise<MasterCvExtractionStatusDto> {
+    const extraction =
+      await this.database.masterCvCanonicalExtraction.findFirst({
+        where: { userId },
+        orderBy: [
+          { finishedAt: "desc" },
+          { updatedAt: "desc" },
+          { createdAt: "desc" },
+        ],
+        select: {
+          status: true,
+          coverageJson: true,
+          updatedAt: true,
+        },
+      });
+
+    if (!extraction) {
+      return null;
+    }
+
+    return {
+      status: extraction.status,
+      extractionCoverage: this.parseExtractionCoverage(extraction.coverageJson),
+      updatedAt: extraction.updatedAt.toISOString(),
+    };
+  }
+
   async create(userId: string, dto: CreateResumeDto, file?: FileUpload) {
     let rawText: string | null = null;
     let sourceFileUrl: string | null = null;
 
     if (file) {
       try {
-        rawText = await extractTextFromCvFile(file);
+        rawText = await this.extractCvText(file);
       } catch (error) {
         throw new BadRequestException(
           `Failed to extract text from file: ${error instanceof Error ? error.message : "unknown error"}`,
@@ -77,7 +118,7 @@ export class ResumesService {
       );
     }
 
-    return this.database.$transaction(async (tx) => {
+    const createdResume = await this.database.$transaction(async (tx) => {
       const existingResumeCount = await tx.resume.count({ where: { userId } });
       const shouldBecomeMaster = dto.isPrimary ?? existingResumeCount === 0;
 
@@ -109,6 +150,35 @@ export class ResumesService {
 
       return createdResume;
     });
+
+    if (
+      rawText &&
+      createdResume.isMaster &&
+      this.masterCvCanonicalExtractionService
+    ) {
+      void this.masterCvCanonicalExtractionService
+        .enqueueFromMasterResumeUpload({
+          userId,
+          resumeId: createdResume.id,
+          rawText,
+        })
+        .catch((error: unknown) => {
+          console.error(
+            "[resumes] failed to enqueue master CV canonical extraction",
+            {
+              error: error instanceof Error ? error.message : String(error),
+              resumeId: createdResume.id,
+              userId,
+            },
+          );
+        });
+    }
+
+    return createdResume;
+  }
+
+  private extractCvText(file: FileUpload) {
+    return extractTextFromCvFile(file);
   }
 
   private async mergeCanonicalProfileFromBaseCv(
@@ -280,6 +350,40 @@ export class ResumesService {
       return {};
     }
     return value as Record<string, unknown>;
+  }
+
+  private parseExtractionCoverage(
+    value: unknown,
+  ): MasterCvExtractionCoverageDto | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+
+    const coverage = value as {
+      identifiedFields?: unknown;
+      missingFields?: unknown;
+      fieldStatus?: unknown;
+    };
+
+    const fieldStatusRecord =
+      coverage.fieldStatus &&
+      typeof coverage.fieldStatus === "object" &&
+      !Array.isArray(coverage.fieldStatus)
+        ? coverage.fieldStatus
+        : {};
+
+    const fieldStatus: MasterCvExtractionCoverageDto["fieldStatus"] = {};
+    for (const [field, status] of Object.entries(fieldStatusRecord)) {
+      if (status === "filled" || status === "partial" || status === "missing") {
+        fieldStatus[field] = status;
+      }
+    }
+
+    return {
+      identifiedFields: this.parseStringArray(coverage.identifiedFields),
+      missingFields: this.parseStringArray(coverage.missingFields),
+      fieldStatus,
+    };
   }
 
   private parseFieldMeta(value: unknown): Record<

@@ -207,3 +207,160 @@ test("deduplicates repeated pending suggestions for same field/value/source", ()
 
   assert.equal(second.suggestions.length, 1);
 });
+
+test("accepts base_cv_ai_extraction as merge source", () => {
+  const result = mergeService.merge({
+    existing: {
+      experiences: [],
+      education: [],
+      skills: { technical: [], business: [], soft: [] },
+    },
+    incoming: {
+      fullName: "Ana Souza",
+    },
+    source: "base_cv_ai_extraction",
+    sourceCvId: "resume-1",
+    fieldMeta: {},
+    suggestions: [],
+  });
+
+  assert.equal(result.next.fullName, "Ana Souza");
+  assert.equal(result.fieldMeta.fullName?.source, "base_cv_ai_extraction");
+});
+
+test("base_cv_ai_extraction does not overwrite confirmed value on low confidence", () => {
+  const result = mergeService.merge({
+    existing: {
+      fullName: "Valor Confirmado",
+      experiences: [],
+      education: [],
+      skills: { technical: [], business: [], soft: [] },
+    },
+    incoming: {
+      fullName: "Valor Extraido",
+    },
+    source: "base_cv_ai_extraction",
+    sourceCvId: "resume-1",
+    fieldMeta: {
+      fullName: { source: "manual_edit", manuallyEdited: false },
+    },
+    suggestions: [],
+    extractionContext: {
+      confidence: {
+        fullName: 0.35,
+      },
+      extractedAt: "2026-06-01T10:00:00.000Z",
+    },
+  });
+
+  assert.equal(result.next.fullName, "Valor Confirmado");
+});
+
+test("base_cv_ai_extraction stores confidence and timestamp in field meta", () => {
+  const extractedAt = "2026-06-01T10:00:00.000Z";
+  const result = mergeService.merge({
+    existing: {
+      experiences: [],
+      education: [],
+      skills: { technical: [], business: [], soft: [] },
+    },
+    incoming: {
+      fullName: "Ana Souza",
+    },
+    source: "base_cv_ai_extraction",
+    sourceCvId: "resume-1",
+    fieldMeta: {},
+    suggestions: [],
+    extractionContext: {
+      confidence: {
+        fullName: 0.92,
+      },
+      extractedAt,
+    },
+  });
+
+  assert.equal(result.fieldMeta.fullName?.source, "base_cv_ai_extraction");
+  assert.equal(result.fieldMeta.fullName?.sourceConfidence, 0.92);
+  assert.equal(result.fieldMeta.fullName?.sourceExtractedAt, extractedAt);
+});
+
+test("base_cv_ai_extraction keeps existing experiences when experiences confidence is low", () => {
+  const existingExperiences = [{ id: "exp_1", role: "Confirmed Role" }];
+  const result = mergeService.merge({
+    existing: {
+      experiences: existingExperiences,
+      education: [],
+      skills: { technical: [], business: [], soft: [] },
+    },
+    incoming: {
+      experiences: [{ id: "exp_2", role: "Extracted Role" }],
+    },
+    source: "base_cv_ai_extraction",
+    fieldMeta: {},
+    suggestions: [],
+    extractionContext: {
+      confidence: {
+        experiences: 0.2,
+      },
+    },
+  });
+
+  assert.deepEqual(result.next.experiences, existingExperiences);
+});
+
+test("base_cv_ai_extraction keeps existing education when education confidence is low", () => {
+  const existingEducation = [{ id: "edu_1", institution: "USP" }];
+  const result = mergeService.merge({
+    existing: {
+      experiences: [],
+      education: existingEducation,
+      skills: { technical: [], business: [], soft: [] },
+    },
+    incoming: {
+      education: [{ id: "edu_2", institution: "FGV" }],
+    },
+    source: "base_cv_ai_extraction",
+    fieldMeta: {},
+    suggestions: [],
+    extractionContext: {
+      confidence: {
+        education: 0.3,
+      },
+    },
+  });
+
+  assert.deepEqual(result.next.education, existingEducation);
+});
+
+test("base_cv_ai_extraction keeps non-empty skill buckets on low confidence", () => {
+  const result = mergeService.merge({
+    existing: {
+      experiences: [],
+      education: [],
+      skills: { technical: ["SQL"], business: ["Finance"], soft: ["Comms"] },
+    },
+    incoming: {
+      skills: {
+        technical: ["Python"],
+        business: ["Ops"],
+        soft: ["Leadership"],
+      },
+    },
+    source: "base_cv_ai_extraction",
+    fieldMeta: {},
+    suggestions: [],
+    extractionContext: {
+      confidence: {
+        "skills.technical": 0.1,
+        "skills.business": 0.2,
+        "skills.soft": 0.3,
+      },
+    },
+  });
+
+  assert.deepEqual(result.next.skills, {
+    technical: ["SQL"],
+    business: ["Finance"],
+    soft: ["Comms"],
+  });
+});
