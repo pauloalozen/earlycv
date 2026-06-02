@@ -74,6 +74,7 @@ function extractScoreAfterFromContent(content: unknown): number | null {
   if (!content || typeof content !== "object") return null;
   const c = content as Record<string, unknown>;
   if (typeof c.scoreAfter === "number") return c.scoreAfter;
+  if (typeof c.score_pos_ajustes === "number") return c.score_pos_ajustes;
   const atsScore = c.atsScore;
   if (atsScore && typeof atsScore === "object") {
     const ats = atsScore as Record<string, unknown>;
@@ -84,6 +85,8 @@ function extractScoreAfterFromContent(content: unknown): number | null {
     const p = proj as Record<string, unknown>;
     if (typeof p.score_pos_otimizacao === "number")
       return p.score_pos_otimizacao;
+    if (typeof p.score_pos_ajustes === "number") return p.score_pos_ajustes;
+    if (typeof p.scoreAfter === "number") return p.scoreAfter;
   }
   return null;
 }

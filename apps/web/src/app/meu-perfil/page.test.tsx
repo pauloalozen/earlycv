@@ -122,7 +122,9 @@ describe("/meu-perfil", () => {
         .getAttribute("href"),
     ).toBe("/meu-cv-master");
     expect(
-      screen.getByRole("link", { name: /adaptar meu cv/i }).getAttribute("href"),
+      screen
+        .getByRole("link", { name: /adaptar meu cv/i })
+        .getAttribute("href"),
     ).toBe("/adaptar");
     expect(screen.getByText(/status do perfil/i)).toBeTruthy();
     expect(screen.getAllByText(/completo/i).length).toBeGreaterThan(0);

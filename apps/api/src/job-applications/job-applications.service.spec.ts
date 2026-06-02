@@ -368,6 +368,34 @@ test("upsertFromCvAdaptation creates new JobApplication from CvAdaptation data",
   assert.equal(app.currentCvAdaptationId, "adapt-1");
 });
 
+test("upsertFromCvAdaptation derives score from score_pos_ajustes payload", async () => {
+  const db = makeDb();
+
+  const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
+  adaptations.set("adapt-score", {
+    id: "adapt-score",
+    jobApplicationId: null,
+    adaptedContentJson: { projecao_melhoria: { score_pos_ajustes: 88 } },
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+
+  await service.upsertFromCvAdaptation({
+    userId: "user-1",
+    cvAdaptationId: "adapt-score",
+    jobTitle: "Analista",
+    companyName: "Corp",
+    jobDescriptionText: null,
+    targetStatus: "ANALYZED",
+    origin: "analysis_auto",
+  });
+
+  const app = Array.from(
+    (db._jobApplications as Map<string, Record<string, unknown>>).values(),
+  )[0];
+  assert.equal(app.scoreAfter, 88);
+});
+
 test("upsertFromCvAdaptation links CvAdaptation to created JobApplication", async () => {
   const db = makeDb();
 
