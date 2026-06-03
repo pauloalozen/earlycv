@@ -37,9 +37,9 @@ const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 
 const CARD: React.CSSProperties = {
-  background: "#fafaf6",
-  border: "1px solid rgba(10,10,10,0.08)",
-  borderRadius: 14,
+  background: "rgba(255,255,255,0.55)",
+  border: "1px solid rgba(10,10,10,0.07)",
+  borderRadius: 12,
 };
 
 const inputStyle: React.CSSProperties = {
@@ -63,99 +63,466 @@ const ORIGIN_LABELS: Record<string, string> = {
   job_portal: "job.portal",
 };
 
-const NEXT_ACTION_BODY: Record<string, string> = {
-  SAVED:
-    "Analise a vaga e adapte seu CV para melhorar a compatibilidade antes de se candidatar.",
-  ANALYZED:
-    "Adapte seu CV para esta vaga para aumentar suas chances de ser chamado.",
-  CV_READY:
-    "Seu CV adaptado está pronto. Candidate-se à vaga quando estiver preparado.",
-  APPLIED: "Candidatura enviada. Aguarde o retorno do recrutador.",
-  IN_PROCESS:
-    "Você está em processo seletivo. Acompanhe os próximos passos com atenção.",
-  INTERVIEW:
-    "Entrevista agendada. Gere uma preparação com IA usando a vaga, análise e CV adaptado.",
-  ASSESSMENT:
-    "Você está na fase de testes. Revise os requisitos técnicos da vaga com atenção.",
-  OFFER: "Você recebeu uma oferta! Revise os termos antes de aceitar.",
-  HIRED: "Parabéns! Você foi contratado nesta vaga.",
-  REJECTED:
-    "Esta candidatura não avançou. Use as lições para as próximas vagas.",
-  WITHDRAWN: "Você desistiu desta candidatura.",
+// ─── Jornada (stepper) ───────────────────────────────────────────
+
+type StepState = "done" | "current" | "upcoming";
+
+type JornadaStep = {
+  key: string;
+  label: string;
+  getMeta: (app: JobApplicationDetailDto) => string | null;
+  terminal?: boolean;
 };
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+const JORNADA_STEPS: JornadaStep[] = [
+  {
+    key: "ANALYZED",
+    label: "Analisada",
+    getMeta: (app) => {
+      if (app.scoreBefore !== null) return `score ${app.scoreBefore}%`;
+      return null;
+    },
+  },
+  {
+    key: "CV_READY",
+    label: "CV liberado",
+    getMeta: (app) => {
+      if (app.scoreAfter !== null) return `score ${app.scoreAfter}%`;
+      return null;
+    },
+  },
+  {
+    key: "APPLIED",
+    label: "Enviada",
+    getMeta: (app) => {
+      if (app.appliedAt)
+        return new Date(app.appliedAt).toLocaleDateString("pt-BR", {
+          day: "2-digit",
+          month: "short",
+        });
+      return null;
+    },
+  },
+  {
+    key: "INTERVIEW",
+    label: "Entrevista",
+    getMeta: (app) => {
+      if (app.nextActionAt) {
+        const d = new Date(app.nextActionAt);
+        return (
+          d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) +
+          " · " +
+          d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+        );
+      }
+      return null;
+    },
+  },
+  {
+    key: "RESULT",
+    label: "Resultado",
+    getMeta: () => null,
+    terminal: true,
+  },
+];
+
+function getStepState(
+  stepKey: string,
+  status: JobApplicationStatus,
+): StepState {
+  const order = [
+    "SAVED",
+    "ANALYZED",
+    "CV_READY",
+    "APPLIED",
+    "IN_PROCESS",
+    "ASSESSMENT",
+    "INTERVIEW",
+    "OFFER",
+    "HIRED",
+    "REJECTED",
+    "WITHDRAWN",
+  ];
+  const statusIdx = order.indexOf(status);
+
+  if (stepKey === "ANALYZED") {
+    if (statusIdx >= order.indexOf("CV_READY")) return "done";
+    if (status === "ANALYZED") return "done";
+    return "upcoming";
+  }
+  if (stepKey === "CV_READY") {
+    if (statusIdx >= order.indexOf("APPLIED")) return "done";
+    if (status === "CV_READY") return "current";
+    if (statusIdx > order.indexOf("CV_READY")) return "done";
+    return "upcoming";
+  }
+  if (stepKey === "APPLIED") {
+    if (
+      statusIdx >= order.indexOf("IN_PROCESS") ||
+      status === "APPLIED" ||
+      status === "INTERVIEW" ||
+      status === "ASSESSMENT" ||
+      status === "OFFER" ||
+      status === "HIRED" ||
+      status === "REJECTED" ||
+      status === "WITHDRAWN"
+    ) {
+      return statusIdx > order.indexOf("APPLIED") ? "done" : "done";
+    }
+    if (status === "CV_READY") return "upcoming";
+    return "upcoming";
+  }
+  if (stepKey === "INTERVIEW") {
+    if (
+      status === "HIRED" ||
+      status === "REJECTED" ||
+      status === "WITHDRAWN" ||
+      status === "OFFER"
+    )
+      return "done";
+    if (
+      status === "INTERVIEW" ||
+      status === "IN_PROCESS" ||
+      status === "ASSESSMENT"
+    )
+      return "current";
+    return "upcoming";
+  }
+  if (stepKey === "RESULT") {
+    if (status === "HIRED" || status === "REJECTED" || status === "WITHDRAWN")
+      return "done";
+    return "upcoming";
+  }
+  return "upcoming";
 }
 
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function getJornadaSubtitle(status: JobApplicationStatus): string {
+  const map: Record<string, string> = {
+    SAVED: "aguardando análise",
+    ANALYZED: "análise concluída · pronto para adaptar",
+    CV_READY: "CV adaptado pronto · candidate-se",
+    APPLIED: "candidatura enviada · aguardando retorno",
+    IN_PROCESS: "em processo seletivo",
+    INTERVIEW: "entrevista em andamento",
+    ASSESSMENT: "fase de testes",
+    OFFER: "oferta recebida",
+    HIRED: "contratado",
+    REJECTED: "não avançou nesta vaga",
+    WITHDRAWN: "desistiu da candidatura",
+  };
+  return map[status] ?? status.toLowerCase();
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const cfg = getStatusConfig(status);
+function JornadaStep({
+  step,
+  state,
+  meta,
+  isLast,
+  onHired,
+  status,
+}: {
+  step: JornadaStep;
+  state: StepState;
+  meta: string | null;
+  isLast: boolean;
+  onHired?: () => void;
+  status: JobApplicationStatus;
+}) {
+  const done = state === "done";
+  const current = state === "current";
+
   return (
-    <span
+    <div
       style={{
-        display: "inline-flex",
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
         alignItems: "center",
-        gap: 6,
-        background: cfg.bg,
-        color: cfg.color,
-        border: `1px solid ${cfg.border}`,
-        borderRadius: 999,
-        padding: "5px 11px 5px 9px",
-        fontFamily: MONO,
-        fontSize: 11.5,
-        fontWeight: 500,
-        letterSpacing: 0.3,
-        lineHeight: 1,
-        whiteSpace: "nowrap",
-        flexShrink: 0,
+        textAlign: "center",
+        minWidth: 0,
       }}
     >
-      <span
+      {/* "AGORA" tag or spacer */}
+      <div
         style={{
-          width: 5,
-          height: 5,
-          borderRadius: "50%",
-          background: cfg.dot,
-          flexShrink: 0,
-          boxShadow: cfg.dotGlow ? `0 0 6px ${cfg.dot}` : "none",
+          height: 18,
+          marginBottom: 5,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
-      />
-      {cfg.label.toUpperCase()}
-    </span>
+      >
+        {current && (
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 8.5,
+              fontWeight: 600,
+              letterSpacing: 0.8,
+              color: "#7a5a04",
+              background: "rgba(245,197,24,0.22)",
+              border: "1px solid rgba(180,140,10,0.3)",
+              borderRadius: 999,
+              padding: "2px 8px",
+            }}
+          >
+            AGORA
+          </span>
+        )}
+      </div>
+
+      {/* Node row with connector */}
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          height: 30,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {!isLast && (
+          <div
+            style={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              width: "100%",
+              height: 0,
+              transform: "translateY(-50%)",
+              zIndex: 0,
+              borderTop: done ? "2px solid #aadb2a" : "2px dashed rgba(10,10,10,0.16)",
+            }}
+          />
+        )}
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            width: 30,
+            height: 30,
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            ...(done
+              ? {
+                  background: "#c6ff3a",
+                  border: "1px solid rgba(110,150,20,0.4)",
+                  boxShadow: "0 2px 6px rgba(110,150,20,0.18)",
+                }
+              : current
+                ? {
+                    background: "#fff",
+                    border: "2px solid #f5c518",
+                    boxShadow: "0 0 0 4px rgba(245,197,24,0.16)",
+                  }
+                : {
+                    background: "#f1f0ea",
+                    border: "1px dashed rgba(10,10,10,0.2)",
+                  }),
+          }}
+        >
+          {done ? (
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#244a00"
+              strokeWidth="3.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          ) : current ? (
+            <span
+              style={{
+                width: 9,
+                height: 9,
+                borderRadius: "50%",
+                background: "#f5c518",
+              }}
+            />
+          ) : (
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: "#c4c2b9",
+              }}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Label */}
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: -0.2,
+          marginTop: 9,
+          color: state === "upcoming" ? "#a8a6a0" : "#0a0a0a",
+        }}
+      >
+        {step.label}
+      </div>
+
+      {/* Meta or terminal chips */}
+      {step.terminal ? (
+        <div
+          style={{
+            display: "flex",
+            gap: 4,
+            marginTop: 7,
+            justifyContent: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          {status === "HIRED" ? (
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 9,
+                fontWeight: 500,
+                color: "#3a5008",
+                background: "rgba(198,255,58,0.3)",
+                border: "1px solid rgba(110,150,20,0.28)",
+                borderRadius: 5,
+                padding: "2px 6px",
+              }}
+            >
+              Contratado ✓
+            </span>
+          ) : status === "REJECTED" ? (
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 9,
+                fontWeight: 500,
+                color: "#7a3a28",
+                background: "rgba(154,61,40,0.06)",
+                border: "1px solid rgba(154,61,40,0.2)",
+                borderRadius: 5,
+                padding: "2px 6px",
+              }}
+            >
+              Recusada
+            </span>
+          ) : status === "WITHDRAWN" ? (
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 9,
+                fontWeight: 500,
+                color: "#9a9892",
+                background: "rgba(10,10,10,0.035)",
+                border: "1px solid rgba(10,10,10,0.08)",
+                borderRadius: 5,
+                padding: "2px 6px",
+              }}
+            >
+              Desisti
+            </span>
+          ) : (
+            <>
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 9,
+                  fontWeight: 500,
+                  color: "#3a5008",
+                  background: "rgba(198,255,58,0.3)",
+                  border: "1px solid rgba(110,150,20,0.28)",
+                  borderRadius: 5,
+                  padding: "2px 6px",
+                  cursor: "pointer",
+                }}
+                onClick={onHired}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === "Enter" && onHired?.()}
+              >
+                Contratado
+              </span>
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 9,
+                  fontWeight: 500,
+                  color: "#9a9892",
+                  background: "rgba(10,10,10,0.035)",
+                  border: "1px solid rgba(10,10,10,0.08)",
+                  borderRadius: 5,
+                  padding: "2px 6px",
+                }}
+              >
+                Recusada
+              </span>
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 9,
+                  fontWeight: 500,
+                  color: "#9a9892",
+                  background: "rgba(10,10,10,0.035)",
+                  border: "1px solid rgba(10,10,10,0.08)",
+                  borderRadius: 5,
+                  padding: "2px 6px",
+                }}
+              >
+                Desisti
+              </span>
+            </>
+          )}
+        </div>
+      ) : meta ? (
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            color: current ? "#7a5a04" : "#8a8a85",
+            marginTop: 3,
+          }}
+        >
+          {meta}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
-function SectionCard({
-  title,
-  right,
-  children,
+function Jornada({
+  application,
+  onUpdated,
 }: {
-  title: string;
-  right?: React.ReactNode;
-  children: React.ReactNode;
+  application: JobApplicationDetailDto;
+  onUpdated: () => void;
 }) {
+  const subtitle = getJornadaSubtitle(application.status);
+
   return (
-    <div>
+    <div
+      style={{
+        background: "rgba(255,255,255,0.6)",
+        border: "1px solid rgba(10,10,10,0.07)",
+        borderRadius: 14,
+        padding: "15px 26px 20px",
+        marginBottom: 24,
+      }}
+    >
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "baseline",
-          marginBottom: 8,
+          marginBottom: 12,
         }}
       >
         <div
@@ -167,433 +534,671 @@ function SectionCard({
             fontWeight: 500,
           }}
         >
-          {title}
+          JORNADA DA CANDIDATURA
         </div>
-        {right && <div>{right}</div>}
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            color: "#7a5a04",
+            letterSpacing: 0.3,
+          }}
+        >
+          {subtitle}
+        </div>
       </div>
-      <div style={{ ...CARD, padding: "18px 22px" }}>{children}</div>
+
+      <div style={{ display: "flex", alignItems: "flex-start" }}>
+        {JORNADA_STEPS.map((step, i) => {
+          const state = getStepState(step.key, application.status);
+          const meta = step.getMeta(application);
+          const isLast = i === JORNADA_STEPS.length - 1;
+          return (
+            <JornadaStep
+              key={step.key}
+              step={step}
+              state={state}
+              meta={meta}
+              isLast={isLast}
+              status={application.status}
+              onHired={onUpdated}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function InterviewBanner({
-  nextActionAt,
-  onPrepClick,
+// ─── Análise Row ─────────────────────────────────────────────────
+
+function AnaliseRow({
+  adaptation,
+  applicationId,
+  isCurrent,
+  isBest,
+  isSent,
+  scoreAfter,
+  scoreBefore,
+  isLast,
+  companyName,
+  jobTitle,
 }: {
-  nextActionAt: string;
-  onPrepClick: () => void;
+  adaptation: {
+    id: string;
+    status: string;
+    isUnlocked: boolean;
+    adaptedResumeId: string | null;
+    createdAt: string;
+  };
+  applicationId: string;
+  isCurrent: boolean;
+  isBest: boolean;
+  isSent: boolean;
+  scoreAfter: number | null;
+  scoreBefore: number | null;
+  isLast: boolean;
+  companyName: string;
+  jobTitle: string;
 }) {
-  const date = new Date(nextActionAt);
-  const dateStr = date.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
+  const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
+  const [downloadStage, setDownloadStage] =
+    useState<DownloadProgressStage | null>(null);
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+  const [wasUnlockedInSession, setWasUnlockedInSession] = useState(false);
+  const [hasCredits, setHasCredits] = useState<boolean | null>(null);
+
+  const isUnlocked = adaptation.isUnlocked || wasUnlockedInSession;
+  const isProcessing =
+    adaptation.status !== "delivered" && adaptation.status !== "unlocked";
+
+  const plansHref = buildCvUnlockPlansHref({
+    adaptationId: adaptation.id,
+    source: "candidatura-analise-unlock",
+    nextPath: `/candidaturas/${applicationId}`,
   });
-  const timeStr = date.toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+
+  const cvFileName = `CV-${companyName.replace(/\s+/g, "-")}-${jobTitle.replace(/\s+/g, "-")}`;
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/plans/me", { cache: "no-store" });
+        if (!res.ok) return;
+        const plan = (await res.json()) as {
+          creditsRemaining?: number | null;
+        };
+        if (!mounted) return;
+        if (plan.creditsRemaining == null) {
+          setHasCredits(true);
+          return;
+        }
+        setHasCredits(plan.creditsRemaining > 0);
+      } catch {
+        if (mounted) setHasCredits(null);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleDownload = async (format: "pdf" | "docx") => {
+    if (downloading) return;
+    setDownloading(format);
+    setDownloadStage("preparing");
+    try {
+      await downloadFromApi({
+        url: `/api/cv-adaptation/${adaptation.id}/download?format=${format}`,
+        fallbackFilename:
+          format === "pdf" ? `${cvFileName}.pdf` : `${cvFileName}.docx`,
+        onStageChange: setDownloadStage,
+      });
+    } finally {
+      setDownloading(null);
+      setDownloadStage(null);
+    }
+  };
+
+  const handleRedeem = async () => {
+    if (redeeming) return;
+    setRedeeming(true);
+    setRedeemError(null);
+    try {
+      const res = await fetch(
+        `/api/cv-adaptation/${adaptation.id}/redeem-credit`,
+        { method: "POST", cache: "no-store" },
+      );
+      if (!res.ok) {
+        let msg = "Não foi possível liberar o CV agora.";
+        try {
+          const body = (await res.json()) as { message?: string };
+          if (typeof body.message === "string" && body.message.trim())
+            msg = body.message;
+        } catch {
+          // no-op
+        }
+        throw new Error(msg);
+      }
+      setWasUnlockedInSession(true);
+      setHasCredits((c) => (c === true ? false : c));
+    } catch (err) {
+      setRedeemError(
+        err instanceof Error ? err.message : "Erro ao liberar CV.",
+      );
+    } finally {
+      setRedeeming(false);
+    }
+  };
+
+  const score = isCurrent || isBest ? scoreAfter : null;
+  const delta =
+    score !== null && scoreBefore !== null ? score - scoreBefore : null;
 
   return (
     <div
       style={{
-        background:
-          "linear-gradient(95deg, rgba(245,197,24,0.12) 0%, rgba(245,197,24,0.04) 100%)",
-        border: "1px solid rgba(180,140,10,0.28)",
-        borderRadius: 14,
-        padding: "18px 22px",
-        display: "flex",
-        alignItems: "center",
-        gap: 16,
+        padding: "16px 0",
+        borderBottom: isLast
+          ? "none"
+          : "1px dashed rgba(10,10,10,0.09)",
+        ...(isBest
+          ? {
+              background:
+                "linear-gradient(90deg, rgba(198,255,58,0.10) 0%, rgba(198,255,58,0) 60%)",
+              margin: "0 -18px",
+              padding: "16px 18px",
+              borderRadius: 8,
+              borderLeft: "2px solid #aadb2a",
+              borderBottom: isLast
+                ? "none"
+                : "1px dashed rgba(10,10,10,0.09)",
+            }
+          : {}),
       }}
     >
+      {/* Top row: info + score */}
       <div
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: 10,
-          background: "#fff",
-          border: "1px solid rgba(180,140,10,0.22)",
-          color: "#7a5a04",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 18,
+          marginBottom: 12,
         }}
       >
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          aria-label="Calendário"
-          role="img"
-        >
-          <rect x="3" y="5" width="18" height="16" rx="2" />
-          <path d="M3 9h18M8 3v4M16 3v4" strokeLinecap="round" />
-        </svg>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 9,
+              flexWrap: "wrap",
+              marginBottom: 5,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 14.5,
+                fontWeight: 600,
+                color: "#0a0a0a",
+                letterSpacing: -0.2,
+              }}
+            >
+              {jobTitle} · {companyName}
+            </span>
+            {isSent && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontFamily: MONO,
+                  fontSize: 8.5,
+                  fontWeight: 600,
+                  letterSpacing: 0.6,
+                  color: "#244a00",
+                  background: "rgba(198,255,58,0.6)",
+                  border: "1px solid rgba(110,150,20,0.4)",
+                  borderRadius: 4,
+                  padding: "2px 7px",
+                }}
+              >
+                <svg
+                  width="9"
+                  height="9"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <rect x="3" y="11" width="18" height="10" rx="2" />
+                  <path d="M7 11V8a5 5 0 0 1 10 0v3" />
+                </svg>
+                CV ENVIADO
+              </span>
+            )}
+            {!isSent && isBest && (
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 8.5,
+                  fontWeight: 600,
+                  letterSpacing: 0.6,
+                  color: "#3a5008",
+                  background: "rgba(198,255,58,0.45)",
+                  border: "1px solid rgba(110,150,20,0.28)",
+                  borderRadius: 4,
+                  padding: "2px 6px",
+                }}
+              >
+                MELHOR SCORE
+              </span>
+            )}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              flexWrap: "wrap",
+              fontSize: 11.5,
+              color: "#8a8a85",
+            }}
+          >
+            <span>
+              {new Date(adaptation.createdAt).toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })}
+            </span>
+            {adaptation.adaptedResumeId && (
+              <>
+                <span style={{ color: "#c8c6bd" }}>·</span>
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 11,
+                    color: "#6a6560",
+                  }}
+                >
+                  {adaptation.adaptedResumeId.slice(0, 8)}
+                </span>
+              </>
+            )}
+            <span style={{ color: "#c8c6bd" }}>·</span>
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 11,
+                color: "#b0aea6",
+                letterSpacing: 0.3,
+              }}
+            >
+              {adaptation.id.slice(0, 8)}
+            </span>
+          </div>
+        </div>
+
+        {/* Score box */}
+        {score !== null && (
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div
+              style={{
+                fontSize: 25,
+                fontWeight: 600,
+                letterSpacing: -1,
+                lineHeight: 1,
+                color: "#2a6a10",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {score}
+              <span style={{ fontSize: 14, marginLeft: 1, fontWeight: 500 }}>
+                %
+              </span>
+            </div>
+            {delta !== null && (
+              <div
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  color: "#5a8a2a",
+                  marginTop: 3,
+                }}
+              >
+                +{delta}% após ajustes
+              </div>
+            )}
+          </div>
+        )}
       </div>
-      <div style={{ flex: 1 }}>
+
+      {/* Action buttons */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 7,
+          flexWrap: "wrap",
+        }}
+      >
+        <a
+          href={`/adaptar/resultado?adaptationId=${adaptation.id}`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            background: "rgba(255,255,255,0.9)",
+            color: "#3a3a36",
+            border: "1px solid rgba(10,10,10,0.12)",
+            borderRadius: 7,
+            padding: "6px 10px",
+            fontSize: 12,
+            fontWeight: 500,
+            textDecoration: "none",
+            fontFamily: GEIST,
+          }}
+        >
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          Rever análise
+        </a>
+
+        {isProcessing ? (
+          <span
+            style={{
+              background: "#F2F2F2",
+              borderRadius: 7,
+              padding: "6px 10px",
+              fontSize: 12,
+              fontWeight: 500,
+              color: "#666",
+              fontFamily: GEIST,
+            }}
+          >
+            Processando...
+          </span>
+        ) : isUnlocked ? (
+          <>
+            <button
+              type="button"
+              onClick={() => void handleDownload("pdf")}
+              disabled={downloading !== null}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                background: "rgba(255,255,255,0.9)",
+                color: "#3a3a36",
+                border: "1px solid rgba(10,10,10,0.12)",
+                borderRadius: 7,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: downloading ? "not-allowed" : "pointer",
+                fontFamily: GEIST,
+              }}
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M12 3v12" />
+                <path d="m7 10 5 5 5-5" />
+                <path d="M5 21h14" />
+              </svg>
+              PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDownload("docx")}
+              disabled={downloading !== null}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                background: "rgba(255,255,255,0.9)",
+                color: "#3a3a36",
+                border: "1px solid rgba(10,10,10,0.12)",
+                borderRadius: 7,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: downloading ? "not-allowed" : "pointer",
+                fontFamily: GEIST,
+              }}
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M12 3v12" />
+                <path d="m7 10 5 5 5-5" />
+                <path d="M5 21h14" />
+              </svg>
+              DOCX
+            </button>
+          </>
+        ) : hasCredits === false ? (
+          <a
+            href={plansHref}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              background: "#0a0a0a",
+              color: "#fafaf6",
+              border: "none",
+              borderRadius: 7,
+              padding: "6px 10px",
+              fontSize: 12,
+              fontWeight: 600,
+              textDecoration: "none",
+              fontFamily: GEIST,
+            }}
+          >
+            Liberar CV · Ver planos
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void handleRedeem()}
+            disabled={redeeming}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              background: "#0a0a0a",
+              color: "#fafaf6",
+              border: "none",
+              borderRadius: 7,
+              padding: "6px 10px",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: redeeming ? "not-allowed" : "pointer",
+              fontFamily: GEIST,
+            }}
+          >
+            {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
+          </button>
+        )}
+      </div>
+      {redeemError && (
+        <p
+          style={{
+            margin: "8px 0 0",
+            fontSize: 11.5,
+            color: "#991b1b",
+            fontFamily: GEIST,
+          }}
+        >
+          {redeemError}
+        </p>
+      )}
+      <DownloadProgressOverlay
+        open={downloadStage !== null}
+        stage={downloadStage}
+        format={downloading}
+      />
+    </div>
+  );
+}
+
+function AnalisesSection({
+  application,
+}: {
+  application: JobApplicationDetailDto;
+}) {
+  const adaptations = application.cvAdaptations;
+
+  return (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: 6,
+        }}
+      >
         <div
           style={{
             fontFamily: MONO,
             fontSize: 10,
             letterSpacing: 1.2,
-            color: "#7a5a04",
+            color: "#8a8a85",
             fontWeight: 500,
-            marginBottom: 4,
           }}
         >
-          ENTREVISTA AGENDADA
+          ANÁLISES DESTA CANDIDATURA
         </div>
         <div
-          style={{
-            fontSize: 15.5,
-            fontWeight: 600,
-            color: "#0a0a0a",
-            letterSpacing: -0.2,
-            marginBottom: 4,
-          }}
+          style={{ fontFamily: MONO, fontSize: 10, color: "#a8a6a0" }}
         >
-          {dateStr} · {timeStr}
-        </div>
-        <div style={{ fontSize: 12.5, color: "#5a5a55", lineHeight: 1.5 }}>
-          Prepare-se com IA usando a vaga, sua análise e seu CV adaptado.
+          {adaptations.length} {adaptations.length === 1 ? "análise" : "análises"} · mesma vaga
         </div>
       </div>
-      <button
-        type="button"
-        onClick={onPrepClick}
+
+      <div
         style={{
-          background: "#c6ff3a",
-          color: "#0a0a0a",
-          border: "1px solid rgba(110,150,20,0.35)",
-          borderRadius: 10,
-          padding: "11px 16px",
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: "pointer",
-          fontFamily: GEIST,
-          boxShadow: "0 6px 14px rgba(198,255,58,0.2)",
-          flexShrink: 0,
-          whiteSpace: "nowrap",
+          background: "rgba(255,255,255,0.55)",
+          border: "1px solid rgba(10,10,10,0.07)",
+          borderRadius: 12,
+          padding: "2px 18px",
         }}
       >
-        Preparar com IA →
-      </button>
+        {adaptations.length === 0 ? (
+          <div
+            style={{
+              padding: "24px 0",
+              textAlign: "center",
+              color: "#8a8a85",
+              fontSize: 13,
+              fontFamily: GEIST,
+            }}
+          >
+            Nenhuma análise registrada ainda.
+          </div>
+        ) : (
+          adaptations.map((a, idx) => {
+            const isCurrent = a.id === application.currentCvAdaptationId;
+            const isBest = a.id === application.bestCvAdaptationId;
+            const isSent = isBest && application.appliedAt !== null;
+            const isLast = idx === adaptations.length - 1;
+            return (
+              <AnaliseRow
+                key={a.id}
+                adaptation={a}
+                applicationId={application.id}
+                isCurrent={isCurrent}
+                isBest={isBest}
+                isSent={isSent}
+                scoreAfter={application.scoreAfter}
+                scoreBefore={application.scoreBefore}
+                isLast={isLast}
+                companyName={application.companyName}
+                jobTitle={application.jobTitle}
+              />
+            );
+          })
+        )}
+
+        {/* Nova análise button */}
+        <a
+          href={`/adaptar`}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 7,
+            width: "100%",
+            padding: "15px 0 13px",
+            border: "none",
+            background: "transparent",
+            color: "#3a5008",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: GEIST,
+            textDecoration: "none",
+            boxSizing: "border-box",
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Fazer nova análise desta vaga
+        </a>
+      </div>
     </div>
   );
 }
 
-function Timeline({
-  events,
-  scoreBefore,
-  scoreAfter,
-}: {
-  events: JobApplicationEvent[];
-  scoreBefore: number | null;
-  scoreAfter: number | null;
-}) {
-  if (events.length === 0) return null;
-
-  function getEventBody(event: JobApplicationEvent): React.ReactNode {
-    switch (event.eventType) {
-      case "APPLICATION_CREATED":
-        return "Candidatura criada automaticamente.";
-      case "ANALYSIS_COMPLETED":
-        return scoreBefore !== null ? (
-          <>
-            Análise concluída. Score inicial <strong>{scoreBefore}%</strong>.
-          </>
-        ) : (
-          "Análise da vaga concluída."
-        );
-      case "CV_READY":
-        if (scoreAfter !== null && scoreBefore !== null) {
-          return (
-            <>
-              CV adaptado gerado. Score subiu para{" "}
-              <strong>{scoreAfter}%</strong> (+
-              {scoreAfter - scoreBefore} pontos).
-            </>
-          );
-        }
-        if (scoreAfter !== null) {
-          return (
-            <>
-              CV adaptado gerado. Score: <strong>{scoreAfter}%</strong>.
-            </>
-          );
-        }
-        return "CV adaptado gerado.";
-      case "STATUS_CHANGED":
-        return event.newStatus ? (
-          <>
-            Status atualizado para{" "}
-            <strong>{getStatusConfig(event.newStatus).label}</strong>.
-          </>
-        ) : (
-          "Status atualizado."
-        );
-      case "MARKED_AS_SENT":
-        return "Você marcou como enviada.";
-      case "NOTE_ADDED":
-        return "Nota adicionada.";
-      case "INTERVIEW_PREP_GENERATED":
-        return "Preparação para entrevista gerada com IA.";
-      default:
-        return event.eventType;
-    }
-  }
-
-  return (
-    <SectionCard
-      title="HISTÓRICO"
-      right={
-        <span style={{ fontFamily: MONO, fontSize: 10.5, color: "#8a8a85" }}>
-          {events.length} eventos
-        </span>
-      }
-    >
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        {events.map((event, idx) => {
-          const isLast = idx === events.length - 1;
-          const isAccent =
-            event.eventType === "CV_READY" ||
-            event.eventType === "ANALYSIS_COMPLETED";
-          return (
-            <div
-              key={event.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "110px 18px 1fr",
-                gap: 12,
-                alignItems: "flex-start",
-                paddingBottom: isLast ? 0 : 14,
-                position: "relative",
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 11,
-                  color: "#8a8a85",
-                  letterSpacing: 0.3,
-                  paddingTop: 1,
-                }}
-              >
-                {formatDateTime(event.createdAt)}
-              </div>
-
-              <div style={{ position: "relative", alignSelf: "stretch" }}>
-                {!isLast && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 7,
-                      top: 16,
-                      bottom: -14,
-                      width: 1,
-                      background: "rgba(10,10,10,0.08)",
-                    }}
-                  />
-                )}
-                <div
-                  style={{
-                    position: "relative",
-                    width: 15,
-                    height: 15,
-                    borderRadius: "50%",
-                    background: isAccent ? "#c6ff3a" : "#fff",
-                    border: isAccent
-                      ? "1px solid rgba(110,150,20,0.4)"
-                      : "1px solid rgba(10,10,10,0.18)",
-                    boxShadow: isAccent
-                      ? "0 0 0 3px rgba(198,255,58,0.18)"
-                      : "0 0 0 3px #fafaf6",
-                  }}
-                />
-              </div>
-
-              <div style={{ flex: 1 }}>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 13.5,
-                    color: "#0a0a0a",
-                    lineHeight: 1.5,
-                    marginBottom: 3,
-                    fontFamily: GEIST,
-                  }}
-                >
-                  {getEventBody(event)}
-                </p>
-                <span
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 10,
-                    letterSpacing: 0.5,
-                    color: "#8a8a85",
-                  }}
-                >
-                  {event.eventType.toLowerCase().replace(/_/g, ".")}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </SectionCard>
-  );
-}
-
-function ScoreSection({
-  scoreBefore,
-  scoreAfter,
-  currentCvAdaptationId,
-}: {
-  scoreBefore: number | null;
-  scoreAfter: number | null;
-  currentCvAdaptationId: string | null;
-}) {
-  if (scoreBefore === null && scoreAfter === null) return null;
-
-  const rightLink = currentCvAdaptationId ? (
-    <Link
-      href={`/adaptar/resultado?adaptationId=${currentCvAdaptationId}`}
-      style={{
-        fontFamily: MONO,
-        fontSize: 11,
-        color: "#0a0a0a",
-        textDecoration: "underline",
-        textUnderlineOffset: 3,
-      }}
-    >
-      Ver análise completa ↗
-    </Link>
-  ) : undefined;
-
-  return (
-    <SectionCard title="RESUMO DA ANÁLISE" right={rightLink}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "100px 22px 100px 1fr",
-          gap: 14,
-          alignItems: "stretch",
-        }}
-      >
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid rgba(10,10,10,0.08)",
-            borderRadius: 10,
-            padding: "12px",
-            textAlign: "center",
-          }}
-        >
-          <div
-            style={{
-              fontFamily: MONO,
-              fontSize: 9.5,
-              letterSpacing: 1,
-              color: "#8a8a85",
-              fontWeight: 500,
-              marginBottom: 6,
-            }}
-          >
-            ANTES
-          </div>
-          <div
-            style={{
-              fontSize: 34,
-              fontWeight: 400,
-              letterSpacing: -1.4,
-              lineHeight: 1,
-              color: "#a8a6a0",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {scoreBefore ?? "—"}
-            {scoreBefore !== null && <span style={{ fontSize: 18 }}>%</span>}
-          </div>
-        </div>
-        <div
-          style={{
-            fontSize: 16,
-            color: "#c0beb4",
-            alignSelf: "center",
-            textAlign: "center",
-          }}
-        >
-          →
-        </div>
-        <div
-          style={{
-            background: "rgba(198,255,58,0.18)",
-            border: "1px solid rgba(110,150,20,0.25)",
-            borderRadius: 10,
-            padding: "12px",
-            textAlign: "center",
-          }}
-        >
-          <div
-            style={{
-              fontFamily: MONO,
-              fontSize: 9.5,
-              letterSpacing: 1,
-              color: "#405410",
-              fontWeight: 500,
-              marginBottom: 6,
-            }}
-          >
-            DEPOIS
-          </div>
-          <div
-            style={{
-              fontSize: 34,
-              fontWeight: 500,
-              letterSpacing: -1.4,
-              lineHeight: 1,
-              color: "#2a6a10",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {scoreAfter ?? "—"}
-            {scoreAfter !== null && <span style={{ fontSize: 18 }}>%</span>}
-          </div>
-        </div>
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid rgba(10,10,10,0.06)",
-            borderRadius: 10,
-            padding: "11px 13px",
-          }}
-        >
-          <div
-            style={{
-              fontFamily: MONO,
-              fontSize: 9.5,
-              letterSpacing: 1,
-              color: "#8a8a85",
-              fontWeight: 500,
-              marginBottom: 5,
-            }}
-          >
-            O QUE MUDOU
-          </div>
-          <div style={{ fontSize: 12.5, lineHeight: 1.55, color: "#2a2a28" }}>
-            {scoreAfter !== null && scoreBefore !== null
-              ? `+${scoreAfter - scoreBefore} pontos de compatibilidade após adaptação do CV.`
-              : "Score disponível após análise e adaptação do CV."}
-          </div>
-        </div>
-      </div>
-    </SectionCard>
-  );
-}
+// ─── Notes ───────────────────────────────────────────────────────
 
 function NotesSection({
   applicationId,
@@ -634,10 +1239,27 @@ function NotesSection({
   }
 
   return (
-    <SectionCard
-      title="NOTAS"
-      right={
-        editing ? (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: 6,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            letterSpacing: 1.2,
+            color: "#8a8a85",
+            fontWeight: 500,
+          }}
+        >
+          NOTAS
+        </div>
+        {editing ? (
           <button
             type="button"
             onClick={() => {
@@ -647,7 +1269,7 @@ function NotesSection({
             }}
             style={{
               fontFamily: MONO,
-              fontSize: 11,
+              fontSize: 10,
               color: "#8a8a85",
               background: "none",
               border: "none",
@@ -663,475 +1285,388 @@ function NotesSection({
             onClick={() => setEditing(true)}
             style={{
               fontFamily: MONO,
-              fontSize: 11,
-              color: "#0a0a0a",
+              fontSize: 10,
+              color: "#3a5008",
               background: "none",
               border: "none",
               cursor: "pointer",
               padding: 0,
-              textDecoration: "underline",
-              textUnderlineOffset: 3,
             }}
           >
-            {currentNotes ? "Editar nota" : "+ Adicionar nota"}
+            {currentNotes ? "Editar nota" : "+ Adicionar"}
           </button>
-        )
-      }
-    >
-      {editing ? (
-        <div>
-          <label htmlFor={textareaId} style={{ display: "none" }}>
-            Notas da candidatura
-          </label>
-          <textarea
-            id={textareaId}
-            value={note}
-            onChange={(e) => {
-              setNote(e.target.value);
-              setError(null);
-              setSaved(false);
-            }}
-            placeholder="Anotações sobre a vaga, contatos, próximos passos..."
-            rows={4}
-            style={{
-              ...inputStyle,
-              resize: "vertical",
-              minHeight: 90,
-              lineHeight: 1.55,
-              marginBottom: 10,
-            }}
-          />
-          {error && (
-            <p
-              style={{
-                margin: "0 0 10px",
-                fontSize: 12,
-                color: "#991b1b",
-                background: "#fee2e2",
-                padding: "7px 10px",
-                borderRadius: 7,
+        )}
+      </div>
+
+      <div
+        style={{
+          background: "rgba(255,255,255,0.55)",
+          border: "1px solid rgba(10,10,10,0.07)",
+          borderRadius: 12,
+          padding: "4px 18px",
+        }}
+      >
+        {editing ? (
+          <div style={{ padding: "14px 0" }}>
+            <label htmlFor={textareaId} style={{ display: "none" }}>
+              Notas da candidatura
+            </label>
+            <textarea
+              id={textareaId}
+              value={note}
+              onChange={(e) => {
+                setNote(e.target.value);
+                setError(null);
+                setSaved(false);
               }}
-            >
-              {error}
-            </p>
-          )}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              gap: 10,
-            }}
-          >
-            {saved && (
-              <span
+              placeholder="Anotações sobre a vaga, contatos, próximos passos..."
+              rows={3}
+              style={{
+                ...inputStyle,
+                resize: "vertical",
+                minHeight: 72,
+                lineHeight: 1.55,
+                marginBottom: 8,
+              }}
+            />
+            {error && (
+              <p
                 style={{
+                  margin: "0 0 8px",
                   fontSize: 12,
-                  color: "#405410",
-                  fontFamily: MONO,
-                  letterSpacing: "0.5px",
+                  color: "#991b1b",
+                  background: "#fee2e2",
+                  padding: "6px 10px",
+                  borderRadius: 7,
                 }}
               >
-                ✔ Salvo
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={!note.trim() || !isDirty || pending}
-              style={{
-                padding: "8px 16px",
-                borderRadius: 10,
-                border: "none",
-                background:
-                  note.trim() && isDirty && !pending
-                    ? "#0a0a0a"
-                    : "rgba(10,10,10,0.08)",
-                color:
-                  note.trim() && isDirty && !pending ? "#fafaf6" : "#8a8a85",
-                fontSize: 12.5,
-                fontWeight: 500,
-                cursor:
-                  note.trim() && isDirty && !pending
-                    ? "pointer"
-                    : "not-allowed",
-                fontFamily: GEIST,
-                transition: "all 140ms ease",
-              }}
-            >
-              {pending ? "Salvando…" : "Salvar nota"}
-            </button>
-          </div>
-        </div>
-      ) : currentNotes ? (
-        <div>
-          <div
-            style={{
-              padding: "12px 0",
-              borderBottom: "1px dashed rgba(10,10,10,0.08)",
-            }}
-          >
-            {lastNoteEvent && (
-              <div
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  color: "#8a8a85",
-                  letterSpacing: 0.3,
-                  marginBottom: 4,
-                }}
-              >
-                {formatDateTime(lastNoteEvent.createdAt)}
-              </div>
+                {error}
+              </p>
             )}
             <div
               style={{
-                fontSize: 13,
-                color: "#2a2a28",
-                lineHeight: 1.55,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                gap: 10,
               }}
             >
-              {currentNotes}
+              {saved && (
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: "#405410",
+                    fontFamily: MONO,
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  ✔ Salvo
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={!note.trim() || !isDirty || pending}
+                style={{
+                  padding: "7px 14px",
+                  borderRadius: 8,
+                  border: "none",
+                  background:
+                    note.trim() && isDirty && !pending
+                      ? "#0a0a0a"
+                      : "rgba(10,10,10,0.08)",
+                  color:
+                    note.trim() && isDirty && !pending ? "#fafaf6" : "#8a8a85",
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  cursor:
+                    note.trim() && isDirty && !pending
+                      ? "pointer"
+                      : "not-allowed",
+                  fontFamily: GEIST,
+                  transition: "all 140ms ease",
+                }}
+              >
+                {pending ? "Salvando…" : "Salvar nota"}
+              </button>
             </div>
           </div>
-        </div>
-      ) : (
-        <p
-          style={{
-            margin: 0,
-            fontSize: 13,
-            color: "#8a8a85",
-            fontFamily: GEIST,
-            lineHeight: 1.5,
-          }}
-        >
-          Nenhuma nota adicionada ainda.
-        </p>
-      )}
-    </SectionCard>
-  );
-}
-
-// ---- Sidebar ----
-
-function ProximaAcaoCard({
-  applicationId,
-  status,
-  jobUrl,
-  showStatusEdit,
-  onSetShowStatusEdit,
-  onPrepClick,
-  onUpdated,
-}: {
-  applicationId: string;
-  status: JobApplicationStatus;
-  jobUrl: string | null;
-  showStatusEdit: boolean;
-  onSetShowStatusEdit: (v: boolean) => void;
-  onPrepClick: () => void;
-  onUpdated: () => void;
-}) {
-  const [selected, setSelected] = useState<JobApplicationStatus>(status);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const selectId = useId();
-
-  useEffect(() => {
-    setSelected(status);
-  }, [status]);
-
-  const isDirty = selected !== status;
-  const isGreen = status === "INTERVIEW" || status === "OFFER";
-  const isDone =
-    status === "HIRED" || status === "REJECTED" || status === "WITHDRAWN";
-  const showOpenJob =
-    jobUrl &&
-    (status === "SAVED" || status === "ANALYZED" || status === "CV_READY");
-  const showDarkCta =
-    status === "APPLIED" || status === "IN_PROCESS" || status === "ASSESSMENT";
-
-  function handleSave() {
-    if (!isDirty || pending) return;
-    startTransition(async () => {
-      try {
-        await updateJobApplicationStatus(applicationId, selected);
-        onSetShowStatusEdit(false);
-        onUpdated();
-      } catch {
-        setError("Falha ao atualizar. Tente novamente.");
-      }
-    });
-  }
-
-  return (
-    <div style={{ ...CARD, padding: "18px 20px" }}>
-      <p
-        style={{
-          margin: "0 0 12px",
-          fontFamily: MONO,
-          fontSize: 10,
-          letterSpacing: 1.2,
-          color: "#8a8a85",
-          fontWeight: 500,
-        }}
-      >
-        PRÓXIMA AÇÃO
-      </p>
-      <div style={{ marginBottom: 12 }}>
-        <StatusBadge status={status} />
-      </div>
-      <p
-        style={{
-          margin: "0 0 14px",
-          fontSize: 13,
-          color: "#5a5a55",
-          lineHeight: 1.55,
-          fontFamily: GEIST,
-        }}
-      >
-        {NEXT_ACTION_BODY[status]}
-      </p>
-
-      {!isDone && (
-        <>
-          {isGreen && (
-            <button
-              type="button"
-              onClick={onPrepClick}
-              style={{
-                width: "100%",
-                background: "#c6ff3a",
-                color: "#0a0a0a",
-                border: "1px solid rgba(110,150,20,0.35)",
-                borderRadius: 10,
-                padding: "12px 14px",
-                fontSize: 13.5,
-                fontWeight: 600,
-                cursor: "pointer",
-                fontFamily: GEIST,
-                boxShadow: "0 6px 14px rgba(198,255,58,0.2)",
-                marginBottom: 10,
-              }}
-            >
-              Preparar entrevista →
-            </button>
-          )}
-          {showDarkCta && (
-            <button
-              type="button"
-              onClick={() => onSetShowStatusEdit(!showStatusEdit)}
-              style={{
-                width: "100%",
-                background: "#0a0a0a",
-                color: "#fff",
-                border: "none",
-                borderRadius: 10,
-                padding: "11px 14px",
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: "pointer",
-                fontFamily: GEIST,
-                marginBottom: 10,
-              }}
-            >
-              Atualizar status
-            </button>
-          )}
-          {showOpenJob && (
-            <a
-              href={jobUrl as string}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: "block",
-                textAlign: "center",
-                padding: "11px 14px",
-                borderRadius: 10,
-                border: "1px solid rgba(10,10,10,0.15)",
-                background: "#fff",
-                color: "#0a0a0a",
-                fontSize: 13,
-                fontWeight: 500,
-                textDecoration: "none",
-                fontFamily: GEIST,
-                marginBottom: 10,
-              }}
-            >
-              Abrir vaga ↗
-            </a>
-          )}
-        </>
-      )}
-
-      <div style={{ textAlign: "center" }}>
-        <button
-          type="button"
-          onClick={() => onSetShowStatusEdit(!showStatusEdit)}
-          style={{
-            fontFamily: MONO,
-            fontSize: 10.5,
-            color: "#5a5a55",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            padding: 0,
-          }}
-        >
-          Mudar status ▾
-        </button>
-      </div>
-
-      {showStatusEdit && (
-        <div
-          style={{
-            marginTop: 14,
-            paddingTop: 14,
-            borderTop: "1px solid rgba(10,10,10,0.06)",
-          }}
-        >
-          <label htmlFor={selectId} style={{ display: "none" }}>
-            Status da candidatura
-          </label>
-          <select
-            id={selectId}
-            value={selected}
-            onChange={(e) => {
-              setSelected(e.target.value as JobApplicationStatus);
-              setError(null);
-            }}
-            style={{ ...inputStyle, marginBottom: 10, cursor: "pointer" }}
-          >
-            {ALL_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {getStatusConfig(s).label}
-              </option>
-            ))}
-          </select>
-          {error && (
-            <p
-              style={{
-                margin: "0 0 10px",
-                fontSize: 12,
-                color: "#991b1b",
-                background: "#fee2e2",
-                padding: "7px 10px",
-                borderRadius: 7,
-              }}
-            >
-              {error}
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!isDirty || pending}
+        ) : currentNotes ? (
+          <div>
+            <div style={{ padding: "12px 0" }}>
+              {lastNoteEvent && (
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#8a8a85",
+                    letterSpacing: 0.3,
+                    marginBottom: 4,
+                  }}
+                >
+                  {new Date(lastNoteEvent.createdAt).toLocaleDateString(
+                    "pt-BR",
+                    {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    },
+                  )}
+                </div>
+              )}
+              <div
+                style={{
+                  fontSize: 12.5,
+                  color: "#2a2a28",
+                  lineHeight: 1.55,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
+              >
+                {currentNotes}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p
             style={{
-              width: "100%",
-              padding: "10px 0",
-              borderRadius: 10,
-              border: "none",
-              background:
-                isDirty && !pending ? "#0a0a0a" : "rgba(10,10,10,0.08)",
-              color: isDirty && !pending ? "#fafaf6" : "#8a8a85",
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: isDirty && !pending ? "pointer" : "not-allowed",
+              margin: 0,
+              padding: "14px 0",
+              fontSize: 12.5,
+              color: "#8a8a85",
               fontFamily: GEIST,
-              transition: "all 140ms ease",
+              lineHeight: 1.5,
             }}
           >
-            {pending ? "Salvando…" : "Salvar status"}
-          </button>
-        </div>
-      )}
+            Nenhuma nota adicionada ainda.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
 
-function CvAdaptadoCard({
-  applicationId,
-  cvAdaptations,
-  currentCvAdaptationId,
-  bestCvAdaptationId,
-  companyName,
-  jobTitle,
+// ─── Timeline (registro de eventos) ──────────────────────────────
+
+function Timeline({
+  events,
+  scoreBefore,
   scoreAfter,
 }: {
-  applicationId: string;
-  cvAdaptations: JobApplicationDetailDto["cvAdaptations"];
-  currentCvAdaptationId: string | null;
-  bestCvAdaptationId: string | null;
-  companyName: string;
-  jobTitle: string;
+  events: JobApplicationEvent[];
+  scoreBefore: number | null;
   scoreAfter: number | null;
 }) {
-  const router = useRouter();
-  const latest = cvAdaptations[0] ?? null;
-  const cvName = `CV-${companyName.replace(/\s+/g, "-")}-${jobTitle.replace(/\s+/g, "-")}.pdf`;
-  const [hasCredits, setHasCredits] = useState<boolean | null>(null);
-  const [redeeming, setRedeeming] = useState(false);
-  const [redeemError, setRedeemError] = useState<string | null>(null);
-  const [wasUnlockedInSession, setWasUnlockedInSession] = useState(false);
+  if (events.length === 0) return null;
+
+  function getEventBody(event: JobApplicationEvent): React.ReactNode {
+    switch (event.eventType) {
+      case "APPLICATION_CREATED":
+        return "Candidatura criada automaticamente.";
+      case "ANALYSIS_COMPLETED":
+        return scoreBefore !== null ? (
+          <>
+            Análise concluída. Score inicial <strong>{scoreBefore}%</strong>.
+          </>
+        ) : (
+          "Análise da vaga concluída."
+        );
+      case "CV_READY":
+        if (scoreAfter !== null && scoreBefore !== null) {
+          return (
+            <>
+              CV adaptado gerado. Score subiu para{" "}
+              <strong>{scoreAfter}%</strong> (+{scoreAfter - scoreBefore}{" "}
+              pontos).
+            </>
+          );
+        }
+        if (scoreAfter !== null) {
+          return (
+            <>
+              CV adaptado gerado. Score: <strong>{scoreAfter}%</strong>.
+            </>
+          );
+        }
+        return "CV adaptado gerado.";
+      case "STATUS_CHANGED":
+        return event.newStatus ? (
+          <>
+            Status atualizado para{" "}
+            <strong>{getStatusConfig(event.newStatus).label}</strong>.
+          </>
+        ) : (
+          "Status atualizado."
+        );
+      case "MARKED_AS_SENT":
+        return "Você marcou como enviada.";
+      case "NOTE_ADDED":
+        return "Nota adicionada.";
+      case "INTERVIEW_PREP_GENERATED":
+        return "Preparação para entrevista gerada com IA.";
+      default:
+        return event.eventType;
+    }
+  }
+
+  return (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: 6,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            letterSpacing: 1.2,
+            color: "#8a8a85",
+            fontWeight: 500,
+          }}
+        >
+          REGISTRO DE EVENTOS
+        </div>
+        <span style={{ fontFamily: MONO, fontSize: 10, color: "#a8a6a0" }}>
+          {events.length} {events.length === 1 ? "evento" : "eventos"}
+        </span>
+      </div>
+
+      <div
+        style={{
+          background: "rgba(255,255,255,0.55)",
+          border: "1px solid rgba(10,10,10,0.07)",
+          borderRadius: 12,
+          padding: "16px 16px",
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {events.map((event, idx) => {
+            const isLast = idx === events.length - 1;
+            const isAccent =
+              event.eventType === "CV_READY" ||
+              event.eventType === "ANALYSIS_COMPLETED";
+            return (
+              <div
+                key={event.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "90px 16px 1fr",
+                  gap: 10,
+                  alignItems: "flex-start",
+                  paddingBottom: isLast ? 0 : 12,
+                  position: "relative",
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    color: "#8a8a85",
+                    letterSpacing: 0.3,
+                    paddingTop: 1,
+                  }}
+                >
+                  {new Date(event.createdAt).toLocaleDateString("pt-BR", {
+                    day: "2-digit",
+                    month: "short",
+                  })}
+                </div>
+
+                <div style={{ position: "relative", alignSelf: "stretch" }}>
+                  {!isLast && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 6,
+                        top: 14,
+                        bottom: -12,
+                        width: 1,
+                        background: "rgba(10,10,10,0.08)",
+                      }}
+                    />
+                  )}
+                  <div
+                    style={{
+                      position: "relative",
+                      width: 13,
+                      height: 13,
+                      borderRadius: "50%",
+                      background: isAccent ? "#c6ff3a" : "#fff",
+                      border: isAccent
+                        ? "1px solid rgba(110,150,20,0.4)"
+                        : "1px solid rgba(10,10,10,0.18)",
+                      boxShadow: isAccent
+                        ? "0 0 0 3px rgba(198,255,58,0.18)"
+                        : "0 0 0 2px rgba(255,255,255,0.55)",
+                    }}
+                  />
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 12.5,
+                      color: "#0a0a0a",
+                      lineHeight: 1.5,
+                      marginBottom: 2,
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    {getEventBody(event)}
+                  </p>
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 9.5,
+                      letterSpacing: 0.5,
+                      color: "#8a8a85",
+                    }}
+                  >
+                    {event.eventType.toLowerCase().replace(/_/g, ".")}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CV card (sidebar) ────────────────────────────────────────────
+
+function CvCard({
+  application,
+}: {
+  application: JobApplicationDetailDto;
+}) {
+  const latest = application.cvAdaptations[0] ?? null;
+  const isSent = application.appliedAt !== null;
+  const cvName = `CV-${application.companyName.replace(/\s+/g, "-")}-${application.jobTitle.replace(/\s+/g, "-")}.pdf`;
   const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
   const [downloadStage, setDownloadStage] =
     useState<DownloadProgressStage | null>(null);
-  const [splittingId, setSplittingId] = useState<string | null>(null);
-  const [splitError, setSplitError] = useState<string | null>(null);
 
-  const plansHref = buildCvUnlockPlansHref({
-    adaptationId: latest?.id,
-    source: "dashboard-candidatura-unlock",
-    nextPath: `/candidaturas/${applicationId}`,
-  });
+  if (!latest) return null;
 
-  useEffect(() => {
-    let mounted = true;
-
-    const loadCredits = async () => {
-      if (!latest) return;
-      try {
-        const response = await fetch("/api/plans/me", { cache: "no-store" });
-        if (!response.ok) return;
-        const plan = (await response.json()) as {
-          creditsRemaining?: number | null;
-        };
-        if (!mounted) return;
-        if (
-          plan.creditsRemaining === null ||
-          plan.creditsRemaining === undefined
-        ) {
-          setHasCredits(true);
-          return;
-        }
-        setHasCredits(plan.creditsRemaining > 0);
-      } catch {
-        if (mounted) {
-          setHasCredits(null);
-        }
-      }
-    };
-
-    void loadCredits();
-    return () => {
-      mounted = false;
-    };
-  }, [latest]);
-
-  const isUnlocked = (latest?.isUnlocked ?? false) || wasUnlockedInSession;
+  const isUnlocked = latest.isUnlocked;
 
   const handleDownload = async (format: "pdf" | "docx") => {
-    if (!latest || !isUnlocked) return;
+    if (downloading) return;
     setDownloading(format);
     setDownloadStage("preparing");
     try {
       await downloadFromApi({
         url: `/api/cv-adaptation/${latest.id}/download?format=${format}`,
-        fallbackFilename: cvName.replace(
-          /\.pdf$/i,
-          format === "pdf" ? ".pdf" : ".docx",
-        ),
+        fallbackFilename: cvName.replace(/\.pdf$/i, format === "pdf" ? ".pdf" : ".docx"),
         onStageChange: setDownloadStage,
       });
     } finally {
@@ -1140,369 +1675,251 @@ function CvAdaptadoCard({
     }
   };
 
-  const handleRedeem = async () => {
-    if (!latest || redeeming) return;
-    setRedeeming(true);
-    setRedeemError(null);
-    try {
-      const response = await fetch(
-        `/api/cv-adaptation/${latest.id}/redeem-credit`,
-        {
-          method: "POST",
-          cache: "no-store",
-        },
-      );
-      if (!response.ok) {
-        let apiMessage =
-          "Nao foi possivel liberar o CV agora. Tente novamente.";
-        try {
-          const body = (await response.json()) as { message?: string };
-          if (typeof body.message === "string" && body.message.trim()) {
-            apiMessage = body.message;
-          }
-        } catch {
-          // no-op
-        }
-        throw new Error(apiMessage);
-      }
-      setWasUnlockedInSession(true);
-      setHasCredits((current) => (current === true ? false : current));
-    } catch (error) {
-      if (error instanceof TypeError) {
-        setRedeemError(
-          "Nao foi possivel conectar ao servidor. Verifique sua internet e tente novamente.",
-        );
-      } else if (error instanceof Error && error.message) {
-        setRedeemError(error.message);
-      } else {
-        setRedeemError("Nao foi possivel liberar o CV agora. Tente novamente.");
-      }
-    } finally {
-      setRedeeming(false);
-    }
-  };
-
-  const handleSplit = async (adaptationId: string) => {
-    if (splittingId) return;
-    const shouldSplit = globalThis.confirm(
-      "Separar esta analise em uma nova candidatura?",
-    );
-    if (!shouldSplit) return;
-    setSplittingId(adaptationId);
-    setSplitError(null);
-    try {
-      const { newApplicationId } = await splitJobApplicationAnalysis(
-        applicationId,
-        adaptationId,
-      );
-      router.refresh();
-      router.push(`/candidaturas/${newApplicationId}`);
-    } catch (error) {
-      if (error instanceof Error && error.message.trim()) {
-        setSplitError(error.message);
-      } else {
-        setSplitError("Nao foi possivel separar a analise agora.");
-      }
-    } finally {
-      setSplittingId(null);
-    }
-  };
-
-  if (!latest) return null;
-
   return (
-    <div style={{ ...CARD, padding: "18px 20px" }}>
-      <p
-        style={{
-          margin: "0 0 12px",
-          fontFamily: MONO,
-          fontSize: 10,
-          letterSpacing: 1.2,
-          color: "#8a8a85",
-          fontWeight: 500,
-        }}
-      >
-        CV ADAPTADO
-      </p>
+    <div>
       <div
         style={{
           display: "flex",
-          alignItems: "center",
-          gap: 12,
-          marginBottom: 12,
-          background: "#fff",
-          border: "1px solid rgba(10,10,10,0.06)",
-          borderRadius: 10,
-          padding: "10px 12px",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: 6,
         }}
       >
         <div
           style={{
-            width: 36,
-            height: 44,
-            background: "#0a0a0a",
-            color: "#c6ff3a",
-            borderRadius: 4,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
             fontFamily: MONO,
             fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: 0.5,
-            flexShrink: 0,
+            letterSpacing: 1.2,
+            color: "#8a8a85",
+            fontWeight: 500,
           }}
         >
-          PDF
+          {isSent ? "CV ENVIADO" : "CV ADAPTADO"}
         </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
+        {isSent && (
           <div
             style={{
-              fontSize: 12.5,
-              fontWeight: 500,
-              color: "#0a0a0a",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              fontFamily: GEIST,
-            }}
-          >
-            {cvName}
-          </div>
-          <div
-            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
               fontFamily: MONO,
               fontSize: 10,
-              color: "#8a8a85",
-              marginTop: 2,
+              color: "#3a5008",
+              letterSpacing: 0.3,
             }}
           >
-            Gerado{" "}
-            {new Date(latest.createdAt).toLocaleDateString("pt-BR", {
-              day: "2-digit",
-              month: "short",
-            })}
-            {scoreAfter !== null && ` · score ${scoreAfter}%`}
+            <svg
+              width="9"
+              height="9"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <rect x="3" y="11" width="18" height="10" rx="2" />
+              <path d="M7 11V8a5 5 0 0 1 10 0v3" />
+            </svg>
+            cravado
           </div>
-        </div>
+        )}
       </div>
+
       <div
         style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          marginBottom: 12,
+          background: isSent
+            ? "linear-gradient(180deg, rgba(198,255,58,0.10) 0%, rgba(255,255,255,0.55) 70%)"
+            : "rgba(255,255,255,0.55)",
+          border: isSent
+            ? "1px solid rgba(110,150,20,0.28)"
+            : "1px solid rgba(10,10,10,0.07)",
+          borderRadius: 12,
+          padding: "14px 16px",
         }}
       >
-        {cvAdaptations.map((adaptation) => {
-          const isCurrent = adaptation.id === currentCvAdaptationId;
-          const isBest = adaptation.id === bestCvAdaptationId;
-
-          return (
+        {/* File preview */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 11,
+            marginBottom: 11,
+            background: "#fff",
+            border: "1px solid rgba(10,10,10,0.06)",
+            borderRadius: 9,
+            padding: "9px 11px",
+          }}
+        >
+          <div
+            style={{
+              width: 32,
+              height: 40,
+              background: "#0a0a0a",
+              color: "#c6ff3a",
+              borderRadius: 4,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: MONO,
+              fontSize: 9.5,
+              fontWeight: 600,
+              letterSpacing: 0.5,
+              flexShrink: 0,
+            }}
+          >
+            PDF
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div
-              key={adaptation.id}
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 10,
-                background: "#fff",
-                border: "1px solid rgba(10,10,10,0.06)",
-                borderRadius: 10,
-                padding: "9px 10px",
+                fontSize: 12,
+                fontWeight: 500,
+                color: "#0a0a0a",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                fontFamily: GEIST,
               }}
             >
-              <div style={{ minWidth: 0 }}>
-                <div
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 10,
-                    color: "#8a8a85",
-                    marginBottom: 3,
-                  }}
-                >
-                  {new Date(adaptation.createdAt).toLocaleDateString("pt-BR", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {isBest && (
-                    <span
-                      style={{
-                        fontSize: 10.5,
-                        fontFamily: MONO,
-                        color: "#3a5008",
-                        border: "1px solid rgba(110,150,20,0.35)",
-                        background: "rgba(198,255,58,0.2)",
-                        borderRadius: 999,
-                        padding: "2px 7px",
-                      }}
-                    >
-                      Melhor versão
-                    </span>
-                  )}
-                  {isCurrent && (
-                    <span
-                      style={{
-                        fontSize: 10.5,
-                        fontFamily: MONO,
-                        color: "#0a0a0a",
-                        border: "1px solid rgba(10,10,10,0.2)",
-                        background: "#f6f6f2",
-                        borderRadius: 999,
-                        padding: "2px 7px",
-                      }}
-                    >
-                      Versão atual
-                    </span>
-                  )}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleSplit(adaptation.id)}
-                disabled={splittingId !== null}
-                style={{
-                  border: "1px solid rgba(10,10,10,0.14)",
-                  borderRadius: 8,
-                  background: "#fff",
-                  color: "#0a0a0a",
-                  padding: "7px 10px",
-                  fontSize: 12,
-                  fontFamily: GEIST,
-                  cursor: splittingId ? "not-allowed" : "pointer",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {splittingId === adaptation.id
-                  ? "Separando..."
-                  : "Separar em nova candidatura"}
-              </button>
+              {cvName}
             </div>
-          );
-        })}
-      </div>
-      {isUnlocked ? (
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            type="button"
-            onClick={() => void handleDownload("pdf")}
-            disabled={downloading !== null}
-            style={{
-              flex: 1,
-              textAlign: "center",
-              padding: "9px 12px",
-              borderRadius: 8,
-              border: "1px solid rgba(10,10,10,0.12)",
-              background: "#fff",
-              color: "#0a0a0a",
-              fontSize: 12.5,
-              fontWeight: 500,
-              textDecoration: "none",
-              fontFamily: GEIST,
-              cursor: downloading ? "not-allowed" : "pointer",
-            }}
-          >
-            Baixar PDF
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleDownload("docx")}
-            disabled={downloading !== null}
-            style={{
-              flex: 1,
-              textAlign: "center",
-              padding: "9px 12px",
-              borderRadius: 8,
-              border: "1px solid rgba(10,10,10,0.12)",
-              background: "#fff",
-              color: "#0a0a0a",
-              fontSize: 12.5,
-              fontWeight: 500,
-              textDecoration: "none",
-              fontFamily: GEIST,
-              cursor: downloading ? "not-allowed" : "pointer",
-            }}
-          >
-            Baixar DOCX
-          </button>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 9.5,
+                color: "#8a8a85",
+                marginTop: 2,
+              }}
+            >
+              {new Date(latest.createdAt).toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "short",
+              })}
+              {application.scoreAfter !== null &&
+                ` · score ${application.scoreAfter}%`}
+            </div>
+          </div>
         </div>
-      ) : hasCredits === false ? (
-        <Link
-          href={plansHref}
-          style={{
-            display: "block",
-            textAlign: "center",
-            padding: "9px 12px",
-            borderRadius: 8,
-            border: "1px solid rgba(10,10,10,0.12)",
-            background: "#fff",
-            color: "#0a0a0a",
-            fontSize: 12.5,
-            fontWeight: 500,
-            textDecoration: "none",
-            fontFamily: GEIST,
-          }}
-        >
-          Liberar CV
-        </Link>
-      ) : (
-        <button
-          type="button"
-          onClick={() => void handleRedeem()}
-          disabled={redeeming}
-          style={{
-            width: "100%",
-            textAlign: "center",
-            padding: "9px 12px",
-            borderRadius: 8,
-            border: "1px solid rgba(10,10,10,0.12)",
-            background: "#fff",
-            color: "#0a0a0a",
-            fontSize: 12.5,
-            fontWeight: 500,
-            textDecoration: "none",
-            fontFamily: GEIST,
-            cursor: redeeming ? "not-allowed" : "pointer",
-          }}
-        >
-          {redeeming ? "Liberando..." : "Liberar CV"}
-        </button>
-      )}
-      {redeemError && (
-        <p
-          style={{
-            margin: "10px 0 0",
-            fontFamily: GEIST,
-            fontSize: 12,
-            color: "#991b1b",
-          }}
-        >
-          {redeemError}
-        </p>
-      )}
-      {splitError && (
-        <p
-          style={{
-            margin: "10px 0 0",
-            fontFamily: GEIST,
-            fontSize: 12,
-            color: "#991b1b",
-          }}
-        >
-          {splitError}
-        </p>
-      )}
-      <DownloadProgressOverlay
-        open={downloadStage !== null}
-        stage={downloadStage}
-        format={downloading}
-      />
+
+        {isSent && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 11,
+              color: "#3a5008",
+              lineHeight: 1.4,
+              marginBottom: 11,
+              fontFamily: GEIST,
+            }}
+          >
+            <svg
+              width="9"
+              height="9"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <rect x="3" y="11" width="18" height="10" rx="2" />
+              <path d="M7 11V8a5 5 0 0 1 10 0v3" />
+            </svg>
+            Cravado no envio ·{" "}
+            {application.appliedAt &&
+              new Date(application.appliedAt).toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "short",
+              })}{" "}
+            · não muda mais.
+          </div>
+        )}
+
+        {isUnlocked ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 8,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => void handleDownload("pdf")}
+              disabled={downloading !== null}
+              style={{
+                background: "#fff",
+                color: "#0a0a0a",
+                border: "1px solid rgba(10,10,10,0.13)",
+                borderRadius: 7,
+                padding: "7px 10px",
+                fontSize: 11.5,
+                fontWeight: 500,
+                cursor: downloading ? "not-allowed" : "pointer",
+                fontFamily: GEIST,
+              }}
+            >
+              Baixar PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDownload("docx")}
+              disabled={downloading !== null}
+              style={{
+                background: "#fff",
+                color: "#0a0a0a",
+                border: "1px solid rgba(10,10,10,0.13)",
+                borderRadius: 7,
+                padding: "7px 10px",
+                fontSize: 11.5,
+                fontWeight: 500,
+                cursor: downloading ? "not-allowed" : "pointer",
+                fontFamily: GEIST,
+              }}
+            >
+              Baixar DOCX
+            </button>
+          </div>
+        ) : (
+          <Link
+            href={buildCvUnlockPlansHref({
+              adaptationId: latest.id,
+              source: "candidatura-cv-unlock",
+              nextPath: `/candidaturas/${application.id}`,
+            })}
+            style={{
+              display: "block",
+              textAlign: "center",
+              padding: "8px 12px",
+              borderRadius: 7,
+              border: "1px solid rgba(10,10,10,0.12)",
+              background: "#fff",
+              color: "#0a0a0a",
+              fontSize: 12,
+              fontWeight: 500,
+              textDecoration: "none",
+              fontFamily: GEIST,
+            }}
+          >
+            Liberar CV
+          </Link>
+        )}
+        <DownloadProgressOverlay
+          open={downloadStage !== null}
+          stage={downloadStage}
+          format={downloading}
+        />
+      </div>
     </div>
   );
 }
+
+// ─── Detalhes card ────────────────────────────────────────────────
 
 function DetalhesCard({
   application,
@@ -1526,14 +1943,14 @@ function DetalhesCard({
                 rel="noopener noreferrer"
                 style={{
                   fontFamily: MONO,
-                  fontSize: 11,
+                  fontSize: 10.5,
                   color: "#0a0a0a",
                   textDecoration: "underline",
                   textUnderlineOffset: 2,
                   wordBreak: "break-all" as const,
                 }}
               >
-                {application.jobUrl.replace(/^https?:\/\//, "").slice(0, 38)}
+                {application.jobUrl.replace(/^https?:\/\//, "").slice(0, 32)}
               </a>
             ),
           },
@@ -1542,14 +1959,30 @@ function DetalhesCard({
     {
       k: "Origem",
       v: (
-        <span style={{ fontFamily: MONO, fontSize: 11, color: "#5a5a55" }}>
+        <span style={{ fontFamily: MONO, fontSize: 10.5, color: "#5a5a55" }}>
           {origin}
         </span>
       ),
     },
-    { k: "Criada", v: formatDate(application.createdAt) },
+    {
+      k: "Criada",
+      v: new Date(application.createdAt).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+    },
     ...(application.appliedAt
-      ? [{ k: "Enviada", v: formatDate(application.appliedAt) }]
+      ? [
+          {
+            k: "Enviada",
+            v: new Date(application.appliedAt).toLocaleDateString("pt-BR", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            }),
+          },
+        ]
       : []),
     ...(application.nextActionAt
       ? [
@@ -1559,18 +1992,12 @@ function DetalhesCard({
               <strong style={{ color: "#0a0a0a" }}>
                 {new Date(application.nextActionAt).toLocaleDateString(
                   "pt-BR",
-                  {
-                    day: "2-digit",
-                    month: "short",
-                  },
+                  { day: "2-digit", month: "short" },
                 )}{" "}
                 ·{" "}
                 {new Date(application.nextActionAt).toLocaleTimeString(
                   "pt-BR",
-                  {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  },
+                  { hour: "2-digit", minute: "2-digit" },
                 )}
               </strong>
             ),
@@ -1580,20 +2007,27 @@ function DetalhesCard({
   ];
 
   return (
-    <div style={{ ...CARD, padding: "18px 20px" }}>
-      <p
+    <div>
+      <div
         style={{
-          margin: "0 0 8px",
           fontFamily: MONO,
           fontSize: 10,
           letterSpacing: 1.2,
           color: "#8a8a85",
           fontWeight: 500,
+          marginBottom: 6,
         }}
       >
         DETALHES
-      </p>
-      <div>
+      </div>
+      <div
+        style={{
+          background: "rgba(255,255,255,0.55)",
+          border: "1px solid rgba(10,10,10,0.07)",
+          borderRadius: 12,
+          padding: "4px 16px",
+        }}
+      >
         {rows.map((row, idx) => (
           <div
             key={row.k}
@@ -1612,7 +2046,7 @@ function DetalhesCard({
             <span
               style={{
                 fontFamily: MONO,
-                fontSize: 10,
+                fontSize: 9.5,
                 color: "#8a8a85",
                 letterSpacing: 0.4,
                 flexShrink: 0,
@@ -1622,7 +2056,7 @@ function DetalhesCard({
             </span>
             <span
               style={{
-                fontSize: 12.5,
+                fontSize: 12,
                 color: "#2a2a28",
                 textAlign: "right",
                 fontFamily: GEIST,
@@ -1636,6 +2070,185 @@ function DetalhesCard({
     </div>
   );
 }
+
+// ─── Status card (próxima ação) ───────────────────────────────────
+
+function StatusCard({
+  applicationId,
+  status,
+  showStatusEdit,
+  onSetShowStatusEdit,
+  onUpdated,
+}: {
+  applicationId: string;
+  status: JobApplicationStatus;
+  showStatusEdit: boolean;
+  onSetShowStatusEdit: (v: boolean) => void;
+  onUpdated: () => void;
+}) {
+  const [selected, setSelected] = useState<JobApplicationStatus>(status);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const selectId = useId();
+
+  useEffect(() => {
+    setSelected(status);
+  }, [status]);
+
+  const isDirty = selected !== status;
+
+  function handleSave() {
+    if (!isDirty || pending) return;
+    startTransition(async () => {
+      try {
+        await updateJobApplicationStatus(applicationId, selected);
+        onSetShowStatusEdit(false);
+        onUpdated();
+      } catch {
+        setError("Falha ao atualizar. Tente novamente.");
+      }
+    });
+  }
+
+  if (!showStatusEdit) return null;
+
+  return (
+    <div
+      style={{
+        background: "rgba(255,255,255,0.55)",
+        border: "1px solid rgba(10,10,10,0.07)",
+        borderRadius: 12,
+        padding: "14px 16px",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 10,
+          letterSpacing: 1.2,
+          color: "#8a8a85",
+          fontWeight: 500,
+          marginBottom: 10,
+        }}
+      >
+        ALTERAR STATUS
+      </div>
+      <label htmlFor={selectId} style={{ display: "none" }}>
+        Status da candidatura
+      </label>
+      <select
+        id={selectId}
+        value={selected}
+        onChange={(e) => {
+          setSelected(e.target.value as JobApplicationStatus);
+          setError(null);
+        }}
+        style={{ ...inputStyle, marginBottom: 10, cursor: "pointer" }}
+      >
+        {ALL_STATUSES.map((s) => (
+          <option key={s} value={s}>
+            {getStatusConfig(s).label}
+          </option>
+        ))}
+      </select>
+      {error && (
+        <p
+          style={{
+            margin: "0 0 10px",
+            fontSize: 12,
+            color: "#991b1b",
+            background: "#fee2e2",
+            padding: "7px 10px",
+            borderRadius: 7,
+          }}
+        >
+          {error}
+        </p>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          type="button"
+          onClick={() => onSetShowStatusEdit(false)}
+          style={{
+            flex: 1,
+            padding: "9px 0",
+            borderRadius: 8,
+            border: "1px solid rgba(10,10,10,0.12)",
+            background: "#fff",
+            color: "#0a0a0a",
+            fontSize: 12.5,
+            fontWeight: 500,
+            cursor: "pointer",
+            fontFamily: GEIST,
+          }}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!isDirty || pending}
+          style={{
+            flex: 1,
+            padding: "9px 0",
+            borderRadius: 8,
+            border: "none",
+            background: isDirty && !pending ? "#0a0a0a" : "rgba(10,10,10,0.08)",
+            color: isDirty && !pending ? "#fafaf6" : "#8a8a85",
+            fontSize: 12.5,
+            fontWeight: 500,
+            cursor: isDirty && !pending ? "pointer" : "not-allowed",
+            fontFamily: GEIST,
+            transition: "all 140ms ease",
+          }}
+        >
+          {pending ? "Salvando…" : "Salvar"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── StatusBadge ──────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = getStatusConfig(status);
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        background: cfg.bg,
+        color: cfg.color,
+        border: `1px solid ${cfg.border}`,
+        borderRadius: 999,
+        padding: "4px 10px 4px 8px",
+        fontFamily: MONO,
+        fontSize: 11,
+        fontWeight: 500,
+        letterSpacing: 0.3,
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+      }}
+    >
+      <span
+        style={{
+          width: 5,
+          height: 5,
+          borderRadius: "50%",
+          background: cfg.dot,
+          flexShrink: 0,
+          boxShadow: cfg.dotGlow ? `0 0 6px ${cfg.dot}` : "none",
+        }}
+      />
+      {cfg.label.toUpperCase()}
+    </span>
+  );
+}
+
+// ─── Main export ──────────────────────────────────────────────────
 
 type Props = {
   application: JobApplicationDetailDto;
@@ -1669,7 +2282,6 @@ export function DetailClient({ application, header }: Props) {
     });
   }
 
-  const hasCvAdaptations = application.cvAdaptations.length > 0;
   const isPrepEligible = PREP_ELIGIBLE_STATUSES.includes(application.status);
   const isInterview = application.status === "INTERVIEW";
   const isArchived = application.archivedAt !== null;
@@ -1677,11 +2289,12 @@ export function DetailClient({ application, header }: Props) {
     application.bestCvState === "unlocked" ||
     application.bestCvState === "ready" ||
     application.cvAdaptations.some(
-      (adaptation) =>
-        adaptation.isUnlocked || adaptation.status === "delivered",
+      (a) => a.isUnlocked || a.status === "delivered",
     );
   const canDelete = isArchived && !hasUnlockedCv;
+  const hasCvAdaptations = application.cvAdaptations.length > 0;
   const origin = ORIGIN_LABELS[application.origin] ?? application.origin;
+  const bestScore = application.scoreAfter ?? application.scoreBefore;
 
   const handleArchive = async () => {
     if (archiving) return;
@@ -1690,12 +2303,10 @@ export function DetailClient({ application, header }: Props) {
     try {
       await archiveJobApplication(application.id);
       router.push("/candidaturas?view=arquivadas");
-    } catch (error) {
-      if (error instanceof Error && error.message) {
-        setArchiveError(error.message);
-      } else {
-        setArchiveError("Nao foi possivel arquivar a candidatura agora.");
-      }
+    } catch (err) {
+      setArchiveError(
+        err instanceof Error ? err.message : "Não foi possível arquivar.",
+      );
     } finally {
       setArchiving(false);
     }
@@ -1708,12 +2319,10 @@ export function DetailClient({ application, header }: Props) {
     try {
       await restoreJobApplication(application.id);
       router.push("/candidaturas");
-    } catch (error) {
-      if (error instanceof Error && error.message) {
-        setArchiveError(error.message);
-      } else {
-        setArchiveError("Nao foi possivel restaurar a candidatura agora.");
-      }
+    } catch (err) {
+      setArchiveError(
+        err instanceof Error ? err.message : "Não foi possível restaurar.",
+      );
     } finally {
       setRestoring(false);
     }
@@ -1728,12 +2337,10 @@ export function DetailClient({ application, header }: Props) {
       closeDeleteModal();
       router.push("/candidaturas?view=arquivadas");
       router.refresh();
-    } catch (error) {
-      if (error instanceof Error && error.message) {
-        setArchiveError(error.message);
-      } else {
-        setArchiveError("Nao foi possivel excluir a candidatura agora.");
-      }
+    } catch (err) {
+      setArchiveError(
+        err instanceof Error ? err.message : "Não foi possível excluir.",
+      );
     } finally {
       setDeleting(false);
     }
@@ -1747,9 +2354,7 @@ export function DetailClient({ application, header }: Props) {
 
   const closeDeleteModal = () => {
     setConfirmDeleteVisible(false);
-    if (closeTimerRef.current) {
-      window.clearTimeout(closeTimerRef.current);
-    }
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = window.setTimeout(() => {
       setConfirmDelete(false);
       closeTimerRef.current = null;
@@ -1758,9 +2363,7 @@ export function DetailClient({ application, header }: Props) {
 
   useEffect(() => {
     return () => {
-      if (closeTimerRef.current) {
-        window.clearTimeout(closeTimerRef.current);
-      }
+      if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
     };
   }, []);
 
@@ -1772,10 +2375,10 @@ export function DetailClient({ application, header }: Props) {
           position: "fixed",
           inset: 0,
           pointerEvents: "none",
-          opacity: 0.4,
+          opacity: 0.5,
           mixBlendMode: "multiply",
           zIndex: 0,
-          backgroundImage: `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.03 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`,
+          backgroundImage: `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`,
         }}
       />
 
@@ -1784,7 +2387,7 @@ export function DetailClient({ application, header }: Props) {
           fontFamily: GEIST,
           minHeight: "100dvh",
           background:
-            "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+            "radial-gradient(ellipse 80% 40% at 50% 0%, #f9f8f4 0%, #efeee9 100%)",
           color: "#0a0a0a",
           position: "relative",
         }}
@@ -1793,15 +2396,15 @@ export function DetailClient({ application, header }: Props) {
 
         <div
           style={{
-            maxWidth: 980,
+            maxWidth: 1200,
             margin: "0 auto",
-            padding: "12px 24px 80px",
+            padding: "12px 40px 80px",
             position: "relative",
             zIndex: 2,
           }}
         >
           {/* Breadcrumb */}
-          <div style={{ paddingTop: 72, paddingBottom: 4 }}>
+          <div style={{ paddingTop: 72, marginBottom: 20 }}>
             <div
               style={{
                 display: "flex",
@@ -1823,136 +2426,80 @@ export function DetailClient({ application, header }: Props) {
           </div>
 
           {/* Hero */}
-          <div style={{ marginBottom: 24, marginTop: 14 }}>
+          <div style={{ marginBottom: 18 }}>
             <div
               style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "flex-start",
-                gap: 24,
+                gap: 32,
                 flexWrap: "wrap",
               }}
             >
               <div style={{ minWidth: 0, flex: 1 }}>
-                <p
+                <div
                   style={{
                     fontFamily: MONO,
-                    fontSize: 11,
-                    color: "#5a5a55",
+                    fontSize: 10.5,
+                    color: "#6a6560",
                     letterSpacing: 0.5,
-                    marginBottom: 8,
+                    marginBottom: 7,
                     textTransform: "uppercase",
                   }}
                 >
                   {application.companyName}
                   {application.location ? ` · ${application.location}` : ""}
-                </p>
+                </div>
                 <h1
                   style={{
-                    margin: "0 0 14px",
-                    fontSize: "clamp(22px, 3vw, 38px)",
+                    margin: "0 0 11px",
+                    fontSize: "clamp(22px, 2.4vw, 30px)",
                     fontWeight: 500,
-                    letterSpacing: -1.5,
-                    lineHeight: 1.05,
+                    letterSpacing: -1,
+                    lineHeight: 1.08,
                     color: "#0a0a0a",
                   }}
                 >
                   {application.jobTitle}
                 </h1>
-                {/* Meta row */}
                 <div
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 10,
+                    gap: 9,
                     flexWrap: "wrap",
                   }}
                 >
                   <StatusBadge status={application.status} />
-                  <span
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 12.5,
-                      color: "#5a5a55",
-                    }}
-                  >
-                    Criada em{" "}
-                    <strong>{formatDate(application.createdAt)}</strong>
+                  <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
+                  <span style={{ fontSize: 12.5, color: "#5a5a55" }}>
+                    <strong>{application.cvAdaptations.length}</strong>{" "}
+                    {application.cvAdaptations.length === 1
+                      ? "análise"
+                      : "análises"}
                   </span>
-                  <span style={{ color: "#c0beb4" }}>·</span>
-                  <span
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 12.5,
-                      color: "#5a5a55",
-                    }}
-                  >
-                    Atualizada{" "}
-                    <strong>{formatDate(application.updatedAt)}</strong>
-                  </span>
-                  {application.appliedAt && (
+                  {bestScore !== null && (
                     <>
-                      <span style={{ color: "#c0beb4" }}>·</span>
-                      <span
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 12.5,
-                          color: "#5a5a55",
-                        }}
-                      >
-                        Enviada em{" "}
-                        <strong>{formatDate(application.appliedAt)}</strong>
+                      <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
+                      <span style={{ fontSize: 12.5, color: "#5a5a55" }}>
+                        melhor score{" "}
+                        <strong style={{ color: "#2a6a10" }}>
+                          {bestScore}%
+                        </strong>
                       </span>
                     </>
                   )}
-                  <span style={{ color: "#c0beb4" }}>·</span>
+                  <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
                   <span
                     style={{
                       fontFamily: MONO,
                       fontSize: 10.5,
-                      color: "#8a8a85",
+                      color: "#a8a6a0",
                       letterSpacing: 0.4,
                     }}
                   >
                     {origin}
                   </span>
-                  {(application.scoreBefore !== null ||
-                    application.scoreAfter !== null) && (
-                    <>
-                      <span style={{ color: "#c0beb4" }}>·</span>
-                      <span
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 11,
-                          color: "#8a8a85",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
-                      >
-                        {application.scoreBefore !== null && (
-                          <span>{application.scoreBefore}%</span>
-                        )}
-                        {application.scoreBefore !== null &&
-                          application.scoreAfter !== null && (
-                            <span style={{ color: "#c6ff3a" }}>→</span>
-                          )}
-                        {application.scoreAfter !== null && (
-                          <span
-                            style={{
-                              color: "#3a5008",
-                              background: "rgba(198,255,58,0.22)",
-                              padding: "1px 6px",
-                              borderRadius: 999,
-                              border: "1px solid rgba(110,150,20,0.22)",
-                            }}
-                          >
-                            {application.scoreAfter}%
-                          </span>
-                        )}
-                      </span>
-                    </>
-                  )}
                 </div>
               </div>
 
@@ -1963,6 +2510,7 @@ export function DetailClient({ application, header }: Props) {
                   gap: 8,
                   flexShrink: 0,
                   flexWrap: "wrap",
+                  alignItems: "flex-start",
                 }}
               >
                 {application.jobUrl && (
@@ -1974,12 +2522,12 @@ export function DetailClient({ application, header }: Props) {
                       display: "inline-flex",
                       alignItems: "center",
                       gap: 5,
-                      padding: "10px 14px",
+                      padding: "8px 13px",
                       borderRadius: 8,
-                      border: "1px solid rgba(10,10,10,0.15)",
-                      background: "#fff",
-                      color: "#0a0a0a",
-                      fontSize: 13,
+                      border: "1px solid rgba(10,10,10,0.12)",
+                      background: "rgba(255,255,255,0.7)",
+                      color: "#3a3a36",
+                      fontSize: 12.5,
                       fontWeight: 500,
                       textDecoration: "none",
                       fontFamily: GEIST,
@@ -1995,33 +2543,20 @@ export function DetailClient({ application, header }: Props) {
                     display: "inline-flex",
                     alignItems: "center",
                     gap: 5,
-                    padding: "10px 14px",
+                    padding: "8px 13px",
                     borderRadius: 8,
-                    border: "1px solid rgba(10,10,10,0.15)",
-                    background: showStatusEdit ? "#f0f0ea" : "#fff",
-                    color: "#0a0a0a",
-                    fontSize: 13,
+                    border: "1px solid rgba(10,10,10,0.12)",
+                    background: showStatusEdit
+                      ? "#f0f0ea"
+                      : "rgba(255,255,255,0.7)",
+                    color: "#3a3a36",
+                    fontSize: 12.5,
                     fontWeight: 500,
                     cursor: "pointer",
                     fontFamily: GEIST,
                   }}
                 >
-                  <svg
-                    aria-hidden="true"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <path
-                      d="m6 9 6 6 6-6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  Atualizar status ▾
+                  Status ▾
                 </button>
                 {isPrepEligible && (
                   <button
@@ -2031,14 +2566,16 @@ export function DetailClient({ application, header }: Props) {
                       display: "inline-flex",
                       alignItems: "center",
                       gap: 5,
-                      padding: "10px 16px",
+                      padding: "8px 15px",
                       borderRadius: 8,
                       border: isInterview
                         ? "1px solid rgba(110,150,20,0.35)"
-                        : "1px solid rgba(10,10,10,0.15)",
-                      background: isInterview ? "#c6ff3a" : "#fff",
+                        : "1px solid rgba(10,10,10,0.12)",
+                      background: isInterview
+                        ? "#c6ff3a"
+                        : "rgba(255,255,255,0.7)",
                       color: "#0a0a0a",
-                      fontSize: 13,
+                      fontSize: 12.5,
                       fontWeight: isInterview ? 600 : 500,
                       cursor: "pointer",
                       fontFamily: GEIST,
@@ -2047,18 +2584,6 @@ export function DetailClient({ application, header }: Props) {
                         : "none",
                     }}
                   >
-                    <svg
-                      aria-hidden="true"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                    >
-                      <circle cx="12" cy="12" r="8" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
                     {application.interviewPrep
                       ? "Ver preparação"
                       : "Preparar entrevista"}
@@ -2075,12 +2600,12 @@ export function DetailClient({ application, header }: Props) {
                     display: "inline-flex",
                     alignItems: "center",
                     gap: 5,
-                    padding: "10px 14px",
+                    padding: "8px 13px",
                     borderRadius: 8,
-                    border: "1px solid rgba(10,10,10,0.15)",
-                    background: "#fff",
-                    color: "#0a0a0a",
-                    fontSize: 13,
+                    border: "1px solid rgba(10,10,10,0.12)",
+                    background: "rgba(255,255,255,0.7)",
+                    color: "#3a3a36",
+                    fontSize: 12.5,
                     fontWeight: 500,
                     cursor:
                       archiving || restoring || deleting
@@ -2089,31 +2614,6 @@ export function DetailClient({ application, header }: Props) {
                     fontFamily: GEIST,
                   }}
                 >
-                  <svg
-                    aria-hidden="true"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    {isArchived ? (
-                      <>
-                        <path d="M3 12a9 9 0 1 0 3-6.7" strokeLinecap="round" />
-                        <path
-                          d="M3 4v3h3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <path d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                        <path d="M3 7V5a2 2 0 0 1 2-2h4" />
-                      </>
-                    )}
-                  </svg>
                   {isArchived
                     ? restoring
                       ? "Restaurando..."
@@ -2122,7 +2622,7 @@ export function DetailClient({ application, header }: Props) {
                       ? "Arquivando..."
                       : "Arquivar"}
                 </button>
-                {canDelete ? (
+                {canDelete && (
                   <button
                     type="button"
                     onClick={() => {
@@ -2134,12 +2634,12 @@ export function DetailClient({ application, header }: Props) {
                       display: "inline-flex",
                       alignItems: "center",
                       gap: 5,
-                      padding: "10px 14px",
+                      padding: "8px 13px",
                       borderRadius: 8,
                       border: "1px solid rgba(185,28,28,0.28)",
-                      background: "#fff",
+                      background: "rgba(255,255,255,0.7)",
                       color: "#7f1d1d",
-                      fontSize: 13,
+                      fontSize: 12.5,
                       fontWeight: 500,
                       cursor:
                         deleting || archiving || restoring
@@ -2148,174 +2648,35 @@ export function DetailClient({ application, header }: Props) {
                       fontFamily: GEIST,
                     }}
                   >
-                    <svg
-                      aria-hidden="true"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                    >
-                      <path d="M3 6h18" strokeLinecap="round" />
-                      <path
-                        d="M8 6V4h8v2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M6 6l1 14h10l1-14"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
                     {deleting ? "Excluindo..." : "Excluir"}
                   </button>
-                ) : null}
+                )}
               </div>
-              {confirmDelete ? (
-                <div
-                  style={{
-                    position: "fixed",
-                    inset: 0,
-                    zIndex: 70,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background: "rgba(10,10,10,0.35)",
-                    padding: "0 16px",
-                    transition: "opacity 180ms ease",
-                    opacity: confirmDeleteVisible ? 1 : 0,
-                  }}
-                >
-                  <div
-                    role="dialog"
-                    aria-modal="true"
-                    style={{
-                      width: "100%",
-                      maxWidth: 460,
-                      background: "#fff",
-                      border: "1px solid rgba(10,10,10,0.12)",
-                      borderRadius: 16,
-                      padding: "20px 18px",
-                      boxShadow: "0 24px 60px -20px rgba(10,10,10,0.35)",
-                      transition: "opacity 180ms ease, transform 180ms ease",
-                      opacity: confirmDeleteVisible ? 1 : 0,
-                      transform: confirmDeleteVisible
-                        ? "translateY(0) scale(1)"
-                        : "translateY(6px) scale(0.98)",
-                    }}
-                  >
-                    <p
-                      style={{
-                        margin: "0 0 6px",
-                        fontSize: 16,
-                        fontWeight: 600,
-                        color: "#0a0a0a",
-                      }}
-                    >
-                      Confirmar exclusao
-                    </p>
-                    <p
-                      style={{
-                        margin: "0 0 14px",
-                        fontSize: 13.5,
-                        color: "#55524d",
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      Esta candidatura sera removida da sua visao e nao podera
-                      ser restaurada por voce.
-                    </p>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "flex-end",
-                        gap: 8,
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => closeDeleteModal()}
-                        style={{
-                          borderRadius: 8,
-                          border: "1px solid rgba(10,10,10,0.12)",
-                          background: "#fff",
-                          color: "#0a0a0a",
-                          fontSize: 12,
-                          padding: "8px 10px",
-                          cursor: "pointer",
-                          fontFamily: GEIST,
-                        }}
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleDelete()}
-                        disabled={deleting}
-                        style={{
-                          borderRadius: 8,
-                          border: "1px solid #7f1d1d",
-                          background: "#7f1d1d",
-                          color: "#fff",
-                          fontSize: 12,
-                          padding: "8px 10px",
-                          cursor: deleting ? "not-allowed" : "pointer",
-                          fontFamily: GEIST,
-                        }}
-                      >
-                        {deleting ? "Excluindo..." : "Confirmar exclusao"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-              {archiveError ? (
-                <p
-                  style={{
-                    margin: "10px 0 0",
-                    fontSize: 12,
-                    color: "#991b1b",
-                  }}
-                >
-                  {archiveError}
-                </p>
-              ) : null}
             </div>
+
+            {archiveError && (
+              <p style={{ margin: "10px 0 0", fontSize: 12, color: "#991b1b" }}>
+                {archiveError}
+              </p>
+            )}
           </div>
+
+          {/* Jornada stepper */}
+          <Jornada application={application} onUpdated={handleUpdated} />
 
           {/* Main grid */}
           <div
             className="candidatura-grid"
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 380px",
-              gap: 24,
+              gridTemplateColumns: "1fr 340px",
+              gap: 28,
               alignItems: "start",
             }}
           >
             {/* Left column */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              {application.nextActionAt && (
-                <InterviewBanner
-                  nextActionAt={application.nextActionAt}
-                  onPrepClick={() => setShowPrep(true)}
-                />
-              )}
-
-              <Timeline
-                events={application.events}
-                scoreBefore={application.scoreBefore}
-                scoreAfter={application.scoreAfter}
-              />
-
-              <ScoreSection
-                scoreBefore={application.scoreBefore}
-                scoreAfter={application.scoreAfter}
-                currentCvAdaptationId={application.currentCvAdaptationId}
-              />
-
+            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              <AnalisesSection application={application} />
               <NotesSection
                 applicationId={application.id}
                 currentNotes={application.notes}
@@ -2325,36 +2686,127 @@ export function DetailClient({ application, header }: Props) {
             </div>
 
             {/* Right column */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <ProximaAcaoCard
-                applicationId={application.id}
-                status={application.status}
-                jobUrl={application.jobUrl}
-                showStatusEdit={showStatusEdit}
-                onSetShowStatusEdit={setShowStatusEdit}
-                onPrepClick={() => setShowPrep(true)}
-                onUpdated={handleUpdated}
-              />
-
-              {hasCvAdaptations && (
-                <CvAdaptadoCard
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {showStatusEdit && (
+                <StatusCard
                   applicationId={application.id}
-                  cvAdaptations={application.cvAdaptations}
-                  currentCvAdaptationId={application.currentCvAdaptationId}
-                  bestCvAdaptationId={application.bestCvAdaptationId}
-                  companyName={application.companyName}
-                  jobTitle={application.jobTitle}
-                  scoreAfter={application.scoreAfter}
+                  status={application.status}
+                  showStatusEdit={showStatusEdit}
+                  onSetShowStatusEdit={setShowStatusEdit}
+                  onUpdated={handleUpdated}
                 />
               )}
+
+              <Timeline
+                events={application.events}
+                scoreBefore={application.scoreBefore}
+                scoreAfter={application.scoreAfter}
+              />
+
+              {hasCvAdaptations && <CvCard application={application} />}
 
               <DetalhesCard application={application} />
             </div>
           </div>
         </div>
 
+        {/* Delete confirmation modal */}
+        {confirmDelete && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 70,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(10,10,10,0.35)",
+              padding: "0 16px",
+              transition: "opacity 180ms ease",
+              opacity: confirmDeleteVisible ? 1 : 0,
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              style={{
+                width: "100%",
+                maxWidth: 460,
+                background: "#fff",
+                border: "1px solid rgba(10,10,10,0.12)",
+                borderRadius: 16,
+                padding: "20px 18px",
+                boxShadow: "0 24px 60px -20px rgba(10,10,10,0.35)",
+                transition: "opacity 180ms ease, transform 180ms ease",
+                opacity: confirmDeleteVisible ? 1 : 0,
+                transform: confirmDeleteVisible
+                  ? "translateY(0) scale(1)"
+                  : "translateY(6px) scale(0.98)",
+              }}
+            >
+              <p
+                style={{
+                  margin: "0 0 6px",
+                  fontSize: 16,
+                  fontWeight: 600,
+                  color: "#0a0a0a",
+                }}
+              >
+                Confirmar exclusão
+              </p>
+              <p
+                style={{
+                  margin: "0 0 14px",
+                  fontSize: 13.5,
+                  color: "#55524d",
+                  lineHeight: 1.45,
+                }}
+              >
+                Esta candidatura será removida e não poderá ser restaurada.
+              </p>
+              <div
+                style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+              >
+                <button
+                  type="button"
+                  onClick={closeDeleteModal}
+                  style={{
+                    borderRadius: 8,
+                    border: "1px solid rgba(10,10,10,0.12)",
+                    background: "#fff",
+                    color: "#0a0a0a",
+                    fontSize: 12,
+                    padding: "8px 10px",
+                    cursor: "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete()}
+                  disabled={deleting}
+                  style={{
+                    borderRadius: 8,
+                    border: "1px solid #7f1d1d",
+                    background: "#7f1d1d",
+                    color: "#fff",
+                    fontSize: 12,
+                    padding: "8px 10px",
+                    cursor: deleting ? "not-allowed" : "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  {deleting ? "Excluindo..." : "Confirmar exclusão"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <style>{`
-          @media (max-width: 700px) {
+          @media (max-width: 760px) {
             .candidatura-grid { grid-template-columns: 1fr !important; }
           }
         `}</style>
