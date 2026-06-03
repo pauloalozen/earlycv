@@ -224,6 +224,9 @@ export class MasterCvCanonicalExtractionService {
         experiencesJson: (merged.next.experiences ??
           []) as Prisma.InputJsonValue,
         educationJson: (merged.next.education ?? []) as Prisma.InputJsonValue,
+        languagesJson: (merged.next.languages ?? []) as Prisma.InputJsonValue,
+        certificationsJson: (merged.next.certifications ??
+          []) as Prisma.InputJsonValue,
       },
     });
   }
@@ -282,6 +285,15 @@ export class MasterCvCanonicalExtractionService {
         business: payload.canonicalProfile.skills.business,
         soft: payload.canonicalProfile.skills.soft,
       },
+      languages: payload.canonicalProfile.languages.map((lang) => ({
+        language: lang.language,
+        level: lang.level ?? undefined,
+      })),
+      certifications: payload.canonicalProfile.certifications.map((cert) => ({
+        name: cert.name,
+        issuer: cert.issuer ?? undefined,
+        year: cert.year ?? undefined,
+      })),
     };
   }
 
@@ -297,6 +309,8 @@ export class MasterCvCanonicalExtractionService {
     experiencesJson: unknown;
     educationJson: unknown;
     skillsJson: unknown;
+    languagesJson: unknown;
+    certificationsJson: unknown;
   }): CanonicalProfileData {
     const skills = this.asRecord(profile.skillsJson);
     return {
@@ -319,6 +333,12 @@ export class MasterCvCanonicalExtractionService {
         business: this.asStringArray(skills.business),
         soft: this.asStringArray(skills.soft),
       },
+      languages: this.asArray(
+        profile.languagesJson,
+      ) as CanonicalProfileData["languages"],
+      certifications: this.asArray(
+        profile.certificationsJson,
+      ) as CanonicalProfileData["certifications"],
     };
   }
 

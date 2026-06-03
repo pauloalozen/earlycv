@@ -28,6 +28,17 @@ export type ProfileSkillsByBucket = {
   soft: string[];
 };
 
+export type ProfileLanguage = {
+  language: string;
+  level?: string;
+};
+
+export type ProfileCertification = {
+  name: string;
+  issuer?: string;
+  year?: string;
+};
+
 export type CanonicalProfileData = {
   fullName?: string;
   phone?: string;
@@ -40,6 +51,8 @@ export type CanonicalProfileData = {
   experiences: ProfileExperience[];
   education: ProfileEducation[];
   skills: ProfileSkillsByBucket;
+  languages: ProfileLanguage[];
+  certifications: ProfileCertification[];
 };
 
 export type ProfileFieldMetaEntry = {

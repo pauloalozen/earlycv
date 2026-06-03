@@ -54,6 +54,8 @@ export class ProfileCanonicalMergeService {
         business: [],
         soft: [],
       },
+      languages: input.existing.languages ?? [],
+      certifications: input.existing.certifications ?? [],
     };
     const fieldMeta = { ...(input.fieldMeta ?? {}) };
     const suggestions = [...(input.suggestions ?? [])];
@@ -213,6 +215,17 @@ export class ProfileCanonicalMergeService {
       };
 
       next.skills = mergedSkills;
+    }
+
+    if (input.incoming.languages && input.incoming.languages.length > 0) {
+      next.languages = [...input.incoming.languages];
+    }
+
+    if (
+      input.incoming.certifications &&
+      input.incoming.certifications.length > 0
+    ) {
+      next.certifications = [...input.incoming.certifications];
     }
 
     return { next, fieldMeta, suggestions };
