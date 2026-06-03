@@ -127,12 +127,12 @@ export default async function MeuCvMasterPage({
     (sum, block) => sum + block.missingCount,
     0,
   );
-  const statusCompletion =
-    profileData.profileReadinessStatus === "ready"
-      ? 100
-      : profileData.profileReadinessStatus === "partial"
-        ? 80
-        : 0;
+  const totalFields = blockStates.reduce((sum, b) => sum + b.fields.length, 0);
+  const missingTotal = blockStates.reduce((sum, b) => sum + b.missingCount, 0);
+  const profileCompletion =
+    totalFields > 0
+      ? Math.round(((totalFields - missingTotal) / totalFields) * 100)
+      : 0;
   const suggestionCount = Array.isArray(profileData.profileSuggestionsJson)
     ? profileData.profileSuggestionsJson.length
     : 0;
@@ -195,10 +195,10 @@ export default async function MeuCvMasterPage({
 
               {/* Pill de completude */}
               <div className="flex shrink-0 items-center gap-3 rounded-[12px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] p-3 pr-4">
-                <ProgressRing value={statusCompletion} size={62} stroke={6} />
+                <ProgressRing value={profileCompletion} size={80} stroke={6} />
                 <div>
                   <p className="text-[15px] font-semibold leading-tight tracking-[-0.01em] text-[#0a0a0a]">
-                    {statusCompletion}% completo
+                    {profileCompletion}% completo
                   </p>
                   <p className="mt-0.5 font-mono text-[10.5px] text-[#8a8a85]">
                     {gapCount} lacunas · {suggestionCount} sugestões
