@@ -22,6 +22,7 @@ import type { MasterCvExtractionStatusDto, ResumeDto } from "@/lib/resumes-api";
 import {
   getMyMasterCvExtractionStatus,
   getMyMasterResume,
+  uploadMasterResume,
 } from "@/lib/resumes-api";
 import { getAuthStatus } from "@/lib/session-actions";
 
@@ -34,6 +35,16 @@ const LOADING_STEPS = [
   "Comparando com a vaga...",
   "Identificando gaps...",
   "Melhorando seu CV...",
+];
+
+const MASTER_CV_OVERLAY_MESSAGES = [
+  "Lendo o documento...",
+  "Identificando seções...",
+  "Extraindo experiências...",
+  "Mapeando competências...",
+  "Encontrando dados de contato...",
+  "Organizando formação acadêmica...",
+  "Finalizando extração...",
 ];
 
 const CV_INPUT_BOX_MIN_HEIGHT = 154;
@@ -141,8 +152,15 @@ export default function AdaptarPage() {
   >(undefined);
   const [cvMode, setCvMode] = useState<CvMode>("upload");
   const [saveMasterCv, setSaveMasterCv] = useState(false);
+  const saveMasterDecisionRef = useRef(false);
+  const [saveMasterDecided, setSaveMasterDecided] = useState(false);
+  const [showSaveMasterPrompt, setShowSaveMasterPrompt] = useState(false);
+  const saveMasterPromptAnsweredRef = useRef(false);
+  const [overlayMsgIndex, setOverlayMsgIndex] = useState(0);
+  const [overlayDots, setOverlayDots] = useState(0);
   const [fileHover, setFileHover] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const [authReady, setAuthReady] = useState(false);
   const jobDescriptionFilledTrackedRef = useRef(false);
@@ -343,7 +361,11 @@ export default function AdaptarPage() {
       );
       setMasterResume(resume ?? null);
       setMasterCvExtractionStatus(extractionStatus ?? null);
-      if (status.userName) {
+      const hasResumeResult = !!resume;
+      const profileIsReady =
+        ((status as { profileReadinessStatus?: unknown })
+          .profileReadinessStatus) === "ready";
+      if (status.userName && hasResumeResult && profileIsReady) {
         setCvMode("profile");
       } else {
         setCvMode("upload");
@@ -384,10 +406,24 @@ export default function AdaptarPage() {
     renderInvisibleTurnstileWidget();
   }, [renderInvisibleTurnstileWidget, turnstileScriptReady]);
 
+  useEffect(() => {
+    if (!loading) return;
+    const dotsTimer = setInterval(() => setOverlayDots((d) => (d + 1) % 4), 500);
+    if (!saveMasterDecided) return () => clearInterval(dotsTimer);
+    const msgTimer = setInterval(
+      () => setOverlayMsgIndex((i) => (i + 1) % MASTER_CV_OVERLAY_MESSAGES.length),
+      2200,
+    );
+    return () => {
+      clearInterval(dotsTimer);
+      clearInterval(msgTimer);
+    };
+  }, [loading, saveMasterDecided]);
+
   const isAuthenticated = !!userName;
   const hasMaster = !!masterResume;
   const isProfileModeReady = profileReadinessStatus === "ready";
-  const isProfileModeAvailable = isAuthenticated && isProfileModeReady;
+  const isProfileModeAvailable = isAuthenticated && hasMaster;
 
   const validateCvTextInput = (input: string): string | null => {
     const normalized = input.trim();
@@ -457,6 +493,23 @@ export default function AdaptarPage() {
       }
     }
 
+    const needsSaveMasterPrompt =
+      isAuthenticated &&
+      !hasMaster &&
+      !saveMasterPromptAnsweredRef.current &&
+      (cvMode === "upload" ? !!file : cvMode === "text");
+
+    if (needsSaveMasterPrompt) {
+      setShowSaveMasterPrompt(true);
+      return;
+    }
+
+    // Checkbox "substituir CV Master" usa a mesma pipeline que o popup
+    if (isAuthenticated && hasMaster && saveMasterCv) {
+      saveMasterDecisionRef.current = true;
+      setSaveMasterDecided(true);
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -491,8 +544,17 @@ export default function AdaptarPage() {
         await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
         analyzeResult = result;
       } else if (isAuthenticated && cvMode === "upload" && file) {
-        formData.append("file", file);
-        if (saveMasterCv) formData.append("saveAsMaster", "true");
+        if (saveMasterDecisionRef.current) {
+          const masterFormData = new FormData();
+          masterFormData.append("file", file);
+          masterFormData.append("title", file.name.replace(/\.[^.]+$/, ""));
+          masterFormData.append("isPrimary", "true");
+          masterFormData.append("turnstileToken", turnstileToken ?? "upload-client-token");
+          const savedResume = await uploadMasterResume(masterFormData);
+          formData.append("masterResumeId", savedResume.id);
+        } else {
+          formData.append("file", file);
+        }
         emitUiFunnelEvent("analysis_started", {
           attemptId: submitAttemptId,
           metadata: {
@@ -500,10 +562,22 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const result = await analyzeAuthenticatedCv(formData, "file_upload");
+        const result = await analyzeAuthenticatedCv(
+          formData,
+          saveMasterDecisionRef.current ? "profile" : "file_upload",
+        );
         await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
         analyzeResult = result;
       } else if (isAuthenticated && cvMode === "text") {
+        if (saveMasterDecisionRef.current) {
+          const masterFormData = new FormData();
+          masterFormData.append("title", "Meu CV");
+          masterFormData.append("rawText", cvText.trim());
+          masterFormData.append("isPrimary", "true");
+          const savedResume = await uploadMasterResume(masterFormData);
+          formData.delete("masterCvText");
+          formData.append("masterResumeId", savedResume.id);
+        }
         emitUiFunnelEvent("analysis_started", {
           attemptId: submitAttemptId,
           metadata: {
@@ -511,7 +585,10 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const result = await analyzeAuthenticatedCv(formData, "text_paste");
+        const result = await analyzeAuthenticatedCv(
+          formData,
+          saveMasterDecisionRef.current ? "profile" : "text_paste",
+        );
         await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
         analyzeResult = result;
       } else {
@@ -579,7 +656,6 @@ export default function AdaptarPage() {
             masterCvText: analyzeResult.masterCvText,
             analysisCvSnapshotId: analyzeResult.analysisCvSnapshotId,
             previewText: analyzeResult.previewText,
-            saveAsMaster: saveMasterCv,
             file: file ?? undefined,
           });
 
@@ -755,7 +831,7 @@ export default function AdaptarPage() {
           </div>
 
           {/* 2-col grid */}
-          <form onSubmit={handleSubmit}>
+          <form ref={formRef} onSubmit={handleSubmit}>
             <div
               style={{
                 display: "grid",
@@ -837,12 +913,15 @@ export default function AdaptarPage() {
                       </div>
                     </div>
                     {/* Mode toggle */}
-                    {isAuthenticated && (
-                      <div className="adaptar-cv-toggle-row">
+                    {isAuthenticated && hasMaster ? (
+                      <div
+                        className="adaptar-cv-toggle-row"
+                        style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}
+                      >
                         <div
                           className="adaptar-cv-mode-toggle"
                           style={{
-                            display: "flex",
+                            display: "inline-flex",
                             gap: 4,
                             background: "rgba(10,10,10,0.05)",
                             borderRadius: 8,
@@ -854,16 +933,7 @@ export default function AdaptarPage() {
                               <button
                                 key={mode}
                                 type="button"
-                                disabled={
-                                  mode === "profile" && !isProfileModeAvailable
-                                }
                                 onClick={() => {
-                                  if (
-                                    mode === "profile" &&
-                                    !isProfileModeAvailable
-                                  ) {
-                                    return;
-                                  }
                                   setCvMode(mode);
                                   if (mode === "profile") clearSelectedFile();
                                   if (mode === "text") clearSelectedFile();
@@ -877,30 +947,16 @@ export default function AdaptarPage() {
                                   padding: "4px 10px",
                                   borderRadius: 6,
                                   border: "none",
-                                  cursor:
-                                    mode === "profile" &&
-                                    !isProfileModeAvailable
-                                      ? "not-allowed"
-                                      : "pointer",
+                                  cursor: "pointer",
                                   background:
                                     cvMode === mode ? "#0a0a0a" : "transparent",
                                   color:
-                                    mode === "profile" &&
-                                    !isProfileModeAvailable
-                                      ? "#a7a79f"
-                                      : cvMode === mode
-                                        ? "#fafaf6"
-                                        : "#7a7a74",
-                                  opacity:
-                                    mode === "profile" &&
-                                    !isProfileModeAvailable
-                                      ? 0.7
-                                      : 1,
+                                    cvMode === mode ? "#fafaf6" : "#7a7a74",
                                   transition: "all 120ms",
                                 }}
                               >
                                 {mode === "profile"
-                                  ? "Meu perfil"
+                                  ? "CV Master"
                                   : mode === "upload"
                                     ? "Upload"
                                     : "Digitar texto"}
@@ -908,28 +964,16 @@ export default function AdaptarPage() {
                             ),
                           )}
                         </div>
-                        {!isProfileModeAvailable ? (
-                          <p
-                            style={{
-                              marginTop: 8,
-                              fontFamily: MONO,
-                              fontSize: 10.5,
-                              color: "#7a7a74",
-                              letterSpacing: 0.2,
-                            }}
-                          >
-                            Modo perfil indisponivel enquanto seu perfil nao
-                            estiver pronto.
-                          </p>
-                        ) : null}
                       </div>
-                    )}
-                    {!isAuthenticated && (
-                      <div className="adaptar-cv-toggle-row">
+                    ) : (
+                      <div
+                        className="adaptar-cv-toggle-row"
+                        style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}
+                      >
                         <div
                           className="adaptar-cv-mode-toggle"
                           style={{
-                            display: "flex",
+                            display: "inline-flex",
                             gap: 4,
                             background: "rgba(10,10,10,0.05)",
                             borderRadius: 8,
@@ -1038,58 +1082,6 @@ export default function AdaptarPage() {
                           <span style={{ color: "#405410" }}>✓ pronto</span>
                         </div>
                       </div>
-                      {masterCvExtractionStatus?.extractionCoverage ? (
-                        <div
-                          style={{
-                            marginTop: 10,
-                            background: "rgba(10,10,10,0.03)",
-                            border: "1px solid rgba(10,10,10,0.08)",
-                            borderRadius: 12,
-                            padding: "10px 12px",
-                            display: "grid",
-                            gap: 6,
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontFamily: MONO,
-                              fontSize: 10.5,
-                              color: "#555",
-                            }}
-                          >
-                            Dados extraidos:{" "}
-                            {masterCvExtractionStatus.extractionCoverage.identifiedFields.join(
-                              ", ",
-                            ) || "nenhum"}
-                          </div>
-                          <div
-                            style={{
-                              fontFamily: MONO,
-                              fontSize: 10.5,
-                              color: "#7a7a74",
-                            }}
-                          >
-                            Campos faltando:{" "}
-                            {masterCvExtractionStatus.extractionCoverage.missingFields.join(
-                              ", ",
-                            ) || "nenhum"}
-                          </div>
-                          {masterCvExtractionStatus.extractionCoverage
-                            .missingFields.length > 0 ? (
-                            <Link
-                              href="/cv-base"
-                              style={{
-                                fontFamily: MONO,
-                                fontSize: 10.5,
-                                color: "#0a0a0a",
-                                textDecoration: "underline",
-                              }}
-                            >
-                              Completar CV base manualmente
-                            </Link>
-                          ) : null}
-                        </div>
-                      ) : null}
                     </>
                   ) : cvMode === "text" ? (
                     <div
@@ -1268,7 +1260,7 @@ export default function AdaptarPage() {
                           </>
                         )}
                       </button>
-                      {isAuthenticated && file && (
+                      {isAuthenticated && hasMaster && file && (
                         <label
                           style={{
                             display: "flex",
@@ -1296,9 +1288,7 @@ export default function AdaptarPage() {
                               letterSpacing: 0.2,
                             }}
                           >
-                            {hasMaster
-                              ? "Salvar como novo CV base (substitui o atual)"
-                              : "Salvar como CV base para próximas análises"}
+                            Salvar como novo CV base (substitui o atual)
                           </span>
                         </label>
                       )}
@@ -1752,6 +1742,215 @@ export default function AdaptarPage() {
             </div>
           </form>
         </div>
+
+        {/* Overlay de processamento */}
+        {loading && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 200,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "0 16px",
+              background: "rgba(10,10,10,0.35)",
+              backdropFilter: "blur(4px)",
+              width: "100vw",
+              height: "100vh",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 20,
+                borderRadius: 20,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "#0a0a0a",
+                padding: "32px",
+                width: "100%",
+                maxWidth: 380,
+                boxShadow: "0 32px 80px -16px rgba(0,0,0,0.8)",
+              }}
+            >
+              {/* Spinner */}
+              <div style={{ position: "relative", width: 56, height: 56, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                <svg
+                  aria-hidden
+                  className="animate-spin"
+                  viewBox="0 0 56 56"
+                  fill="none"
+                  style={{ position: "absolute", inset: 0, width: 56, height: 56 }}
+                >
+                  <circle cx="28" cy="28" r="23" stroke="rgba(198,255,58,0.15)" strokeWidth="3" />
+                  <path d="M28 5 A23 23 0 0 1 51 28" stroke="#c6ff3a" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+                <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 600, color: "#c6ff3a" }}>IA</span>
+              </div>
+
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontSize: 15, fontWeight: 500, letterSpacing: -0.01, color: "#fafaf6", margin: 0 }}>
+                  {saveMasterDecided ? "Processando CV" : "Analisando..."}
+                </p>
+                {saveMasterDecided && (
+                  <p style={{ marginTop: 4, fontFamily: MONO, fontSize: 10.5, color: "#8a8a85", margin: "4px 0 0" }}>
+                    {file?.name ?? "seu currículo"}
+                  </p>
+                )}
+              </div>
+
+              <div style={{ height: 22, textAlign: "center" }}>
+                <p style={{ fontSize: 13, color: "#a0a09a", margin: 0 }}>
+                  {saveMasterDecided
+                    ? MASTER_CV_OVERLAY_MESSAGES[overlayMsgIndex]
+                    : LOADING_STEPS[loadingStep]}
+                  {".".repeat(overlayDots)}
+                </p>
+              </div>
+
+              <p style={{ textAlign: "center", fontFamily: MONO, fontSize: 10, color: "#5a5a55", margin: 0 }}>
+                Isso pode levar alguns segundos
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Popup: salvar como CV master */}
+        {showSaveMasterPrompt && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(10,10,10,0.45)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 100,
+              padding: "0 16px",
+            }}
+          >
+            <div
+              style={{
+                background: "#fafaf6",
+                borderRadius: 16,
+                padding: "28px 24px 24px",
+                maxWidth: 420,
+                width: "100%",
+                boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 12,
+                }}
+              >
+                {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden
+                >
+                  <path
+                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                    stroke="#0a0a0a"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <polyline
+                    points="14 2 14 8 20 8"
+                    stroke="#0a0a0a"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 500,
+                    letterSpacing: -0.2,
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Salvar como CV base?
+                </span>
+              </div>
+              <p
+                style={{
+                  fontFamily: GEIST,
+                  fontSize: 13.5,
+                  color: "#3a3a34",
+                  lineHeight: 1.55,
+                  margin: "0 0 20px",
+                }}
+              >
+                Quer salvar este CV como seu perfil base? Assim você não
+                precisará fazer upload de novo nas próximas candidaturas.
+              </p>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveMasterDecisionRef.current = true;
+                    setSaveMasterDecided(true);
+                    setSaveMasterCv(true);
+                    saveMasterPromptAnsweredRef.current = true;
+                    setShowSaveMasterPrompt(false);
+                    formRef.current?.requestSubmit();
+                  }}
+                  style={{
+                    flex: 1,
+                    background: "#0a0a0a",
+                    color: "#fafaf6",
+                    border: "none",
+                    borderRadius: 10,
+                    padding: "11px 0",
+                    fontSize: 13.5,
+                    fontWeight: 500,
+                    fontFamily: GEIST,
+                    cursor: "pointer",
+                  }}
+                >
+                  Sim, salvar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveMasterDecisionRef.current = false;
+                    setSaveMasterDecided(false);
+                    setSaveMasterCv(false);
+                    saveMasterPromptAnsweredRef.current = true;
+                    setShowSaveMasterPrompt(false);
+                    formRef.current?.requestSubmit();
+                  }}
+                  style={{
+                    flex: 1,
+                    background: "transparent",
+                    color: "#3a3a34",
+                    border: "1.5px solid rgba(10,10,10,0.12)",
+                    borderRadius: 10,
+                    padding: "11px 0",
+                    fontSize: 13.5,
+                    fontWeight: 500,
+                    fontFamily: GEIST,
+                    cursor: "pointer",
+                  }}
+                >
+                  Não, só analisar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <style>{`
           @media (max-width: 860px) {

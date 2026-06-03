@@ -146,6 +146,8 @@ export class ResumesService {
       } catch {
         // non-fatal — extraction will fall back to file-binary mode
       }
+    } else if (dto.rawText?.trim()) {
+      extractedRawText = dto.rawText.trim();
     }
 
     const createdResume = await this.database.$transaction(async (tx) => {
