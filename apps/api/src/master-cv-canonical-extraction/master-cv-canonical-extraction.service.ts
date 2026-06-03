@@ -199,6 +199,8 @@ export class MasterCvCanonicalExtractionService {
       experiences: merged.next.experiences ?? [],
       education: merged.next.education ?? [],
       skills: merged.next.skills ?? { technical: [], business: [], soft: [] },
+      languages: merged.next.languages ?? [],
+      certifications: merged.next.certifications ?? [],
     });
 
     await this.database.userProfile.update({

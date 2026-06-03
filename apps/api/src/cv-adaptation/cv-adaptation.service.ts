@@ -2424,6 +2424,8 @@ export class CvAdaptationService {
       experiences: merged.next.experiences ?? [],
       education: merged.next.education ?? [],
       skills: merged.next.skills ?? { technical: [], business: [], soft: [] },
+      languages: merged.next.languages ?? [],
+      certifications: merged.next.certifications ?? [],
     });
 
     await this.database.userProfile.update({
@@ -2536,6 +2538,8 @@ export class CvAdaptationService {
     experiencesJson: unknown;
     educationJson: unknown;
     skillsJson: unknown;
+    languagesJson?: unknown;
+    certificationsJson?: unknown;
   }): CanonicalProfileData {
     const parsedSkills = this.parseRecord(profile.skillsJson) as {
       technical?: unknown;
@@ -2559,7 +2563,13 @@ export class CvAdaptationService {
         technical: this.parseStringArray(parsedSkills.technical),
       },
       state: profile.state ?? undefined,
+      languages: this.parseArray(profile.languagesJson) as CanonicalProfileData["languages"],
+      certifications: this.parseArray(profile.certificationsJson) as CanonicalProfileData["certifications"],
     };
+  }
+
+  private parseArray(value: unknown): unknown[] {
+    return Array.isArray(value) ? value : [];
   }
 
   private parseExperienceArray(
