@@ -164,10 +164,7 @@ export function parseMasterCvCanonicalExtractionPayload(
     );
   });
 
-  const skills = asRecord(canonicalProfile.skills, "canonicalProfile.skills");
-  asStringArray(skills.technical, "canonicalProfile.skills.technical");
-  asStringArray(skills.business, "canonicalProfile.skills.business");
-  asStringArray(skills.soft, "canonicalProfile.skills.soft");
+  asStringArray(canonicalProfile.skills, "canonicalProfile.skills");
 
   const languages = canonicalProfile.languages;
   if (!Array.isArray(languages)) {

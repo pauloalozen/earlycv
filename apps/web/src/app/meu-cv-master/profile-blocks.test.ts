@@ -78,10 +78,6 @@ describe("buildProfileBlockStates", () => {
     expect(blocks[0].hasGap).toBe(true);
   });
 
-  it("sets hasSugestao to false (no backend signal yet)", () => {
-    const blocks = buildProfileBlockStates(baseProfile);
-    expect(blocks.every((b) => b.hasSugestao === false)).toBe(true);
-  });
 });
 
 describe("buildProfileBlockUpdatePayload", () => {

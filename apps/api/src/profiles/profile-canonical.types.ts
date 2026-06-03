@@ -41,6 +41,7 @@ export type ProfileCertification = {
 
 export type CanonicalProfileData = {
   fullName?: string;
+  contactEmail?: string;
   phone?: string;
   linkedinUrl?: string;
   city?: string;

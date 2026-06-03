@@ -53,3 +53,14 @@ export async function clearAllProfileAction() {
   revalidatePath("/meu-cv-master");
   redirect("/meu-cv-master");
 }
+
+export async function clearAllProfileForReupload() {
+  const payload = buildClearAllPayload();
+  const response = await apiRequest("PUT", "/users/profile", payload);
+
+  if (!response.ok) {
+    throw new Error("Falha ao limpar o perfil");
+  }
+
+  revalidatePath("/meu-cv-master");
+}

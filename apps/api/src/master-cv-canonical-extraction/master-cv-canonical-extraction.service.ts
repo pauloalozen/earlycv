@@ -174,7 +174,7 @@ export class MasterCvCanonicalExtractionService {
     }
 
     const { extractMasterCvCanonicalProfile } = await import("@earlycv/ai");
-    const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+    const model = process.env.OPENAI_MODEL_MASTERCV ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini";
     const { output } = await extractMasterCvCanonicalProfile(
       this.aiClient as never,
       model,
@@ -222,6 +222,7 @@ export class MasterCvCanonicalExtractionService {
       where: { userId: input.userId },
       data: {
         fullName: merged.next.fullName ?? profile.fullName,
+        contactEmail: merged.next.contactEmail ?? profile.contactEmail,
         headline: merged.next.headline ?? profile.headline,
         linkedinUrl: merged.next.linkedinUrl ?? profile.linkedinUrl,
         phone: merged.next.phone ?? profile.phone,
@@ -253,6 +254,7 @@ export class MasterCvCanonicalExtractionService {
   ): Partial<CanonicalProfileData> {
     return {
       fullName: payload.canonicalProfile.fullName ?? undefined,
+      contactEmail: payload.canonicalProfile.email ?? undefined,
       headline: payload.canonicalProfile.headline ?? undefined,
       phone: payload.canonicalProfile.phone ?? undefined,
       linkedinUrl: payload.canonicalProfile.linkedinUrl ?? undefined,
@@ -298,9 +300,9 @@ export class MasterCvCanonicalExtractionService {
         };
       }),
       skills: {
-        technical: payload.canonicalProfile.skills.technical,
-        business: payload.canonicalProfile.skills.business,
-        soft: payload.canonicalProfile.skills.soft,
+        technical: payload.canonicalProfile.skills,
+        business: [],
+        soft: [],
       },
       languages: payload.canonicalProfile.languages.map((lang) => ({
         language: lang.language,
@@ -316,6 +318,7 @@ export class MasterCvCanonicalExtractionService {
 
   private mapProfileRecordToCanonicalData(profile: {
     fullName: string | null;
+    contactEmail: string | null;
     phone: string | null;
     linkedinUrl: string | null;
     city: string | null;
@@ -332,6 +335,7 @@ export class MasterCvCanonicalExtractionService {
     const skills = this.asRecord(profile.skillsJson);
     return {
       fullName: profile.fullName ?? undefined,
+      contactEmail: profile.contactEmail ?? undefined,
       phone: profile.phone ?? undefined,
       linkedinUrl: profile.linkedinUrl ?? undefined,
       city: profile.city ?? undefined,

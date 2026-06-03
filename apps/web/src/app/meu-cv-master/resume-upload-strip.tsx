@@ -1,18 +1,33 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { uploadMasterResume } from "@/lib/resumes-api";
+import {
+  getMyMasterCvExtractionStatus,
+  uploadMasterResume,
+} from "@/lib/resumes-api";
 import type { ResumeDto } from "@/lib/resumes-api";
 
-// ResumesService only checks that turnstileToken is a non-empty string —
-// it does not call the Cloudflare siteverify endpoint. Pass a marker so
-// the presence check passes. Real verification can be wired in later.
+import { clearAllProfileForReupload } from "./actions";
+import { ConfirmDialog } from "./confirm-dialog";
+
 const UPLOAD_TOKEN =
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()
     ? "upload-client-token"
     : "";
+
+const POLL_INTERVAL_MS = 2500;
+
+const MICROFEEDBACK_MESSAGES = [
+  "Lendo o documento...",
+  "Identificando seções...",
+  "Extraindo experiências...",
+  "Mapeando competências...",
+  "Encontrando dados de contato...",
+  "Organizando formação acadêmica...",
+  "Finalizando extração...",
+];
 
 function getExt(fileName: string | null | undefined) {
   return fileName?.split(".").pop()?.toLowerCase() ?? "";
@@ -28,48 +43,210 @@ function ExtBadge({ fileName }: { fileName: string | null | undefined }) {
   );
 }
 
+function ProcessingOverlay({ fileName }: { fileName: string }) {
+  const [msgIndex, setMsgIndex] = useState(0);
+  const [dots, setDots] = useState(0);
+
+  useEffect(() => {
+    const bodyOriginal = document.body.style.overflow;
+    const htmlOriginal = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = bodyOriginal;
+      document.documentElement.style.overflow = htmlOriginal;
+    };
+  }, []);
+
+  useEffect(() => {
+    const msgTimer = setInterval(() => {
+      setMsgIndex((i) => (i + 1) % MICROFEEDBACK_MESSAGES.length);
+    }, 2200);
+    const dotsTimer = setInterval(() => {
+      setDots((d) => (d + 1) % 4);
+    }, 500);
+    return () => {
+      clearInterval(msgTimer);
+      clearInterval(dotsTimer);
+    };
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{
+        background: "rgba(10,10,10,0.55)",
+        backdropFilter: "blur(8px)",
+        width: "100vw",
+        height: "100vh",
+      }}
+    >
+      <div
+        className="flex w-full max-w-[380px] flex-col items-center gap-5 rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[#0a0a0a] px-8 py-8 shadow-[0_32px_80px_-16px_rgba(0,0,0,0.8)]"
+        style={{ animation: "cv-block-open 0.2s ease-out both" }}
+      >
+        {/* Spinner */}
+        <div className="relative flex h-14 w-14 items-center justify-center">
+          <svg
+            className="absolute inset-0 animate-spin"
+            viewBox="0 0 56 56"
+            fill="none"
+          >
+            <circle
+              cx="28"
+              cy="28"
+              r="23"
+              stroke="rgba(198,255,58,0.15)"
+              strokeWidth="3"
+            />
+            <path
+              d="M28 5 A23 23 0 0 1 51 28"
+              stroke="#c6ff3a"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+          </svg>
+          <span className="font-mono text-[10px] font-semibold text-[#c6ff3a]">
+            IA
+          </span>
+        </div>
+
+        <div className="text-center">
+          <p className="text-[15px] font-medium tracking-[-0.01em] text-[#fafaf6]">
+            Processando CV
+          </p>
+          <p className="mt-1 font-mono text-[10.5px] text-[#8a8a85]">
+            {fileName}
+          </p>
+        </div>
+
+        <div className="h-[22px] text-center">
+          <p className="text-[13px] text-[#a0a09a]">
+            {MICROFEEDBACK_MESSAGES[msgIndex]}
+            {".".repeat(dots)}
+          </p>
+        </div>
+
+        <p className="text-center font-mono text-[10px] text-[#5a5a55]">
+          Isso pode levar alguns segundos
+        </p>
+      </div>
+    </div>
+  );
+}
+
 const labelCls =
   "font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-[#8a8a85]";
 
 const btnBase =
   "shrink-0 rounded-[8px] px-4 py-2.5 text-[13px] font-medium [font-family:inherit] transition-colors disabled:opacity-50";
 
-type Props = { masterResume: ResumeDto | null };
+type Props = { masterResume: ResumeDto | null; hasFilledFields: boolean };
 
-export function ResumeUploadStrip({ masterResume }: Props) {
+export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [processingFileName, setProcessingFileName] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const startPolling = () => {
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await getMyMasterCvExtractionStatus();
+        if (!status) return;
+        if (status.status === "succeeded" || status.status === "failed") {
+          stopPolling();
+          setProcessing(false);
+          router.refresh();
+        }
+      } catch {
+        // keep polling
+      }
+    }, POLL_INTERVAL_MS);
+  };
+
+  useEffect(() => () => stopPolling(), []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
-    setPendingFile(file);
+    if (!file) return;
+
+    if (hasFilledFields) {
+      setPendingFile(file);
+      setShowConfirm(true);
+    } else {
+      setPendingFile(file);
+    }
     setError(null);
   };
 
-  const handleUpload = async () => {
-    if (!pendingFile) return;
-    setUploading(true);
+  const doUpload = async (file: File, alreadyUploading = false) => {
+    if (!alreadyUploading) setUploading(true);
     setError(null);
     try {
       const formData = new FormData();
-      formData.append("file", pendingFile);
-      formData.append("title", pendingFile.name.replace(/\.[^.]+$/, ""));
+      formData.append("file", file);
+      formData.append("title", file.name.replace(/\.[^.]+$/, ""));
       formData.append("isPrimary", "true");
       if (UPLOAD_TOKEN) formData.append("turnstileToken", UPLOAD_TOKEN);
       await uploadMasterResume(formData);
       setPendingFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      router.refresh();
+      startPolling();
     } catch (err) {
+      setProcessing(false);
       setError(
         err instanceof Error ? err.message : "Erro ao enviar o arquivo.",
       );
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleConfirmReplace = async () => {
+    setShowConfirm(false);
+    if (!pendingFile) return;
+    setProcessingFileName(pendingFile.name);
+    setProcessing(true);
+    setUploading(true);
+    setError(null);
+    try {
+      await clearAllProfileForReupload();
+    } catch (err) {
+      setProcessing(false);
+      setError(
+        err instanceof Error ? err.message : "Erro ao limpar o perfil.",
+      );
+      setUploading(false);
+      return;
+    }
+    await doUpload(pendingFile, true);
+  };
+
+  const handleCancelConfirm = () => {
+    setShowConfirm(false);
+    setPendingFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleUpload = async () => {
+    if (!pendingFile) return;
+    setProcessingFileName(pendingFile.name);
+    setProcessing(true);
+    await doUpload(pendingFile);
   };
 
   const handleCancel = () => {
@@ -80,6 +257,19 @@ export function ResumeUploadStrip({ masterResume }: Props) {
 
   return (
     <>
+      {processing && <ProcessingOverlay fileName={processingFileName} />}
+
+      {showConfirm && (
+        <ConfirmDialog
+          title="Substituir CV Master?"
+          description="Isso vai apagar todos os campos preenchidos e recarregar os dados a partir do novo arquivo. Essa ação não pode ser desfeita."
+          confirmLabel="Sim, substituir tudo"
+          danger
+          onConfirm={handleConfirmReplace}
+          onCancel={handleCancelConfirm}
+        />
+      )}
+
       <input
         ref={fileInputRef}
         type="file"
@@ -89,7 +279,6 @@ export function ResumeUploadStrip({ masterResume }: Props) {
       />
 
       <div className="flex flex-wrap items-center justify-between gap-5 rounded-[14px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] px-5 py-4">
-        {/* Left: badge + file info */}
         <div className="flex items-center gap-3.5">
           <ExtBadge
             fileName={pendingFile?.name ?? masterResume?.sourceFileName}
@@ -111,7 +300,6 @@ export function ResumeUploadStrip({ masterResume }: Props) {
           </div>
         </div>
 
-        {/* Right: actions */}
         <div className="flex flex-col items-end gap-2">
           {error && (
             <p className="max-w-[300px] text-right text-[12px] text-[#9a3d28]">
@@ -119,7 +307,7 @@ export function ResumeUploadStrip({ masterResume }: Props) {
             </p>
           )}
 
-          {pendingFile ? (
+          {pendingFile && !showConfirm ? (
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -139,21 +327,18 @@ export function ResumeUploadStrip({ masterResume }: Props) {
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-3">
-              {masterResume && (
-                <p className="max-w-[220px] text-right text-[11.5px] leading-[1.4] text-[#8a8a85]">
-                  Substituir re-extrai os dados. Suas edições são preservadas
-                  quando possível.
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className={`${btnBase} bg-[#0a0a0a] text-[#fafaf6] hover:bg-[#1a1a1a]`}
-              >
-                {masterResume ? "Substituir Arquivo" : "Enviar Arquivo"}
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+              className={`${btnBase} bg-[#0a0a0a] text-[#fafaf6] hover:bg-[#1a1a1a]`}
+            >
+              {uploading
+                ? "Enviando..."
+                : masterResume
+                  ? "Substituir Arquivo"
+                  : "Enviar Arquivo"}
+            </button>
           )}
         </div>
       </div>

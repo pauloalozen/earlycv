@@ -47,11 +47,7 @@ export type MasterCvCanonicalExtractionOutput = {
       startDate: string | null;
       endDate: string | null;
     }>;
-    skills: {
-      technical: string[];
-      business: string[];
-      soft: string[];
-    };
+    skills: string[];
     languages: Array<{
       language: string;
       level: string | null;

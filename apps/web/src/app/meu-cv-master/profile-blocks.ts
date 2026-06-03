@@ -91,13 +91,13 @@ export type ProfileBlockDefinition = {
   description: string;
   fields: ProfileFieldDefinition[];
   id: ProfileBlockId;
+  optional?: boolean;
   title: string;
 };
 
 export type ProfileBlockState = ProfileBlockDefinition & {
   gapHint: string;
   hasGap: boolean;
-  hasSugestao: boolean;
   missingCount: number;
   missingFields: string[];
 };
@@ -114,7 +114,6 @@ export const profileBlockDefinitions: ProfileBlockDefinition[] = [
       { name: "linkedinUrl", label: "LinkedIn", type: "text" },
       { name: "city", label: "Cidade", type: "text" },
       { name: "state", label: "Estado", type: "text" },
-      { name: "country", label: "País", type: "text" },
     ],
   },
   {
@@ -203,10 +202,9 @@ export const profileBlockDefinitions: ProfileBlockDefinition[] = [
   {
     id: "links",
     title: "Links",
-    description: "LinkedIn e outros links profissionais.",
-    fields: [
-      { name: "linkedinUrl", label: "LinkedIn", type: "text" },
-    ],
+    description: "Links adicionais (portfólio, GitHub, etc.).",
+    fields: [],
+    optional: true,
   },
 ];
 
@@ -290,16 +288,15 @@ export function buildProfileBlockStates(
     return {
       ...definition,
       gapHint: missingLabelCount(missingFields),
-      hasGap: missingFields.length > 0,
-      hasSugestao: false,
-      missingCount: missingFields.length,
-      missingFields,
+      hasGap: definition.optional ? false : missingFields.length > 0,
+      missingCount: definition.optional ? 0 : missingFields.length,
+      missingFields: definition.optional ? [] : missingFields,
     };
   });
 }
 
 export function getPrimaryGapBlockId(blocks: ProfileBlockState[]) {
-  return blocks.find((block) => block.hasGap)?.id ?? null;
+  return blocks.find((block) => !block.optional && block.hasGap)?.id ?? null;
 }
 
 function readString(formData: FormData, key: string) {

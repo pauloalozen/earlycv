@@ -20,13 +20,13 @@ type CvMasterBlockProps = {
   defaultOpen?: boolean;
   gapHint: string;
   hasGap: boolean;
-  hasSugestao?: boolean;
   index: number;
+  isOptional?: boolean;
   profile: UserProfileRecord;
   userEmail?: string;
 };
 
-type BlockState = "completo" | "lacuna" | "sugestao";
+type BlockState = "completo" | "lacuna" | "opcional";
 
 const STATE_META: Record<
   BlockState,
@@ -34,10 +34,10 @@ const STATE_META: Record<
 > = {
   completo: {
     label: "Completo",
-    dot: "#2a6a10",
-    text: "#2a6a10",
-    bg: "transparent",
-    border: "rgba(10,10,10,0.12)",
+    dot: "#7aa01a",
+    text: "#3a5008",
+    bg: "rgba(198,255,58,0.18)",
+    border: "rgba(110,150,20,0.22)",
   },
   lacuna: {
     label: "Lacuna",
@@ -46,12 +46,12 @@ const STATE_META: Record<
     bg: "rgba(245,197,24,0.13)",
     border: "rgba(220,170,20,0.30)",
   },
-  sugestao: {
-    label: "Sugestão da IA",
-    dot: "#7aa01a",
-    text: "#3a5008",
-    bg: "rgba(198,255,58,0.18)",
-    border: "rgba(110,150,20,0.22)",
+  opcional: {
+    label: "Opcional",
+    dot: "#8a8a85",
+    text: "#6a6a65",
+    bg: "transparent",
+    border: "rgba(10,10,10,0.10)",
   },
 };
 
@@ -137,11 +137,11 @@ function TextareaField({
         {label}
       </label>
       <textarea
-        className="w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 py-2.5 text-[13px] font-normal leading-relaxed text-[#3a3a36] outline-none transition-[border-color] placeholder:text-[#b0aea8] focus:border-[#0a0a0a]"
+        className="w-full resize-none rounded-[8px] border border-[#e3e1d9] bg-white px-3 py-2.5 text-[13px] font-normal leading-relaxed text-[#3a3a36] outline-none transition-[border-color] placeholder:text-[#b0aea8] focus:border-[#0a0a0a]"
         defaultValue={value}
         id={id}
         name={name}
-        rows={rows}
+        rows={rows ?? 6}
         placeholder={placeholder}
       />
     </div>
@@ -380,13 +380,13 @@ function ExperienciasEditor({ raw }: { raw: unknown }) {
                 Descrição
               </label>
               <textarea
-                className="w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 py-2.5 text-[13px] font-normal leading-relaxed text-[#3a3a36] outline-none transition-[border-color] placeholder:text-[#b0aea8] focus:border-[#0a0a0a]"
+                className="w-full resize-none rounded-[8px] border border-[#e3e1d9] bg-white px-3 py-2.5 text-[13px] font-normal leading-relaxed text-[#3a3a36] outline-none transition-[border-color] placeholder:text-[#b0aea8] focus:border-[#0a0a0a]"
                 id={`exp-desc-${e._id}`}
                 value={e.description}
                 onChange={(ev) =>
                   update(e._id, "description", ev.target.value)
                 }
-                rows={3}
+                rows={5}
                 placeholder="Responsabilidades e conquistas principais"
               />
             </div>
@@ -966,13 +966,6 @@ function BlockContent({
           value={profile.state ?? ""}
           placeholder="SP"
         />
-        <Field
-          label="País"
-          id="dp-country"
-          name="country"
-          value={profile.country ?? ""}
-          placeholder="Brasil"
-        />
       </div>
     );
   }
@@ -1023,8 +1016,8 @@ export function CvMasterBlock({
   block,
   defaultOpen = false,
   hasGap,
-  hasSugestao = false,
   index,
+  isOptional = false,
   profile,
   userEmail,
 }: CvMasterBlockProps) {
@@ -1032,10 +1025,10 @@ export function CvMasterBlock({
   const [closing, setClosing] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const blockRef = useRef<HTMLDivElement>(null);
-  const state: BlockState = hasGap
-    ? "lacuna"
-    : hasSugestao
-      ? "sugestao"
+  const state: BlockState = isOptional
+    ? "opcional"
+    : hasGap
+      ? "lacuna"
       : "completo";
   const idx = String(index).padStart(2, "0");
 
@@ -1061,7 +1054,7 @@ export function CvMasterBlock({
       const t = setTimeout(() => {
         blockRef.current?.scrollIntoView({
           behavior: "smooth",
-          block: "center",
+          block: "start",
         });
       }, 80);
       return () => clearTimeout(t);

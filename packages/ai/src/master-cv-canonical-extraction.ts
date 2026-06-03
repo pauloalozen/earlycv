@@ -9,15 +9,14 @@ const ALLOWED_CANONICAL_FIELD_PATHS = [
   "email",
   "phone",
   "linkedinUrl",
+  "location",
   "location.city",
   "location.state",
   "location.country",
   "professionalSummary",
   "experiences",
   "education",
-  "skills.technical",
-  "skills.business",
-  "skills.soft",
+  "skills",
   "languages",
   "certifications",
 ] as const;
@@ -65,11 +64,7 @@ export type CanonicalProfile = {
     startDate: string | null;
     endDate: string | null;
   }>;
-  skills: {
-    technical: string[];
-    business: string[];
-    soft: string[];
-  };
+  skills: string[];
   languages: Array<{
     language: string;
     level: string | null;
@@ -94,11 +89,14 @@ export type MasterCvCanonicalExtractionOutput = {
   evidence: Record<string, string[]>;
 };
 
-const SYSTEM_PROMPT = `You extract canonical profile data from a user's Master CV.
+const SYSTEM_PROMPT = `You are a precise transcription engine for CV data. Your only job is to locate and copy information exactly as written — do NOT rewrite, rephrase, summarize, or infer anything.
 
 HARD RULES:
-- Never invent experiences, roles, dates, skills, certifications, results or contact data.
-- Only output values that have textual evidence in the CV.
+- TRANSCRIBE VERBATIM: copy text exactly as it appears in the CV. Never paraphrase.
+- EXHAUSTIVE: include EVERY experience, education entry, skill, language, and certification present. Do not omit any.
+- CONTACT DATA: scan the ENTIRE document — headers, footers, sidebars, top section — for email address, phone number, and LinkedIn URL. These are almost always present. If you see something that looks like an email (contains @), extract it.
+- SKILLS must be short keyword chips only (e.g. "React", "Next.js", "SQL", "Agile", "Power BI"). Never output phrases or sentences as skills. Split compound skill lists into individual items.
+- Never invent or infer data not explicitly present in the CV text.
 - Missing/unknown values must be null or empty arrays.
 - Return strict JSON only.
 - extractionCoverage.fieldStatus values must be only: filled, partial, missing.
@@ -115,7 +113,7 @@ Return exactly this JSON shape:
     "professionalSummary": string | null,
     "experiences": [{ "role": string | null, "company": string | null, "location": string | null, "startDate": string | null, "endDate": string | null, "bullets": string[], "technologies": string[] }],
     "education": [{ "institution": string | null, "degree": string | null, "fieldOfStudy": string | null, "startDate": string | null, "endDate": string | null }],
-    "skills": { "technical": string[], "business": string[], "soft": string[] },
+    "skills": string[],
     "languages": [{ "language": string, "level": string | null }],
     "certifications": [{ "name": string, "issuer": string | null, "year": string | null }]
   },
@@ -279,10 +277,6 @@ function validateOutput(payload: unknown): MasterCvCanonicalExtractionOutput {
   const location = validateRecord(
     canonicalProfile.location,
     "canonicalProfile.location",
-  );
-  const skills = validateRecord(
-    canonicalProfile.skills,
-    "canonicalProfile.skills",
   );
 
   const typedCoverage = {
@@ -471,17 +465,10 @@ function validateOutput(payload: unknown): MasterCvCanonicalExtractionOutput {
           };
         });
       })(),
-      skills: {
-        technical: validateStringArray(
-          skills.technical,
-          "canonicalProfile.skills.technical",
-        ),
-        business: validateStringArray(
-          skills.business,
-          "canonicalProfile.skills.business",
-        ),
-        soft: validateStringArray(skills.soft, "canonicalProfile.skills.soft"),
-      },
+      skills: validateStringArray(
+        canonicalProfile.skills,
+        "canonicalProfile.skills",
+      ),
       languages: (() => {
         if (!Array.isArray(canonicalProfile.languages)) {
           throw new Error(

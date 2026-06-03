@@ -33,6 +33,7 @@ type MergeResult = {
 
 type ScalarFieldPath =
   | "fullName"
+  | "contactEmail"
   | "phone"
   | "linkedinUrl"
   | "city"
@@ -64,6 +65,17 @@ export class ProfileCanonicalMergeService {
       fieldPath: "fullName",
       next,
       incoming: input.incoming.fullName,
+      source: input.source,
+      sourceCvId: input.sourceCvId,
+      fieldMeta,
+      suggestions,
+      nowIso,
+      extractionContext: input.extractionContext,
+    });
+    this.mergeScalar({
+      fieldPath: "contactEmail",
+      next,
+      incoming: input.incoming.contactEmail,
       source: input.source,
       sourceCvId: input.sourceCvId,
       fieldMeta,

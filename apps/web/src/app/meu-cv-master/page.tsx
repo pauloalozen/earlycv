@@ -56,28 +56,28 @@ const STATE_LEGEND = [
     key: "completo",
     label: "Completo",
     desc: "extração ok",
-    dot: "#2a6a10",
-    text: "#2a6a10",
-    bg: "transparent",
-    border: "rgba(10,10,10,0.12)",
+    dot: "#7aa01a",
+    text: "#3a5008",
+    bg: "rgba(198,255,58,0.18)",
+    border: "rgba(110,150,20,0.22)",
   },
   {
     key: "lacuna",
     label: "Lacuna",
-    desc: "falta um dado",
+    desc: "faltam dados",
     dot: "#e0a90c",
     text: "#a07a0a",
     bg: "rgba(245,197,24,0.13)",
     border: "rgba(220,170,20,0.30)",
   },
   {
-    key: "sugestao",
-    label: "Sugestão da IA",
-    desc: "pode melhorar",
-    dot: "#7aa01a",
-    text: "#3a5008",
-    bg: "rgba(198,255,58,0.18)",
-    border: "rgba(110,150,20,0.22)",
+    key: "opcional",
+    label: "Opcional",
+    desc: "não obrigatório",
+    dot: "#8a8a85",
+    text: "#6a6a65",
+    bg: "transparent",
+    border: "rgba(10,10,10,0.10)",
   },
 ] as const;
 
@@ -133,15 +133,13 @@ export default async function MeuCvMasterPage({
     (sum, block) => sum + block.missingCount,
     0,
   );
-  const totalFields = blockStates.reduce((sum, b) => sum + b.fields.length, 0);
-  const missingTotal = blockStates.reduce((sum, b) => sum + b.missingCount, 0);
+  const requiredBlocks = blockStates.filter((b) => !b.optional);
+  const totalFields = requiredBlocks.reduce((sum, b) => sum + b.fields.length, 0);
+  const missingTotal = requiredBlocks.reduce((sum, b) => sum + b.missingCount, 0);
   const profileCompletion =
     totalFields > 0
       ? Math.round(((totalFields - missingTotal) / totalFields) * 100)
       : 0;
-  const suggestionCount = Array.isArray(profileData.profileSuggestionsJson)
-    ? profileData.profileSuggestionsJson.length
-    : 0;
 
   return (
     <PageShell>
@@ -207,14 +205,17 @@ export default async function MeuCvMasterPage({
                     {profileCompletion}% completo
                   </p>
                   <p className="mt-0.5 font-mono text-[10.5px] text-[#8a8a85]">
-                    {gapCount} lacunas · {suggestionCount} sugestões
+                    {gapCount} lacunas
                   </p>
                 </div>
               </div>
             </div>
 
             {/* Strip do arquivo — inline upload sem sair da página */}
-            <ResumeUploadStrip masterResume={masterResume} />
+            <ResumeUploadStrip
+              masterResume={masterResume}
+              hasFilledFields={profile !== null}
+            />
 
             {/* Revisão: gaps summary */}
             {gapCount > 0 && (
@@ -277,7 +278,7 @@ export default async function MeuCvMasterPage({
                   defaultOpen={focusedBlockId === blockState.id}
                   gapHint={blockState.gapHint}
                   hasGap={blockState.hasGap}
-                  hasSugestao={blockState.hasSugestao}
+                  isOptional={blockState.optional}
                   profile={profileData}
                   userEmail={user?.email}
                 />
