@@ -9,11 +9,13 @@ export type EnqueueMasterCvCanonicalExtractionInput = {
   userId: string;
   resumeId: string;
   file?: MasterCvFilePayload;
+  rawText?: string;
 };
 
 export type ProcessMasterCvCanonicalExtractionJobInput = {
   extractionId: string;
   file?: MasterCvFilePayload;
+  rawText?: string;
 };
 
 export type MasterCvCanonicalExtractionOutput = {

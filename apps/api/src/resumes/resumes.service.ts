@@ -119,6 +119,7 @@ export class ResumesService {
     turnstileToken?: string,
   ) {
     let sourceFileUrl: string | null = null;
+    let extractedRawText: string | null = null;
 
     if (file) {
       if (!turnstileToken?.trim()) {
@@ -133,6 +134,18 @@ export class ResumesService {
         file.buffer,
         file.mimetype,
       );
+
+      // Extract raw text from the file so the AI extraction step can use
+      // plain text input, which works with any chat model and avoids
+      // file_data format incompatibilities.
+      try {
+        const { extractTextFromCvFile } = await import(
+          "../common/cv-text-extractor.js"
+        );
+        extractedRawText = await extractTextFromCvFile(file);
+      } catch {
+        // non-fatal — extraction will fall back to file-binary mode
+      }
     }
 
     const createdResume = await this.database.$transaction(async (tx) => {
@@ -150,7 +163,7 @@ export class ResumesService {
           sourceFileName: dto.sourceFileName ?? file?.originalname ?? null,
           sourceFileType: file?.mimetype ?? null,
           sourceFileUrl,
-          rawText: null,
+          rawText: extractedRawText,
           status: dto.status ?? (file ? "uploaded" : "draft"),
           kind: ResumeKind.master,
           isMaster: shouldBecomeMaster,
@@ -166,6 +179,7 @@ export class ResumesService {
           {
             userId,
             resumeId: createdResume.id,
+            ...(extractedRawText ? { rawText: extractedRawText } : {}),
             file: file
               ? {
                   buffer: file.buffer,

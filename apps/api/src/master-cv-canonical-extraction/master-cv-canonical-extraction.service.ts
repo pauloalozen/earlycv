@@ -49,15 +49,16 @@ export class MasterCvCanonicalExtractionService {
   async enqueueFromMasterResumeUpload(
     input: EnqueueMasterCvCanonicalExtractionInput,
   ) {
-    if (!input.file) {
+    if (!input.file && !input.rawText) {
       throw new Error(
-        "Master CV file payload is required for synchronous extraction",
+        "Either file or rawText is required for master CV extraction",
       );
     }
 
-    const inputHash = createHash("sha256")
-      .update(input.file.buffer)
-      .digest("hex");
+    const hashSource = input.rawText
+      ? Buffer.from(input.rawText)
+      : input.file!.buffer;
+    const inputHash = createHash("sha256").update(hashSource).digest("hex");
     const table = this.database.masterCvCanonicalExtraction;
 
     const created = await table.create({
@@ -69,7 +70,11 @@ export class MasterCvCanonicalExtractionService {
       },
     });
 
-    return this.processJob({ extractionId: created.id, file: input.file });
+    return this.processJob({
+      extractionId: created.id,
+      file: input.file,
+      rawText: input.rawText,
+    });
   }
 
   async processJob(input: ProcessMasterCvCanonicalExtractionJobInput) {
@@ -97,10 +102,20 @@ export class MasterCvCanonicalExtractionService {
     });
 
     try {
-      const rawText = extraction.resume?.rawText ?? "";
-      const output = await this.extractCanonical(
-        input.file ? { file: input.file } : { masterCvText: rawText },
-      );
+      // Prefer rawText (pre-extracted) over sending the raw file binary.
+      // File-based extraction requires model support for input_file / file_data
+      // which is not universal. Text extraction works with any chat model.
+      const rawText =
+        input.rawText?.trim() ||
+        extraction.resume?.rawText?.trim() ||
+        "";
+      const extractionInput =
+        rawText
+          ? { masterCvText: rawText }
+          : input.file
+            ? { file: input.file }
+            : { masterCvText: "" };
+      const output = await this.extractCanonical(extractionInput);
       const payload = parseMasterCvCanonicalExtractionPayload(output);
 
       await this.mergeIntoUserProfile({
