@@ -171,6 +171,13 @@ export type CvAnalysisData = {
     pontos: number;
     dica: string;
   }>;
+  ajustes_indisponiveis?: Array<{
+    id?: string;
+    titulo: string;
+    descricao?: string;
+    pontos: number;
+    dica?: string;
+  }>;
   /** Presente em análises novas — keywords com impacto por item */
   keywords?: {
     presentes: Array<{ kw: string; pontos: number }>;

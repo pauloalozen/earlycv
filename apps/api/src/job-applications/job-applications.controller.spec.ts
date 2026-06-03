@@ -77,6 +77,18 @@ test("controller query pipes pin expectedType for pagination DTOs", () => {
   assert.match(source, /expectedType: ListJobApplicationHighlightsDto/);
 });
 
+test("controller exposes highlights summary handler", () => {
+  const db = makeDb();
+  const service = new JobApplicationsServiceCtor(db);
+  const controller = new JobApplicationsController(service, interviewPrepStub);
+
+  assert.equal(
+    typeof (controller as unknown as { getHighlightsSummary?: unknown })
+      .getHighlightsSummary,
+    "function",
+  );
+});
+
 test("list/controller payload includes derived best-version fields", async () => {
   const db = makeDb();
   const service = new JobApplicationsServiceCtor(db);
@@ -110,6 +122,36 @@ test("highlights/controller returns relevance-ranked items with derived fields",
   assert.equal(item.bestCvAdaptationId, "a2");
   assert.equal(item.bestCvState, "ready");
   assert.equal(item.scorePresentation, "scored");
+});
+
+test("highlights summary/controller delegates with authenticated user and returns service payload", async () => {
+  const db = makeDb();
+  const service = new JobApplicationsServiceCtor(db);
+  const controller = new JobApplicationsController(service, interviewPrepStub);
+  const expected = {
+    activeApplicationsCount: 4,
+    analyzedCvsCount: 3,
+    averageScore: 79,
+  };
+  let capturedUserId: string | null = null;
+
+  (
+    service as unknown as {
+      getHighlightsSummary: (userId: string) => Promise<{
+        activeApplicationsCount: number;
+        analyzedCvsCount: number;
+        averageScore: number | null;
+      }>;
+    }
+  ).getHighlightsSummary = async (userId: string) => {
+    capturedUserId = userId;
+    return expected;
+  };
+
+  const response = await controller.getHighlightsSummary({ id: "user-1" });
+
+  assert.equal(capturedUserId, "user-1");
+  assert.deepEqual(response, expected);
 });
 
 test("split/controller delegates to service with authenticated user", async () => {

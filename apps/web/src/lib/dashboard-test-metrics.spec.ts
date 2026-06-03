@@ -99,6 +99,42 @@ test("extractDashboardAnalysisSignal returns final score from normalized CV calc
   );
 });
 
+test("extractDashboardAnalysisSignal resolves historical normalized-analysis payloads consistently", () => {
+  const payload = makeAnalysisPayload();
+  const signal = extractDashboardAnalysisSignal(payload);
+
+  assert.equal(signal.adjustments.scoreBefore, 58);
+  assert.equal(signal.adjustments.scoreFinal, 72);
+  assert.equal(signal.score, 72);
+  assert.equal(signal.improvement, 14);
+});
+
+test("extractDashboardAnalysisSignal preserves scalar fallback for malformed historical payloads", () => {
+  const payload = {
+    ...makeAnalysisPayload(),
+    fit: {
+      score: 41,
+      score_pos_ajustes: 83,
+      categoria: "medio",
+      headline: "headline",
+      subheadline: "subheadline",
+    },
+    positivos: [null],
+    projecao_melhoria: {
+      score_atual: 62,
+      score_pos_otimizacao: 78,
+      explicacao_curta: "",
+    },
+  } as unknown as CvAnalysisData;
+
+  const signal = extractDashboardAnalysisSignal(payload);
+
+  assert.equal(signal.adjustments.scoreBefore, 62);
+  assert.equal(signal.adjustments.scoreFinal, 83);
+  assert.equal(signal.score, 83);
+  assert.equal(signal.improvement, 21);
+});
+
 test("extractDashboardAnalysisSignal uses normalized final score instead of raw fit score", () => {
   const payload = makeAnalysisPayload();
   payload.fit.score = 99;

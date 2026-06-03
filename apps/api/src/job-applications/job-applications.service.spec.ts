@@ -851,6 +851,292 @@ test("listHighlights ranks applications by relevance groups and score", async ()
   );
 });
 
+test("getHighlightsSummary returns full KPI totals for the user", async () => {
+  let capturedWhere: Record<string, unknown> | null = null;
+  const db = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        capturedWhere = where;
+
+        return [
+          {
+            id: "app-saved",
+            userId: "user-1",
+            status: "SAVED",
+            cvAdaptations: [],
+          },
+          {
+            id: "app-analyzed",
+            userId: "user-1",
+            status: "ANALYZED",
+            cvAdaptations: [
+              {
+                id: "adapt-1",
+                createdAt: new Date("2026-05-01T10:00:00Z"),
+                status: "delivered",
+                adaptedResumeId: "resume-1",
+                isUnlocked: true,
+                adaptedContentJson: { scoreAfter: 82 },
+              },
+            ],
+          },
+          {
+            id: "app-applied",
+            userId: "user-1",
+            status: "APPLIED",
+            cvAdaptations: [
+              {
+                id: "adapt-2",
+                createdAt: new Date("2026-05-02T10:00:00Z"),
+                status: "delivered",
+                adaptedResumeId: "resume-2",
+                isUnlocked: true,
+                adaptedContentJson: { scoreAfter: 76 },
+              },
+            ],
+          },
+          {
+            id: "app-interview",
+            userId: "user-1",
+            status: "INTERVIEW",
+            cvAdaptations: [
+              {
+                id: "adapt-3",
+                createdAt: new Date("2026-05-03T10:00:00Z"),
+                status: "delivered",
+                adaptedResumeId: "resume-3",
+                isUnlocked: true,
+                adaptedContentJson: { scoreAfter: 79 },
+              },
+            ],
+          },
+          {
+            id: "app-rejected",
+            userId: "user-1",
+            status: "REJECTED",
+            cvAdaptations: [],
+          },
+        ];
+      },
+    },
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+  const summary = await service.getHighlightsSummary("user-1");
+
+  assert.deepEqual(capturedWhere, {
+    userId: "user-1",
+    archivedAt: null,
+    deletedAt: null,
+  });
+  assert.equal(summary.activeApplicationsCount, 4);
+  assert.equal(summary.analyzedCvsCount, 3);
+  assert.equal(summary.averageScore, 79);
+});
+
+test("getHighlightsSummary active count does not depend on relevance ranking", async () => {
+  const db = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findMany: async () => [
+        {
+          id: "app-saved",
+          userId: "user-1",
+          status: "SAVED",
+          cvAdaptations: [],
+        },
+        {
+          id: "app-in-process",
+          userId: "user-1",
+          status: "IN_PROCESS",
+          cvAdaptations: [],
+        },
+        {
+          id: "app-rejected",
+          userId: "user-1",
+          status: "REJECTED",
+          cvAdaptations: [],
+        },
+      ],
+    },
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+  (
+    service as unknown as {
+      relevanceGroupRank: (_status: string) => number;
+    }
+  ).relevanceGroupRank = () => 2;
+
+  const summary = await service.getHighlightsSummary("user-1");
+
+  assert.equal(summary.activeApplicationsCount, 2);
+});
+
+test("getHighlightsSummary counts persisted scoreAfter only for legacy applications without adaptations", async () => {
+  const db = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findMany: async () => [
+        {
+          id: "app-empty-adaptations",
+          userId: "user-1",
+          status: "ANALYZED",
+          scoreAfter: 84,
+          cvAdaptations: [],
+        },
+        {
+          id: "app-unresolved-adaptation",
+          userId: "user-1",
+          status: "CV_READY",
+          scoreAfter: 76,
+          cvAdaptations: [
+            {
+              id: "adapt-unresolved",
+              createdAt: new Date("2026-05-04T10:00:00Z"),
+              status: "delivered",
+              adaptedResumeId: "resume-legacy",
+              isUnlocked: true,
+              adaptedContentJson: { summary: "missing score payload" },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+  const summary = await service.getHighlightsSummary("user-1");
+
+  assert.equal(summary.activeApplicationsCount, 2);
+  assert.equal(summary.analyzedCvsCount, 1);
+  assert.equal(summary.averageScore, 84);
+});
+
+test("getHighlightsSummary does not trust persisted scoreAfter when adaptations exist but cannot resolve a score", async () => {
+  const db = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findMany: async () => [
+        {
+          id: "app-stale-score",
+          userId: "user-1",
+          status: "CV_READY",
+          scoreAfter: 91,
+          cvAdaptations: [
+            {
+              id: "adapt-current",
+              createdAt: new Date("2026-05-04T10:00:00Z"),
+              status: "delivered",
+              adaptedResumeId: "resume-current",
+              isUnlocked: true,
+              adaptedContentJson: { summary: "missing score payload" },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+  const summary = await service.getHighlightsSummary("user-1");
+
+  assert.equal(summary.activeApplicationsCount, 1);
+  assert.equal(summary.analyzedCvsCount, 0);
+  assert.equal(summary.averageScore, null);
+});
+
+test("getHighlightsSummary counts historical normalized-analysis payloads that web resolves", async () => {
+  const db = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findMany: async () => [
+        {
+          id: "app-historical-normalized-shape",
+          userId: "user-1",
+          status: "CV_READY",
+          cvAdaptations: [
+            {
+              id: "adapt-historical-normalized-shape",
+              createdAt: new Date("2026-05-04T10:00:00Z"),
+              status: "delivered",
+              adaptedResumeId: "resume-historical-normalized-shape",
+              isUnlocked: true,
+              adaptedContentJson: {
+                vaga: { cargo: "Analista", empresa: "EarlyCV" },
+                fit: {
+                  score: 1,
+                  categoria: "medio",
+                  headline: "headline",
+                  subheadline: "subheadline",
+                },
+                positivos: [{ texto: "xp relevante", pontos: 20 }],
+                ajustes_conteudo: [
+                  {
+                    id: "a1",
+                    titulo: "Ajustar bullets",
+                    descricao: "",
+                    pontos: 10,
+                    dica: "",
+                  },
+                ],
+                ajustes_indisponiveis: [
+                  {
+                    id: "i1",
+                    titulo: "Sem ingles avancado",
+                    descricao: "",
+                    pontos: 10,
+                    dica: "",
+                  },
+                ],
+                keywords: {
+                  presentes: [{ kw: "SQL", pontos: 25 }],
+                  ausentes: [{ kw: "Python", pontos: 15 }],
+                },
+                formato_cv: {
+                  resumo: "ok",
+                  problemas: [
+                    {
+                      tipo: "atencao",
+                      titulo: "Resumo longo",
+                      descricao: "",
+                      impacto: 4,
+                    },
+                  ],
+                  campos: [
+                    { nome: "Telefone", presente: false },
+                    { nome: "LinkedIn", presente: false },
+                    { nome: "Nome completo", presente: true },
+                  ],
+                },
+                comparacao: { antes: "", depois: "" },
+                pontos_fortes: [],
+                lacunas: [],
+                melhorias_aplicadas: [],
+                ats_keywords: { presentes: [], ausentes: [] },
+                preview: { antes: "", depois: "" },
+                projecao_melhoria: {
+                  score_atual: 88,
+                  explicacao_curta: "",
+                },
+                mensagem_venda: { titulo: "", subtexto: "" },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+  const summary = await service.getHighlightsSummary("user-1");
+
+  assert.equal(summary.activeApplicationsCount, 1);
+  assert.equal(summary.analyzedCvsCount, 1);
+  assert.equal(summary.averageScore, 72);
+});
+
 test("getById returns derived best-version fields", async () => {
   const db = makeDb({
     jobApplication: {

@@ -7,9 +7,14 @@ import { PageShell } from "@/components/page-shell";
 import { ProgressRing } from "@/components/progress-ring";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { getCvAdaptationContent } from "@/lib/cv-adaptation-api";
+import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getStatusConfig } from "@/lib/job-application-status";
-import { listJobApplicationHighlights } from "@/lib/job-applications-api";
+import {
+  getJobApplicationHighlightsSummary,
+  listJobApplicationHighlights,
+} from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 
@@ -18,9 +23,22 @@ export const metadata: Metadata = {
   title: "Meu Perfil | EarlyCV",
 };
 
-function formatSignedPercent(value: number | null) {
-  if (value === null) return "—";
-  return `${value > 0 ? "+" : ""}${value}%`;
+function toNum(value: unknown): number | null {
+  const n = Number(value);
+  return value !== null && value !== undefined && !Number.isNaN(n) ? n : null;
+}
+
+async function resolveLegacyScore(adaptationId: string | null) {
+  if (!adaptationId) return null;
+
+  try {
+    const payload = await getCvAdaptationContent(adaptationId);
+    return toNum(
+      extractDashboardAnalysisSignal(payload.adaptedContentJson).score,
+    );
+  } catch {
+    return null;
+  }
 }
 
 function Chevron() {
@@ -46,46 +64,41 @@ export default async function MeuPerfilPage() {
   const redirectPath = getRouteAccessRedirectPath("/meu-perfil", user);
   if (redirectPath) redirect(redirectPath);
 
-  const [planResult, highlightsResult, masterResumeResult] =
+  const [planResult, highlightsResult, summaryResult, masterResumeResult] =
     await Promise.allSettled([
       getMyPlan(),
       listJobApplicationHighlights(3),
+      getJobApplicationHighlightsSummary(),
       getMyMasterResume(),
     ]);
 
   const plan = planResult.status === "fulfilled" ? planResult.value : null;
   const applicationHighlights =
     highlightsResult.status === "fulfilled" ? highlightsResult.value : [];
+  const highlightsSummary =
+    summaryResult.status === "fulfilled" ? summaryResult.value : null;
   const highlightsError = highlightsResult.status === "rejected";
   const masterResume =
     masterResumeResult.status === "fulfilled" ? masterResumeResult.value : null;
 
   const firstName = user?.name?.split(" ")[0] ?? "";
   const availableCredits = toHeaderAvailableCredits(plan);
-  const toNum = (v: unknown): number | null => {
-    const n = Number(v);
-    return v !== null && v !== undefined && !Number.isNaN(n) ? n : null;
-  };
-  const scoredHighlights = applicationHighlights
-    .map((item) => ({ ...item, score: toNum(item.bestScore) }))
-    .filter(
-      (item): item is typeof item & { score: number } => item.score !== null,
-    );
-  const averageScore =
-    scoredHighlights.length > 0
-      ? Math.round(
-          scoredHighlights.reduce((sum, item) => sum + item.score, 0) /
-            scoredHighlights.length,
-        )
-      : null;
-  const bestScore =
-    scoredHighlights.length > 0
-      ? Math.max(...scoredHighlights.map((item) => item.score))
-      : null;
-  const recentImprovement =
-    scoredHighlights.length >= 2
-      ? scoredHighlights[0].score - scoredHighlights[1].score
-      : null;
+  const highlightsWithScores = await Promise.all(
+    applicationHighlights.map(async (item) => {
+      const directScore = toNum(item.bestScore);
+      if (directScore !== null) {
+        return { ...item, displayScore: directScore };
+      }
+
+      return {
+        ...item,
+        displayScore: await resolveLegacyScore(
+          item.bestCvAdaptationId ?? item.currentCvAdaptationId,
+        ),
+      };
+    }),
+  );
+  const kpisAvailable = highlightsSummary !== null;
   const profileCompletion = masterResume ? 80 : 0;
   const profileSuggestions = masterResume ? 2 : 0;
 
@@ -261,20 +274,29 @@ export default async function MeuPerfilPage() {
             <div className="grid gap-3 md:grid-cols-3">
               {[
                 {
-                  label: "Vagas analisadas",
-                  value: String(applicationHighlights.length),
+                  label: "Candidaturas ativas",
+                  value: kpisAvailable
+                    ? String(highlightsSummary.activeApplicationsCount)
+                    : "Erro ao carregar",
                   accent: false,
                 },
                 {
-                  label: "Melhoria recente",
-                  value: formatSignedPercent(recentImprovement),
-                  accent: recentImprovement !== null && recentImprovement > 0,
+                  label: "CVs analisados",
+                  value: kpisAvailable
+                    ? String(highlightsSummary.analyzedCvsCount)
+                    : "Erro ao carregar",
+                  accent:
+                    kpisAvailable && highlightsSummary.analyzedCvsCount > 0,
                 },
                 {
                   label: "Score médio",
-                  value:
-                    bestScore === null ? "—" : `${averageScore ?? bestScore}%`,
-                  accent: bestScore !== null,
+                  value: !kpisAvailable
+                    ? "Erro ao carregar"
+                    : highlightsSummary.averageScore === null
+                      ? "—"
+                      : `${highlightsSummary.averageScore}%`,
+                  accent:
+                    kpisAvailable && highlightsSummary.averageScore !== null,
                 },
               ].map((kpi) => (
                 <div
@@ -316,7 +338,7 @@ export default async function MeuPerfilPage() {
                       página.
                     </p>
                   </div>
-                ) : applicationHighlights.length === 0 ? (
+                ) : highlightsWithScores.length === 0 ? (
                   <div className="py-8 text-center">
                     <p className="text-[14.5px] font-medium text-[#0a0a0a]">
                       Você ainda não tem candidaturas
@@ -326,9 +348,9 @@ export default async function MeuPerfilPage() {
                     </p>
                   </div>
                 ) : (
-                  applicationHighlights.map((item) => {
+                  highlightsWithScores.map((item) => {
                     const status = getStatusConfig(item.status);
-                    const scoreNum = toNum(item.bestScore);
+                    const scoreNum = item.displayScore;
                     const scoreText =
                       scoreNum !== null ? `${Math.round(scoreNum)}%` : "—";
 
@@ -336,7 +358,7 @@ export default async function MeuPerfilPage() {
                       <Link
                         key={item.id}
                         href={`/candidaturas/${item.id}`}
-                        className="flex items-center gap-4 border-t border-[rgba(10,10,10,0.06)] py-[15px] first:border-t-0 transition-opacity hover:opacity-75"
+                        className="flex items-center gap-4 border-t border-[rgba(10,10,10,0.06)] py-[22px] first:border-t-0 transition-opacity hover:opacity-75"
                       >
                         <div className="min-w-0 flex-1">
                           <p className="text-[14.5px] font-medium leading-tight tracking-[-0.01em] text-[#0a0a0a]">
@@ -395,6 +417,14 @@ export default async function MeuPerfilPage() {
             </div>
 
             {/* 7 · Zona de perigo */}
+            <div className="mt-8">
+              <div className="mb-6 flex items-center gap-4">
+                <div className="h-px flex-1 bg-[rgba(154,61,40,0.18)]" />
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9a3d28]">
+                  Zona de perigo
+                </p>
+                <div className="h-px flex-1 bg-[rgba(154,61,40,0.18)]" />
+              </div>
             <div
               className="flex flex-wrap items-center justify-between gap-5 rounded-[12px] px-5 py-4"
               style={{
@@ -403,10 +433,7 @@ export default async function MeuPerfilPage() {
               }}
             >
               <div>
-                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[#9a3d28]">
-                  Zona de perigo
-                </p>
-                <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.01em] text-[#9a3d28]">
+                <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#9a3d28]">
                   Excluir conta
                 </p>
                 <p className="mt-0.5 max-w-[520px] text-[12.5px] leading-relaxed text-[#5a5a55]">
@@ -424,6 +451,7 @@ export default async function MeuPerfilPage() {
               >
                 Excluir conta
               </Link>
+            </div>
             </div>
           </div>
         </div>

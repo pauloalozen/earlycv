@@ -69,6 +69,11 @@ export class JobApplicationsController {
     return this.service.listHighlights(user.id, query.limit ?? 3);
   }
 
+  @Get("highlights/summary")
+  getHighlightsSummary(@AuthenticatedUser() user: { id: string }) {
+    return this.service.getHighlightsSummary(user.id);
+  }
+
   @Get(":id")
   getById(@AuthenticatedUser() user: { id: string }, @Param("id") id: string) {
     return this.service.getById(user.id, id);

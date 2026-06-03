@@ -104,9 +104,16 @@ export type JobApplicationHighlightsDto = {
   companyName: string;
   status: JobApplicationStatus;
   bestScore: number | null;
+  currentCvAdaptationId: string | null;
   bestCvAdaptationId: string | null;
   bestCvState: "ready" | "locked" | "unlocked" | "missing";
   scorePresentation: "scored" | "not_analyzed";
+};
+
+export type JobApplicationHighlightsSummaryDto = {
+  activeApplicationsCount: number;
+  analyzedCvsCount: number;
+  averageScore: number | null;
 };
 
 export type JobApplicationDetailDto = Omit<
@@ -339,4 +346,15 @@ export async function listJobApplicationHighlights(
   if (!response.ok)
     throw new Error("Falha ao carregar destaques das candidaturas");
   return response.json() as Promise<JobApplicationHighlightsDto[]>;
+}
+
+export async function getJobApplicationHighlightsSummary(): Promise<JobApplicationHighlightsSummaryDto> {
+  const response = await apiRequest(
+    "GET",
+    "/job-applications/highlights/summary",
+  );
+  if (!response.ok) {
+    throw new Error("Falha ao carregar resumo das candidaturas");
+  }
+  return response.json() as Promise<JobApplicationHighlightsSummaryDto>;
 }

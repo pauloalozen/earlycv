@@ -1,3 +1,4 @@
+import { resolveCvAnalysisScores } from "@earlycv/config/cv-analysis-score";
 import {
   BadRequestException,
   ConflictException,
@@ -58,37 +59,21 @@ function normalize(value: string): string {
 
 const RECENT_WINDOW_DAYS = 60;
 
+const ACTIVE_SUMMARY_STATUSES: ReadonlySet<JobApplicationStatus> = new Set([
+  "SAVED",
+  "ANALYZED",
+  "CV_READY",
+  "APPLIED",
+  "IN_PROCESS",
+  "INTERVIEW",
+]);
+
 function extractScoreBeforeFromContent(content: unknown): number | null {
-  if (!content || typeof content !== "object") return null;
-  const c = content as Record<string, unknown>;
-  if (typeof c.scoreBefore === "number") return c.scoreBefore;
-  const proj = c.projecao_melhoria;
-  if (proj && typeof proj === "object") {
-    const p = proj as Record<string, unknown>;
-    if (typeof p.score_atual === "number") return p.score_atual;
-  }
-  return null;
+  return resolveCvAnalysisScores(content).scoreBefore;
 }
 
 function extractScoreAfterFromContent(content: unknown): number | null {
-  if (!content || typeof content !== "object") return null;
-  const c = content as Record<string, unknown>;
-  if (typeof c.scoreAfter === "number") return c.scoreAfter;
-  if (typeof c.score_pos_ajustes === "number") return c.score_pos_ajustes;
-  const atsScore = c.atsScore;
-  if (atsScore && typeof atsScore === "object") {
-    const ats = atsScore as Record<string, unknown>;
-    if (typeof ats.after === "number") return ats.after;
-  }
-  const proj = c.projecao_melhoria;
-  if (proj && typeof proj === "object") {
-    const p = proj as Record<string, unknown>;
-    if (typeof p.score_pos_otimizacao === "number")
-      return p.score_pos_otimizacao;
-    if (typeof p.score_pos_ajustes === "number") return p.score_pos_ajustes;
-    if (typeof p.scoreAfter === "number") return p.scoreAfter;
-  }
-  return null;
+  return resolveCvAnalysisScores(content).scoreAfter;
 }
 
 function deriveSummaryFromAdaptations(
@@ -238,6 +223,7 @@ export class JobApplicationsService {
         ...deriveSummaryFromAdaptations(
           item.cvAdaptations as AdaptationSummaryView[],
         ),
+        currentCvAdaptationId: item.currentCvAdaptationId,
       }))
       .sort((a, b) => {
         const groupDelta =
@@ -254,6 +240,57 @@ export class JobApplicationsService {
         return b.updatedAt.getTime() - a.updatedAt.getTime();
       })
       .slice(0, Math.max(1, limit));
+  }
+
+  async getHighlightsSummary(userId: string) {
+    const items = await this.database.jobApplication.findMany({
+      where: { userId, archivedAt: null, deletedAt: null },
+      select: {
+        status: true,
+        scoreAfter: true,
+        cvAdaptations: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            adaptedResumeId: true,
+            isUnlocked: true,
+            adaptedContentJson: true,
+          },
+        },
+      },
+    });
+
+    let activeApplicationsCount = 0;
+    let analyzedCvsCount = 0;
+    let totalScore = 0;
+
+    for (const item of items) {
+      if (ACTIVE_SUMMARY_STATUSES.has(item.status)) {
+        activeApplicationsCount += 1;
+      }
+
+      const summary = deriveSummaryFromAdaptations(
+        item.cvAdaptations as AdaptationSummaryView[],
+      );
+      const resolvedScore =
+        summary.bestScore ??
+        (item.cvAdaptations.length === 0 && typeof item.scoreAfter === "number"
+          ? item.scoreAfter
+          : null);
+
+      if (resolvedScore !== null) {
+        analyzedCvsCount += 1;
+        totalScore += resolvedScore;
+      }
+    }
+
+    return {
+      activeApplicationsCount,
+      analyzedCvsCount,
+      averageScore:
+        analyzedCvsCount > 0 ? Math.round(totalScore / analyzedCvsCount) : null,
+    };
   }
 
   async getById(userId: string, id: string) {
