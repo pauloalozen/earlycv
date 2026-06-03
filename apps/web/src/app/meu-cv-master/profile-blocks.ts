@@ -369,6 +369,46 @@ export function buildProfileBlockUpdatePayload(
   }
 }
 
+export function buildClearBlockPayload(blockId: ProfileBlockId) {
+  const emptySkills: ProfileSkillsJson = { technical: [], business: [], soft: [] };
+  switch (blockId) {
+    case "dados-pessoais":
+      return { fullName: "", contactEmail: "", phone: "", linkedinUrl: "", city: "", state: "", country: "" };
+    case "resumo":
+      return { professionalSummary: "" };
+    case "experiencias":
+      return { experiencesJson: [] as unknown[] };
+    case "formacao":
+      return { educationJson: [] as unknown[] };
+    case "habilidades":
+      return { skillsJson: emptySkills };
+    case "idiomas":
+      return { languagesJson: [] as unknown[] };
+    case "certificacoes":
+      return { certificationsJson: [] as unknown[] };
+    case "links":
+      return {};
+  }
+}
+
+export function buildClearAllPayload() {
+  return {
+    fullName: "",
+    contactEmail: "",
+    phone: "",
+    linkedinUrl: "",
+    city: "",
+    state: "",
+    country: "",
+    professionalSummary: "",
+    experiencesJson: [] as unknown[],
+    educationJson: [] as unknown[],
+    skillsJson: { technical: [], business: [], soft: [] } satisfies ProfileSkillsJson,
+    languagesJson: [] as unknown[],
+    certificationsJson: [] as unknown[],
+  };
+}
+
 export function getProfileFieldDefaultValue(
   profile: UserProfileRecord,
   field: ProfileFieldDefinition,

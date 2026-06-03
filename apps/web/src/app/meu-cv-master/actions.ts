@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { apiRequest } from "@/lib/api-request";
 
 import {
+  buildClearAllPayload,
+  buildClearBlockPayload,
   buildProfileBlockUpdatePayload,
   type ProfileBlockId,
 } from "./profile-blocks";
@@ -26,4 +28,28 @@ export async function saveProfileBlockAction(
 
   revalidatePath("/meu-cv-master");
   redirect(`/meu-cv-master?focus=${encodeURIComponent(focusBlockId)}`);
+}
+
+export async function clearProfileBlockAction(blockId: ProfileBlockId) {
+  const payload = buildClearBlockPayload(blockId);
+  const response = await apiRequest("PUT", "/users/profile", payload);
+
+  if (!response.ok) {
+    throw new Error("Falha ao limpar o bloco");
+  }
+
+  revalidatePath("/meu-cv-master");
+  redirect("/meu-cv-master");
+}
+
+export async function clearAllProfileAction() {
+  const payload = buildClearAllPayload();
+  const response = await apiRequest("PUT", "/users/profile", payload);
+
+  if (!response.ok) {
+    throw new Error("Falha ao limpar o perfil");
+  }
+
+  revalidatePath("/meu-cv-master");
+  redirect("/meu-cv-master");
 }

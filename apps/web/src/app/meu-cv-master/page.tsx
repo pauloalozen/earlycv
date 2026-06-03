@@ -10,13 +10,18 @@ import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getMyMasterResume } from "@/lib/resumes-api";
 
-import { saveProfileBlockAction } from "./actions";
+import {
+  clearAllProfileAction,
+  clearProfileBlockAction,
+  saveProfileBlockAction,
+} from "./actions";
 import { CvMasterBlock } from "./cv-master-block";
 import {
   buildProfileBlockStates,
   getPrimaryGapBlockId,
   type UserProfileRecord,
 } from "./profile-blocks";
+import { ClearAllButton } from "./clear-all-button";
 import { ResumeUploadStrip } from "./resume-upload-strip";
 
 export const metadata: Metadata = {
@@ -255,12 +260,19 @@ export default async function MeuCvMasterPage({
             </div>
 
             {/* Blocos editáveis */}
+            <div className="flex items-center justify-between">
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-[#8a8a85]">
+                {blockStates.length} blocos
+              </p>
+              <ClearAllButton action={clearAllProfileAction} />
+            </div>
             <div className="space-y-2">
               {blockStates.map((blockState, index) => (
                 <CvMasterBlock
                   key={blockState.id}
                   index={index + 1}
                   action={saveProfileBlockAction.bind(null, blockState.id)}
+                  clearAction={clearProfileBlockAction.bind(null, blockState.id)}
                   block={blockState}
                   defaultOpen={focusedBlockId === blockState.id}
                   gapHint={blockState.gapHint}

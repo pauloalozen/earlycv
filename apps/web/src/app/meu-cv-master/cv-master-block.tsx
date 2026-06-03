@@ -14,6 +14,7 @@ type ProfileBlockAction = (formData: FormData) => void | Promise<void>;
 
 type CvMasterBlockProps = {
   action: ProfileBlockAction;
+  clearAction: ProfileBlockAction;
   block: ProfileBlockDefinition;
   defaultOpen?: boolean;
   gapHint: string;
@@ -1017,6 +1018,7 @@ const CLOSE_MS = 220;
 
 export function CvMasterBlock({
   action,
+  clearAction,
   block,
   defaultOpen = false,
   hasGap,
@@ -1075,40 +1077,72 @@ export function CvMasterBlock({
       )}
       id={block.id}
     >
-      <button
-        type="button"
-        aria-expanded={open && !closing}
-        aria-controls={`${block.id}-panel`}
-        onClick={handleToggle}
-        className="flex w-full items-center gap-3.5 px-[18px] py-[15px] text-left"
-      >
-        <span className="w-[18px] shrink-0 font-mono text-[11px] font-medium text-[#8a8a85]">
-          {idx}
-        </span>
-        <span className="flex-1 text-[15px] font-medium tracking-[-0.01em] text-[#0a0a0a]">
-          {block.title}
-        </span>
-        <StateChip state={state} />
-        <span
-          className="text-[#8a8a85] transition-transform duration-200"
-          style={{ transform: open ? "rotate(180deg)" : "none" }}
-          aria-hidden="true"
+      <div className="flex w-full items-center px-[18px] py-[14px]">
+        {/* Toggle area */}
+        <button
+          type="button"
+          aria-expanded={open && !closing}
+          aria-controls={`${block.id}-panel`}
+          aria-label={block.title}
+          onClick={handleToggle}
+          className="flex flex-1 items-center gap-3.5 text-left"
         >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-            stroke="currentColor"
+          <span className="w-[18px] shrink-0 font-mono text-[11px] font-medium text-[#8a8a85]">
+            {idx}
+          </span>
+          <span className="flex-1 text-[15px] font-medium tracking-[-0.01em] text-[#0a0a0a]">
+            {block.title}
+          </span>
+          <StateChip state={state} />
+          <span
+            className="ml-1 text-[#8a8a85] transition-transform duration-200"
+            style={{ transform: open ? "rotate(180deg)" : "none" }}
             aria-hidden="true"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
           >
-            <path d="M2 4l5 5 5-5" />
-          </svg>
-        </span>
-      </button>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M2 4l5 5 5-5" />
+            </svg>
+          </span>
+        </button>
+
+        {/* Clear block button */}
+        <form action={clearAction} className="ml-3 shrink-0">
+          <button
+            type="submit"
+            aria-label={`Limpar bloco ${idx}`}
+            title={`Limpar "${block.title}"`}
+            onClick={(e) => {
+              if (!confirm(`Limpar todos os campos de "${block.title}"?`))
+                e.preventDefault();
+            }}
+            className="flex h-7 w-7 items-center justify-center rounded-[6px] text-[#c0beb8] transition-colors hover:bg-[rgba(154,61,40,0.08)] hover:text-[#9a3d28]"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 14 14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="1 3.5 13 3.5" />
+              <path d="M11.5 3.5v8a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-8" />
+              <path d="M4.5 3.5V2a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1.5" />
+            </svg>
+          </button>
+        </form>
+      </div>
 
       {(open || closing) && (
         <form
