@@ -54,13 +54,13 @@ describe("CvMasterBlock", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: /identidade profissional/i }),
+      screen.getByRole("button", { name: /dados pessoais e contato/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/lacuna/i)).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /identidade profissional/i }),
+      screen.getByRole("button", { name: /dados pessoais e contato/i }),
     );
 
     expect(

@@ -57,24 +57,15 @@ export type ProfileFieldDefinition = {
     | "certificationsJson"
     | "city"
     | "country"
-    | "currentTitle"
     | "educationJson"
     | "experiencesJson"
     | "fullName"
-    | "headline"
     | "languagesJson"
     | "linkedinUrl"
     | "phone"
-    | "preferredLanguage"
     | "professionalSummary"
-    | "relocationPreference"
-    | "remotePreference"
     | "skillsJson"
     | "state"
-    | "summary"
-    | "targetSalaryMax"
-    | "targetSalaryMin"
-    | "yearsExperience"
   >;
   options?: Array<{ label: string; value: string }>;
   rows?: number;
@@ -82,15 +73,14 @@ export type ProfileFieldDefinition = {
 };
 
 export type ProfileBlockId =
-  | "identity"
-  | "contact"
-  | "location"
-  | "goals"
-  | "experiences"
-  | "education"
-  | "skills"
-  | "languages"
-  | "certifications";
+  | "dados-pessoais"
+  | "resumo"
+  | "experiencias"
+  | "formacao"
+  | "habilidades"
+  | "idiomas"
+  | "certificacoes"
+  | "links";
 
 export type ProfileBlockDefinition = {
   description: string;
@@ -102,77 +92,40 @@ export type ProfileBlockDefinition = {
 export type ProfileBlockState = ProfileBlockDefinition & {
   gapHint: string;
   hasGap: boolean;
+  hasSugestao: boolean;
   missingCount: number;
   missingFields: string[];
 };
 
 export const profileBlockDefinitions: ProfileBlockDefinition[] = [
   {
-    id: "identity",
-    title: "Identidade profissional",
-    description: "Nome, cargo atual, headline e resumo principal.",
+    id: "dados-pessoais",
+    title: "Dados pessoais e contato",
+    description: "Nome, telefone e localização para o recrutador.",
     fields: [
       { name: "fullName", label: "Nome completo", type: "text" },
-      { name: "headline", label: "Headline", type: "text" },
-      { name: "currentTitle", label: "Cargo atual", type: "text" },
-      {
-        name: "professionalSummary",
-        label: "Resumo profissional",
-        rows: 4,
-        type: "textarea",
-      },
-      { name: "summary", label: "Resumo curto", rows: 4, type: "textarea" },
-    ],
-  },
-  {
-    id: "contact",
-    title: "Contato",
-    description: "Telefone e perfil público para o recrutador.",
-    fields: [
       { name: "phone", label: "Telefone", type: "text" },
-      { name: "linkedinUrl", label: "LinkedIn", type: "text" },
-    ],
-  },
-  {
-    id: "location",
-    title: "Localização",
-    description: "Cidade, estado, país e idioma preferido.",
-    fields: [
       { name: "city", label: "Cidade", type: "text" },
       { name: "state", label: "Estado", type: "text" },
       { name: "country", label: "País", type: "text" },
-      { name: "preferredLanguage", label: "Idioma preferido", type: "text" },
     ],
   },
   {
-    id: "goals",
-    title: "Direção de carreira",
-    description: "Experiência, preferência remota e faixa salarial.",
+    id: "resumo",
+    title: "Resumo profissional",
+    description: "Resumo de abertura e posicionamento de carreira.",
     fields: [
-      { name: "yearsExperience", label: "Anos de experiência", type: "number" },
       {
-        name: "remotePreference",
-        label: "Preferência remota",
-        options: [
-          { label: "Remoto", value: "remote" },
-          { label: "Híbrido", value: "hybrid" },
-          { label: "Presencial", value: "onsite" },
-          { label: "Flexível", value: "flexible" },
-        ],
-        type: "select",
+        name: "professionalSummary",
+        label: "Resumo profissional",
+        rows: 5,
+        type: "textarea",
       },
-      {
-        name: "relocationPreference",
-        label: "Aceita mudança de cidade",
-        type: "checkbox",
-      },
-      { name: "targetSalaryMin", label: "Pretensão mínima", type: "number" },
-      { name: "targetSalaryMax", label: "Pretensão máxima", type: "number" },
     ],
   },
   {
-    id: "experiences",
-    title: "Experiências",
+    id: "experiencias",
+    title: "Experiências profissionais",
     description: "Estrutura factual das experiências de trabalho.",
     fields: [
       {
@@ -185,8 +138,8 @@ export const profileBlockDefinitions: ProfileBlockDefinition[] = [
     ],
   },
   {
-    id: "education",
-    title: "Formação",
+    id: "formacao",
+    title: "Formação acadêmica",
     description: "Cursos, graduações e registros acadêmicos.",
     fields: [
       {
@@ -199,8 +152,8 @@ export const profileBlockDefinitions: ProfileBlockDefinition[] = [
     ],
   },
   {
-    id: "skills",
-    title: "Habilidades e competências",
+    id: "habilidades",
+    title: "Skills e competências",
     description: "Competências técnicas, de negócio e comportamentais.",
     fields: [
       {
@@ -213,7 +166,7 @@ export const profileBlockDefinitions: ProfileBlockDefinition[] = [
     ],
   },
   {
-    id: "languages",
+    id: "idiomas",
     title: "Idiomas",
     description: "Idiomas com o formato que você já usa no CV.",
     fields: [
@@ -227,7 +180,7 @@ export const profileBlockDefinitions: ProfileBlockDefinition[] = [
     ],
   },
   {
-    id: "certifications",
+    id: "certificacoes",
     title: "Certificações e cursos",
     description: "Certificações, cursos e credenciais relevantes.",
     fields: [
@@ -238,6 +191,14 @@ export const profileBlockDefinitions: ProfileBlockDefinition[] = [
         rows: 6,
         type: "json",
       },
+    ],
+  },
+  {
+    id: "links",
+    title: "Links",
+    description: "LinkedIn e outros links profissionais.",
+    fields: [
+      { name: "linkedinUrl", label: "LinkedIn", type: "text" },
     ],
   },
 ];
@@ -323,6 +284,7 @@ export function buildProfileBlockStates(
       ...definition,
       gapHint: missingLabelCount(missingFields),
       hasGap: missingFields.length > 0,
+      hasSugestao: false,
       missingCount: missingFields.length,
       missingFields,
     };
@@ -336,20 +298,6 @@ export function getPrimaryGapBlockId(blocks: ProfileBlockState[]) {
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
-}
-
-function readNumber(formData: FormData, key: string) {
-  const value = readString(formData, key);
-  if (!value) {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function readBoolean(formData: FormData, key: string) {
-  return formData.get(key) === "on";
 }
 
 function readJson<T>(formData: FormData, key: string, fallback: T): T {
@@ -366,43 +314,27 @@ export function buildProfileBlockUpdatePayload(
   formData: FormData,
 ) {
   switch (blockId) {
-    case "identity":
-      return {
-        currentTitle: readString(formData, "currentTitle"),
-        fullName: readString(formData, "fullName"),
-        headline: readString(formData, "headline"),
-        professionalSummary: readString(formData, "professionalSummary"),
-        summary: readString(formData, "summary"),
-      };
-    case "contact":
-      return {
-        linkedinUrl: readString(formData, "linkedinUrl"),
-        phone: readString(formData, "phone"),
-      };
-    case "location":
+    case "dados-pessoais":
       return {
         city: readString(formData, "city"),
         country: readString(formData, "country"),
-        preferredLanguage: readString(formData, "preferredLanguage"),
+        fullName: readString(formData, "fullName"),
+        phone: readString(formData, "phone"),
         state: readString(formData, "state"),
       };
-    case "goals":
+    case "resumo":
       return {
-        yearsExperience: readNumber(formData, "yearsExperience"),
-        remotePreference: readString(formData, "remotePreference") || undefined,
-        relocationPreference: readBoolean(formData, "relocationPreference"),
-        targetSalaryMin: readNumber(formData, "targetSalaryMin"),
-        targetSalaryMax: readNumber(formData, "targetSalaryMax"),
+        professionalSummary: readString(formData, "professionalSummary"),
       };
-    case "experiences":
+    case "experiencias":
       return {
         experiencesJson: readJson(formData, "experiencesJson", [] as unknown[]),
       };
-    case "education":
+    case "formacao":
       return {
         educationJson: readJson(formData, "educationJson", [] as unknown[]),
       };
-    case "skills":
+    case "habilidades":
       return {
         skillsJson: readJson(formData, "skillsJson", {
           business: [],
@@ -410,17 +342,21 @@ export function buildProfileBlockUpdatePayload(
           technical: [],
         } satisfies ProfileSkillsJson),
       };
-    case "languages":
+    case "idiomas":
       return {
         languagesJson: readJson(formData, "languagesJson", [] as unknown[]),
       };
-    case "certifications":
+    case "certificacoes":
       return {
         certificationsJson: readJson(
           formData,
           "certificationsJson",
           [] as unknown[],
         ),
+      };
+    case "links":
+      return {
+        linkedinUrl: readString(formData, "linkedinUrl"),
       };
   }
 }

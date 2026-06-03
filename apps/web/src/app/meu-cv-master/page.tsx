@@ -64,6 +64,15 @@ const STATE_LEGEND = [
     bg: "rgba(245,197,24,0.13)",
     border: "rgba(220,170,20,0.30)",
   },
+  {
+    key: "sugestao",
+    label: "Sugestão da IA",
+    desc: "pode melhorar",
+    dot: "#7aa01a",
+    text: "#3a5008",
+    bg: "rgba(198,255,58,0.18)",
+    border: "rgba(110,150,20,0.22)",
+  },
 ] as const;
 
 export default async function MeuCvMasterPage({
@@ -220,17 +229,16 @@ export default async function MeuCvMasterPage({
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                {gapCount > 0 && primaryGapBlockId && (
-                  <Link
-                    href={`/meu-cv-master?focus=${primaryGapBlockId}`}
-                    className="inline-flex h-10 items-center rounded-full border border-[rgba(10,10,10,0.12)] bg-white px-4 text-xs font-semibold uppercase tracking-[0.18em] text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
-                  >
-                    Abrir bloco sugerido
-                  </Link>
+                {masterResume && (
+                  <p className="max-w-[220px] text-right text-[11.5px] leading-[1.4] text-[#8a8a85]">
+                    Substituir re-extrai os dados. Suas edições são preservadas
+                    quando possível.
+                  </p>
                 )}
                 <Link
                   href="/cv-base"
-                  className="inline-flex h-10 items-center rounded-full bg-[#0a0a0a] px-4 text-xs font-semibold uppercase tracking-[0.18em] text-[#fafaf6] transition-colors hover:bg-[#1a1a1a]"
+                  className="shrink-0 rounded-[8px] bg-[#0a0a0a] px-4 py-2.5 text-[13px] font-medium transition-colors hover:bg-[#1a1a1a]"
+                  style={{ color: "#fafaf6" }}
                 >
                   {masterResume ? "Substituir PDF" : "Enviar CV Base"}
                 </Link>
@@ -291,6 +299,7 @@ export default async function MeuCvMasterPage({
                   defaultOpen={focusedBlockId === blockState.id}
                   gapHint={blockState.gapHint}
                   hasGap={blockState.hasGap}
+                  hasSugestao={blockState.hasSugestao}
                   profile={profileData}
                 />
               ))}

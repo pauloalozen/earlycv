@@ -18,11 +18,12 @@ type CvMasterBlockProps = {
   defaultOpen?: boolean;
   gapHint: string;
   hasGap: boolean;
+  hasSugestao?: boolean;
   index: number;
   profile: UserProfileRecord;
 };
 
-type BlockState = "completo" | "lacuna";
+type BlockState = "completo" | "lacuna" | "sugestao";
 
 const STATE_META: Record<
   BlockState,
@@ -41,6 +42,13 @@ const STATE_META: Record<
     text: "#a07a0a",
     bg: "rgba(245,197,24,0.13)",
     border: "rgba(220,170,20,0.30)",
+  },
+  sugestao: {
+    label: "Sugestão da IA",
+    dot: "#7aa01a",
+    text: "#3a5008",
+    bg: "rgba(198,255,58,0.18)",
+    border: "rgba(110,150,20,0.22)",
   },
 };
 
@@ -70,11 +78,16 @@ export function CvMasterBlock({
   block,
   defaultOpen = false,
   hasGap,
+  hasSugestao = false,
   index,
   profile,
 }: CvMasterBlockProps) {
   const [open, setOpen] = useState(defaultOpen);
-  const state: BlockState = hasGap ? "lacuna" : "completo";
+  const state: BlockState = hasGap
+    ? "lacuna"
+    : hasSugestao
+      ? "sugestao"
+      : "completo";
   const idx = String(index).padStart(2, "0");
 
   return (
