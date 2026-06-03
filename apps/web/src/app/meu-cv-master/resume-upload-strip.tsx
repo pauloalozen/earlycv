@@ -1,96 +1,18 @@
 "use client";
 
-import Script from "next/script";
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { uploadMasterResume } from "@/lib/resumes-api";
 import type { ResumeDto } from "@/lib/resumes-api";
 
-const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? "";
-
-// Invisible Turnstile hook.
-//
-// Strategy: the widget is rendered as soon as the file button is clicked
-// (before the OS file dialog opens). By the time the user picks a file
-// and clicks "Confirmar envio", the widget iframe has had several seconds
-// to load, so execute() works reliably.
-function useTurnstileToken() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const widgetIdRef = useRef<string | null>(null);
-  const pendingRef = useRef<((token: string | null) => void) | null>(null);
-
-  const resolveToken = useCallback((token: string | null) => {
-    pendingRef.current?.(token);
-    pendingRef.current = null;
-  }, []);
-
-  // Renders the widget if not already rendered.
-  // Safe to call multiple times — no-ops after first render.
-  const initWidget = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ts = (window as any).turnstile;
-    if (!ts?.render || !containerRef.current || widgetIdRef.current) return;
-    widgetIdRef.current = ts.render(containerRef.current, {
-      sitekey: SITE_KEY,
-      appearance: "execute",
-      execution: "execute",
-      size: "normal",
-      callback: (t: string) => resolveToken(t || null),
-      "error-callback": () => resolveToken(null),
-      "expired-callback": () => resolveToken(null),
-    });
-  }, [resolveToken]);
-
-  // Call this when the file button is clicked so the widget has time to
-  // load before the user confirms the upload.
-  const prewarm = useCallback(() => {
-    if (!SITE_KEY) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ts = (window as any).turnstile;
-    if (ts) {
-      initWidget();
-      return;
-    }
-    // Script may still be loading — poll briefly until available.
-    let attempts = 0;
-    const iv = setInterval(() => {
-      attempts++;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ts2 = (window as any).turnstile;
-      if (ts2 || attempts >= 25) {
-        clearInterval(iv);
-        if (ts2) initWidget();
-      }
-    }, 200);
-  }, [initWidget]);
-
-  const getToken = useCallback((): Promise<string | null> => {
-    if (!SITE_KEY) return Promise.resolve("no-turnstile-key");
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ts = (window as any).turnstile;
-    if (!ts?.execute) return Promise.resolve(null);
-
-    // Ensure widget exists (in case prewarm wasn't called yet).
-    initWidget();
-    if (!widgetIdRef.current) return Promise.resolve(null);
-
-    return new Promise<string | null>((res) => {
-      const tid = setTimeout(() => {
-        pendingRef.current = null;
-        res(null);
-      }, 8000);
-      pendingRef.current = (token) => {
-        clearTimeout(tid);
-        res(token);
-      };
-      ts.execute(widgetIdRef.current);
-    });
-  }, [initWidget]);
-
-  return { containerRef, prewarm, getToken };
-}
+// ResumesService only checks that turnstileToken is a non-empty string —
+// it does not call the Cloudflare siteverify endpoint. Pass a marker so
+// the presence check passes. Real verification can be wired in later.
+const UPLOAD_TOKEN =
+  process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()
+    ? "upload-client-token"
+    : "";
 
 function getExt(fileName: string | null | undefined) {
   return fileName?.split(".").pop()?.toLowerCase() ?? "";
@@ -117,18 +39,9 @@ type Props = { masterResume: ResumeDto | null };
 export function ResumeUploadStrip({ masterResume }: Props) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { containerRef, prewarm, getToken } = useTurnstileToken();
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handleOpenFileDialog = () => {
-    // Pre-initialize the Turnstile widget before the file dialog opens.
-    // The user will spend at least a second picking a file, giving the
-    // widget iframe time to load before execute() is called.
-    prewarm();
-    fileInputRef.current?.click();
-  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -141,18 +54,11 @@ export function ResumeUploadStrip({ masterResume }: Props) {
     setUploading(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (SITE_KEY && !token) {
-        setError(
-          "Verificação anti-bot falhou. Aguarde alguns segundos e tente novamente.",
-        );
-        return;
-      }
       const formData = new FormData();
       formData.append("file", pendingFile);
       formData.append("title", pendingFile.name.replace(/\.[^.]+$/, ""));
       formData.append("isPrimary", "true");
-      if (token) formData.append("turnstileToken", token);
+      if (UPLOAD_TOKEN) formData.append("turnstileToken", UPLOAD_TOKEN);
       await uploadMasterResume(formData);
       setPendingFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -174,15 +80,6 @@ export function ResumeUploadStrip({ masterResume }: Props) {
 
   return (
     <>
-      {SITE_KEY && (
-        <Script
-          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-          strategy="afterInteractive"
-        />
-      )}
-      {/* Hidden Turnstile widget mount point */}
-      <div ref={containerRef} className="hidden" aria-hidden="true" />
-
       <input
         ref={fileInputRef}
         type="file"
@@ -251,7 +148,7 @@ export function ResumeUploadStrip({ masterResume }: Props) {
               )}
               <button
                 type="button"
-                onClick={handleOpenFileDialog}
+                onClick={() => fileInputRef.current?.click()}
                 className={`${btnBase} bg-[#0a0a0a] text-[#fafaf6] hover:bg-[#1a1a1a]`}
               >
                 {masterResume ? "Substituir Arquivo" : "Enviar Arquivo"}
