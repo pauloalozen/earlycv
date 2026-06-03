@@ -77,7 +77,7 @@ function getFieldId(blockId: string, fieldName: string) {
 // ─── Shared form field atoms ───────────────────────────────────────────────
 
 const inputCls =
-  "h-11 w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 text-[13.5px] text-[#0a0a0a] outline-none transition-[border-color] placeholder:text-[#8a8a85] focus:border-[#0a0a0a]";
+  "h-11 w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 text-[13px] font-normal text-[#3a3a36] outline-none transition-[border-color] placeholder:text-[#b0aea8] focus:border-[#0a0a0a]";
 
 const labelCls =
   "font-mono text-[9.5px] font-medium uppercase tracking-[0.06em] text-[#8a8a85]";
@@ -135,7 +135,7 @@ function TextareaField({
         {label}
       </label>
       <textarea
-        className="w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 py-2.5 text-[13.5px] leading-relaxed text-[#0a0a0a] outline-none transition-[border-color] placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
+        className="w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 py-2.5 text-[13px] font-normal leading-relaxed text-[#3a3a36] outline-none transition-[border-color] placeholder:text-[#b0aea8] focus:border-[#0a0a0a]"
         defaultValue={value}
         id={id}
         name={name}
@@ -378,7 +378,7 @@ function ExperienciasEditor({ raw }: { raw: unknown }) {
                 Descrição
               </label>
               <textarea
-                className="w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 py-2.5 text-[13.5px] leading-relaxed text-[#0a0a0a] outline-none transition-[border-color] placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
+                className="w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 py-2.5 text-[13px] font-normal leading-relaxed text-[#3a3a36] outline-none transition-[border-color] placeholder:text-[#b0aea8] focus:border-[#0a0a0a]"
                 id={`exp-desc-${e._id}`}
                 value={e.description}
                 onChange={(ev) =>
@@ -690,7 +690,7 @@ function IdiomasEditor({ raw }: { raw: unknown }) {
               Nível
             </label>
             <select
-              className={cn(inputCls, "cursor-pointer")}
+              className={cn(inputCls, "cursor-pointer text-[13px] text-[#3a3a36]")}
               id={`lang-level-${e._id}`}
               value={e.level}
               onChange={(ev) => update(e._id, "level", ev.target.value)}
