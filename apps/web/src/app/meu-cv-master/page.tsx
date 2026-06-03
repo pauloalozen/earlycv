@@ -17,6 +17,7 @@ import {
   getPrimaryGapBlockId,
   type UserProfileRecord,
 } from "./profile-blocks";
+import { ResumeUploadStrip } from "./resume-upload-strip";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -207,44 +208,8 @@ export default async function MeuCvMasterPage({
               </div>
             </div>
 
-            {/* Strip do PDF */}
-            <div className="flex flex-wrap items-center justify-between gap-5 rounded-[14px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] px-5 py-4">
-              <div className="flex items-center gap-3.5">
-                <div className="flex h-[52px] w-11 shrink-0 items-center justify-center rounded-[8px] bg-[#0a0a0a] font-mono text-[11px] font-semibold text-[#c6ff3a]">
-                  PDF
-                </div>
-                <div>
-                  <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-[#8a8a85]">
-                    CV Base
-                  </p>
-                  <p className="mt-0.5 text-[14.5px] font-medium tracking-[-0.01em] text-[#0a0a0a]">
-                    {masterResume
-                      ? masterResume.title
-                      : "Nenhum CV Master ativo"}
-                  </p>
-                  <p className="mt-0.5 font-mono text-[10.5px] text-[#8a8a85]">
-                    {masterResume
-                      ? (masterResume.sourceFileName ?? "extraído pela IA")
-                      : "Vá para o fluxo de upload para cadastrar o PDF base."}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {masterResume && (
-                  <p className="max-w-[220px] text-right text-[11.5px] leading-[1.4] text-[#8a8a85]">
-                    Substituir re-extrai os dados. Suas edições são preservadas
-                    quando possível.
-                  </p>
-                )}
-                <Link
-                  href="/cv-base"
-                  className="shrink-0 rounded-[8px] bg-[#0a0a0a] px-4 py-2.5 text-[13px] font-medium transition-colors hover:bg-[#1a1a1a]"
-                  style={{ color: "#fafaf6" }}
-                >
-                  {masterResume ? "Substituir PDF" : "Enviar CV Base"}
-                </Link>
-              </div>
-            </div>
+            {/* Strip do arquivo — inline upload sem sair da página */}
+            <ResumeUploadStrip masterResume={masterResume} />
 
             {/* Revisão: gaps summary */}
             {gapCount > 0 && (

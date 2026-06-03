@@ -12,6 +12,7 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn(() => {
     throw new Error("NEXT_REDIRECT");
   }),
+  useRouter: vi.fn(() => ({ refresh: vi.fn() })),
 }));
 
 vi.mock("@/components/app-header", () => ({
