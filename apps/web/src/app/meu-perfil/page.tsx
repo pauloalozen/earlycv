@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
 import { ProgressRing } from "@/components/progress-ring";
+import { apiRequest } from "@/lib/api-request";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getCvAdaptationContent } from "@/lib/cv-adaptation-api";
@@ -17,6 +18,11 @@ import {
 } from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
+
+import {
+  buildProfileBlockStates,
+  type UserProfileRecord,
+} from "../meu-cv-master/profile-blocks";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -64,12 +70,17 @@ export default async function MeuPerfilPage() {
   const redirectPath = getRouteAccessRedirectPath("/meu-perfil", user);
   if (redirectPath) redirect(redirectPath);
 
-  const [planResult, highlightsResult, summaryResult, masterResumeResult] =
+  const [planResult, highlightsResult, summaryResult, masterResumeResult, profileResult] =
     await Promise.allSettled([
       getMyPlan(),
       listJobApplicationHighlights(3),
       getJobApplicationHighlightsSummary(),
       getMyMasterResume(),
+      apiRequest("GET", "/users/profile").then(async (r) => {
+        if (!r.ok) return null;
+        const body = await r.text();
+        return body.trim() ? (JSON.parse(body) as UserProfileRecord) : null;
+      }).catch(() => null),
     ]);
 
   const plan = planResult.status === "fulfilled" ? planResult.value : null;
@@ -80,6 +91,8 @@ export default async function MeuPerfilPage() {
   const highlightsError = highlightsResult.status === "rejected";
   const masterResume =
     masterResumeResult.status === "fulfilled" ? masterResumeResult.value : null;
+  const profile =
+    profileResult.status === "fulfilled" ? profileResult.value : null;
 
   const firstName = user?.name?.split(" ")[0] ?? "";
   const availableCredits = toHeaderAvailableCredits(plan);
@@ -99,7 +112,13 @@ export default async function MeuPerfilPage() {
     }),
   );
   const kpisAvailable = highlightsSummary !== null;
-  const profileCompletion = masterResume ? 80 : 0;
+  const blockStates = profile ? buildProfileBlockStates(profile) : [];
+  const totalFields = blockStates.reduce((sum, b) => sum + b.fields.length, 0);
+  const missingTotal = blockStates.reduce((sum, b) => sum + b.missingCount, 0);
+  const profileCompletion =
+    totalFields > 0
+      ? Math.round(((totalFields - missingTotal) / totalFields) * 100)
+      : 0;
   const profileSuggestions = masterResume ? 2 : 0;
 
   return (
