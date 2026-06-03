@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/cn";
 
+import { ConfirmDialog } from "./confirm-dialog";
 import {
   getProfileFieldDefaultValue,
   type ProfileBlockDefinition,
@@ -1029,6 +1030,7 @@ export function CvMasterBlock({
 }: CvMasterBlockProps) {
   const [open, setOpen] = useState(defaultOpen);
   const [closing, setClosing] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const blockRef = useRef<HTMLDivElement>(null);
   const state: BlockState = hasGap
     ? "lacuna"
@@ -1114,35 +1116,50 @@ export function CvMasterBlock({
           </span>
         </button>
 
-        {/* Clear block button */}
-        <form action={clearAction} className="ml-3 shrink-0">
-          <button
-            type="submit"
-            aria-label={`Limpar bloco ${idx}`}
-            title={`Limpar "${block.title}"`}
-            onClick={(e) => {
-              if (!confirm(`Limpar todos os campos de "${block.title}"?`))
-                e.preventDefault();
-            }}
-            className="flex h-7 w-7 items-center justify-center rounded-[6px] text-[#c0beb8] transition-colors hover:bg-[rgba(154,61,40,0.08)] hover:text-[#9a3d28]"
+        {/* Clear block — opens confirm dialog */}
+        <button
+          type="button"
+          aria-label={`Limpar ${block.title}`}
+          onClick={() => setConfirmingClear(true)}
+          className="ml-3 shrink-0 flex h-7 w-7 items-center justify-center rounded-[6px] text-[#b8b6b0] transition-colors hover:bg-[rgba(154,61,40,0.07)] hover:text-[#9a3d28]"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 14 14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
           >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 14 14"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="1 3.5 13 3.5" />
-              <path d="M11.5 3.5v8a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-8" />
-              <path d="M4.5 3.5V2a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1.5" />
-            </svg>
-          </button>
-        </form>
+            <polyline points="1 3.5 13 3.5" />
+            <path d="M11.5 3.5v8a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-8" />
+            <path d="M4.5 3.5V2a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1.5" />
+          </svg>
+        </button>
       </div>
+
+      {/* Hidden form used to submit clearAction after dialog confirmation */}
+      <form id={`${block.id}-clear-form`} action={clearAction} className="hidden" />
+
+      {confirmingClear && (
+        <ConfirmDialog
+          title={`Limpar "${block.title}"?`}
+          description="Todos os campos deste bloco serão apagados. A ação pode ser revertida salvando novos valores."
+          confirmLabel="Limpar bloco"
+          danger
+          onConfirm={() => {
+            setConfirmingClear(false);
+            const form = document.getElementById(
+              `${block.id}-clear-form`,
+            ) as HTMLFormElement | null;
+            form?.requestSubmit();
+          }}
+          onCancel={() => setConfirmingClear(false)}
+        />
+      )}
 
       {(open || closing) && (
         <form

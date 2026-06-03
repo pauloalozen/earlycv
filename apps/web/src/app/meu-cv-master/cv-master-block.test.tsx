@@ -20,6 +20,7 @@ describe("CvMasterBlock", () => {
         gapHint="3 campos pendentes"
         index={1}
         action={vi.fn()}
+        clearAction={vi.fn()}
         profile={{
           city: "São Paulo",
           contactEmail: "ana@trabalho.com",
@@ -55,13 +56,13 @@ describe("CvMasterBlock", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: /dados pessoais e contato/i }),
+      screen.getByRole("button", { name: "Dados pessoais e contato" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/lacuna/i)).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /dados pessoais e contato/i }),
+      screen.getByRole("button", { name: "Dados pessoais e contato" }),
     );
 
     expect(

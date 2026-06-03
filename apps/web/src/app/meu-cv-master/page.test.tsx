@@ -119,7 +119,7 @@ describe("/meu-cv-master", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
     // First block title visible as a button
     expect(
-      screen.getByRole("button", { name: /dados pessoais e contato/i }),
+      screen.getByRole("button", { name: "Dados pessoais e contato" }),
     ).toBeInTheDocument();
   });
 
@@ -144,7 +144,7 @@ describe("/meu-cv-master", () => {
     render(await MeuCvMasterPage({ searchParams: Promise.resolve({}) }));
 
     expect(
-      screen.getByRole("button", { name: /dados pessoais e contato/i }),
+      screen.getByRole("button", { name: "Dados pessoais e contato" }),
     ).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
   });
