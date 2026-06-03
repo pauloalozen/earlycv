@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 
@@ -43,7 +43,7 @@ export class MasterCvCanonicalExtractionService {
       "compute"
     >,
     @Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI,
-    private readonly extractionClient?: ExtractionClient,
+    @Optional() private readonly extractionClient?: ExtractionClient,
   ) {}
 
   async enqueueFromMasterResumeUpload(
