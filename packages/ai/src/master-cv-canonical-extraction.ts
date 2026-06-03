@@ -190,14 +190,14 @@ function buildPrompt(input: MasterCvCanonicalExtractionInput) {
   const prompt = input.file
     ? [
         `<LOCALE>${locale}</LOCALE>`,
-        `<TASK>Extract canonical profile data from the attached CV file.</TASK>`,
+        `<TASK>Extract canonical profile data from the attached CV file and return as JSON.</TASK>`,
         `<FILE_METADATA>`,
         `name: ${input.file.originalname}`,
         `mimeType: ${input.file.mimetype}`,
         `sizeBytes: ${input.file.size}`,
         `</FILE_METADATA>`,
       ].join("\n")
-    : `<LOCALE>${locale}</LOCALE>\n<MASTER_CV>\n${masterCvText ?? ""}\n</MASTER_CV>`;
+    : `<LOCALE>${locale}</LOCALE>\n<MASTER_CV>\n${masterCvText ?? ""}\n</MASTER_CV>\n<TASK>Extract canonical profile data and return as JSON.</TASK>`;
 
   return { locale, masterCvText, prompt };
 }
@@ -207,13 +207,16 @@ function buildResponseInput(
   prompt: string,
 ) {
   if (input.file) {
+    // file_data must be a data URI: data:<mime>;base64,<data>
+    const base64 = input.file.buffer.toString("base64");
+    const dataUri = `data:${input.file.mimetype};base64,${base64}`;
     return [
       {
         role: "user" as const,
         content: [
           {
             type: "input_file" as const,
-            file_data: input.file.buffer.toString("base64"),
+            file_data: dataUri,
             filename: input.file.originalname,
           },
           {
