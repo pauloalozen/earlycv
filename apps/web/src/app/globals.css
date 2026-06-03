@@ -294,3 +294,17 @@ html {
     animation: none;
   }
 }
+
+/* ── CV Master block animation ── */
+@keyframes cv-block-open {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cv-block-panel {
+  animation: cv-block-open 0.22s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-block-panel { animation: none; }
+}

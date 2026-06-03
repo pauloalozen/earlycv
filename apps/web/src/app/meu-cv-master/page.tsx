@@ -301,6 +301,7 @@ export default async function MeuCvMasterPage({
                   hasGap={blockState.hasGap}
                   hasSugestao={blockState.hasSugestao}
                   profile={profileData}
+                  userEmail={user?.email}
                 />
               ))}
             </div>

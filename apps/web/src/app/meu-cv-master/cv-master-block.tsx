@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -21,6 +21,7 @@ type CvMasterBlockProps = {
   hasSugestao?: boolean;
   index: number;
   profile: UserProfileRecord;
+  userEmail?: string;
 };
 
 type BlockState = "completo" | "lacuna" | "sugestao";
@@ -73,6 +74,985 @@ function getFieldId(blockId: string, fieldName: string) {
   return `${blockId}-${fieldName}`;
 }
 
+// ─── Shared form field atoms ───────────────────────────────────────────────
+
+const inputCls =
+  "h-11 w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-3.5 text-[13.5px] text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]";
+
+const labelCls =
+  "font-mono text-[9.5px] font-medium uppercase tracking-[0.06em] text-[#8a8a85]";
+
+function Field({
+  label,
+  id,
+  name,
+  value,
+  type = "text",
+  placeholder,
+}: {
+  label: string;
+  id: string;
+  name: string;
+  value: string;
+  type?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className={labelCls} htmlFor={id}>
+        {label}
+      </label>
+      <input
+        className={inputCls}
+        defaultValue={value}
+        id={id}
+        name={name}
+        type={type}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+
+function TextareaField({
+  label,
+  id,
+  name,
+  value,
+  rows = 4,
+  placeholder,
+}: {
+  label: string;
+  id: string;
+  name: string;
+  value: string;
+  rows?: number;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1.5 md:col-span-2">
+      <label className={labelCls} htmlFor={id}>
+        {label}
+      </label>
+      <textarea
+        className="w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-3.5 py-3 text-[13.5px] leading-relaxed text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
+        defaultValue={value}
+        id={id}
+        name={name}
+        rows={rows}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+
+function ReadonlyField({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <span className={labelCls}>{label}</span>
+      <div className="flex h-11 items-center rounded-[8px] border border-[rgba(10,10,10,0.06)] bg-[#f5f4f0] px-3.5 text-[13.5px] text-[#8a8a85]">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function AddButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-1 inline-flex items-center gap-1.5 rounded-[8px] border border-dashed border-[rgba(10,10,10,0.18)] px-4 py-2 text-[13px] font-medium text-[#8a8a85] transition-colors hover:border-[rgba(10,10,10,0.30)] hover:text-[#0a0a0a]"
+    >
+      + {label}
+    </button>
+  );
+}
+
+function RemoveButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[#8a8a85] transition-colors hover:bg-[rgba(154,61,40,0.08)] hover:text-[#9a3d28]"
+      aria-label="Remover"
+    >
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 12 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      >
+        <path d="M2 2l8 8M10 2l-8 8" />
+      </svg>
+    </button>
+  );
+}
+
+function EntryCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-[10px] border border-[rgba(10,10,10,0.08)] bg-white p-4">
+      {children}
+    </div>
+  );
+}
+
+// ─── JSON data helpers ─────────────────────────────────────────────────────
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asStr(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+function asRecord(v: unknown): Record<string, unknown> {
+  if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+    return v as Record<string, unknown>;
+  }
+  return {};
+}
+
+function uid() {
+  return (
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2)
+  );
+}
+
+// ─── Structured editors ───────────────────────────────────────────────────
+
+type ExpEntry = {
+  _id: string;
+  role: string;
+  company: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+  description: string;
+};
+
+function parseExps(raw: unknown): ExpEntry[] {
+  return asArray(raw).map((item) => {
+    const r = asRecord(item);
+    return {
+      _id: asStr(r.id) || uid(),
+      role: asStr(r.role),
+      company: asStr(r.company),
+      startDate: asStr(r.startDate),
+      endDate: asStr(r.endDate),
+      isCurrent: Boolean(r.isCurrent),
+      description: asStr(r.description),
+    };
+  });
+}
+
+function ExperienciasEditor({ raw }: { raw: unknown }) {
+  const [entries, setEntries] = useState<ExpEntry[]>(() => parseExps(raw));
+
+  const add = () =>
+    setEntries((prev) => [
+      ...prev,
+      {
+        _id: uid(),
+        role: "",
+        company: "",
+        startDate: "",
+        endDate: "",
+        isCurrent: false,
+        description: "",
+      },
+    ]);
+
+  const remove = (id: string) =>
+    setEntries((prev) => prev.filter((e) => e._id !== id));
+
+  const update = (id: string, key: keyof ExpEntry, value: string | boolean) =>
+    setEntries((prev) =>
+      prev.map((e) => (e._id === id ? { ...e, [key]: value } : e)),
+    );
+
+  const serialized = JSON.stringify(
+    entries.map(({ _id, ...rest }) => ({ id: _id, ...rest })),
+  );
+
+  return (
+    <div className="space-y-3">
+      <input type="hidden" name="experiencesJson" value={serialized} />
+      {entries.length === 0 && (
+        <p className="py-2 text-[13px] text-[#8a8a85]">
+          Nenhuma experiência cadastrada.
+        </p>
+      )}
+      {entries.map((e) => (
+        <EntryCard key={e._id}>
+          <div className="mb-3 flex items-center justify-between">
+            <span className={labelCls}>Experiência</span>
+            <RemoveButton onClick={() => remove(e._id)} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className={labelCls} htmlFor={`exp-role-${e._id}`}>
+                Cargo
+              </label>
+              <input
+                className={inputCls}
+                id={`exp-role-${e._id}`}
+                value={e.role}
+                onChange={(ev) => update(e._id, "role", ev.target.value)}
+                placeholder="Cargo ou título"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls} htmlFor={`exp-company-${e._id}`}>
+                Empresa
+              </label>
+              <input
+                className={inputCls}
+                id={`exp-company-${e._id}`}
+                value={e.company}
+                onChange={(ev) => update(e._id, "company", ev.target.value)}
+                placeholder="Nome da empresa"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls} htmlFor={`exp-start-${e._id}`}>
+                Início
+              </label>
+              <input
+                className={inputCls}
+                id={`exp-start-${e._id}`}
+                value={e.startDate}
+                onChange={(ev) => update(e._id, "startDate", ev.target.value)}
+                placeholder="Ex.: Jan 2020"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls} htmlFor={`exp-end-${e._id}`}>
+                Fim
+              </label>
+              {e.isCurrent ? (
+                <div className={cn(inputCls, "flex items-center text-[#8a8a85]")}>
+                  Emprego atual
+                </div>
+              ) : (
+                <input
+                  className={inputCls}
+                  id={`exp-end-${e._id}`}
+                  value={e.endDate}
+                  onChange={(ev) => update(e._id, "endDate", ev.target.value)}
+                  placeholder="Ex.: Dez 2023"
+                />
+              )}
+              <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-[12px] text-[#5a5a55]">
+                <input
+                  type="checkbox"
+                  checked={e.isCurrent}
+                  onChange={(ev) =>
+                    update(e._id, "isCurrent", ev.target.checked)
+                  }
+                  className="rounded border-[rgba(10,10,10,0.2)]"
+                />
+                Emprego atual
+              </label>
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <label className={labelCls} htmlFor={`exp-desc-${e._id}`}>
+                Descrição
+              </label>
+              <textarea
+                className="w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-3.5 py-3 text-[13.5px] leading-relaxed text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
+                id={`exp-desc-${e._id}`}
+                value={e.description}
+                onChange={(ev) =>
+                  update(e._id, "description", ev.target.value)
+                }
+                rows={3}
+                placeholder="Responsabilidades e conquistas principais"
+              />
+            </div>
+          </div>
+        </EntryCard>
+      ))}
+      <AddButton label="Adicionar experiência" onClick={add} />
+    </div>
+  );
+}
+
+type EduEntry = {
+  _id: string;
+  degree: string;
+  fieldOfStudy: string;
+  institution: string;
+  startDate: string;
+  endDate: string;
+};
+
+function parseEdu(raw: unknown): EduEntry[] {
+  return asArray(raw).map((item) => {
+    const r = asRecord(item);
+    return {
+      _id: asStr(r.id) || uid(),
+      degree: asStr(r.degree),
+      fieldOfStudy: asStr(r.fieldOfStudy),
+      institution: asStr(r.institution),
+      startDate: asStr(r.startDate),
+      endDate: asStr(r.endDate),
+    };
+  });
+}
+
+function FormacaoEditor({ raw }: { raw: unknown }) {
+  const [entries, setEntries] = useState<EduEntry[]>(() => parseEdu(raw));
+
+  const add = () =>
+    setEntries((prev) => [
+      ...prev,
+      {
+        _id: uid(),
+        degree: "",
+        fieldOfStudy: "",
+        institution: "",
+        startDate: "",
+        endDate: "",
+      },
+    ]);
+
+  const remove = (id: string) =>
+    setEntries((prev) => prev.filter((e) => e._id !== id));
+
+  const update = (id: string, key: keyof EduEntry, value: string) =>
+    setEntries((prev) =>
+      prev.map((e) => (e._id === id ? { ...e, [key]: value } : e)),
+    );
+
+  const serialized = JSON.stringify(
+    entries.map(({ _id, ...rest }) => ({ id: _id, ...rest })),
+  );
+
+  return (
+    <div className="space-y-3">
+      <input type="hidden" name="educationJson" value={serialized} />
+      {entries.length === 0 && (
+        <p className="py-2 text-[13px] text-[#8a8a85]">
+          Nenhuma formação cadastrada.
+        </p>
+      )}
+      {entries.map((e) => (
+        <EntryCard key={e._id}>
+          <div className="mb-3 flex items-center justify-between">
+            <span className={labelCls}>Formação</span>
+            <RemoveButton onClick={() => remove(e._id)} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className={labelCls} htmlFor={`edu-degree-${e._id}`}>
+                Grau / Curso
+              </label>
+              <input
+                className={inputCls}
+                id={`edu-degree-${e._id}`}
+                value={e.degree}
+                onChange={(ev) => update(e._id, "degree", ev.target.value)}
+                placeholder="Ex.: Bacharelado, MBA"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls} htmlFor={`edu-institution-${e._id}`}>
+                Instituição
+              </label>
+              <input
+                className={inputCls}
+                id={`edu-institution-${e._id}`}
+                value={e.institution}
+                onChange={(ev) =>
+                  update(e._id, "institution", ev.target.value)
+                }
+                placeholder="Nome da instituição"
+              />
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <label
+                className={labelCls}
+                htmlFor={`edu-field-${e._id}`}
+              >
+                Área de estudo
+              </label>
+              <input
+                className={inputCls}
+                id={`edu-field-${e._id}`}
+                value={e.fieldOfStudy}
+                onChange={(ev) =>
+                  update(e._id, "fieldOfStudy", ev.target.value)
+                }
+                placeholder="Ex.: Ciência da Computação"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls} htmlFor={`edu-start-${e._id}`}>
+                Início
+              </label>
+              <input
+                className={inputCls}
+                id={`edu-start-${e._id}`}
+                value={e.startDate}
+                onChange={(ev) => update(e._id, "startDate", ev.target.value)}
+                placeholder="Ex.: 2014"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls} htmlFor={`edu-end-${e._id}`}>
+                Fim
+              </label>
+              <input
+                className={inputCls}
+                id={`edu-end-${e._id}`}
+                value={e.endDate}
+                onChange={(ev) => update(e._id, "endDate", ev.target.value)}
+                placeholder="Ex.: 2018"
+              />
+            </div>
+          </div>
+        </EntryCard>
+      ))}
+      <AddButton label="Adicionar formação" onClick={add} />
+    </div>
+  );
+}
+
+type SkillBucket = "technical" | "business" | "soft";
+
+const SKILL_BUCKETS: Array<{
+  key: SkillBucket;
+  label: string;
+  dot: string;
+}> = [
+  { key: "technical", label: "Técnicas", dot: "#2a6a10" },
+  { key: "business", label: "Negócio", dot: "#1a4a8a" },
+  { key: "soft", label: "Comportamentais", dot: "#8a4a0a" },
+];
+
+function parseSkills(raw: unknown): Record<SkillBucket, string[]> {
+  const r = asRecord(raw);
+  const toStringArray = (v: unknown) =>
+    asArray(v)
+      .map((x) => asStr(x))
+      .filter(Boolean);
+  return {
+    technical: toStringArray(r.technical),
+    business: toStringArray(r.business),
+    soft: toStringArray(r.soft),
+  };
+}
+
+function HabilidadesEditor({ raw }: { raw: unknown }) {
+  const [skills, setSkills] = useState(() => parseSkills(raw));
+  const [inputs, setInputs] = useState<Record<SkillBucket, string>>({
+    technical: "",
+    business: "",
+    soft: "",
+  });
+
+  const addSkill = (bucket: SkillBucket) => {
+    const val = inputs[bucket].trim();
+    if (!val) return;
+    setSkills((prev) => ({
+      ...prev,
+      [bucket]: [...prev[bucket], val],
+    }));
+    setInputs((prev) => ({ ...prev, [bucket]: "" }));
+  };
+
+  const removeSkill = (bucket: SkillBucket, idx: number) => {
+    setSkills((prev) => ({
+      ...prev,
+      [bucket]: prev[bucket].filter((_, i) => i !== idx),
+    }));
+  };
+
+  return (
+    <div className="space-y-4 md:col-span-2">
+      <input type="hidden" name="skillsJson" value={JSON.stringify(skills)} />
+      {SKILL_BUCKETS.map(({ key, label, dot }) => (
+        <div key={key}>
+          <div className="mb-2 flex items-center gap-2">
+            <span
+              className="size-2 rounded-full"
+              style={{ background: dot }}
+            />
+            <span className={labelCls}>{label}</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {skills[key].map((skill, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1.5 rounded-[6px] border border-[rgba(10,10,10,0.1)] bg-white px-2.5 py-1 font-mono text-[12px] text-[#0a0a0a]"
+              >
+                {skill}
+                <button
+                  type="button"
+                  onClick={() => removeSkill(key, i)}
+                  className="text-[#8a8a85] hover:text-[#9a3d28]"
+                  aria-label={`Remover ${skill}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              className="h-8 min-w-[160px] flex-1 rounded-[6px] border border-dashed border-[rgba(10,10,10,0.18)] bg-transparent px-3 text-[13px] text-[#0a0a0a] outline-none placeholder:text-[#8a8a85] focus:border-[rgba(10,10,10,0.35)]"
+              value={inputs[key]}
+              onChange={(e) =>
+                setInputs((prev) => ({ ...prev, [key]: e.target.value }))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addSkill(key);
+                }
+              }}
+              placeholder="Adicionar e pressionar Enter"
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type LangEntry = { _id: string; language: string; level: string };
+
+function parseLangs(raw: unknown): LangEntry[] {
+  return asArray(raw).map((item) => {
+    const r = asRecord(item);
+    return {
+      _id: uid(),
+      language: asStr(r.language),
+      level: asStr(r.level),
+    };
+  });
+}
+
+const LANG_LEVELS = [
+  "Nativo",
+  "Fluente",
+  "Avançado",
+  "Intermediário",
+  "Básico",
+];
+
+function IdiomasEditor({ raw }: { raw: unknown }) {
+  const [entries, setEntries] = useState<LangEntry[]>(() => parseLangs(raw));
+
+  const add = () =>
+    setEntries((prev) => [
+      ...prev,
+      { _id: uid(), language: "", level: "" },
+    ]);
+
+  const remove = (id: string) =>
+    setEntries((prev) => prev.filter((e) => e._id !== id));
+
+  const update = (id: string, key: keyof LangEntry, value: string) =>
+    setEntries((prev) =>
+      prev.map((e) => (e._id === id ? { ...e, [key]: value } : e)),
+    );
+
+  const serialized = JSON.stringify(
+    entries.map(({ _id, ...rest }) => rest),
+  );
+
+  return (
+    <div className="space-y-3 md:col-span-2">
+      <input type="hidden" name="languagesJson" value={serialized} />
+      {entries.length === 0 && (
+        <p className="py-2 text-[13px] text-[#8a8a85]">
+          Nenhum idioma cadastrado.
+        </p>
+      )}
+      {entries.map((e) => (
+        <div
+          key={e._id}
+          className="grid items-end gap-3 rounded-[10px] border border-[rgba(10,10,10,0.08)] bg-white p-4 md:grid-cols-[1fr_1fr_auto]"
+        >
+          <div className="space-y-1.5">
+            <label className={labelCls} htmlFor={`lang-name-${e._id}`}>
+              Idioma
+            </label>
+            <input
+              className={inputCls}
+              id={`lang-name-${e._id}`}
+              value={e.language}
+              onChange={(ev) => update(e._id, "language", ev.target.value)}
+              placeholder="Ex.: Inglês"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls} htmlFor={`lang-level-${e._id}`}>
+              Nível
+            </label>
+            <select
+              className={cn(inputCls, "cursor-pointer")}
+              id={`lang-level-${e._id}`}
+              value={e.level}
+              onChange={(ev) => update(e._id, "level", ev.target.value)}
+            >
+              <option value="">Selecionar nível</option>
+              {LANG_LEVELS.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </div>
+          <RemoveButton onClick={() => remove(e._id)} />
+        </div>
+      ))}
+      <AddButton label="Adicionar idioma" onClick={add} />
+    </div>
+  );
+}
+
+type CertEntry = {
+  _id: string;
+  name: string;
+  issuer: string;
+  year: string;
+};
+
+function parseCerts(raw: unknown): CertEntry[] {
+  return asArray(raw).map((item) => {
+    const r = asRecord(item);
+    return {
+      _id: uid(),
+      name: asStr(r.name),
+      issuer: asStr(r.issuer),
+      year: asStr(r.year),
+    };
+  });
+}
+
+function CertificacoesEditor({ raw }: { raw: unknown }) {
+  const [entries, setEntries] = useState<CertEntry[]>(() => parseCerts(raw));
+
+  const add = () =>
+    setEntries((prev) => [
+      ...prev,
+      { _id: uid(), name: "", issuer: "", year: "" },
+    ]);
+
+  const remove = (id: string) =>
+    setEntries((prev) => prev.filter((e) => e._id !== id));
+
+  const update = (id: string, key: keyof CertEntry, value: string) =>
+    setEntries((prev) =>
+      prev.map((e) => (e._id === id ? { ...e, [key]: value } : e)),
+    );
+
+  const serialized = JSON.stringify(entries.map(({ _id, ...rest }) => rest));
+
+  return (
+    <div className="space-y-3">
+      <input type="hidden" name="certificationsJson" value={serialized} />
+      {entries.length === 0 && (
+        <p className="py-2 text-[13px] text-[#8a8a85]">
+          Nenhuma certificação cadastrada.
+        </p>
+      )}
+      {entries.map((e) => (
+        <EntryCard key={e._id}>
+          <div className="mb-3 flex items-center justify-between">
+            <span className={labelCls}>Certificação</span>
+            <RemoveButton onClick={() => remove(e._id)} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1.5 md:col-span-2">
+              <label className={labelCls} htmlFor={`cert-name-${e._id}`}>
+                Nome
+              </label>
+              <input
+                className={inputCls}
+                id={`cert-name-${e._id}`}
+                value={e.name}
+                onChange={(ev) => update(e._id, "name", ev.target.value)}
+                placeholder="Ex.: AWS Solutions Architect"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls} htmlFor={`cert-issuer-${e._id}`}>
+                Emissor / Instituição
+              </label>
+              <input
+                className={inputCls}
+                id={`cert-issuer-${e._id}`}
+                value={e.issuer}
+                onChange={(ev) => update(e._id, "issuer", ev.target.value)}
+                placeholder="Ex.: Amazon, Coursera"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls} htmlFor={`cert-year-${e._id}`}>
+                Ano
+              </label>
+              <input
+                className={inputCls}
+                id={`cert-year-${e._id}`}
+                value={e.year}
+                onChange={(ev) => update(e._id, "year", ev.target.value)}
+                placeholder="Ex.: 2023"
+              />
+            </div>
+          </div>
+        </EntryCard>
+      ))}
+      <AddButton label="Adicionar certificação" onClick={add} />
+    </div>
+  );
+}
+
+type LinkEntry = { _id: string; label: string; url: string };
+
+function parseLinks(raw: unknown): LinkEntry[] {
+  return asArray(raw).map((item) => {
+    const r = asRecord(item);
+    return {
+      _id: uid(),
+      label: asStr(r.label),
+      url: asStr(r.url),
+    };
+  });
+}
+
+function LinksEditor({
+  raw,
+  defaultLinkedin,
+}: {
+  raw: unknown;
+  defaultLinkedin: string;
+}) {
+  const [linkedin, setLinkedin] = useState(defaultLinkedin);
+  const [extras, setExtras] = useState<LinkEntry[]>(() => parseLinks(raw));
+
+  const add = () =>
+    setExtras((prev) => [...prev, { _id: uid(), label: "", url: "" }]);
+
+  const remove = (id: string) =>
+    setExtras((prev) => prev.filter((e) => e._id !== id));
+
+  const update = (id: string, key: keyof LinkEntry, value: string) =>
+    setExtras((prev) =>
+      prev.map((e) => (e._id === id ? { ...e, [key]: value } : e)),
+    );
+
+  return (
+    <div className="space-y-3 md:col-span-2">
+      <input type="hidden" name="linkedinUrl" value={linkedin} />
+      <input
+        type="hidden"
+        name="linksJson"
+        value={JSON.stringify(extras.map(({ _id, ...rest }) => rest))}
+      />
+      <div className="space-y-1.5">
+        <label className={labelCls} htmlFor="links-linkedin">
+          LinkedIn
+        </label>
+        <input
+          className={inputCls}
+          id="links-linkedin"
+          value={linkedin}
+          onChange={(e) => setLinkedin(e.target.value)}
+          placeholder="https://linkedin.com/in/seuperfil"
+          type="url"
+        />
+      </div>
+      {extras.map((e) => (
+        <div
+          key={e._id}
+          className="grid gap-3 rounded-[10px] border border-[rgba(10,10,10,0.08)] bg-white p-4 md:grid-cols-[1fr_2fr_auto]"
+        >
+          <div className="space-y-1.5">
+            <label className={labelCls} htmlFor={`link-label-${e._id}`}>
+              Rótulo
+            </label>
+            <input
+              className={inputCls}
+              id={`link-label-${e._id}`}
+              value={e.label}
+              onChange={(ev) => update(e._id, "label", ev.target.value)}
+              placeholder="Ex.: Portfólio"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls} htmlFor={`link-url-${e._id}`}>
+              URL
+            </label>
+            <input
+              className={inputCls}
+              id={`link-url-${e._id}`}
+              value={e.url}
+              onChange={(ev) => update(e._id, "url", ev.target.value)}
+              placeholder="https://"
+              type="url"
+            />
+          </div>
+          <div className="flex items-end pb-0.5">
+            <RemoveButton onClick={() => remove(e._id)} />
+          </div>
+        </div>
+      ))}
+      <AddButton label="Adicionar link" onClick={add} />
+    </div>
+  );
+}
+
+// ─── Block content dispatcher ──────────────────────────────────────────────
+
+function BlockContent({
+  block,
+  profile,
+  userEmail,
+}: {
+  block: ProfileBlockDefinition;
+  profile: UserProfileRecord;
+  userEmail?: string;
+}) {
+  const bid = block.id;
+
+  if (bid === "experiencias") {
+    return <ExperienciasEditor raw={profile.experiencesJson} />;
+  }
+
+  if (bid === "formacao") {
+    return <FormacaoEditor raw={profile.educationJson} />;
+  }
+
+  if (bid === "habilidades") {
+    return <HabilidadesEditor raw={profile.skillsJson} />;
+  }
+
+  if (bid === "idiomas") {
+    return <IdiomasEditor raw={profile.languagesJson} />;
+  }
+
+  if (bid === "certificacoes") {
+    return <CertificacoesEditor raw={profile.certificationsJson} />;
+  }
+
+  if (bid === "links") {
+    return (
+      <LinksEditor
+        raw={[]}
+        defaultLinkedin={profile.linkedinUrl ?? ""}
+      />
+    );
+  }
+
+  // dados-pessoais: custom layout with email readonly + linkedin
+  if (bid === "dados-pessoais") {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field
+          label="Nome completo"
+          id="dp-fullName"
+          name="fullName"
+          value={profile.fullName ?? ""}
+          placeholder="Seu nome completo"
+        />
+        <ReadonlyField label="Email" value={userEmail ?? "—"} />
+        <Field
+          label="Telefone"
+          id="dp-phone"
+          name="phone"
+          value={profile.phone ?? ""}
+          placeholder="+55 11 99999-0000"
+        />
+        <Field
+          label="LinkedIn"
+          id="dp-linkedin"
+          name="linkedinUrl"
+          value={profile.linkedinUrl ?? ""}
+          placeholder="https://linkedin.com/in/seuperfil"
+        />
+        <Field
+          label="Cidade"
+          id="dp-city"
+          name="city"
+          value={profile.city ?? ""}
+          placeholder="São Paulo"
+        />
+        <Field
+          label="Estado"
+          id="dp-state"
+          name="state"
+          value={profile.state ?? ""}
+          placeholder="SP"
+        />
+        <Field
+          label="País"
+          id="dp-country"
+          name="country"
+          value={profile.country ?? ""}
+          placeholder="Brasil"
+        />
+      </div>
+    );
+  }
+
+  // Generic renderer for simple field blocks (resumo)
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {block.fields.map((field) => {
+        const id = getFieldId(block.id, field.name);
+        const defaultValue = String(
+          getProfileFieldDefaultValue(profile, field),
+        );
+
+        if (field.type === "textarea") {
+          return (
+            <TextareaField
+              key={field.name}
+              label={field.label}
+              id={id}
+              name={field.name}
+              value={defaultValue}
+              rows={field.rows}
+            />
+          );
+        }
+
+        return (
+          <Field
+            key={field.name}
+            label={field.label}
+            id={id}
+            name={field.name}
+            value={defaultValue}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Main block component ──────────────────────────────────────────────────
+
 export function CvMasterBlock({
   action,
   block,
@@ -81,8 +1061,10 @@ export function CvMasterBlock({
   hasSugestao = false,
   index,
   profile,
+  userEmail,
 }: CvMasterBlockProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const blockRef = useRef<HTMLDivElement>(null);
   const state: BlockState = hasGap
     ? "lacuna"
     : hasSugestao
@@ -90,8 +1072,21 @@ export function CvMasterBlock({
       : "completo";
   const idx = String(index).padStart(2, "0");
 
+  useEffect(() => {
+    if (open && blockRef.current) {
+      const t = setTimeout(() => {
+        blockRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      }, 120);
+      return () => clearTimeout(t);
+    }
+  }, [open]);
+
   return (
     <div
+      ref={blockRef}
       className={cn(
         "overflow-hidden rounded-[12px] border bg-[#fafaf6] transition-[border-color,box-shadow] duration-150",
         open
@@ -115,7 +1110,7 @@ export function CvMasterBlock({
         </span>
         <StateChip state={state} />
         <span
-          className="text-[#8a8a85] transition-transform duration-150"
+          className="text-[#8a8a85] transition-transform duration-200"
           style={{ transform: open ? "rotate(180deg)" : "none" }}
           aria-hidden="true"
         >
@@ -139,151 +1134,40 @@ export function CvMasterBlock({
         <form
           action={action}
           id={`${block.id}-panel`}
-          className="border-t border-[rgba(10,10,10,0.06)]"
+          className="cv-block-panel border-t border-[rgba(10,10,10,0.06)]"
         >
-          <input name="focus" type="hidden" value={block.id} />
+            <input name="focus" type="hidden" value={block.id} />
 
-          <div className="grid gap-4 p-5 md:grid-cols-2 md:p-6">
-            {block.fields.map((field) => {
-              const id = getFieldId(block.id, field.name);
-
-              if (field.type === "checkbox") {
-                return (
-                  <label
-                    key={field.name}
-                    htmlFor={id}
-                    className="flex items-center gap-3 rounded-[10px] border border-[rgba(10,10,10,0.08)] bg-white p-4 text-sm text-[#0a0a0a]"
-                  >
-                    <input
-                      defaultChecked={Boolean(
-                        getProfileFieldDefaultValue(profile, field),
-                      )}
-                      id={id}
-                      name={field.name}
-                      type="checkbox"
-                      className="size-4 rounded border-[#CFCFCF] text-[#111111] focus:ring-[#111111]"
-                    />
-                    <span>{field.label}</span>
-                  </label>
-                );
-              }
-
-              if (field.type === "select") {
-                return (
-                  <div key={field.name} className="space-y-2 md:col-span-1">
-                    <label
-                      className="text-sm font-medium text-[#0a0a0a]"
-                      htmlFor={id}
-                    >
-                      {field.label}
-                    </label>
-                    <select
-                      defaultValue={String(
-                        getProfileFieldDefaultValue(profile, field),
-                      )}
-                      id={id}
-                      name={field.name}
-                      className="h-12 w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 text-sm text-[#0a0a0a] outline-none transition-colors focus:border-[#0a0a0a]"
-                    >
-                      <option value="">Selecione</option>
-                      {field.options?.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              }
-
-              if (field.type === "json") {
-                return (
-                  <div key={field.name} className="space-y-2 md:col-span-2">
-                    <label
-                      className="text-sm font-medium text-[#0a0a0a]"
-                      htmlFor={id}
-                    >
-                      {field.label}
-                    </label>
-                    <textarea
-                      defaultValue={String(
-                        getProfileFieldDefaultValue(profile, field),
-                      )}
-                      id={id}
-                      name={field.name}
-                      rows={field.rows ?? 8}
-                      spellCheck={false}
-                      className="w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 py-3 font-mono text-[13px] leading-6 text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
-                    />
-                    {field.helpText ? (
-                      <p className="text-xs text-[#8a8a85]">{field.helpText}</p>
-                    ) : null}
-                  </div>
-                );
-              }
-
-              return (
-                <div
-                  key={field.name}
-                  className={cn(
-                    "space-y-2",
-                    field.type === "textarea" ? "md:col-span-2" : undefined,
-                  )}
-                >
-                  <label
-                    className="text-sm font-medium text-[#0a0a0a]"
-                    htmlFor={id}
-                  >
-                    {field.label}
-                  </label>
-                  {field.type === "textarea" ? (
-                    <textarea
-                      defaultValue={String(
-                        getProfileFieldDefaultValue(profile, field),
-                      )}
-                      id={id}
-                      name={field.name}
-                      rows={field.rows ?? 4}
-                      className="w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 py-3 text-sm text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
-                    />
-                  ) : (
-                    <input
-                      defaultValue={String(
-                        getProfileFieldDefaultValue(profile, field),
-                      )}
-                      id={id}
-                      name={field.name}
-                      type={field.type === "number" ? "number" : "text"}
-                      className="h-12 w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 text-sm text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[rgba(10,10,10,0.06)] px-5 py-4 md:px-6">
-            <p className="text-[13px] text-[#5a5a55]">
-              {hasGap
-                ? "Salve este bloco para atualizar o perfil."
-                : "Edite apenas o bloco que deseja revisar."}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                className="inline-flex h-10 items-center rounded-full border border-[rgba(10,10,10,0.12)] bg-white px-4 text-xs font-semibold uppercase tracking-[0.18em] text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
-                type="button"
-                onClick={() => setOpen(false)}
-              >
-                Cancelar
-              </button>
-              <button
-                className="inline-flex h-10 items-center rounded-full bg-[#0a0a0a] px-5 text-xs font-semibold uppercase tracking-[0.18em] text-[#fafaf6] transition-colors hover:bg-[#1a1a1a]"
-                type="submit"
-              >
-                Salvar bloco
-              </button>
+            <div className="p-5 md:p-6">
+              <BlockContent
+                block={block}
+                profile={profile}
+                userEmail={userEmail}
+              />
             </div>
-          </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[rgba(10,10,10,0.06)] px-5 py-4 md:px-6">
+              <p className="text-[12.5px] text-[#5a5a55]">
+                {hasGap
+                  ? "Salve este bloco para atualizar o perfil."
+                  : "Edite apenas o bloco que deseja revisar."}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  className="rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 py-2 text-[13px] font-medium text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
+                  type="button"
+                  onClick={() => setOpen(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="rounded-[8px] bg-[#0a0a0a] px-5 py-2 text-[13px] font-medium text-[#fafaf6] transition-colors hover:bg-[#1a1a1a]"
+                  type="submit"
+                >
+                  Salvar bloco
+                </button>
+              </div>
+            </div>
         </form>
       )}
     </div>

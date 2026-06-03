@@ -82,6 +82,9 @@ export type ProfileBlockId =
   | "certificacoes"
   | "links";
 
+// linksJson is a local-only type for additional URLs; no backend field yet.
+export type LinkEntry = { label: string; url: string };
+
 export type ProfileBlockDefinition = {
   description: string;
   fields: ProfileFieldDefinition[];
@@ -101,10 +104,11 @@ export const profileBlockDefinitions: ProfileBlockDefinition[] = [
   {
     id: "dados-pessoais",
     title: "Dados pessoais e contato",
-    description: "Nome, telefone e localização para o recrutador.",
+    description: "Nome, telefone, LinkedIn e localização para o recrutador.",
     fields: [
       { name: "fullName", label: "Nome completo", type: "text" },
       { name: "phone", label: "Telefone", type: "text" },
+      { name: "linkedinUrl", label: "LinkedIn", type: "text" },
       { name: "city", label: "Cidade", type: "text" },
       { name: "state", label: "Estado", type: "text" },
       { name: "country", label: "País", type: "text" },
@@ -319,6 +323,7 @@ export function buildProfileBlockUpdatePayload(
         city: readString(formData, "city"),
         country: readString(formData, "country"),
         fullName: readString(formData, "fullName"),
+        linkedinUrl: readString(formData, "linkedinUrl"),
         phone: readString(formData, "phone"),
         state: readString(formData, "state"),
       };
@@ -355,6 +360,8 @@ export function buildProfileBlockUpdatePayload(
         ),
       };
     case "links":
+      // Saves only linkedinUrl; additional link entries (linksJson) are
+      // display-only until a dedicated backend field is available.
       return {
         linkedinUrl: readString(formData, "linkedinUrl"),
       };

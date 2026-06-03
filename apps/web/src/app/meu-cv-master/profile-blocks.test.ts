@@ -88,6 +88,7 @@ describe("buildProfileBlockUpdatePayload", () => {
     const formData = new FormData();
     formData.set("fullName", "Ana Souza");
     formData.set("phone", "+55 11 99999-0000");
+    formData.set("linkedinUrl", "https://linkedin.com/in/ana");
     formData.set("city", "São Paulo");
     formData.set("state", "SP");
     formData.set("country", "Brasil");
@@ -95,6 +96,7 @@ describe("buildProfileBlockUpdatePayload", () => {
     expect(buildProfileBlockUpdatePayload("dados-pessoais", formData)).toEqual({
       fullName: "Ana Souza",
       phone: "+55 11 99999-0000",
+      linkedinUrl: "https://linkedin.com/in/ana",
       city: "São Paulo",
       state: "SP",
       country: "Brasil",
