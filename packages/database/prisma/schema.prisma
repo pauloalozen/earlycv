@@ -472,6 +472,7 @@ model UserProfile {
   id                    String            @id @default(cuid())
   userId                String            @unique
   fullName              String?
+  contactEmail          String?
   phone                 String?
   linkedinUrl           String?
   professionalSummary   String?

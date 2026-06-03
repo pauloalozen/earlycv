@@ -13,6 +13,7 @@ export type ProfileSkillsJson = {
 export type UserProfileRecord = {
   certificationsJson: unknown;
   city: string | null;
+  contactEmail: string | null;
   country: string | null;
   currentTitle: string | null;
   createdAt?: string;
@@ -56,6 +57,7 @@ export type ProfileFieldDefinition = {
     UserProfileRecord,
     | "certificationsJson"
     | "city"
+    | "contactEmail"
     | "country"
     | "educationJson"
     | "experiencesJson"
@@ -104,9 +106,10 @@ export const profileBlockDefinitions: ProfileBlockDefinition[] = [
   {
     id: "dados-pessoais",
     title: "Dados pessoais e contato",
-    description: "Nome, telefone, LinkedIn e localização para o recrutador.",
+    description: "Nome, email, telefone, LinkedIn e localização para o recrutador.",
     fields: [
       { name: "fullName", label: "Nome completo", type: "text" },
+      { name: "contactEmail", label: "Email de contato", type: "text" },
       { name: "phone", label: "Telefone", type: "text" },
       { name: "linkedinUrl", label: "LinkedIn", type: "text" },
       { name: "city", label: "Cidade", type: "text" },
@@ -321,6 +324,7 @@ export function buildProfileBlockUpdatePayload(
     case "dados-pessoais":
       return {
         city: readString(formData, "city"),
+        contactEmail: readString(formData, "contactEmail"),
         country: readString(formData, "country"),
         fullName: readString(formData, "fullName"),
         linkedinUrl: readString(formData, "linkedinUrl"),
@@ -360,11 +364,8 @@ export function buildProfileBlockUpdatePayload(
         ),
       };
     case "links":
-      // Saves only linkedinUrl; additional link entries (linksJson) are
-      // display-only until a dedicated backend field is available.
-      return {
-        linkedinUrl: readString(formData, "linkedinUrl"),
-      };
+      // Extra link entries are display-only; no dedicated backend field yet.
+      return {};
   }
 }
 

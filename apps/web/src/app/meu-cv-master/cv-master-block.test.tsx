@@ -22,6 +22,7 @@ describe("CvMasterBlock", () => {
         action={vi.fn()}
         profile={{
           city: "São Paulo",
+          contactEmail: "ana@trabalho.com",
           country: "Brasil",
           currentTitle: "Analista de Dados",
           certificationsJson: [],

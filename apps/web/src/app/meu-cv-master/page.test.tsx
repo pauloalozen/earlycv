@@ -40,6 +40,36 @@ vi.mock("@/lib/resumes-api", () => ({
 
 import MeuCvMasterPage from "./page";
 
+const mockProfile = {
+  certificationsJson: [],
+  city: "São Paulo",
+  contactEmail: "ana@trabalho.com",
+  country: "Brasil",
+  currentTitle: "Analista de Dados",
+  educationJson: [],
+  experiencesJson: [],
+  fullName: "Ana Souza",
+  headline: "Data Analyst",
+  id: "profile-1",
+  languagesJson: [],
+  linkedinUrl: "https://www.linkedin.com/in/ana",
+  phone: "+55 11 99999-0000",
+  preferredLanguage: "pt-BR",
+  profileFieldMetaJson: {},
+  profileReadinessStatus: "partial",
+  profileSuggestionsJson: [],
+  professionalSummary: "Resumo pronto",
+  remotePreference: "flexible",
+  skillsJson: { business: [], soft: [], technical: [] },
+  state: "SP",
+  summary: "Resumo",
+  targetSalaryMax: 15000,
+  targetSalaryMin: 10000,
+  userId: "user-1",
+  yearsExperience: 5,
+  relocationPreference: true,
+};
+
 describe("/meu-cv-master", () => {
   beforeEach(() => {
     getCurrentAppUserFromCookiesMock.mockReset();
@@ -64,37 +94,7 @@ describe("/meu-cv-master", () => {
       updatedAt: "2026-06-01T10:00:00.000Z",
     });
     apiRequestMock.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          certificationsJson: [],
-          city: "São Paulo",
-          country: "Brasil",
-          currentTitle: "Analista de Dados",
-          educationJson: [],
-          experiencesJson: [],
-          fullName: "Ana Souza",
-          headline: "Data Analyst",
-          id: "profile-1",
-          languagesJson: [],
-          linkedinUrl: "https://www.linkedin.com/in/ana",
-          phone: "+55 11 99999-0000",
-          preferredLanguage: "pt-BR",
-          profileFieldMetaJson: {},
-          profileReadinessStatus: "partial",
-          profileSuggestionsJson: [],
-          professionalSummary: "Resumo pronto",
-          remotePreference: "flexible",
-          skillsJson: { business: [], soft: [], technical: [] },
-          state: "SP",
-          summary: "Resumo",
-          targetSalaryMax: 15000,
-          targetSalaryMin: 10000,
-          userId: "user-1",
-          yearsExperience: 5,
-          relocationPreference: true,
-        }),
-        { status: 200 },
-      ),
+      new Response(JSON.stringify(mockProfile), { status: 200 }),
     );
   });
 
@@ -102,7 +102,7 @@ describe("/meu-cv-master", () => {
     cleanup();
   });
 
-  it("renders the reference-style editing shell", async () => {
+  it("renders the editing shell with PDF strip and block list", async () => {
     render(await MeuCvMasterPage({ searchParams: Promise.resolve({}) }));
 
     expect(
@@ -110,40 +110,40 @@ describe("/meu-cv-master", () => {
     ).toBeTruthy();
     // PDF strip shows the CV title
     expect(screen.getByText("CV Base Ana")).toBeTruthy();
-    expect(screen.getByText(/blocos com lacunas/i)).toBeTruthy();
+    // Hint text shown when masterResume exists
     expect(
-      screen.getByRole("link", { name: /abrir bloco sugerido/i }),
-    ).toHaveAttribute("href", "/meu-cv-master?focus=experiences");
+      screen.getByText(/substituir re-extrai/i),
+    ).toBeTruthy();
+    // Blocks are collapsed by default — no inputs visible
     expect(screen.queryByRole("textbox")).toBeNull();
+    // First block title visible as a button
     expect(
-      screen.getByRole("button", { name: /identidade profissional/i }),
+      screen.getByRole("button", { name: /dados pessoais e contato/i }),
     ).toBeInTheDocument();
   });
 
   it("opens the focused block from search params", async () => {
     render(
       await MeuCvMasterPage({
-        searchParams: Promise.resolve({ focus: "skills" }),
+        searchParams: Promise.resolve({ focus: "resumo" }),
       }),
     );
 
+    // resumo block opens, showing a textarea for professionalSummary
     expect(
-      screen.getByRole("textbox", { name: /habilidades e competências/i }),
+      screen.getByRole("textbox", { name: /resumo profissional/i }),
     ).toBeInTheDocument();
+    // Other blocks remain collapsed
     expect(
-      screen.queryByRole("textbox", { name: /resumo profissional/i }),
+      screen.queryByRole("textbox", { name: /nome completo/i }),
     ).toBeNull();
   });
 
-  it("shows the block list in collapsed state by default", async () => {
-    render(
-      await MeuCvMasterPage({
-        searchParams: Promise.resolve({}),
-      }),
-    );
+  it("shows the block list collapsed by default", async () => {
+    render(await MeuCvMasterPage({ searchParams: Promise.resolve({}) }));
 
     expect(
-      screen.getByRole("button", { name: /identidade profissional/i }),
+      screen.getByRole("button", { name: /dados pessoais e contato/i }),
     ).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
   });

@@ -77,7 +77,7 @@ function getFieldId(blockId: string, fieldName: string) {
 // ─── Shared form field atoms ───────────────────────────────────────────────
 
 const inputCls =
-  "h-11 w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-3.5 text-[13.5px] text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]";
+  "h-11 w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 text-[13.5px] text-[#0a0a0a] outline-none transition-[border-color] placeholder:text-[#8a8a85] focus:border-[#0a0a0a]";
 
 const labelCls =
   "font-mono text-[9.5px] font-medium uppercase tracking-[0.06em] text-[#8a8a85]";
@@ -135,7 +135,7 @@ function TextareaField({
         {label}
       </label>
       <textarea
-        className="w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-3.5 py-3 text-[13.5px] leading-relaxed text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
+        className="w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 py-2.5 text-[13.5px] leading-relaxed text-[#0a0a0a] outline-none transition-[border-color] placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
         defaultValue={value}
         id={id}
         name={name}
@@ -206,7 +206,7 @@ function RemoveButton({ onClick }: { onClick: () => void }) {
 
 function EntryCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-[10px] border border-[rgba(10,10,10,0.08)] bg-white p-4">
+    <div className="rounded-[10px] border border-[#e3e1d9] bg-white p-4">
       {children}
     </div>
   );
@@ -378,7 +378,7 @@ function ExperienciasEditor({ raw }: { raw: unknown }) {
                 Descrição
               </label>
               <textarea
-                className="w-full rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-3.5 py-3 text-[13.5px] leading-relaxed text-[#0a0a0a] outline-none transition-colors placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
+                className="w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 py-2.5 text-[13.5px] leading-relaxed text-[#0a0a0a] outline-none transition-[border-color] placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
                 id={`exp-desc-${e._id}`}
                 value={e.description}
                 onChange={(ev) =>
@@ -537,102 +537,83 @@ function FormacaoEditor({ raw }: { raw: unknown }) {
   );
 }
 
-type SkillBucket = "technical" | "business" | "soft";
-
-const SKILL_BUCKETS: Array<{
-  key: SkillBucket;
-  label: string;
-  dot: string;
-}> = [
-  { key: "technical", label: "Técnicas", dot: "#2a6a10" },
-  { key: "business", label: "Negócio", dot: "#1a4a8a" },
-  { key: "soft", label: "Comportamentais", dot: "#8a4a0a" },
-];
-
-function parseSkills(raw: unknown): Record<SkillBucket, string[]> {
+function parseSkillsFlat(raw: unknown): string[] {
   const r = asRecord(raw);
   const toStringArray = (v: unknown) =>
     asArray(v)
       .map((x) => asStr(x))
       .filter(Boolean);
-  return {
-    technical: toStringArray(r.technical),
-    business: toStringArray(r.business),
-    soft: toStringArray(r.soft),
-  };
+  // Merge all buckets into a flat list for display
+  return [
+    ...toStringArray(r.technical),
+    ...toStringArray(r.business),
+    ...toStringArray(r.soft),
+  ];
 }
 
 function HabilidadesEditor({ raw }: { raw: unknown }) {
-  const [skills, setSkills] = useState(() => parseSkills(raw));
-  const [inputs, setInputs] = useState<Record<SkillBucket, string>>({
-    technical: "",
-    business: "",
-    soft: "",
+  const [chips, setChips] = useState<string[]>(() => parseSkillsFlat(raw));
+  const [input, setInput] = useState("");
+
+  const add = () => {
+    const val = input.trim();
+    if (!val || chips.includes(val)) return;
+    setChips((prev) => [...prev, val]);
+    setInput("");
+  };
+
+  const remove = (idx: number) =>
+    setChips((prev) => prev.filter((_, i) => i !== idx));
+
+  // Serialize as { technical: [...all], business: [], soft: [] }
+  const serialized = JSON.stringify({
+    technical: chips,
+    business: [],
+    soft: [],
   });
 
-  const addSkill = (bucket: SkillBucket) => {
-    const val = inputs[bucket].trim();
-    if (!val) return;
-    setSkills((prev) => ({
-      ...prev,
-      [bucket]: [...prev[bucket], val],
-    }));
-    setInputs((prev) => ({ ...prev, [bucket]: "" }));
-  };
-
-  const removeSkill = (bucket: SkillBucket, idx: number) => {
-    setSkills((prev) => ({
-      ...prev,
-      [bucket]: prev[bucket].filter((_, i) => i !== idx),
-    }));
-  };
-
   return (
-    <div className="space-y-4 md:col-span-2">
-      <input type="hidden" name="skillsJson" value={JSON.stringify(skills)} />
-      {SKILL_BUCKETS.map(({ key, label, dot }) => (
-        <div key={key}>
-          <div className="mb-2 flex items-center gap-2">
-            <span
-              className="size-2 rounded-full"
-              style={{ background: dot }}
-            />
-            <span className={labelCls}>{label}</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {skills[key].map((skill, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-1.5 rounded-[6px] border border-[rgba(10,10,10,0.1)] bg-white px-2.5 py-1 font-mono text-[12px] text-[#0a0a0a]"
-              >
-                {skill}
-                <button
-                  type="button"
-                  onClick={() => removeSkill(key, i)}
-                  className="text-[#8a8a85] hover:text-[#9a3d28]"
-                  aria-label={`Remover ${skill}`}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-            <input
-              className="h-8 min-w-[160px] flex-1 rounded-[6px] border border-dashed border-[rgba(10,10,10,0.18)] bg-transparent px-3 text-[13px] text-[#0a0a0a] outline-none placeholder:text-[#8a8a85] focus:border-[rgba(10,10,10,0.35)]"
-              value={inputs[key]}
-              onChange={(e) =>
-                setInputs((prev) => ({ ...prev, [key]: e.target.value }))
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addSkill(key);
-                }
-              }}
-              placeholder="Adicionar e pressionar Enter"
-            />
-          </div>
-        </div>
-      ))}
+    <div className="space-y-3 md:col-span-2">
+      <input type="hidden" name="skillsJson" value={serialized} />
+      <div className="flex flex-wrap gap-2">
+        {chips.map((chip, i) => (
+          <span
+            key={i}
+            className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#e3e1d9] bg-white px-2.5 py-1 font-mono text-[12px] text-[#0a0a0a]"
+          >
+            {chip}
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="text-[#8a8a85] transition-colors hover:text-[#9a3d28]"
+              aria-label={`Remover ${chip}`}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          className="h-10 flex-1 rounded-[8px] border border-dashed border-[#c8c6be] bg-transparent px-3 text-[13.5px] text-[#0a0a0a] outline-none placeholder:text-[#8a8a85] focus:border-[#0a0a0a]"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder="Digitar competência e pressionar Enter"
+        />
+        <button
+          type="button"
+          onClick={add}
+          className="h-10 rounded-[8px] border border-[#e3e1d9] bg-white px-4 text-[13px] font-medium text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
+        >
+          Adicionar
+        </button>
+      </div>
     </div>
   );
 }
@@ -840,52 +821,31 @@ function parseLinks(raw: unknown): LinkEntry[] {
   });
 }
 
-function LinksEditor({
-  raw,
-  defaultLinkedin,
-}: {
-  raw: unknown;
-  defaultLinkedin: string;
-}) {
-  const [linkedin, setLinkedin] = useState(defaultLinkedin);
-  const [extras, setExtras] = useState<LinkEntry[]>(() => parseLinks(raw));
+function LinksEditor({ raw }: { raw: unknown }) {
+  const [entries, setEntries] = useState<LinkEntry[]>(() => parseLinks(raw));
 
   const add = () =>
-    setExtras((prev) => [...prev, { _id: uid(), label: "", url: "" }]);
+    setEntries((prev) => [...prev, { _id: uid(), label: "", url: "" }]);
 
   const remove = (id: string) =>
-    setExtras((prev) => prev.filter((e) => e._id !== id));
+    setEntries((prev) => prev.filter((e) => e._id !== id));
 
   const update = (id: string, key: keyof LinkEntry, value: string) =>
-    setExtras((prev) =>
+    setEntries((prev) =>
       prev.map((e) => (e._id === id ? { ...e, [key]: value } : e)),
     );
 
   return (
     <div className="space-y-3 md:col-span-2">
-      <input type="hidden" name="linkedinUrl" value={linkedin} />
-      <input
-        type="hidden"
-        name="linksJson"
-        value={JSON.stringify(extras.map(({ _id, ...rest }) => rest))}
-      />
-      <div className="space-y-1.5">
-        <label className={labelCls} htmlFor="links-linkedin">
-          LinkedIn
-        </label>
-        <input
-          className={inputCls}
-          id="links-linkedin"
-          value={linkedin}
-          onChange={(e) => setLinkedin(e.target.value)}
-          placeholder="https://linkedin.com/in/seuperfil"
-          type="url"
-        />
-      </div>
-      {extras.map((e) => (
+      {entries.length === 0 && (
+        <p className="py-2 text-[13px] text-[#8a8a85]">
+          Nenhum link adicional. LinkedIn está em Dados pessoais e contato.
+        </p>
+      )}
+      {entries.map((e) => (
         <div
           key={e._id}
-          className="grid gap-3 rounded-[10px] border border-[rgba(10,10,10,0.08)] bg-white p-4 md:grid-cols-[1fr_2fr_auto]"
+          className="grid items-end gap-3 rounded-[10px] border border-[#e3e1d9] bg-white p-4 md:grid-cols-[1fr_2fr_auto]"
         >
           <div className="space-y-1.5">
             <label className={labelCls} htmlFor={`link-label-${e._id}`}>
@@ -912,9 +872,7 @@ function LinksEditor({
               type="url"
             />
           </div>
-          <div className="flex items-end pb-0.5">
-            <RemoveButton onClick={() => remove(e._id)} />
-          </div>
+          <RemoveButton onClick={() => remove(e._id)} />
         </div>
       ))}
       <AddButton label="Adicionar link" onClick={add} />
@@ -956,15 +914,10 @@ function BlockContent({
   }
 
   if (bid === "links") {
-    return (
-      <LinksEditor
-        raw={[]}
-        defaultLinkedin={profile.linkedinUrl ?? ""}
-      />
-    );
+    return <LinksEditor raw={[]} />;
   }
 
-  // dados-pessoais: custom layout with email readonly + linkedin
+  // dados-pessoais: custom layout with contactEmail editable + linkedin
   if (bid === "dados-pessoais") {
     return (
       <div className="grid gap-4 md:grid-cols-2">
@@ -975,7 +928,14 @@ function BlockContent({
           value={profile.fullName ?? ""}
           placeholder="Seu nome completo"
         />
-        <ReadonlyField label="Email" value={userEmail ?? "—"} />
+        <Field
+          label="Email de contato"
+          id="dp-contactEmail"
+          name="contactEmail"
+          value={profile.contactEmail ?? ""}
+          placeholder={userEmail ?? "email@exemplo.com"}
+          type="email"
+        />
         <Field
           label="Telefone"
           id="dp-phone"
@@ -1053,6 +1013,8 @@ function BlockContent({
 
 // ─── Main block component ──────────────────────────────────────────────────
 
+const CLOSE_MS = 220;
+
 export function CvMasterBlock({
   action,
   block,
@@ -1064,6 +1026,7 @@ export function CvMasterBlock({
   userEmail,
 }: CvMasterBlockProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const [closing, setClosing] = useState(false);
   const blockRef = useRef<HTMLDivElement>(null);
   const state: BlockState = hasGap
     ? "lacuna"
@@ -1072,17 +1035,34 @@ export function CvMasterBlock({
       : "completo";
   const idx = String(index).padStart(2, "0");
 
+  const handleClose = () => {
+    setClosing(true);
+    setTimeout(() => {
+      setOpen(false);
+      setClosing(false);
+    }, CLOSE_MS);
+  };
+
+  const handleToggle = () => {
+    if (open || closing) {
+      handleClose();
+    } else {
+      setOpen(true);
+    }
+  };
+
+  // Scroll card to vertical center after opening
   useEffect(() => {
-    if (open && blockRef.current) {
+    if (open && !closing && blockRef.current) {
       const t = setTimeout(() => {
         blockRef.current?.scrollIntoView({
           behavior: "smooth",
-          block: "nearest",
+          block: "center",
         });
-      }, 120);
+      }, 80);
       return () => clearTimeout(t);
     }
-  }, [open]);
+  }, [open, closing]);
 
   return (
     <div
@@ -1097,9 +1077,9 @@ export function CvMasterBlock({
     >
       <button
         type="button"
-        aria-expanded={open}
+        aria-expanded={open && !closing}
         aria-controls={`${block.id}-panel`}
-        onClick={() => setOpen((cur) => !cur)}
+        onClick={handleToggle}
         className="flex w-full items-center gap-3.5 px-[18px] py-[15px] text-left"
       >
         <span className="w-[18px] shrink-0 font-mono text-[11px] font-medium text-[#8a8a85]">
@@ -1130,11 +1110,14 @@ export function CvMasterBlock({
         </span>
       </button>
 
-      {open && (
+      {(open || closing) && (
         <form
           action={action}
           id={`${block.id}-panel`}
-          className="cv-block-panel border-t border-[rgba(10,10,10,0.06)]"
+          className={cn(
+            "border-t border-[rgba(10,10,10,0.06)]",
+            closing ? "cv-block-panel-close" : "cv-block-panel",
+          )}
         >
             <input name="focus" type="hidden" value={block.id} />
 
@@ -1156,7 +1139,7 @@ export function CvMasterBlock({
                 <button
                   className="rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 py-2 text-[13px] font-medium text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
                   type="button"
-                  onClick={() => setOpen(false)}
+                  onClick={handleClose}
                 >
                   Cancelar
                 </button>

@@ -91,6 +91,7 @@ export default async function MeuCvMasterPage({
   const profileData: UserProfileRecord = profile ?? {
     certificationsJson: [],
     city: null,
+    contactEmail: null,
     country: null,
     currentTitle: null,
     educationJson: [],

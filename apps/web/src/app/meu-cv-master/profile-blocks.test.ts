@@ -9,6 +9,7 @@ import {
 const baseProfile = {
   certificationsJson: [],
   city: "São Paulo",
+  contactEmail: "ana@trabalho.com",
   country: "Brasil",
   currentTitle: "Analista de Dados",
   educationJson: [],
@@ -87,6 +88,7 @@ describe("buildProfileBlockUpdatePayload", () => {
   it("serializes dados-pessoais fields", () => {
     const formData = new FormData();
     formData.set("fullName", "Ana Souza");
+    formData.set("contactEmail", "ana@trabalho.com");
     formData.set("phone", "+55 11 99999-0000");
     formData.set("linkedinUrl", "https://linkedin.com/in/ana");
     formData.set("city", "São Paulo");
@@ -95,6 +97,7 @@ describe("buildProfileBlockUpdatePayload", () => {
 
     expect(buildProfileBlockUpdatePayload("dados-pessoais", formData)).toEqual({
       fullName: "Ana Souza",
+      contactEmail: "ana@trabalho.com",
       phone: "+55 11 99999-0000",
       linkedinUrl: "https://linkedin.com/in/ana",
       city: "São Paulo",
@@ -124,12 +127,8 @@ describe("buildProfileBlockUpdatePayload", () => {
     });
   });
 
-  it("serializes links field", () => {
+  it("serializes links as empty (no backend field yet)", () => {
     const formData = new FormData();
-    formData.set("linkedinUrl", "https://linkedin.com/in/ana");
-
-    expect(buildProfileBlockUpdatePayload("links", formData)).toEqual({
-      linkedinUrl: "https://linkedin.com/in/ana",
-    });
+    expect(buildProfileBlockUpdatePayload("links", formData)).toEqual({});
   });
 });

@@ -20,6 +20,12 @@ export class UpdateProfileDto {
   @IsOptional()
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   @IsString()
+  @MaxLength(254)
+  contactEmail?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
   @MaxLength(40)
   phone?: string;
 
