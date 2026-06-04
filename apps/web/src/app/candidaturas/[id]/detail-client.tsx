@@ -588,6 +588,7 @@ function AnaliseRow({
     createdAt: string;
     scoreBefore: number | null;
     scoreAfter: number | null;
+    notes?: string | null;
     canDownloadBaseCv?: boolean;
   };
   applicationId: string;
@@ -620,8 +621,29 @@ function AnaliseRow({
   const releaseWatchdogTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const releaseCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [adjustmentsOpen, setAdjustmentsOpen] = useState(false);
+  const [adjustmentsVisible, setAdjustmentsVisible] = useState(false);
+  const adjustmentsCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const canDownloadNow = adaptation.isUnlocked || wasRedeemedInSession;
   const canRedeemNow = !adaptation.isUnlocked && !wasRedeemedInSession;
+
+  const showAdjustments =
+    canDownloadNow &&
+    (adaptation.scoreBefore !== null || adaptation.scoreAfter !== null || !!adaptation.notes);
+
+  const openAdjustments = () => {
+    setAdjustmentsOpen(true);
+    requestAnimationFrame(() => setAdjustmentsVisible(true));
+  };
+
+  const closeAdjustments = () => {
+    setAdjustmentsVisible(false);
+    if (adjustmentsCloseTimerRef.current) clearTimeout(adjustmentsCloseTimerRef.current);
+    adjustmentsCloseTimerRef.current = setTimeout(() => {
+      if (isMountedRef.current) setAdjustmentsOpen(false);
+    }, 240);
+  };
 
   const plansHref = buildCvUnlockPlansHref({
     adaptationId: adaptation.id,
@@ -638,6 +660,7 @@ function AnaliseRow({
       redeemAbortControllerRef.current?.abort();
       if (releaseWatchdogTimeoutRef.current) clearTimeout(releaseWatchdogTimeoutRef.current);
       if (releaseCloseTimeoutRef.current) clearTimeout(releaseCloseTimeoutRef.current);
+      if (adjustmentsCloseTimerRef.current) clearTimeout(adjustmentsCloseTimerRef.current);
     };
   }, []);
 
@@ -1059,7 +1082,27 @@ function AnaliseRow({
               DOCX
             </button>
           </>
-        ) : canRedeemNow && hasCredits ? (
+        ) : canRedeemNow && hasCredits === false ? (
+          <a
+            href={plansHref}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              background: "#0a0a0a",
+              color: "#fafaf6",
+              border: "none",
+              borderRadius: 7,
+              padding: "6px 10px",
+              fontSize: 12,
+              fontWeight: 600,
+              textDecoration: "none",
+              fontFamily: GEIST,
+            }}
+          >
+            Liberar CV · 1 Crédito
+          </a>
+        ) : canRedeemNow ? (
           <button
             type="button"
             onClick={() => void handleRedeem()}
@@ -1084,9 +1127,11 @@ function AnaliseRow({
             </svg>
             {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
           </button>
-        ) : canRedeemNow ? (
-          <a
-            href={plansHref}
+        ) : null}
+        {showAdjustments && (
+          <button
+            type="button"
+            onClick={openAdjustments}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -1098,13 +1143,17 @@ function AnaliseRow({
               padding: "6px 10px",
               fontSize: 12,
               fontWeight: 600,
-              textDecoration: "none",
+              cursor: "pointer",
               fontFamily: GEIST,
             }}
           >
-            Liberar CV · 1 Crédito
-          </a>
-        ) : null}
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+            Ajustes feitos
+          </button>
+        )}
         </div>
         {adaptation.canDownloadBaseCv && (
           <a
@@ -1150,6 +1199,120 @@ function AnaliseRow({
         downloading={downloading}
         canDownload={releaseStatus === "success"}
       />
+      {adjustmentsOpen && (
+        <div
+          onClick={closeAdjustments}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 120,
+            background: "rgba(10,10,10,0.5)",
+            padding: "16px",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            overflowY: "auto",
+            transition: "opacity 240ms ease-out",
+            opacity: adjustmentsVisible ? 1 : 0,
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "relative",
+              width: "100%",
+              maxWidth: 560,
+              maxHeight: "calc(100dvh - 32px)",
+              overflowY: "auto",
+              background: "#fafaf6",
+              border: "1px solid rgba(10,10,10,0.08)",
+              borderRadius: 18,
+              padding: "20px 24px",
+              fontFamily: GEIST,
+              boxShadow: "0 24px 60px -20px rgba(10,10,10,0.4)",
+              transition: "opacity 240ms ease-out, transform 240ms ease-out",
+              opacity: adjustmentsVisible ? 1 : 0,
+              transform: adjustmentsVisible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.98)",
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.4px", color: "#0a0a0a", margin: "0 0 4px" }}>
+                  Ajustes feitos
+                </h3>
+                <p style={{ fontSize: 13.5, color: "#6a6560", margin: 0 }}>
+                  Resumo do que foi aplicado no seu CV para esta vaga.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAdjustments}
+                aria-label="Fechar"
+                style={{ background: "rgba(10,10,10,0.05)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6a6560", fontSize: 18, flexShrink: 0 }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Context */}
+            <div style={{ background: "#f0efe9", border: "1px solid rgba(10,10,10,0.06)", borderRadius: 10, padding: "10px 12px", marginBottom: 12, display: "flex", flexDirection: "column", gap: 5 }}>
+              <p style={{ fontFamily: MONO, fontSize: 10, fontWeight: 500, letterSpacing: 1, textTransform: "uppercase", color: "#8a8a85", margin: 0 }}>
+                Contexto da análise
+              </p>
+              <p style={{ fontSize: 13, color: "#0a0a0a", margin: 0 }}>
+                <span style={{ fontWeight: 500 }}>Vaga:</span> {jobTitle} · {companyName}
+              </p>
+            </div>
+
+            {/* Scores */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <div style={{ flex: 1, background: "#fff", border: "1px solid rgba(10,10,10,0.08)", borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
+                <p style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 500, letterSpacing: 1, textTransform: "uppercase", color: "#8a8a85", margin: "0 0 6px" }}>Score antes</p>
+                <p style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-1.4px", margin: 0, color: "#0a0a0a", fontVariantNumeric: "tabular-nums" }}>
+                  {adaptation.scoreBefore !== null ? `${adaptation.scoreBefore}%` : "—"}
+                </p>
+              </div>
+              <span style={{ fontSize: 20, color: "#c0beb4", flexShrink: 0 }}>→</span>
+              <div style={{ flex: 1, background: "rgba(198,255,58,0.2)", border: "1px solid rgba(110,150,20,0.2)", borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
+                <p style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 500, letterSpacing: 1, textTransform: "uppercase", color: "#405410", margin: "0 0 6px" }}>Score após ajustes</p>
+                <p style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-1.4px", margin: 0, color: "#405410", fontVariantNumeric: "tabular-nums" }}>
+                  {adaptation.scoreAfter !== null ? `${adaptation.scoreAfter}%` : "—"}
+                </p>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div style={{ borderLeft: "3px solid #c6ff3a", paddingLeft: 12, marginBottom: 20, display: "flex", flexDirection: "column", gap: 6 }}>
+              <p style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 500, letterSpacing: 1, textTransform: "uppercase", color: "#405410", margin: 0 }}>
+                O que foi feito no seu CV
+              </p>
+              <p style={{ fontSize: 13.5, color: "#45443e", lineHeight: 1.6, margin: 0 }}>
+                {adaptation.notes ?? "Nesta análise, o score e os ajustes aplicados foram registrados sem texto descritivo adicional."}
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                type="button"
+                onClick={closeAdjustments}
+                style={{ background: "#fafaf6", color: "#0a0a0a", border: "1px solid #d8d6ce", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: GEIST }}
+              >
+                Fechar
+              </button>
+              <a
+                href={`/adaptar/resultado?adaptationId=${adaptation.id}`}
+                style={{ background: "#0a0a0a", color: "#fafaf6", border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 500, textDecoration: "none", display: "inline-flex", alignItems: "center", fontFamily: GEIST }}
+              >
+                Ver análise completa →
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -49,14 +49,14 @@ export default async function CandidaturaDetailPage({ params }: Props) {
     application.cvAdaptations.map(async (a) => {
       const content = await getCvAdaptationContent(a.id);
       const signal = extractDashboardAnalysisSignal(content.adaptedContentJson);
-      return { id: a.id, scoreBefore: signal.adjustments.scoreBefore, scoreAfter: signal.score };
+      return { id: a.id, scoreBefore: signal.adjustments.scoreBefore, scoreAfter: signal.score, notes: signal.adjustments.notes };
     }),
   );
 
-  const scoresById = new Map<string, { scoreBefore: number | null; scoreAfter: number | null }>();
+  const scoresById = new Map<string, { scoreBefore: number | null; scoreAfter: number | null; notes: string | null }>();
   for (const r of contentResponses) {
     if (r.status === "fulfilled") {
-      scoresById.set(r.value.id, { scoreBefore: r.value.scoreBefore, scoreAfter: r.value.scoreAfter });
+      scoresById.set(r.value.id, { scoreBefore: r.value.scoreBefore, scoreAfter: r.value.scoreAfter, notes: r.value.notes });
     }
   }
 
@@ -66,6 +66,7 @@ export default async function CandidaturaDetailPage({ params }: Props) {
       ...a,
       scoreBefore: scoresById.get(a.id)?.scoreBefore ?? null,
       scoreAfter: scoresById.get(a.id)?.scoreAfter ?? null,
+      notes: scoresById.get(a.id)?.notes ?? null,
     })),
   };
 
