@@ -32,7 +32,6 @@ import {
   archiveJobApplication,
   deleteJobApplication,
   restoreJobApplication,
-  splitJobApplicationAnalysis,
   updateJobApplicationStatus,
 } from "@/lib/job-applications-api";
 import { InterviewPrepDrawer } from "./interview-prep-drawer";
@@ -40,11 +39,6 @@ import { InterviewPrepDrawer } from "./interview-prep-drawer";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 
-const CARD: React.CSSProperties = {
-  background: "rgba(255,255,255,0.55)",
-  border: "1px solid rgba(10,10,10,0.07)",
-  borderRadius: 12,
-};
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -2354,7 +2348,6 @@ const PREP_ELIGIBLE_STATUSES: JobApplicationStatus[] = [
 
 export function DetailClient({ application, header }: Props) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
   const [showPrep, setShowPrep] = useState(false);
   const [showStatusEdit, setShowStatusEdit] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -2366,9 +2359,7 @@ export function DetailClient({ application, header }: Props) {
   const closeTimerRef = useRef<number | null>(null);
 
   function handleUpdated() {
-    startTransition(() => {
-      router.refresh();
-    });
+    router.refresh();
   }
 
   const isPrepEligible = PREP_ELIGIBLE_STATUSES.includes(application.status);

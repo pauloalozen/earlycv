@@ -13,3 +13,11 @@ test("PageShell listens to pageshow and uses a short reveal timeout", () => {
   assert.match(content, /addEventListener\("pageshow"/);
   assert.match(content, /setTimeout\(\(\) => setReady\(true\), 100\)/);
 });
+
+test("PageShell resets on popstate (browser back/forward navigation)", () => {
+  const filePath = resolve(currentDir, "../components/page-shell.tsx");
+  const content = readFileSync(filePath, "utf8");
+
+  assert.match(content, /addEventListener\("popstate"/);
+  assert.match(content, /setReady\(false\)/);
+});

@@ -6,18 +6,29 @@ export function PageShell({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setReady(false);
-    const timeoutId = setTimeout(() => setReady(true), 100);
+    let timeoutId: ReturnType<typeof setTimeout>;
 
-    const handlePageShow = () => {
-      setReady(true);
+    const reveal = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => setReady(true), 100);
+    };
+
+    setReady(false);
+    reveal();
+
+    const handlePageShow = () => setReady(true);
+    const handlePopState = () => {
+      setReady(false);
+      reveal();
     };
 
     window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("popstate", handlePopState);
 
     return () => {
       clearTimeout(timeoutId);
       window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("popstate", handlePopState);
     };
   }, []);
 
