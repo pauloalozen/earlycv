@@ -2942,6 +2942,7 @@ function StatusPopover({
   onClose,
   onUpdated,
   onInterviewSelected,
+  onHiredSelected,
 }: {
   applicationId: string;
   status: JobApplicationStatus;
