@@ -18,6 +18,7 @@ import { CreateJobApplicationDto } from "./dto/create-job-application.dto";
 import { ListJobApplicationHighlightsDto } from "./dto/list-job-application-highlights.dto";
 import { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
+import { RejectionFeedbackDto } from "./dto/rejection-feedback.dto";
 import { ScheduleInterviewDto } from "./dto/schedule-interview.dto";
 import { UpdateJobApplicationUrlDto } from "./dto/update-job-application-url.dto";
 import { JobApplicationInterviewPrepService } from "./interview-prep.service";
@@ -112,6 +113,26 @@ export class JobApplicationsController {
     dto: UpdateJobApplicationStatusDto,
   ) {
     return this.service.updateStatus(user.id, id, dto.status);
+  }
+
+  @Patch(":id/rejection-feedback")
+  submitRejectionFeedback(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        expectedType: RejectionFeedbackDto,
+      }),
+    )
+    dto: RejectionFeedbackDto,
+  ) {
+    return this.service.submitRejectionFeedback(user.id, id, {
+      rejectionStrengths: dto.rejectionStrengths,
+      rejectionImprovements: dto.rejectionImprovements,
+    });
   }
 
   @Patch(":id/interview")

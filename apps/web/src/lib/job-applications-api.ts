@@ -86,6 +86,8 @@ export type JobApplicationDto = {
   interviewerName: string | null;
   interviewMeetingUrl: string | null;
   interviewLocation: string | null;
+  rejectionStrengths: string | null;
+  rejectionImprovements: string | null;
   archivedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
@@ -290,6 +292,19 @@ export async function updateJobApplicationStatus(
     status,
   });
   if (!response.ok) throw new Error("Falha ao atualizar status");
+  return response.json() as Promise<JobApplicationDto>;
+}
+
+export async function submitRejectionFeedback(
+  id: string,
+  data: { rejectionStrengths?: string; rejectionImprovements?: string },
+): Promise<JobApplicationDto> {
+  const response = await apiRequest(
+    "PATCH",
+    `/job-applications/${id}/rejection-feedback`,
+    data,
+  );
+  if (!response.ok) throw new Error("Falha ao salvar feedback");
   return response.json() as Promise<JobApplicationDto>;
 }
 

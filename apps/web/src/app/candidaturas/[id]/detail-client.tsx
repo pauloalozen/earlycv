@@ -35,6 +35,7 @@ import {
   deleteJobApplication,
   restoreJobApplication,
   scheduleInterview,
+  submitRejectionFeedback,
   updateJobApplicationStatus,
   updateJobApplicationUrl,
 } from "@/lib/job-applications-api";
@@ -248,6 +249,7 @@ function JornadaStep({
   meta,
   isLast,
   onHired,
+  onRejected,
   status,
 }: {
   step: JornadaStep;
@@ -255,6 +257,7 @@ function JornadaStep({
   meta: string | null;
   isLast: boolean;
   onHired?: () => void;
+  onRejected?: () => void;
   status: JobApplicationStatus;
 }) {
   const done = state === "done";
@@ -492,7 +495,12 @@ function JornadaStep({
                   border: "1px solid rgba(10,10,10,0.08)",
                   borderRadius: 5,
                   padding: "2px 6px",
+                  cursor: "pointer",
                 }}
+                onClick={onRejected}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === "Enter" && onRejected?.()}
               >
                 Recusada
               </span>
@@ -532,9 +540,11 @@ function JornadaStep({
 function Jornada({
   application,
   onUpdated,
+  onRejected,
 }: {
   application: JobApplicationDetailDto;
   onUpdated: () => void;
+  onRejected: () => void;
 }) {
   const subtitle = getJornadaSubtitle(application.status);
 
@@ -593,6 +603,7 @@ function Jornada({
               isLast={isLast}
               status={application.status}
               onHired={onUpdated}
+              onRejected={onRejected}
             />
           );
         })}
@@ -3009,6 +3020,256 @@ function HiredCelebrationModal({
   );
 }
 
+// ─── Rejection feedback modal ─────────────────────────────────────
+
+function RejectionFeedbackModal({
+  applicationId,
+  companyName,
+  jobTitle,
+  onClose,
+  onUpdated,
+}: {
+  applicationId: string;
+  companyName: string;
+  jobTitle: string;
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const { visible, close } = useModalFade(onClose);
+  const [strengths, setStrengths] = useState("");
+  const [improvements, setImprovements] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function handleSave(skip = false) {
+    startTransition(async () => {
+      try {
+        await submitRejectionFeedback(applicationId, {
+          rejectionStrengths: skip ? undefined : strengths.trim() || undefined,
+          rejectionImprovements: skip
+            ? undefined
+            : improvements.trim() || undefined,
+        });
+        close();
+        onUpdated();
+      } catch {
+        // silent
+      }
+    });
+  }
+
+  const textareaStyle: React.CSSProperties = {
+    ...inputStyle,
+    resize: "vertical",
+    minHeight: 72,
+    lineHeight: 1.5,
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    fontFamily: MONO,
+    fontSize: 9.5,
+    letterSpacing: 0.8,
+    color: "#8a8a85",
+    fontWeight: 500,
+    marginBottom: 5,
+    textTransform: "uppercase",
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 70,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(10,10,10,0.40)",
+        padding: "0 16px",
+        opacity: visible ? 1 : 0,
+        transition: "opacity 180ms ease",
+      }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) close();
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 480,
+          background: "#fafaf6",
+          borderRadius: 20,
+          overflow: "hidden",
+          boxShadow: "0 24px 72px rgba(10,10,10,0.20)",
+          transform: visible ? "translateY(0)" : "translateY(12px)",
+          transition:
+            "transform 200ms cubic-bezier(0.22,1,0.36,1), opacity 180ms ease",
+          opacity: visible ? 1 : 0,
+        }}
+      >
+        {/* Top accent */}
+        <div
+          style={{
+            height: 4,
+            background:
+              "linear-gradient(90deg, rgba(10,10,10,0.12), rgba(10,10,10,0.04))",
+          }}
+        />
+
+        <div style={{ padding: "28px 28px 24px" }}>
+          {/* Encouraging header */}
+          <div style={{ marginBottom: 22 }}>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                letterSpacing: "0.14em",
+                color: "#8a8a85",
+                fontWeight: 500,
+                marginBottom: 10,
+                textTransform: "uppercase",
+              }}
+            >
+              {jobTitle} · {companyName}
+            </div>
+            <h2
+              style={{
+                margin: "0 0 6px",
+                fontSize: 22,
+                fontWeight: 500,
+                letterSpacing: "-0.03em",
+                color: "#0a0a0a",
+                fontFamily: GEIST,
+                lineHeight: 1.2,
+              }}
+            >
+              Tudo bem, faz parte.
+            </h2>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 14,
+                color: "#5a5a55",
+                lineHeight: 1.6,
+                fontFamily: GEIST,
+              }}
+            >
+              Na próxima você vai melhor — e a IA vai te ajudar a chegar mais
+              preparado. Conta pra gente como foi para aprendermos juntos.
+            </p>
+          </div>
+
+          {/* AI badge */}
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "rgba(10,10,10,0.04)",
+              border: "1px solid rgba(10,10,10,0.08)",
+              borderRadius: 6,
+              padding: "5px 10px",
+              marginBottom: 20,
+            }}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+              style={{ color: "#6a6560" }}
+            >
+              <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" />
+              <path d="M12 8v4l3 3" />
+            </svg>
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 9.5,
+                color: "#6a6560",
+                letterSpacing: 0.4,
+              }}
+            >
+              Suas respostas alimentam a IA para os próximos processos
+            </span>
+          </div>
+
+          {/* Fields */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelStyle}>O que você foi bem neste processo?</label>
+            <textarea
+              value={strengths}
+              onChange={(e) => setStrengths(e.target.value)}
+              placeholder="Ex: apresentei bem minha trajetória, fui claro nas respostas técnicas..."
+              style={textareaStyle}
+            />
+          </div>
+
+          <div style={{ marginBottom: 22 }}>
+            <label style={labelStyle}>
+              O que poderia ter ido melhor?
+            </label>
+            <textarea
+              value={improvements}
+              onChange={(e) => setImprovements(e.target.value)}
+              placeholder="Ex: poderia ter pesquisado mais sobre a empresa, preparado melhor o case..."
+              style={textareaStyle}
+            />
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => handleSave(false)}
+              disabled={pending}
+              style={{
+                flex: 2,
+                padding: "11px 0",
+                borderRadius: 10,
+                border: "none",
+                background: !pending ? "#0a0a0a" : "rgba(10,10,10,0.08)",
+                color: !pending ? "#fafaf6" : "#8a8a85",
+                fontSize: 13.5,
+                fontWeight: 500,
+                cursor: pending ? "not-allowed" : "pointer",
+                fontFamily: GEIST,
+                transition: "opacity 140ms ease",
+              }}
+            >
+              {pending ? "Salvando…" : "Salvar e marcar como recusado"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSave(true)}
+              disabled={pending}
+              style={{
+                flex: 1,
+                padding: "11px 0",
+                borderRadius: 10,
+                border: "1px solid rgba(10,10,10,0.12)",
+                background: "rgba(255,255,255,0.7)",
+                color: "#8a8a85",
+                fontSize: 13,
+                fontWeight: 400,
+                cursor: pending ? "not-allowed" : "pointer",
+                fontFamily: GEIST,
+              }}
+            >
+              Pular
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Status card (próxima ação) ───────────────────────────────────
 
 function StatusPopover({
@@ -3018,6 +3279,7 @@ function StatusPopover({
   onUpdated,
   onInterviewSelected,
   onHiredSelected,
+  onRejectedSelected,
 }: {
   applicationId: string;
   status: JobApplicationStatus;
@@ -3025,6 +3287,7 @@ function StatusPopover({
   onUpdated: () => void;
   onInterviewSelected: () => void;
   onHiredSelected: () => void;
+  onRejectedSelected: () => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [savingStatus, setSavingStatus] = useState<JobApplicationStatus | null>(
@@ -3052,6 +3315,11 @@ function StatusPopover({
     if (newStatus === "HIRED") {
       onClose();
       onHiredSelected();
+      return;
+    }
+    if (newStatus === "REJECTED") {
+      onClose();
+      onRejectedSelected();
       return;
     }
     setSavingStatus(newStatus);
@@ -4002,6 +4270,7 @@ export function DetailClient({ application, header }: Props) {
   const [showUrlModal, setShowUrlModal] = useState(false);
   const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [showHiredModal, setShowHiredModal] = useState(false);
+  const [showRejectionModal, setShowRejectionModal] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -4288,6 +4557,7 @@ export function DetailClient({ application, header }: Props) {
                       onUpdated={handleUpdated}
                       onInterviewSelected={() => setShowInterviewModal(true)}
                       onHiredSelected={() => setShowHiredModal(true)}
+                      onRejectedSelected={() => setShowRejectionModal(true)}
                     />
                   )}
                 </div>
@@ -4422,7 +4692,11 @@ export function DetailClient({ application, header }: Props) {
           </div>
 
           {/* Jornada stepper */}
-          <Jornada application={application} onUpdated={handleUpdated} />
+          <Jornada
+            application={application}
+            onUpdated={handleUpdated}
+            onRejected={() => setShowRejectionModal(true)}
+          />
 
           {/* Entrevista agendada */}
           <div style={{ marginBottom: 28 }}>
@@ -4473,6 +4747,17 @@ export function DetailClient({ application, header }: Props) {
             companyName={application.companyName}
             jobTitle={application.jobTitle}
             onClose={() => setShowHiredModal(false)}
+            onUpdated={handleUpdated}
+          />
+        )}
+
+        {/* Rejection feedback modal */}
+        {showRejectionModal && (
+          <RejectionFeedbackModal
+            applicationId={application.id}
+            companyName={application.companyName}
+            jobTitle={application.jobTitle}
+            onClose={() => setShowRejectionModal(false)}
             onUpdated={handleUpdated}
           />
         )}

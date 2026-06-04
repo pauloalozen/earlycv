@@ -63,6 +63,8 @@ function buildApplication(
     interviewerName: null,
     interviewMeetingUrl: null,
     interviewLocation: null,
+    rejectionStrengths: null,
+    rejectionImprovements: null,
     archivedAt: null,
     deletedAt: null,
     createdAt: "2026-05-01T00:00:00.000Z",

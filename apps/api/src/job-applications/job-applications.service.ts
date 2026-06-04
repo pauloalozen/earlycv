@@ -437,6 +437,42 @@ export class JobApplicationsService {
     return application;
   }
 
+  async submitRejectionFeedback(
+    userId: string,
+    id: string,
+    data: { rejectionStrengths?: string; rejectionImprovements?: string },
+  ) {
+    const application = await this.database.jobApplication.findFirst({
+      where: { id, userId, deletedAt: null },
+    });
+
+    if (!application) {
+      throw new NotFoundException("job application not found");
+    }
+
+    return this.database.$transaction(async (tx) => {
+      const result = await tx.jobApplication.update({
+        where: { id },
+        data: {
+          status: "REJECTED",
+          rejectionStrengths: data.rejectionStrengths ?? null,
+          rejectionImprovements: data.rejectionImprovements ?? null,
+        },
+      });
+
+      await tx.jobApplicationEvent.create({
+        data: {
+          jobApplicationId: id,
+          eventType: "STATUS_CHANGED",
+          previousStatus: application.status,
+          newStatus: "REJECTED",
+        },
+      });
+
+      return result;
+    });
+  }
+
   async scheduleInterview(
     userId: string,
     id: string,

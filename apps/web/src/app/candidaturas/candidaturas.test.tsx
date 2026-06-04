@@ -88,6 +88,8 @@ function makeApp(
     interviewerName: null,
     interviewMeetingUrl: null,
     interviewLocation: null,
+    rejectionStrengths: null,
+    rejectionImprovements: null,
     archivedAt: null,
     deletedAt: null,
     createdAt: "2026-05-01T10:00:00Z",
