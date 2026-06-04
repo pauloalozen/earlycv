@@ -3505,6 +3505,9 @@ function InterviewScheduledCard({
             Entrar na reunião ↗
           </a>
         )}
+
+        <AddToCalendarButton application={application} />
+
         <button
           type="button"
           onClick={onSchedule}
@@ -3525,6 +3528,195 @@ function InterviewScheduledCard({
           Editar
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Add to calendar ──────────────────────────────────────────────
+
+function formatIcsDate(iso: string): string {
+  return iso.replace(/[-:]/g, "").replace(/\.\d{3}/, "").replace("Z", "Z");
+}
+
+function buildGoogleCalendarUrl(application: JobApplicationDetailDto): string {
+  const dt = new Date(application.nextActionAt!);
+  const end = new Date(dt.getTime() + 60 * 60 * 1000); // +1h
+  const fmt = (d: Date) =>
+    d
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace(/\.\d{3}/, "");
+  const title = [application.interviewTitle, application.companyName]
+    .filter(Boolean)
+    .join(" — ");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: title,
+    dates: `${fmt(dt)}/${fmt(end)}`,
+    details: [
+      application.interviewerName
+        ? `Entrevistador: ${application.interviewerName}`
+        : "",
+      application.interviewMeetingUrl
+        ? `Link: ${application.interviewMeetingUrl}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    ...(application.interviewMeetingUrl
+      ? { location: application.interviewMeetingUrl }
+      : {}),
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function downloadIcs(application: JobApplicationDetailDto) {
+  const dt = new Date(application.nextActionAt!);
+  const end = new Date(dt.getTime() + 60 * 60 * 1000);
+  const title = [application.interviewTitle, application.companyName]
+    .filter(Boolean)
+    .join(" — ");
+  const uid = `interview-${application.id}-${dt.getTime()}@earlycv`;
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//EarlyCV//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `DTSTART:${formatIcsDate(dt.toISOString())}`,
+    `DTEND:${formatIcsDate(end.toISOString())}`,
+    `SUMMARY:${title}`,
+    application.interviewerName
+      ? `DESCRIPTION:Entrevistador: ${application.interviewerName}`
+      : "",
+    application.interviewMeetingUrl
+      ? `LOCATION:${application.interviewMeetingUrl}`
+      : "",
+    `UID:${uid}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ]
+    .filter((l) => l !== "")
+    .join("\r\n");
+
+  const blob = new Blob([lines], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `entrevista-${application.companyName.replace(/\s+/g, "-").toLowerCase()}.ics`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function AddToCalendarButton({
+  application,
+}: {
+  application: JobApplicationDetailDto;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [open]);
+
+  const btnStyle: React.CSSProperties = {
+    display: "block",
+    width: "100%",
+    padding: "8px 14px",
+    border: "none",
+    background: "transparent",
+    color: "#0a0a0a",
+    fontSize: 13,
+    fontWeight: 400,
+    textAlign: "left",
+    cursor: "pointer",
+    fontFamily: GEIST,
+    borderRadius: 7,
+    whiteSpace: "nowrap",
+  };
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 5,
+          padding: "7px 13px",
+          borderRadius: 8,
+          border: "1px solid rgba(10,10,10,0.12)",
+          background: open ? "#f0f0ea" : "rgba(255,255,255,0.7)",
+          color: "#3a3a36",
+          fontSize: 12.5,
+          fontWeight: 500,
+          cursor: "pointer",
+          fontFamily: GEIST,
+        }}
+      >
+        📅 Salvar na agenda ▾
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            right: 0,
+            zIndex: 50,
+            background: "#fff",
+            border: "1px solid rgba(10,10,10,0.10)",
+            borderRadius: 10,
+            padding: "5px",
+            boxShadow: "0 8px 24px rgba(10,10,10,0.12)",
+            minWidth: 190,
+          }}
+        >
+          <a
+            href={buildGoogleCalendarUrl(application)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setOpen(false)}
+            style={{ ...btnStyle, textDecoration: "none" }}
+            onMouseEnter={(e) =>
+              ((e.currentTarget as HTMLElement).style.background =
+                "rgba(10,10,10,0.04)")
+            }
+            onMouseLeave={(e) =>
+              ((e.currentTarget as HTMLElement).style.background = "transparent")
+            }
+          >
+            Google Agenda
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              downloadIcs(application);
+              setOpen(false);
+            }}
+            style={btnStyle}
+            onMouseEnter={(e) =>
+              ((e.currentTarget as HTMLElement).style.background =
+                "rgba(10,10,10,0.04)")
+            }
+            onMouseLeave={(e) =>
+              ((e.currentTarget as HTMLElement).style.background = "transparent")
+            }
+          >
+            Apple / iCal / Outlook
+          </button>
+        </div>
+      )}
     </div>
   );
 }
