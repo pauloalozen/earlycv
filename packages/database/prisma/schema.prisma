@@ -1152,6 +1152,9 @@ model JobApplication {
   notes                  String?
   appliedAt              DateTime?
   nextActionAt           DateTime?
+  interviewTitle         String?
+  interviewerName        String?
+  interviewMeetingUrl    String?
   archivedAt             DateTime?
   deletedAt              DateTime?
   createdAt              DateTime                 @default(now())

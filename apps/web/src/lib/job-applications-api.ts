@@ -82,6 +82,9 @@ export type JobApplicationDto = {
   notes: string | null;
   appliedAt: string | null;
   nextActionAt: string | null;
+  interviewTitle: string | null;
+  interviewerName: string | null;
+  interviewMeetingUrl: string | null;
   archivedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
@@ -286,6 +289,24 @@ export async function updateJobApplicationStatus(
     status,
   });
   if (!response.ok) throw new Error("Falha ao atualizar status");
+  return response.json() as Promise<JobApplicationDto>;
+}
+
+export async function scheduleInterview(
+  id: string,
+  data: {
+    scheduledAt: string;
+    interviewTitle: string;
+    interviewerName?: string;
+    interviewMeetingUrl?: string;
+  },
+): Promise<JobApplicationDto> {
+  const response = await apiRequest(
+    "PATCH",
+    `/job-applications/${id}/interview`,
+    data,
+  );
+  if (!response.ok) throw new Error("Falha ao agendar entrevista");
   return response.json() as Promise<JobApplicationDto>;
 }
 

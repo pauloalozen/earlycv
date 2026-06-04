@@ -33,6 +33,7 @@ import {
   archiveJobApplication,
   deleteJobApplication,
   restoreJobApplication,
+  scheduleInterview,
   updateJobApplicationStatus,
   updateJobApplicationUrl,
 } from "@/lib/job-applications-api";
@@ -2697,11 +2698,13 @@ function StatusPopover({
   status,
   onClose,
   onUpdated,
+  onInterviewSelected,
 }: {
   applicationId: string;
   status: JobApplicationStatus;
   onClose: () => void;
   onUpdated: () => void;
+  onInterviewSelected: () => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [savingStatus, setSavingStatus] = useState<JobApplicationStatus | null>(
@@ -2721,6 +2724,11 @@ function StatusPopover({
 
   function handleSelect(newStatus: JobApplicationStatus) {
     if (newStatus === status || pending) return;
+    if (newStatus === "INTERVIEW") {
+      onClose();
+      onInterviewSelected();
+      return;
+    }
     setSavingStatus(newStatus);
     startTransition(async () => {
       try {
@@ -2778,6 +2786,422 @@ function StatusPopover({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Interview schedule modal ─────────────────────────────────────
+
+function InterviewScheduleModal({
+  applicationId,
+  onClose,
+  onUpdated,
+}: {
+  applicationId: string;
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const today = new Date();
+  const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const localTime = `${String(today.getHours()).padStart(2, "0")}:${String(today.getMinutes()).padStart(2, "0")}`;
+
+  const [date, setDate] = useState(localDate);
+  const [time, setTime] = useState(localTime);
+  const [title, setTitle] = useState("");
+  const [interviewer, setInterviewer] = useState("");
+  const [meetingUrl, setMeetingUrl] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSave() {
+    if (!date || !time || !title.trim()) {
+      setError("Data, hora e título são obrigatórios.");
+      return;
+    }
+    const scheduledAt = new Date(`${date}T${time}:00`).toISOString();
+    const url = meetingUrl.trim()
+      ? /^https?:\/\//i.test(meetingUrl.trim())
+        ? meetingUrl.trim()
+        : `https://${meetingUrl.trim()}`
+      : undefined;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await scheduleInterview(applicationId, {
+          scheduledAt,
+          interviewTitle: title.trim(),
+          interviewerName: interviewer.trim() || undefined,
+          interviewMeetingUrl: url,
+        });
+        onClose();
+        onUpdated();
+      } catch {
+        setError("Falha ao salvar. Tente novamente.");
+      }
+    });
+  }
+
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    fontFamily: MONO,
+    fontSize: 9.5,
+    letterSpacing: 0.8,
+    color: "#8a8a85",
+    fontWeight: 500,
+    marginBottom: 5,
+    textTransform: "uppercase",
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 70,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(10,10,10,0.35)",
+        padding: "0 16px",
+      }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 460,
+          background: "#fafaf6",
+          borderRadius: 16,
+          padding: "28px 24px 24px",
+          boxShadow: "0 20px 60px rgba(10,10,10,0.18)",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            letterSpacing: 1.2,
+            color: "#8a8a85",
+            fontWeight: 500,
+            marginBottom: 20,
+            textTransform: "uppercase",
+          }}
+        >
+          Agendar entrevista
+        </div>
+
+        {/* Date + time row */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+          <div>
+            <label style={labelStyle}>Data</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              style={{ ...inputStyle }}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Hora</label>
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              style={{ ...inputStyle }}
+            />
+          </div>
+        </div>
+
+        {/* Title */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Título da entrevista</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Ex: Entrevista RH, Entrevista Gestor..."
+            style={{ ...inputStyle }}
+          />
+        </div>
+
+        {/* Interviewer */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Entrevistador (opcional)</label>
+          <input
+            type="text"
+            value={interviewer}
+            onChange={(e) => setInterviewer(e.target.value)}
+            placeholder="Nome do entrevistador"
+            style={{ ...inputStyle }}
+          />
+        </div>
+
+        {/* Meeting link */}
+        <div style={{ marginBottom: error ? 8 : 20 }}>
+          <label style={labelStyle}>Link da reunião (opcional)</label>
+          <input
+            type="url"
+            value={meetingUrl}
+            onChange={(e) => setMeetingUrl(e.target.value)}
+            placeholder="meet.google.com/..."
+            style={{ ...inputStyle }}
+          />
+        </div>
+
+        {error && (
+          <p
+            style={{
+              margin: "0 0 14px",
+              fontSize: 12,
+              color: "#991b1b",
+              background: "#fee2e2",
+              padding: "7px 10px",
+              borderRadius: 7,
+            }}
+          >
+            {error}
+          </p>
+        )}
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              flex: 1,
+              padding: "10px 0",
+              borderRadius: 8,
+              border: "1px solid rgba(10,10,10,0.12)",
+              background: "#fff",
+              color: "#0a0a0a",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: GEIST,
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={pending}
+            style={{
+              flex: 1,
+              padding: "10px 0",
+              borderRadius: 8,
+              border: "none",
+              background: !pending ? "#0a0a0a" : "rgba(10,10,10,0.08)",
+              color: !pending ? "#fafaf6" : "#8a8a85",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: pending ? "not-allowed" : "pointer",
+              fontFamily: GEIST,
+              transition: "all 140ms ease",
+            }}
+          >
+            {pending ? "Salvando…" : "Confirmar entrevista"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Interview scheduled card ──────────────────────────────────────
+
+function InterviewScheduledCard({
+  application,
+  onSchedule,
+}: {
+  application: JobApplicationDetailDto;
+  onSchedule: () => void;
+}) {
+  const isInterviewStatus =
+    application.status === "INTERVIEW" ||
+    application.status === "IN_PROCESS" ||
+    application.status === "ASSESSMENT" ||
+    application.status === "OFFER";
+
+  if (!isInterviewStatus) return null;
+
+  const hasSchedule = application.nextActionAt !== null;
+
+  if (!hasSchedule) {
+    return (
+      <div
+        style={{
+          background: "rgba(245,197,24,0.08)",
+          border: "1px dashed rgba(180,140,10,0.30)",
+          borderRadius: 12,
+          padding: "14px 18px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 13,
+            color: "#7a5a04",
+            fontFamily: GEIST,
+          }}
+        >
+          Nenhuma entrevista agendada ainda.
+        </span>
+        <button
+          type="button"
+          onClick={onSchedule}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            padding: "7px 13px",
+            borderRadius: 8,
+            border: "1px solid rgba(180,140,10,0.35)",
+            background: "rgba(245,197,24,0.15)",
+            color: "#7a5a04",
+            fontSize: 12.5,
+            fontWeight: 500,
+            cursor: "pointer",
+            fontFamily: GEIST,
+            whiteSpace: "nowrap",
+          }}
+        >
+          + Agendar
+        </button>
+      </div>
+    );
+  }
+
+  const dt = new Date(application.nextActionAt!);
+  const dateStr = dt.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+  });
+  const timeStr = dt.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return (
+    <div
+      style={{
+        background: "rgba(245,197,24,0.10)",
+        border: "1px solid rgba(180,140,10,0.22)",
+        borderRadius: 12,
+        padding: "14px 18px",
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+      }}
+    >
+      {/* Calendar icon */}
+      <div
+        style={{
+          flexShrink: 0,
+          width: 36,
+          height: 36,
+          borderRadius: 8,
+          background: "rgba(245,197,24,0.20)",
+          border: "1px solid rgba(180,140,10,0.20)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#7a5a04",
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+      </div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 9.5,
+            letterSpacing: 1,
+            color: "#9a7a14",
+            fontWeight: 500,
+            marginBottom: 3,
+            textTransform: "uppercase",
+          }}
+        >
+          Entrevista agendada
+        </div>
+        <div
+          style={{
+            fontSize: 13.5,
+            fontWeight: 500,
+            color: "#0a0a0a",
+            fontFamily: GEIST,
+            marginBottom: 2,
+          }}
+        >
+          {dateStr} · {timeStr}
+          {application.interviewTitle ? ` — ${application.interviewTitle}` : ""}
+          {application.companyName ? ` com ${application.companyName}` : ""}
+        </div>
+        {application.interviewerName && (
+          <div style={{ fontSize: 12, color: "#6a6560", fontFamily: GEIST }}>
+            {application.interviewerName}
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
+        {application.interviewMeetingUrl && (
+          <a
+            href={application.interviewMeetingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              padding: "7px 13px",
+              borderRadius: 8,
+              border: "1px solid rgba(180,140,10,0.30)",
+              background: "rgba(245,197,24,0.15)",
+              color: "#7a5a04",
+              fontSize: 12.5,
+              fontWeight: 500,
+              textDecoration: "none",
+              fontFamily: GEIST,
+            }}
+          >
+            Entrar na reunião ↗
+          </a>
+        )}
+        <button
+          type="button"
+          onClick={onSchedule}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            padding: "7px 13px",
+            borderRadius: 8,
+            border: "1px solid rgba(10,10,10,0.12)",
+            background: "rgba(255,255,255,0.7)",
+            color: "#6a6560",
+            fontSize: 12.5,
+            fontWeight: 500,
+            cursor: "pointer",
+            fontFamily: GEIST,
+          }}
+        >
+          Editar
+        </button>
+      </div>
     </div>
   );
 }
@@ -3004,6 +3428,7 @@ export function DetailClient({ application, header }: Props) {
   const [showPrep, setShowPrep] = useState(false);
   const [showStatusEdit, setShowStatusEdit] = useState(false);
   const [showUrlModal, setShowUrlModal] = useState(false);
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -3282,6 +3707,7 @@ export function DetailClient({ application, header }: Props) {
                       status={application.status}
                       onClose={() => setShowStatusEdit(false)}
                       onUpdated={handleUpdated}
+                      onInterviewSelected={() => setShowInterviewModal(true)}
                     />
                   )}
                 </div>
@@ -3418,6 +3844,14 @@ export function DetailClient({ application, header }: Props) {
           {/* Jornada stepper */}
           <Jornada application={application} onUpdated={handleUpdated} />
 
+          {/* Entrevista agendada */}
+          <div style={{ marginBottom: 28 }}>
+            <InterviewScheduledCard
+              application={application}
+              onSchedule={() => setShowInterviewModal(true)}
+            />
+          </div>
+
           {/* Main grid */}
           <div
             className="candidatura-grid"
@@ -3451,6 +3885,15 @@ export function DetailClient({ application, header }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Interview schedule modal */}
+        {showInterviewModal && (
+          <InterviewScheduleModal
+            applicationId={application.id}
+            onClose={() => setShowInterviewModal(false)}
+            onUpdated={handleUpdated}
+          />
+        )}
 
         {/* Job URL modal */}
         {showUrlModal && (

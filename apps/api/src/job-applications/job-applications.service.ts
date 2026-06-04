@@ -437,6 +437,36 @@ export class JobApplicationsService {
     return application;
   }
 
+  async scheduleInterview(
+    userId: string,
+    id: string,
+    data: {
+      scheduledAt: string;
+      interviewTitle: string;
+      interviewerName?: string;
+      interviewMeetingUrl?: string;
+    },
+  ) {
+    const application = await this.database.jobApplication.findFirst({
+      where: { id, userId, deletedAt: null },
+    });
+
+    if (!application) {
+      throw new NotFoundException("job application not found");
+    }
+
+    return this.database.jobApplication.update({
+      where: { id },
+      data: {
+        status: "INTERVIEW",
+        nextActionAt: new Date(data.scheduledAt),
+        interviewTitle: data.interviewTitle,
+        interviewerName: data.interviewerName ?? null,
+        interviewMeetingUrl: data.interviewMeetingUrl ?? null,
+      },
+    });
+  }
+
   async updateUrl(userId: string, id: string, jobUrl: string) {
     const application = await this.database.jobApplication.findFirst({
       where: { id, userId, deletedAt: null },
