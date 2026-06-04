@@ -16,12 +16,12 @@ import {
 } from "@/components/cv-release-modal";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
-import { getDashboardScoreColor } from "@/lib/dashboard-test-metrics";
 import {
   type DownloadProgressStage,
   downloadFromApi,
 } from "@/lib/client-download";
 import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
+import { getDashboardScoreColor } from "@/lib/dashboard-test-metrics";
 import { ALL_STATUSES, getStatusConfig } from "@/lib/job-application-status";
 import type {
   JobApplicationDetailDto,
@@ -37,9 +37,22 @@ import {
 } from "@/lib/job-applications-api";
 import { InterviewPrepDrawer } from "./interview-prep-drawer";
 
+const USER_VISIBLE_STATUS_OPTIONS: Array<{
+  value: JobApplicationStatus;
+  label: string;
+}> = [
+  { value: "SAVED", label: "Salva" },
+  { value: "ANALYZED", label: "Analisada" },
+  { value: "CV_READY", label: "CV Liberado" },
+  { value: "APPLIED", label: "Candidatado" },
+  { value: "INTERVIEW", label: "Em entrevista" },
+  { value: "HIRED", label: "Contratado" },
+  { value: "REJECTED", label: "Recusado" },
+  { value: "WITHDRAWN", label: "Desistência" },
+];
+
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
-
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -92,7 +105,7 @@ const JORNADA_STEPS: JornadaStep[] = [
   },
   {
     key: "APPLIED",
-    label: "Enviada",
+    label: "Candidatado",
     getMeta: (app) => {
       if (app.appliedAt)
         return new Date(app.appliedAt).toLocaleDateString("pt-BR", {
@@ -104,7 +117,7 @@ const JORNADA_STEPS: JornadaStep[] = [
   },
   {
     key: "INTERVIEW",
-    label: "Entrevista",
+    label: "Em entrevista",
     getMeta: (app) => {
       if (app.nextActionAt) {
         const d = new Date(app.nextActionAt);
@@ -200,11 +213,11 @@ function getJornadaSubtitle(status: JobApplicationStatus): string {
     SAVED: "aguardando análise",
     ANALYZED: "análise concluída · pronto para adaptar",
     CV_READY: "CV adaptado pronto · candidate-se",
-    APPLIED: "candidatura enviada · aguardando retorno",
-    IN_PROCESS: "em processo seletivo",
-    INTERVIEW: "entrevista em andamento",
-    ASSESSMENT: "fase de testes",
-    OFFER: "oferta recebida",
+    APPLIED: "candidatura realizada",
+    IN_PROCESS: "em entrevista",
+    INTERVIEW: "em entrevista",
+    ASSESSMENT: "em entrevista",
+    OFFER: "em entrevista",
     HIRED: "contratado",
     REJECTED: "não avançou nesta vaga",
     WITHDRAWN: "desistiu da candidatura",
@@ -291,7 +304,9 @@ function JornadaStep({
               height: 0,
               transform: "translateY(-50%)",
               zIndex: 0,
-              borderTop: done ? "2px solid #aadb2a" : "2px dashed rgba(10,10,10,0.16)",
+              borderTop: done
+                ? "2px solid #aadb2a"
+                : "2px dashed rgba(10,10,10,0.16)",
             }}
           />
         )}
@@ -620,19 +635,27 @@ function AnaliseRow({
   const redeemInFlightRef = useRef(false);
   const isMountedRef = useRef(true);
   const redeemAbortControllerRef = useRef<AbortController | null>(null);
-  const releaseWatchdogTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const releaseCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const releaseWatchdogTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const releaseCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const [adjustmentsOpen, setAdjustmentsOpen] = useState(false);
   const [adjustmentsVisible, setAdjustmentsVisible] = useState(false);
-  const adjustmentsCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const adjustmentsCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const canDownloadNow = adaptation.isUnlocked || wasRedeemedInSession;
   const canRedeemNow = !adaptation.isUnlocked && !wasRedeemedInSession;
 
   const showAdjustments =
     canDownloadNow &&
-    (adaptation.scoreBefore !== null || adaptation.scoreAfter !== null || !!adaptation.notes);
+    (adaptation.scoreBefore !== null ||
+      adaptation.scoreAfter !== null ||
+      !!adaptation.notes);
 
   const openAdjustments = () => {
     setAdjustmentsOpen(true);
@@ -641,7 +664,8 @@ function AnaliseRow({
 
   const closeAdjustments = () => {
     setAdjustmentsVisible(false);
-    if (adjustmentsCloseTimerRef.current) clearTimeout(adjustmentsCloseTimerRef.current);
+    if (adjustmentsCloseTimerRef.current)
+      clearTimeout(adjustmentsCloseTimerRef.current);
     adjustmentsCloseTimerRef.current = setTimeout(() => {
       if (isMountedRef.current) setAdjustmentsOpen(false);
     }, 240);
@@ -660,9 +684,12 @@ function AnaliseRow({
     return () => {
       isMountedRef.current = false;
       redeemAbortControllerRef.current?.abort();
-      if (releaseWatchdogTimeoutRef.current) clearTimeout(releaseWatchdogTimeoutRef.current);
-      if (releaseCloseTimeoutRef.current) clearTimeout(releaseCloseTimeoutRef.current);
-      if (adjustmentsCloseTimerRef.current) clearTimeout(adjustmentsCloseTimerRef.current);
+      if (releaseWatchdogTimeoutRef.current)
+        clearTimeout(releaseWatchdogTimeoutRef.current);
+      if (releaseCloseTimeoutRef.current)
+        clearTimeout(releaseCloseTimeoutRef.current);
+      if (adjustmentsCloseTimerRef.current)
+        clearTimeout(adjustmentsCloseTimerRef.current);
     };
   }, []);
 
@@ -671,7 +698,9 @@ function AnaliseRow({
       if (sessionStorage.getItem(redeemSessionKey) === "1") {
         setWasRedeemedInSession(true);
       }
-    } catch { /* no-op */ }
+    } catch {
+      /* no-op */
+    }
   }, [redeemSessionKey]);
 
   useEffect(() => {
@@ -682,22 +711,29 @@ function AnaliseRow({
         if (!res.ok) return;
         const plan = (await res.json()) as { creditsRemaining?: number | null };
         if (!mounted) return;
-        setHasCredits(plan.creditsRemaining == null ? true : plan.creditsRemaining > 0);
+        setHasCredits(
+          plan.creditsRemaining == null ? true : plan.creditsRemaining > 0,
+        );
       } catch {
         if (mounted) setHasCredits(null);
       }
     };
     void load();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
     if (!releaseModalOpen || releaseStatus !== "loading") return;
-    if (releaseWatchdogTimeoutRef.current) clearTimeout(releaseWatchdogTimeoutRef.current);
+    if (releaseWatchdogTimeoutRef.current)
+      clearTimeout(releaseWatchdogTimeoutRef.current);
     releaseWatchdogTimeoutRef.current = setTimeout(() => {
       if (!isMountedRef.current) return;
       setReleaseStatus("error");
-      setReleaseError("A liberação está demorando mais do que o esperado. Tente novamente.");
+      setReleaseError(
+        "A liberação está demorando mais do que o esperado. Tente novamente.",
+      );
       setRedeeming(false);
       redeemInFlightRef.current = false;
       redeemAbortControllerRef.current?.abort();
@@ -713,7 +749,8 @@ function AnaliseRow({
 
   const closeReleaseModal = () => {
     setReleaseModalVisible(false);
-    if (releaseCloseTimeoutRef.current) clearTimeout(releaseCloseTimeoutRef.current);
+    if (releaseCloseTimeoutRef.current)
+      clearTimeout(releaseCloseTimeoutRef.current);
     releaseCloseTimeoutRef.current = setTimeout(() => {
       if (!isMountedRef.current) return;
       setReleaseModalOpen(false);
@@ -728,7 +765,8 @@ function AnaliseRow({
     try {
       await downloadFromApi({
         url: `/api/cv-adaptation/${adaptation.id}/download?format=${format}`,
-        fallbackFilename: format === "pdf" ? `${cvFileName}.pdf` : `${cvFileName}.docx`,
+        fallbackFilename:
+          format === "pdf" ? `${cvFileName}.pdf` : `${cvFileName}.docx`,
         onStageChange: setDownloadStage,
       });
     } finally {
@@ -752,7 +790,10 @@ function AnaliseRow({
     redeemAbortControllerRef.current?.abort();
     const controller = new AbortController();
     redeemAbortControllerRef.current = controller;
-    const timeoutId = setTimeout(() => controller.abort(), REDEEM_REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      REDEEM_REQUEST_TIMEOUT_MS,
+    );
 
     try {
       const response = await fetch(redeemHref, {
@@ -764,17 +805,26 @@ function AnaliseRow({
         let msg = "Falha ao liberar CV";
         try {
           const body = (await response.json()) as { message?: string };
-          if (typeof body.message === "string" && body.message.trim()) msg = body.message;
-        } catch { /* no-op */ }
+          if (typeof body.message === "string" && body.message.trim())
+            msg = body.message;
+        } catch {
+          /* no-op */
+        }
         throw new Error(msg);
       }
       const elapsed = Date.now() - startedAt;
       if (elapsed < MIN_RELEASE_LOADING_MS) {
-        await new Promise((r) => setTimeout(r, MIN_RELEASE_LOADING_MS - elapsed));
+        await new Promise((r) =>
+          setTimeout(r, MIN_RELEASE_LOADING_MS - elapsed),
+        );
       }
       if (!isMountedRef.current) return;
       setWasRedeemedInSession(true);
-      try { sessionStorage.setItem(redeemSessionKey, "1"); } catch { /* no-op */ }
+      try {
+        sessionStorage.setItem(redeemSessionKey, "1");
+      } catch {
+        /* no-op */
+      }
       setReleaseStatus("success");
     } catch (err) {
       if (!isMountedRef.current) return;
@@ -790,7 +840,8 @@ function AnaliseRow({
       setReleaseError(msg);
     } finally {
       clearTimeout(timeoutId);
-      if (redeemAbortControllerRef.current === controller) redeemAbortControllerRef.current = null;
+      if (redeemAbortControllerRef.current === controller)
+        redeemAbortControllerRef.current = null;
       if (isMountedRef.current) setRedeeming(false);
       redeemInFlightRef.current = false;
     }
@@ -800,17 +851,13 @@ function AnaliseRow({
   const scoreBefore = adaptation.scoreBefore ?? null;
   const scoreColor = score !== null ? getDashboardScoreColor(score) : "#2a6a10";
   const delta =
-    score !== null && scoreBefore !== null
-      ? score - scoreBefore
-      : null;
+    score !== null && scoreBefore !== null ? score - scoreBefore : null;
 
   return (
     <div
       style={{
         padding: "16px 0",
-        borderBottom: isLast
-          ? "none"
-          : "1px dashed rgba(10,10,10,0.09)",
+        borderBottom: isLast ? "none" : "1px dashed rgba(10,10,10,0.09)",
         ...(isBest
           ? {
               background:
@@ -819,9 +866,7 @@ function AnaliseRow({
               padding: "16px 18px",
               borderRadius: 8,
               borderLeft: "2px solid #aadb2a",
-              borderBottom: isLast
-                ? "none"
-                : "1px dashed rgba(10,10,10,0.09)",
+              borderBottom: isLast ? "none" : "1px dashed rgba(10,10,10,0.09)",
             }
           : {}),
       }}
@@ -999,165 +1044,217 @@ function AnaliseRow({
           flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-        <a
-          href={`/adaptar/resultado?adaptationId=${adaptation.id}`}
+        <div
           style={{
-            display: "inline-flex",
+            display: "flex",
             alignItems: "center",
-            gap: 5,
-            background: "rgba(255,255,255,0.9)",
-            color: "#3a3a36",
-            border: "1px solid rgba(10,10,10,0.12)",
-            borderRadius: 7,
-            padding: "6px 10px",
-            fontSize: 12,
-            fontWeight: 500,
-            textDecoration: "none",
-            fontFamily: GEIST,
+            gap: 7,
+            flexWrap: "wrap",
           }}
         >
-          <svg
-            width="11"
-            height="11"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-          Rever análise
-        </a>
-
-        {canDownloadNow ? (
-          <>
-            <button
-              type="button"
-              onClick={() => void handleDownload("pdf")}
-              disabled={downloading !== null}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                background: "rgba(255,255,255,0.9)",
-                color: "#3a3a36",
-                border: "1px solid rgba(10,10,10,0.12)",
-                borderRadius: 7,
-                padding: "6px 10px",
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: downloading ? "not-allowed" : "pointer",
-                fontFamily: GEIST,
-              }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
-              </svg>
-              PDF
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleDownload("docx")}
-              disabled={downloading !== null}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                background: "rgba(255,255,255,0.9)",
-                color: "#3a3a36",
-                border: "1px solid rgba(10,10,10,0.12)",
-                borderRadius: 7,
-                padding: "6px 10px",
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: downloading ? "not-allowed" : "pointer",
-                fontFamily: GEIST,
-              }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
-              </svg>
-              DOCX
-            </button>
-          </>
-        ) : canRedeemNow && hasCredits === false ? (
           <a
-            href={plansHref}
+            href={`/adaptar/resultado?adaptationId=${adaptation.id}`}
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 5,
-              background: "#0a0a0a",
-              color: "#fafaf6",
-              border: "none",
+              background: "rgba(255,255,255,0.9)",
+              color: "#3a3a36",
+              border: "1px solid rgba(10,10,10,0.12)",
               borderRadius: 7,
               padding: "6px 10px",
               fontSize: 12,
-              fontWeight: 600,
+              fontWeight: 500,
               textDecoration: "none",
               fontFamily: GEIST,
             }}
           >
-            Liberar CV · 1 Crédito
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            Rever análise
           </a>
-        ) : canRedeemNow ? (
-          <button
-            type="button"
-            onClick={() => void handleRedeem()}
-            disabled={redeeming}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              background: "#0a0a0a",
-              color: "#fafaf6",
-              border: "none",
-              borderRadius: 7,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: redeeming ? "not-allowed" : "pointer",
-              fontFamily: GEIST,
-            }}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V8a4 4 0 1 1 8 0" />
-            </svg>
-            {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
-          </button>
-        ) : null}
-        {showAdjustments && (
-          <button
-            data-testid={`analysis-adjustments-${adaptation.id}`}
-            type="button"
-            onClick={openAdjustments}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              background: "#0a0a0a",
-              color: "#fafaf6",
-              border: "none",
-              borderRadius: 7,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: GEIST,
-            }}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-            Ajustes feitos
-          </button>
-        )}
+
+          {canDownloadNow ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleDownload("pdf")}
+                disabled={downloading !== null}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: "rgba(255,255,255,0.9)",
+                  color: "#3a3a36",
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  borderRadius: 7,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: downloading ? "not-allowed" : "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M12 3v12" />
+                  <path d="m7 10 5 5 5-5" />
+                  <path d="M5 21h14" />
+                </svg>
+                PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDownload("docx")}
+                disabled={downloading !== null}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: "rgba(255,255,255,0.9)",
+                  color: "#3a3a36",
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  borderRadius: 7,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: downloading ? "not-allowed" : "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M12 3v12" />
+                  <path d="m7 10 5 5 5-5" />
+                  <path d="M5 21h14" />
+                </svg>
+                DOCX
+              </button>
+            </>
+          ) : canRedeemNow && hasCredits === false ? (
+            <a
+              href={plansHref}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                background: "#0a0a0a",
+                color: "#fafaf6",
+                border: "none",
+                borderRadius: 7,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 600,
+                textDecoration: "none",
+                fontFamily: GEIST,
+              }}
+            >
+              Liberar CV · 1 Crédito
+            </a>
+          ) : canRedeemNow ? (
+            <button
+              type="button"
+              onClick={() => void handleRedeem()}
+              disabled={redeeming}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                background: "#0a0a0a",
+                color: "#fafaf6",
+                border: "none",
+                borderRadius: 7,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: redeeming ? "not-allowed" : "pointer",
+                fontFamily: GEIST,
+              }}
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <rect x="4" y="11" width="16" height="10" rx="2" />
+                <path d="M8 11V8a4 4 0 1 1 8 0" />
+              </svg>
+              {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
+            </button>
+          ) : null}
+          {showAdjustments && (
+            <button
+              data-testid={`analysis-adjustments-${adaptation.id}`}
+              type="button"
+              onClick={openAdjustments}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                background: "#0a0a0a",
+                color: "#fafaf6",
+                border: "none",
+                borderRadius: 7,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: GEIST,
+              }}
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              Ajustes feitos
+            </button>
+          )}
         </div>
         {adaptation.canDownloadBaseCv && (
           <a
@@ -1179,8 +1276,20 @@ function AnaliseRow({
               flexShrink: 0,
             }}
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M12 3v12" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M5 21h14" />
             </svg>
             CV usado na análise
           </a>
@@ -1238,13 +1347,31 @@ function AnaliseRow({
               boxShadow: "0 24px 60px -20px rgba(10,10,10,0.4)",
               transition: "opacity 240ms ease-out, transform 240ms ease-out",
               opacity: adjustmentsVisible ? 1 : 0,
-              transform: adjustmentsVisible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.98)",
+              transform: adjustmentsVisible
+                ? "translateY(0) scale(1)"
+                : "translateY(8px) scale(0.98)",
             }}
           >
             {/* Header */}
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 16,
+              }}
+            >
               <div>
-                <h3 style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.4px", color: "#0a0a0a", margin: "0 0 4px" }}>
+                <h3
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 500,
+                    letterSpacing: "-0.4px",
+                    color: "#0a0a0a",
+                    margin: "0 0 4px",
+                  }}
+                >
                   Ajustes feitos
                 </h3>
                 <p style={{ fontSize: 13.5, color: "#6a6560", margin: 0 }}>
@@ -1255,19 +1382,54 @@ function AnaliseRow({
                 type="button"
                 onClick={closeAdjustments}
                 aria-label="Fechar"
-                style={{ background: "rgba(10,10,10,0.05)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6a6560", fontSize: 18, flexShrink: 0 }}
+                style={{
+                  background: "rgba(10,10,10,0.05)",
+                  border: "none",
+                  borderRadius: 8,
+                  width: 32,
+                  height: 32,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#6a6560",
+                  fontSize: 18,
+                  flexShrink: 0,
+                }}
               >
                 ×
               </button>
             </div>
 
             {/* Context */}
-            <div style={{ background: "#f0efe9", border: "1px solid rgba(10,10,10,0.06)", borderRadius: 10, padding: "10px 12px", marginBottom: 12, display: "flex", flexDirection: "column", gap: 5 }}>
-              <p style={{ fontFamily: MONO, fontSize: 10, fontWeight: 500, letterSpacing: 1, textTransform: "uppercase", color: "#8a8a85", margin: 0 }}>
+            <div
+              style={{
+                background: "#f0efe9",
+                border: "1px solid rgba(10,10,10,0.06)",
+                borderRadius: 10,
+                padding: "10px 12px",
+                marginBottom: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 5,
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  fontWeight: 500,
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                  color: "#8a8a85",
+                  margin: 0,
+                }}
+              >
                 Contexto da análise
               </p>
               <p style={{ fontSize: 13, color: "#0a0a0a", margin: 0 }}>
-                <span style={{ fontWeight: 500 }}>Vaga:</span> {jobTitle} · {companyName}
+                <span style={{ fontWeight: 500 }}>Vaga:</span> {jobTitle} ·{" "}
+                {companyName}
               </p>
               <p style={{ fontSize: 13, color: "#0a0a0a", margin: 0 }}>
                 <span style={{ fontWeight: 500 }}>CV usado na análise:</span>{" "}
@@ -1276,44 +1438,169 @@ function AnaliseRow({
             </div>
 
             {/* Scores */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-              <div style={{ flex: 1, background: "#fff", border: "1px solid rgba(10,10,10,0.08)", borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
-                <p style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 500, letterSpacing: 1, textTransform: "uppercase", color: "#8a8a85", margin: "0 0 6px" }}>Score antes</p>
-                <p style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-1.4px", margin: 0, color: "#0a0a0a", fontVariantNumeric: "tabular-nums" }}>
-                  {adaptation.scoreBefore !== null ? `${adaptation.scoreBefore}%` : "—"}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 14,
+              }}
+            >
+              <div
+                style={{
+                  flex: 1,
+                  background: "#fff",
+                  border: "1px solid rgba(10,10,10,0.08)",
+                  borderRadius: 10,
+                  padding: "14px 16px",
+                  textAlign: "center",
+                }}
+              >
+                <p
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 9.5,
+                    fontWeight: 500,
+                    letterSpacing: 1,
+                    textTransform: "uppercase",
+                    color: "#8a8a85",
+                    margin: "0 0 6px",
+                  }}
+                >
+                  Score antes
+                </p>
+                <p
+                  style={{
+                    fontSize: 36,
+                    fontWeight: 500,
+                    letterSpacing: "-1.4px",
+                    margin: 0,
+                    color: "#0a0a0a",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {adaptation.scoreBefore !== null
+                    ? `${adaptation.scoreBefore}%`
+                    : "—"}
                 </p>
               </div>
-              <span style={{ fontSize: 20, color: "#c0beb4", flexShrink: 0 }}>→</span>
-              <div style={{ flex: 1, background: "rgba(198,255,58,0.2)", border: "1px solid rgba(110,150,20,0.2)", borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
-                <p style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 500, letterSpacing: 1, textTransform: "uppercase", color: score !== null ? scoreColor : "#405410", margin: "0 0 6px" }}>Score após ajustes</p>
-                <p style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-1.4px", margin: 0, color: score !== null ? scoreColor : "#405410", fontVariantNumeric: "tabular-nums" }}>
-                  {adaptation.scoreAfter !== null ? `${adaptation.scoreAfter}%` : "—"}
+              <span style={{ fontSize: 20, color: "#c0beb4", flexShrink: 0 }}>
+                →
+              </span>
+              <div
+                style={{
+                  flex: 1,
+                  background: "rgba(198,255,58,0.2)",
+                  border: "1px solid rgba(110,150,20,0.2)",
+                  borderRadius: 10,
+                  padding: "14px 16px",
+                  textAlign: "center",
+                }}
+              >
+                <p
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 9.5,
+                    fontWeight: 500,
+                    letterSpacing: 1,
+                    textTransform: "uppercase",
+                    color: score !== null ? scoreColor : "#405410",
+                    margin: "0 0 6px",
+                  }}
+                >
+                  Score após ajustes
+                </p>
+                <p
+                  style={{
+                    fontSize: 36,
+                    fontWeight: 500,
+                    letterSpacing: "-1.4px",
+                    margin: 0,
+                    color: score !== null ? scoreColor : "#405410",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {adaptation.scoreAfter !== null
+                    ? `${adaptation.scoreAfter}%`
+                    : "—"}
                 </p>
               </div>
             </div>
 
             {/* Notes */}
-            <div style={{ borderLeft: "3px solid #c6ff3a", paddingLeft: 12, marginBottom: 20, display: "flex", flexDirection: "column", gap: 6 }}>
-              <p style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 500, letterSpacing: 1, textTransform: "uppercase", color: "#405410", margin: 0 }}>
+            <div
+              style={{
+                borderLeft: "3px solid #c6ff3a",
+                paddingLeft: 12,
+                marginBottom: 20,
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  fontWeight: 500,
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                  color: "#405410",
+                  margin: 0,
+                }}
+              >
                 O que foi feito no seu CV
               </p>
-              <p style={{ fontSize: 13.5, color: "#45443e", lineHeight: 1.6, margin: 0, whiteSpace: "pre-line" }}>
-                {adaptation.notes ?? "Nesta análise, o score e os ajustes aplicados foram registrados sem texto descritivo adicional."}
+              <p
+                style={{
+                  fontSize: 13.5,
+                  color: "#45443e",
+                  lineHeight: 1.6,
+                  margin: 0,
+                  whiteSpace: "pre-line",
+                }}
+              >
+                {adaptation.notes ??
+                  "Nesta análise, o score e os ajustes aplicados foram registrados sem texto descritivo adicional."}
               </p>
             </div>
 
             {/* Actions */}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <div
+              style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+            >
               <button
                 type="button"
                 onClick={closeAdjustments}
-                style={{ background: "#fafaf6", color: "#0a0a0a", border: "1px solid #d8d6ce", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: GEIST }}
+                style={{
+                  background: "#fafaf6",
+                  color: "#0a0a0a",
+                  border: "1px solid #d8d6ce",
+                  borderRadius: 10,
+                  padding: "10px 16px",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: GEIST,
+                }}
               >
                 Fechar
               </button>
               <a
                 href={`/adaptar/resultado?adaptationId=${adaptation.id}`}
-                style={{ background: "#0a0a0a", color: "#fafaf6", border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 500, textDecoration: "none", display: "inline-flex", alignItems: "center", fontFamily: GEIST }}
+                style={{
+                  background: "#0a0a0a",
+                  color: "#fafaf6",
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "10px 16px",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  fontFamily: GEIST,
+                }}
               >
                 Ver análise completa →
               </a>
@@ -1353,10 +1640,9 @@ function AnalisesSection({
         >
           ANÁLISES DESTA CANDIDATURA
         </div>
-        <div
-          style={{ fontFamily: MONO, fontSize: 10, color: "#a8a6a0" }}
-        >
-          {adaptations.length} {adaptations.length === 1 ? "análise" : "análises"} · mesma vaga
+        <div style={{ fontFamily: MONO, fontSize: 10, color: "#a8a6a0" }}>
+          {adaptations.length}{" "}
+          {adaptations.length === 1 ? "análise" : "análises"} · mesma vaga
         </div>
       </div>
 
@@ -1383,32 +1669,36 @@ function AnalisesSection({
         ) : (
           [...adaptations]
             .sort((a, b) => {
-              const aIsSent = a.id === application.bestCvAdaptationId && application.appliedAt !== null;
-              const bIsSent = b.id === application.bestCvAdaptationId && application.appliedAt !== null;
+              const aIsSent =
+                a.id === application.bestCvAdaptationId &&
+                application.appliedAt !== null;
+              const bIsSent =
+                b.id === application.bestCvAdaptationId &&
+                application.appliedAt !== null;
               if (aIsSent !== bIsSent) return aIsSent ? -1 : 1;
               const aScore = a.scoreAfter ?? -1;
               const bScore = b.scoreAfter ?? -1;
               return bScore - aScore;
             })
             .map((a, idx, arr) => {
-            const isCurrent = a.id === application.currentCvAdaptationId;
-            const isBest = a.id === application.bestCvAdaptationId;
-            const isSent = isBest && application.appliedAt !== null;
-            const isLast = idx === arr.length - 1;
-            return (
-              <AnaliseRow
-                key={a.id}
-                adaptation={a}
-                applicationId={application.id}
-                isCurrent={isCurrent}
-                isBest={isBest}
-                isSent={isSent}
-                isLast={isLast}
-                companyName={application.companyName}
-                jobTitle={application.jobTitle}
-              />
-            );
-          })
+              const isCurrent = a.id === application.currentCvAdaptationId;
+              const isBest = a.id === application.bestCvAdaptationId;
+              const isSent = isBest && application.appliedAt !== null;
+              const isLast = idx === arr.length - 1;
+              return (
+                <AnaliseRow
+                  key={a.id}
+                  adaptation={a}
+                  applicationId={application.id}
+                  isCurrent={isCurrent}
+                  isBest={isBest}
+                  isSent={isSent}
+                  isLast={isLast}
+                  companyName={application.companyName}
+                  jobTitle={application.jobTitle}
+                />
+              );
+            })
         )}
 
         {/* Nova análise button */}
@@ -1972,11 +2262,7 @@ function Timeline({
 
 // ─── CV card (sidebar) ────────────────────────────────────────────
 
-function CvCard({
-  application,
-}: {
-  application: JobApplicationDetailDto;
-}) {
+function CvCard({ application }: { application: JobApplicationDetailDto }) {
   const latest = application.cvAdaptations[0] ?? null;
   const isSent = application.appliedAt !== null;
   const cvName = `CV-${application.companyName.replace(/\s+/g, "-")}-${application.jobTitle.replace(/\s+/g, "-")}.pdf`;
@@ -1995,7 +2281,10 @@ function CvCard({
     try {
       await downloadFromApi({
         url: `/api/cv-adaptation/${latest.id}/download?format=${format}`,
-        fallbackFilename: cvName.replace(/\.pdf$/i, format === "pdf" ? ".pdf" : ".docx"),
+        fallbackFilename: cvName.replace(
+          /\.pdf$/i,
+          format === "pdf" ? ".pdf" : ".docx",
+        ),
         onStageChange: setDownloadStage,
       });
     } finally {
@@ -2474,9 +2763,9 @@ function StatusCard({
         }}
         style={{ ...inputStyle, marginBottom: 10, cursor: "pointer" }}
       >
-        {ALL_STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {getStatusConfig(s).label}
+        {USER_VISIBLE_STATUS_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
           </option>
         ))}
       </select>
