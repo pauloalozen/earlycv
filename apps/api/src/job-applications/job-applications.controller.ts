@@ -18,6 +18,7 @@ import { CreateJobApplicationDto } from "./dto/create-job-application.dto";
 import { ListJobApplicationHighlightsDto } from "./dto/list-job-application-highlights.dto";
 import { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
+import { UpdateJobApplicationUrlDto } from "./dto/update-job-application-url.dto";
 import { JobApplicationInterviewPrepService } from "./interview-prep.service";
 import { JobApplicationsService } from "./job-applications.service";
 
@@ -110,6 +111,23 @@ export class JobApplicationsController {
     dto: UpdateJobApplicationStatusDto,
   ) {
     return this.service.updateStatus(user.id, id, dto.status);
+  }
+
+  @Patch(":id/url")
+  updateUrl(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        expectedType: UpdateJobApplicationUrlDto,
+      }),
+    )
+    dto: UpdateJobApplicationUrlDto,
+  ) {
+    return this.service.updateUrl(user.id, id, dto.jobUrl);
   }
 
   @Post(":id/notes")

@@ -34,6 +34,7 @@ import {
   deleteJobApplication,
   restoreJobApplication,
   updateJobApplicationStatus,
+  updateJobApplicationUrl,
 } from "@/lib/job-applications-api";
 import { InterviewPrepDrawer } from "./interview-prep-drawer";
 
@@ -2781,6 +2782,163 @@ function StatusPopover({
   );
 }
 
+// ─── Job URL modal ────────────────────────────────────────────────
+
+function JobUrlModal({
+  applicationId,
+  currentUrl,
+  onClose,
+  onUpdated,
+}: {
+  applicationId: string;
+  currentUrl: string | null;
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const [value, setValue] = useState(currentUrl ?? "");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  function handleSave() {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    try {
+      new URL(trimmed);
+    } catch {
+      setError("URL inválida. Inclua https:// no início.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updateJobApplicationUrl(applicationId, trimmed);
+        onClose();
+        onUpdated();
+      } catch {
+        setError("Falha ao salvar. Tente novamente.");
+      }
+    });
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 70,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(10,10,10,0.35)",
+        padding: "0 16px",
+      }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 440,
+          background: "#fafaf6",
+          borderRadius: 16,
+          padding: "28px 24px 24px",
+          boxShadow: "0 20px 60px rgba(10,10,10,0.18)",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            letterSpacing: 1.2,
+            color: "#8a8a85",
+            fontWeight: 500,
+            marginBottom: 14,
+            textTransform: "uppercase",
+          }}
+        >
+          Link da vaga
+        </div>
+        <input
+          ref={inputRef}
+          type="url"
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSave();
+            if (e.key === "Escape") onClose();
+          }}
+          placeholder="https://linkedin.com/jobs/..."
+          style={{ ...inputStyle, marginBottom: error ? 8 : 16 }}
+        />
+        {error && (
+          <p
+            style={{
+              margin: "0 0 12px",
+              fontSize: 12,
+              color: "#991b1b",
+              background: "#fee2e2",
+              padding: "7px 10px",
+              borderRadius: 7,
+            }}
+          >
+            {error}
+          </p>
+        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              flex: 1,
+              padding: "10px 0",
+              borderRadius: 8,
+              border: "1px solid rgba(10,10,10,0.12)",
+              background: "#fff",
+              color: "#0a0a0a",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: GEIST,
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!value.trim() || pending}
+            style={{
+              flex: 1,
+              padding: "10px 0",
+              borderRadius: 8,
+              border: "none",
+              background:
+                value.trim() && !pending ? "#0a0a0a" : "rgba(10,10,10,0.08)",
+              color: value.trim() && !pending ? "#fafaf6" : "#8a8a85",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: value.trim() && !pending ? "pointer" : "not-allowed",
+              fontFamily: GEIST,
+              transition: "all 140ms ease",
+            }}
+          >
+            {pending ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── StatusBadge ──────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
@@ -2839,6 +2997,7 @@ export function DetailClient({ application, header }: Props) {
   const router = useRouter();
   const [showPrep, setShowPrep] = useState(false);
   const [showStatusEdit, setShowStatusEdit] = useState(false);
+  const [showUrlModal, setShowUrlModal] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -3087,30 +3246,6 @@ export function DetailClient({ application, header }: Props) {
 
               {/* Right: actions */}
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {application.jobUrl && (
-                  <a
-                    href={application.jobUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 5,
-                      padding: "8px 13px",
-                      borderRadius: 8,
-                      border: "1px solid rgba(10,10,10,0.12)",
-                      background: "rgba(255,255,255,0.7)",
-                      color: "#3a3a36",
-                      fontSize: 12.5,
-                      fontWeight: 500,
-                      textDecoration: "none",
-                      fontFamily: GEIST,
-                    }}
-                  >
-                    Abrir vaga ↗
-                  </a>
-                )}
-
                 {/* Status button + inline popover */}
                 <div style={{ position: "relative" }}>
                   <button
@@ -3144,6 +3279,32 @@ export function DetailClient({ application, header }: Props) {
                     />
                   )}
                 </div>
+
+                {/* Link da vaga */}
+                <button
+                  type="button"
+                  onClick={() => setShowUrlModal(true)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "8px 13px",
+                    borderRadius: 8,
+                    border: application.jobUrl
+                      ? "1px solid rgba(10,10,10,0.20)"
+                      : "1px dashed rgba(10,10,10,0.20)",
+                    background: application.jobUrl
+                      ? "rgba(255,255,255,0.7)"
+                      : "transparent",
+                    color: application.jobUrl ? "#3a3a36" : "#8a8a85",
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  {application.jobUrl ? "Editar link ↗" : "+ Link da vaga"}
+                </button>
 
                 {isPrepEligible && (
                   <button
@@ -3286,6 +3447,16 @@ export function DetailClient({ application, header }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Job URL modal */}
+        {showUrlModal && (
+          <JobUrlModal
+            applicationId={application.id}
+            currentUrl={application.jobUrl}
+            onClose={() => setShowUrlModal(false)}
+            onUpdated={handleUpdated}
+          />
+        )}
 
         {/* Delete confirmation modal */}
         {confirmDelete && (

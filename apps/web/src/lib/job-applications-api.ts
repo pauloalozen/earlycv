@@ -289,6 +289,17 @@ export async function updateJobApplicationStatus(
   return response.json() as Promise<JobApplicationDto>;
 }
 
+export async function updateJobApplicationUrl(
+  id: string,
+  jobUrl: string,
+): Promise<JobApplicationDto> {
+  const response = await apiRequest("PATCH", `/job-applications/${id}/url`, {
+    jobUrl,
+  });
+  if (!response.ok) throw new Error("Falha ao salvar link da vaga");
+  return response.json() as Promise<JobApplicationDto>;
+}
+
 export async function addJobApplicationNote(
   id: string,
   note: string,
