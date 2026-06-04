@@ -1895,7 +1895,7 @@ function NotesSection({
               rows={3}
               style={{
                 ...inputStyle,
-                resize: "vertical",
+                resize: "none",
                 minHeight: 72,
                 lineHeight: 1.55,
                 marginBottom: 8,
@@ -3059,7 +3059,7 @@ function RejectionFeedbackModal({
 
   const textareaStyle: React.CSSProperties = {
     ...inputStyle,
-    resize: "vertical",
+    resize: "none",
     minHeight: 72,
     lineHeight: 1.5,
   };
@@ -3154,8 +3154,8 @@ function RejectionFeedbackModal({
                 fontFamily: GEIST,
               }}
             >
-              Na próxima você vai melhor — e a IA vai te ajudar a chegar mais
-              preparado. Conta pra gente como foi para aprendermos juntos.
+              Na próxima você vai melhor — e o EarlyCV vai te ajudar a chegar
+              mais preparado. Conta pra gente como foi para aprendermos juntos.
             </p>
           </div>
 
