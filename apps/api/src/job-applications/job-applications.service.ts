@@ -455,15 +455,31 @@ export class JobApplicationsService {
       throw new NotFoundException("job application not found");
     }
 
-    return this.database.jobApplication.update({
-      where: { id },
-      data: {
-        status: "INTERVIEW",
-        nextActionAt: new Date(data.scheduledAt),
-        interviewTitle: data.interviewTitle,
-        interviewerName: data.interviewerName ?? null,
-        interviewMeetingUrl: data.interviewMeetingUrl ?? null,
-      },
+    const previousStatus = application.status;
+
+    return this.database.$transaction(async (tx) => {
+      const result = await tx.jobApplication.update({
+        where: { id },
+        data: {
+          status: "INTERVIEW",
+          nextActionAt: new Date(data.scheduledAt),
+          interviewTitle: data.interviewTitle,
+          interviewerName: data.interviewerName ?? null,
+          interviewMeetingUrl: data.interviewMeetingUrl ?? null,
+        },
+      });
+
+      await tx.jobApplicationEvent.create({
+        data: {
+          jobApplicationId: id,
+          eventType: "STATUS_CHANGED",
+          previousStatus,
+          newStatus: "INTERVIEW",
+          metadata: { interviewTitle: data.interviewTitle },
+        },
+      });
+
+      return result;
     });
   }
 

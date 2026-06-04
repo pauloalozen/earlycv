@@ -2053,15 +2053,23 @@ function Timeline({
           );
         }
         return "CV adaptado gerado.";
-      case "STATUS_CHANGED":
-        return event.newStatus ? (
+      case "STATUS_CHANGED": {
+        if (!event.newStatus) return "Status atualizado.";
+        const label = getStatusConfig(event.newStatus).label;
+        const ititle =
+          typeof event.metadata?.interviewTitle === "string"
+            ? event.metadata.interviewTitle
+            : null;
+        return (
           <>
-            Status atualizado para{" "}
-            <strong>{getStatusConfig(event.newStatus).label}</strong>.
+            Status atualizado para <strong>{label}</strong>
+            {ititle ? (
+              <> — <em>{ititle}</em></>
+            ) : null}
+            .
           </>
-        ) : (
-          "Status atualizado."
         );
+      }
       case "MARKED_AS_SENT":
         return "Você marcou como enviada.";
       case "NOTE_ADDED":
@@ -2760,6 +2768,15 @@ function StatusPopover({
       {USER_VISIBLE_STATUS_OPTIONS.map((opt) => {
         const isCurrent = opt.value === status;
         const isSaving = savingStatus === opt.value;
+        const isCurrentlyInterview =
+          status === "INTERVIEW" ||
+          status === "IN_PROCESS" ||
+          status === "ASSESSMENT" ||
+          status === "OFFER";
+        const displayLabel =
+          opt.value === "INTERVIEW" && isCurrentlyInterview
+            ? "Nova entrevista"
+            : opt.label;
         return (
           <button
             key={opt.value}
@@ -2782,7 +2799,7 @@ function StatusPopover({
               opacity: pending && !isSaving ? 0.4 : 1,
             }}
           >
-            {isSaving ? "Salvando…" : opt.label}
+            {isSaving ? "Salvando…" : displayLabel}
           </button>
         );
       })}
