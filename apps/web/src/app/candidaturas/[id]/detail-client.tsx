@@ -2699,6 +2699,241 @@ function DetalhesCard({
   );
 }
 
+// ─── Hired celebration modal ──────────────────────────────────────
+
+function HiredCelebrationModal({
+  applicationId,
+  companyName,
+  jobTitle,
+  onClose,
+  onUpdated,
+}: {
+  applicationId: string;
+  companyName: string;
+  jobTitle: string;
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+
+    const colors = ["#c6ff3a", "#f5c518", "#0a0a0a", "#3a8a00", "#fafaf6", "#e8e034"];
+    const particles: {
+      x: number; y: number; vx: number; vy: number;
+      r: number; color: string; angle: number; spin: number; shape: number;
+    }[] = [];
+
+    for (let i = 0; i < 120; i++) {
+      particles.push({
+        x: canvas.width / 2 + (Math.random() - 0.5) * 80,
+        y: canvas.height * 0.35,
+        vx: (Math.random() - 0.5) * 14,
+        vy: -(Math.random() * 12 + 4),
+        r: Math.random() * 5 + 3,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        angle: Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 0.3,
+        shape: Math.floor(Math.random() * 3),
+      });
+    }
+
+    let frame: number;
+    function draw() {
+      if (!ctx || !canvas) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let alive = false;
+      for (const p of particles) {
+        p.vy += 0.28;
+        p.vx *= 0.99;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.angle += p.spin;
+        if (p.y < canvas.height + 20) alive = true;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.max(0, 1 - p.y / (canvas.height * 1.1));
+        if (p.shape === 0) {
+          ctx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r);
+        } else if (p.shape === 1) {
+          ctx.beginPath();
+          ctx.arc(0, 0, p.r * 0.7, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(0, -p.r);
+          ctx.lineTo(p.r * 0.8, p.r * 0.6);
+          ctx.lineTo(-p.r * 0.8, p.r * 0.6);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+      if (alive) frame = requestAnimationFrame(draw);
+    }
+
+    frame = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  function handleConfirm() {
+    startTransition(async () => {
+      try {
+        await updateJobApplicationStatus(applicationId, "HIRED");
+        onClose();
+        onUpdated();
+      } catch {
+        // silent — modal stays open
+      }
+    });
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 70,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(10,10,10,0.45)",
+        padding: "0 16px",
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          maxWidth: 420,
+          background: "#fafaf6",
+          borderRadius: 20,
+          overflow: "hidden",
+          boxShadow: "0 24px 72px rgba(10,10,10,0.22)",
+        }}
+      >
+        {/* Confetti canvas */}
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            pointerEvents: "none",
+          }}
+        />
+
+        {/* Content */}
+        <div style={{ position: "relative", zIndex: 1, padding: "36px 28px 28px" }}>
+          <div
+            style={{
+              fontSize: 42,
+              textAlign: "center",
+              marginBottom: 12,
+              lineHeight: 1,
+            }}
+          >
+            🎉
+          </div>
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              letterSpacing: 1.5,
+              color: "#6a6560",
+              textAlign: "center",
+              textTransform: "uppercase",
+              marginBottom: 10,
+            }}
+          >
+            Parabéns!
+          </div>
+          <h2
+            style={{
+              margin: "0 0 8px",
+              fontSize: 22,
+              fontWeight: 600,
+              letterSpacing: -0.5,
+              color: "#0a0a0a",
+              textAlign: "center",
+              lineHeight: 1.2,
+              fontFamily: GEIST,
+            }}
+          >
+            Você foi contratado!
+          </h2>
+          <p
+            style={{
+              margin: "0 0 28px",
+              fontSize: 14,
+              color: "#6a6560",
+              textAlign: "center",
+              fontFamily: GEIST,
+              lineHeight: 1.5,
+            }}
+          >
+            {jobTitle} na {companyName}.<br />
+            Todo o esforço valeu a pena.
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                flex: 1,
+                padding: "11px 0",
+                borderRadius: 10,
+                border: "1px solid rgba(10,10,10,0.12)",
+                background: "#fff",
+                color: "#6a6560",
+                fontSize: 13.5,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: GEIST,
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={pending}
+              style={{
+                flex: 2,
+                padding: "11px 0",
+                borderRadius: 10,
+                border: "none",
+                background: "#c6ff3a",
+                color: "#1a3800",
+                fontSize: 13.5,
+                fontWeight: 600,
+                cursor: pending ? "not-allowed" : "pointer",
+                fontFamily: GEIST,
+                boxShadow: "0 4px 14px rgba(198,255,58,0.35)",
+                transition: "opacity 140ms ease",
+                opacity: pending ? 0.7 : 1,
+              }}
+            >
+              {pending ? "Salvando…" : "Confirmar contratação 🎊"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Status card (próxima ação) ───────────────────────────────────
 
 function StatusPopover({
@@ -2713,6 +2948,7 @@ function StatusPopover({
   onClose: () => void;
   onUpdated: () => void;
   onInterviewSelected: () => void;
+  onHiredSelected: () => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [savingStatus, setSavingStatus] = useState<JobApplicationStatus | null>(
@@ -2735,6 +2971,11 @@ function StatusPopover({
     if (newStatus === "INTERVIEW") {
       onClose();
       onInterviewSelected();
+      return;
+    }
+    if (newStatus === "HIRED") {
+      onClose();
+      onHiredSelected();
       return;
     }
     setSavingStatus(newStatus);
@@ -3446,6 +3687,7 @@ export function DetailClient({ application, header }: Props) {
   const [showStatusEdit, setShowStatusEdit] = useState(false);
   const [showUrlModal, setShowUrlModal] = useState(false);
   const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [showHiredModal, setShowHiredModal] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -3725,6 +3967,7 @@ export function DetailClient({ application, header }: Props) {
                       onClose={() => setShowStatusEdit(false)}
                       onUpdated={handleUpdated}
                       onInterviewSelected={() => setShowInterviewModal(true)}
+                      onHiredSelected={() => setShowHiredModal(true)}
                     />
                   )}
                 </div>
@@ -3902,6 +4145,17 @@ export function DetailClient({ application, header }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Hired celebration modal */}
+        {showHiredModal && (
+          <HiredCelebrationModal
+            applicationId={application.id}
+            companyName={application.companyName}
+            jobTitle={application.jobTitle}
+            onClose={() => setShowHiredModal(false)}
+            onUpdated={handleUpdated}
+          />
+        )}
 
         {/* Interview schedule modal */}
         {showInterviewModal && (
