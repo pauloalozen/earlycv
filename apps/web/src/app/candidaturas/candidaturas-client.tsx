@@ -11,7 +11,10 @@ import {
   useTransition,
 } from "react";
 import { PageShell } from "@/components/page-shell";
-import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
+import {
+  extractDashboardAnalysisSignal,
+  getDashboardScoreColor,
+} from "@/lib/dashboard-test-metrics";
 import {
   CLOSED_STATUSES,
   getStatusConfig,
@@ -421,11 +424,11 @@ function CandRow({
   const detailUrl = `/candidaturas/${application.id}`;
   const cta = ctaForStatus(application.status, detailUrl);
   const scoreBefore =
-    application.scoreBefore ?? derivedScore?.scoreBefore ?? null;
-  const scoreAfter = application.scoreAfter ?? derivedScore?.scoreAfter ?? null;
+    derivedScore?.scoreBefore ?? application.scoreBefore ?? null;
+  const scoreAfter = derivedScore?.scoreAfter ?? application.scoreAfter ?? null;
   const shortId = `#${application.id.slice(-5).toUpperCase()}`;
   const cfg = getStatusConfig(application.status);
-  const bestScore = application.bestScore ?? scoreAfter;
+  const bestScore = derivedScore?.scoreAfter ?? application.bestScore ?? scoreAfter;
   const displayedScore = bestScore ?? scoreAfter ?? scoreBefore;
   const scoreDelta =
     scoreAfter !== null && scoreBefore !== null
@@ -840,7 +843,7 @@ function CandRow({
                 fontSize: 32,
                 fontWeight: 500,
                 letterSpacing: -0.8,
-                color: "#2a6a10",
+                color: getDashboardScoreColor(displayedScore),
                 lineHeight: 1,
                 fontVariantNumeric: "tabular-nums",
               }}
@@ -1384,8 +1387,6 @@ export function CandidaturasClient({
     const allApplications = [...initialApplications, ...archivedApplications];
     const targets = allApplications.filter(
       (application) =>
-        application.scoreBefore === null &&
-        application.scoreAfter === null &&
         Boolean(application.currentCvAdaptationId),
     );
 
@@ -1419,7 +1420,7 @@ export function CandidaturasClient({
             );
             updates[application.id] = {
               scoreBefore: signal.adjustments.scoreBefore,
-              scoreAfter: signal.adjustments.scoreFinal,
+              scoreAfter: signal.score,
             };
           } catch {
             // no-op

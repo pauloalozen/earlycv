@@ -7,7 +7,7 @@ import {
   getRouteAccessRedirectPath,
 } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
-import { getCvAdaptationContent } from "@/lib/cv-adaptation-api";
+import { getCvAdaptation, getCvAdaptationContent } from "@/lib/cv-adaptation-api";
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getJobApplication } from "@/lib/job-applications-api";
@@ -45,38 +45,39 @@ export default async function CandidaturaDetailPage({ params }: Props) {
   const application = applicationResult.value;
   const planInfo = planResult.status === "fulfilled" ? planResult.value : null;
   const availableCredits = toHeaderAvailableCredits(planInfo);
-  const resumeTitleById = new Map(
-    (resumesResult.status === "fulfilled" ? resumesResult.value : []).map((r) => [r.id, r.title]),
-  );
 
   // Compute per-adaptation scores exactly like dashboard_old does
+  const resumeList = resumesResult.status === "fulfilled" ? resumesResult.value : [];
+
   const contentResponses = await Promise.allSettled(
     application.cvAdaptations.map(async (a) => {
-      const content = await getCvAdaptationContent(a.id);
+      const [content, dto] = await Promise.all([
+        getCvAdaptationContent(a.id),
+        getCvAdaptation(a.id).catch(() => null),
+      ]);
       const signal = extractDashboardAnalysisSignal(content.adaptedContentJson);
       // adaptation_notes é o campo preferido; fallback: ajustes_conteudo titles
       const json = content.adaptedContentJson as Record<string, unknown>;
       const ajustesConteudo = Array.isArray(json.ajustes_conteudo)
         ? (json.ajustes_conteudo as Array<{ titulo?: unknown; descricao?: unknown }>)
-            .filter((a) => typeof a.titulo === "string" && a.titulo.trim())
-            .map((a) => `${a.titulo}${typeof a.descricao === "string" && a.descricao.trim() ? `: ${a.descricao}` : ""}`)
+            .filter((item) => typeof item.titulo === "string" && item.titulo.trim())
+            .map((item) => `${item.titulo}${typeof item.descricao === "string" && item.descricao.trim() ? `: ${item.descricao}` : ""}`)
             .join("\n")
         : null;
       const notes = signal.adjustments.notes ?? (ajustesConteudo || null);
-      const resumeUsed = a.adaptedResumeId
-        ? (resumesResult.status === "fulfilled" ? resumesResult.value : []).find((r) => r.id === a.adaptedResumeId) ?? null
-        : null;
-      const masterResumeTitle = resumeUsed
+      const masterResumeId = dto?.masterResumeId ?? null;
+      const resumeUsed = masterResumeId ? resumeList.find((r) => r.id === masterResumeId) ?? null : null;
+      const resumeUsedTitle = resumeUsed
         ? (resumeUsed.isMaster ? "CV Master" : resumeUsed.title)
         : null;
-      return { id: a.id, scoreBefore: signal.adjustments.scoreBefore, scoreAfter: signal.score, notes, masterResumeTitle };
+      return { id: a.id, scoreBefore: signal.adjustments.scoreBefore, scoreAfter: signal.score, notes, resumeUsedTitle };
     }),
   );
 
-  const scoresById = new Map<string, { scoreBefore: number | null; scoreAfter: number | null; notes: string | null; masterResumeTitle: string | null }>();
+  const scoresById = new Map<string, { scoreBefore: number | null; scoreAfter: number | null; notes: string | null; resumeUsedTitle: string | null }>();
   for (const r of contentResponses) {
     if (r.status === "fulfilled") {
-      scoresById.set(r.value.id, { scoreBefore: r.value.scoreBefore, scoreAfter: r.value.scoreAfter, notes: r.value.notes, masterResumeTitle: r.value.masterResumeTitle });
+      scoresById.set(r.value.id, { scoreBefore: r.value.scoreBefore, scoreAfter: r.value.scoreAfter, notes: r.value.notes, resumeUsedTitle: r.value.resumeUsedTitle });
     }
   }
 
@@ -87,7 +88,7 @@ export default async function CandidaturaDetailPage({ params }: Props) {
       scoreBefore: scoresById.get(a.id)?.scoreBefore ?? null,
       scoreAfter: scoresById.get(a.id)?.scoreAfter ?? null,
       notes: scoresById.get(a.id)?.notes ?? null,
-      masterResumeTitle: scoresById.get(a.id)?.masterResumeTitle ?? null,
+      resumeUsedTitle: scoresById.get(a.id)?.resumeUsedTitle ?? null,
     })),
   };
 

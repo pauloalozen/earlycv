@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { getDashboardScoreColor } from "@/lib/dashboard-test-metrics";
 import type { JobApplicationDetailDto } from "@/lib/job-applications-api";
 import {
   deleteJobApplication,
@@ -75,10 +76,23 @@ function buildApplication(
         createdAt: "2026-05-01T00:00:00.000Z",
         scoreBefore: 50,
         scoreAfter: 73,
-              canDownloadBaseCv: false,
+        canDownloadBaseCv: false,
+        resumeUsedTitle: "CV Master",
       },
     ],
     ...overrides,
+  };
+}
+
+function makeEvent(index: number): JobApplicationDetailDto["events"][number] {
+  return {
+    id: `event_${index}`,
+    jobApplicationId: "app_123",
+    eventType: index % 2 === 0 ? "STATUS_CHANGED" : "NOTE_ADDED",
+    previousStatus: null,
+    newStatus: index % 2 === 0 ? "APPLIED" : null,
+    metadata: null,
+    createdAt: `2026-05-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`,
   };
 }
 
@@ -115,6 +129,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
               scoreBefore: 50,
               scoreAfter: 73,
               canDownloadBaseCv: false,
+              resumeUsedTitle: "CV Master",
             },
             {
               id: "adp_best",
@@ -127,6 +142,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
               scoreBefore: 50,
               scoreAfter: 73,
               canDownloadBaseCv: false,
+              resumeUsedTitle: "CV Master",
             },
           ],
         })}
@@ -136,6 +152,334 @@ describe("DetailClient - CV ADAPTADO card", () => {
 
     expect(screen.getByText("Versão atual")).toBeTruthy();
     expect(screen.getByText("Melhor versão")).toBeTruthy();
+  });
+
+  it("shows best score from the best analyzed adaptation", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          scoreBefore: 55,
+          scoreAfter: 68,
+          bestScore: 68,
+          bestCvAdaptationId: "adp_best",
+          cvAdaptations: [
+            {
+              id: "adp_current",
+              status: "completed",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_123",
+              createdAt: "2026-05-02T00:00:00.000Z",
+              scoreBefore: 55,
+              scoreAfter: 68,
+              canDownloadBaseCv: false,
+              resumeUsedTitle: "CV Master",
+            },
+            {
+              id: "adp_best",
+              status: "completed",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_124",
+              createdAt: "2026-05-01T00:00:00.000Z",
+              scoreBefore: 67,
+              scoreAfter: 83,
+              canDownloadBaseCv: false,
+              resumeUsedTitle: "Meu CV Dados",
+            },
+          ],
+        })}
+        header={<div />}
+      />,
+    );
+
+    expect(screen.getByText("83%")).toBeTruthy();
+  });
+
+  it("applies score color variation to the best score badge", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          scoreBefore: 55,
+          scoreAfter: 68,
+          bestScore: 68,
+          bestCvAdaptationId: "adp_best",
+          cvAdaptations: [
+            {
+              id: "adp_best",
+              status: "completed",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_124",
+              createdAt: "2026-05-01T00:00:00.000Z",
+              scoreBefore: 67,
+              scoreAfter: 83,
+              canDownloadBaseCv: false,
+              resumeUsedTitle: "Meu CV Dados",
+            },
+          ],
+        })}
+        header={<div />}
+      />,
+    );
+
+    expect(screen.getByText("83%")).toHaveStyle({
+      color: getDashboardScoreColor(83),
+    });
+  });
+
+  it("shows the resume used for the selected analysis", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          cvAdaptations: [
+            {
+              id: "adp_123",
+              status: "completed",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_123",
+              createdAt: "2026-05-01T00:00:00.000Z",
+              scoreBefore: 50,
+              scoreAfter: 73,
+              canDownloadBaseCv: false,
+              resumeUsedTitle: "CV Master",
+            },
+          ],
+        })}
+        header={<div />}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /ajustes feitos/i }));
+
+    expect(await screen.findByText(/CV usado na análise:/i)).toBeTruthy();
+    expect(screen.getByText("CV Master")).toBeTruthy();
+  });
+
+  it("shows a non-master resume title in the adjustments popup", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          cvAdaptations: [
+            {
+              id: "adp_123",
+              status: "completed",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_123",
+              createdAt: "2026-05-01T00:00:00.000Z",
+              scoreBefore: 50,
+              scoreAfter: 73,
+              canDownloadBaseCv: false,
+              resumeUsedTitle: "Meu CV Dados",
+            },
+          ],
+        })}
+        header={<div />}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /ajustes feitos/i }));
+
+    expect(await screen.findByText("Meu CV Dados")).toBeTruthy();
+  });
+
+  it("shows fallback text when resume used cannot be identified", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          cvAdaptations: [
+            {
+              id: "adp_123",
+              status: "completed",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_123",
+              createdAt: "2026-05-01T00:00:00.000Z",
+              scoreBefore: 50,
+              scoreAfter: 73,
+              canDownloadBaseCv: false,
+              resumeUsedTitle: null,
+            },
+          ],
+        })}
+        header={<div />}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /ajustes feitos/i }));
+
+    expect(await screen.findByText("Não identificado")).toBeTruthy();
+  });
+
+  it("shows the correct resume title for each analysis in the same application", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          currentCvAdaptationId: "adp_master",
+          cvAdaptations: [
+            {
+              id: "adp_master",
+              status: "completed",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_master",
+              createdAt: "2026-05-02T00:00:00.000Z",
+              scoreBefore: 50,
+              scoreAfter: 73,
+              canDownloadBaseCv: false,
+              resumeUsedTitle: "CV Master",
+            },
+            {
+              id: "adp_data",
+              status: "completed",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_data",
+              createdAt: "2026-05-01T00:00:00.000Z",
+              scoreBefore: 48,
+              scoreAfter: 76,
+              canDownloadBaseCv: false,
+              resumeUsedTitle: "Meu CV Dados",
+            },
+          ],
+        })}
+        header={<div />}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("analysis-adjustments-adp_data"));
+    expect(await screen.findByText("Meu CV Dados")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /fechar/i }));
+
+    fireEvent.click(screen.getByTestId("analysis-adjustments-adp_master"));
+    expect(await screen.findByText("CV Master")).toBeTruthy();
+  });
+
+  it("does not show timeline scroll controls when there are up to five events", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          events: Array.from({ length: 5 }, (_, index) => makeEvent(index)),
+        })}
+        header={<div />}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /subir eventos/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /descer eventos/i })).toBeNull();
+  });
+
+  it("shows timeline scroll controls when there are more than five events", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          events: Array.from({ length: 6 }, (_, index) => makeEvent(index)),
+        })}
+        header={<div />}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /subir eventos/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /descer eventos/i })).toBeTruthy();
+  });
+
+  it("shows newest timeline events first", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          events: [makeEvent(0), makeEvent(1), makeEvent(2)],
+        })}
+        header={<div />}
+      />,
+    );
+
+    const timelineTexts = screen.getAllByText(/Nota adicionada\.|Status atualizado para/i);
+
+    expect(timelineTexts[0]).toHaveTextContent("Status atualizado para Enviada");
+    expect(timelineTexts[1]).toHaveTextContent("Nota adicionada.");
+    expect(timelineTexts[2]).toHaveTextContent("Status atualizado para Enviada");
   });
 
   it("splits an analysis into a new application and navigates", async () => {
@@ -289,6 +633,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
               scoreBefore: 50,
               scoreAfter: 73,
               canDownloadBaseCv: false,
+              resumeUsedTitle: "CV Master",
             },
           ],
         })}

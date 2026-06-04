@@ -56,6 +56,8 @@ import {
   generateOrGetInterviewPrep,
   updateJobApplicationStatus,
 } from "@/lib/job-applications-api";
+import * as dashboardMetrics from "@/lib/dashboard-test-metrics";
+import { getDashboardScoreColor } from "@/lib/dashboard-test-metrics";
 import { DetailClient } from "./[id]/detail-client";
 import { CandidaturasClient } from "./candidaturas-client";
 
@@ -444,6 +446,144 @@ describe("CandidaturasClient", () => {
     expect(screen.getByTestId("score-highlight-value")).toHaveTextContent(
       "83%",
     );
+    expect(screen.getByTestId("score-highlight-delta")).toHaveTextContent(
+      "+16 vs original",
+    );
+  });
+
+  it("12c2. score block uses score-based color variation", () => {
+    const apps = [
+      makeApp({
+        id: "delta-color-1",
+        status: "CV_READY",
+        scorePresentation: "scored",
+        scoreBefore: 67,
+        scoreAfter: 83,
+        bestScore: 83,
+      }),
+    ];
+
+    render(<CandidaturasClient initialApplications={apps} header={null} />);
+
+    expect(screen.getByTestId("score-highlight-value")).toHaveStyle({
+      color: getDashboardScoreColor(83),
+    });
+  });
+
+  it("12d. list prefers derived score over stale persisted score", async () => {
+    const extractSignalSpy = vi
+      .spyOn(dashboardMetrics, "extractDashboardAnalysisSignal")
+      .mockReturnValue({
+        adjustments: {
+          notes: null,
+          scoreBefore: 67,
+          scoreFinal: 83,
+        },
+        selectedMissingKeywords: [],
+        improvement: 16,
+        score: 83,
+      });
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/cv-adaptation/adapt-stale-1/content") {
+        return {
+          ok: true,
+          json: async () => ({
+            adaptedContentJson: {
+              fit: {
+                score: 1,
+                categoria: "medio",
+                headline: "headline",
+                subheadline: "subheadline",
+              },
+              positivos: [{ texto: "xp relevante", pontos: 20 }],
+              ajustes_conteudo: [
+                {
+                  id: "a1",
+                  titulo: "Ajustar bullets",
+                  descricao: "",
+                  pontos: 10,
+                  dica: "",
+                },
+              ],
+              ajustes_indisponiveis: [
+                {
+                  id: "i1",
+                  titulo: "Sem ingles avancado",
+                  descricao: "",
+                  pontos: 10,
+                  dica: "",
+                },
+              ],
+              keywords: {
+                presentes: [{ kw: "SQL", pontos: 25 }],
+                ausentes: [{ kw: "Python", pontos: 15 }],
+              },
+              formato_cv: {
+                resumo: "ok",
+                problemas: [
+                  {
+                    tipo: "atencao",
+                    titulo: "Resumo longo",
+                    descricao: "",
+                    impacto: 4,
+                  },
+                ],
+                campos: [
+                  { nome: "Telefone", presente: false },
+                  { nome: "LinkedIn", presente: false },
+                  { nome: "Nome completo", presente: true },
+                ],
+              },
+              comparacao: { antes: "", depois: "" },
+              pontos_fortes: [],
+              lacunas: [],
+              melhorias_aplicadas: [],
+              ats_keywords: { presentes: [], ausentes: [] },
+              preview: { antes: "", depois: "" },
+              projecao_melhoria: {
+                score_atual: 88,
+                score_pos_otimizacao: 99,
+                explicacao_curta: "",
+              },
+              mensagem_venda: { titulo: "", subtexto: "" },
+            },
+          }),
+        } as Response;
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <CandidaturasClient
+        initialApplications={[
+          makeApp({
+            id: "stale-score-1",
+            status: "CV_READY",
+            scorePresentation: "scored",
+            currentCvAdaptationId: "adapt-stale-1",
+            scoreBefore: 55,
+            scoreAfter: 68,
+            bestScore: 68,
+            bestCvState: "ready",
+            bestCvAdaptationId: "adapt-stale-1",
+          }),
+        ]}
+        header={null}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("score-highlight-value")).toHaveTextContent(
+        "83%",
+      );
+    });
+    expect(extractSignalSpy).toHaveBeenCalled();
     expect(screen.getByTestId("score-highlight-delta")).toHaveTextContent(
       "+16 vs original",
     );

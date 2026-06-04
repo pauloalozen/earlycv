@@ -16,6 +16,7 @@ import {
 } from "@/components/cv-release-modal";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
+import { getDashboardScoreColor } from "@/lib/dashboard-test-metrics";
 import {
   type DownloadProgressStage,
   downloadFromApi,
@@ -589,7 +590,7 @@ function AnaliseRow({
     scoreBefore: number | null;
     scoreAfter: number | null;
     notes?: string | null;
-    masterResumeTitle?: string | null;
+    resumeUsedTitle?: string | null;
     canDownloadBaseCv?: boolean;
   };
   applicationId: string;
@@ -797,6 +798,7 @@ function AnaliseRow({
 
   const score = adaptation.scoreAfter ?? null;
   const scoreBefore = adaptation.scoreBefore ?? null;
+  const scoreColor = score !== null ? getDashboardScoreColor(score) : "#2a6a10";
   const delta =
     score !== null && scoreBefore !== null
       ? score - scoreBefore
@@ -961,7 +963,7 @@ function AnaliseRow({
                   fontWeight: 600,
                   letterSpacing: -1,
                   lineHeight: 1,
-                  color: "#2a6a10",
+                  color: scoreColor,
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
@@ -1131,6 +1133,7 @@ function AnaliseRow({
         ) : null}
         {showAdjustments && (
           <button
+            data-testid={`analysis-adjustments-${adaptation.id}`}
             type="button"
             onClick={openAdjustments}
             style={{
@@ -1268,7 +1271,7 @@ function AnaliseRow({
               </p>
               <p style={{ fontSize: 13, color: "#0a0a0a", margin: 0 }}>
                 <span style={{ fontWeight: 500 }}>CV usado na análise:</span>{" "}
-                {adaptation.masterResumeTitle ?? "Não identificado"}
+                {adaptation.resumeUsedTitle ?? "Não identificado"}
               </p>
             </div>
 
@@ -1282,8 +1285,8 @@ function AnaliseRow({
               </div>
               <span style={{ fontSize: 20, color: "#c0beb4", flexShrink: 0 }}>→</span>
               <div style={{ flex: 1, background: "rgba(198,255,58,0.2)", border: "1px solid rgba(110,150,20,0.2)", borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
-                <p style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 500, letterSpacing: 1, textTransform: "uppercase", color: "#405410", margin: "0 0 6px" }}>Score após ajustes</p>
-                <p style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-1.4px", margin: 0, color: "#405410", fontVariantNumeric: "tabular-nums" }}>
+                <p style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 500, letterSpacing: 1, textTransform: "uppercase", color: score !== null ? scoreColor : "#405410", margin: "0 0 6px" }}>Score após ajustes</p>
+                <p style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-1.4px", margin: 0, color: score !== null ? scoreColor : "#405410", fontVariantNumeric: "tabular-nums" }}>
                   {adaptation.scoreAfter !== null ? `${adaptation.scoreAfter}%` : "—"}
                 </p>
               </div>
@@ -1712,6 +1715,22 @@ function Timeline({
 }) {
   if (events.length === 0) return null;
 
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const shouldClamp = events.length > 5;
+  const sortedEvents = [...events].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
+  const scrollTimeline = (direction: "up" | "down") => {
+    const node = scrollRef.current;
+    if (!node) return;
+
+    node.scrollBy({
+      top: direction === "down" ? 180 : -180,
+      behavior: "smooth",
+    });
+  };
+
   function getEventBody(event: JobApplicationEvent): React.ReactNode {
     switch (event.eventType) {
       case "APPLICATION_CREATED":
@@ -1796,9 +1815,68 @@ function Timeline({
           padding: "16px 16px",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {events.map((event, idx) => {
-            const isLast = idx === events.length - 1;
+        {shouldClamp && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 8,
+              marginBottom: 12,
+            }}
+          >
+            <button
+              type="button"
+              aria-label="Subir eventos"
+              onClick={() => scrollTimeline("up")}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 999,
+                border: "1px solid rgba(10,10,10,0.12)",
+                background: "rgba(255,255,255,0.92)",
+                color: "#3a3a36",
+                cursor: "pointer",
+                fontSize: 12,
+                fontFamily: GEIST,
+              }}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              aria-label="Descer eventos"
+              onClick={() => scrollTimeline("down")}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 999,
+                border: "1px solid rgba(10,10,10,0.12)",
+                background: "rgba(255,255,255,0.92)",
+                color: "#3a3a36",
+                cursor: "pointer",
+                fontSize: 12,
+                fontFamily: GEIST,
+              }}
+            >
+              ↓
+            </button>
+          </div>
+        )}
+
+        <div
+          ref={scrollRef}
+          className={shouldClamp ? "timeline-scroll" : undefined}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            maxHeight: shouldClamp ? 344 : undefined,
+            overflowY: shouldClamp ? "auto" : undefined,
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+          }}
+        >
+          {sortedEvents.map((event, idx) => {
+            const isLast = idx === sortedEvents.length - 1;
             const isAccent =
               event.eventType === "CV_READY" ||
               event.eventType === "ANALYSIS_COMPLETED";
@@ -2542,7 +2620,15 @@ export function DetailClient({ application, header }: Props) {
   const canDelete = isArchived && !hasUnlockedCv;
   const hasCvAdaptations = application.cvAdaptations.length > 0;
   const origin = ORIGIN_LABELS[application.origin] ?? application.origin;
-  const bestScore = application.scoreAfter ?? application.scoreBefore;
+  const bestAdaptation =
+    application.cvAdaptations.find(
+      (adaptation) => adaptation.id === application.bestCvAdaptationId,
+    ) ?? null;
+  const bestScore =
+    bestAdaptation?.scoreAfter ??
+    bestAdaptation?.scoreBefore ??
+    application.scoreAfter ??
+    application.scoreBefore;
 
   const handleArchive = async () => {
     if (archiving) return;
@@ -2731,7 +2817,9 @@ export function DetailClient({ application, header }: Props) {
                       <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
                       <span style={{ fontSize: 12.5, color: "#5a5a55" }}>
                         melhor score{" "}
-                        <strong style={{ color: "#2a6a10" }}>
+                        <strong
+                          style={{ color: getDashboardScoreColor(bestScore) }}
+                        >
                           {bestScore}%
                         </strong>
                       </span>
@@ -3057,6 +3145,7 @@ export function DetailClient({ application, header }: Props) {
           @media (max-width: 760px) {
             .candidatura-grid { grid-template-columns: 1fr !important; }
           }
+          .timeline-scroll::-webkit-scrollbar { display: none; }
         `}</style>
       </main>
 

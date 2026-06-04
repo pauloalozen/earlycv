@@ -132,6 +132,7 @@ export type JobApplicationDetailDto = Omit<
     scoreBefore: number | null;
     scoreAfter: number | null;
     canDownloadBaseCv: boolean;
+    resumeUsedTitle: string | null;
   }>;
 };
 
