@@ -481,6 +481,7 @@ export class JobApplicationsService {
       interviewTitle: string;
       interviewerName?: string;
       interviewMeetingUrl?: string;
+      interviewLocation?: string;
     },
   ) {
     const application = await this.database.jobApplication.findFirst({
