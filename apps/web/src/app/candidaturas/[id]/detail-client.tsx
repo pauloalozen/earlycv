@@ -2804,19 +2804,25 @@ function JobUrlModal({
     inputRef.current?.focus();
   }, []);
 
+  function normalize(raw: string): string {
+    const trimmed = raw.trim();
+    if (!trimmed) return trimmed;
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  }
+
   function handleSave() {
-    const trimmed = value.trim();
-    if (!trimmed) return;
+    const url = normalize(value);
+    if (!url) return;
     try {
-      new URL(trimmed);
+      new URL(url);
     } catch {
-      setError("URL inválida. Inclua https:// no início.");
+      setError("URL inválida.");
       return;
     }
     setError(null);
     startTransition(async () => {
       try {
-        await updateJobApplicationUrl(applicationId, trimmed);
+        await updateJobApplicationUrl(applicationId, url);
         onClose();
         onUpdated();
       } catch {
