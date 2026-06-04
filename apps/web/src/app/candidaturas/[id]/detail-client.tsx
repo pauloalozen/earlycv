@@ -3019,37 +3019,74 @@ export function DetailClient({ application, header }: Props) {
               {application.location ? ` · ${application.location}` : ""}
             </div>
 
-            {/* Title + actions on same line */}
+            {/* Title */}
+            <h1
+              style={{
+                margin: "0 0 11px",
+                fontSize: "clamp(22px, 2.4vw, 30px)",
+                fontWeight: 500,
+                letterSpacing: -1,
+                lineHeight: 1.15,
+                color: "#0a0a0a",
+              }}
+            >
+              {application.jobTitle}
+            </h1>
+
+            {/* Badge + stats + actions — all on the same line */}
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr auto",
                 gap: 16,
                 alignItems: "center",
-                marginBottom: 11,
               }}
             >
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: "clamp(22px, 2.4vw, 30px)",
-                  fontWeight: 500,
-                  letterSpacing: -1,
-                  lineHeight: 1.15,
-                  color: "#0a0a0a",
-                }}
-              >
-                {application.jobTitle}
-              </h1>
-
-              {/* Actions */}
+              {/* Left: pill + stats */}
               <div
                 style={{
                   display: "flex",
-                  gap: 8,
                   alignItems: "center",
+                  gap: 9,
+                  flexWrap: "wrap",
                 }}
               >
+                <StatusBadge status={application.status} />
+                <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
+                <span style={{ fontSize: 12.5, color: "#5a5a55" }}>
+                  <strong>{application.cvAdaptations.length}</strong>{" "}
+                  {application.cvAdaptations.length === 1
+                    ? "análise"
+                    : "análises"}
+                </span>
+                {bestScore !== null && (
+                  <>
+                    <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
+                    <span style={{ fontSize: 12.5, color: "#5a5a55" }}>
+                      melhor score{" "}
+                      <strong
+                        style={{ color: getDashboardScoreColor(bestScore) }}
+                      >
+                        {bestScore}%
+                      </strong>
+                    </span>
+                  </>
+                )}
+                <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#a8a6a0",
+                    letterSpacing: 0.4,
+                  }}
+                >
+                  {origin}
+                </span>
+              </div>
+
+              {/* Right: actions */}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {application.jobUrl && (
                   <a
                     href={application.jobUrl}
@@ -3202,49 +3239,6 @@ export function DetailClient({ application, header }: Props) {
                   </button>
                 )}
               </div>
-            </div>
-
-            {/* Status badge + stats */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 9,
-                flexWrap: "wrap",
-              }}
-            >
-              <StatusBadge status={application.status} />
-              <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
-              <span style={{ fontSize: 12.5, color: "#5a5a55" }}>
-                <strong>{application.cvAdaptations.length}</strong>{" "}
-                {application.cvAdaptations.length === 1
-                  ? "análise"
-                  : "análises"}
-              </span>
-              {bestScore !== null && (
-                <>
-                  <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
-                  <span style={{ fontSize: 12.5, color: "#5a5a55" }}>
-                    melhor score{" "}
-                    <strong
-                      style={{ color: getDashboardScoreColor(bestScore) }}
-                    >
-                      {bestScore}%
-                    </strong>
-                  </span>
-                </>
-              )}
-              <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
-              <span
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  color: "#a8a6a0",
-                  letterSpacing: 0.4,
-                }}
-              >
-                {origin}
-              </span>
             </div>
 
             {archiveError && (
