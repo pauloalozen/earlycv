@@ -2086,7 +2086,7 @@ function Timeline({
         );
       }
       case "MARKED_AS_SENT":
-        return "Você marcou como enviada.";
+        return "Você se candidatou.";
       case "NOTE_ADDED":
         return "Nota adicionada.";
       case "INTERVIEW_PREP_GENERATED":
