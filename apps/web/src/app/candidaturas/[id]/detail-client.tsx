@@ -2691,17 +2691,15 @@ function DetalhesCard({
 
 // ─── Status card (próxima ação) ───────────────────────────────────
 
-function StatusCard({
+function StatusPopover({
   applicationId,
   status,
-  showStatusEdit,
-  onSetShowStatusEdit,
+  onClose,
   onUpdated,
 }: {
   applicationId: string;
   status: JobApplicationStatus;
-  showStatusEdit: boolean;
-  onSetShowStatusEdit: (v: boolean) => void;
+  onClose: () => void;
   onUpdated: () => void;
 }) {
   const [selected, setSelected] = useState<JobApplicationStatus>(status);
@@ -2720,7 +2718,7 @@ function StatusCard({
     startTransition(async () => {
       try {
         await updateJobApplicationStatus(applicationId, selected);
-        onSetShowStatusEdit(false);
+        onClose();
         onUpdated();
       } catch {
         setError("Falha ao atualizar. Tente novamente.");
@@ -2728,29 +2726,21 @@ function StatusCard({
     });
   }
 
-  if (!showStatusEdit) return null;
-
   return (
     <div
       style={{
-        background: "rgba(255,255,255,0.55)",
-        border: "1px solid rgba(10,10,10,0.07)",
+        position: "absolute",
+        top: "calc(100% + 6px)",
+        right: 0,
+        zIndex: 50,
+        width: 220,
+        background: "#fff",
+        border: "1px solid rgba(10,10,10,0.10)",
         borderRadius: 12,
         padding: "14px 16px",
+        boxShadow: "0 8px 24px rgba(10,10,10,0.12)",
       }}
     >
-      <div
-        style={{
-          fontFamily: MONO,
-          fontSize: 10,
-          letterSpacing: 1.2,
-          color: "#8a8a85",
-          fontWeight: 500,
-          marginBottom: 10,
-        }}
-      >
-        ALTERAR STATUS
-      </div>
       <label htmlFor={selectId} style={{ display: "none" }}>
         Status da candidatura
       </label>
@@ -2786,7 +2776,7 @@ function StatusCard({
       <div style={{ display: "flex", gap: 8 }}>
         <button
           type="button"
-          onClick={() => onSetShowStatusEdit(false)}
+          onClick={onClose}
           style={{
             flex: 1,
             padding: "9px 0",
@@ -3050,83 +3040,45 @@ export function DetailClient({ application, header }: Props) {
 
           {/* Hero */}
           <div style={{ marginBottom: 18 }}>
+            {/* Company / location */}
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10.5,
+                color: "#6a6560",
+                letterSpacing: 0.5,
+                marginBottom: 7,
+                textTransform: "uppercase",
+              }}
+            >
+              {application.companyName}
+              {application.location ? ` · ${application.location}` : ""}
+            </div>
+
+            {/* Title + actions on same line */}
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: 32,
+                alignItems: "center",
+                gap: 16,
                 flexWrap: "wrap",
+                marginBottom: 11,
               }}
             >
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 10.5,
-                    color: "#6a6560",
-                    letterSpacing: 0.5,
-                    marginBottom: 7,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {application.companyName}
-                  {application.location ? ` · ${application.location}` : ""}
-                </div>
-                <h1
-                  style={{
-                    margin: "0 0 11px",
-                    fontSize: "clamp(22px, 2.4vw, 30px)",
-                    fontWeight: 500,
-                    letterSpacing: -1,
-                    lineHeight: 1.08,
-                    color: "#0a0a0a",
-                  }}
-                >
-                  {application.jobTitle}
-                </h1>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 9,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <StatusBadge status={application.status} />
-                  <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
-                  <span style={{ fontSize: 12.5, color: "#5a5a55" }}>
-                    <strong>{application.cvAdaptations.length}</strong>{" "}
-                    {application.cvAdaptations.length === 1
-                      ? "análise"
-                      : "análises"}
-                  </span>
-                  {bestScore !== null && (
-                    <>
-                      <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
-                      <span style={{ fontSize: 12.5, color: "#5a5a55" }}>
-                        melhor score{" "}
-                        <strong
-                          style={{ color: getDashboardScoreColor(bestScore) }}
-                        >
-                          {bestScore}%
-                        </strong>
-                      </span>
-                    </>
-                  )}
-                  <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
-                  <span
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 10.5,
-                      color: "#a8a6a0",
-                      letterSpacing: 0.4,
-                    }}
-                  >
-                    {origin}
-                  </span>
-                </div>
-              </div>
+              <h1
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  margin: 0,
+                  fontSize: "clamp(22px, 2.4vw, 30px)",
+                  fontWeight: 500,
+                  letterSpacing: -1,
+                  lineHeight: 1.08,
+                  color: "#0a0a0a",
+                }}
+              >
+                {application.jobTitle}
+              </h1>
 
               {/* Actions */}
               <div
@@ -3135,7 +3087,7 @@ export function DetailClient({ application, header }: Props) {
                   gap: 8,
                   flexShrink: 0,
                   flexWrap: "wrap",
-                  alignItems: "flex-start",
+                  alignItems: "center",
                 }}
               >
                 {application.jobUrl && (
@@ -3161,28 +3113,41 @@ export function DetailClient({ application, header }: Props) {
                     Abrir vaga ↗
                   </a>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setShowStatusEdit((v) => !v)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    padding: "8px 13px",
-                    borderRadius: 8,
-                    border: "1px solid rgba(10,10,10,0.12)",
-                    background: showStatusEdit
-                      ? "#f0f0ea"
-                      : "rgba(255,255,255,0.7)",
-                    color: "#3a3a36",
-                    fontSize: 12.5,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    fontFamily: GEIST,
-                  }}
-                >
-                  Status ▾
-                </button>
+
+                {/* Status button + inline popover */}
+                <div style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowStatusEdit((v) => !v)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      padding: "8px 13px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(10,10,10,0.12)",
+                      background: showStatusEdit
+                        ? "#f0f0ea"
+                        : "rgba(255,255,255,0.7)",
+                      color: "#3a3a36",
+                      fontSize: 12.5,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    Status ▾
+                  </button>
+                  {showStatusEdit && (
+                    <StatusPopover
+                      applicationId={application.id}
+                      status={application.status}
+                      onClose={() => setShowStatusEdit(false)}
+                      onUpdated={handleUpdated}
+                    />
+                  )}
+                </div>
+
                 {isPrepEligible && (
                   <button
                     type="button"
@@ -3279,6 +3244,49 @@ export function DetailClient({ application, header }: Props) {
               </div>
             </div>
 
+            {/* Status badge + stats */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
+                flexWrap: "wrap",
+              }}
+            >
+              <StatusBadge status={application.status} />
+              <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
+              <span style={{ fontSize: 12.5, color: "#5a5a55" }}>
+                <strong>{application.cvAdaptations.length}</strong>{" "}
+                {application.cvAdaptations.length === 1
+                  ? "análise"
+                  : "análises"}
+              </span>
+              {bestScore !== null && (
+                <>
+                  <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
+                  <span style={{ fontSize: 12.5, color: "#5a5a55" }}>
+                    melhor score{" "}
+                    <strong
+                      style={{ color: getDashboardScoreColor(bestScore) }}
+                    >
+                      {bestScore}%
+                    </strong>
+                  </span>
+                </>
+              )}
+              <span style={{ color: "#c0beb4", fontSize: 12 }}>·</span>
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#a8a6a0",
+                  letterSpacing: 0.4,
+                }}
+              >
+                {origin}
+              </span>
+            </div>
+
             {archiveError && (
               <p style={{ margin: "10px 0 0", fontSize: 12, color: "#991b1b" }}>
                 {archiveError}
@@ -3312,16 +3320,6 @@ export function DetailClient({ application, header }: Props) {
 
             {/* Right column */}
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              {showStatusEdit && (
-                <StatusCard
-                  applicationId={application.id}
-                  status={application.status}
-                  showStatusEdit={showStatusEdit}
-                  onSetShowStatusEdit={setShowStatusEdit}
-                  onUpdated={handleUpdated}
-                />
-              )}
-
               <Timeline
                 events={application.events}
                 scoreBefore={application.scoreBefore}
