@@ -118,7 +118,7 @@ export type JobApplicationHighlightsSummaryDto = {
 
 export type JobApplicationDetailDto = Omit<
   JobApplicationDto,
-  "interviewPrep"
+  "interviewPrep" | "cvAdaptations"
 > & {
   interviewPrep: InterviewPrepDto | null;
   cvAdaptations: Array<{
@@ -129,6 +129,9 @@ export type JobApplicationDetailDto = Omit<
     isUnlocked: boolean;
     adaptedResumeId: string | null;
     createdAt: string;
+    scoreBefore: number | null;
+    scoreAfter: number | null;
+    canDownloadBaseCv: boolean;
   }>;
 };
 

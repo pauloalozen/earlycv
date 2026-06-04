@@ -1,3 +1,4 @@
+import { normalizeData } from "@earlycv/config/cv-analysis-normalize";
 import { resolveCvAnalysisScores } from "@earlycv/config/cv-analysis-score";
 import {
   BadRequestException,
@@ -68,12 +69,62 @@ const ACTIVE_SUMMARY_STATUSES: ReadonlySet<JobApplicationStatus> = new Set([
   "INTERVIEW",
 ]);
 
+function extractAdaptationScores(
+  content: unknown,
+): { scoreBefore: number | null; scoreAfter: number | null } {
+  if (!content || typeof content !== "object" || Array.isArray(content)) {
+    return { scoreBefore: null, scoreAfter: null };
+  }
+  const parsed = content as Record<string, unknown>;
+
+  const hasNormalizedPayload =
+    parsed.fit &&
+    typeof parsed.fit === "object" &&
+    (Array.isArray(parsed.positivos) ||
+      Array.isArray(parsed.ajustes_conteudo) ||
+      Array.isArray(parsed.ajustes_indisponiveis) ||
+      Array.isArray(parsed.pontos_fortes) ||
+      Array.isArray(parsed.lacunas) ||
+      Boolean(parsed.keywords && typeof parsed.keywords === "object") ||
+      Boolean(parsed.formato_cv && typeof parsed.formato_cv === "object") ||
+      Boolean(
+        parsed.ats_keywords && typeof parsed.ats_keywords === "object",
+      ));
+
+  if (hasNormalizedPayload) {
+    try {
+      const data = normalizeData(parsed as never);
+      // Mirror resultado/page.tsx exactly: direct (non-normalized) keyword match
+      const frozenKeywords = Array.isArray(parsed.selectedMissingKeywords)
+        ? (parsed.selectedMissingKeywords as string[])
+        : [];
+      const effectiveSelected = new Set(frozenKeywords);
+      const ptsKw = (
+        data.keywords.ausentes as Array<{ kw: string; pontos: number }>
+      )
+        .filter((k) => effectiveSelected.has(k.kw))
+        .reduce((s, k) => s + k.pontos, 0);
+      const scoreAfter = Math.min(
+        100,
+        data.score.scoreAposLiberarBase + ptsKw,
+      );
+      return { scoreBefore: data.score.scoreAtualBase, scoreAfter };
+    } catch {
+      // fall through to legacy path
+    }
+  }
+
+  // Legacy / scalar fallback
+  const result = resolveCvAnalysisScores(content);
+  return { scoreBefore: result.scoreBefore, scoreAfter: result.scoreAfter };
+}
+
 function extractScoreBeforeFromContent(content: unknown): number | null {
-  return resolveCvAnalysisScores(content).scoreBefore;
+  return extractAdaptationScores(content).scoreBefore;
 }
 
 function extractScoreAfterFromContent(content: unknown): number | null {
-  return resolveCvAnalysisScores(content).scoreAfter;
+  return extractAdaptationScores(content).scoreAfter;
 }
 
 function deriveSummaryFromAdaptations(
@@ -308,6 +359,7 @@ export class JobApplicationsService {
             isUnlocked: true,
             adaptedResumeId: true,
             adaptedContentJson: true,
+            analysisCvSnapshotId: true,
             createdAt: true,
           },
           orderBy: { createdAt: "desc" },
@@ -319,8 +371,19 @@ export class JobApplicationsService {
       throw new NotFoundException("job application not found");
     }
 
+    const mappedAdaptations = application.cvAdaptations.map((a) => {
+      const { adaptedContentJson, analysisCvSnapshotId, ...rest } = a;
+      return {
+        ...rest,
+        scoreBefore: extractScoreBeforeFromContent(adaptedContentJson),
+        scoreAfter: extractScoreAfterFromContent(adaptedContentJson),
+        canDownloadBaseCv: Boolean(analysisCvSnapshotId),
+      };
+    });
+
     return {
       ...application,
+      cvAdaptations: mappedAdaptations,
       ...deriveSummaryFromAdaptations(
         application.cvAdaptations as AdaptationSummaryView[],
       ),

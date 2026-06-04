@@ -10,6 +10,10 @@ import {
   useState,
   useTransition,
 } from "react";
+import {
+  CvReleaseModal,
+  type CvReleaseModalStatus,
+} from "@/components/cv-release-modal";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
 import {
@@ -578,8 +582,6 @@ function AnaliseRow({
   isCurrent,
   isBest,
   isSent,
-  scoreAfter,
-  scoreBefore,
   isLast,
   companyName,
   jobTitle,
@@ -590,36 +592,68 @@ function AnaliseRow({
     isUnlocked: boolean;
     adaptedResumeId: string | null;
     createdAt: string;
+    scoreBefore: number | null;
+    scoreAfter: number | null;
+    canDownloadBaseCv?: boolean;
   };
   applicationId: string;
   isCurrent: boolean;
   isBest: boolean;
   isSent: boolean;
-  scoreAfter: number | null;
-  scoreBefore: number | null;
   isLast: boolean;
   companyName: string;
   jobTitle: string;
 }) {
+  const MIN_RELEASE_LOADING_MS = 3000;
+  const REDEEM_REQUEST_TIMEOUT_MS = 15_000;
+  const redeemHref = `/api/cv-adaptation/${adaptation.id}/redeem-credit`;
+  const redeemSessionKey = `dashboard-cv-redeemed:${redeemHref}`;
+
   const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
   const [downloadStage, setDownloadStage] =
     useState<DownloadProgressStage | null>(null);
   const [redeeming, setRedeeming] = useState(false);
-  const [redeemError, setRedeemError] = useState<string | null>(null);
-  const [wasUnlockedInSession, setWasUnlockedInSession] = useState(false);
+  const [wasRedeemedInSession, setWasRedeemedInSession] = useState(false);
   const [hasCredits, setHasCredits] = useState<boolean | null>(null);
+  const [releaseModalOpen, setReleaseModalOpen] = useState(false);
+  const [releaseModalVisible, setReleaseModalVisible] = useState(false);
+  const [releaseStatus, setReleaseStatus] =
+    useState<CvReleaseModalStatus>("loading");
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+  const redeemInFlightRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const redeemAbortControllerRef = useRef<AbortController | null>(null);
+  const releaseWatchdogTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const releaseCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isUnlocked = adaptation.isUnlocked || wasUnlockedInSession;
-  const isProcessing =
-    adaptation.status !== "delivered" && adaptation.status !== "unlocked";
+  const canDownloadNow = adaptation.isUnlocked || wasRedeemedInSession;
+  const canRedeemNow = !adaptation.isUnlocked && !wasRedeemedInSession;
 
   const plansHref = buildCvUnlockPlansHref({
     adaptationId: adaptation.id,
-    source: "candidatura-analise-unlock",
+    source: "resultado-buy-credits",
     nextPath: `/candidaturas/${applicationId}`,
   });
 
   const cvFileName = `CV-${companyName.replace(/\s+/g, "-")}-${jobTitle.replace(/\s+/g, "-")}`;
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      redeemAbortControllerRef.current?.abort();
+      if (releaseWatchdogTimeoutRef.current) clearTimeout(releaseWatchdogTimeoutRef.current);
+      if (releaseCloseTimeoutRef.current) clearTimeout(releaseCloseTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(redeemSessionKey) === "1") {
+        setWasRedeemedInSession(true);
+      }
+    } catch { /* no-op */ }
+  }, [redeemSessionKey]);
 
   useEffect(() => {
     let mounted = true;
@@ -627,76 +661,128 @@ function AnaliseRow({
       try {
         const res = await fetch("/api/plans/me", { cache: "no-store" });
         if (!res.ok) return;
-        const plan = (await res.json()) as {
-          creditsRemaining?: number | null;
-        };
+        const plan = (await res.json()) as { creditsRemaining?: number | null };
         if (!mounted) return;
-        if (plan.creditsRemaining == null) {
-          setHasCredits(true);
-          return;
-        }
-        setHasCredits(plan.creditsRemaining > 0);
+        setHasCredits(plan.creditsRemaining == null ? true : plan.creditsRemaining > 0);
       } catch {
         if (mounted) setHasCredits(null);
       }
     };
     void load();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    if (!releaseModalOpen || releaseStatus !== "loading") return;
+    if (releaseWatchdogTimeoutRef.current) clearTimeout(releaseWatchdogTimeoutRef.current);
+    releaseWatchdogTimeoutRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
+      setReleaseStatus("error");
+      setReleaseError("A liberação está demorando mais do que o esperado. Tente novamente.");
+      setRedeeming(false);
+      redeemInFlightRef.current = false;
+      redeemAbortControllerRef.current?.abort();
+      redeemAbortControllerRef.current = null;
+    }, 20_000);
+    return () => {
+      if (releaseWatchdogTimeoutRef.current) {
+        clearTimeout(releaseWatchdogTimeoutRef.current);
+        releaseWatchdogTimeoutRef.current = null;
+      }
+    };
+  }, [releaseModalOpen, releaseStatus]);
+
+  const closeReleaseModal = () => {
+    setReleaseModalVisible(false);
+    if (releaseCloseTimeoutRef.current) clearTimeout(releaseCloseTimeoutRef.current);
+    releaseCloseTimeoutRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
+      setReleaseModalOpen(false);
+      setReleaseStatus("loading");
+      setReleaseError(null);
+    }, 260);
+  };
 
   const handleDownload = async (format: "pdf" | "docx") => {
     if (downloading) return;
     setDownloading(format);
-    setDownloadStage("preparing");
     try {
       await downloadFromApi({
         url: `/api/cv-adaptation/${adaptation.id}/download?format=${format}`,
-        fallbackFilename:
-          format === "pdf" ? `${cvFileName}.pdf` : `${cvFileName}.docx`,
+        fallbackFilename: format === "pdf" ? `${cvFileName}.pdf` : `${cvFileName}.docx`,
         onStageChange: setDownloadStage,
       });
     } finally {
-      setDownloading(null);
-      setDownloadStage(null);
+      if (isMountedRef.current) {
+        setDownloading(null);
+        setDownloadStage(null);
+      }
     }
   };
 
   const handleRedeem = async () => {
-    if (redeeming) return;
+    if (redeeming || redeemInFlightRef.current) return;
+    redeemInFlightRef.current = true;
     setRedeeming(true);
-    setRedeemError(null);
+    const startedAt = Date.now();
+    setReleaseModalOpen(true);
+    requestAnimationFrame(() => setReleaseModalVisible(true));
+    setReleaseStatus("loading");
+    setReleaseError(null);
+
+    redeemAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    redeemAbortControllerRef.current = controller;
+    const timeoutId = setTimeout(() => controller.abort(), REDEEM_REQUEST_TIMEOUT_MS);
+
     try {
-      const res = await fetch(
-        `/api/cv-adaptation/${adaptation.id}/redeem-credit`,
-        { method: "POST", cache: "no-store" },
-      );
-      if (!res.ok) {
-        let msg = "Não foi possível liberar o CV agora.";
+      const response = await fetch(redeemHref, {
+        method: "POST",
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        let msg = "Falha ao liberar CV";
         try {
-          const body = (await res.json()) as { message?: string };
-          if (typeof body.message === "string" && body.message.trim())
-            msg = body.message;
-        } catch {
-          // no-op
-        }
+          const body = (await response.json()) as { message?: string };
+          if (typeof body.message === "string" && body.message.trim()) msg = body.message;
+        } catch { /* no-op */ }
         throw new Error(msg);
       }
-      setWasUnlockedInSession(true);
-      setHasCredits((c) => (c === true ? false : c));
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < MIN_RELEASE_LOADING_MS) {
+        await new Promise((r) => setTimeout(r, MIN_RELEASE_LOADING_MS - elapsed));
+      }
+      if (!isMountedRef.current) return;
+      setWasRedeemedInSession(true);
+      try { sessionStorage.setItem(redeemSessionKey, "1"); } catch { /* no-op */ }
+      setReleaseStatus("success");
     } catch (err) {
-      setRedeemError(
-        err instanceof Error ? err.message : "Erro ao liberar CV.",
-      );
+      if (!isMountedRef.current) return;
+      const msg = (() => {
+        if (err instanceof DOMException && err.name === "AbortError")
+          return "A liberação demorou mais do que o esperado. Verifique sua conexão e tente novamente.";
+        if (err instanceof TypeError)
+          return "Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.";
+        if (err instanceof Error && err.message) return err.message;
+        return "Não foi possível liberar o CV agora. Tente novamente.";
+      })();
+      setReleaseStatus("error");
+      setReleaseError(msg);
     } finally {
-      setRedeeming(false);
+      clearTimeout(timeoutId);
+      if (redeemAbortControllerRef.current === controller) redeemAbortControllerRef.current = null;
+      if (isMountedRef.current) setRedeeming(false);
+      redeemInFlightRef.current = false;
     }
   };
 
-  const score = isCurrent || isBest ? scoreAfter : null;
+  const score = adaptation.scoreAfter ?? null;
+  const scoreBefore = adaptation.scoreBefore ?? null;
   const delta =
-    score !== null && scoreBefore !== null ? score - scoreBefore : null;
+    score !== null && scoreBefore !== null
+      ? score - scoreBefore
+      : null;
 
   return (
     <div
@@ -848,37 +934,39 @@ function AnaliseRow({
         </div>
 
         {/* Score box */}
-        {score !== null && (
-          <div style={{ textAlign: "right", flexShrink: 0 }}>
-            <div
-              style={{
-                fontSize: 25,
-                fontWeight: 600,
-                letterSpacing: -1,
-                lineHeight: 1,
-                color: "#2a6a10",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {score}
-              <span style={{ fontSize: 14, marginLeft: 1, fontWeight: 500 }}>
-                %
-              </span>
-            </div>
-            {delta !== null && (
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          {score !== null && (
+            <>
               <div
                 style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  color: "#5a8a2a",
-                  marginTop: 3,
+                  fontSize: 25,
+                  fontWeight: 600,
+                  letterSpacing: -1,
+                  lineHeight: 1,
+                  color: "#2a6a10",
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
-                +{delta}% após ajustes
+                {score}
+                <span style={{ fontSize: 14, marginLeft: 1, fontWeight: 500 }}>
+                  %
+                </span>
               </div>
-            )}
-          </div>
-        )}
+              {delta !== null && (
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    color: "#5a8a2a",
+                    marginTop: 3,
+                  }}
+                >
+                  +{delta}% após ajustes
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Action buttons */}
@@ -886,10 +974,12 @@ function AnaliseRow({
         style={{
           display: "flex",
           alignItems: "center",
+          justifyContent: "space-between",
           gap: 7,
           flexWrap: "wrap",
         }}
       >
+        <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
         <a
           href={`/adaptar/resultado?adaptationId=${adaptation.id}`}
           style={{
@@ -924,21 +1014,7 @@ function AnaliseRow({
           Rever análise
         </a>
 
-        {isProcessing ? (
-          <span
-            style={{
-              background: "#F2F2F2",
-              borderRadius: 7,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 500,
-              color: "#666",
-              fontFamily: GEIST,
-            }}
-          >
-            Processando...
-          </span>
-        ) : isUnlocked ? (
+        {canDownloadNow ? (
           <>
             <button
               type="button"
@@ -959,20 +1035,8 @@ function AnaliseRow({
                 fontFamily: GEIST,
               }}
             >
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M12 3v12" />
-                <path d="m7 10 5 5 5-5" />
-                <path d="M5 21h14" />
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
               </svg>
               PDF
             </button>
@@ -995,45 +1059,13 @@ function AnaliseRow({
                 fontFamily: GEIST,
               }}
             >
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M12 3v12" />
-                <path d="m7 10 5 5 5-5" />
-                <path d="M5 21h14" />
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
               </svg>
               DOCX
             </button>
           </>
-        ) : hasCredits === false ? (
-          <a
-            href={plansHref}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              background: "#0a0a0a",
-              color: "#fafaf6",
-              border: "none",
-              borderRadius: 7,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 600,
-              textDecoration: "none",
-              fontFamily: GEIST,
-            }}
-          >
-            Liberar CV · Ver planos
-          </a>
-        ) : (
+        ) : canRedeemNow && hasCredits ? (
           <button
             type="button"
             onClick={() => void handleRedeem()}
@@ -1053,26 +1085,76 @@ function AnaliseRow({
               fontFamily: GEIST,
             }}
           >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V8a4 4 0 1 1 8 0" />
+            </svg>
             {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
           </button>
+        ) : canRedeemNow ? (
+          <a
+            href={plansHref}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              background: "#0a0a0a",
+              color: "#fafaf6",
+              border: "none",
+              borderRadius: 7,
+              padding: "6px 10px",
+              fontSize: 12,
+              fontWeight: 600,
+              textDecoration: "none",
+              fontFamily: GEIST,
+            }}
+          >
+            Liberar CV · 1 Crédito
+          </a>
+        ) : null}
+        </div>
+        {adaptation.canDownloadBaseCv && (
+          <a
+            href={`/api/cv-adaptation/${adaptation.id}/base-cv`}
+            download
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              background: "rgba(255,255,255,0.9)",
+              color: "#6a6560",
+              border: "1px solid rgba(10,10,10,0.12)",
+              borderRadius: 7,
+              padding: "6px 10px",
+              fontSize: 12,
+              fontWeight: 500,
+              textDecoration: "none",
+              fontFamily: GEIST,
+              flexShrink: 0,
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+            </svg>
+            CV usado na análise
+          </a>
         )}
       </div>
-      {redeemError && (
-        <p
-          style={{
-            margin: "8px 0 0",
-            fontSize: 11.5,
-            color: "#991b1b",
-            fontFamily: GEIST,
-          }}
-        >
-          {redeemError}
-        </p>
-      )}
       <DownloadProgressOverlay
         open={downloadStage !== null}
         stage={downloadStage}
         format={downloading}
+      />
+      <CvReleaseModal
+        open={releaseModalOpen}
+        visible={releaseModalVisible}
+        status={releaseStatus}
+        message={releaseError}
+        canClose={releaseStatus !== "loading"}
+        onClose={closeReleaseModal}
+        onDownloadPdf={() => void handleDownload("pdf")}
+        onDownloadDocx={() => void handleDownload("docx")}
+        downloading={downloading}
+        canDownload={releaseStatus === "success"}
       />
     </div>
   );
@@ -1134,11 +1216,20 @@ function AnalisesSection({
             Nenhuma análise registrada ainda.
           </div>
         ) : (
-          adaptations.map((a, idx) => {
+          [...adaptations]
+            .sort((a, b) => {
+              const aIsSent = a.id === application.bestCvAdaptationId && application.appliedAt !== null;
+              const bIsSent = b.id === application.bestCvAdaptationId && application.appliedAt !== null;
+              if (aIsSent !== bIsSent) return aIsSent ? -1 : 1;
+              const aScore = a.scoreAfter ?? -1;
+              const bScore = b.scoreAfter ?? -1;
+              return bScore - aScore;
+            })
+            .map((a, idx, arr) => {
             const isCurrent = a.id === application.currentCvAdaptationId;
             const isBest = a.id === application.bestCvAdaptationId;
             const isSent = isBest && application.appliedAt !== null;
-            const isLast = idx === adaptations.length - 1;
+            const isLast = idx === arr.length - 1;
             return (
               <AnaliseRow
                 key={a.id}
@@ -1147,8 +1238,6 @@ function AnalisesSection({
                 isCurrent={isCurrent}
                 isBest={isBest}
                 isSent={isSent}
-                scoreAfter={application.scoreAfter}
-                scoreBefore={application.scoreBefore}
                 isLast={isLast}
                 companyName={application.companyName}
                 jobTitle={application.jobTitle}
