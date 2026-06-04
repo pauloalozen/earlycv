@@ -3655,16 +3655,27 @@ function AddToCalendarButton({
           gap: 5,
           padding: "7px 13px",
           borderRadius: 8,
-          border: "1px solid rgba(10,10,10,0.12)",
-          background: open ? "#f0f0ea" : "rgba(255,255,255,0.7)",
-          color: "#3a3a36",
+          border: "1.5px dashed rgba(180,140,10,0.40)",
+          background: open ? "rgba(245,197,24,0.22)" : "rgba(245,197,24,0.12)",
+          color: "#7a5a04",
           fontSize: 12.5,
           fontWeight: 500,
           cursor: "pointer",
           fontFamily: GEIST,
         }}
       >
-        📅 Salvar na agenda ▾
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+          <line x1="8" y1="14" x2="8" y2="14" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="12" y1="14" x2="12" y2="14" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="16" y1="14" x2="16" y2="14" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="8" y1="18" x2="8" y2="18" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="12" y1="18" x2="12" y2="18" strokeWidth="2.5" strokeLinecap="round" />
+        </svg>
+        Salvar na agenda ▾
       </button>
 
       {open && (
