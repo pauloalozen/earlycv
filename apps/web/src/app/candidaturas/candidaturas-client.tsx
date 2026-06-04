@@ -51,7 +51,7 @@ const FILTERS: {
 }[] = [
   { key: "todas", label: "Todas", statuses: null },
   { key: "abertas", label: "Em aberto", statuses: OPEN_STATUSES },
-  { key: "processo", label: "Em processo", statuses: IN_PROCESS_STATUSES },
+  { key: "processo", label: "Em andamento", statuses: IN_PROCESS_STATUSES },
   { key: "finalizadas", label: "Finalizadas", statuses: CLOSED_STATUSES },
 ];
 
