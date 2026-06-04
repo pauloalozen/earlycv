@@ -12,6 +12,7 @@ import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getJobApplication } from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
+import { listMyResumes } from "@/lib/resumes-api";
 import { DetailClient } from "./detail-client";
 
 export const metadata: Metadata = {
@@ -31,9 +32,10 @@ export default async function CandidaturaDetailPage({ params }: Props) {
 
   const { id } = await params;
 
-  const [applicationResult, planResult] = await Promise.allSettled([
+  const [applicationResult, planResult, resumesResult] = await Promise.allSettled([
     getJobApplication(id),
     getMyPlan(),
+    listMyResumes(),
   ]);
 
   if (applicationResult.status === "rejected") {
@@ -43,6 +45,9 @@ export default async function CandidaturaDetailPage({ params }: Props) {
   const application = applicationResult.value;
   const planInfo = planResult.status === "fulfilled" ? planResult.value : null;
   const availableCredits = toHeaderAvailableCredits(planInfo);
+  const resumeTitleById = new Map(
+    (resumesResult.status === "fulfilled" ? resumesResult.value : []).map((r) => [r.id, r.title]),
+  );
 
   // Compute per-adaptation scores exactly like dashboard_old does
   const contentResponses = await Promise.allSettled(
@@ -58,14 +63,15 @@ export default async function CandidaturaDetailPage({ params }: Props) {
             .join("\n")
         : null;
       const notes = signal.adjustments.notes ?? (ajustesConteudo || null);
-      return { id: a.id, scoreBefore: signal.adjustments.scoreBefore, scoreAfter: signal.score, notes };
+      const masterResumeTitle = a.adaptedResumeId ? (resumeTitleById.get(a.adaptedResumeId) ?? null) : null;
+      return { id: a.id, scoreBefore: signal.adjustments.scoreBefore, scoreAfter: signal.score, notes, masterResumeTitle };
     }),
   );
 
-  const scoresById = new Map<string, { scoreBefore: number | null; scoreAfter: number | null; notes: string | null }>();
+  const scoresById = new Map<string, { scoreBefore: number | null; scoreAfter: number | null; notes: string | null; masterResumeTitle: string | null }>();
   for (const r of contentResponses) {
     if (r.status === "fulfilled") {
-      scoresById.set(r.value.id, { scoreBefore: r.value.scoreBefore, scoreAfter: r.value.scoreAfter, notes: r.value.notes });
+      scoresById.set(r.value.id, { scoreBefore: r.value.scoreBefore, scoreAfter: r.value.scoreAfter, notes: r.value.notes, masterResumeTitle: r.value.masterResumeTitle });
     }
   }
 
@@ -76,6 +82,7 @@ export default async function CandidaturaDetailPage({ params }: Props) {
       scoreBefore: scoresById.get(a.id)?.scoreBefore ?? null,
       scoreAfter: scoresById.get(a.id)?.scoreAfter ?? null,
       notes: scoresById.get(a.id)?.notes ?? null,
+      masterResumeTitle: scoresById.get(a.id)?.masterResumeTitle ?? null,
     })),
   };
 
