@@ -2702,117 +2702,81 @@ function StatusPopover({
   onClose: () => void;
   onUpdated: () => void;
 }) {
-  const [selected, setSelected] = useState<JobApplicationStatus>(status);
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const selectId = useId();
+  const [savingStatus, setSavingStatus] = useState<JobApplicationStatus | null>(
+    null,
+  );
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setSelected(status);
-  }, [status]);
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [onClose]);
 
-  const isDirty = selected !== status;
-
-  function handleSave() {
-    if (!isDirty || pending) return;
+  function handleSelect(newStatus: JobApplicationStatus) {
+    if (newStatus === status || pending) return;
+    setSavingStatus(newStatus);
     startTransition(async () => {
       try {
-        await updateJobApplicationStatus(applicationId, selected);
+        await updateJobApplicationStatus(applicationId, newStatus);
         onClose();
         onUpdated();
       } catch {
-        setError("Falha ao atualizar. Tente novamente.");
+        setSavingStatus(null);
       }
     });
   }
 
   return (
     <div
+      ref={ref}
       style={{
         position: "absolute",
         top: "calc(100% + 6px)",
         right: 0,
         zIndex: 50,
-        width: 220,
+        minWidth: 180,
         background: "#fff",
         border: "1px solid rgba(10,10,10,0.10)",
         borderRadius: 12,
-        padding: "14px 16px",
+        padding: "6px",
         boxShadow: "0 8px 24px rgba(10,10,10,0.12)",
       }}
     >
-      <label htmlFor={selectId} style={{ display: "none" }}>
-        Status da candidatura
-      </label>
-      <select
-        id={selectId}
-        value={selected}
-        onChange={(e) => {
-          setSelected(e.target.value as JobApplicationStatus);
-          setError(null);
-        }}
-        style={{ ...inputStyle, marginBottom: 10, cursor: "pointer" }}
-      >
-        {USER_VISIBLE_STATUS_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      {error && (
-        <p
-          style={{
-            margin: "0 0 10px",
-            fontSize: 12,
-            color: "#991b1b",
-            background: "#fee2e2",
-            padding: "7px 10px",
-            borderRadius: 7,
-          }}
-        >
-          {error}
-        </p>
-      )}
-      <div style={{ display: "flex", gap: 8 }}>
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            flex: 1,
-            padding: "9px 0",
-            borderRadius: 8,
-            border: "1px solid rgba(10,10,10,0.12)",
-            background: "#fff",
-            color: "#0a0a0a",
-            fontSize: 12.5,
-            fontWeight: 500,
-            cursor: "pointer",
-            fontFamily: GEIST,
-          }}
-        >
-          Cancelar
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!isDirty || pending}
-          style={{
-            flex: 1,
-            padding: "9px 0",
-            borderRadius: 8,
-            border: "none",
-            background: isDirty && !pending ? "#0a0a0a" : "rgba(10,10,10,0.08)",
-            color: isDirty && !pending ? "#fafaf6" : "#8a8a85",
-            fontSize: 12.5,
-            fontWeight: 500,
-            cursor: isDirty && !pending ? "pointer" : "not-allowed",
-            fontFamily: GEIST,
-            transition: "all 140ms ease",
-          }}
-        >
-          {pending ? "Salvando…" : "Salvar"}
-        </button>
-      </div>
+      {USER_VISIBLE_STATUS_OPTIONS.map((opt) => {
+        const isCurrent = opt.value === status;
+        const isSaving = savingStatus === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => handleSelect(opt.value)}
+            disabled={pending}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: "8px 12px",
+              borderRadius: 7,
+              border: "none",
+              background: isCurrent ? "rgba(10,10,10,0.05)" : "transparent",
+              color: isCurrent ? "#0a0a0a" : "#3a3a36",
+              fontSize: 13,
+              fontWeight: isCurrent ? 600 : 400,
+              textAlign: "left",
+              cursor: isCurrent || pending ? "default" : "pointer",
+              fontFamily: GEIST,
+              opacity: pending && !isSaving ? 0.4 : 1,
+            }}
+          >
+            {isSaving ? "Salvando…" : opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -3058,22 +3022,20 @@ export function DetailClient({ application, header }: Props) {
             {/* Title + actions on same line */}
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
+                display: "grid",
+                gridTemplateColumns: "1fr auto",
                 gap: 16,
-                flexWrap: "wrap",
+                alignItems: "center",
                 marginBottom: 11,
               }}
             >
               <h1
                 style={{
-                  flex: 1,
-                  minWidth: 0,
                   margin: 0,
                   fontSize: "clamp(22px, 2.4vw, 30px)",
                   fontWeight: 500,
                   letterSpacing: -1,
-                  lineHeight: 1.08,
+                  lineHeight: 1.15,
                   color: "#0a0a0a",
                 }}
               >
@@ -3085,8 +3047,6 @@ export function DetailClient({ application, header }: Props) {
                 style={{
                   display: "flex",
                   gap: 8,
-                  flexShrink: 0,
-                  flexWrap: "wrap",
                   alignItems: "center",
                 }}
               >
