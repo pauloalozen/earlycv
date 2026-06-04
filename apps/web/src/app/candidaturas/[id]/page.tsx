@@ -49,7 +49,16 @@ export default async function CandidaturaDetailPage({ params }: Props) {
     application.cvAdaptations.map(async (a) => {
       const content = await getCvAdaptationContent(a.id);
       const signal = extractDashboardAnalysisSignal(content.adaptedContentJson);
-      return { id: a.id, scoreBefore: signal.adjustments.scoreBefore, scoreAfter: signal.score, notes: signal.adjustments.notes };
+      // adaptation_notes é o campo preferido; fallback: ajustes_conteudo titles
+      const json = content.adaptedContentJson as Record<string, unknown>;
+      const ajustesConteudo = Array.isArray(json.ajustes_conteudo)
+        ? (json.ajustes_conteudo as Array<{ titulo?: unknown; descricao?: unknown }>)
+            .filter((a) => typeof a.titulo === "string" && a.titulo.trim())
+            .map((a) => `${a.titulo}${typeof a.descricao === "string" && a.descricao.trim() ? `: ${a.descricao}` : ""}`)
+            .join("\n")
+        : null;
+      const notes = signal.adjustments.notes ?? (ajustesConteudo || null);
+      return { id: a.id, scoreBefore: signal.adjustments.scoreBefore, scoreAfter: signal.score, notes };
     }),
   );
 

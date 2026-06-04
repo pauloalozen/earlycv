@@ -1209,7 +1209,7 @@ function AnaliseRow({
             background: "rgba(10,10,10,0.5)",
             padding: "16px",
             display: "flex",
-            alignItems: "flex-start",
+            alignItems: "center",
             justifyContent: "center",
             overflowY: "auto",
             transition: "opacity 240ms ease-out",
@@ -1289,7 +1289,7 @@ function AnaliseRow({
               <p style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 500, letterSpacing: 1, textTransform: "uppercase", color: "#405410", margin: 0 }}>
                 O que foi feito no seu CV
               </p>
-              <p style={{ fontSize: 13.5, color: "#45443e", lineHeight: 1.6, margin: 0 }}>
+              <p style={{ fontSize: 13.5, color: "#45443e", lineHeight: 1.6, margin: 0, whiteSpace: "pre-line" }}>
                 {adaptation.notes ?? "Nesta análise, o score e os ajustes aplicados foram registrados sem texto descritivo adicional."}
               </p>
             </div>
