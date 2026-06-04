@@ -133,6 +133,7 @@ export class JobApplicationsController {
       interviewTitle: dto.interviewTitle,
       interviewerName: dto.interviewerName,
       interviewMeetingUrl: dto.interviewMeetingUrl,
+      interviewLocation: dto.interviewLocation,
     });
   }
 

@@ -466,6 +466,7 @@ export class JobApplicationsService {
           interviewTitle: data.interviewTitle,
           interviewerName: data.interviewerName ?? null,
           interviewMeetingUrl: data.interviewMeetingUrl ?? null,
+          interviewLocation: data.interviewLocation ?? null,
         },
       });
 

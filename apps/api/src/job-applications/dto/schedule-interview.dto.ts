@@ -16,4 +16,9 @@ export class ScheduleInterviewDto {
   @IsOptional()
   @IsUrl({}, { message: "interviewMeetingUrl deve ser uma URL válida" })
   interviewMeetingUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  interviewLocation?: string;
 }

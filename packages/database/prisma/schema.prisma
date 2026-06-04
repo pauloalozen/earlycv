@@ -1155,6 +1155,7 @@ model JobApplication {
   interviewTitle         String?
   interviewerName        String?
   interviewMeetingUrl    String?
+  interviewLocation      String?
   archivedAt             DateTime?
   deletedAt              DateTime?
   createdAt              DateTime                 @default(now())

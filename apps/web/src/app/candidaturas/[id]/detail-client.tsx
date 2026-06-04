@@ -3133,6 +3133,7 @@ function InterviewScheduleModal({
   const [title, setTitle] = useState("");
   const [interviewer, setInterviewer] = useState("");
   const [meetingUrl, setMeetingUrl] = useState("");
+  const [location, setLocation] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -3155,6 +3156,7 @@ function InterviewScheduleModal({
           interviewTitle: title.trim(),
           interviewerName: interviewer.trim() || undefined,
           interviewMeetingUrl: url,
+          interviewLocation: location.trim() || undefined,
         });
         onClose();
         onUpdated();
@@ -3262,13 +3264,25 @@ function InterviewScheduleModal({
         </div>
 
         {/* Meeting link */}
-        <div style={{ marginBottom: error ? 8 : 20 }}>
+        <div style={{ marginBottom: 14 }}>
           <label style={labelStyle}>Link da reunião (opcional)</label>
           <input
             type="url"
             value={meetingUrl}
             onChange={(e) => setMeetingUrl(e.target.value)}
             placeholder="meet.google.com/..."
+            style={{ ...inputStyle }}
+          />
+        </div>
+
+        {/* Location */}
+        <div style={{ marginBottom: error ? 8 : 20 }}>
+          <label style={labelStyle}>Endereço / local (opcional)</label>
+          <input
+            type="text"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="Av. Paulista, 1000 — São Paulo"
             style={{ ...inputStyle }}
           />
         </div>
@@ -3473,9 +3487,11 @@ function InterviewScheduledCard({
           {application.interviewTitle ? ` — ${application.interviewTitle}` : ""}
           {application.companyName ? ` com ${application.companyName}` : ""}
         </div>
-        {application.interviewerName && (
+        {(application.interviewerName || application.interviewLocation) && (
           <div style={{ fontSize: 12, color: "#6a6560", fontFamily: GEIST }}>
-            {application.interviewerName}
+            {[application.interviewerName, application.interviewLocation]
+              .filter(Boolean)
+              .join(" · ")}
           </div>
         )}
       </div>
@@ -3563,8 +3579,11 @@ function buildGoogleCalendarUrl(application: JobApplicationDetailDto): string {
     ]
       .filter(Boolean)
       .join("\n"),
-    ...(application.interviewMeetingUrl
-      ? { location: application.interviewMeetingUrl }
+    ...(application.interviewLocation || application.interviewMeetingUrl
+      ? {
+          location:
+            application.interviewLocation ?? application.interviewMeetingUrl!,
+        }
       : {}),
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
@@ -3590,9 +3609,11 @@ function downloadIcs(application: JobApplicationDetailDto) {
     application.interviewerName
       ? `DESCRIPTION:Entrevistador: ${application.interviewerName}`
       : "",
-    application.interviewMeetingUrl
-      ? `LOCATION:${application.interviewMeetingUrl}`
-      : "",
+    application.interviewLocation
+      ? `LOCATION:${application.interviewLocation}`
+      : application.interviewMeetingUrl
+        ? `LOCATION:${application.interviewMeetingUrl}`
+        : "",
     `UID:${uid}`,
     "END:VEVENT",
     "END:VCALENDAR",

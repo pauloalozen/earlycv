@@ -85,6 +85,7 @@ export type JobApplicationDto = {
   interviewTitle: string | null;
   interviewerName: string | null;
   interviewMeetingUrl: string | null;
+  interviewLocation: string | null;
   archivedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
@@ -299,6 +300,7 @@ export async function scheduleInterview(
     interviewTitle: string;
     interviewerName?: string;
     interviewMeetingUrl?: string;
+    interviewLocation?: string;
   },
 ): Promise<JobApplicationDto> {
   const response = await apiRequest(
