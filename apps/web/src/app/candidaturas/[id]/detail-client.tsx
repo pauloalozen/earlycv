@@ -3441,15 +3441,13 @@ export function DetailClient({ application, header }: Props) {
 
             {/* Right column */}
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <DetalhesCard application={application} />
+
               <Timeline
                 events={application.events}
                 scoreBefore={application.scoreBefore}
                 scoreAfter={application.scoreAfter}
               />
-
-              {hasCvAdaptations && <CvCard application={application} />}
-
-              <DetalhesCard application={application} />
             </div>
           </div>
         </div>
