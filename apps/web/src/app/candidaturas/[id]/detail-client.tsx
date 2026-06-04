@@ -57,6 +57,20 @@ const USER_VISIBLE_STATUS_OPTIONS: Array<{
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 
+// Returns { visible, close } — visible drives CSS transitions, close animates out then calls onClose
+function useModalFade(onClose: () => void) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  function close() {
+    setVisible(false);
+    setTimeout(onClose, 190);
+  }
+  return { visible, close };
+}
+
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "10px 13px",
@@ -2782,19 +2796,14 @@ function HiredCelebrationModal({
   onClose: () => void;
   onUpdated: () => void;
 }) {
-  const [mounted, setMounted] = useState(false);
+  const { visible: mounted, close } = useModalFade(onClose);
   const [pending, startTransition] = useTransition();
-
-  useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 40);
-    return () => clearTimeout(t);
-  }, []);
 
   function handleConfirm() {
     startTransition(async () => {
       try {
         await updateJobApplicationStatus(applicationId, "HIRED");
-        onClose();
+        close();
         onUpdated();
       } catch {
         // silent
@@ -2819,6 +2828,8 @@ function HiredCelebrationModal({
         justifyContent: "center",
         background: "rgba(10,10,10,0.45)",
         padding: "0 16px",
+        opacity: mounted ? 1 : 0,
+        transition: "opacity 180ms ease",
       }}
     >
       <style>{`
@@ -2967,7 +2978,7 @@ function HiredCelebrationModal({
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={close}
               style={{
                 flex: 1,
                 padding: "12px 0",
@@ -3069,6 +3080,7 @@ function StatusPopover({
         borderRadius: 12,
         padding: "6px",
         boxShadow: "0 8px 24px rgba(10,10,10,0.12)",
+        animation: "dropdownFadeIn 150ms cubic-bezier(0.22,1,0.36,1)",
       }}
     >
       {USER_VISIBLE_STATUS_OPTIONS.map((opt) => {
@@ -3128,6 +3140,7 @@ function InterviewScheduleModal({
   const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const localTime = `${String(today.getHours()).padStart(2, "0")}:${String(today.getMinutes()).padStart(2, "0")}`;
 
+  const { visible, close } = useModalFade(onClose);
   const [date, setDate] = useState(localDate);
   const [time, setTime] = useState(localTime);
   const [title, setTitle] = useState("");
@@ -3158,7 +3171,7 @@ function InterviewScheduleModal({
           interviewMeetingUrl: url,
           interviewLocation: location.trim() || undefined,
         });
-        onClose();
+        close();
         onUpdated();
       } catch {
         setError("Falha ao salvar. Tente novamente.");
@@ -3188,9 +3201,11 @@ function InterviewScheduleModal({
         justifyContent: "center",
         background: "rgba(10,10,10,0.35)",
         padding: "0 16px",
+        opacity: visible ? 1 : 0,
+        transition: "opacity 180ms ease",
       }}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) close();
       }}
     >
       <div
@@ -3201,6 +3216,9 @@ function InterviewScheduleModal({
           borderRadius: 16,
           padding: "28px 24px 24px",
           boxShadow: "0 20px 60px rgba(10,10,10,0.18)",
+          transform: visible ? "translateY(0)" : "translateY(12px)",
+          transition: "transform 200ms cubic-bezier(0.22,1,0.36,1), opacity 180ms ease",
+          opacity: visible ? 1 : 0,
         }}
       >
         <div
@@ -3305,7 +3323,7 @@ function InterviewScheduleModal({
         <div style={{ display: "flex", gap: 8 }}>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             style={{
               flex: 1,
               padding: "10px 0",
@@ -3712,6 +3730,7 @@ function AddToCalendarButton({
             padding: "5px",
             boxShadow: "0 8px 24px rgba(10,10,10,0.12)",
             minWidth: 190,
+            animation: "dropdownFadeIn 150ms cubic-bezier(0.22,1,0.36,1)",
           }}
         >
           <a
@@ -3766,6 +3785,7 @@ function JobUrlModal({
   onClose: () => void;
   onUpdated: () => void;
 }) {
+  const { visible, close } = useModalFade(onClose);
   const [value, setValue] = useState(currentUrl ?? "");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -3794,7 +3814,7 @@ function JobUrlModal({
     startTransition(async () => {
       try {
         await updateJobApplicationUrl(applicationId, url);
-        onClose();
+        close();
         onUpdated();
       } catch {
         setError("Falha ao salvar. Tente novamente.");
@@ -3813,9 +3833,11 @@ function JobUrlModal({
         justifyContent: "center",
         background: "rgba(10,10,10,0.35)",
         padding: "0 16px",
+        opacity: visible ? 1 : 0,
+        transition: "opacity 180ms ease",
       }}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) close();
       }}
     >
       <div
@@ -3826,6 +3848,9 @@ function JobUrlModal({
           borderRadius: 16,
           padding: "28px 24px 24px",
           boxShadow: "0 20px 60px rgba(10,10,10,0.18)",
+          transform: visible ? "translateY(0)" : "translateY(12px)",
+          transition: "transform 200ms cubic-bezier(0.22,1,0.36,1), opacity 180ms ease",
+          opacity: visible ? 1 : 0,
         }}
       >
         <div
@@ -3873,7 +3898,7 @@ function JobUrlModal({
         <div style={{ display: "flex", gap: 8 }}>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             style={{
               flex: 1,
               padding: "10px 0",
@@ -4084,6 +4109,12 @@ export function DetailClient({ application, header }: Props) {
 
   return (
     <PageShell>
+      <style>{`
+        @keyframes dropdownFadeIn {
+          from { opacity: 0; transform: translateY(-5px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
       <div
         aria-hidden
         style={{
