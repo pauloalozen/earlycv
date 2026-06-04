@@ -1267,7 +1267,7 @@ function AnaliseRow({
                 <span style={{ fontWeight: 500 }}>Vaga:</span> {jobTitle} · {companyName}
               </p>
               <p style={{ fontSize: 13, color: "#0a0a0a", margin: 0 }}>
-                <span style={{ fontWeight: 500 }}>CV master usado:</span>{" "}
+                <span style={{ fontWeight: 500 }}>CV usado na análise:</span>{" "}
                 {adaptation.masterResumeTitle ?? "Não identificado"}
               </p>
             </div>

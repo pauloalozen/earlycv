@@ -63,7 +63,12 @@ export default async function CandidaturaDetailPage({ params }: Props) {
             .join("\n")
         : null;
       const notes = signal.adjustments.notes ?? (ajustesConteudo || null);
-      const masterResumeTitle = a.adaptedResumeId ? (resumeTitleById.get(a.adaptedResumeId) ?? null) : null;
+      const resumeUsed = a.adaptedResumeId
+        ? (resumesResult.status === "fulfilled" ? resumesResult.value : []).find((r) => r.id === a.adaptedResumeId) ?? null
+        : null;
+      const masterResumeTitle = resumeUsed
+        ? (resumeUsed.isMaster ? "CV Master" : resumeUsed.title)
+        : null;
       return { id: a.id, scoreBefore: signal.adjustments.scoreBefore, scoreAfter: signal.score, notes, masterResumeTitle };
     }),
   );
