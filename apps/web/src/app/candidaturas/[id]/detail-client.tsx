@@ -2758,7 +2758,7 @@ function HiredConfetti({ active }: { active: boolean }) {
             "--dx": `${p.dx}px`,
             "--rot": `${p.rot}deg`,
             animation: active
-              ? `cv-fall ${p.dur}s cubic-bezier(0.22,0.61,0.36,1) ${p.delay}s forwards`
+              ? `cv-fall-loop 5s cubic-bezier(0.22,0.61,0.36,1) ${p.delay}s infinite`
               : "none",
             boxShadow:
               p.color === "#c6ff3a" ? "0 0 8px rgba(198,255,58,0.4)" : "none",
@@ -2827,6 +2827,12 @@ function HiredCelebrationModal({
           12%  { opacity: 1; }
           100% { transform: translate3d(var(--dx,0),480px,0) rotate(var(--rot,540deg)); opacity: 0; }
         }
+        @keyframes cv-fall-loop {
+          0%   { transform: translate3d(0,-40px,0) rotate(0deg); opacity: 0; }
+          8%   { opacity: 1; }
+          48%  { transform: translate3d(var(--dx,0),520px,0) rotate(var(--rot,540deg)); opacity: 0; }
+          100% { transform: translate3d(0,-40px,0) rotate(0deg); opacity: 0; }
+        }
         @keyframes cv-pulse {
           0%   { transform: scale(0.6); opacity: 0.55; }
           70%  { transform: scale(1.55); opacity: 0; }
@@ -2837,7 +2843,7 @@ function HiredCelebrationModal({
         style={{
           position: "relative",
           width: "100%",
-          maxWidth: 400,
+          maxWidth: 500,
           background: "#fafaf6",
           borderRadius: 20,
           overflow: "hidden",
