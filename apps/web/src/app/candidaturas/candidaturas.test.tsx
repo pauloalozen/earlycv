@@ -44,6 +44,8 @@ vi.mock("@/lib/job-applications-api", () => ({
   splitJobApplicationAnalysis: vi.fn(),
 }));
 
+import * as dashboardMetrics from "@/lib/dashboard-test-metrics";
+import { getDashboardScoreColor } from "@/lib/dashboard-test-metrics";
 import type {
   InterviewPrepDto,
   JobApplicationDetailDto,
@@ -56,8 +58,6 @@ import {
   generateOrGetInterviewPrep,
   updateJobApplicationStatus,
 } from "@/lib/job-applications-api";
-import * as dashboardMetrics from "@/lib/dashboard-test-metrics";
-import { getDashboardScoreColor } from "@/lib/dashboard-test-metrics";
 import { DetailClient } from "./[id]/detail-client";
 import { CandidaturasClient } from "./candidaturas-client";
 
@@ -186,7 +186,7 @@ describe("CandidaturasClient", () => {
     expect(screen.getByText("Process Job")).toBeInTheDocument();
     expect(screen.getByText("Closed Job")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Em processo/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Em andamento/ }));
 
     expect(screen.queryByText("Open Job")).not.toBeInTheDocument();
     expect(screen.getByText("Process Job")).toBeInTheDocument();
@@ -327,8 +327,36 @@ describe("CandidaturasClient", () => {
     render(<CandidaturasClient initialApplications={apps} header={null} />);
 
     expect(screen.getByText("SALVA")).toBeInTheDocument();
-    expect(screen.getByText("OFERTA")).toBeInTheDocument();
+    expect(screen.getByText("EM ENTREVISTA")).toBeInTheDocument();
     expect(screen.getByText("CONTRATADO")).toBeInTheDocument();
+  });
+
+  it("maps CV_READY to the CV Liberado label", () => {
+    const apps = [makeApp({ id: "cv-ready-1", status: "CV_READY" })];
+
+    render(<CandidaturasClient initialApplications={apps} header={null} />);
+
+    expect(screen.getByText(/^CV LIBERADO$/i)).toBeInTheDocument();
+  });
+
+  it("maps APPLIED to the Candidatado label", () => {
+    const apps = [makeApp({ id: "applied-1", status: "APPLIED" })];
+
+    render(<CandidaturasClient initialApplications={apps} header={null} />);
+
+    expect(screen.getByText(/^CANDIDATADO$/i)).toBeInTheDocument();
+  });
+
+  it("maps REJECTED and WITHDRAWN to approved semantic labels", () => {
+    const apps = [
+      makeApp({ id: "rejected-1", status: "REJECTED" }),
+      makeApp({ id: "withdrawn-1", status: "WITHDRAWN" }),
+    ];
+
+    render(<CandidaturasClient initialApplications={apps} header={null} />);
+
+    expect(screen.getByText(/^RECUSADO$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^DESISTÊNCIA$/i)).toBeInTheDocument();
   });
 
   it("10. shows derived scores when application scores are null", async () => {
@@ -723,6 +751,33 @@ describe("CandidaturasClient", () => {
     render(<CandidaturasClient initialApplications={apps} header={null} />);
 
     expect(screen.queryByText(/Detalhes/)).not.toBeInTheDocument();
+  });
+
+  it("groups IN_PROCESS, ASSESSMENT, and OFFER under Em entrevista in the list", () => {
+    const apps = [
+      makeApp({ id: "process-1", status: "IN_PROCESS" }),
+      makeApp({ id: "assessment-1", status: "ASSESSMENT" }),
+      makeApp({ id: "offer-1", status: "OFFER" }),
+    ];
+
+    render(<CandidaturasClient initialApplications={apps} header={null} />);
+
+    expect(screen.getAllByText(/^EM ENTREVISTA$/i)).toHaveLength(3);
+    expect(screen.queryByText(/^EM PROCESSO$/i)).toBeNull();
+    expect(screen.queryByText(/^TESTE \/ CASE$/i)).toBeNull();
+    expect(screen.queryByText(/^OFERTA$/i)).toBeNull();
+  });
+
+  it("uses simplified filter wording for interview-stage applications", () => {
+    render(
+      <CandidaturasClient
+        initialApplications={[makeApp({ status: "INTERVIEW" })]}
+        header={null}
+      />,
+    );
+
+    expect(screen.getByText("Em andamento")).toBeInTheDocument();
+    expect(screen.queryByText("Em processo")).toBeNull();
   });
 
   it("14c. renders download action when current adaptation exists and cv is unlocked", () => {
