@@ -3154,7 +3154,7 @@ function RejectionFeedbackModal({
                 fontFamily: GEIST,
               }}
             >
-              Na próxima você vai melhor — e o EarlyCV vai te ajudar a chegar
+              Na próxima você vai melhor, e o EarlyCV vai te ajudar a chegar
               mais preparado. Conta pra gente como foi para aprendermos juntos.
             </p>
           </div>
@@ -3195,7 +3195,7 @@ function RejectionFeedbackModal({
                 letterSpacing: 0.4,
               }}
             >
-              Suas respostas alimentam a IA para os próximos processos
+              Suas respostas ajudam a te preparar melhor para as próximas
             </span>
           </div>
 
