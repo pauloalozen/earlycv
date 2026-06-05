@@ -112,7 +112,7 @@ export class JobApplicationsController {
     )
     dto: UpdateJobApplicationStatusDto,
   ) {
-    return this.service.updateStatus(user.id, id, dto.status);
+    return this.service.updateStatus(user.id, id, dto.status, dto.currentCvAdaptationId);
   }
 
   @Patch(":id/rejection-feedback")

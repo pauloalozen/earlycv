@@ -339,6 +339,14 @@ export default function AdaptarPage() {
   );
 
   useEffect(() => {
+    const prefill = sessionStorage.getItem("adaptar_prefill_job_description");
+    if (prefill) {
+      setJobDescription(prefill);
+      sessionStorage.removeItem("adaptar_prefill_job_description");
+    }
+  }, []);
+
+  useEffect(() => {
     router.prefetch("/adaptar/resultado");
     Promise.all([
       getAuthStatus(),

@@ -540,6 +540,7 @@ export class JobApplicationsService {
     userId: string,
     id: string,
     newStatus: JobApplicationStatus,
+    currentCvAdaptationId?: string,
   ) {
     const application = await this.database.jobApplication.findFirst({
       where: { id, userId, deletedAt: null },
@@ -562,6 +563,9 @@ export class JobApplicationsService {
         data: {
           status: newStatus,
           ...(appliedAt !== undefined ? { appliedAt } : {}),
+          ...(currentCvAdaptationId !== undefined
+            ? { currentCvAdaptationId }
+            : {}),
         },
       });
 

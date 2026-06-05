@@ -108,18 +108,12 @@ const JORNADA_STEPS: JornadaStep[] = [
   {
     key: "ANALYZED",
     label: "Analisada",
-    getMeta: (app) => {
-      if (app.scoreBefore !== null) return `score ${app.scoreBefore}%`;
-      return null;
-    },
+    getMeta: () => null,
   },
   {
     key: "CV_READY",
     label: "CV liberado",
-    getMeta: (app) => {
-      if (app.scoreAfter !== null) return `score ${app.scoreAfter}%`;
-      return null;
-    },
+    getMeta: () => null,
   },
   {
     key: "APPLIED",
@@ -623,6 +617,7 @@ function AnaliseRow({
   isLast,
   companyName,
   jobTitle,
+  onUpdated,
 }: {
   adaptation: {
     id: string;
@@ -643,6 +638,7 @@ function AnaliseRow({
   isLast: boolean;
   companyName: string;
   jobTitle: string;
+  onUpdated?: () => void;
 }) {
   const MIN_RELEASE_LOADING_MS = 3000;
   const REDEEM_REQUEST_TIMEOUT_MS = 15_000;
@@ -853,6 +849,7 @@ function AnaliseRow({
       } catch {
         /* no-op */
       }
+      onUpdated?.();
       setReleaseStatus("success");
     } catch (err) {
       if (!isMountedRef.current) return;
@@ -1642,8 +1639,10 @@ function AnaliseRow({
 
 function AnalisesSection({
   application,
+  onUpdated,
 }: {
   application: JobApplicationDetailDto;
+  onUpdated: () => void;
 }) {
   const adaptations = application.cvAdaptations;
 
@@ -1695,43 +1694,62 @@ function AnalisesSection({
             Nenhuma análise registrada ainda.
           </div>
         ) : (
-          [...adaptations]
-            .sort((a, b) => {
-              const aIsSent =
-                a.id === application.bestCvAdaptationId &&
-                application.appliedAt !== null;
-              const bIsSent =
-                b.id === application.bestCvAdaptationId &&
-                application.appliedAt !== null;
-              if (aIsSent !== bIsSent) return aIsSent ? -1 : 1;
-              const aScore = a.scoreAfter ?? -1;
-              const bScore = b.scoreAfter ?? -1;
-              return bScore - aScore;
-            })
-            .map((a, idx, arr) => {
-              const isCurrent = a.id === application.currentCvAdaptationId;
-              const isBest = a.id === application.bestCvAdaptationId;
-              const isSent = isBest && application.appliedAt !== null;
-              const isLast = idx === arr.length - 1;
-              return (
-                <AnaliseRow
-                  key={a.id}
-                  adaptation={a}
-                  applicationId={application.id}
-                  isCurrent={isCurrent}
-                  isBest={isBest}
-                  isSent={isSent}
-                  isLast={isLast}
-                  companyName={application.companyName}
-                  jobTitle={application.jobTitle}
-                />
+          (() => {
+              const sorted = [...adaptations].sort((a, b) => {
+                const aIsSent =
+                  a.id === application.currentCvAdaptationId &&
+                  application.appliedAt !== null;
+                const bIsSent =
+                  b.id === application.currentCvAdaptationId &&
+                  application.appliedAt !== null;
+                if (aIsSent !== bIsSent) return aIsSent ? -1 : 1;
+                const aScore = a.scoreAfter ?? -1;
+                const bScore = b.scoreAfter ?? -1;
+                return bScore - aScore;
+              });
+              const maxScore = Math.max(
+                ...sorted.map((a) => a.scoreAfter ?? -1),
               );
-            })
+              const bestId =
+                maxScore >= 0
+                  ? (sorted.find((a) => (a.scoreAfter ?? -1) === maxScore)
+                      ?.id ?? null)
+                  : null;
+              return sorted.map((a, idx, arr) => {
+                const isCurrent = a.id === application.currentCvAdaptationId;
+                const isBest = bestId !== null && a.id === bestId;
+                const isSent = a.id === application.currentCvAdaptationId && application.appliedAt !== null;
+                const isLast = idx === arr.length - 1;
+                return (
+                  <AnaliseRow
+                    key={a.id}
+                    adaptation={a}
+                    applicationId={application.id}
+                    isCurrent={isCurrent}
+                    isBest={isBest}
+                    isSent={isSent}
+                    isLast={isLast}
+                    companyName={application.companyName}
+                    jobTitle={application.jobTitle}
+                    onUpdated={onUpdated}
+                  />
+                );
+              });
+            })()
         )}
 
         {/* Nova análise button */}
-        <a
-          href={`/adaptar`}
+        <button
+          type="button"
+          onClick={() => {
+            if (application.jobDescriptionText) {
+              sessionStorage.setItem(
+                "adaptar_prefill_job_description",
+                application.jobDescriptionText,
+              );
+            }
+            window.location.href = "/adaptar";
+          }}
           style={{
             display: "flex",
             alignItems: "center",
@@ -1764,7 +1782,7 @@ function AnalisesSection({
             <path d="M12 5v14M5 12h14" />
           </svg>
           Fazer nova análise desta vaga
-        </a>
+        </button>
       </div>
     </div>
   );
@@ -2022,22 +2040,45 @@ function NotesSection({
 
 // ─── Timeline (registro de eventos) ──────────────────────────────
 
+type AdaptationSummary = JobApplicationDetailDto["cvAdaptations"][number];
+
+type TimelineItem =
+  | { kind: "event"; event: JobApplicationEvent }
+  | { kind: "analysis"; id: string; createdAt: string; scoreBefore: number | null; scoreAfter: number | null };
+
 function Timeline({
   events,
   scoreBefore,
   scoreAfter,
+  cvAdaptations,
 }: {
   events: JobApplicationEvent[];
   scoreBefore: number | null;
   scoreAfter: number | null;
+  cvAdaptations: AdaptationSummary[];
 }) {
-  if (events.length === 0) return null;
-
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const shouldClamp = events.length > 5;
-  const sortedEvents = [...events].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+
+  const displayItems: TimelineItem[] = [
+    ...events
+      .filter((e) => e.eventType !== "ANALYSIS_COMPLETED")
+      .map((e): TimelineItem => ({ kind: "event", event: e })),
+    ...cvAdaptations.map((a): TimelineItem => ({
+      kind: "analysis",
+      id: a.id,
+      createdAt: a.createdAt,
+      scoreBefore: a.scoreBefore,
+      scoreAfter: a.scoreAfter,
+    })),
+  ].sort(
+    (a, b) =>
+      new Date(b.kind === "event" ? b.event.createdAt : b.createdAt).getTime() -
+      new Date(a.kind === "event" ? a.event.createdAt : a.createdAt).getTime(),
   );
+
+  if (displayItems.length === 0) return null;
+
+  const shouldClamp = displayItems.length > 5;
 
   const scrollTimeline = (direction: "up" | "down") => {
     const node = scrollRef.current;
@@ -2049,18 +2090,21 @@ function Timeline({
     });
   };
 
-  function getEventBody(event: JobApplicationEvent): React.ReactNode {
+  function getItemBody(item: TimelineItem): React.ReactNode {
+    if (item.kind === "analysis") {
+      return item.scoreBefore !== null ? (
+        <>
+          Análise concluída. Score inicial <strong>{item.scoreBefore}%</strong>.
+        </>
+      ) : (
+        "Análise da vaga concluída."
+      );
+    }
+
+    const event = item.event;
     switch (event.eventType) {
       case "APPLICATION_CREATED":
         return "Candidatura criada automaticamente.";
-      case "ANALYSIS_COMPLETED":
-        return scoreBefore !== null ? (
-          <>
-            Análise concluída. Score inicial <strong>{scoreBefore}%</strong>.
-          </>
-        ) : (
-          "Análise da vaga concluída."
-        );
       case "CV_READY":
         if (scoreAfter !== null && scoreBefore !== null) {
           return (
@@ -2129,7 +2173,7 @@ function Timeline({
           REGISTRO DE EVENTOS
         </div>
         <span style={{ fontFamily: MONO, fontSize: 10, color: "#a8a6a0" }}>
-          {events.length} {events.length === 1 ? "evento" : "eventos"}
+          {displayItems.length} {displayItems.length === 1 ? "evento" : "eventos"}
         </span>
       </div>
 
@@ -2201,14 +2245,22 @@ function Timeline({
             msOverflowStyle: "none",
           }}
         >
-          {sortedEvents.map((event, idx) => {
-            const isLast = idx === sortedEvents.length - 1;
+          {displayItems.map((item, idx) => {
+            const isLast = idx === displayItems.length - 1;
             const isAccent =
-              event.eventType === "CV_READY" ||
-              event.eventType === "ANALYSIS_COMPLETED";
+              item.kind === "analysis" ||
+              (item.kind === "event" && item.event.eventType === "CV_READY");
+            const itemKey =
+              item.kind === "event" ? item.event.id : `analysis-${item.id}`;
+            const itemDate =
+              item.kind === "event" ? item.event.createdAt : item.createdAt;
+            const itemLabel =
+              item.kind === "event"
+                ? item.event.eventType.toLowerCase().replace(/_/g, ".")
+                : "analysis.completed";
             return (
               <div
-                key={event.id}
+                key={itemKey}
                 style={{
                   display: "grid",
                   gridTemplateColumns: "90px 16px 1fr",
@@ -2227,7 +2279,7 @@ function Timeline({
                     paddingTop: 1,
                   }}
                 >
-                  {new Date(event.createdAt).toLocaleDateString("pt-BR", {
+                  {new Date(itemDate).toLocaleDateString("pt-BR", {
                     day: "2-digit",
                     month: "short",
                   })}
@@ -2274,7 +2326,7 @@ function Timeline({
                       fontFamily: GEIST,
                     }}
                   >
-                    {getEventBody(event)}
+                    {getItemBody(item)}
                   </p>
                   <span
                     style={{
@@ -2284,7 +2336,7 @@ function Timeline({
                       color: "#8a8a85",
                     }}
                   >
-                    {event.eventType.toLowerCase().replace(/_/g, ".")}
+                    {itemLabel}
                   </span>
                 </div>
               </div>
@@ -3275,6 +3327,7 @@ function RejectionFeedbackModal({
 function StatusPopover({
   applicationId,
   status,
+  unlockedAdaptations,
   onClose,
   onUpdated,
   onInterviewSelected,
@@ -3283,6 +3336,7 @@ function StatusPopover({
 }: {
   applicationId: string;
   status: JobApplicationStatus;
+  unlockedAdaptations: Array<{ id: string; jobTitle: string | null; companyName: string | null; createdAt: string; scoreAfter: number | null }>;
   onClose: () => void;
   onUpdated: () => void;
   onInterviewSelected: () => void;
@@ -3290,9 +3344,9 @@ function StatusPopover({
   onRejectedSelected: () => void;
 }) {
   const [pending, startTransition] = useTransition();
-  const [savingStatus, setSavingStatus] = useState<JobApplicationStatus | null>(
-    null,
-  );
+  const [savingStatus, setSavingStatus] = useState<JobApplicationStatus | null>(null);
+  const [cvPickStep, setCvPickStep] = useState(false);
+  const [selectedCvId, setSelectedCvId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -3304,6 +3358,20 @@ function StatusPopover({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [onClose]);
+
+  function saveApplied(currentCvAdaptationId?: string) {
+    setSavingStatus("APPLIED");
+    startTransition(async () => {
+      try {
+        await updateJobApplicationStatus(applicationId, "APPLIED", currentCvAdaptationId);
+        onClose();
+        onUpdated();
+      } catch {
+        setSavingStatus(null);
+        setCvPickStep(false);
+      }
+    });
+  }
 
   function handleSelect(newStatus: JobApplicationStatus) {
     if (newStatus === status || pending) return;
@@ -3322,6 +3390,15 @@ function StatusPopover({
       onRejectedSelected();
       return;
     }
+    if (newStatus === "APPLIED" && unlockedAdaptations.length > 1) {
+      setCvPickStep(true);
+      setSelectedCvId(unlockedAdaptations[0]?.id ?? null);
+      return;
+    }
+    if (newStatus === "APPLIED") {
+      saveApplied(unlockedAdaptations[0]?.id);
+      return;
+    }
     setSavingStatus(newStatus);
     startTransition(async () => {
       try {
@@ -3332,6 +3409,112 @@ function StatusPopover({
         setSavingStatus(null);
       }
     });
+  }
+
+  if (cvPickStep) {
+    return (
+      <div
+        ref={ref}
+        style={{
+          position: "absolute",
+          top: "calc(100% + 6px)",
+          right: 0,
+          zIndex: 50,
+          width: 260,
+          background: "#fff",
+          border: "1px solid rgba(10,10,10,0.10)",
+          borderRadius: 12,
+          padding: "14px 14px 12px",
+          boxShadow: "0 8px 24px rgba(10,10,10,0.12)",
+          animation: "dropdownFadeIn 150ms cubic-bezier(0.22,1,0.36,1)",
+        }}
+      >
+        <div style={{ fontFamily: GEIST, fontSize: 12.5, fontWeight: 600, color: "#0a0a0a", marginBottom: 10 }}>
+          Qual CV foi usado na candidatura?
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+          {unlockedAdaptations.map((a) => {
+            const isSelected = selectedCvId === a.id;
+            const date = new Date(a.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => setSelectedCvId(a.id)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border: isSelected ? "1.5px solid #aadb2a" : "1px solid rgba(10,10,10,0.10)",
+                  background: isSelected ? "rgba(198,255,58,0.10)" : "rgba(10,10,10,0.02)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  fontFamily: GEIST,
+                  width: "100%",
+                }}
+              >
+                <div
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: "50%",
+                    border: isSelected ? "4px solid #aadb2a" : "1.5px solid rgba(10,10,10,0.25)",
+                    flexShrink: 0,
+                    background: "#fff",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: "#0a0a0a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {date}{a.scoreAfter !== null ? ` · ${a.scoreAfter}%` : ""}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => saveApplied(selectedCvId ?? undefined)}
+            disabled={pending || !selectedCvId}
+            style={{
+              flex: 1,
+              padding: "8px 0",
+              borderRadius: 8,
+              border: "none",
+              background: pending || !selectedCvId ? "rgba(10,10,10,0.08)" : "#0a0a0a",
+              color: pending || !selectedCvId ? "#8a8a85" : "#fafaf6",
+              fontSize: 12.5,
+              fontWeight: 500,
+              cursor: pending || !selectedCvId ? "not-allowed" : "pointer",
+              fontFamily: GEIST,
+            }}
+          >
+            {pending ? "Salvando…" : "Confirmar"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setCvPickStep(false)}
+            disabled={pending}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid rgba(10,10,10,0.12)",
+              background: "transparent",
+              color: "#8a8a85",
+              fontSize: 12.5,
+              cursor: pending ? "not-allowed" : "pointer",
+              fontFamily: GEIST,
+            }}
+          >
+            Voltar
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -4553,6 +4736,7 @@ export function DetailClient({ application, header }: Props) {
                     <StatusPopover
                       applicationId={application.id}
                       status={application.status}
+                      unlockedAdaptations={application.cvAdaptations.filter((a) => a.isUnlocked)}
                       onClose={() => setShowStatusEdit(false)}
                       onUpdated={handleUpdated}
                       onInterviewSelected={() => setShowInterviewModal(true)}
@@ -4718,7 +4902,7 @@ export function DetailClient({ application, header }: Props) {
           >
             {/* Left column */}
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-              <AnalisesSection application={application} />
+              <AnalisesSection application={application} onUpdated={handleUpdated} />
               <NotesSection
                 applicationId={application.id}
                 currentNotes={application.notes}
@@ -4735,6 +4919,7 @@ export function DetailClient({ application, header }: Props) {
                 events={application.events}
                 scoreBefore={application.scoreBefore}
                 scoreAfter={application.scoreAfter}
+                cvAdaptations={application.cvAdaptations}
               />
             </div>
           </div>

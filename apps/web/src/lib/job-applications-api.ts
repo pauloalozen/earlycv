@@ -287,9 +287,11 @@ export async function createJobApplication(
 export async function updateJobApplicationStatus(
   id: string,
   status: JobApplicationStatus,
+  currentCvAdaptationId?: string,
 ): Promise<JobApplicationDto> {
   const response = await apiRequest("PATCH", `/job-applications/${id}/status`, {
     status,
+    ...(currentCvAdaptationId !== undefined ? { currentCvAdaptationId } : {}),
   });
   if (!response.ok) throw new Error("Falha ao atualizar status");
   return response.json() as Promise<JobApplicationDto>;
