@@ -718,7 +718,7 @@ export default function ResultadoPage() {
       active = false;
       controller.abort();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [router]);
 
   // ── Handlers ──────────────────────────────────────────────
 
