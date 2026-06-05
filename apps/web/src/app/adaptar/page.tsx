@@ -373,7 +373,7 @@ export default function AdaptarPage() {
       const profileIsReady =
         ((status as { profileReadinessStatus?: unknown })
           .profileReadinessStatus) === "ready";
-      if (status.userName && hasResumeResult && profileIsReady) {
+      if (status.userName && hasResumeResult) {
         setCvMode("profile");
       } else {
         setCvMode("upload");
