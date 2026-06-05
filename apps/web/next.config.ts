@@ -76,6 +76,9 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "6mb",
     },
+    staleTimes: {
+      dynamic: 30,
+    },
   },
   turbopack: {
     root: workspaceRoot,
