@@ -17,6 +17,7 @@ export async function apiRequest(
   method: string,
   path: string,
   body?: FormData | Record<string, unknown>,
+  timeoutMs = 15_000,
 ): Promise<Response> {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get(APP_ACCESS_TOKEN_COOKIE_NAME)?.value;
@@ -49,7 +50,7 @@ export async function apiRequest(
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {

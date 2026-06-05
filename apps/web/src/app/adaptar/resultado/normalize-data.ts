@@ -191,12 +191,11 @@ export function normalizeData(raw: CvAnalysisData) {
   return {
     vaga: raw.vaga,
     fit: raw.fit,
-    secoes:
-      raw.secoes ?? {
-        experiencia: { score: scoreExp, max: 40 },
-        competencias: { score: scoreComp, max: 40 },
-        formatacao: { score: scoreFmt, max: 20 },
-      },
+    secoes: {
+      experiencia: { score: scoreExp, max: 40 },
+      competencias: { score: scoreComp, max: 40 },
+      formatacao: { score: scoreFmt, max: 20 },
+    },
     positivos,
     keywords: {
       presentes: kwPresentes,

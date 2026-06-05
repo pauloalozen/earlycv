@@ -369,7 +369,7 @@ export async function analyzeAuthenticatedCv(
   if (inputMode) {
     formData.set("inputMode", inputMode);
   }
-  const response = await apiRequest("POST", "/cv-adaptation/analyze", formData);
+  const response = await apiRequest("POST", "/cv-adaptation/analyze", formData, 60_000);
   if (!response.ok) {
     const raw = await response.text();
     return {
