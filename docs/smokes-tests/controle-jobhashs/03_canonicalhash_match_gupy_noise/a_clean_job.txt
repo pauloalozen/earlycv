@@ -1,0 +1,19 @@
+Analista de Dados Sênior
+
+Empresa: XPTO Tecnologia
+Local: Remoto
+Tipo: Tempo integral
+
+Estamos buscando uma pessoa Analista de Dados Sênior para apoiar áreas de negócio com análises, dashboards e modelagem de indicadores.
+
+Responsabilidades:
+- Construir dashboards em Power BI.
+- Criar consultas SQL para análise de dados.
+- Definir e acompanhar KPIs.
+- Apoiar times de negócio na tomada de decisão.
+
+Requisitos:
+- Experiência avançada com SQL.
+- Experiência com Power BI.
+- Conhecimento de modelagem de dados.
+- Capacidade de comunicação com áreas de negócio.

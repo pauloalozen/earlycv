@@ -548,7 +548,8 @@ model Resume {
   kind                    ResumeKind       @default(master)
   isMaster                Boolean          @default(true)
   basedOnResumeId         String?
-  templateId              String?
+  templateId           String?
+  canonicalJobId       String?
   targetJobId             String?
   targetJobTitle          String?
   createdAt               DateTime         @default(now())
@@ -566,6 +567,34 @@ model Resume {
   @@index([basedOnResumeId])
   @@index([templateId])
   @@index([targetJobId])
+}
+
+model CanonicalJob {
+  id                            String      @id @default(cuid())
+  canonicalJobHash              String      @unique
+  requirementSourceHash         String
+  canonicalJobJson              Json
+  canonicalizationModel         String
+  canonicalizationPromptVersion String
+  createdAt                     DateTime    @default(now())
+  updatedAt                     DateTime    @updatedAt
+  rawInputs                     JobRawInput[]
+  cvAdaptations                 CvAdaptation[]
+
+  @@index([requirementSourceHash])
+}
+
+model JobRawInput {
+  id                String       @id @default(cuid())
+  rawJobHash        String       @unique
+  rawText           String       @db.Text
+  normalizedRawText String       @db.Text
+  canonicalJobId    String
+  createdAt         DateTime     @default(now())
+
+  canonicalJob      CanonicalJob @relation(fields: [canonicalJobId], references: [id], onDelete: Cascade)
+
+  @@index([canonicalJobId, createdAt])
 }
 
 model MasterCvCanonicalExtraction {
@@ -631,6 +660,7 @@ model CvAdaptation {
   userId               String
   masterResumeId       String
   templateId           String?
+  canonicalJobId       String?
   adaptationSource     CvAdaptationSource  @default(uploaded_content)
   inputMode            CvAdaptationInputMode @default(file_upload)
   jobDescriptionText   String
@@ -666,6 +696,7 @@ model CvAdaptation {
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   masterResume  Resume          @relation("CvAdaptationMaster", fields: [masterResumeId], references: [id], onDelete: Cascade)
   template      ResumeTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  canonicalJob  CanonicalJob?   @relation(fields: [canonicalJobId], references: [id], onDelete: SetNull)
   adaptedResume Resume?         @relation("CvAdaptationResult", fields: [adaptedResumeId], references: [id], onDelete: SetNull)
   analysisCvSnapshot AnalysisCvSnapshot? @relation(fields: [analysisCvSnapshotId], references: [id], onDelete: SetNull)
   cvUnlock     CvUnlock?
@@ -677,6 +708,7 @@ model CvAdaptation {
   @@index([mpPaymentId])
   @@index([analysisCvSnapshotId])
   @@index([jobApplicationId])
+  @@index([canonicalJobId])
 }
 
 model CvUnlock {

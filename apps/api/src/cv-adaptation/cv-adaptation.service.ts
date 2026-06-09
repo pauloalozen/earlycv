@@ -10,6 +10,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from "@nestjs/common";
 import type {
@@ -54,6 +55,7 @@ import { createCvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto"
 import type { RedeemCreditDto } from "./dto/redeem-credit.dto";
 import type { SaveApplicationIdentityDto } from "./dto/save-application-identity.dto";
 import type { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
+import { JobCanonicalizationService } from "./job-canonicalization.service";
 
 type JobApplicationHookInput = {
   cvAdaptationId: string;
@@ -151,6 +153,12 @@ export class CvAdaptationService {
         return "partial";
       },
     },
+    @Optional()
+    @Inject(JobCanonicalizationService)
+    private readonly jobCanonicalizationService?: Pick<
+      JobCanonicalizationService,
+      "getOrCreateCanonicalJob"
+    >,
   ) {}
 
   private async triggerJobApplicationHook(
@@ -303,11 +311,17 @@ export class CvAdaptationService {
       userId,
     });
 
+    const canonicalJobId = await this.resolveCanonicalJobId(
+      normalizedJobDescriptionText,
+      "create",
+    );
+
     const adaptation = await this.database.cvAdaptation.create({
       data: {
         userId,
         masterResumeId,
         templateId: dto.templateId || null,
+        canonicalJobId,
         jobDescriptionText: normalizedJobDescriptionText,
         jobTitle: dto.jobTitle || null,
         companyName: dto.companyName || null,
@@ -431,6 +445,10 @@ export class CvAdaptationService {
     }
 
     const defaultTemplate = await this.getDefaultTemplate();
+    const canonicalJobId = await this.resolveCanonicalJobId(
+      dto.jobDescriptionText,
+      "claimGuest",
+    );
     const guestSessionHash = this.hashGuestSessionToken(
       dto.guestSessionPublicToken ?? analysisContext?.sessionPublicToken,
     );
@@ -484,6 +502,7 @@ export class CvAdaptationService {
           masterResumeId,
           jobDescriptionText: dto.jobDescriptionText,
           templateId: defaultTemplate?.id ?? null,
+          canonicalJobId,
           jobTitle: dto.jobTitle ?? null,
           companyName: dto.companyName ?? null,
           adaptedContentJson: adaptedContent as Prisma.InputJsonValue,
@@ -904,6 +923,28 @@ export class CvAdaptationService {
     return createHash("sha256").update(fileBuffer).digest("hex");
   }
 
+  private async resolveCanonicalJobId(
+    jobDescriptionText: string,
+    callerMethod: string,
+  ): Promise<string | null> {
+    if (!this.jobCanonicalizationService) {
+      return null;
+    }
+
+    try {
+      const result =
+        await this.jobCanonicalizationService.getOrCreateCanonicalJob(
+          jobDescriptionText,
+        );
+      return result.canonicalJobId;
+    } catch (error) {
+      this.logger.warn(
+        `[job-canonicalization] failed in ${callerMethod}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
   async saveGuestPreview(
     userId: string,
     dto: SaveGuestPreviewDto,
@@ -911,6 +952,10 @@ export class CvAdaptationService {
     analysisContext?: AnalysisRequestContext,
   ) {
     const defaultTemplate = await this.getDefaultTemplate();
+    const canonicalJobId = await this.resolveCanonicalJobId(
+      dto.jobDescriptionText,
+      "saveGuestPreview",
+    );
     const guestSessionHash = this.hashGuestSessionToken(
       dto.guestSessionPublicToken ?? analysisContext?.sessionPublicToken,
     );
@@ -1015,6 +1060,7 @@ export class CvAdaptationService {
         masterResumeId,
         jobDescriptionText: dto.jobDescriptionText,
         templateId: defaultTemplate?.id ?? null,
+        canonicalJobId,
         jobTitle: dto.jobTitle ?? null,
         companyName: dto.companyName ?? null,
         adaptedContentJson: dto.adaptedContentJson as Prisma.InputJsonValue,
@@ -2563,8 +2609,12 @@ export class CvAdaptationService {
         technical: this.parseStringArray(parsedSkills.technical),
       },
       state: profile.state ?? undefined,
-      languages: this.parseArray(profile.languagesJson) as CanonicalProfileData["languages"],
-      certifications: this.parseArray(profile.certificationsJson) as CanonicalProfileData["certifications"],
+      languages: this.parseArray(
+        profile.languagesJson,
+      ) as CanonicalProfileData["languages"],
+      certifications: this.parseArray(
+        profile.certificationsJson,
+      ) as CanonicalProfileData["certifications"],
     };
   }
 

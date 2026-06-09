@@ -15,6 +15,7 @@ import { CvAdaptationPdfService } from "./cv-adaptation-pdf.service";
 import { CvAdaptationProtectedAnalyzeService } from "./cv-adaptation-protected-analyze.service";
 import { CvAdaptationPublicController } from "./cv-adaptation-public.controller";
 import { CvAdaptationSnapshotCleanupScheduler } from "./cv-adaptation-snapshot-cleanup.scheduler";
+import { JobCanonicalizationService } from "./job-canonicalization.service";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { CvAdaptationSnapshotCleanupScheduler } from "./cv-adaptation-snapshot-c
     CvAdaptationDocxService,
     CvAdaptationProtectedAnalyzeService,
     CvAdaptationSnapshotCleanupScheduler,
+    JobCanonicalizationService,
     {
       provide: "OPENAI_CLIENT",
       useFactory: () =>

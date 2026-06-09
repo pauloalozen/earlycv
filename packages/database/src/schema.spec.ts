@@ -549,3 +549,31 @@ test("MasterCvCanonicalExtraction schema exists with status enum, payload fields
     "MasterCvCanonicalExtraction should index status+updatedAt for monitoring",
   );
 });
+
+test("canonical job cache models exist with stable hash fields", () => {
+  const canonicalJob = getBlock("model", "CanonicalJob");
+  const jobRawInput = getBlock("model", "JobRawInput");
+  const cvAdaptation = getBlock("model", "CvAdaptation");
+
+  assert.match(canonicalJob, /^\s*canonicalJobHash\s+String\s+@unique$/m);
+  assert.match(canonicalJob, /^\s*requirementSourceHash\s+String$/m);
+  assert.match(canonicalJob, /^\s*canonicalJobJson\s+Json$/m);
+  assert.match(canonicalJob, /^\s*canonicalizationModel\s+String$/m);
+  assert.match(canonicalJob, /^\s*canonicalizationPromptVersion\s+String$/m);
+  assert.match(canonicalJob, /^\s*rawInputs\s+JobRawInput\[\]$/m);
+
+  assert.match(jobRawInput, /^\s*rawJobHash\s+String\s+@unique$/m);
+  assert.match(jobRawInput, /^\s*rawText\s+String\s+@db\.Text$/m);
+  assert.match(jobRawInput, /^\s*normalizedRawText\s+String\s+@db\.Text$/m);
+  assert.match(jobRawInput, /^\s*canonicalJobId\s+String$/m);
+  assert.match(
+    jobRawInput,
+    /^\s*canonicalJob\s+CanonicalJob\s+@relation\(fields: \[canonicalJobId\], references: \[id\], onDelete: Cascade\)$/m,
+  );
+
+  assert.match(cvAdaptation, /^\s*canonicalJobId\s+String\?$/m);
+  assert.match(
+    cvAdaptation,
+    /^\s*canonicalJob\s+CanonicalJob\?\s+@relation\(fields: \[canonicalJobId\], references: \[id\], onDelete: SetNull\)$/m,
+  );
+});

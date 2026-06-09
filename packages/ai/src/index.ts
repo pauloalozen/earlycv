@@ -23,6 +23,11 @@ export type {
   CvSectionItem,
 } from "./cv-adaptation.js";
 export { adaptCv, analyzeAndAdaptCv } from "./cv-adaptation.js";
+export type { CanonicalJobJson } from "./job-canonicalization.js";
+export {
+  canonicalizeJobDescription,
+  JOB_CANONICALIZATION_PROMPT_VERSION,
+} from "./job-canonicalization.js";
 export {
   type CanonicalProfile,
   type ExtractionCoverage,

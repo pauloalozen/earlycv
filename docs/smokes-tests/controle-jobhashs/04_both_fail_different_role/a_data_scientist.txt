@@ -1,0 +1,17 @@
+Data Scientist III - AI Engineer
+
+Empresa: Bradesco
+Local: São Paulo
+Modelo: Híbrido
+
+Responsabilidades:
+- Desenvolver modelos de machine learning.
+- Trabalhar com Python, SQL e cloud.
+- Construir pipelines de dados.
+- Comunicar resultados para áreas de negócio.
+
+Requisitos:
+- Python.
+- SQL.
+- Machine learning.
+- Cloud.

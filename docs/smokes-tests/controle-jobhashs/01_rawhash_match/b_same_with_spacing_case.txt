@@ -1,0 +1,23 @@
+DATA SCIENTIST III - AI ENGINEER
+
+
+BRADESCO
+São Paulo, São Paulo, Brasil · Híbrido
+Tempo integral
+
+
+Sobre a vaga:
+Buscamos uma pessoa Data Scientist III - AI Engineer para atuar com desenvolvimento de soluções de inteligência artificial, modelos de machine learning e automação de processos analíticos.
+
+Responsabilidades:
+- Desenvolver modelos de machine learning e soluções de IA.
+- Trabalhar com Python, SQL e cloud.
+- Construir pipelines de dados.
+- Comunicar resultados para áreas de negócio.
+
+Requisitos:
+- Experiência com Python.
+- Experiência com SQL.
+- Conhecimento em machine learning.
+- Experiência com cloud.
+- Boa comunicação com stakeholders.

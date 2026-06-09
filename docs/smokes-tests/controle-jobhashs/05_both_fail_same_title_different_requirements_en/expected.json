@@ -1,0 +1,6 @@
+{
+  "rawHash": "DIFFERENT",
+  "canonicalHash": "DIFFERENT",
+  "requirementSourceHash": "DIFFERENT",
+  "reason": "Same title and company, but stack/requirements differ significantly. Must not reuse blindly."
+}

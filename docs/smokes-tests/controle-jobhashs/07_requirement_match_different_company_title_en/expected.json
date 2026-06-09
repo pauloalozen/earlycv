@@ -1,0 +1,6 @@
+{
+  "rawHash": "DIFFERENT",
+  "canonicalHash": "DIFFERENT",
+  "requirementSourceHash": "MATCH",
+  "reason": "Different company/title metadata, but same cleaned description. Requirement source should match."
+}

@@ -1,0 +1,39 @@
+{
+  "purpose": "Fixtures para testar rawJobHash e canonicalJobHash no EarlyCV.",
+  "rules": {
+    "MATCH": "os hashes comparados devem ser iguais",
+    "DIFFERENT": "os hashes comparados devem ser diferentes"
+  },
+  "cases": {
+    "01_rawhash_match": {
+      "rawHash": "MATCH",
+      "canonicalHash": "MATCH",
+      "reason": "Mesmo conteúdo, só muda caixa, espaços e quebras de linha."
+    },
+    "02_canonicalhash_match_linkedin_noise": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "MATCH",
+      "reason": "Mesmo conteúdo de vaga, mas uma versão tem ruído de LinkedIn/interface."
+    },
+    "03_canonicalhash_match_gupy_noise": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "MATCH",
+      "reason": "Mesmo conteúdo de vaga, mas com ruído típico de plataforma de candidatura."
+    },
+    "04_both_fail_different_role": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "DIFFERENT",
+      "reason": "Vagas realmente diferentes: Data Scientist vs Frontend Engineer."
+    },
+    "05_both_fail_same_title_different_requirements": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "DIFFERENT",
+      "reason": "Mesmo título e empresa, mas requisitos mudaram bastante. Não deve reaproveitar como se fosse a mesma vaga."
+    },
+    "06_canonicalhash_should_not_match_if_seniority_changes": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "DIFFERENT",
+      "reason": "Cargo parecido, mas senioridade muda de Júnior para Sênior. Não pode reaproveitar cegamente."
+    }
+  }
+}

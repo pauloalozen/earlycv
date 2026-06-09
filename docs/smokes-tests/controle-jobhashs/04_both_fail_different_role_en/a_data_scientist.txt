@@ -1,0 +1,17 @@
+Senior Data Scientist - AI Engineer
+
+Company: FinBank
+Location: New York
+Work mode: Hybrid
+
+Responsibilities:
+- Develop machine learning models.
+- Work with Python, SQL, and cloud platforms.
+- Build data pipelines.
+- Communicate results to business stakeholders.
+
+Requirements:
+- Python.
+- SQL.
+- Machine learning.
+- Cloud platforms.

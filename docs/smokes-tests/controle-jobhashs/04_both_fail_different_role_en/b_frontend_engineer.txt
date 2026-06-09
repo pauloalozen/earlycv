@@ -1,0 +1,17 @@
+Frontend Engineer
+
+Company: FinBank
+Location: New York
+Work mode: Hybrid
+
+Responsibilities:
+- Build web interfaces with React.
+- Create reusable components.
+- Integrate frontend applications with REST APIs.
+- Ensure visual quality and performance.
+
+Requirements:
+- React.
+- TypeScript.
+- HTML and CSS.
+- Frontend testing.
