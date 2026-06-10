@@ -82,11 +82,15 @@ describe("CvAdaptationAiService", () => {
 
       const service = new CvAdaptationAiService(mockDatabase, mockAiClient);
 
-      const adaptation: CvAdaptation = {
+      const adaptation = {
         id: "test-id",
         userId: "user-id",
         masterResumeId: "resume-id",
         templateId: null,
+        canonicalJobId: null,
+        jobRequirementSetId: null,
+        adaptationSource: "uploaded_content",
+        inputMode: "file_upload",
         jobDescriptionText: "Senior Engineer role",
         jobTitle: "Senior Engineer",
         companyName: "Tech Corp",
@@ -101,10 +105,21 @@ describe("CvAdaptationAiService", () => {
         paymentAmountInCents: null,
         paymentCurrency: null,
         paidAt: null,
+        mpPaymentId: null,
+        mpMerchantOrderId: null,
+        mpPreferenceId: null,
         failureReason: null,
+        isUnlocked: false,
+        unlockedAt: null,
+        analysisCvSnapshotId: null,
+        userProfileSnapshotJson: null,
+        uploadedContentSnapshotJson: null,
+        analysisInputSnapshotJson: null,
+        generationInputSnapshotJson: null,
+        jobApplicationId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      };
+      } as unknown as CvAdaptation;
 
       await service.analyzeAndAdapt(
         adaptation,
@@ -145,11 +160,15 @@ describe("CvAdaptationAiService", () => {
 
       const service = new CvAdaptationAiService(mockDatabase, mockAiClient);
 
-      const adaptation: CvAdaptation = {
+      const adaptation = {
         id: "test-id",
         userId: "user-id",
         masterResumeId: "resume-id",
         templateId: null,
+        canonicalJobId: null,
+        jobRequirementSetId: null,
+        adaptationSource: "uploaded_content",
+        inputMode: "file_upload",
         jobDescriptionText: "Job",
         jobTitle: null,
         companyName: null,
@@ -164,10 +183,21 @@ describe("CvAdaptationAiService", () => {
         paymentAmountInCents: null,
         paymentCurrency: null,
         paidAt: null,
+        mpPaymentId: null,
+        mpMerchantOrderId: null,
+        mpPreferenceId: null,
         failureReason: null,
+        isUnlocked: false,
+        unlockedAt: null,
+        analysisCvSnapshotId: null,
+        userProfileSnapshotJson: null,
+        uploadedContentSnapshotJson: null,
+        analysisInputSnapshotJson: null,
+        generationInputSnapshotJson: null,
+        jobApplicationId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      };
+      } as unknown as CvAdaptation;
 
       await service.analyzeAndAdapt(adaptation, "Resume text");
 
@@ -179,6 +209,25 @@ describe("CvAdaptationAiService", () => {
       const updateData = updateCall.arguments[0].data;
       assert.equal(updateData.status, "failed");
       assert.ok(updateData.failureReason);
+    });
+  });
+
+  it("returns structured requirements when analysis creates a new rule", async () => {
+    await withEnv({ SKIP_AI: "true" }, async () => {
+      const service = new CvAdaptationAiService(
+        {} as DatabaseService,
+        {} as OpenAI,
+      );
+
+      const result = await service.analyzeAndAdaptDirect({
+        masterCvText: "SQL e dashboards",
+        jobDescriptionText: "Vaga com SQL e dashboards",
+        canonicalJobJson: { title: "Analista de Dados" },
+      });
+
+      assert.equal(result.analysisModel, "stub");
+      assert.equal(result.structuredRequirements.length, 1);
+      assert.equal(result.structuredRequirements[0]?.importance, "high");
     });
   });
 });

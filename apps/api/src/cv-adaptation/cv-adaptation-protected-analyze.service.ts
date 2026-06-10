@@ -7,9 +7,15 @@ import {
 import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
+import type {
+  JobRequirementCoverage,
+  StructuredJobRequirement,
+} from "./dto/job-requirement.types";
 
 type ProtectedAnalyzeInput<TPayload> = {
+  canonicalJobJson: unknown;
   context: AnalysisRequestContext & { routeKey: string };
+  existingRequirements?: StructuredJobRequirement[];
   jobDescriptionText: string;
   loadMasterCvText: () => Promise<string>;
   payload: TPayload;
@@ -18,8 +24,11 @@ type ProtectedAnalyzeInput<TPayload> = {
 
 type ProtectedAnalyzeOutput = {
   adaptedContentJson: unknown;
+  analysisModel: string;
+  analysisPromptVersion: string;
   masterCvText: string;
   previewText: string;
+  structuredRequirements: StructuredJobRequirement[];
 };
 
 type ProtectedAnalyzeAndPersistInput<TPayload> = {
@@ -42,6 +51,7 @@ type ProtectedBuildPaidCvOutputInput<TPayload> = {
   jobDescriptionText: string;
   jobTitle?: string;
   masterCvText: string;
+  requirementCoverage?: JobRequirementCoverage[];
   selectedMissingKeywords?: string[];
   payload: TPayload;
 };
@@ -66,10 +76,12 @@ export class CvAdaptationProtectedAnalyzeService {
       input.context,
       async () => {
         const masterCvText = await input.loadMasterCvText();
-        const result = await this.aiService.analyzeAndAdaptDirect(
+        const result = await this.aiService.analyzeAndAdaptDirect({
           masterCvText,
-          input.jobDescriptionText,
-        );
+          jobDescriptionText: input.jobDescriptionText,
+          canonicalJobJson: input.canonicalJobJson,
+          existingRequirements: input.existingRequirements,
+        });
 
         return {
           ...result,
@@ -113,6 +125,7 @@ export class CvAdaptationProtectedAnalyzeService {
           jobDescriptionText: input.jobDescriptionText,
           jobTitle: input.jobTitle,
           masterCvText: input.masterCvText,
+          requirementCoverage: input.requirementCoverage,
           selectedMissingKeywords: input.selectedMissingKeywords,
         });
       },

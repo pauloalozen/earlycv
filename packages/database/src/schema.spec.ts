@@ -552,6 +552,7 @@ test("MasterCvCanonicalExtraction schema exists with status enum, payload fields
 
 test("canonical job cache models exist with stable hash fields", () => {
   const canonicalJob = getBlock("model", "CanonicalJob");
+  const jobRequirementSet = getBlock("model", "JobRequirementSet");
   const jobRawInput = getBlock("model", "JobRawInput");
   const cvAdaptation = getBlock("model", "CvAdaptation");
 
@@ -561,6 +562,23 @@ test("canonical job cache models exist with stable hash fields", () => {
   assert.match(canonicalJob, /^\s*canonicalizationModel\s+String$/m);
   assert.match(canonicalJob, /^\s*canonicalizationPromptVersion\s+String$/m);
   assert.match(canonicalJob, /^\s*rawInputs\s+JobRawInput\[\]$/m);
+  assert.match(
+    canonicalJob,
+    /^\s*jobRequirementSets\s+JobRequirementSet\[\]$/m,
+  );
+
+  assert.match(
+    jobRequirementSet,
+    /^\s*requirementSourceHash\s+String\s+@unique$/m,
+  );
+  assert.match(jobRequirementSet, /^\s*canonicalJobId\s+String$/m);
+  assert.match(jobRequirementSet, /^\s*requirementsJson\s+Json$/m);
+  assert.match(jobRequirementSet, /^\s*analysisModel\s+String$/m);
+  assert.match(jobRequirementSet, /^\s*analysisPromptVersion\s+String$/m);
+  assert.match(
+    jobRequirementSet,
+    /^\s*canonicalJob\s+CanonicalJob\s+@relation\(fields: \[canonicalJobId\], references: \[id\], onDelete: Cascade\)$/m,
+  );
 
   assert.match(jobRawInput, /^\s*rawJobHash\s+String\s+@unique$/m);
   assert.match(jobRawInput, /^\s*rawText\s+String\s+@db\.Text$/m);
@@ -572,8 +590,13 @@ test("canonical job cache models exist with stable hash fields", () => {
   );
 
   assert.match(cvAdaptation, /^\s*canonicalJobId\s+String\?$/m);
+  assert.match(cvAdaptation, /^\s*jobRequirementSetId\s+String\?$/m);
   assert.match(
     cvAdaptation,
     /^\s*canonicalJob\s+CanonicalJob\?\s+@relation\(fields: \[canonicalJobId\], references: \[id\], onDelete: SetNull\)$/m,
+  );
+  assert.match(
+    cvAdaptation,
+    /^\s*jobRequirementSet\s+JobRequirementSet\?\s+@relation\(fields: \[jobRequirementSetId\], references: \[id\], onDelete: SetNull\)$/m,
   );
 });

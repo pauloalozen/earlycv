@@ -201,6 +201,403 @@ test("analyzeGuest accepts CV text without file", async () => {
   assert.equal(result.masterCvText, "CV texto");
 });
 
+test("analyzeGuest persists the first requirement rule for a requirementSourceHash", async () => {
+  const protectedCalls: Array<Record<string, unknown>> = [];
+  const createdRules: Array<Record<string, unknown>> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-1" }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async (input: Record<string, unknown>) => {
+        protectedCalls.push(input);
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-1",
+          result: {
+            adaptedContentJson: { ok: true },
+            previewText: "preview",
+            masterCvText: "CV texto",
+            analysisModel: "gpt-test",
+            analysisPromptVersion: "2026-06-09.v1",
+            structuredRequirements: [
+              {
+                requirementKey: "sql-analytics",
+                requirementText: "Experiencia com SQL para analise de dados",
+                importance: "high",
+              },
+            ],
+          },
+        };
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      getOrCreateCanonicalJob: async () => ({
+        canonicalJobId: "canonical-1",
+        rawJobHash: "raw-hash",
+        canonicalJobHash: "canonical-hash",
+        requirementSourceHash: "req-source-1",
+        canonicalJobJson: { title: "Analista de Dados" },
+        reusedByRawHash: false,
+        reusedByCanonicalHash: false,
+      }),
+    },
+    {
+      findByRequirementSourceHash: async () => null,
+      getOrCreateFromAnalysis: async (input: Record<string, unknown>) => {
+        createdRules.push(input);
+        return {
+          id: "rule-1",
+          requirementSourceHash: "req-source-1",
+          canonicalJobId: "canonical-1",
+          requirements: input.requirements,
+          analysisModel: "gpt-test",
+          analysisPromptVersion: "2026-06-09.v1",
+        };
+      },
+    },
+  );
+
+  await service.analyzeGuest(
+    "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    undefined,
+    validMasterCvText,
+    "token",
+  );
+
+  assert.equal(createdRules.length, 1);
+  assert.deepEqual(createdRules[0]?.requirements, [
+    {
+      requirementKey: "sql-analytics",
+      requirementText: "Experiencia com SQL para analise de dados",
+      importance: "high",
+    },
+  ]);
+  assert.deepEqual(protectedCalls[0]?.existingRequirements, undefined);
+});
+
+test("analyzeGuest reuses an existing requirement rule without recreating it", async () => {
+  const protectedCalls: Array<Record<string, unknown>> = [];
+  let createCalls = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-1" }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async (input: Record<string, unknown>) => {
+        protectedCalls.push(input);
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-1",
+          result: {
+            adaptedContentJson: { ok: true },
+            previewText: "preview",
+            masterCvText: "CV texto",
+            analysisModel: "gpt-test",
+            analysisPromptVersion: "2026-06-09.v1",
+            structuredRequirements: [
+              {
+                requirementKey: "sql-analytics",
+                requirementText: "Experiencia com SQL para analise de dados",
+                importance: "high",
+              },
+            ],
+          },
+        };
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      getOrCreateCanonicalJob: async () => ({
+        canonicalJobId: "canonical-1",
+        rawJobHash: "raw-hash",
+        canonicalJobHash: "canonical-hash",
+        requirementSourceHash: "req-source-1",
+        canonicalJobJson: { title: "Analista de Dados" },
+        reusedByRawHash: true,
+        reusedByCanonicalHash: true,
+      }),
+    },
+    {
+      findByRequirementSourceHash: async () => ({
+        id: "rule-1",
+        requirementSourceHash: "req-source-1",
+        canonicalJobId: "canonical-1",
+        requirements: [
+          {
+            requirementKey: "sql-analytics",
+            requirementText: "Experiencia com SQL para analise de dados",
+            importance: "high",
+          },
+        ],
+        analysisModel: "gpt-old",
+        analysisPromptVersion: "2026-06-08.v1",
+      }),
+      getOrCreateFromAnalysis: async () => {
+        createCalls += 1;
+        throw new Error("should not create");
+      },
+    },
+  );
+
+  await service.analyzeGuest(
+    "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    undefined,
+    validMasterCvText,
+    "token",
+  );
+
+  assert.equal(createCalls, 0);
+  assert.deepEqual(protectedCalls[0]?.existingRequirements, [
+    {
+      requirementKey: "sql-analytics",
+      requirementText: "Experiencia com SQL para analise de dados",
+      importance: "high",
+    },
+  ]);
+});
+
+test("analyzeAuthenticated with adapted CV reuses existing requirement set without recreating", async () => {
+  const protectedCalls: Array<Record<string, unknown>> = [];
+  let createRuleCalls = 0;
+
+  const existingRequirements = [
+    {
+      requirementKey: "sql-analytics",
+      requirementText: "Experiencia com SQL para analise de dados",
+      importance: "high",
+    },
+  ];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-adapted-cv-1" }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async (input: Record<string, unknown>) => {
+        protectedCalls.push(input);
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-1",
+          result: {
+            adaptedContentJson: { ok: true },
+            previewText: "preview-adaptado",
+            masterCvText: "CV adaptado texto",
+            analysisModel: "gpt-test",
+            analysisPromptVersion: "2026-06-09.v1",
+            structuredRequirements: existingRequirements,
+          },
+        };
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      getOrCreateCanonicalJob: async () => ({
+        canonicalJobId: "canonical-vaga-a",
+        rawJobHash: "raw-hash-a",
+        canonicalJobHash: "canonical-hash-a",
+        requirementSourceHash: "req-source-a",
+        canonicalJobJson: { title: "Analista de Dados" },
+        reusedByRawHash: true,
+        reusedByCanonicalHash: true,
+      }),
+    },
+    {
+      findByRequirementSourceHash: async () => ({
+        id: "rule-existente-1",
+        requirementSourceHash: "req-source-a",
+        canonicalJobId: "canonical-vaga-a",
+        requirements: existingRequirements,
+        analysisModel: "gpt-antigo",
+        analysisPromptVersion: "2026-06-08.v1",
+      }),
+      getOrCreateFromAnalysis: async () => {
+        createRuleCalls += 1;
+        throw new Error("should not create a new rule when reusing adapted CV");
+      },
+    },
+  );
+
+  const result = await service.analyzeAuthenticated(
+    "user-1",
+    {
+      jobDescriptionText:
+        "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+      masterCvText: validMasterCvText,
+      saveAsMaster: false,
+      turnstileToken: "token",
+    },
+  );
+
+  assert.equal(createRuleCalls, 0, "must not create a new requirement set when one already exists");
+  assert.equal(protectedCalls.length, 1);
+  assert.deepEqual(protectedCalls[0]?.existingRequirements, existingRequirements,
+    "must pass existing requirements to AI so it uses the same rule");
+  assert.equal(result.previewText, "preview-adaptado");
+});
+
+test("analyzeAuthenticated creates separate requirement sets for two different vagas", async () => {
+  const createdRules: Array<{ requirementSourceHash: string }> = [];
+
+  let callCount = 0;
+  const requirementSourceHashes = ["req-source-vaga-a", "req-source-vaga-b"];
+  const canonicalJobIds = ["canonical-vaga-a", "canonical-vaga-b"];
+
+  const makeService = () =>
+    new CvAdaptationServiceCtor(
+      {
+        analysisCvSnapshot: {
+          create: async () => ({ id: `snapshot-${++callCount}` }),
+        },
+      },
+      {
+        analyzeAndAdapt: async () => {},
+        buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+      },
+      { createIntent: async () => ({}) },
+      { generatePdf: async () => Buffer.from("pdf") },
+      {
+        generateDocx: async () => Buffer.from("docx"),
+        toPdf: async () => Buffer.from("pdf"),
+      },
+      {
+        executeProtectedAnalyze: async () => ({
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-x",
+          result: {
+            adaptedContentJson: { ok: true },
+            previewText: "preview",
+            masterCvText: "CV texto",
+            analysisModel: "gpt-test",
+            analysisPromptVersion: "2026-06-09.v1",
+            structuredRequirements: [
+              {
+                requirementKey: "req-key",
+                requirementText: "Requisito da vaga",
+                importance: "high",
+              },
+            ],
+          },
+        }),
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        getOrCreateCanonicalJob: async () => {
+          const idx = callCount - 1;
+          return {
+            canonicalJobId: canonicalJobIds[idx] ?? `canonical-${idx}`,
+            rawJobHash: `raw-hash-${idx}`,
+            canonicalJobHash: `canonical-hash-${idx}`,
+            requirementSourceHash: requirementSourceHashes[idx] ?? `req-source-${idx}`,
+            canonicalJobJson: { title: `Vaga ${idx}` },
+            reusedByRawHash: false,
+            reusedByCanonicalHash: false,
+          };
+        },
+      },
+      {
+        findByRequirementSourceHash: async () => null,
+        getOrCreateFromAnalysis: async (input: { requirementSourceHash: string }) => {
+          createdRules.push({ requirementSourceHash: input.requirementSourceHash });
+          return {
+            id: `rule-${createdRules.length}`,
+            requirementSourceHash: input.requirementSourceHash,
+            canonicalJobId: "canonical-x",
+            requirements: [],
+            analysisModel: "gpt-test",
+            analysisPromptVersion: "2026-06-09.v1",
+          };
+        },
+      },
+    );
+
+  const service = makeService();
+
+  await service.analyzeAuthenticated("user-1", {
+    jobDescriptionText:
+      "Descricao da vaga A com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    masterCvText: validMasterCvText,
+    saveAsMaster: false,
+    turnstileToken: "token",
+  });
+
+  await service.analyzeAuthenticated("user-1", {
+    jobDescriptionText:
+      "Descricao da vaga B com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    masterCvText: validMasterCvText,
+    saveAsMaster: false,
+    turnstileToken: "token",
+  });
+
+  assert.equal(createdRules.length, 2, "must create a separate requirement set for each distinct vaga");
+  assert.notEqual(
+    createdRules[0]?.requirementSourceHash,
+    createdRules[1]?.requirementSourceHash,
+    "the two requirement sets must have different requirementSourceHash values",
+  );
+});
+
 test("analyzeGuest validates job description before CV text checks", async () => {
   let protectedCalls = 0;
 

@@ -51,11 +51,14 @@ import type {
   FileUpload,
 } from "./dto/create-cv-adaptation.dto";
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
+import type { JobRequirementCoverage } from "./dto/job-requirement.types";
 import { createCvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
 import type { RedeemCreditDto } from "./dto/redeem-credit.dto";
 import type { SaveApplicationIdentityDto } from "./dto/save-application-identity.dto";
 import type { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
+import type { CanonicalJobLookupResult } from "./job-canonicalization.service";
 import { JobCanonicalizationService } from "./job-canonicalization.service";
+import { JobRequirementSetsService } from "./job-requirement-sets.service";
 
 type JobApplicationHookInput = {
   cvAdaptationId: string;
@@ -158,6 +161,12 @@ export class CvAdaptationService {
     private readonly jobCanonicalizationService?: Pick<
       JobCanonicalizationService,
       "getOrCreateCanonicalJob"
+    >,
+    @Optional()
+    @Inject(JobRequirementSetsService)
+    private readonly jobRequirementSetsService?: Pick<
+      JobRequirementSetsService,
+      "findByRequirementSourceHash" | "getOrCreateFromAnalysis"
     >,
   ) {}
 
@@ -311,10 +320,13 @@ export class CvAdaptationService {
       userId,
     });
 
-    const canonicalJobId = await this.resolveCanonicalJobId(
+    const canonicalJob = await this.resolveCanonicalJob(
       normalizedJobDescriptionText,
       "create",
     );
+    const existingRequirementSet =
+      await this.resolveExistingRequirementSet(canonicalJob);
+    const canonicalJobId = canonicalJob?.canonicalJobId ?? null;
 
     const adaptation = await this.database.cvAdaptation.create({
       data: {
@@ -322,6 +334,7 @@ export class CvAdaptationService {
         masterResumeId,
         templateId: dto.templateId || null,
         canonicalJobId,
+        jobRequirementSetId: existingRequirementSet?.id ?? null,
         jobDescriptionText: normalizedJobDescriptionText,
         jobTitle: dto.jobTitle || null,
         companyName: dto.companyName || null,
@@ -445,10 +458,13 @@ export class CvAdaptationService {
     }
 
     const defaultTemplate = await this.getDefaultTemplate();
-    const canonicalJobId = await this.resolveCanonicalJobId(
+    const canonicalJob = await this.resolveCanonicalJob(
       dto.jobDescriptionText,
       "claimGuest",
     );
+    const canonicalJobId = canonicalJob?.canonicalJobId ?? null;
+    const existingRequirementSet =
+      await this.resolveExistingRequirementSet(canonicalJob);
     const guestSessionHash = this.hashGuestSessionToken(
       dto.guestSessionPublicToken ?? analysisContext?.sessionPublicToken,
     );
@@ -503,6 +519,7 @@ export class CvAdaptationService {
           jobDescriptionText: dto.jobDescriptionText,
           templateId: defaultTemplate?.id ?? null,
           canonicalJobId,
+          jobRequirementSetId: existingRequirementSet?.id ?? null,
           jobTitle: dto.jobTitle ?? null,
           companyName: dto.companyName ?? null,
           adaptedContentJson: adaptedContent as Prisma.InputJsonValue,
@@ -605,6 +622,12 @@ export class CvAdaptationService {
         routeKey: "cv-adaptation/analyze-guest",
       },
     );
+    const canonicalJob = await this.resolveCanonicalJob(
+      normalizedJobDescriptionText,
+      "analyzeGuest",
+    );
+    const existingRequirementSet =
+      await this.resolveExistingRequirementSet(canonicalJob);
 
     const normalizedMasterCvText =
       typeof masterCvText === "string"
@@ -641,6 +664,10 @@ export class CvAdaptationService {
           null,
           "cv-adaptation/analyze-guest",
         ),
+        canonicalJobJson: canonicalJob?.canonicalJobJson ?? {
+          description: normalizedJobDescriptionText,
+        },
+        existingRequirements: existingRequirementSet?.requirements,
         jobDescriptionText: normalizedJobDescriptionText,
         loadMasterCvText: async () => {
           if (resolvedMasterCvText) {
@@ -696,6 +723,16 @@ export class CvAdaptationService {
     const finalMasterCvText =
       resolvedMasterCvText ??
       this.normalizeSnapshotText(protectionResult.result.masterCvText);
+
+    if (!existingRequirementSet) {
+      await this.persistRequirementSetFromAnalysis({
+        canonicalJob,
+        analysisModel: protectionResult.result.analysisModel,
+        analysisPromptVersion: protectionResult.result.analysisPromptVersion,
+        structuredRequirements: protectionResult.result.structuredRequirements,
+      });
+    }
+
     const snapshot = await this.createAnalysisCvSnapshot({
       sourceType: hasTextInput ? "text_input" : "uploaded_file",
       text: finalMasterCvText,
@@ -736,6 +773,12 @@ export class CvAdaptationService {
         routeKey: "cv-adaptation/analyze",
       },
     );
+    const canonicalJob = await this.resolveCanonicalJob(
+      normalizedJobDescriptionText,
+      "analyzeAuthenticated",
+    );
+    const existingRequirementSet =
+      await this.resolveExistingRequirementSet(canonicalJob);
     const hasTextInput = Boolean(dto.masterCvText?.trim());
     const shouldUseUploadedFile = !hasTextInput && Boolean(file);
     let sourceType: "text_input" | "uploaded_file" | "master_resume" =
@@ -769,6 +812,10 @@ export class CvAdaptationService {
           userId,
           "cv-adaptation/analyze",
         ),
+        canonicalJobJson: canonicalJob?.canonicalJobJson ?? {
+          description: normalizedJobDescriptionText,
+        },
+        existingRequirements: existingRequirementSet?.requirements,
         jobDescriptionText: normalizedJobDescriptionText,
         loadMasterCvText: async () => {
           if (resolvedMasterCvText) {
@@ -878,6 +925,16 @@ export class CvAdaptationService {
     const finalMasterCvText =
       resolvedMasterCvText ??
       this.normalizeSnapshotText(protectionResult.result.masterCvText);
+
+    if (!existingRequirementSet) {
+      await this.persistRequirementSetFromAnalysis({
+        canonicalJob,
+        analysisModel: protectionResult.result.analysisModel,
+        analysisPromptVersion: protectionResult.result.analysisPromptVersion,
+        structuredRequirements: protectionResult.result.structuredRequirements,
+      });
+    }
+
     const snapshot = await this.createAnalysisCvSnapshot({
       sourceType,
       text: finalMasterCvText,
@@ -923,23 +980,70 @@ export class CvAdaptationService {
     return createHash("sha256").update(fileBuffer).digest("hex");
   }
 
-  private async resolveCanonicalJobId(
+  private async resolveCanonicalJob(
     jobDescriptionText: string,
     callerMethod: string,
-  ): Promise<string | null> {
+  ): Promise<CanonicalJobLookupResult | null> {
     if (!this.jobCanonicalizationService) {
       return null;
     }
 
     try {
-      const result =
-        await this.jobCanonicalizationService.getOrCreateCanonicalJob(
-          jobDescriptionText,
-        );
-      return result.canonicalJobId;
+      return await this.jobCanonicalizationService.getOrCreateCanonicalJob(
+        jobDescriptionText,
+      );
     } catch (error) {
       this.logger.warn(
         `[job-canonicalization] failed in ${callerMethod}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  private async resolveExistingRequirementSet(
+    canonicalJob: CanonicalJobLookupResult | null,
+  ) {
+    if (!canonicalJob || !this.jobRequirementSetsService) {
+      return null;
+    }
+
+    try {
+      return await this.jobRequirementSetsService.findByRequirementSourceHash(
+        canonicalJob.requirementSourceHash,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `[job-requirement-set] lookup failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  private async persistRequirementSetFromAnalysis(input: {
+    canonicalJob: CanonicalJobLookupResult | null;
+    analysisModel: string;
+    analysisPromptVersion: string;
+    structuredRequirements: Array<{
+      requirementKey: string;
+      requirementText: string;
+      importance: "high" | "medium" | "low";
+    }>;
+  }) {
+    if (!input.canonicalJob || !this.jobRequirementSetsService) {
+      return null;
+    }
+
+    try {
+      return await this.jobRequirementSetsService.getOrCreateFromAnalysis({
+        requirementSourceHash: input.canonicalJob.requirementSourceHash,
+        canonicalJobId: input.canonicalJob.canonicalJobId,
+        requirements: input.structuredRequirements,
+        analysisModel: input.analysisModel,
+        analysisPromptVersion: input.analysisPromptVersion,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `[job-requirement-set] persist failed: ${error instanceof Error ? error.message : String(error)}`,
       );
       return null;
     }
@@ -952,10 +1056,13 @@ export class CvAdaptationService {
     analysisContext?: AnalysisRequestContext,
   ) {
     const defaultTemplate = await this.getDefaultTemplate();
-    const canonicalJobId = await this.resolveCanonicalJobId(
+    const canonicalJob = await this.resolveCanonicalJob(
       dto.jobDescriptionText,
       "saveGuestPreview",
     );
+    const canonicalJobId = canonicalJob?.canonicalJobId ?? null;
+    const existingRequirementSet =
+      await this.resolveExistingRequirementSet(canonicalJob);
     const guestSessionHash = this.hashGuestSessionToken(
       dto.guestSessionPublicToken ?? analysisContext?.sessionPublicToken,
     );
@@ -1061,6 +1168,7 @@ export class CvAdaptationService {
         jobDescriptionText: dto.jobDescriptionText,
         templateId: defaultTemplate?.id ?? null,
         canonicalJobId,
+        jobRequirementSetId: existingRequirementSet?.id ?? null,
         jobTitle: dto.jobTitle ?? null,
         companyName: dto.companyName ?? null,
         adaptedContentJson: dto.adaptedContentJson as Prisma.InputJsonValue,
@@ -2170,6 +2278,10 @@ export class CvAdaptationService {
 
     await this.persistGenerationSnapshotIfMissing(adaptation, masterCvText);
 
+    const requirementCoverage = this.extractRequirementCoverageFromAnalysis(
+      adaptation.adaptedContentJson,
+    );
+
     try {
       const protectionResult =
         await this.protectedAnalyzeService.executeProtectedBuildPaidCvOutputFromGuest(
@@ -2183,6 +2295,7 @@ export class CvAdaptationService {
             jobDescriptionText: adaptation.jobDescriptionText,
             jobTitle: adaptation.jobTitle ?? undefined,
             masterCvText,
+            requirementCoverage,
             selectedMissingKeywords: this.getSelectedMissingKeywords(
               adaptation.adaptedContentJson,
             ),
@@ -2360,6 +2473,30 @@ export class CvAdaptationService {
       .map((item) => item.trim())
       .filter((item) => item.length > 0)
       .slice(0, 80);
+  }
+
+  private extractRequirementCoverageFromAnalysis(
+    adaptedContentJson: unknown,
+  ): JobRequirementCoverage[] | undefined {
+    if (!adaptedContentJson || typeof adaptedContentJson !== "object") {
+      return undefined;
+    }
+
+    const raw = (adaptedContentJson as { requirements?: unknown }).requirements;
+
+    if (!Array.isArray(raw) || raw.length === 0) {
+      return undefined;
+    }
+
+    const valid = raw.filter(
+      (r): r is JobRequirementCoverage =>
+        r !== null &&
+        typeof r === "object" &&
+        typeof (r as JobRequirementCoverage).requirementKey === "string" &&
+        typeof (r as JobRequirementCoverage).coverageStatus === "string",
+    );
+
+    return valid.length > 0 ? valid : undefined;
   }
 
   private async getDefaultTemplate(): Promise<{

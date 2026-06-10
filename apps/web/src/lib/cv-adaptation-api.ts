@@ -277,6 +277,7 @@ export async function analyzeGuestCv(
     "POST",
     "/cv-adaptation/analyze-guest",
     formData,
+    120_000,
   );
   if (!response.ok) {
     const raw = await response.text();
@@ -369,7 +370,7 @@ export async function analyzeAuthenticatedCv(
   if (inputMode) {
     formData.set("inputMode", inputMode);
   }
-  const response = await apiRequest("POST", "/cv-adaptation/analyze", formData, 60_000);
+  const response = await apiRequest("POST", "/cv-adaptation/analyze", formData, 120_000);
   if (!response.ok) {
     const raw = await response.text();
     return {
@@ -384,7 +385,7 @@ export async function analyzeAuthenticatedCv(
 }
 
 export async function downloadCvAdaptationPdf(id: string): Promise<Blob> {
-  const response = await apiRequest("GET", `/cv-adaptation/${id}/download`);
+  const response = await apiRequest("GET", `/cv-adaptation/${id}/download`, undefined, 180_000);
   if (!response.ok) {
     throw new Error("Failed to download PDF");
   }

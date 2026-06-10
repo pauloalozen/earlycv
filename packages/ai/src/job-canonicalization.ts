@@ -161,7 +161,10 @@ function validateEnum<T extends readonly (string | null)[]>(
   allowed: T,
 ): T[number] {
   if (!allowed.includes(value as T[number])) {
-    throw new Error(`Invalid enum at ${path}`);
+    // Unknown enum value from model — fall back to null rather than throwing,
+    // since both workMode and employmentType accept null and the model can return
+    // locale-specific variants (e.g. "presencial", "CLT") not in the allowed list.
+    return null as T[number];
   }
 
   return value as T[number];

@@ -55,7 +55,7 @@ describe("canonicalizeJobDescription", () => {
     );
   });
 
-  it("rejects invalid enum values", async () => {
+  it("falls back to null for unrecognized workMode (e.g. 'flex', 'presencial')", async () => {
     const client = {
       responses: {
         create: mock.fn(async () => ({
@@ -67,9 +67,31 @@ describe("canonicalizeJobDescription", () => {
       },
     } as unknown as OpenAI;
 
-    await assert.rejects(
-      () => canonicalizeJobDescription(client, "gpt-4.1-mini", "Texto bruto"),
-      /workmode/i,
+    const result = await canonicalizeJobDescription(
+      client,
+      "gpt-4.1-mini",
+      "Texto bruto",
     );
+    assert.equal(result.workMode, null);
+  });
+
+  it("falls back to null for unrecognized employmentType (e.g. 'CLT', 'PJ')", async () => {
+    const client = {
+      responses: {
+        create: mock.fn(async () => ({
+          output_text: JSON.stringify({
+            ...createOutput(),
+            employmentType: "CLT",
+          }),
+        })),
+      },
+    } as unknown as OpenAI;
+
+    const result = await canonicalizeJobDescription(
+      client,
+      "gpt-4.1-mini",
+      "Texto bruto",
+    );
+    assert.equal(result.employmentType, null);
   });
 });

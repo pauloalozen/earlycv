@@ -85,6 +85,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.jobRawInput;
   }
 
+  get jobRequirementSet() {
+    return this.prisma.jobRequirementSet;
+  }
+
   get cvUnlock() {
     return this.prisma.cvUnlock;
   }

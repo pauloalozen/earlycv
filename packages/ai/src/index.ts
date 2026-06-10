@@ -21,8 +21,17 @@ export type {
   CvAnalysisOutput,
   CvSection,
   CvSectionItem,
+  JobRequirementCoverage,
+  JobRequirementImportance,
+  RequirementAdaptationAction,
+  RequirementCoverageStatus,
+  StructuredJobRequirement,
 } from "./cv-adaptation.js";
-export { adaptCv, analyzeAndAdaptCv } from "./cv-adaptation.js";
+export {
+  adaptCv,
+  analyzeAndAdaptCv,
+  CV_ANALYSIS_PROMPT_VERSION,
+} from "./cv-adaptation.js";
 export type { CanonicalJobJson } from "./job-canonicalization.js";
 export {
   canonicalizeJobDescription,

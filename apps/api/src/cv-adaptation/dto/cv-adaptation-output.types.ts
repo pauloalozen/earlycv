@@ -1,6 +1,10 @@
 // Local type mirror of CvAdaptationOutput from @earlycv/ai
 // Avoids CJS→ESM type import issues in the NestJS build
 
+import type { RequirementAdaptationAction } from "./job-requirement.types";
+
+export type { RequirementAdaptationAction };
+
 export type CvSectionItem = {
   heading: string;
   subheading?: string;
@@ -29,4 +33,5 @@ export type CvAdaptationOutput = {
   highlightedSkills: string[];
   removedSections: string[];
   adaptationNotes?: string;
+  requirementAdaptationActions?: RequirementAdaptationAction[];
 };

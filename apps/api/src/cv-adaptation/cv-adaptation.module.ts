@@ -16,6 +16,7 @@ import { CvAdaptationProtectedAnalyzeService } from "./cv-adaptation-protected-a
 import { CvAdaptationPublicController } from "./cv-adaptation-public.controller";
 import { CvAdaptationSnapshotCleanupScheduler } from "./cv-adaptation-snapshot-cleanup.scheduler";
 import { JobCanonicalizationService } from "./job-canonicalization.service";
+import { JobRequirementSetsService } from "./job-requirement-sets.service";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { JobCanonicalizationService } from "./job-canonicalization.service";
     CvAdaptationProtectedAnalyzeService,
     CvAdaptationSnapshotCleanupScheduler,
     JobCanonicalizationService,
+    JobRequirementSetsService,
     {
       provide: "OPENAI_CLIENT",
       useFactory: () =>

@@ -549,7 +549,6 @@ model Resume {
   isMaster                Boolean          @default(true)
   basedOnResumeId         String?
   templateId           String?
-  canonicalJobId       String?
   targetJobId             String?
   targetJobTitle          String?
   createdAt               DateTime         @default(now())
@@ -580,8 +579,25 @@ model CanonicalJob {
   updatedAt                     DateTime    @updatedAt
   rawInputs                     JobRawInput[]
   cvAdaptations                 CvAdaptation[]
+  jobRequirementSets            JobRequirementSet[]
 
   @@index([requirementSourceHash])
+}
+
+model JobRequirementSet {
+  id                    String         @id @default(cuid())
+  requirementSourceHash String         @unique
+  canonicalJobId        String
+  requirementsJson      Json
+  analysisModel         String
+  analysisPromptVersion String
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  canonicalJob          CanonicalJob   @relation(fields: [canonicalJobId], references: [id], onDelete: Cascade)
+  cvAdaptations         CvAdaptation[]
+
+  @@index([canonicalJobId])
 }
 
 model JobRawInput {
@@ -661,6 +677,7 @@ model CvAdaptation {
   masterResumeId       String
   templateId           String?
   canonicalJobId       String?
+  jobRequirementSetId  String?
   adaptationSource     CvAdaptationSource  @default(uploaded_content)
   inputMode            CvAdaptationInputMode @default(file_upload)
   jobDescriptionText   String
@@ -697,6 +714,7 @@ model CvAdaptation {
   masterResume  Resume          @relation("CvAdaptationMaster", fields: [masterResumeId], references: [id], onDelete: Cascade)
   template      ResumeTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   canonicalJob  CanonicalJob?   @relation(fields: [canonicalJobId], references: [id], onDelete: SetNull)
+  jobRequirementSet JobRequirementSet? @relation(fields: [jobRequirementSetId], references: [id], onDelete: SetNull)
   adaptedResume Resume?         @relation("CvAdaptationResult", fields: [adaptedResumeId], references: [id], onDelete: SetNull)
   analysisCvSnapshot AnalysisCvSnapshot? @relation(fields: [analysisCvSnapshotId], references: [id], onDelete: SetNull)
   cvUnlock     CvUnlock?
