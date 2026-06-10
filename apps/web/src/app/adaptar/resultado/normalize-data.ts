@@ -1,81 +1,86 @@
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 
-export function normalizeData(raw: CvAnalysisData) {
-  const clamp = (value: number, min: number, max: number) =>
-    Math.min(max, Math.max(min, value));
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
 
-  const applyBudget = <T extends { pontos: number }>(
-    items: T[],
-    budget: number,
-  ): T[] => {
-    if (items.length === 0) return items;
-    const total = items.reduce((sum, item) => sum + item.pontos, 0);
-    if (total === 0) {
-      const even = Math.floor(budget / items.length);
-      const rest = budget - even * items.length;
-      return items.map((item, index) => ({
-        ...item,
-        pontos: even + (index === items.length - 1 ? rest : 0),
-      }));
-    }
+type PointsItem = { pontos: number };
+type NamedField = { nome: string; presente: boolean };
+type FormatProblem = {
+  tipo: "critico" | "atencao" | "ok";
+  titulo: string;
+  descricao: string;
+  impacto: number;
+};
 
-    const scaled = items.map((item) => ({
+type CvAnalysisLike = CvAnalysisData;
+
+function applyBudget<T extends PointsItem>(items: T[], budget: number): T[] {
+  if (items.length === 0) return items;
+  const total = items.reduce((sum, item) => sum + item.pontos, 0);
+  if (total === 0) {
+    const even = Math.floor(budget / items.length);
+    const rest = budget - even * items.length;
+    return items.map((item, index) => ({
       ...item,
-      pontos: Math.max(1, Math.round((item.pontos / total) * budget)),
+      pontos: even + (index === items.length - 1 ? rest : 0),
     }));
-    const diff = budget - scaled.reduce((sum, item) => sum + item.pontos, 0);
+  }
 
-    if (diff !== 0) {
-      scaled[scaled.length - 1] = {
-        ...scaled[scaled.length - 1],
-        pontos: Math.max(1, scaled[scaled.length - 1].pontos + diff),
-      };
-    }
+  const scaled = items.map((item) => ({
+    ...item,
+    pontos: Math.max(1, Math.round((item.pontos / total) * budget)),
+  }));
+  const diff = budget - scaled.reduce((sum, item) => sum + item.pontos, 0);
 
-    return scaled;
-  };
+  if (diff !== 0) {
+    scaled[scaled.length - 1] = {
+      ...scaled[scaled.length - 1],
+      pontos: Math.max(1, scaled[scaled.length - 1].pontos + diff),
+    };
+  }
 
-  const CAMPO_PTS: Record<string, number> = {
-    "Nome completo": 2,
-    "E-mail": 2,
-    Telefone: 2,
-    Localização: 2,
-    Localizacao: 2,
-    "Formação acadêmica": 2,
-    "Formacao academica": 2,
-    "Experiências com datas": 2,
-    "Experiencias com datas": 2,
-    LinkedIn: 1,
-    "Resumo profissional": 1,
-    "Habilidades e Competências": 1,
-    "Habilidades e Competencias": 1,
-  };
+  return scaled;
+}
 
-  const isCampoIndisponivel = (nome: string): boolean => {
-    const normalized = nome.trim().toLowerCase();
-    return [
-      "nome completo",
-      "e-mail",
-      "email",
-      "telefone",
-      "linkedin",
-      "localização",
-      "localizacao",
-      "formação acadêmica",
-      "formacao academica",
-      "experiências com datas",
-      "experiencias com datas",
-    ].includes(normalized);
-  };
+const CAMPO_PTS: Record<string, number> = {
+  "Nome completo": 2,
+  "E-mail": 2,
+  Telefone: 2,
+  Localização: 2,
+  Localizacao: 2,
+  "Formação acadêmica": 2,
+  "Formacao academica": 2,
+  "Experiências com datas": 2,
+  "Experiencias com datas": 2,
+  LinkedIn: 1,
+  "Resumo profissional": 1,
+  "Habilidades e Competências": 1,
+  "Habilidades e Competencias": 1,
+};
 
-  const penalidadeProblema = (problema: {
-    tipo: "critico" | "atencao" | "ok";
-    impacto: number;
-  }): number => {
-    if (problema.tipo === "ok") return 0;
-    return Math.max(0, Math.abs(problema.impacto));
-  };
+function isCampoIndisponivel(nome: string): boolean {
+  const normalized = nome.trim().toLowerCase();
+  return [
+    "nome completo",
+    "e-mail",
+    "email",
+    "telefone",
+    "linkedin",
+    "localização",
+    "localizacao",
+    "formação acadêmica",
+    "formacao academica",
+    "experiências com datas",
+    "experiencias com datas",
+  ].includes(normalized);
+}
 
+function penalidadeProblema(problema: FormatProblem): number {
+  if (problema.tipo === "ok") return 0;
+  return Math.max(0, Math.abs(problema.impacto));
+}
+
+export function normalizeData<T extends CvAnalysisLike>(raw: T) {
   const positivosRaw = raw.positivos?.length
     ? raw.positivos
     : (raw.pontos_fortes ?? []).map((texto, index) => ({
@@ -118,27 +123,36 @@ export function normalizeData(raw: CvAnalysisData) {
     [...positivosRaw, ...ajustesConteudoRaw, ...ajustesIndisponiveisRaw],
     40,
   );
-  const positivos = s1All.slice(0, positivosRaw.length).sort((a, b) => {
-    return b.pontos - a.pontos;
-  });
-  const ajustesConteudo = s1All
-    .slice(positivosRaw.length, positivosRaw.length + ajustesConteudoRaw.length)
-    .sort((a, b) => {
-      return b.pontos - a.pontos;
-    });
-  const ajustesIndisponiveis = s1All
-    .slice(positivosRaw.length + ajustesConteudoRaw.length)
-    .sort((a, b) => {
-      return b.pontos - a.pontos;
-    });
+  const positivos = (s1All.slice(0, positivosRaw.length) as typeof positivosRaw)
+    .slice()
+    .sort((a: PointsItem, b: PointsItem) => b.pontos - a.pontos);
+  const ajustesConteudo = (
+    s1All.slice(
+      positivosRaw.length,
+      positivosRaw.length + ajustesConteudoRaw.length,
+    ) as typeof ajustesConteudoRaw
+  )
+    .slice()
+    .sort((a: PointsItem, b: PointsItem) => b.pontos - a.pontos);
+  const ajustesIndisponiveis = (
+    s1All.slice(
+      positivosRaw.length + ajustesConteudoRaw.length,
+    ) as typeof ajustesIndisponiveisRaw
+  )
+    .slice()
+    .sort((a: PointsItem, b: PointsItem) => b.pontos - a.pontos);
 
   const s2All = applyBudget([...kwPresentesRaw, ...kwAusentesRaw], 40);
-  const kwPresentes = s2All.slice(0, kwPresentesRaw.length).sort((a, b) => {
-    return b.pontos - a.pontos;
-  });
-  const kwAusentes = s2All.slice(kwPresentesRaw.length).sort((a, b) => {
-    return b.pontos - a.pontos;
-  });
+  const kwPresentes = (
+    s2All.slice(0, kwPresentesRaw.length) as typeof kwPresentesRaw
+  )
+    .slice()
+    .sort((a: PointsItem, b: PointsItem) => b.pontos - a.pontos);
+  const kwAusentes = (
+    s2All.slice(kwPresentesRaw.length) as typeof kwAusentesRaw
+  )
+    .slice()
+    .sort((a: PointsItem, b: PointsItem) => b.pontos - a.pontos);
 
   const formatoCv = raw.formato_cv
     ? {
@@ -148,79 +162,111 @@ export function normalizeData(raw: CvAnalysisData) {
           : [],
         problemas: Array.isArray(raw.formato_cv.problemas)
           ? raw.formato_cv.problemas.slice().sort((a, b) => {
-              return a.impacto - b.impacto || a.titulo.localeCompare(b.titulo);
+              return (
+                a.impacto - b.impacto ||
+                a.titulo.localeCompare(b.titulo, "pt-BR", {
+                  sensitivity: "base",
+                })
+              );
             })
           : [],
       }
-    : {
-        ats_score: 100,
-        resumo: "",
-        problemas: [],
-        campos: [],
-      };
+    : null;
 
-  const missingFieldsPenalty = formatoCv.campos
-    .filter((c) => !c.presente && isCampoIndisponivel(c.nome))
-    .reduce((sum, c) => sum + (CAMPO_PTS[c.nome] ?? 1), 0);
+  const penalidadesFormatacao = Math.max(
+    0,
+    formatoCv?.problemas.reduce(
+      (sum: number, problema: FormatProblem) =>
+        sum + penalidadeProblema(problema),
+      0,
+    ) ?? 0,
+  );
+  const penalidadesCamposAusentes =
+    formatoCv?.campos
+      .filter((campo) => !campo.presente)
+      .reduce((sum, campo) => sum + (CAMPO_PTS[campo.nome] ?? 1), 0) ?? 0;
+  const melhoriasFormatacaoSecao3 =
+    formatoCv?.problemas.reduce(
+      (sum: number, problema: FormatProblem) =>
+        sum + penalidadeProblema(problema),
+      0,
+    ) ?? 0;
+  const camposIndisponiveisSecao3 =
+    formatoCv?.campos
+      .filter((campo) => !campo.presente && isCampoIndisponivel(campo.nome))
+      .reduce((sum, campo) => sum + (CAMPO_PTS[campo.nome] ?? 1), 0) ?? 0;
+  const totalSecao3Atual = clamp(
+    20 - penalidadesFormatacao - penalidadesCamposAusentes,
+    0,
+    20,
+  );
 
-  const formatPenalty = formatoCv.problemas.reduce(
-    (sum, problema) => sum + penalidadeProblema(problema),
+  const pontosFortesSecao1 = positivos.reduce(
+    (sum: number, item: PointsItem) => sum + item.pontos,
+    0,
+  );
+  const ajustesConteudoSecao1 = ajustesConteudo.reduce(
+    (sum: number, item: PointsItem) => sum + item.pontos,
+    0,
+  );
+  const ajustesIndisponiveisSecao1 = ajustesIndisponiveis.reduce(
+    (sum: number, item: PointsItem) => sum + item.pontos,
+    0,
+  );
+  const jaNoCvSecao2 = kwPresentes.reduce(
+    (sum: number, item: PointsItem) => sum + item.pontos,
+    0,
+  );
+  const keywordsAusentesTotal = kwAusentes.reduce(
+    (sum: number, item: PointsItem) => sum + item.pontos,
     0,
   );
 
-  const scoreExp = clamp(
-    positivos.reduce((sum, item) => sum + item.pontos, 0),
+  const scoreAtualBase = clamp(
+    pontosFortesSecao1 + jaNoCvSecao2 + totalSecao3Atual,
     0,
-    40,
+    100,
   );
-  const scoreComp = clamp(
-    kwPresentes.reduce((sum, item) => sum + item.pontos, 0),
+  const pontosDisponiveisBase = clamp(
+    ajustesConteudoSecao1 + melhoriasFormatacaoSecao3,
     0,
-    40,
+    100,
   );
-  const scoreFmt = clamp(20 - missingFieldsPenalty - formatPenalty, 0, 20);
-  const scoreAtualBase = clamp(scoreExp + scoreComp + scoreFmt, 0, 100);
-
   const scoreAposLiberarBase = clamp(
-    scoreAtualBase +
-      ajustesConteudo.reduce((sum, item) => sum + item.pontos, 0),
+    scoreAtualBase + pontosDisponiveisBase,
     0,
     100,
   );
 
   return {
     vaga: raw.vaga,
-    fit: raw.fit,
-    secoes: {
-      experiencia: { score: scoreExp, max: 40 },
-      competencias: { score: scoreComp, max: 40 },
-      formatacao: { score: scoreFmt, max: 20 },
-    },
+    fit: { ...raw.fit },
     positivos,
-    keywords: {
-      presentes: kwPresentes,
-      ausentes: kwAusentes,
-    },
     ajustes_conteudo: ajustesConteudo,
     ajustes_indisponiveis: ajustesIndisponiveis,
+    keywords: { presentes: kwPresentes, ausentes: kwAusentes },
     formato_cv: formatoCv,
-    preview: raw.preview ?? null,
     comparacao: raw.comparacao,
-    pontos_fortes: raw.pontos_fortes ?? [],
-    lacunas: raw.lacunas ?? [],
-    ats_keywords: raw.ats_keywords ?? { presentes: [], ausentes: [] },
-    mensagem_venda: raw.mensagem_venda,
-    ajustes: {
-      conteudo: ajustesConteudo,
-      indisponiveis: ajustesIndisponiveis,
+    preview: raw.preview ?? null,
+    secoes: {
+      experiencia: { score: pontosFortesSecao1, max: 40 },
+      competencias: { score: jaNoCvSecao2, max: 40 },
+      formatacao: { score: totalSecao3Atual, max: 20 },
     },
-    formato: formatoCv,
     score: {
+      pontosFortesSecao1,
+      ajustesConteudoSecao1,
+      ajustesIndisponiveisSecao1,
+      jaNoCvSecao2,
+      keywordsAusentesTotal,
+      penalidadesFormatacao,
+      penalidadesCamposAusentes,
+      melhoriasFormatacaoSecao3,
+      camposIndisponiveisSecao3,
+      totalSecao3Atual,
       scoreAtualBase,
+      pontosDisponiveisBase,
       scoreAposLiberarBase,
-      experiencia: scoreExp,
-      competencias: scoreComp,
-      formatacao: scoreFmt,
     },
   };
 }

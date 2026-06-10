@@ -1645,6 +1645,7 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
   const updates: Array<Record<string, unknown>> = [];
   let protectedCalls = 0;
   let directCalls = 0;
+  let protectedPayload: Record<string, unknown> | null = null;
 
   const service = new CvAdaptationServiceCtor(
     {
@@ -1689,8 +1690,9 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
         canonicalHash: "hash-1",
         result: undefined,
       }),
-      executeProtectedBuildPaidCvOutputFromGuest: async () => {
+      executeProtectedBuildPaidCvOutputFromGuest: async (args: Record<string, unknown>) => {
         protectedCalls += 1;
+        protectedPayload = args;
         return {
           ok: true,
           cached: false,
@@ -1708,7 +1710,22 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
 
   // biome-ignore lint/suspicious/noExplicitAny: test mock
   const output = await (service as any).ensureLegacyStructuredOutput({
-    adaptedContentJson: { fit: { headline: "headline" } },
+    adaptedContentJson: {
+      fit: { headline: "headline" },
+      requirements: [
+        {
+          requirementKey: "sql-analytics",
+          requirementText: "Experiencia com SQL para analise de dados",
+          importance: "high",
+          coverageStatus: "partial",
+          evidence: ["Resumo menciona SQL"],
+          gapExplanation: "Sem profundidade em projetos",
+          recommendation: "Destacar entregas com SQL",
+          impactScore: 18,
+        },
+      ],
+      selectedMissingKeywords: ["Power BI", "Stakeholders"],
+    },
     aiAuditJson: null,
     companyName: "Acme",
     id: "adapt-1",
@@ -1722,6 +1739,19 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
   assert.equal(protectedCalls, 1);
   assert.equal(directCalls, 0);
   assert.equal(output.summary, "Resumo");
+  assert.deepEqual(protectedPayload?.requirementCoverage, [
+    {
+      requirementKey: "sql-analytics",
+      requirementText: "Experiencia com SQL para analise de dados",
+      importance: "high",
+      coverageStatus: "partial",
+      evidence: ["Resumo menciona SQL"],
+      gapExplanation: "Sem profundidade em projetos",
+      recommendation: "Destacar entregas com SQL",
+      impactScore: 18,
+    },
+  ]);
+  assert.deepEqual(protectedPayload?.selectedMissingKeywords, ["Power BI", "Stakeholders"]);
   const aiAuditUpdate = updates.find(
     (entry) =>
       typeof entry === "object" &&
