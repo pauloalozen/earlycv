@@ -273,4 +273,89 @@ describe("normalizeData", () => {
       "Formato compatível ATS",
     ]);
   });
+
+  it("preserves explicit keyword buckets for requirements_v2 payloads", () => {
+    const raw = {
+      analysisVersion: "requirements_v2",
+      vaga: { cargo: "Analista", empresa: "EarlyCV" },
+      fit: {
+        score: 1,
+        score_pos_ajustes: 1,
+        categoria: "medio",
+        headline: "headline",
+        subheadline: "subheadline",
+      },
+      requirements: [
+        {
+          requirementKey: "sql",
+          requirementText: "Experiencia com SQL e BI",
+          importance: "high",
+          gateLevel: "hard",
+          coverageStatus: "covered",
+          evidence: ["Projeto com SQL"],
+          gapExplanation: "",
+          recommendation: "",
+        },
+        {
+          requirementKey: "python",
+          requirementText: "Automacao com Python para dados",
+          importance: "medium",
+          coverageStatus: "partial",
+          evidence: ["Scripts internos"],
+          gapExplanation: "",
+          recommendation: "",
+        },
+      ],
+      scoring: {
+        kind: "requirements_v2",
+        sections: {
+          experiencia: { score: 24, max: 40 },
+          competencias: { score: 24, max: 40 },
+          formatacao: { score: 16, max: 20 },
+        },
+        totals: {
+          scoreAtualBase: 64,
+          scoreAposLiberarBase: 72,
+          scoreDelta: 8,
+        },
+      },
+      positivos: [],
+      ajustes_conteudo: [],
+      ajustes_indisponiveis: [],
+      keywords: {
+        presentes: [{ kw: "SQL", pontos: 2 }],
+        ausentes: [{ kw: "Python", pontos: 1 }],
+      },
+      formato_cv: {
+        resumo: "ok",
+        problemas: [],
+        campos: [],
+      },
+      comparacao: { antes: "", depois: "" },
+      pontos_fortes: [],
+      lacunas: [],
+      melhorias_aplicadas: [],
+      ats_keywords: {
+        presentes: ["Experiencia com SQL e BI"],
+        ausentes: ["Automacao com Python para dados"],
+      },
+      preview: { antes: "", depois: "" },
+      projecao_melhoria: {
+        score_atual: 0,
+        score_pos_otimizacao: 0,
+        explicacao_curta: "",
+      },
+      mensagem_venda: { titulo: "", subtexto: "" },
+    } as unknown as CvAnalysisData;
+
+    const normalized = normalizeData(raw);
+
+    expect(normalized.keywords.presentes.map((item) => item.kw)).toEqual([
+      "SQL",
+    ]);
+    expect(normalized.keywords.ausentes.map((item) => item.kw)).toEqual([
+      "Python",
+    ]);
+    expect(normalized.secoes.competencias.score).toBe(24);
+  });
 });

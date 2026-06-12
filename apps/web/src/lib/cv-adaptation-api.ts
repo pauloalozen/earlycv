@@ -143,6 +143,7 @@ export async function getCvAdaptationContent(id: string): Promise<{
 }
 
 export type CvAnalysisData = {
+  analysisVersion?: "legacy_v1" | "requirements_v2";
   vaga: {
     cargo: string;
     empresa: string;
@@ -155,14 +156,18 @@ export type CvAnalysisData = {
     headline: string;
     subheadline: string;
   };
-  /** Presente em análises novas — scores por seção (experiência 0-40 + competências 0-40 + formatação 0-20 = fit.score) */
+  /** Presente em análises novas — scores por seção (experiência 0-50 + competências 0-40 + formatação 0-10 = fit.score) */
   secoes?: {
     experiencia: { score: number; max: number };
     competencias: { score: number; max: number };
     formatacao: { score: number; max: number };
   };
   /** Presente em análises novas — pontos fortes com peso relativo */
-  positivos?: Array<{ texto: string; pontos: number }>;
+  positivos?: Array<{
+    texto: string;
+    pontos: number;
+    coveragePercent?: 0 | 25 | 50 | 75 | 100;
+  }>;
   /** Presente em análises novas — ajustes de conteúdo com ganho estimado */
   ajustes_conteudo?: Array<{
     id?: string;
@@ -170,6 +175,7 @@ export type CvAnalysisData = {
     descricao: string;
     pontos: number;
     dica: string;
+    coveragePercent?: 0 | 25 | 50 | 75 | 100;
   }>;
   ajustes_indisponiveis?: Array<{
     id?: string;
@@ -177,10 +183,12 @@ export type CvAnalysisData = {
     descricao?: string;
     pontos: number;
     dica?: string;
+    coveragePercent?: 0 | 25 | 50 | 75 | 100;
   }>;
   /** Presente em análises novas — keywords com impacto por item */
   keywords?: {
     presentes: Array<{ kw: string; pontos: number }>;
+    possiveis?: Array<{ kw: string; pontos: number }>;
     ausentes: Array<{ kw: string; pontos: number }>;
   };
   /** Presente em análises novas — análise de formato ATS */
@@ -221,6 +229,47 @@ export type CvAnalysisData = {
     subtexto: string;
   };
   adaptation_notes?: string;
+  sinais_referencia?: string[];
+  requirements?: Array<{
+    requirementKey?: string;
+    requirementText: string;
+    importance: "high" | "medium" | "low";
+    gateLevel?: "hard" | "soft";
+    coverageStatus: "covered" | "partial" | "missing";
+    coveragePercent?: 0 | 25 | 50 | 75 | 100;
+    evidence?: string[];
+    gapExplanation?: string;
+    recommendation?: string;
+    impactScore?: number;
+  }>;
+  scoring?: {
+    kind: "requirements_v2";
+    gates?: {
+      hardTotal: number;
+      hardCovered: number;
+      hardPartial: number;
+      hardMissing: number;
+    };
+    sections: {
+      experiencia: { score: number; max: number };
+      competencias: { score: number; max: number };
+      formatacao: { score: number; max: number };
+    };
+    totals: {
+      scoreAtualBase: number;
+      scoreAposLiberarBase: number;
+      scoreDelta: number;
+    };
+  };
+  hard_gates?: Array<{
+    requirementKey?: string;
+    requirementText: string;
+    status: "covered" | "partial" | "missing";
+    importance: "high" | "medium" | "low";
+  }>;
+  scoreBefore?: number;
+  scoreAfter?: number;
+  scoreDelta?: number;
 };
 
 export type GuestAnalysisResult = {
@@ -277,7 +326,7 @@ export async function analyzeGuestCv(
     "POST",
     "/cv-adaptation/analyze-guest",
     formData,
-    120_000,
+    180_000,
   );
   if (!response.ok) {
     const raw = await response.text();
@@ -306,6 +355,7 @@ export async function claimGuestAnalysis(payload: {
     "POST",
     "/cv-adaptation/claim-guest",
     payload,
+    180_000,
   );
   if (!response.ok) {
     const error = await response.text();
@@ -355,6 +405,7 @@ export async function saveGuestPreview(payload: {
     "POST",
     "/cv-adaptation/save-guest-preview",
     body,
+    180_000,
   );
   if (!response.ok) {
     const error = await response.text();
@@ -370,7 +421,12 @@ export async function analyzeAuthenticatedCv(
   if (inputMode) {
     formData.set("inputMode", inputMode);
   }
-  const response = await apiRequest("POST", "/cv-adaptation/analyze", formData, 120_000);
+  const response = await apiRequest(
+    "POST",
+    "/cv-adaptation/analyze",
+    formData,
+    180_000,
+  );
   if (!response.ok) {
     const raw = await response.text();
     return {
@@ -385,7 +441,12 @@ export async function analyzeAuthenticatedCv(
 }
 
 export async function downloadCvAdaptationPdf(id: string): Promise<Blob> {
-  const response = await apiRequest("GET", `/cv-adaptation/${id}/download`, undefined, 180_000);
+  const response = await apiRequest(
+    "GET",
+    `/cv-adaptation/${id}/download`,
+    undefined,
+    180_000,
+  );
   if (!response.ok) {
     throw new Error("Failed to download PDF");
   }

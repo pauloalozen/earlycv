@@ -127,6 +127,8 @@ export class JobRequirementSetsService {
       const requirementKey = String(record.requirementKey ?? "").trim();
       const requirementText = String(record.requirementText ?? "").trim();
       const importance = String(record.importance ?? "").trim();
+      const dimension = String(record.dimension ?? "").trim();
+      const gateLevel = String(record.gateLevel ?? "").trim();
 
       if (!requirementKey || !requirementText) {
         throw new Error(`Job requirement ${index} is missing stable fields`);
@@ -140,6 +142,22 @@ export class JobRequirementSetsService {
         requirementKey,
         requirementText,
         importance: importance as StructuredJobRequirement["importance"],
+        ...(dimension &&
+        [
+          "experience",
+          "skill",
+          "education",
+          "certification",
+          "language",
+          "location",
+          "work_model",
+          "other",
+        ].includes(dimension)
+          ? { dimension: dimension as StructuredJobRequirement["dimension"] }
+          : {}),
+        ...(gateLevel && ["hard", "soft"].includes(gateLevel)
+          ? { gateLevel: gateLevel as StructuredJobRequirement["gateLevel"] }
+          : {}),
       };
     });
   }

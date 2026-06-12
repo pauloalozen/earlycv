@@ -22,6 +22,8 @@ export type {
   CvSection,
   CvSectionItem,
   JobRequirementCoverage,
+  JobRequirementDimension,
+  JobRequirementGateLevel,
   JobRequirementImportance,
   RequirementAdaptationAction,
   RequirementCoverageStatus,

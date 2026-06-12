@@ -17,9 +17,9 @@ import { AddNoteDto } from "./dto/add-note.dto";
 import { CreateJobApplicationDto } from "./dto/create-job-application.dto";
 import { ListJobApplicationHighlightsDto } from "./dto/list-job-application-highlights.dto";
 import { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
-import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
 import { RejectionFeedbackDto } from "./dto/rejection-feedback.dto";
 import { ScheduleInterviewDto } from "./dto/schedule-interview.dto";
+import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
 import { UpdateJobApplicationUrlDto } from "./dto/update-job-application-url.dto";
 import { JobApplicationInterviewPrepService } from "./interview-prep.service";
 import { JobApplicationsService } from "./job-applications.service";
@@ -112,7 +112,12 @@ export class JobApplicationsController {
     )
     dto: UpdateJobApplicationStatusDto,
   ) {
-    return this.service.updateStatus(user.id, id, dto.status, dto.currentCvAdaptationId);
+    return this.service.updateStatus(
+      user.id,
+      id,
+      dto.status,
+      dto.currentCvAdaptationId,
+    );
   }
 
   @Patch(":id/rejection-feedback")

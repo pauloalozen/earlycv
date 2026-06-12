@@ -763,6 +763,8 @@ model AnalysisCvSnapshot {
   originalFileName      String?
   originalMimeType      String?
   originalFileSizeBytes Int?
+  professionalProfileFingerprint String
+  professionalProfileJson Json
   capturedAt            DateTime             @default(now())
   expiresAt             DateTime?
   claimedAt             DateTime?
@@ -778,6 +780,7 @@ model AnalysisCvSnapshot {
   @@index([guestSessionHash])
   @@index([expiresAt])
   @@index([textSha256])
+  @@index([professionalProfileFingerprint])
 }
 
 model JobSource {

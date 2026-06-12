@@ -16,6 +16,11 @@ type ProtectedAnalyzeInput<TPayload> = {
   canonicalJobJson: unknown;
   context: AnalysisRequestContext & { routeKey: string };
   existingRequirements?: StructuredJobRequirement[];
+  existingKeywordRule?: {
+    presentes: Array<{ kw: string; pontos: number }>;
+    possiveis: Array<{ kw: string; pontos: number }>;
+    ausentes: Array<{ kw: string; pontos: number }>;
+  };
   jobDescriptionText: string;
   loadMasterCvText: () => Promise<string>;
   payload: TPayload;
@@ -81,6 +86,7 @@ export class CvAdaptationProtectedAnalyzeService {
           jobDescriptionText: input.jobDescriptionText,
           canonicalJobJson: input.canonicalJobJson,
           existingRequirements: input.existingRequirements,
+          existingKeywordRule: input.existingKeywordRule,
         });
 
         return {

@@ -14,6 +14,11 @@ type AnalyzeJobFitInput = {
   jobDescriptionText: string;
   canonicalJobJson: unknown;
   existingRequirements?: StructuredJobRequirement[];
+  existingKeywordRule?: {
+    presentes: Array<{ kw: string; pontos: number }>;
+    possiveis: Array<{ kw: string; pontos: number }>;
+    ausentes: Array<{ kw: string; pontos: number }>;
+  };
 };
 
 type AnalyzeJobFitResult = {
@@ -107,6 +112,7 @@ export class CvAdaptationAiService {
       jobDescriptionText: input.jobDescriptionText,
       canonicalJobJson: input.canonicalJobJson,
       existingRequirements: input.existingRequirements,
+      existingKeywordRule: input.existingKeywordRule,
     });
 
     return {
@@ -116,6 +122,8 @@ export class CvAdaptationAiService {
         requirementKey: requirement.requirementKey,
         requirementText: requirement.requirementText,
         importance: requirement.importance,
+        dimension: requirement.dimension,
+        gateLevel: requirement.gateLevel,
       })),
       analysisModel: model,
       analysisPromptVersion: CV_ANALYSIS_PROMPT_VERSION,
@@ -151,13 +159,14 @@ export class CvAdaptationAiService {
         ],
         highlightedSkills: [],
         removedSections: [],
-        requirementAdaptationActions: input.requirementCoverage?.map((r) => ({
-          requirementKey: r.requirementKey,
-          action: "not_addressed" as const,
-          whereChanged: [],
-          reason: "SKIP_AI mode active — no real adaptation performed.",
-          truthfulnessRisk: "low" as const,
-        })) ?? [],
+        requirementAdaptationActions:
+          input.requirementCoverage?.map((r) => ({
+            requirementKey: r.requirementKey,
+            action: "not_addressed" as const,
+            whereChanged: [],
+            reason: "SKIP_AI mode active — no real adaptation performed.",
+            truthfulnessRisk: "low" as const,
+          })) ?? [],
       };
     }
 

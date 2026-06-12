@@ -474,21 +474,25 @@ test("analyzeAuthenticated with adapted CV reuses existing requirement set witho
     },
   );
 
-  const result = await service.analyzeAuthenticated(
-    "user-1",
-    {
-      jobDescriptionText:
-        "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
-      masterCvText: validMasterCvText,
-      saveAsMaster: false,
-      turnstileToken: "token",
-    },
-  );
+  const result = await service.analyzeAuthenticated("user-1", {
+    jobDescriptionText:
+      "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    masterCvText: validMasterCvText,
+    saveAsMaster: false,
+    turnstileToken: "token",
+  });
 
-  assert.equal(createRuleCalls, 0, "must not create a new requirement set when one already exists");
+  assert.equal(
+    createRuleCalls,
+    0,
+    "must not create a new requirement set when one already exists",
+  );
   assert.equal(protectedCalls.length, 1);
-  assert.deepEqual(protectedCalls[0]?.existingRequirements, existingRequirements,
-    "must pass existing requirements to AI so it uses the same rule");
+  assert.deepEqual(
+    protectedCalls[0]?.existingRequirements,
+    existingRequirements,
+    "must pass existing requirements to AI so it uses the same rule",
+  );
   assert.equal(result.previewText, "preview-adaptado");
 });
 
@@ -549,7 +553,8 @@ test("analyzeAuthenticated creates separate requirement sets for two different v
             canonicalJobId: canonicalJobIds[idx] ?? `canonical-${idx}`,
             rawJobHash: `raw-hash-${idx}`,
             canonicalJobHash: `canonical-hash-${idx}`,
-            requirementSourceHash: requirementSourceHashes[idx] ?? `req-source-${idx}`,
+            requirementSourceHash:
+              requirementSourceHashes[idx] ?? `req-source-${idx}`,
             canonicalJobJson: { title: `Vaga ${idx}` },
             reusedByRawHash: false,
             reusedByCanonicalHash: false,
@@ -558,8 +563,12 @@ test("analyzeAuthenticated creates separate requirement sets for two different v
       },
       {
         findByRequirementSourceHash: async () => null,
-        getOrCreateFromAnalysis: async (input: { requirementSourceHash: string }) => {
-          createdRules.push({ requirementSourceHash: input.requirementSourceHash });
+        getOrCreateFromAnalysis: async (input: {
+          requirementSourceHash: string;
+        }) => {
+          createdRules.push({
+            requirementSourceHash: input.requirementSourceHash,
+          });
           return {
             id: `rule-${createdRules.length}`,
             requirementSourceHash: input.requirementSourceHash,
@@ -590,7 +599,11 @@ test("analyzeAuthenticated creates separate requirement sets for two different v
     turnstileToken: "token",
   });
 
-  assert.equal(createdRules.length, 2, "must create a separate requirement set for each distinct vaga");
+  assert.equal(
+    createdRules.length,
+    2,
+    "must create a separate requirement set for each distinct vaga",
+  );
   assert.notEqual(
     createdRules[0]?.requirementSourceHash,
     createdRules[1]?.requirementSourceHash,
@@ -1690,7 +1703,9 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
         canonicalHash: "hash-1",
         result: undefined,
       }),
-      executeProtectedBuildPaidCvOutputFromGuest: async (args: Record<string, unknown>) => {
+      executeProtectedBuildPaidCvOutputFromGuest: async (
+        args: Record<string, unknown>,
+      ) => {
         protectedCalls += 1;
         protectedPayload = args;
         return {
@@ -1751,7 +1766,10 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
       impactScore: 18,
     },
   ]);
-  assert.deepEqual(protectedPayload?.selectedMissingKeywords, ["Power BI", "Stakeholders"]);
+  assert.deepEqual(protectedPayload?.selectedMissingKeywords, [
+    "Power BI",
+    "Stakeholders",
+  ]);
   const aiAuditUpdate = updates.find(
     (entry) =>
       typeof entry === "object" &&

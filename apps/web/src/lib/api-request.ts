@@ -17,7 +17,7 @@ export async function apiRequest(
   method: string,
   path: string,
   body?: FormData | Record<string, unknown>,
-  timeoutMs = 15_000,
+  timeoutMs = 180_000,
 ): Promise<Response> {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get(APP_ACCESS_TOKEN_COOKIE_NAME)?.value;

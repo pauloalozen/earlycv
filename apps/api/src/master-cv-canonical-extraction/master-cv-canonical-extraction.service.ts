@@ -57,7 +57,7 @@ export class MasterCvCanonicalExtractionService {
 
     const hashSource = input.rawText
       ? Buffer.from(input.rawText)
-      : input.file!.buffer;
+      : (input.file?.buffer ?? Buffer.alloc(0));
     const inputHash = createHash("sha256").update(hashSource).digest("hex");
     const table = this.database.masterCvCanonicalExtraction;
 
@@ -106,15 +106,12 @@ export class MasterCvCanonicalExtractionService {
       // File-based extraction requires model support for input_file / file_data
       // which is not universal. Text extraction works with any chat model.
       const rawText =
-        input.rawText?.trim() ||
-        extraction.resume?.rawText?.trim() ||
-        "";
-      const extractionInput =
-        rawText
-          ? { masterCvText: rawText }
-          : input.file
-            ? { file: input.file }
-            : { masterCvText: "" };
+        input.rawText?.trim() || extraction.resume?.rawText?.trim() || "";
+      const extractionInput = rawText
+        ? { masterCvText: rawText }
+        : input.file
+          ? { file: input.file }
+          : { masterCvText: "" };
       const output = await this.extractCanonical(extractionInput);
       const payload = parseMasterCvCanonicalExtractionPayload(output);
 
@@ -174,7 +171,10 @@ export class MasterCvCanonicalExtractionService {
     }
 
     const { extractMasterCvCanonicalProfile } = await import("@earlycv/ai");
-    const model = process.env.OPENAI_MODEL_MASTERCV ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+    const model =
+      process.env.OPENAI_MODEL_MASTERCV ??
+      process.env.OPENAI_MODEL ??
+      "gpt-4o-mini";
     const { output } = await extractMasterCvCanonicalProfile(
       this.aiClient as never,
       model,

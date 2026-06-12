@@ -69,9 +69,10 @@ const ACTIVE_SUMMARY_STATUSES: ReadonlySet<JobApplicationStatus> = new Set([
   "INTERVIEW",
 ]);
 
-function extractAdaptationScores(
-  content: unknown,
-): { scoreBefore: number | null; scoreAfter: number | null } {
+function extractAdaptationScores(content: unknown): {
+  scoreBefore: number | null;
+  scoreAfter: number | null;
+} {
   if (!content || typeof content !== "object" || Array.isArray(content)) {
     return { scoreBefore: null, scoreAfter: null };
   }
@@ -87,9 +88,7 @@ function extractAdaptationScores(
       Array.isArray(parsed.lacunas) ||
       Boolean(parsed.keywords && typeof parsed.keywords === "object") ||
       Boolean(parsed.formato_cv && typeof parsed.formato_cv === "object") ||
-      Boolean(
-        parsed.ats_keywords && typeof parsed.ats_keywords === "object",
-      ));
+      Boolean(parsed.ats_keywords && typeof parsed.ats_keywords === "object"));
 
   if (hasNormalizedPayload) {
     try {
@@ -104,10 +103,7 @@ function extractAdaptationScores(
       )
         .filter((k) => effectiveSelected.has(k.kw))
         .reduce((s, k) => s + k.pontos, 0);
-      const scoreAfter = Math.min(
-        100,
-        data.score.scoreAposLiberarBase + ptsKw,
-      );
+      const scoreAfter = Math.min(100, data.score.scoreAposLiberarBase + ptsKw);
       return { scoreBefore: data.score.scoreAtualBase, scoreAfter };
     } catch {
       // fall through to legacy path

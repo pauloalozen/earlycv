@@ -210,8 +210,14 @@ describe("analyzeAndAdaptCv", () => {
       canonicalJobJson: { title: "Analista de Dados" },
     });
 
+    assert.equal(output.analysisVersion, "requirements_v2");
+    assert.equal(output.fit.score, 10);
+    assert.equal(output.fit.score_pos_ajustes, 23);
+    assert.equal(output.scoreBefore, 10);
+    assert.equal(output.scoreAfter, 23);
     assert.equal(output.requirements.length, 1);
     assert.match(output.requirements[0]?.requirementKey ?? "", /sql/i);
+    assert.equal(output.requirements[0]?.coveragePercent, 50);
     assert.deepEqual(output.lacunas, [
       "SQL aparece, mas com pouca profundidade",
     ]);
@@ -247,19 +253,38 @@ describe("analyzeAndAdaptCv", () => {
                         impactScore: 10,
                       },
                     ],
-                    fit: { score: 60, score_pos_ajustes: 75, categoria: "medio", headline: "ok", subheadline: "ok" },
-                    secoes: { experiencia: { score: 24, max: 40 }, competencias: { score: 22, max: 40 }, formatacao: { score: 14, max: 20 } },
+                    fit: {
+                      score: 60,
+                      score_pos_ajustes: 75,
+                      categoria: "medio",
+                      headline: "ok",
+                      subheadline: "ok",
+                    },
+                    secoes: {
+                      experiencia: { score: 24, max: 40 },
+                      competencias: { score: 22, max: 40 },
+                      formatacao: { score: 14, max: 20 },
+                    },
                     positivos: [],
                     ajustes_conteudo: [],
                     keywords: { presentes: [], ausentes: [] },
-                    formato_cv: { ats_score: 70, resumo: "ok", problemas: [], campos: [] },
+                    formato_cv: {
+                      ats_score: 70,
+                      resumo: "ok",
+                      problemas: [],
+                      campos: [],
+                    },
                     comparacao: { antes: "antes", depois: "depois" },
                     preview: { antes: "antes", depois: "depois" },
                     pontos_fortes: [],
                     lacunas: ["placeholder — deve ser substituído"],
                     melhorias_aplicadas: [],
                     ats_keywords: { presentes: [], ausentes: [] },
-                    projecao_melhoria: { score_atual: 60, score_pos_otimizacao: 75, explicacao_curta: "ok" },
+                    projecao_melhoria: {
+                      score_atual: 60,
+                      score_pos_otimizacao: 75,
+                      explicacao_curta: "ok",
+                    },
                     mensagem_venda: { titulo: "ok", subtexto: "ok" },
                   }),
                 },
@@ -283,6 +308,210 @@ describe("analyzeAndAdaptCv", () => {
     assert.ok(coverageKeys.includes("missing"));
   });
 
+  it("preserves explicit keyword labels instead of replacing them with requirement phrases", async () => {
+    const mockClient = {
+      chat: {
+        completions: {
+          create: mock.fn(async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    vaga: { cargo: "Analista", empresa: "Acme" },
+                    requirements: [
+                      {
+                        requirementText: "Experiencia com SQL e BI",
+                        importance: "high",
+                        coverageStatus: "covered",
+                        evidence: ["Projeto com SQL"],
+                        gapExplanation: "",
+                        recommendation: "",
+                        impactScore: 12,
+                      },
+                      {
+                        requirementText: "Automacao com Python para dados",
+                        importance: "medium",
+                        coverageStatus: "partial",
+                        evidence: ["Scripts internos"],
+                        gapExplanation: "",
+                        recommendation: "",
+                        impactScore: 10,
+                      },
+                    ],
+                    fit: {
+                      score: 70,
+                      score_pos_ajustes: 82,
+                      categoria: "medio",
+                      headline: "ok",
+                      subheadline: "ok",
+                    },
+                    secoes: {
+                      experiencia: { score: 28, max: 40 },
+                      competencias: { score: 24, max: 40 },
+                      formatacao: { score: 16, max: 20 },
+                    },
+                    positivos: [],
+                    ajustes_conteudo: [],
+                    keywords: {
+                      presentes: [{ kw: "SQL", pontos: 2 }],
+                      ausentes: [{ kw: "Python", pontos: 1 }],
+                    },
+                    formato_cv: {
+                      ats_score: 80,
+                      resumo: "ok",
+                      problemas: [],
+                      campos: [],
+                    },
+                    comparacao: { antes: "antes", depois: "depois" },
+                    preview: { antes: "antes", depois: "depois" },
+                    pontos_fortes: [],
+                    lacunas: [],
+                    melhorias_aplicadas: [],
+                    ats_keywords: { presentes: [], ausentes: [] },
+                    projecao_melhoria: {
+                      score_atual: 70,
+                      score_pos_otimizacao: 82,
+                      explicacao_curta: "ok",
+                    },
+                    mensagem_venda: { titulo: "ok", subtexto: "ok" },
+                  }),
+                },
+              },
+            ],
+          })),
+        },
+      },
+    } as unknown as OpenAI;
+
+    const output = await analyzeAndAdaptCv(mockClient, "gpt-4-mini", {
+      masterCvText: "Experiencia com BI e SQL.",
+      jobDescriptionText: "Vaga com SQL, Python e dashboards.",
+      canonicalJobJson: { title: "Analista de Dados" },
+    });
+
+    assert.deepEqual(
+      output.keywords.presentes.map((item) => item.kw),
+      ["SQL"],
+    );
+    assert.deepEqual(
+      output.keywords.ausentes.map((item) => item.kw),
+      ["Python"],
+    );
+  });
+
+  it("reuses a fixed keyword ruler on reanalysis when existingKeywordRule is provided", async () => {
+    const mockClient = {
+      chat: {
+        completions: {
+          create: mock.fn(async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    vaga: { cargo: "Analista", empresa: "Acme" },
+                    requirements: [
+                      {
+                        requirementKey: "quality-practices",
+                        requirementText:
+                          "Vivência com práticas de qualidade de engenharia como code review, testes, observabilidade e dívida técnica.",
+                        importance: "high",
+                        gateLevel: "hard",
+                        coverageStatus: "partial",
+                        evidence: [
+                          "Code review, testes e observabilidade aplicados",
+                        ],
+                        gapExplanation:
+                          "Code review, testes e observabilidade aparecem, mas dívida técnica não fica comprovada.",
+                        recommendation: "",
+                        impactScore: 9,
+                      },
+                    ],
+                    fit: {
+                      score: 70,
+                      score_pos_ajustes: 82,
+                      categoria: "medio",
+                      headline: "ok",
+                      subheadline: "ok",
+                    },
+                    secoes: {
+                      experiencia: { score: 28, max: 40 },
+                      competencias: { score: 24, max: 40 },
+                      formatacao: { score: 16, max: 20 },
+                    },
+                    positivos: [],
+                    ajustes_conteudo: [],
+                    keywords: {
+                      presentes: [
+                        { kw: "code review", pontos: 2 },
+                        { kw: "testes", pontos: 2 },
+                        { kw: "observabilidade", pontos: 2 },
+                      ],
+                      ausentes: [
+                        { kw: "dívida técnica", pontos: 1 },
+                        { kw: "confiabilidade", pontos: 1 },
+                      ],
+                    },
+                    formato_cv: {
+                      ats_score: 80,
+                      resumo: "ok",
+                      problemas: [],
+                      campos: [],
+                    },
+                    comparacao: { antes: "antes", depois: "depois" },
+                    preview: { antes: "antes", depois: "depois" },
+                    pontos_fortes: [],
+                    lacunas: [],
+                    melhorias_aplicadas: [],
+                    ats_keywords: { presentes: [], ausentes: [] },
+                    projecao_melhoria: {
+                      score_atual: 70,
+                      score_pos_otimizacao: 82,
+                      explicacao_curta: "ok",
+                    },
+                    mensagem_venda: { titulo: "ok", subtexto: "ok" },
+                  }),
+                },
+              },
+            ],
+          })),
+        },
+      },
+    } as unknown as OpenAI;
+
+    const output = await analyzeAndAdaptCv(mockClient, "gpt-4-mini", {
+      masterCvText: "Experiencia com BI e SQL.",
+      jobDescriptionText: "Vaga com qualidade de engenharia.",
+      canonicalJobJson: { title: "Analista de Dados" },
+      existingRequirements: [
+        {
+          requirementKey: "quality-practices",
+          requirementText:
+            "Vivência com práticas de qualidade de engenharia como code review, testes, observabilidade e dívida técnica.",
+          importance: "high",
+          gateLevel: "hard",
+        },
+      ],
+      existingKeywordRule: {
+        presentes: [{ kw: "arquitetura de sistemas", pontos: 6 }],
+        ausentes: [
+          { kw: "code review", pontos: 4 },
+          { kw: "testes", pontos: 4 },
+          { kw: "observabilidade", pontos: 4 },
+          { kw: "dívida técnica", pontos: 3 },
+        ],
+      },
+    });
+
+    assert.deepEqual(
+      output.keywords.presentes.map((item) => item.kw),
+      ["arquitetura de sistemas", "code review", "testes", "observabilidade"],
+    );
+    assert.deepEqual(
+      output.keywords.ausentes.map((item) => item.kw),
+      ["dívida técnica"],
+    );
+  });
+
   it("lacunas fall back to recommendation when gapExplanation is empty", async () => {
     const mockClient = {
       chat: {
@@ -300,23 +529,43 @@ describe("analyzeAndAdaptCv", () => {
                         coverageStatus: "partial",
                         evidence: ["Menção pontual a projetos"],
                         gapExplanation: "",
-                        recommendation: "Detalhar escopo e resultado dos projetos",
+                        recommendation:
+                          "Detalhar escopo e resultado dos projetos",
                         impactScore: 12,
                       },
                     ],
-                    fit: { score: 55, score_pos_ajustes: 70, categoria: "medio", headline: "ok", subheadline: "ok" },
-                    secoes: { experiencia: { score: 22, max: 40 }, competencias: { score: 20, max: 40 }, formatacao: { score: 13, max: 20 } },
+                    fit: {
+                      score: 55,
+                      score_pos_ajustes: 70,
+                      categoria: "medio",
+                      headline: "ok",
+                      subheadline: "ok",
+                    },
+                    secoes: {
+                      experiencia: { score: 22, max: 40 },
+                      competencias: { score: 20, max: 40 },
+                      formatacao: { score: 13, max: 20 },
+                    },
                     positivos: [],
                     ajustes_conteudo: [],
                     keywords: { presentes: [], ausentes: [] },
-                    formato_cv: { ats_score: 65, resumo: "ok", problemas: [], campos: [] },
+                    formato_cv: {
+                      ats_score: 65,
+                      resumo: "ok",
+                      problemas: [],
+                      campos: [],
+                    },
                     comparacao: { antes: "antes", depois: "depois" },
                     preview: { antes: "antes", depois: "depois" },
                     pontos_fortes: [],
                     lacunas: [],
                     melhorias_aplicadas: [],
                     ats_keywords: { presentes: [], ausentes: [] },
-                    projecao_melhoria: { score_atual: 55, score_pos_otimizacao: 70, explicacao_curta: "ok" },
+                    projecao_melhoria: {
+                      score_atual: 55,
+                      score_pos_otimizacao: 70,
+                      explicacao_curta: "ok",
+                    },
                     mensagem_venda: { titulo: "ok", subtexto: "ok" },
                   }),
                 },
@@ -358,19 +607,38 @@ describe("analyzeAndAdaptCv", () => {
                         impactScore: 5,
                       },
                     ],
-                    fit: { score: 50, score_pos_ajustes: 55, categoria: "medio", headline: "ok", subheadline: "ok" },
-                    secoes: { experiencia: { score: 20, max: 40 }, competencias: { score: 20, max: 40 }, formatacao: { score: 10, max: 20 } },
+                    fit: {
+                      score: 50,
+                      score_pos_ajustes: 55,
+                      categoria: "medio",
+                      headline: "ok",
+                      subheadline: "ok",
+                    },
+                    secoes: {
+                      experiencia: { score: 20, max: 40 },
+                      competencias: { score: 20, max: 40 },
+                      formatacao: { score: 10, max: 20 },
+                    },
                     positivos: [],
                     ajustes_conteudo: [],
                     keywords: { presentes: [], ausentes: [] },
-                    formato_cv: { ats_score: 60, resumo: "ok", problemas: [], campos: [] },
+                    formato_cv: {
+                      ats_score: 60,
+                      resumo: "ok",
+                      problemas: [],
+                      campos: [],
+                    },
                     comparacao: { antes: "antes", depois: "depois" },
                     preview: { antes: "antes", depois: "depois" },
                     pontos_fortes: [],
                     lacunas: [],
                     melhorias_aplicadas: [],
                     ats_keywords: { presentes: [], ausentes: [] },
-                    projecao_melhoria: { score_atual: 50, score_pos_otimizacao: 55, explicacao_curta: "ok" },
+                    projecao_melhoria: {
+                      score_atual: 50,
+                      score_pos_otimizacao: 55,
+                      explicacao_curta: "ok",
+                    },
                     mensagem_venda: { titulo: "ok", subtexto: "ok" },
                   }),
                 },
@@ -656,10 +924,23 @@ describe("adaptCv — requirement-guided generation", () => {
     const actions = output.requirementAdaptationActions ?? [];
     const keys = actions.map((a) => a.requirementKey);
 
-    assert.equal(actions.length, 2, "apenas as 2 chaves validas devem aparecer");
-    assert.ok(!keys.includes("invented-key-that-does-not-exist"), "chave inventada deve ser descartada");
-    assert.ok(keys.includes("sql-analytics"), "sql-analytics deve estar presente");
-    assert.ok(keys.includes("stakeholder-communication"), "stakeholder-communication deve estar presente");
+    assert.equal(
+      actions.length,
+      2,
+      "apenas as 2 chaves validas devem aparecer",
+    );
+    assert.ok(
+      !keys.includes("invented-key-that-does-not-exist"),
+      "chave inventada deve ser descartada",
+    );
+    assert.ok(
+      keys.includes("sql-analytics"),
+      "sql-analytics deve estar presente",
+    );
+    assert.ok(
+      keys.includes("stakeholder-communication"),
+      "stakeholder-communication deve estar presente",
+    );
   });
 
   it("sem requirementCoverage — output nao inclui requirementAdaptationActions", async () => {
@@ -706,7 +987,9 @@ function makeCapturingClient(response: CvAdaptationOutput) {
       completions: {
         create: mock.fn(async (args: CapturedCall) => {
           calls.push(args);
-          return { choices: [{ message: { content: JSON.stringify(fullResponse) } }] };
+          return {
+            choices: [{ message: { content: JSON.stringify(fullResponse) } }],
+          };
         }),
       },
     },
@@ -736,8 +1019,13 @@ describe("adaptCv — smoke: prompt com régua de requisitos", () => {
       requirementCoverage: sampleCoverage,
     });
 
-    assert.equal(calls.length, 1, "deve ter feito exatamente uma chamada ao modelo");
-    const userMsg = calls[0]?.messages.find((m) => m.role === "user")?.content ?? "";
+    assert.equal(
+      calls.length,
+      1,
+      "deve ter feito exatamente uma chamada ao modelo",
+    );
+    const userMsg =
+      calls[0]?.messages.find((m) => m.role === "user")?.content ?? "";
 
     assert.ok(
       userMsg.includes("<REGUA_REQUISITOS>"),
@@ -778,7 +1066,8 @@ describe("adaptCv — smoke: prompt com régua de requisitos", () => {
       jobDescriptionText: "Vaga generica.",
     });
 
-    const userMsg = calls[0]?.messages.find((m) => m.role === "user")?.content ?? "";
+    const userMsg =
+      calls[0]?.messages.find((m) => m.role === "user")?.content ?? "";
 
     assert.ok(
       !userMsg.includes("<REGUA_REQUISITOS>"),
@@ -799,7 +1088,8 @@ describe("adaptCv — smoke: prompt com régua de requisitos", () => {
         coverageStatus: "missing",
         evidence: [],
         gapExplanation: "Sem mencao a Python ou ML no CV",
-        recommendation: "Incluir experiencias reais com Python e ML se existirem",
+        recommendation:
+          "Incluir experiencias reais com Python e ML se existirem",
         impactScore: 22,
       },
       {
@@ -824,7 +1114,8 @@ describe("adaptCv — smoke: prompt com régua de requisitos", () => {
           requirementKey: "python-ml",
           action: "strengthened",
           whereChanged: ["Projetos"],
-          reason: "Usuario selecionou Python como keyword missing; incluido em Projetos",
+          reason:
+            "Usuario selecionou Python como keyword missing; incluido em Projetos",
           truthfulnessRisk: "medium",
         },
         {
@@ -843,15 +1134,28 @@ describe("adaptCv — smoke: prompt com régua de requisitos", () => {
       requirementCoverage: coverageComGapCritico,
     });
 
-    const userMsg = calls[0]?.messages.find((m) => m.role === "user")?.content ?? "";
+    const userMsg =
+      calls[0]?.messages.find((m) => m.role === "user")?.content ?? "";
 
     // Verifica que o gap critico (high+missing) esta visivel no prompt
-    assert.ok(userMsg.includes("python-ml"), "chave high+missing deve estar no prompt");
-    assert.ok(userMsg.includes("missing"), "status missing deve constar na cobertura");
-    assert.ok(userMsg.includes("Sem mencao"), "gapExplanation deve constar na cobertura");
+    assert.ok(
+      userMsg.includes("python-ml"),
+      "chave high+missing deve estar no prompt",
+    );
+    assert.ok(
+      userMsg.includes("missing"),
+      "status missing deve constar na cobertura",
+    );
+    assert.ok(
+      userMsg.includes("Sem mencao"),
+      "gapExplanation deve constar na cobertura",
+    );
 
     // Verifica que o requisito coberto tambem esta presente (para preservacao)
-    assert.ok(userMsg.includes("comunicacao-executiva"), "chave covered deve estar no prompt");
+    assert.ok(
+      userMsg.includes("comunicacao-executiva"),
+      "chave covered deve estar no prompt",
+    );
     assert.ok(userMsg.includes("covered"), "status covered deve constar");
 
     // Verifica que o output mapeia os dois requisitos prometidos
@@ -864,13 +1168,26 @@ describe("adaptCv — smoke: prompt com régua de requisitos", () => {
     const actions = output.requirementAdaptationActions ?? [];
     const keys = actions.map((a) => a.requirementKey);
     assert.ok(keys.includes("python-ml"), "output deve mapear python-ml");
-    assert.ok(keys.includes("comunicacao-executiva"), "output deve mapear comunicacao-executiva");
+    assert.ok(
+      keys.includes("comunicacao-executiva"),
+      "output deve mapear comunicacao-executiva",
+    );
 
     const gap = actions.find((a) => a.requirementKey === "python-ml");
-    assert.equal(gap?.action, "strengthened", "gap high+missing deve ser strengthened no output");
+    assert.equal(
+      gap?.action,
+      "strengthened",
+      "gap high+missing deve ser strengthened no output",
+    );
 
-    const preserved = actions.find((a) => a.requirementKey === "comunicacao-executiva");
-    assert.equal(preserved?.action, "preserved", "requisito covered deve ser preserved no output");
+    const preserved = actions.find(
+      (a) => a.requirementKey === "comunicacao-executiva",
+    );
+    assert.equal(
+      preserved?.action,
+      "preserved",
+      "requisito covered deve ser preserved no output",
+    );
   });
 
   it("todos os requirementKeys da análise aparecem no output — nenhum requisito prometido é omitido", async () => {
@@ -940,8 +1257,14 @@ describe("adaptCv — smoke: prompt com régua de requisitos", () => {
 
     const keys = actions.map((a) => a.requirementKey);
     assert.ok(keys.includes("req-a"), "req-a deve estar no output");
-    assert.ok(keys.includes("req-b"), "req-b omitido pelo modelo deve aparecer como not_addressed");
-    assert.ok(keys.includes("req-c"), "req-c omitido pelo modelo deve aparecer como not_addressed");
+    assert.ok(
+      keys.includes("req-b"),
+      "req-b omitido pelo modelo deve aparecer como not_addressed",
+    );
+    assert.ok(
+      keys.includes("req-c"),
+      "req-c omitido pelo modelo deve aparecer como not_addressed",
+    );
 
     const reqB = actions.find((a) => a.requirementKey === "req-b");
     const reqC = actions.find((a) => a.requirementKey === "req-c");
@@ -975,7 +1298,8 @@ const FINHUB_REQUIREMENTS: StructuredJobRequirement[] = [
   },
   {
     requirementKey: "colaboracao-squads",
-    requirementText: "Colaboração com squads multidisciplinares (dev, design, dados)",
+    requirementText:
+      "Colaboração com squads multidisciplinares (dev, design, dados)",
     importance: "medium",
   },
   {
@@ -1019,7 +1343,8 @@ HABILIDADES
 Product discovery, backlog management, OKRs, Jira, Mixpanel, SQL básico
 `.trim();
 
-const FINHUB_JOB = "Product Owner — FinHub Pagamentos. Responsável por backlog, métricas de produto e colaboração com squads. Desejável: conhecimento regulatório fintech.";
+const FINHUB_JOB =
+  "Product Owner — FinHub Pagamentos. Responsável por backlog, métricas de produto e colaboração com squads. Desejável: conhecimento regulatório fintech.";
 
 function makeAnalysisMockClient(output: Record<string, unknown>) {
   return {
@@ -1046,7 +1371,8 @@ function buildAnalysisOutput(overrides: {
       score_pos_ajustes: 85,
       categoria: "medio",
       headline: "Boa aderência técnica; lacuna regulatória",
-      subheadline: "Backlog e métricas fortes; sem experiência fintech documentada",
+      subheadline:
+        "Backlog e métricas fortes; sem experiência fintech documentada",
     },
     secoes: {
       experiencia: { score: 30, max: 40 },
@@ -1067,8 +1393,14 @@ function buildAnalysisOutput(overrides: {
     ],
     ajustes_indisponiveis: [],
     keywords: {
-      presentes: [{ kw: "backlog management", pontos: 8 }, { kw: "KPIs", pontos: 7 }],
-      ausentes: [{ kw: "regulatório fintech", pontos: 6 }, { kw: "Open Finance", pontos: 5 }],
+      presentes: [
+        { kw: "backlog management", pontos: 8 },
+        { kw: "KPIs", pontos: 7 },
+      ],
+      ausentes: [
+        { kw: "regulatório fintech", pontos: 6 },
+        { kw: "Open Finance", pontos: 5 },
+      ],
     },
     formato_cv: {
       ats_score: 78,
@@ -1086,38 +1418,66 @@ function buildAnalysisOutput(overrides: {
         { nome: "Habilidades e Competências", presente: true },
       ],
     },
-    comparacao: { antes: "CV genérico de PM", depois: "CV focado em produto financeiro" },
-    preview: { antes: "Product Manager generalista", depois: "PM com foco em backlog e métricas B2B" },
-    pontos_fortes: ["Gestão de backlog comprovada", "Métricas e OKRs documentados"],
+    comparacao: {
+      antes: "CV genérico de PM",
+      depois: "CV focado em produto financeiro",
+    },
+    preview: {
+      antes: "Product Manager generalista",
+      depois: "PM com foco em backlog e métricas B2B",
+    },
+    pontos_fortes: [
+      "Gestão de backlog comprovada",
+      "Métricas e OKRs documentados",
+    ],
     lacunas: ["Discovery regulatório fintech"],
     melhorias_aplicadas: ["Backlog priorizado por impacto"],
     ats_keywords: {
-      presentes: overrides.atsPresentesFromModel ?? ["backlog management", "KPIs"],
-      ausentes: overrides.atsAusentesFromModel ?? ["regulatório fintech", "Open Finance"],
+      presentes: overrides.atsPresentesFromModel ?? [
+        "backlog management",
+        "KPIs",
+      ],
+      ausentes: overrides.atsAusentesFromModel ?? [
+        "regulatório fintech",
+        "Open Finance",
+      ],
     },
-    projecao_melhoria: { score_atual: 74, score_pos_otimizacao: 85, explicacao_curta: "Ajuste regulatório melhora fit" },
-    mensagem_venda: { titulo: "PM pronto para fintech", subtexto: "Backlog e métricas já comprovados" },
+    projecao_melhoria: {
+      score_atual: 74,
+      score_pos_otimizacao: 85,
+      explicacao_curta: "Ajuste regulatório melhora fit",
+    },
+    mensagem_venda: {
+      titulo: "PM pronto para fintech",
+      subtexto: "Backlog e métricas já comprovados",
+    },
   };
 }
 
 describe("analyzeAndAdaptCv — reanálise Camila + Product Owner FinHub", () => {
   it("reanálise não cria novos requirementKeys fora da régua salva", async () => {
     // Modelo retorna os requisitos na mesma ordem com cobertura atualizada
-    const modelRequirements: JobRequirementCoverage[] = FINHUB_REQUIREMENTS.map((r) => ({
-      ...r,
-      coverageStatus:
-        r.requirementKey === "fintech-regulatorio" ? "missing" : "covered",
-      evidence: r.requirementKey !== "fintech-regulatorio"
-        ? ["Evidência presente no CV adaptado"]
-        : [],
-      gapExplanation: r.requirementKey === "fintech-regulatorio"
-        ? "Sem experiência regulatória documentada"
-        : "",
-      recommendation: r.requirementKey === "fintech-regulatorio"
-        ? "Incluir se tiver experiência real com compliance"
-        : "",
-      impactScore: r.importance === "high" ? 20 : r.importance === "medium" ? 12 : 6,
-    }));
+    const modelRequirements: JobRequirementCoverage[] = FINHUB_REQUIREMENTS.map(
+      (r) => ({
+        ...r,
+        coverageStatus:
+          r.requirementKey === "fintech-regulatorio" ? "missing" : "covered",
+        evidence:
+          r.requirementKey !== "fintech-regulatorio"
+            ? ["Evidência presente no CV adaptado"]
+            : [],
+        gapExplanation:
+          r.requirementKey === "fintech-regulatorio"
+            ? "Sem experiência regulatória documentada"
+            : "",
+        recommendation:
+          r.requirementKey === "fintech-regulatorio"
+            ? "Incluir se tiver experiência real com compliance"
+            : "",
+        impactScore:
+          r.importance === "high" ? 20 : r.importance === "medium" ? 12 : 6,
+      }),
+    );
 
     const client = makeAnalysisMockClient(
       buildAnalysisOutput({ requirementsFromModel: modelRequirements }),
@@ -1126,31 +1486,39 @@ describe("analyzeAndAdaptCv — reanálise Camila + Product Owner FinHub", () =>
     const output = await analyzeAndAdaptCv(client, "gpt-4o-mini", {
       masterCvText: CAMILA_ADAPTED_CV,
       jobDescriptionText: FINHUB_JOB,
-      canonicalJobJson: { title: "Product Owner", company: "FinHub Pagamentos" },
+      canonicalJobJson: {
+        title: "Product Owner",
+        company: "FinHub Pagamentos",
+      },
       existingRequirements: FINHUB_REQUIREMENTS,
     });
 
     const outputKeys = output.requirements.map((r) => r.requirementKey);
     const ruleKeys = FINHUB_REQUIREMENTS.map((r) => r.requirementKey);
 
-    assert.deepEqual(outputKeys, ruleKeys, "requirementKeys devem ser idênticos à régua salva");
+    assert.deepEqual(
+      outputKeys,
+      ruleKeys,
+      "requirementKeys devem ser idênticos à régua salva",
+    );
   });
 
   it("reanálise não gera lacunas fora dos requirements missing/partial", async () => {
-    const modelRequirements: JobRequirementCoverage[] = FINHUB_REQUIREMENTS.map((r) => ({
-      ...r,
-      coverageStatus:
-        r.requirementKey === "fintech-regulatorio" ? "missing" : "covered",
-      evidence: r.requirementKey !== "fintech-regulatorio"
-        ? ["Evidência no CV"]
-        : [],
-      gapExplanation:
-        r.requirementKey === "fintech-regulatorio"
-          ? "Sem experiência regulatória"
-          : "",
-      recommendation: "",
-      impactScore: 10,
-    }));
+    const modelRequirements: JobRequirementCoverage[] = FINHUB_REQUIREMENTS.map(
+      (r) => ({
+        ...r,
+        coverageStatus:
+          r.requirementKey === "fintech-regulatorio" ? "missing" : "covered",
+        evidence:
+          r.requirementKey !== "fintech-regulatorio" ? ["Evidência no CV"] : [],
+        gapExplanation:
+          r.requirementKey === "fintech-regulatorio"
+            ? "Sem experiência regulatória"
+            : "",
+        recommendation: "",
+        impactScore: 10,
+      }),
+    );
 
     const client = makeAnalysisMockClient(
       buildAnalysisOutput({ requirementsFromModel: modelRequirements }),
@@ -1159,13 +1527,18 @@ describe("analyzeAndAdaptCv — reanálise Camila + Product Owner FinHub", () =>
     const output = await analyzeAndAdaptCv(client, "gpt-4o-mini", {
       masterCvText: CAMILA_ADAPTED_CV,
       jobDescriptionText: FINHUB_JOB,
-      canonicalJobJson: { title: "Product Owner", company: "FinHub Pagamentos" },
+      canonicalJobJson: {
+        title: "Product Owner",
+        company: "FinHub Pagamentos",
+      },
       existingRequirements: FINHUB_REQUIREMENTS,
     });
 
     // Lacunas só podem vir de missing/partial
     const missingOrPartialKeys = output.requirements
-      .filter((r) => r.coverageStatus === "missing" || r.coverageStatus === "partial")
+      .filter(
+        (r) => r.coverageStatus === "missing" || r.coverageStatus === "partial",
+      )
       .map((r) => r.requirementKey);
 
     assert.equal(
@@ -1202,20 +1575,28 @@ describe("analyzeAndAdaptCv — reanálise Camila + Product Owner FinHub", () =>
 
   it("ats_keywords.ausentes deriva apenas de requirements missing/partial, não do modelo", async () => {
     // Modelo tenta colocar keywords livres em ats_keywords — deve ser ignorado
-    const modelRequirements: JobRequirementCoverage[] = FINHUB_REQUIREMENTS.map((r) => ({
-      ...r,
-      coverageStatus: r.requirementKey === "fintech-regulatorio" ? "missing" : "covered",
-      evidence: [],
-      gapExplanation: "",
-      recommendation: "",
-      impactScore: 10,
-    }));
+    const modelRequirements: JobRequirementCoverage[] = FINHUB_REQUIREMENTS.map(
+      (r) => ({
+        ...r,
+        coverageStatus:
+          r.requirementKey === "fintech-regulatorio" ? "missing" : "covered",
+        evidence: [],
+        gapExplanation: "",
+        recommendation: "",
+        impactScore: 10,
+      }),
+    );
 
     const client = makeAnalysisMockClient(
       buildAnalysisOutput({
         requirementsFromModel: modelRequirements,
         // Modelo tenta colocar keywords inventadas fora da régua
-        atsAusentesFromModel: ["Open Finance", "Pix", "LGPD", "regulatório fintech"],
+        atsAusentesFromModel: [
+          "Open Finance",
+          "Pix",
+          "LGPD",
+          "regulatório fintech",
+        ],
         atsPresentesFromModel: ["backlog", "KPIs", "OKR"],
       }),
     );
@@ -1223,14 +1604,17 @@ describe("analyzeAndAdaptCv — reanálise Camila + Product Owner FinHub", () =>
     const output = await analyzeAndAdaptCv(client, "gpt-4o-mini", {
       masterCvText: CAMILA_ADAPTED_CV,
       jobDescriptionText: FINHUB_JOB,
-      canonicalJobJson: { title: "Product Owner", company: "FinHub Pagamentos" },
+      canonicalJobJson: {
+        title: "Product Owner",
+        company: "FinHub Pagamentos",
+      },
       existingRequirements: FINHUB_REQUIREMENTS,
     });
 
     // ats_keywords.ausentes deve ser derivado apenas dos requirements missing/partial
-    const expectedAusentes = FINHUB_REQUIREMENTS
-      .filter((r) => r.requirementKey === "fintech-regulatorio")
-      .map((r) => r.requirementText);
+    const expectedAusentes = FINHUB_REQUIREMENTS.filter(
+      (r) => r.requirementKey === "fintech-regulatorio",
+    ).map((r) => r.requirementText);
 
     assert.deepEqual(
       output.ats_keywords.ausentes,
@@ -1239,9 +1623,9 @@ describe("analyzeAndAdaptCv — reanálise Camila + Product Owner FinHub", () =>
     );
 
     // ats_keywords.presentes deve conter apenas os covered
-    const expectedPresentes = FINHUB_REQUIREMENTS
-      .filter((r) => r.requirementKey !== "fintech-regulatorio")
-      .map((r) => r.requirementText);
+    const expectedPresentes = FINHUB_REQUIREMENTS.filter(
+      (r) => r.requirementKey !== "fintech-regulatorio",
+    ).map((r) => r.requirementText);
 
     assert.deepEqual(
       output.ats_keywords.presentes,
@@ -1258,7 +1642,8 @@ describe("analyzeAndAdaptCv — reanálise Camila + Product Owner FinHub", () =>
       .reverse()
       .map((r) => ({
         ...r,
-        coverageStatus: r.requirementKey === "fintech-regulatorio" ? "missing" : "covered",
+        coverageStatus:
+          r.requirementKey === "fintech-regulatorio" ? "missing" : "covered",
         evidence: [],
         gapExplanation: "",
         recommendation: "",
@@ -1266,40 +1651,65 @@ describe("analyzeAndAdaptCv — reanálise Camila + Product Owner FinHub", () =>
       }));
 
     const client = makeAnalysisMockClient(
-      buildAnalysisOutput({ requirementsFromModel: modelRequirementsReordered }),
+      buildAnalysisOutput({
+        requirementsFromModel: modelRequirementsReordered,
+      }),
     );
 
     const output = await analyzeAndAdaptCv(client, "gpt-4o-mini", {
       masterCvText: CAMILA_ADAPTED_CV,
       jobDescriptionText: FINHUB_JOB,
-      canonicalJobJson: { title: "Product Owner", company: "FinHub Pagamentos" },
+      canonicalJobJson: {
+        title: "Product Owner",
+        company: "FinHub Pagamentos",
+      },
       existingRequirements: FINHUB_REQUIREMENTS,
     });
 
     // Output deve estar na ordem da régua, não do modelo
     const outputKeys = output.requirements.map((r) => r.requirementKey);
     const ruleKeys = FINHUB_REQUIREMENTS.map((r) => r.requirementKey);
-    assert.deepEqual(outputKeys, ruleKeys, "ordem da régua deve ser preservada mesmo com modelo reordenando");
+    assert.deepEqual(
+      outputKeys,
+      ruleKeys,
+      "ordem da régua deve ser preservada mesmo com modelo reordenando",
+    );
 
     // requirementText e importance devem vir da régua, não do modelo
     for (const [i, req] of output.requirements.entries()) {
       const rule = FINHUB_REQUIREMENTS[i];
-      assert.equal(req.requirementText, rule.requirementText, `requirementText[${i}] deve vir da régua`);
-      assert.equal(req.importance, rule.importance, `importance[${i}] deve vir da régua`);
+      assert.equal(
+        req.requirementText,
+        rule.requirementText,
+        `requirementText[${i}] deve vir da régua`,
+      );
+      assert.equal(
+        req.importance,
+        rule.importance,
+        `importance[${i}] deve vir da régua`,
+      );
     }
 
     // Coverage do fintech-regulatorio deve ter sido mantida mesmo após reordenação
-    const fintech = output.requirements.find((r) => r.requirementKey === "fintech-regulatorio");
-    assert.equal(fintech?.coverageStatus, "missing", "coverage do fintech-regulatorio deve ser preservada após reordenação");
+    const fintech = output.requirements.find(
+      (r) => r.requirementKey === "fintech-regulatorio",
+    );
+    assert.equal(
+      fintech?.coverageStatus,
+      "missing",
+      "coverage do fintech-regulatorio deve ser preservada após reordenação",
+    );
   });
 
   it("modelo que omite um requirementKey recebe coverageStatus covered por padrão", async () => {
     // Modelo não retorna o requirementKey "descoberta-usuario"
-    const modelRequirementsIncomplete: JobRequirementCoverage[] = FINHUB_REQUIREMENTS
-      .filter((r) => r.requirementKey !== "descoberta-usuario")
-      .map((r) => ({
+    const modelRequirementsIncomplete: JobRequirementCoverage[] =
+      FINHUB_REQUIREMENTS.filter(
+        (r) => r.requirementKey !== "descoberta-usuario",
+      ).map((r) => ({
         ...r,
-        coverageStatus: r.requirementKey === "fintech-regulatorio" ? "missing" : "covered",
+        coverageStatus:
+          r.requirementKey === "fintech-regulatorio" ? "missing" : "covered",
         evidence: [],
         gapExplanation: "",
         recommendation: "",
@@ -1307,26 +1717,50 @@ describe("analyzeAndAdaptCv — reanálise Camila + Product Owner FinHub", () =>
       }));
 
     const client = makeAnalysisMockClient(
-      buildAnalysisOutput({ requirementsFromModel: modelRequirementsIncomplete }),
+      buildAnalysisOutput({
+        requirementsFromModel: modelRequirementsIncomplete,
+      }),
     );
 
     const output = await analyzeAndAdaptCv(client, "gpt-4o-mini", {
       masterCvText: CAMILA_ADAPTED_CV,
       jobDescriptionText: FINHUB_JOB,
-      canonicalJobJson: { title: "Product Owner", company: "FinHub Pagamentos" },
+      canonicalJobJson: {
+        title: "Product Owner",
+        company: "FinHub Pagamentos",
+      },
       existingRequirements: FINHUB_REQUIREMENTS,
     });
 
     // Todos os 5 requisitos da régua devem aparecer no output
-    assert.equal(output.requirements.length, FINHUB_REQUIREMENTS.length, "todos os requisitos da régua devem aparecer");
+    assert.equal(
+      output.requirements.length,
+      FINHUB_REQUIREMENTS.length,
+      "todos os requisitos da régua devem aparecer",
+    );
 
     // O requisito omitido pelo modelo deve ter coverageStatus covered (conservador)
-    const omitted = output.requirements.find((r) => r.requirementKey === "descoberta-usuario");
-    assert.ok(omitted, "descoberta-usuario deve aparecer no output mesmo omitido pelo modelo");
-    assert.equal(omitted?.coverageStatus, "covered", "requisito omitido pelo modelo recebe covered por padrão");
+    const omitted = output.requirements.find(
+      (r) => r.requirementKey === "descoberta-usuario",
+    );
+    assert.ok(
+      omitted,
+      "descoberta-usuario deve aparecer no output mesmo omitido pelo modelo",
+    );
+    assert.equal(
+      omitted?.coverageStatus,
+      "covered",
+      "requisito omitido pelo modelo recebe covered por padrão",
+    );
 
     // requirementText e importance do omitido devem vir da régua
-    const rule = FINHUB_REQUIREMENTS.find((r) => r.requirementKey === "descoberta-usuario");
-    assert.equal(omitted?.requirementText, rule?.requirementText, "requirementText do omitido deve vir da régua");
+    const rule = FINHUB_REQUIREMENTS.find(
+      (r) => r.requirementKey === "descoberta-usuario",
+    );
+    assert.equal(
+      omitted?.requirementText,
+      rule?.requirementText,
+      "requirementText do omitido deve vir da régua",
+    );
   });
 });

@@ -9,6 +9,7 @@ import {
 } from "@/components/cv-release-modal";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
+import { PublicFooter } from "@/components/public-footer";
 import { trackEvent } from "@/lib/analytics-tracking";
 import {
   type DownloadProgressStage,
@@ -1192,7 +1193,15 @@ export default function ResultadoPage() {
   const ptsKwSelecionadas = data.keywords.ausentes
     .filter((k) => effectiveSelected.has(k.kw))
     .reduce((s, k) => s + k.pontos, 0);
+  const ptsKwPossiveis = (data.keywords.possiveis ?? []).reduce(
+    (s, k) => s + k.pontos,
+    0,
+  );
   const totalAjustesConteudo = data.ajustes_conteudo.reduce(
+    (s, a) => s + a.pontos,
+    0,
+  );
+  const totalAjustesIndisponiveis = data.ajustes_indisponiveis.reduce(
     (s, a) => s + a.pontos,
     0,
   );
@@ -1210,22 +1219,24 @@ export default function ResultadoPage() {
   const atencoes =
     data.formato_cv?.problemas.filter((p) => p.tipo === "atencao") ?? [];
   const oks = data.formato_cv?.problemas.filter((p) => p.tipo === "ok") ?? [];
-  const problemasPontuacao = [...criticos, ...atencoes];
+  const pontosAtencao = [...criticos, ...atencoes];
   const totalAjustesAplicados =
     data.ajustes_conteudo.length +
     data.keywords.ausentes.length +
-    problemasPontuacao.length;
-  const pontosPerdidosApresentacao = problemasPontuacao.reduce(
-    (total, problema) => total + Math.abs(problema.impacto),
-    0,
-  );
+    pontosAtencao.length;
   const camposPresentes =
     data.formato_cv?.campos.filter((c) => c.presente).length ?? 0;
   const ptsFaltando =
     data.formato_cv?.campos
       .filter((c) => !c.presente)
-      .reduce((s, c) => s + (CAMPO_PTS_MAP[c.nome] ?? 1), 0) ?? 0;
-
+      .reduce(
+        (s, c) =>
+          s +
+          (rawData.analysisVersion === "requirements_v2"
+            ? 1
+            : (CAMPO_PTS_MAP[c.nome] ?? 1)),
+        0,
+      ) ?? 0;
   const isDownloadReady =
     reviewAdaptationId !== null && reviewPaymentStatus === "completed";
   const isKeywordSelectionLocked =
@@ -1233,6 +1244,26 @@ export default function ResultadoPage() {
   const unlockedProfessionalSummary = isDownloadReady
     ? extractProfessionalSummaryFromFinalOutput(finalCvOutput)
     : "";
+  const hardGates =
+    Array.isArray(rawData.hard_gates) && rawData.hard_gates.length > 0
+      ? rawData.hard_gates
+      : (rawData.requirements ?? [])
+          .filter((requirement) => requirement.gateLevel === "hard")
+          .map((requirement) => ({
+            requirementKey: requirement.requirementKey,
+            requirementText: requirement.requirementText,
+            status: requirement.coverageStatus,
+            importance: requirement.importance,
+          }));
+  const hardGateCovered = hardGates.filter(
+    (gate) => gate.status === "covered",
+  ).length;
+  const hardGatePartial = hardGates.filter(
+    (gate) => gate.status === "partial",
+  ).length;
+  const hardGateMissing = hardGates.filter(
+    (gate) => gate.status === "missing",
+  ).length;
   const previewAntesText = data.preview?.antes ?? "";
   const previewDepoisText =
     isDownloadReady && hasFinalGeneratedCv(finalCvOutput)
@@ -1252,6 +1283,8 @@ export default function ResultadoPage() {
   const dashProjected = C_GAUGE * (scoreMaxPossivel / 100);
   const gaugeColors = getAtsScoreColors(data.score.scoreAtualBase);
   const ptsPositivos = data.positivos.reduce((s, p) => s + p.pontos, 0);
+  const formatCoveragePercent = (coveragePercent?: number) =>
+    typeof coveragePercent === "number" ? `${coveragePercent}% da régua` : null;
 
   return (
     <PageShell>
@@ -1670,11 +1703,208 @@ export default function ResultadoPage() {
           ════════════════════════════════════════════════════ */}
           <SectionHeader
             label="SEÇÃO 1 — EXPERIÊNCIA PROFISSIONAL"
-            title="O que já está a seu favor"
-            description="Pontos do seu perfil que contribuem positivamente para esta vaga."
+            title="Cobertura das experiências exigidas"
+            description="O que a vaga pede e quanto do seu histórico já comprova cada item."
             score={data.secoes.experiencia.score}
             maxScore={data.secoes.experiencia.max}
           />
+
+          {hardGates.length > 0 && (
+            <div style={{ ...CARD, marginBottom: 10 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 16,
+                  marginBottom: 14,
+                  paddingBottom: 14,
+                  borderBottom: "1px solid rgba(10,10,10,0.06)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      background: "rgba(10,10,10,0.08)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>⛳</span>
+                  </div>
+                  <div>
+                    <p
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: "#0a0a0a",
+                        margin: 0,
+                      }}
+                    >
+                      Pontos inegociáveis da vaga
+                    </p>
+                    <p
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        color: "#8a8a85",
+                        margin: "2px 0 0",
+                      }}
+                    >
+                      requisitos críticos que pesam na triagem inicial
+                    </p>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      color: "#405410",
+                      background: "rgba(198,255,58,0.2)",
+                      borderRadius: 999,
+                      padding: "4px 8px",
+                    }}
+                  >
+                    {hardGateCovered} cobertos
+                  </span>
+                  {hardGatePartial > 0 && (
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        color: "#92400e",
+                        background: "rgba(245,158,11,0.12)",
+                        borderRadius: 999,
+                        padding: "4px 8px",
+                      }}
+                    >
+                      {hardGatePartial} parciais
+                    </span>
+                  )}
+                  {hardGateMissing > 0 && (
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        color: "#991b1b",
+                        background: "rgba(239,68,68,0.1)",
+                        borderRadius: 999,
+                        padding: "4px 8px",
+                      }}
+                    >
+                      {hardGateMissing} ausentes
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {hardGates.map((gate, index) => {
+                  const visual =
+                    gate.status === "covered"
+                      ? {
+                          label: "coberto",
+                          bg: "rgba(198,255,58,0.12)",
+                          border: "rgba(110,150,20,0.2)",
+                          color: "#405410",
+                          icon: "✓",
+                        }
+                      : gate.status === "partial"
+                        ? {
+                            label: "parcial",
+                            bg: "rgba(245,158,11,0.08)",
+                            border: "rgba(245,158,11,0.18)",
+                            color: "#92400e",
+                            icon: "~",
+                          }
+                        : {
+                            label: "ausente",
+                            bg: "rgba(239,68,68,0.07)",
+                            border: "rgba(239,68,68,0.16)",
+                            color: "#991b1b",
+                            icon: "!",
+                          };
+
+                  return (
+                    <div
+                      key={
+                        gate.requirementKey ??
+                        `${gate.requirementText}-${index}`
+                      }
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "28px 1fr auto",
+                        gap: 12,
+                        alignItems: "start",
+                        background: visual.bg,
+                        border: `1px solid ${visual.border}`,
+                        borderRadius: 12,
+                        padding: "13px 14px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 8,
+                          background: "#fff",
+                          color: visual.color,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {visual.icon}
+                      </div>
+                      <div>
+                        <p
+                          style={{
+                            fontSize: 13.5,
+                            fontWeight: 500,
+                            color: "#0a0a0a",
+                            lineHeight: 1.45,
+                            margin: 0,
+                          }}
+                        >
+                          {gate.requirementText}
+                        </p>
+                      </div>
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          color: visual.color,
+                          background: "#fff",
+                          borderRadius: 999,
+                          padding: "4px 8px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {visual.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Pontos fortes */}
           <div style={{ ...CARD, marginBottom: 10 }}>
@@ -1747,73 +1977,103 @@ export default function ResultadoPage() {
               {(isGuestView
                 ? data.positivos.slice(0, GUEST_VISIBLE)
                 : data.positivos
-              ).map((item, i) => (
-                <div
-                  key={item.texto}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "28px 1fr auto",
-                    gap: 12,
-                    alignItems: "start",
-                  }}
-                >
+              ).map((item, i) => {
+                const coverageLabel = formatCoveragePercent(
+                  (item as { coveragePercent?: number }).coveragePercent,
+                );
+                return (
                   <div
+                    key={item.texto}
                     style={{
-                      fontFamily: MONO,
-                      fontSize: 11,
-                      fontWeight: 500,
-                      color: "#8a8a85",
-                      paddingTop: 2,
+                      display: "grid",
+                      gridTemplateColumns: "28px 1fr auto",
+                      gap: 12,
+                      alignItems: "start",
                     }}
                   >
-                    {String(i + 1).padStart(2, "0")}
-                  </div>
-                  <div>
-                    <p
-                      style={{
-                        fontSize: 13.5,
-                        color: "#2a2a28",
-                        lineHeight: 1.5,
-                        margin: 0,
-                      }}
-                    >
-                      {item.texto}
-                    </p>
                     <div
                       style={{
-                        marginTop: 6,
-                        height: 3,
-                        background: "rgba(10,10,10,0.06)",
-                        borderRadius: 99,
-                        overflow: "hidden",
+                        fontFamily: MONO,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        color: "#8a8a85",
+                        paddingTop: 2,
                       }}
                     >
+                      {String(i + 1).padStart(2, "0")}
+                    </div>
+                    <div>
+                      <p
+                        style={{
+                          fontSize: 13.5,
+                          color: "#2a2a28",
+                          lineHeight: 1.5,
+                          margin: 0,
+                        }}
+                      >
+                        {item.texto}
+                      </p>
                       <div
                         style={{
-                          height: "100%",
-                          background: "#c6ff3a",
+                          marginTop: 6,
+                          height: 3,
+                          background: "rgba(10,10,10,0.06)",
                           borderRadius: 99,
-                          width: `${Math.round((item.pontos / Math.max(...data.positivos.map((p) => p.pontos), 1)) * 100)}%`,
+                          overflow: "hidden",
                         }}
-                      />
+                      >
+                        <div
+                          style={{
+                            height: "100%",
+                            background: "#c6ff3a",
+                            borderRadius: 99,
+                            width: `${Math.round((item.pontos / Math.max(...data.positivos.map((p) => p.pontos), 1)) * 100)}%`,
+                          }}
+                        />
+                      </div>
                     </div>
+                    <span
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-end",
+                        gap: 4,
+                      }}
+                    >
+                      {coverageLabel && (
+                        <span
+                          style={{
+                            background: "rgba(198,255,58,0.2)",
+                            color: "#405410",
+                            fontFamily: MONO,
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {coverageLabel}
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          background: "rgba(198,255,58,0.12)",
+                          color: "#405410",
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          fontWeight: 500,
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        +{item.pontos} pts
+                      </span>
+                    </span>
                   </div>
-                  <span
-                    style={{
-                      background: "rgba(198,255,58,0.2)",
-                      color: "#405410",
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      fontWeight: 500,
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    +{item.pontos}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {isGuestView && data.positivos.length > GUEST_VISIBLE && (
@@ -1928,7 +2188,8 @@ export default function ResultadoPage() {
                     margin: "2px 0 0",
                   }}
                 >
-                  lacunas que o EarlyCV corrige no CV otimizado
+                  itens que já contam parcialmente e ainda podem subir a
+                  cobertura
                 </p>
               </div>
               <span
@@ -1944,7 +2205,7 @@ export default function ResultadoPage() {
                   flexShrink: 0,
                 }}
               >
-                +{totalAjustesConteudo} pts
+                +{totalAjustesConteudo} pts liberáveis
               </span>
             </div>
 
@@ -1952,87 +2213,117 @@ export default function ResultadoPage() {
               {(isGuestView
                 ? data.ajustes_conteudo.slice(0, GUEST_VISIBLE)
                 : data.ajustes_conteudo
-              ).map((a, i) => (
-                <div
-                  key={a.id}
-                  style={{
-                    background: "#fff",
-                    border: "1px solid rgba(10,10,10,0.06)",
-                    borderRadius: 12,
-                    padding: "14px 16px",
-                    display: "grid",
-                    gridTemplateColumns: "28px 1fr auto",
-                    gap: 12,
-                    alignItems: "start",
-                  }}
-                >
+              ).map((a, i) => {
+                const coverageLabel = formatCoveragePercent(
+                  (a as { coveragePercent?: number }).coveragePercent,
+                );
+                return (
                   <div
+                    key={a.id}
                     style={{
-                      fontFamily: MONO,
-                      fontSize: 11,
-                      fontWeight: 500,
-                      color: "#8a8a85",
-                      paddingTop: 2,
+                      background: "#fff",
+                      border: "1px solid rgba(10,10,10,0.06)",
+                      borderRadius: 12,
+                      padding: "14px 16px",
+                      display: "grid",
+                      gridTemplateColumns: "28px 1fr auto",
+                      gap: 12,
+                      alignItems: "start",
                     }}
                   >
-                    {String(i + 1).padStart(2, "0")}
-                  </div>
-                  <div>
-                    <p
+                    <div
                       style={{
-                        fontSize: 14,
+                        fontFamily: MONO,
+                        fontSize: 11,
                         fontWeight: 500,
-                        letterSpacing: -0.2,
-                        color: "#0a0a0a",
-                        margin: "0 0 4px",
+                        color: "#8a8a85",
+                        paddingTop: 2,
                       }}
                     >
-                      {a.titulo}
-                    </p>
-                    {a.descricao && (
+                      {String(i + 1).padStart(2, "0")}
+                    </div>
+                    <div>
                       <p
                         style={{
-                          fontSize: 12.5,
-                          color: "#5a5a55",
-                          lineHeight: 1.5,
-                          margin: 0,
+                          fontSize: 14,
+                          fontWeight: 500,
+                          letterSpacing: -0.2,
+                          color: "#0a0a0a",
+                          margin: "0 0 4px",
                         }}
                       >
-                        {a.descricao}
+                        {a.titulo}
                       </p>
-                    )}
-                    {a.dica && (
-                      <p
+                      {a.descricao && (
+                        <p
+                          style={{
+                            fontSize: 12.5,
+                            color: "#5a5a55",
+                            lineHeight: 1.5,
+                            margin: 0,
+                          }}
+                        >
+                          {a.descricao}
+                        </p>
+                      )}
+                      {a.dica && (
+                        <p
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 10.5,
+                            color: "#8a8a85",
+                            marginTop: 6,
+                            fontStyle: "italic",
+                          }}
+                        >
+                          {a.dica}
+                        </p>
+                      )}
+                    </div>
+                    <span
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-end",
+                        gap: 4,
+                      }}
+                    >
+                      {coverageLabel && (
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 9.5,
+                            fontWeight: 600,
+                            padding: "3px 7px",
+                            borderRadius: 4,
+                            background: "rgba(245,158,11,0.12)",
+                            color: "#92400e",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {coverageLabel}
+                        </span>
+                      )}
+                      <span
                         style={{
                           fontFamily: MONO,
-                          fontSize: 10.5,
-                          color: "#8a8a85",
-                          marginTop: 6,
-                          fontStyle: "italic",
+                          fontSize: 9.5,
+                          fontWeight: 500,
+                          letterSpacing: 1,
+                          padding: "3px 7px",
+                          borderRadius: 4,
+                          background: "#0a0a0a",
+                          color: "#fff",
+                          marginTop: 2,
+                          whiteSpace: "nowrap",
                         }}
                       >
-                        {a.dica}
-                      </p>
-                    )}
+                        +{a.pontos} pts
+                      </span>
+                    </span>
                   </div>
-                  <span
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 9.5,
-                      fontWeight: 500,
-                      letterSpacing: 1,
-                      padding: "3px 7px",
-                      borderRadius: 4,
-                      background: "#0a0a0a",
-                      color: "#fff",
-                      marginTop: 2,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    +{a.pontos} pts
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {isGuestView && data.ajustes_conteudo.length > GUEST_VISIBLE && (
@@ -2140,11 +2431,205 @@ export default function ResultadoPage() {
                 }}
               >
                 Libere seu CV otimizado para aplicar todos os{" "}
-                {data.ajustes_conteudo.length} ajustes de conteúdo
-                automaticamente.
+                {data.ajustes_conteudo.length} ajustes de conteúdo e buscar um
+                ganho estimado de +{totalAjustesConteudo} pts só nesta seção.
+                Esses itens já contam parcialmente hoje; o ganho exibido aqui é
+                apenas o trecho que ainda falta capturar.
+              </p>
+              <p
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#8a8a85",
+                  margin: "6px 0 0",
+                }}
+              >
+                Nesta vaga, a seção soma {ptsPositivos} pts já comprovados +{" "}
+                {totalAjustesConteudo} pts liberáveis com o seu histórico atual.
               </p>
             </div>
           </div>
+
+          {data.ajustes_indisponiveis.length > 0 && (
+            <div style={{ ...CARD, marginTop: 10, marginBottom: 0 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  marginBottom: 16,
+                  paddingBottom: 14,
+                  borderBottom: "1px solid rgba(10,10,10,0.06)",
+                }}
+              >
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    background: "rgba(239,68,68,0.1)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{ fontSize: 14, color: "#991b1b" }}>!</span>
+                </div>
+                <div>
+                  <p
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "#0a0a0a",
+                      margin: 0,
+                    }}
+                  >
+                    Missings reais do perfil atual
+                  </p>
+                  <p
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      color: "#8a8a85",
+                      margin: "2px 0 0",
+                    }}
+                  >
+                    lacunas sem evidência no CV, fora do alcance da adaptação
+                  </p>
+                </div>
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    background: "rgba(239,68,68,0.08)",
+                    color: "#991b1b",
+                    fontFamily: MONO,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    padding: "3px 8px",
+                    borderRadius: 6,
+                    flexShrink: 0,
+                  }}
+                >
+                  {totalAjustesIndisponiveis} pts travados
+                </span>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {data.ajustes_indisponiveis.map((a, i) => {
+                  const coverageLabel = formatCoveragePercent(
+                    (a as { coveragePercent?: number }).coveragePercent,
+                  );
+                  return (
+                    <div
+                      key={a.id}
+                      style={{
+                        background: "rgba(239,68,68,0.03)",
+                        border: "1px solid rgba(239,68,68,0.12)",
+                        borderRadius: 12,
+                        padding: "14px 16px",
+                        display: "grid",
+                        gridTemplateColumns: "28px 1fr auto",
+                        gap: 12,
+                        alignItems: "start",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          fontWeight: 500,
+                          color: "#8a8a85",
+                          paddingTop: 2,
+                        }}
+                      >
+                        {String(i + 1).padStart(2, "0")}
+                      </div>
+                      <div>
+                        <p
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 500,
+                            letterSpacing: -0.2,
+                            color: "#0a0a0a",
+                            margin: "0 0 4px",
+                          }}
+                        >
+                          {a.titulo}
+                        </p>
+                        {a.descricao && (
+                          <p
+                            style={{
+                              fontSize: 12.5,
+                              color: "#5a5a55",
+                              lineHeight: 1.5,
+                              margin: 0,
+                            }}
+                          >
+                            {a.descricao}
+                          </p>
+                        )}
+                        {a.dica && (
+                          <p
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#8a8a85",
+                              marginTop: 6,
+                              fontStyle: "italic",
+                            }}
+                          >
+                            {a.dica}
+                          </p>
+                        )}
+                      </div>
+                      <span
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                          gap: 4,
+                        }}
+                      >
+                        {coverageLabel && (
+                          <span
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 9.5,
+                              fontWeight: 600,
+                              padding: "3px 7px",
+                              borderRadius: 4,
+                              background: "rgba(239,68,68,0.08)",
+                              color: "#991b1b",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {coverageLabel}
+                          </span>
+                        )}
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 9.5,
+                            fontWeight: 500,
+                            letterSpacing: 1,
+                            padding: "3px 7px",
+                            borderRadius: 4,
+                            background: "#0a0a0a",
+                            color: "#fff",
+                            marginTop: 2,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {a.pontos} pts fora do CV
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* ════════════════════════════════════════════════════
               SEÇÃO 2 — Competências Técnicas
@@ -2173,7 +2658,9 @@ export default function ResultadoPage() {
           >
             <div>
               <p style={{ fontSize: 13.5, fontWeight: 500, margin: "0 0 3px" }}>
-                {data.keywords.presentes.length + data.keywords.ausentes.length}{" "}
+                {data.keywords.presentes.length +
+                  (data.keywords.possiveis?.length ?? 0) +
+                  data.keywords.ausentes.length}{" "}
                 keywords identificadas para esta vaga
               </p>
               <p
@@ -2185,6 +2672,10 @@ export default function ResultadoPage() {
                 }}
               >
                 Libere o CV para inserir as{" "}
+                <span style={{ color: "#facc15", fontWeight: 600 }}>
+                  {data.keywords.possiveis?.length ?? 0} possíveis
+                </span>{" "}
+                e selecionar as{" "}
                 <span style={{ color: "#c6ff3a", fontWeight: 600 }}>
                   {data.keywords.ausentes.length} que faltam
                 </span>
@@ -2291,6 +2782,101 @@ export default function ResultadoPage() {
                 marginBottom: 14,
               }}
             />
+
+            {(data.keywords.possiveis?.length ?? 0) > 0 && (
+              <>
+                <p
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    letterSpacing: 1.2,
+                    color: "#8a6500",
+                    fontWeight: 500,
+                    marginBottom: 6,
+                  }}
+                >
+                  POSSÍVEIS COM BASE REAL (
+                  {data.keywords.possiveis?.length ?? 0})
+                </p>
+                <p
+                  style={{
+                    fontSize: 12.5,
+                    color: "#8a8a85",
+                    marginBottom: 12,
+                  }}
+                >
+                  A IA consegue reforçar estes termos por contexto, analogia e
+                  reformulação sem inventar fatos.
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 7,
+                    marginBottom: 20,
+                  }}
+                >
+                  {(isGuestView
+                    ? (data.keywords.possiveis ?? []).slice(0, GUEST_VISIBLE)
+                    : (data.keywords.possiveis ?? [])
+                  ).map((k) => (
+                    <span
+                      key={k.kw}
+                      style={{
+                        background: "rgba(250,204,21,0.12)",
+                        border: "1px solid rgba(250,204,21,0.24)",
+                        color: "#8a6500",
+                        fontFamily: MONO,
+                        fontSize: 11.5,
+                        fontWeight: 500,
+                        padding: "5px 11px",
+                        borderRadius: 999,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
+                      ≈ {k.kw}
+                      <span style={{ fontSize: 10, opacity: 0.7 }}>
+                        +{k.pontos}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                <div
+                  style={{
+                    marginBottom: 14,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    background: "rgba(250,204,21,0.08)",
+                    border: "1px solid rgba(250,204,21,0.18)",
+                    borderRadius: 10,
+                    padding: "10px 14px",
+                  }}
+                >
+                  <span style={{ fontSize: 13, flexShrink: 0 }}>✨</span>
+                  <p
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: "#8a6500",
+                      margin: 0,
+                    }}
+                  >
+                    Ao liberar, o EarlyCV tenta capturar +{ptsKwPossiveis} pts
+                    desta seção reforçando essas keywords por analogia
+                    verdadeira com o que já existe no seu histórico.
+                  </p>
+                </div>
+                <div
+                  style={{
+                    borderTop: "1px solid rgba(10,10,10,0.06)",
+                    marginBottom: 14,
+                  }}
+                />
+              </>
+            )}
 
             {/* Faltando */}
             <p
@@ -2603,8 +3189,8 @@ export default function ResultadoPage() {
                       }}
                     >
                       {ptsFaltando === 0
-                        ? "Você tem todos os campos essenciais, mas perde pontos por estrutura e linguagem pouco orientadas à vaga."
-                        : "Seu CV perde pontos por campos ausentes e problemas de estrutura."}
+                        ? "Você tem todos os campos essenciais. Os itens abaixo são editoriais e servem como orientação, não como desconto de score."
+                        : "Sua nota aqui depende dos campos essenciais. Os itens abaixo são observações qualitativas para melhorar leitura e clareza."}
                     </p>
                     <p
                       style={{
@@ -2614,9 +3200,9 @@ export default function ResultadoPage() {
                         margin: "6px 0 0",
                       }}
                     >
-                      {problemasPontuacao.length === 0
-                        ? "Nenhuma perda por problemas de apresentação."
-                        : `Você perdeu ${pontosPerdidosApresentacao} pontos nesta seção por ${problemasPontuacao.length} ${problemasPontuacao.length === 1 ? "problema" : "problemas"} de apresentação.`}
+                      {pontosAtencao.length === 0
+                        ? "Nenhum ponto de atenção editorial relevante."
+                        : `${pontosAtencao.length} ${pontosAtencao.length === 1 ? "ponto de atenção editorial" : "pontos de atenção editoriais"} identificados para melhorar legibilidade e clareza.`}
                     </p>
                   </div>
                 </div>
@@ -2837,7 +3423,7 @@ export default function ResultadoPage() {
                       margin: 0,
                     }}
                   >
-                    Problemas que reduzem sua pontuação
+                    Pontos de atenção
                   </p>
                   {criticos.length > 0 && (
                     <span
@@ -2873,7 +3459,7 @@ export default function ResultadoPage() {
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 8 }}
                 >
-                  {[...criticos, ...atencoes].length === 0 && (
+                  {pontosAtencao.length === 0 && (
                     <div
                       style={{
                         display: "flex",
@@ -2899,8 +3485,8 @@ export default function ResultadoPage() {
                     </div>
                   )}
                   {(isGuestView
-                    ? [...criticos, ...atencoes].slice(0, GUEST_VISIBLE)
-                    : [...criticos, ...atencoes]
+                    ? pontosAtencao.slice(0, GUEST_VISIBLE)
+                    : pontosAtencao
                   ).map((p) => (
                     <div
                       key={p.titulo}
@@ -2939,20 +3525,6 @@ export default function ResultadoPage() {
                           >
                             {p.titulo}
                           </p>
-                          {p.impacto !== 0 && (
-                            <span
-                              style={{
-                                fontFamily: MONO,
-                                fontSize: 11,
-                                fontWeight: 600,
-                                color:
-                                  p.tipo === "atencao" ? "#92400e" : "#991b1b",
-                                flexShrink: 0,
-                              }}
-                            >
-                              -{Math.abs(p.impacto)} pts
-                            </span>
-                          )}
                         </div>
                         <p
                           style={{
@@ -2967,71 +3539,70 @@ export default function ResultadoPage() {
                       </div>
                     </div>
                   ))}
-                  {isGuestView &&
-                    [...criticos, ...atencoes].length > GUEST_VISIBLE && (
-                      <GuestBlurOverlay
-                        count={Math.min(
-                          [...criticos, ...atencoes].length - GUEST_VISIBLE,
-                          GUEST_MOCK_PROBLEMAS.length,
-                        )}
+                  {isGuestView && pontosAtencao.length > GUEST_VISIBLE && (
+                    <GuestBlurOverlay
+                      count={Math.min(
+                        pontosAtencao.length - GUEST_VISIBLE,
+                        GUEST_MOCK_PROBLEMAS.length,
+                      )}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 8,
+                        }}
                       >
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 8,
-                          }}
-                        >
-                          {GUEST_MOCK_PROBLEMAS.slice(
-                            0,
-                            Math.min(
-                              [...criticos, ...atencoes].length - GUEST_VISIBLE,
-                              GUEST_MOCK_PROBLEMAS.length,
-                            ),
-                          ).map((p) => (
-                            <div
-                              key={p.titulo}
-                              style={{
-                                display: "flex",
-                                alignItems: "flex-start",
-                                gap: 12,
-                                background:
-                                  p.tipo === "critico"
-                                    ? "rgba(239,68,68,0.05)"
-                                    : "rgba(245,158,11,0.05)",
-                                border: "1px solid rgba(10,10,10,0.06)",
-                                borderRadius: 10,
-                                padding: "12px 14px",
-                              }}
-                            >
-                              <IssueIcon tipo={p.tipo} />
-                              <div style={{ flex: 1 }}>
-                                <p
-                                  style={{
-                                    fontSize: 13.5,
-                                    fontWeight: 500,
-                                    color: "#0a0a0a",
-                                    margin: "0 0 4px",
-                                  }}
-                                >
-                                  {p.titulo}
-                                </p>
-                                <p
-                                  style={{
-                                    fontSize: 12.5,
-                                    color: "#5a5a55",
-                                    lineHeight: 1.5,
-                                    margin: 0,
-                                  }}
-                                >
-                                  {p.descricao}
-                                </p>
-                              </div>
+                        {GUEST_MOCK_PROBLEMAS.slice(
+                          0,
+                          Math.min(
+                            pontosAtencao.length - GUEST_VISIBLE,
+                            GUEST_MOCK_PROBLEMAS.length,
+                          ),
+                        ).map((p) => (
+                          <div
+                            key={p.titulo}
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: 12,
+                              background:
+                                p.tipo === "critico"
+                                  ? "rgba(239,68,68,0.05)"
+                                  : "rgba(245,158,11,0.05)",
+                              border: "1px solid rgba(10,10,10,0.06)",
+                              borderRadius: 10,
+                              padding: "12px 14px",
+                            }}
+                          >
+                            <IssueIcon tipo={p.tipo} />
+                            <div style={{ flex: 1 }}>
+                              <p
+                                style={{
+                                  fontSize: 13.5,
+                                  fontWeight: 500,
+                                  color: "#0a0a0a",
+                                  margin: "0 0 4px",
+                                }}
+                              >
+                                {p.titulo}
+                              </p>
+                              <p
+                                style={{
+                                  fontSize: 12.5,
+                                  color: "#5a5a55",
+                                  lineHeight: 1.5,
+                                  margin: 0,
+                                }}
+                              >
+                                {p.descricao}
+                              </p>
                             </div>
-                          ))}
-                        </div>
-                      </GuestBlurOverlay>
-                    )}
+                          </div>
+                        ))}
+                      </div>
+                    </GuestBlurOverlay>
+                  )}
                 </div>
               </div>
             </>
@@ -3076,6 +3647,69 @@ export default function ResultadoPage() {
               </a>
             </div>
           )}
+
+          {Array.isArray(data.sinais_referencia) &&
+            data.sinais_referencia.length > 0 && (
+              <>
+                <SectionHeader
+                  label="SINAIS DE REFERÊNCIA"
+                  title="O que costuma aparecer em candidatos fortes"
+                  description="Esses itens não entram no score. São sinais comuns para esse tipo de vaga que podem fortalecer o CV se forem verdadeiros no seu histórico."
+                />
+                <div style={{ ...CARD, marginBottom: 10 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                    }}
+                  >
+                    {data.sinais_referencia.map((item) => (
+                      <div
+                        key={item}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 12,
+                          background: "rgba(10,10,10,0.02)",
+                          border: "1px solid rgba(10,10,10,0.06)",
+                          borderRadius: 10,
+                          padding: "12px 14px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: "50%",
+                            background: "rgba(10,10,10,0.06)",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "#0a0a0a",
+                          }}
+                        >
+                          +
+                        </span>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 13,
+                            lineHeight: 1.55,
+                            color: "#2a2a28",
+                          }}
+                        >
+                          {item}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
           {/* ── Preview ── */}
           {hasPreviewSection && (
@@ -3557,8 +4191,13 @@ export default function ResultadoPage() {
                     {[
                       {
                         key: "content-adjustments",
-                        text: `${data.ajustes_conteudo.length} ajustes de conteúdo prontos para aplicar`,
+                        text: `${data.ajustes_conteudo.length} ajustes de conteúdo com ganho estimado de +${totalAjustesConteudo} pts`,
                         visible: true,
+                      },
+                      {
+                        key: "possible-keywords",
+                        text: `${data.keywords.possiveis?.length ?? 0} keyword${(data.keywords.possiveis?.length ?? 0) > 1 ? "s possíveis" : " possível"} com ganho estimado de +${ptsKwPossiveis} pts`,
+                        visible: (data.keywords.possiveis?.length ?? 0) > 0,
                       },
                       {
                         key: "selected-keywords",
@@ -3652,11 +4291,16 @@ export default function ResultadoPage() {
                       }}
                     >
                       <span>{data.score.scoreAtualBase}</span>
-                      <span>
-                        + {data.score.pontosDisponiveisBase} pts disponíveis
-                      </span>
+                      {totalAjustesConteudo > 0 && (
+                        <span>+ {totalAjustesConteudo} pts seção 1</span>
+                      )}
+                      {ptsKwPossiveis > 0 && (
+                        <span>+ {ptsKwPossiveis} pts keywords possíveis</span>
+                      )}
                       {ptsKwSelecionadas > 0 && (
-                        <span>+ {ptsKwSelecionadas} pts keywords ausentes</span>
+                        <span>
+                          + {ptsKwSelecionadas} pts keywords selecionadas
+                        </span>
                       )}
                       <span style={{ color: "rgba(255,255,255,0.5)" }}>
                         = {scoreProjetado}/100
@@ -4236,6 +4880,8 @@ export default function ResultadoPage() {
             )}
         </div>
       </main>
+
+      <PublicFooter />
 
       <CvReleaseModal
         open={releaseModalOpen}

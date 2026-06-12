@@ -99,22 +99,93 @@ export type CvAdaptationOutput = {
 export type JobRequirementImportance = "high" | "medium" | "low";
 
 export type RequirementCoverageStatus = "covered" | "partial" | "missing";
+export type RequirementCoveragePercent = 0 | 25 | 50 | 75 | 100;
+
+export type JobRequirementDimension =
+  | "experience"
+  | "skill"
+  | "education"
+  | "certification"
+  | "language"
+  | "location"
+  | "work_model"
+  | "other";
+
+export type JobRequirementGateLevel = "hard" | "soft";
 
 export type StructuredJobRequirement = {
   requirementKey: string;
   requirementText: string;
   importance: JobRequirementImportance;
+  dimension?: JobRequirementDimension;
+  gateLevel?: JobRequirementGateLevel;
 };
 
 export type JobRequirementCoverage = StructuredJobRequirement & {
   coverageStatus: RequirementCoverageStatus;
+  coveragePercent?: RequirementCoveragePercent;
   evidence: string[];
   gapExplanation: string;
   recommendation: string;
   impactScore: number;
 };
 
-export const CV_ANALYSIS_PROMPT_VERSION = "2026-06-09.v2";
+type RequirementScoringSummary = {
+  coverage: {
+    coveredCount: number;
+    adjustableCount: number;
+    unavailableCount: number;
+    coveredWeight: number;
+    adjustableWeight: number;
+    unavailableWeight: number;
+    totalWeight: number;
+  };
+  gates: {
+    hardTotal: number;
+    hardCovered: number;
+    hardPartial: number;
+    hardMissing: number;
+  };
+  sections: {
+    experiencia: { score: number; max: 50 };
+    competencias: { score: number; max: 40 };
+    formatacao: { score: number; max: 10 };
+  };
+  score: {
+    scoreAtualBase: number;
+    scoreAposLiberarBase: number;
+    scoreDelta: number;
+  };
+  positives: Array<{
+    texto: string;
+    pontos: number;
+    coveragePercent: RequirementCoveragePercent;
+  }>;
+  adjustments: Array<{
+    titulo: string;
+    descricao: string;
+    pontos: number;
+    dica: string;
+    coveragePercent: RequirementCoveragePercent;
+  }>;
+  unavailable: Array<{
+    titulo: string;
+    descricao: string;
+    pontos: number;
+    motivo: string;
+    coveragePercent: RequirementCoveragePercent;
+  }>;
+  keywords: {
+    presentes: Array<{ kw: string; pontos: number }>;
+    possiveis: Array<{ kw: string; pontos: number }>;
+    ausentes: Array<{ kw: string; pontos: number }>;
+  };
+  lacunas: string[];
+  atsKeywords: CvAnalysisOutput["ats_keywords"];
+  qualitativeSignals: string[];
+};
+
+export const CV_ANALYSIS_PROMPT_VERSION = "2026-06-12.v1";
 
 const SYSTEM_PROMPT = `You are an expert CV enhancement specialist focused on the Brazilian job market. Your task is to improve a candidate's existing CV to better match a specific job opening AND ensure it passes ATS (Applicant Tracking System) filters — without changing what the person has done.
 
@@ -631,6 +702,7 @@ OUTPUT — valid JSON only, no markdown
 }`;
 
 export type CvAnalysisOutput = {
+  analysisVersion?: "legacy_v1" | "requirements_v2";
   vaga: {
     cargo: string;
     empresa: string;
@@ -644,24 +716,37 @@ export type CvAnalysisOutput = {
     headline: string;
     subheadline: string;
   };
-  /** Scores por seção: experiência (0-40) + competências (0-40) + formatação (0-20) = fit.score */
+  /** Scores por seção: experiência (0-50) + competências (0-40) + formatação (0-10) = fit.score */
   secoes: {
-    experiencia: { score: number; max: 40 };
+    experiencia: { score: number; max: 50 };
     competencias: { score: number; max: 40 };
-    formatacao: { score: number; max: 20 };
+    formatacao: { score: number; max: 10 };
   };
   /** Pontos fortes do candidato para esta vaga, com peso relativo */
-  positivos: Array<{ texto: string; pontos: number }>;
+  positivos: Array<{
+    texto: string;
+    pontos: number;
+    coveragePercent?: RequirementCoveragePercent;
+  }>;
   /** Ajustes de conteúdo identificados, com ganho estimado de pontos */
   ajustes_conteudo: Array<{
     titulo: string;
     descricao: string;
     pontos: number;
     dica: string;
+    coveragePercent?: RequirementCoveragePercent;
+  }>;
+  ajustes_indisponiveis?: Array<{
+    titulo: string;
+    descricao: string;
+    pontos: number;
+    motivo: string;
+    coveragePercent?: RequirementCoveragePercent;
   }>;
   /** Palavras-chave da vaga com impacto por keyword */
   keywords: {
     presentes: Array<{ kw: string; pontos: number }>;
+    possiveis?: Array<{ kw: string; pontos: number }>;
     ausentes: Array<{ kw: string; pontos: number }>;
   };
   /** Análise do formato do CV para sistemas ATS */
@@ -703,6 +788,29 @@ export type CvAnalysisOutput = {
     titulo: string;
     subtexto: string;
   };
+  sinais_referencia?: string[];
+  scoring?: {
+    kind: "requirements_v2";
+    coverage: RequirementScoringSummary["coverage"];
+    gates: RequirementScoringSummary["gates"];
+    sections: RequirementScoringSummary["sections"];
+    totals: RequirementScoringSummary["score"];
+  };
+  hard_gates?: Array<{
+    requirementKey: string;
+    requirementText: string;
+    status: RequirementCoverageStatus;
+    importance: JobRequirementImportance;
+  }>;
+  scoreBefore?: number;
+  scoreAfter?: number;
+  scoreDelta?: number;
+};
+
+type KeywordBucket = {
+  presentes: Array<{ kw: string; pontos: number }>;
+  possiveis: Array<{ kw: string; pontos: number }>;
+  ausentes: Array<{ kw: string; pontos: number }>;
 };
 
 function buildAnalysisUserMessage(input: {
@@ -755,15 +863,21 @@ REGRAS DE REGUA DE REQUISITOS:
   - extraia os requisitos estruturados da vaga dentro desta mesma análise
   - gere requisitos objetivos, avaliáveis e relevantes para decisão
   - descarte formulações vagas como "perfil dinâmico" e converta apenas critérios reais em requisitos observáveis
+  - para cada requisito, classifique também:
+    - "dimension": "experience" | "skill" | "education" | "certification" | "language" | "location" | "work_model" | "other"
+    - "gateLevel": "hard" quando o requisito soar eliminatório/binário para screening, senão "soft"
 - Se <MODO_ANALISE> for "use_existing_rule":
   - MODO COBERTURA: avalie apenas coverageStatus, evidence, gapExplanation e recommendation para cada requirementKey recebido
-  - use EXATAMENTE os requisitos recebidos em <REQUISITOS_EXISTENTES> — mesmos requirementKey, requirementText, importance e na mesma ordem
+  - use EXATAMENTE os requisitos recebidos em <REQUISITOS_EXISTENTES> — mesmos requirementKey, requirementText, importance, dimension, gateLevel e na mesma ordem
   - não criar novos requisitos, não remover requisitos existentes
-  - não alterar requirementKey, requirementText nem importance
+  - não alterar requirementKey, requirementText, importance, dimension nem gateLevel
   - "ats_keywords.ausentes" deve conter APENAS termos de requirements com coverageStatus "missing" ou "partial"
   - "ats_keywords.presentes" deve conter APENAS termos de requirements com coverageStatus "covered"
   - "ajustes_conteudo" deve referenciar APENAS requirements com coverageStatus "missing" ou "partial"
   - "ajustes_indisponiveis" deve referenciar APENAS requirements com lacunas reais não corrigíveis
+  - "keywords.possiveis" deve conter APENAS keywords curtas de ATS que podem ser introduzidas por analogia verdadeira, contexto ou reformulação sem inventar fatos
+  - "keywords.possiveis" NÃO deve repetir frases longas de requirements
+  - "keywords.possiveis" NÃO deve conter requisitos de experiência, gestão, senioridade ou escopo executivo
   - não gerar lacunas, keywords ausentes ou ajustes que não correspondam a um requirementKey da régua
 - Em ambos os modos:
   - retornar "requirements" com cobertura por requisito
@@ -803,6 +917,8 @@ SAÍDA — JSON válido, sem markdown:
       "requirementKey": "identificador-estavel-em-kebab-case",
       "requirementText": "requisito objetivo e avaliável contra o currículo",
       "importance": "high" | "medium" | "low",
+      "dimension": "experience" | "skill" | "education" | "certification" | "language" | "location" | "work_model" | "other",
+      "gateLevel": "hard" | "soft",
       "coverageStatus": "covered" | "partial" | "missing",
       "evidence": ["evidência textual curta encontrada no CV"],
       "gapExplanation": "explicação curta da lacuna quando existir",
@@ -819,7 +935,7 @@ SAÍDA — JSON válido, sem markdown:
 
   "secoes": {
     "experiencia": {
-      "max": 40,
+      "max": 50,
       "criterio": "Experiência profissional aderente à vaga"
     },
     "competencias": {
@@ -827,7 +943,7 @@ SAÍDA — JSON válido, sem markdown:
       "criterio": "Competências técnicas aderentes à vaga"
     },
     "formatacao": {
-      "max": 20,
+      "max": 10,
       "criterio": "Formatação, estrutura e campos essenciais do CV"
     }
   },
@@ -861,6 +977,12 @@ SAÍDA — JSON válido, sem markdown:
     "presentes": [
       {
         "kw": "palavra-chave presente no CV",
+        "pontos": number
+      }
+    ],
+    "possiveis": [
+      {
+        "kw": "palavra-chave com base parcial no CV e que pode ser reforçada sem inventar fatos",
         "pontos": number
       }
     ],
@@ -960,7 +1082,10 @@ SAÍDA — JSON válido, sem markdown:
   "mensagem_venda": {
     "titulo": "frase curta focada em resultado prático para esta vaga específica",
     "subtexto": "frase direta sobre ganho concreto"
-  }
+  },
+  "sinais_referencia": [
+    "3 a 5 sinais comuns em candidatos fortes para esse tipo de vaga, sem repetir requisitos explícitos da vaga"
+  ],
   "adaptation_notes": "3 frases em PT-BR descrevendo as principais adaptações feitas no CV para esta vaga: (1) o que foi reposicionado ou reescrito, (2) quais keywords foram incorporadas e onde, (3) o que foi priorizado ou condensado. Escrever como se a adaptação já tivesse sido feita. Direto, específico, sem fluff."
 }
 
@@ -980,7 +1105,7 @@ Os pontos por item serão usados pelo sistema para cálculo posterior.
 
 SEÇÃO 1 — EXPERIÊNCIA PROFISSIONAL
 
-Orçamento total teórico: 40 pontos.
+Orçamento total teórico: 50 pontos.
 
 Total Pontos Seção 1 =
 sum(positivos[].pontos)
@@ -993,7 +1118,7 @@ Onde:
 - ajustes_indisponiveis[].pontos são pontos que não podem ser incluídos porque representam lacunas reais no perfil do candidato
 
 Regra:
-- A soma dos três grupos deve ser exatamente 40
+- A soma dos três grupos deve ser exatamente 50
 - A IA deve ser justa na atribuição de pontos
 - A IA deve tentar beneficiar o candidato sempre que houver base real no CV
 - A IA nunca deve incluir informação inexistente
@@ -1005,7 +1130,7 @@ Exemplo:
 positivos = 18 pontos
 ajustes_conteudo = 12 pontos
 ajustes_indisponiveis = 10 pontos
-Total = 40 pontos
+Total = 50 pontos
 
 SEÇÃO 2 — COMPETÊNCIAS TÉCNICAS
 
@@ -1013,10 +1138,12 @@ Orçamento total teórico: 40 pontos.
 
 Total Pontos Seção 2 =
 sum(keywords.presentes[].pontos)
++ sum(keywords.possiveis[].pontos)
 + sum(keywords.ausentes[].pontos)
 
 Onde:
 - keywords.presentes[].pontos são competências já identificadas no CV
+- keywords.possiveis[].pontos são competências que podem ser reforçadas pela IA com base real já existente no CV
 - keywords.ausentes[].pontos são competências relevantes para a vaga que não aparecem no CV
 
 Regra:
@@ -1024,19 +1151,24 @@ Regra:
 - Priorizar palavras-chave realmente importantes para a vaga
 - Não listar keywords irrelevantes só para preencher espaço
 - Não marcar como presente uma competência que não aparece ou não fica evidente no CV
+- "keywords.possiveis" deve conter apenas termos que possam ser introduzidos por analogia verdadeira, contexto ou reformulação sem inventar fatos
+- "keywords.possiveis" deve parecer keyword de ATS, não frase de requirement
+- exemplos válidos: "engenharia de dados", "data platform", "cloud-native", "observabilidade", "arquitetura de dados"
+- exemplos inválidos: "Liderar arquitetura e roadmap de plataforma de dados", "Comunicar riscos, trade-offs e decisões de roadmap"
+- "keywords.ausentes" deve conter apenas termos que exigiriam seleção explícita do usuário ou informação nova
 
 Exemplo:
 keywords.presentes = 24 pontos
-keywords.ausentes = 16 pontos
+keywords.possiveis = 8 pontos
+keywords.ausentes = 8 pontos
 Total = 40 pontos
 
 SEÇÃO 3 — FORMATAÇÃO E CAMPOS
 
-Orçamento total prático: 20 pontos.
+Orçamento total prático: 10 pontos.
 
-Total Pontos Seção 3 = 20
-- penalidades por problemas de formatação
-- penalidades por campos essenciais ausentes
+Total Pontos Seção 3 = 10
+- 1 ponto perdido por campo essencial ausente
 
 Regra:
 - A IA deve listar problemas de formato em formato_cv.problemas
@@ -1068,6 +1200,13 @@ TOM CORRETO:
 - "Seu CV não mostra o que a vaga cobra"
 - "Faltam sinais claros para o recrutador"
 - "Seu CV esconde experiências relevantes"
+
+REGRAS DE SINAIS DE REFERÊNCIA:
+- "sinais_referencia" NÃO entra no score
+- Listar apenas atributos, contextos ou sinais comuns em candidatos fortes para esse tipo de vaga
+- NÃO repetir requisitos explícitos já presentes em "requirements"
+- NÃO inventar fatos do candidato
+- Formular como sugestões condicionais do que valeria destacar no CV se for verdadeiro
 
 TOM PROIBIDO:
 - "O candidato possui experiência..."
@@ -1208,9 +1347,9 @@ function normalizeRequirementAdaptationActions(
       seen.add(key);
 
       const actionRaw = String(record.action ?? "").trim();
-      const action = (["strengthened", "preserved", "not_addressed"] as const).includes(
-        actionRaw as "strengthened" | "preserved" | "not_addressed",
-      )
+      const action = (
+        ["strengthened", "preserved", "not_addressed"] as const
+      ).includes(actionRaw as "strengthened" | "preserved" | "not_addressed")
         ? (actionRaw as RequirementAdaptationAction["action"])
         : "not_addressed";
 
@@ -1279,6 +1418,8 @@ function normalizeRequirementCoverage(
     const requirementText = String(record.requirementText ?? "").trim();
     const importance = String(record.importance ?? "").trim();
     const coverageStatus = String(record.coverageStatus ?? "").trim();
+    const dimension = String(record.dimension ?? "").trim();
+    const gateLevel = String(record.gateLevel ?? "").trim();
 
     if (!requirementText) {
       throw new Error(`Requirement ${index} is missing requirementText`);
@@ -1302,6 +1443,22 @@ function normalizeRequirementCoverage(
             .map((item) => String(item).trim())
             .filter((item) => item.length > 0)
         : [],
+      ...(dimension &&
+      [
+        "experience",
+        "skill",
+        "education",
+        "certification",
+        "language",
+        "location",
+        "work_model",
+        "other",
+      ].includes(dimension)
+        ? { dimension: dimension as JobRequirementDimension }
+        : {}),
+      ...(gateLevel && ["hard", "soft"].includes(gateLevel)
+        ? { gateLevel: gateLevel as JobRequirementGateLevel }
+        : {}),
       gapExplanation: String(record.gapExplanation ?? "").trim(),
       recommendation: String(record.recommendation ?? "").trim(),
       impactScore: Number(record.impactScore ?? 0),
@@ -1323,6 +1480,8 @@ function normalizeRequirementCoverage(
         requirementKey: existing.requirementKey,
         requirementText: existing.requirementText,
         importance: existing.importance,
+        dimension: existing.dimension,
+        gateLevel: existing.gateLevel,
         // Coverage fields come from the model; default to "covered" if key was omitted
         coverageStatus: model?.coverageStatus ?? "covered",
         evidence: model?.evidence ?? [],
@@ -1373,12 +1532,649 @@ function deriveAtsKeywordsFromRequirements(
   };
 }
 
+function sanitizeKeywordLabel(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeKeywordKey(value: string): string {
+  return sanitizeKeywordLabel(value).toLocaleLowerCase("pt-BR");
+}
+
+function dedupeKeywordItems(
+  items: Array<{ kw: string; pontos: number }>,
+): Array<{ kw: string; pontos: number }> {
+  const seen = new Set<string>();
+  const deduped: Array<{ kw: string; pontos: number }> = [];
+  for (const item of items) {
+    const kw = sanitizeKeywordLabel(item.kw);
+    if (!kw) continue;
+    const key = normalizeKeywordKey(kw);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push({
+      kw,
+      pontos:
+        typeof item.pontos === "number" && Number.isFinite(item.pontos)
+          ? Math.max(1, item.pontos)
+          : 1,
+    });
+  }
+  return deduped;
+}
+
+function remapExistingKeywordRule(
+  existingRule: KeywordBucket,
+  currentKeywords: CvAnalysisOutput["keywords"] | undefined,
+  currentAtsKeywords: CvAnalysisOutput["ats_keywords"] | undefined,
+): KeywordBucket {
+  const universe = dedupeKeywordItems([
+    ...(existingRule.presentes ?? []),
+    ...(existingRule.possiveis ?? []),
+    ...(existingRule.ausentes ?? []),
+  ]);
+  const currentPresent = new Set(
+    dedupeKeywordItems([
+      ...(currentKeywords?.presentes ?? []),
+      ...((currentAtsKeywords?.presentes ?? []).map((kw) => ({
+        kw,
+        pontos: 1,
+      })) as Array<{ kw: string; pontos: number }>),
+    ]).map((item) => normalizeKeywordKey(item.kw)),
+  );
+  const currentPossible = new Set(
+    dedupeKeywordItems(currentKeywords?.possiveis ?? []).map((item) =>
+      normalizeKeywordKey(item.kw),
+    ),
+  );
+  const currentAbsent = new Set(
+    dedupeKeywordItems([
+      ...(currentKeywords?.ausentes ?? []),
+      ...((currentAtsKeywords?.ausentes ?? []).map((kw) => ({
+        kw,
+        pontos: 1,
+      })) as Array<{ kw: string; pontos: number }>),
+    ]).map((item) => normalizeKeywordKey(item.kw)),
+  );
+
+  const previousPresent = new Set(
+    (existingRule.presentes ?? []).map((item) => normalizeKeywordKey(item.kw)),
+  );
+  const previousPossible = new Set(
+    (existingRule.possiveis ?? []).map((item) => normalizeKeywordKey(item.kw)),
+  );
+
+  const presentes: Array<{ kw: string; pontos: number }> = [];
+  const possiveis: Array<{ kw: string; pontos: number }> = [];
+  const ausentes: Array<{ kw: string; pontos: number }> = [];
+
+  for (const item of universe) {
+    const key = normalizeKeywordKey(item.kw);
+    if (
+      currentPresent.has(key) ||
+      (!currentPossible.has(key) &&
+        !currentAbsent.has(key) &&
+        previousPresent.has(key))
+    ) {
+      presentes.push(item);
+      continue;
+    }
+    if (
+      currentPossible.has(key) ||
+      (!currentPresent.has(key) &&
+        !currentAbsent.has(key) &&
+        previousPossible.has(key))
+    ) {
+      possiveis.push(item);
+      continue;
+    }
+    ausentes.push(item);
+  }
+
+  return {
+    presentes,
+    possiveis,
+    ausentes,
+  };
+}
+
+function buildKeywordFallbackFromRequirements(
+  requirements: Array<
+    JobRequirementCoverage & { dimension?: JobRequirementDimension }
+  >,
+  status: "covered" | "possible" | "missing_only",
+): string[] {
+  const filtered = requirements.filter((requirement) => {
+    const matchesStatus =
+      status === "covered"
+        ? requirement.coverageStatus === "covered"
+        : status === "possible"
+          ? requirement.coverageStatus === "partial" ||
+            (requirement.coverageStatus === "missing" &&
+              requirement.evidence.length > 0)
+          : requirement.coverageStatus === "missing" &&
+            requirement.evidence.length === 0;
+    if (!matchesStatus) return false;
+    return requirement.dimension && requirement.dimension !== "experience";
+  });
+
+  const selected =
+    filtered.length > 0
+      ? filtered
+      : requirements.filter((requirement) =>
+          status === "covered"
+            ? requirement.coverageStatus === "covered"
+            : status === "possible"
+              ? requirement.coverageStatus === "partial" ||
+                (requirement.coverageStatus === "missing" &&
+                  requirement.evidence.length > 0)
+              : requirement.coverageStatus === "missing" &&
+                requirement.evidence.length === 0,
+        );
+
+  return selected.map((requirement) => requirement.requirementText);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function applyBudget<T extends { pontos: number }>(
+  items: T[],
+  budget: number,
+): T[] {
+  if (budget <= 0 || items.length === 0) return [];
+
+  const total = items.reduce((sum, item) => sum + Math.max(0, item.pontos), 0);
+  if (total <= 0) {
+    const even = Math.floor(budget / items.length);
+    const rest = budget - even * items.length;
+    return items.map((item, index) => ({
+      ...item,
+      pontos: even + (index === items.length - 1 ? rest : 0),
+    }));
+  }
+
+  const scaled = items.map((item) => ({
+    ...item,
+    pontos: Math.max(
+      1,
+      Math.round((Math.max(0, item.pontos) / total) * budget),
+    ),
+  }));
+  const diff = budget - scaled.reduce((sum, item) => sum + item.pontos, 0);
+  if (diff !== 0) {
+    const last = scaled.length - 1;
+    scaled[last] = {
+      ...scaled[last],
+      pontos: Math.max(1, scaled[last].pontos + diff),
+    };
+  }
+
+  return scaled;
+}
+
+function getRequirementWeight(
+  requirement: Pick<JobRequirementCoverage, "importance" | "gateLevel">,
+): number {
+  const base =
+    requirement.importance === "high"
+      ? 5
+      : requirement.importance === "medium"
+        ? 3
+        : 1;
+  return requirement.gateLevel === "hard" ? base + 1 : base;
+}
+
+function inferRequirementDimension(
+  requirement: Pick<JobRequirementCoverage, "dimension" | "requirementText">,
+): JobRequirementDimension {
+  if (requirement.dimension) {
+    return requirement.dimension;
+  }
+
+  const text = requirement.requirementText
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (
+    /(certificacao|certification|licenca|license|pmp|scrum|aws certified)/.test(
+      text,
+    )
+  ) {
+    return "certification";
+  }
+  if (/(ingles|english|espanhol|language|idioma)/.test(text)) {
+    return "language";
+  }
+  if (/(hibrido|hybrid|remoto|remote|presencial|onsite)/.test(text)) {
+    return "work_model";
+  }
+  if (/(localizacao|localizacao|sao paulo|rio de janeiro|brasil)/.test(text)) {
+    return "location";
+  }
+  if (
+    /(sql|python|power bi|tableau|excel|aws|gcp|azure|dbt|airflow|looker|sap|salesforce|hubspot|java|javascript|typescript|react|node)/.test(
+      text,
+    )
+  ) {
+    return "skill";
+  }
+  if (
+    /(graduacao|formacao|bacharel|degree|mba|pos-graduacao|pos graduacao)/.test(
+      text,
+    )
+  ) {
+    return "education";
+  }
+
+  return "experience";
+}
+
+function deriveCoveragePercent(
+  requirement: Pick<
+    JobRequirementCoverage,
+    "coverageStatus" | "evidence" | "impactScore"
+  >,
+): RequirementCoveragePercent {
+  const evidenceCount = requirement.evidence.length;
+
+  if (requirement.coverageStatus === "covered") {
+    return 100;
+  }
+
+  if (requirement.coverageStatus === "partial") {
+    if (evidenceCount >= 2 || requirement.impactScore >= 80) {
+      return 75;
+    }
+    if (evidenceCount >= 1 || requirement.impactScore >= 40) {
+      return 50;
+    }
+    return 25;
+  }
+
+  if (evidenceCount > 0 || requirement.impactScore >= 25) {
+    return 25;
+  }
+
+  return 0;
+}
+
+function deriveProjectedCoveragePercent(
+  requirement: Pick<JobRequirementCoverage, "coverageStatus" | "evidence"> & {
+    coveragePercent: RequirementCoveragePercent;
+  },
+): RequirementCoveragePercent {
+  if (requirement.coveragePercent === 100) {
+    return requirement.coveragePercent;
+  }
+
+  if (
+    requirement.coverageStatus === "missing" &&
+    requirement.evidence.length === 0
+  ) {
+    return 0;
+  }
+
+  return Math.min(
+    100,
+    requirement.coveragePercent + 25,
+  ) as RequirementCoveragePercent;
+}
+
+function buildRequirementScoringSummary(
+  requirements: JobRequirementCoverage[],
+  formatoCv: CvAnalysisOutput["formato_cv"],
+  keywordSource?: CvAnalysisOutput["keywords"],
+  atsKeywordSource?: CvAnalysisOutput["ats_keywords"],
+  options?: { preserveKeywordWeights?: boolean },
+): RequirementScoringSummary {
+  const weighted = requirements.map((requirement) => {
+    const weight = getRequirementWeight(requirement);
+    const coveragePercent = deriveCoveragePercent(requirement);
+    const projectedCoveragePercent = deriveProjectedCoveragePercent({
+      coveragePercent,
+      coverageStatus: requirement.coverageStatus,
+      evidence: requirement.evidence,
+    });
+    const isCovered = requirement.coverageStatus === "covered";
+    const isAdjustable =
+      requirement.coverageStatus === "partial" ||
+      (requirement.coverageStatus === "missing" &&
+        requirement.evidence.length > 0);
+    const isUnavailable =
+      requirement.coverageStatus === "missing" &&
+      requirement.evidence.length === 0;
+    const dimension = inferRequirementDimension(requirement);
+    const currentContribution = weight * (coveragePercent / 100);
+    const projectedContribution = weight * (projectedCoveragePercent / 100);
+    const upgradeContribution = Math.max(
+      0,
+      projectedContribution - currentContribution,
+    );
+    const lockedContribution = Math.max(0, weight - projectedContribution);
+    return {
+      ...requirement,
+      coveragePercent,
+      projectedCoveragePercent,
+      weight,
+      isCovered,
+      isAdjustable,
+      isUnavailable,
+      dimension,
+      currentContribution,
+      projectedContribution,
+      upgradeContribution,
+      lockedContribution,
+    };
+  });
+
+  const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
+  const coveredItems = weighted.filter((item) => item.isCovered);
+  const adjustableItems = weighted.filter((item) => item.isAdjustable);
+  const unavailableItems = weighted.filter((item) => item.isUnavailable);
+  const coveredWeight = coveredItems.reduce(
+    (sum, item) => sum + item.currentContribution,
+    0,
+  );
+  const adjustableWeight = adjustableItems.reduce(
+    (sum, item) => sum + item.upgradeContribution,
+    0,
+  );
+  const unavailableWeight = unavailableItems.reduce(
+    (sum, item) => sum + item.lockedContribution,
+    0,
+  );
+
+  const experienceCurrentBudget =
+    totalWeight > 0 ? Math.round((coveredWeight / totalWeight) * 50) : 0;
+  const experienceProjectedBudget =
+    totalWeight > 0
+      ? Math.round(
+          ((coveredWeight + adjustableWeight) /
+            totalWeight) *
+            50,
+        )
+      : 0;
+  const adjustmentBudget = clamp(
+    experienceProjectedBudget - experienceCurrentBudget,
+    0,
+    50,
+  );
+  const unavailableBudget = clamp(50 - experienceProjectedBudget, 0, 50);
+
+  const positivos = applyBudget(
+    coveredItems
+      .slice()
+      .sort(
+        (a, b) =>
+          b.coveragePercent - a.coveragePercent ||
+          b.currentContribution - a.currentContribution ||
+          b.impactScore - a.impactScore,
+      )
+      .map((requirement) => ({
+        texto: requirement.requirementText,
+        pontos: Math.max(1, Math.round(requirement.currentContribution * 4)),
+        coveragePercent: requirement.coveragePercent,
+      })),
+    clamp(experienceCurrentBudget, 0, 50),
+  );
+
+  const ajustes = applyBudget(
+    adjustableItems
+      .slice()
+      .sort(
+        (a, b) =>
+          b.coveragePercent - a.coveragePercent ||
+          b.upgradeContribution - a.upgradeContribution ||
+          b.impactScore - a.impactScore,
+      )
+      .map((requirement) => ({
+        titulo: requirement.requirementText,
+        descricao:
+          requirement.gapExplanation ||
+          requirement.recommendation ||
+          "Cobertura parcial do requisito.",
+        pontos: Math.max(1, Math.round(requirement.upgradeContribution * 4)),
+        dica:
+          requirement.recommendation ||
+          "Evidencie esse requisito apenas se for verdadeiro no seu CV.",
+        coveragePercent: requirement.coveragePercent,
+      })),
+    adjustmentBudget,
+  );
+
+  const indisponiveis = applyBudget(
+    unavailableItems
+      .slice()
+      .sort((a, b) => b.lockedContribution - a.lockedContribution)
+      .map((requirement) => ({
+        titulo: requirement.requirementText,
+        descricao:
+          requirement.gapExplanation ||
+          "Nao ha evidencia suficiente no CV atual.",
+        pontos: Math.max(1, Math.round(requirement.lockedContribution * 4)),
+        motivo:
+          requirement.recommendation ||
+          "Nao e possivel afirmar esse requisito sem inventar informacao.",
+        coveragePercent: requirement.coveragePercent,
+      })),
+    unavailableBudget,
+  );
+
+  const keywordPresentSeed = dedupeKeywordItems(
+    (keywordSource?.presentes?.length
+      ? keywordSource.presentes
+      : (
+          atsKeywordSource?.presentes ??
+          buildKeywordFallbackFromRequirements(weighted, "covered")
+        ).map((kw) => ({ kw, pontos: 1 }))) as Array<{
+      kw: string;
+      pontos: number;
+    }>,
+  );
+  const keywordPossibleSeed = dedupeKeywordItems(
+    (keywordSource?.possiveis?.length ? keywordSource.possiveis : []) as Array<{
+      kw: string;
+      pontos: number;
+    }>,
+  );
+  const keywordAbsentSeed = dedupeKeywordItems(
+    (keywordSource?.ausentes?.length
+      ? keywordSource.ausentes
+      : (
+          atsKeywordSource?.ausentes ??
+          buildKeywordFallbackFromRequirements(weighted, "missing_only")
+        ).map((kw) => ({ kw, pontos: 1 }))) as Array<{
+      kw: string;
+      pontos: number;
+    }>,
+  );
+  const keywordPresentBudget =
+    totalWeight > 0 ? Math.round((coveredWeight / totalWeight) * 40) : 0;
+  const possibleKeywordWeight = weighted
+    .filter(
+      (item) =>
+        item.coverageStatus === "partial" ||
+        (item.coverageStatus === "missing" && item.evidence.length > 0),
+    )
+    .reduce((sum, item) => sum + item.upgradeContribution, 0);
+  const keywordPossibleBudget =
+    totalWeight > 0
+      ? Math.round((possibleKeywordWeight / totalWeight) * 40)
+      : 0;
+  const keywordAbsentBudget = clamp(
+    40 - keywordPresentBudget - keywordPossibleBudget,
+    0,
+    40,
+  );
+  const keywordPresentes = options?.preserveKeywordWeights
+    ? keywordPresentSeed
+    : applyBudget(keywordPresentSeed, keywordPresentBudget);
+  const keywordPossiveis = options?.preserveKeywordWeights
+    ? keywordPossibleSeed
+    : applyBudget(keywordPossibleSeed, keywordPossibleBudget);
+  const keywordAusentes = options?.preserveKeywordWeights
+    ? keywordAbsentSeed
+    : applyBudget(keywordAbsentSeed, keywordAbsentBudget);
+
+  const formatFields = Array.isArray(formatoCv?.campos) ? formatoCv.campos : [];
+  const penalidadesCamposAusentes = formatFields.filter(
+    (field) => !field.presente,
+  ).length;
+  const formatacaoAtual = clamp(10 - penalidadesCamposAusentes, 0, 10);
+
+  const competenciasScore = keywordPresentes.reduce(
+    (sum, item) => sum + item.pontos,
+    0,
+  );
+  const competenciasProjetadas =
+    competenciasScore +
+    keywordPossiveis.reduce((sum, item) => sum + item.pontos, 0);
+  const scoreAtualBase = clamp(
+    experienceCurrentBudget + competenciasScore + formatacaoAtual,
+    0,
+    100,
+  );
+  const scoreAposLiberarBase = clamp(
+    experienceProjectedBudget + competenciasProjetadas + formatacaoAtual,
+    0,
+    100,
+  );
+
+  return {
+    coverage: {
+      coveredCount: coveredItems.length,
+      adjustableCount: adjustableItems.length,
+      unavailableCount: unavailableItems.length,
+      coveredWeight,
+      adjustableWeight,
+      unavailableWeight,
+      totalWeight,
+    },
+    gates: {
+      hardTotal: weighted.filter((item) => item.gateLevel === "hard").length,
+      hardCovered: weighted.filter(
+        (item) =>
+          item.gateLevel === "hard" && item.coverageStatus === "covered",
+      ).length,
+      hardPartial: weighted.filter(
+        (item) =>
+          item.gateLevel === "hard" && item.coverageStatus === "partial",
+      ).length,
+      hardMissing: weighted.filter(
+        (item) =>
+          item.gateLevel === "hard" && item.coverageStatus === "missing",
+      ).length,
+    },
+    sections: {
+      experiencia: { score: experienceCurrentBudget, max: 50 },
+      competencias: { score: competenciasScore, max: 40 },
+      formatacao: { score: formatacaoAtual, max: 10 },
+    },
+    score: {
+      scoreAtualBase,
+      scoreAposLiberarBase,
+      scoreDelta: scoreAposLiberarBase - scoreAtualBase,
+    },
+    positives: positivos,
+    adjustments: ajustes,
+    unavailable: indisponiveis,
+    keywords: {
+      presentes: keywordPresentes,
+      possiveis: keywordPossiveis,
+      ausentes: keywordAusentes,
+    },
+    lacunas: weighted
+      .filter((item) => item.coverageStatus !== "covered")
+      .map(
+        (item) =>
+          item.gapExplanation || item.recommendation || item.requirementText,
+      ),
+    atsKeywords: deriveAtsKeywordsFromRequirements(requirements),
+    qualitativeSignals: [],
+  };
+}
+
+function applyRequirementDrivenOverlay(
+  output: CvAnalysisOutput,
+  options?: { preserveKeywordWeights?: boolean },
+): CvAnalysisOutput {
+  const summary = buildRequirementScoringSummary(
+    output.requirements,
+    output.formato_cv,
+    output.keywords,
+    output.ats_keywords,
+    options,
+  );
+
+  return {
+    ...output,
+    analysisVersion: "requirements_v2",
+    requirements: output.requirements.map((requirement) => ({
+      ...requirement,
+      coveragePercent: deriveCoveragePercent(requirement),
+    })),
+    fit: {
+      ...output.fit,
+      score: summary.score.scoreAtualBase,
+      score_pos_ajustes: summary.score.scoreAposLiberarBase,
+    },
+    secoes: summary.sections,
+    positivos: summary.positives,
+    ajustes_conteudo: summary.adjustments,
+    ajustes_indisponiveis: summary.unavailable.map((item) => ({
+      titulo: item.titulo,
+      descricao: item.descricao,
+      pontos: item.pontos,
+      motivo: item.motivo,
+      coveragePercent: item.coveragePercent,
+    })),
+    keywords: summary.keywords,
+    lacunas: summary.lacunas,
+    ats_keywords: summary.atsKeywords,
+    sinais_referencia: Array.isArray(output.sinais_referencia)
+      ? output.sinais_referencia
+          .map((item) => String(item).trim())
+          .filter((item) => item.length > 0)
+          .slice(0, 5)
+      : [],
+    projecao_melhoria: {
+      score_atual: summary.score.scoreAtualBase,
+      score_pos_otimizacao: summary.score.scoreAposLiberarBase,
+      explicacao_curta:
+        summary.adjustments.length > 0
+          ? "Ajustes reais de cobertura ainda podem elevar a aderencia."
+          : "A maior parte do ganho restante depende de lacunas sem evidencia no CV atual.",
+    },
+    scoring: {
+      kind: "requirements_v2",
+      coverage: summary.coverage,
+      gates: summary.gates,
+      sections: summary.sections,
+      totals: summary.score,
+    },
+    hard_gates: output.requirements
+      .filter((requirement) => requirement.gateLevel === "hard")
+      .map((requirement) => ({
+        requirementKey: requirement.requirementKey,
+        requirementText: requirement.requirementText,
+        status: requirement.coverageStatus,
+        importance: requirement.importance,
+      })),
+    scoreBefore: summary.score.scoreAtualBase,
+    scoreAfter: summary.score.scoreAposLiberarBase,
+    scoreDelta: summary.score.scoreDelta,
+  };
+}
+
 export async function analyzeAndAdaptCv(
   client: OpenAI,
   model: string,
   input: Pick<CvAdaptationInput, "masterCvText" | "jobDescriptionText"> & {
     canonicalJobJson: unknown;
     existingRequirements?: StructuredJobRequirement[];
+    existingKeywordRule?: KeywordBucket;
   },
 ): Promise<CvAnalysisOutput> {
   const userMessage = buildAnalysisUserMessage(input);
@@ -1416,10 +2212,23 @@ export async function analyzeAndAdaptCv(
   if (input.existingRequirements?.length) {
     // Coverage-only mode: derive ats_keywords entirely from requirements.
     // Prevents the model from inventing keywords outside the saved rule.
-    output.ats_keywords = deriveAtsKeywordsFromRequirements(output.requirements);
+    output.ats_keywords = deriveAtsKeywordsFromRequirements(
+      output.requirements,
+    );
+    if (input.existingKeywordRule) {
+      output.keywords = remapExistingKeywordRule(
+        input.existingKeywordRule,
+        output.keywords,
+        output.ats_keywords,
+      );
+    }
   }
 
-  return output;
+  return applyRequirementDrivenOverlay(output, {
+    preserveKeywordWeights: Boolean(
+      input.existingRequirements?.length && input.existingKeywordRule,
+    ),
+  });
 }
 
 export async function adaptCv(
@@ -1488,11 +2297,14 @@ export async function adaptCv(
     }
 
     if (input.requirementCoverage?.length) {
-      const expectedKeys = input.requirementCoverage.map((r) => r.requirementKey);
-      output.requirementAdaptationActions = normalizeRequirementAdaptationActions(
-        output.requirementAdaptationActions,
-        expectedKeys,
+      const expectedKeys = input.requirementCoverage.map(
+        (r) => r.requirementKey,
       );
+      output.requirementAdaptationActions =
+        normalizeRequirementAdaptationActions(
+          output.requirementAdaptationActions,
+          expectedKeys,
+        );
     }
 
     validateCvAdaptationOutput(output);
@@ -1580,7 +2392,9 @@ function validateCvAdaptationOutput(
     obj.requirementAdaptationActions !== undefined &&
     !Array.isArray(obj.requirementAdaptationActions)
   ) {
-    throw new Error("requirementAdaptationActions must be an array when present");
+    throw new Error(
+      "requirementAdaptationActions must be an array when present",
+    );
   }
 }
 

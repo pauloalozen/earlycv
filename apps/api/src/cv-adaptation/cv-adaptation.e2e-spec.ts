@@ -428,6 +428,11 @@ test("POST /cv-adaptation/save-guest-preview without saveAsMaster does not creat
         textStorageKey: "analysis-cv-snapshots/test-save-no-master.md",
         textSha256: "hash-save-no-master",
         textSizeBytes: 123,
+        professionalProfileFingerprint: "profile-hash-save-no-master",
+        professionalProfileJson: {
+          version: "test",
+          highlights: ["CV original enviado pelo usuario"],
+        },
       },
     });
 
@@ -504,6 +509,11 @@ test("POST /cv-adaptation/save-guest-preview with saveAsMaster promotes uploaded
         textStorageKey: "analysis-cv-snapshots/test-save-master.md",
         textSha256: "hash-save-master",
         textSizeBytes: 123,
+        professionalProfileFingerprint: "profile-hash-save-master",
+        professionalProfileJson: {
+          version: "test",
+          highlights: ["CV enviado pelo usuario"],
+        },
       },
     });
 
@@ -614,6 +624,14 @@ test("claimed guest analysis can be downloaded as PDF and DOCX", async () => {
             textStorageKey: "analysis-cv-snapshots/test-claim-download.md",
             textSha256: "hash-claim-download",
             textSizeBytes: 123,
+            professionalProfileFingerprint: "profile-hash-claim-download",
+            professionalProfileJson: {
+              version: "test",
+              highlights: [
+                "Resumo profissional",
+                "Experiencia com produto e dados",
+              ],
+            },
           },
         })
       ).id,
@@ -715,6 +733,11 @@ test("superadmin can claim guest analysis even with zero credits", async () => {
             textStorageKey: "analysis-cv-snapshots/test-superadmin-claim.md",
             textSha256: "hash-superadmin-claim",
             textSizeBytes: 123,
+            professionalProfileFingerprint: "profile-hash-superadmin-claim",
+            professionalProfileJson: {
+              version: "test",
+              highlights: ["Resumo profissional com experiencia em dados"],
+            },
           },
         })
       ).id,

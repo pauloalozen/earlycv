@@ -51,8 +51,8 @@ import type {
   FileUpload,
 } from "./dto/create-cv-adaptation.dto";
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
-import type { JobRequirementCoverage } from "./dto/job-requirement.types";
 import { createCvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
+import type { JobRequirementCoverage } from "./dto/job-requirement.types";
 import type { RedeemCreditDto } from "./dto/redeem-credit.dto";
 import type { SaveApplicationIdentityDto } from "./dto/save-application-identity.dto";
 import type { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
@@ -628,6 +628,9 @@ export class CvAdaptationService {
     );
     const existingRequirementSet =
       await this.resolveExistingRequirementSet(canonicalJob);
+    const effectiveRequirements = await this.resolveEffectiveRequirements(
+      existingRequirementSet,
+    );
 
     const normalizedMasterCvText =
       typeof masterCvText === "string"
@@ -667,7 +670,7 @@ export class CvAdaptationService {
         canonicalJobJson: canonicalJob?.canonicalJobJson ?? {
           description: normalizedJobDescriptionText,
         },
-        existingRequirements: existingRequirementSet?.requirements,
+        existingRequirements: effectiveRequirements ?? undefined,
         jobDescriptionText: normalizedJobDescriptionText,
         loadMasterCvText: async () => {
           if (resolvedMasterCvText) {
@@ -779,6 +782,13 @@ export class CvAdaptationService {
     );
     const existingRequirementSet =
       await this.resolveExistingRequirementSet(canonicalJob);
+    const effectiveRequirements = await this.resolveEffectiveRequirements(
+      existingRequirementSet,
+    );
+    const existingKeywordRule = await this.resolveExistingKeywordRule({
+      userId,
+      jobRequirementSetId: existingRequirementSet?.id ?? null,
+    });
     const hasTextInput = Boolean(dto.masterCvText?.trim());
     const shouldUseUploadedFile = !hasTextInput && Boolean(file);
     let sourceType: "text_input" | "uploaded_file" | "master_resume" =
@@ -815,7 +825,8 @@ export class CvAdaptationService {
         canonicalJobJson: canonicalJob?.canonicalJobJson ?? {
           description: normalizedJobDescriptionText,
         },
-        existingRequirements: existingRequirementSet?.requirements,
+        existingRequirements: effectiveRequirements ?? undefined,
+        existingKeywordRule,
         jobDescriptionText: normalizedJobDescriptionText,
         loadMasterCvText: async () => {
           if (resolvedMasterCvText) {
@@ -1019,6 +1030,139 @@ export class CvAdaptationService {
     }
   }
 
+  private hasRequirementMetadata(
+    requirements:
+      | Array<{
+          dimension?:
+            | "experience"
+            | "skill"
+            | "education"
+            | "certification"
+            | "language"
+            | "location"
+            | "work_model"
+            | "other";
+          gateLevel?: "hard" | "soft";
+        }>
+      | null
+      | undefined,
+  ) {
+    return (
+      Array.isArray(requirements) &&
+      requirements.some(
+        (requirement) => requirement.gateLevel || requirement.dimension,
+      )
+    );
+  }
+
+  private async resolveEffectiveRequirements(
+    existingRequirementSet: {
+      requirements: Array<{
+        requirementKey: string;
+        requirementText: string;
+        importance: "high" | "medium" | "low";
+        dimension?:
+          | "experience"
+          | "skill"
+          | "education"
+          | "certification"
+          | "language"
+          | "location"
+          | "work_model"
+          | "other";
+        gateLevel?: "hard" | "soft";
+      }>;
+      id: string;
+    } | null,
+  ) {
+    if (!existingRequirementSet) {
+      return null;
+    }
+
+    if (this.hasRequirementMetadata(existingRequirementSet.requirements)) {
+      return existingRequirementSet.requirements;
+    }
+
+    const latest = await this.database.cvAdaptation.findFirst({
+      where: {
+        jobRequirementSetId: existingRequirementSet.id,
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        adaptedContentJson: true,
+      },
+    });
+
+    const parsed =
+      latest?.adaptedContentJson &&
+      typeof latest.adaptedContentJson === "object" &&
+      !Array.isArray(latest.adaptedContentJson)
+        ? (latest.adaptedContentJson as Record<string, unknown>)
+        : null;
+
+    const requirements = Array.isArray(parsed?.requirements)
+      ? parsed.requirements
+      : null;
+
+    if (!requirements?.length) {
+      return existingRequirementSet.requirements;
+    }
+
+    const hydrated = requirements.flatMap((entry) => {
+      if (!entry || typeof entry !== "object") return [];
+      const record = entry as Record<string, unknown>;
+      const requirementKey = String(record.requirementKey ?? "").trim();
+      const requirementText = String(record.requirementText ?? "").trim();
+      const importance = String(record.importance ?? "").trim();
+      const dimension = String(record.dimension ?? "").trim();
+      const gateLevel = String(record.gateLevel ?? "").trim();
+
+      if (
+        !requirementKey ||
+        !requirementText ||
+        !["high", "medium", "low"].includes(importance)
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          requirementKey,
+          requirementText,
+          importance: importance as "high" | "medium" | "low",
+          ...(dimension &&
+          [
+            "experience",
+            "skill",
+            "education",
+            "certification",
+            "language",
+            "location",
+            "work_model",
+            "other",
+          ].includes(dimension)
+            ? {
+                dimension: dimension as
+                  | "experience"
+                  | "skill"
+                  | "education"
+                  | "certification"
+                  | "language"
+                  | "location"
+                  | "work_model"
+                  | "other",
+              }
+            : {}),
+          ...(gateLevel && ["hard", "soft"].includes(gateLevel)
+            ? { gateLevel: gateLevel as "hard" | "soft" }
+            : {}),
+        },
+      ];
+    });
+
+    return hydrated.length > 0 ? hydrated : existingRequirementSet.requirements;
+  }
+
   private async persistRequirementSetFromAnalysis(input: {
     canonicalJob: CanonicalJobLookupResult | null;
     analysisModel: string;
@@ -1027,6 +1171,16 @@ export class CvAdaptationService {
       requirementKey: string;
       requirementText: string;
       importance: "high" | "medium" | "low";
+      dimension?:
+        | "experience"
+        | "skill"
+        | "education"
+        | "certification"
+        | "language"
+        | "location"
+        | "work_model"
+        | "other";
+      gateLevel?: "hard" | "soft";
     }>;
   }) {
     if (!input.canonicalJob || !this.jobRequirementSetsService) {
@@ -1047,6 +1201,83 @@ export class CvAdaptationService {
       );
       return null;
     }
+  }
+
+  private async resolveExistingKeywordRule(input: {
+    userId: string | null;
+    jobRequirementSetId: string | null;
+  }): Promise<
+    | {
+        presentes: Array<{ kw: string; pontos: number }>;
+        possiveis: Array<{ kw: string; pontos: number }>;
+        ausentes: Array<{ kw: string; pontos: number }>;
+      }
+    | undefined
+  > {
+    if (!input.userId || !input.jobRequirementSetId) {
+      return undefined;
+    }
+
+    const latest = await this.database.cvAdaptation.findFirst({
+      where: {
+        userId: input.userId,
+        jobRequirementSetId: input.jobRequirementSetId,
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        adaptedContentJson: true,
+      },
+    });
+
+    const parsed =
+      latest?.adaptedContentJson &&
+      typeof latest.adaptedContentJson === "object" &&
+      !Array.isArray(latest.adaptedContentJson)
+        ? (latest.adaptedContentJson as Record<string, unknown>)
+        : null;
+
+    const keywordRecord =
+      parsed?.keywords &&
+      typeof parsed.keywords === "object" &&
+      !Array.isArray(parsed.keywords)
+        ? (parsed.keywords as Record<string, unknown>)
+        : null;
+
+    const toKeywordItems = (value: unknown) =>
+      Array.isArray(value)
+        ? value.flatMap((entry) => {
+            if (!entry || typeof entry !== "object") return [];
+            const record = entry as Record<string, unknown>;
+            const kw = String(record.kw ?? "").trim();
+            if (!kw) return [];
+            const rawPoints = Number(record.pontos ?? 0);
+            return [
+              {
+                kw,
+                pontos:
+                  Number.isFinite(rawPoints) && rawPoints > 0 ? rawPoints : 1,
+              },
+            ];
+          })
+        : [];
+
+    const presentes = toKeywordItems(keywordRecord?.presentes);
+    const possiveis = toKeywordItems(keywordRecord?.possiveis);
+    const ausentes = toKeywordItems(keywordRecord?.ausentes);
+
+    if (
+      presentes.length === 0 &&
+      possiveis.length === 0 &&
+      ausentes.length === 0
+    ) {
+      return undefined;
+    }
+
+    return {
+      presentes,
+      possiveis,
+      ausentes,
+    };
   }
 
   async saveGuestPreview(
@@ -3099,6 +3330,28 @@ export class CvAdaptationService {
     return new Date("2026-04-29T14:30:00.000Z");
   }
 
+  private buildSnapshotProfessionalProfile(text: string) {
+    const normalizedText = this.normalizeSnapshotText(text);
+    const lines = normalizedText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    const highlights = lines.filter((line) => line.length >= 8).slice(0, 24);
+
+    const profile = {
+      version: "fallback_v1",
+      textPreview: normalizedText.slice(0, 4_000),
+      textLength: normalizedText.length,
+      highlights,
+    } satisfies Prisma.InputJsonObject;
+
+    return {
+      fingerprint: createHash("sha256").update(normalizedText).digest("hex"),
+      profile,
+    };
+  }
+
   private async createAnalysisCvSnapshot(input: {
     userId: string | null;
     guestSessionHash: string | null;
@@ -3107,6 +3360,8 @@ export class CvAdaptationService {
     file?: FileUpload;
   }) {
     const normalizedText = this.normalizeSnapshotText(input.text);
+    const professionalProfile =
+      this.buildSnapshotProfessionalProfile(normalizedText);
     const textBuffer = Buffer.from(normalizedText, "utf8");
     const textSha256 = createHash("sha256").update(textBuffer).digest("hex");
     const textStorageKey = `analysis-cv-snapshots/text/${randomUUID()}.md`;
@@ -3151,6 +3406,8 @@ export class CvAdaptationService {
         originalFileName,
         originalMimeType,
         originalFileSizeBytes,
+        professionalProfileFingerprint: professionalProfile.fingerprint,
+        professionalProfileJson: professionalProfile.profile,
         expiresAt,
       },
     });
