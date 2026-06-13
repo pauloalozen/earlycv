@@ -280,6 +280,19 @@ export class CvAdaptationController {
     return this.cvAdaptationService.getContent(user.id, id);
   }
 
+  @Patch(":id/cv-content")
+  updateCvContent(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+    @Body() body: { sections: unknown[] },
+  ) {
+    return this.cvAdaptationService.updateCvContent(
+      user.id,
+      id,
+      body.sections as Parameters<typeof this.cvAdaptationService.updateCvContent>[2],
+    );
+  }
+
   @SkipThrottle()
   @Post("webhook/:provider")
   webhook(

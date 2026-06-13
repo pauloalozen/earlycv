@@ -1522,6 +1522,10 @@ export default function ResultadoPage() {
         remainingCredits: 0,
       });
       clearGuestAnalysisRaw();
+      const unlockedId = payload.id ?? reviewAdaptationId;
+      if (unlockedId) {
+        router.push(`/adaptacao-cv/${unlockedId}`);
+      }
     } catch (err) {
       const message =
         err instanceof Error && err.message.trim()
@@ -1684,6 +1688,9 @@ export default function ResultadoPage() {
         unlockMethod: "review_redeem",
         remainingCredits: 0,
       });
+      if (reviewAdaptationId) {
+        router.push(`/adaptacao-cv/${reviewAdaptationId}`);
+      }
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()

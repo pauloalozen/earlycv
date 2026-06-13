@@ -688,6 +688,7 @@ model CvAdaptation {
   previewText          String?
   adaptedResumeId      String?             @unique
   aiAuditJson          Json?
+  editedCvJson         Json?
   paymentStatus        PaymentStatus       @default(none)
   paymentProvider      PaymentProvider?
   paymentReference     String?             @unique

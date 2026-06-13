@@ -2237,7 +2237,8 @@ export class CvAdaptationService {
     const resolvedStructureJson = (templateData?.structureJson ??
       fallbackTemplate?.structureJson ??
       null) as TemplateStructureJson | null;
-    const output = this.toCvAdaptationOutput(
+    const output = this.resolveEffectiveCvOutput(
+      (adaptation as { editedCvJson?: unknown }).editedCvJson,
       adaptation.adaptedContentJson,
       generatedOutput ?? adaptation.aiAuditJson,
     );
@@ -2303,7 +2304,8 @@ export class CvAdaptationService {
       : await this.getDefaultTemplate();
 
     const docxBuffer = await this.docxService.generateDocx(
-      this.toCvAdaptationOutput(
+      this.resolveEffectiveCvOutput(
+        (adaptation as { editedCvJson?: unknown }).editedCvJson,
         adaptation.adaptedContentJson,
         generatedOutput ?? adaptation.aiAuditJson,
       ),
@@ -2403,14 +2405,20 @@ export class CvAdaptationService {
       typeof aiAudit?.adaptationNotes === "string"
         ? aiAudit.adaptationNotes
         : null;
-    const finalCvOutput = this.toCvAdaptationOutput(
+    const aiGeneratedOutput = this.toCvAdaptationOutput(
       adaptation.adaptedContentJson,
       adaptation.aiAuditJson,
     );
+    const editedCvJson = adaptation.editedCvJson as CvAdaptationOutput | null;
+    const finalCvOutput = editedCvJson ?? aiGeneratedOutput;
+
+    const sectionMapping = this.buildSectionMapping(adaptation.adaptedContentJson);
 
     return {
       adaptedContentJson: adaptation.adaptedContentJson,
       finalCvOutput,
+      editedCvJson,
+      sectionMapping,
       paymentStatus: adaptation.paymentStatus,
       isUnlocked: adaptation.isUnlocked,
       status: adaptation.status,
@@ -2423,6 +2431,90 @@ export class CvAdaptationService {
         adaptation.companyName,
       ),
     };
+  }
+
+  async updateCvContent(
+    userId: string,
+    id: string,
+    sections: CvAdaptationOutput["sections"],
+  ): Promise<void> {
+    const adaptation = await this.database.cvAdaptation.findFirst({
+      where: { id, userId },
+      select: { isUnlocked: true, aiAuditJson: true },
+    });
+
+    if (!adaptation) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    if (!adaptation.isUnlocked) {
+      throw new BadRequestException("Adaptation is not unlocked.");
+    }
+
+    const base = (adaptation.aiAuditJson ?? {}) as Partial<CvAdaptationOutput>;
+    const editedCvJson: CvAdaptationOutput = {
+      summary: base.summary ?? "",
+      sections,
+      highlightedSkills: base.highlightedSkills ?? [],
+      removedSections: base.removedSections ?? [],
+      adaptationNotes: base.adaptationNotes,
+    };
+
+    await this.database.cvAdaptation.update({
+      where: { id },
+      data: { editedCvJson: editedCvJson as unknown as Prisma.InputJsonValue },
+    });
+  }
+
+  private buildSectionMapping(
+    adaptedContentJson: unknown,
+  ): Record<string, string> {
+    if (
+      !adaptedContentJson ||
+      typeof adaptedContentJson !== "object" ||
+      Array.isArray(adaptedContentJson)
+    ) {
+      return {};
+    }
+
+    const content = adaptedContentJson as Record<string, unknown>;
+    const ajustes = content.ajustes_conteudo as
+      | Array<{ id?: string; titulo?: string; descricao?: string }>
+      | undefined;
+    if (!Array.isArray(ajustes)) return {};
+
+    const mapping: Record<string, string> = {};
+    for (const ajuste of ajustes) {
+      if (!ajuste.id) continue;
+      const text = `${ajuste.titulo ?? ""} ${ajuste.descricao ?? ""}`.toLowerCase();
+      mapping[ajuste.id] = this.inferSectionType(text);
+    }
+    return mapping;
+  }
+
+  private inferSectionType(text: string): string {
+    if (/experiên|experi[eê]ncia|cargo|empresa|atua[çc]|profissional|trabalh|ocupa[çc]/.test(text)) {
+      return "experience";
+    }
+    if (/habilidad|competên|skill|tecnolog|ferramenta|técni|stack|linguagem de program|framework/.test(text)) {
+      return "skills";
+    }
+    if (/forma[çc][ãa]o|educa[çc]|curso|gradua[çc]|acad[eê]m|universid|faculdad|ensino|diploma/.test(text)) {
+      return "education";
+    }
+    if (/resumo profis|objetivo|perfil|sobre m[iı]m|apresenta[çc]/.test(text)) {
+      return "header";
+    }
+    if (/projeto|portf[oó]l/.test(text)) {
+      return "projects";
+    }
+    if (/certifica[çc]|certific[aá]do/.test(text)) {
+      return "certifications";
+    }
+    if (/idioma|l[iíì]ngua|ingl[eê]s|portugu[eê]s|espanhol|franc[eê]s/.test(text)) {
+      return "languages";
+    }
+    return "experience";
   }
 
   private async deliverAdaptation(adaptationId: string): Promise<void> {
@@ -3148,6 +3240,22 @@ export class CvAdaptationService {
         createdAt: string;
       } => typeof item === "object" && item !== null,
     );
+  }
+
+  private resolveEffectiveCvOutput(
+    editedCvJson: unknown,
+    adaptedContentJson: unknown,
+    aiAuditJson?: unknown,
+  ): CvAdaptationOutput {
+    if (
+      editedCvJson &&
+      typeof editedCvJson === "object" &&
+      "sections" in editedCvJson &&
+      Array.isArray((editedCvJson as { sections: unknown }).sections)
+    ) {
+      return this.filterEmptySections(editedCvJson as CvAdaptationOutput);
+    }
+    return this.toCvAdaptationOutput(adaptedContentJson, aiAuditJson);
   }
 
   private toCvAdaptationOutput(

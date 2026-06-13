@@ -124,22 +124,68 @@ export async function deleteCvAdaptation(id: string): Promise<void> {
   }
 }
 
-export async function getCvAdaptationContent(id: string): Promise<{
-  adaptedContentJson: Record<string, unknown>;
+export type CvSection = {
+  sectionType:
+    | "header"
+    | "experience"
+    | "education"
+    | "skills"
+    | "projects"
+    | "certifications"
+    | "languages"
+    | "other";
+  title: string;
+  items: Array<{
+    heading?: string;
+    subheading?: string;
+    dateRange?: string;
+    bullets: string[];
+  }>;
+};
+
+export type FinalCvOutput = {
+  summary?: string;
+  sections?: CvSection[];
+  highlightedSkills?: string[];
+  removedSections?: string[];
+  adaptationNotes?: string;
+};
+
+export type CvAdaptationContentResponse = {
+  adaptedContentJson: CvAnalysisData;
+  finalCvOutput?: FinalCvOutput | null;
+  editedCvJson?: FinalCvOutput | null;
+  sectionMapping?: Record<string, string>;
   paymentStatus?: PaymentStatus;
   isUnlocked?: boolean;
+  status?: string;
+  jobTitle?: string | null;
+  companyName?: string | null;
+  adaptationNotes?: string | null;
   jobApplicationId?: string | null;
-}> {
+  jobAnalysisCount?: number | null;
+};
+
+export async function getCvAdaptationContent(
+  id: string,
+): Promise<CvAdaptationContentResponse> {
   const response = await apiRequest("GET", `/cv-adaptation/${id}/content`);
   if (!response.ok) {
     throw new Error("Failed to fetch adaptation content");
   }
-  return response.json() as Promise<{
-    adaptedContentJson: Record<string, unknown>;
-    paymentStatus?: PaymentStatus;
-    isUnlocked?: boolean;
-    jobApplicationId?: string | null;
-  }>;
+  return response.json() as Promise<CvAdaptationContentResponse>;
+}
+
+export async function updateCvAdaptationContent(
+  id: string,
+  sections: CvSection[],
+): Promise<void> {
+  const response = await apiRequest("PATCH", `/cv-adaptation/${id}/cv-content`, {
+    sections,
+  });
+  if (!response.ok) {
+    throw new Error("Failed to save CV edits");
+  }
 }
 
 export type CvAnalysisData = {
