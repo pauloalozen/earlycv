@@ -36,13 +36,6 @@ const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 const SERIF_ITALIC = "var(--font-instrument-serif), serif";
 
-// Section color tokens
-const AMBER = "#d4854a";
-const AMBER_SOFT = "rgba(212,133,74,0.12)";
-const AMBER_BORDER = "rgba(212,133,74,0.28)";
-const AMBER_TEXT = "#7a3d10";
-const BLUE = "#5da0e8";
-
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
@@ -232,30 +225,25 @@ function SectionHeader({
   description,
   score,
   maxScore,
-  sectionBadge,
-  sectionColor,
 }: {
   label: string;
   title: string;
   description?: string;
   score?: number;
   maxScore?: number;
-  sectionBadge?: string;
-  sectionColor?: string;
 }) {
   const pct =
     score !== undefined && maxScore !== undefined
       ? score / maxScore
       : undefined;
   const barColor =
-    sectionColor ??
-    (pct === undefined
+    pct === undefined
       ? "#c6ff3a"
       : pct >= 0.75
         ? "#c6ff3a"
         : pct >= 0.4
           ? "#f59e0b"
-          : "#ef4444");
+          : "#ef4444";
   const badgeBg =
     pct === undefined
       ? "rgba(198,255,58,0.2)"
@@ -283,36 +271,17 @@ function SectionHeader({
           marginBottom: 6,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {sectionBadge && (
-            <span
-              style={{
-                fontFamily: MONO,
-                fontSize: 9.5,
-                letterSpacing: 1.2,
-                fontWeight: 600,
-                padding: "4px 8px",
-                borderRadius: 5,
-                background: sectionColor ?? "#0a0a0a",
-                color: sectionColor === "#c6ff3a" ? "#405410" : "#fff",
-                flexShrink: 0,
-              }}
-            >
-              {sectionBadge}
-            </span>
-          )}
-          <span
-            style={{
-              fontFamily: MONO,
-              fontSize: 10,
-              letterSpacing: 1.2,
-              color: "#8a8a85",
-              fontWeight: 500,
-            }}
-          >
-            {label}
-          </span>
-        </div>
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            letterSpacing: 1.2,
+            color: "#8a8a85",
+            fontWeight: 500,
+          }}
+        >
+          {label}
+        </span>
         {score !== undefined && maxScore !== undefined && (
           <span
             style={{
@@ -403,561 +372,6 @@ function IssueIcon({ tipo }: { tipo: "critico" | "atencao" | "ok" }) {
       }}
     >
       {m.text}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// New atomic components (design reference)
-// ─────────────────────────────────────────────────────────────
-
-const LIME_SOFT = "rgba(198,255,58,0.18)";
-const LIME_BORDER = "rgba(198,255,58,0.35)";
-const LIME_DEEP = "#405410";
-const WARN_SOFT = "rgba(232,168,56,0.08)";
-const WARN_BORDER = "rgba(232,168,56,0.22)";
-const WARN_TEXT = "#7a5010";
-const BORDER_MED = "rgba(10,10,10,0.12)";
-const MUTED = "#8a8a85";
-const FAINT = "rgba(10,10,10,0.04)";
-const BORDER_BASE = "rgba(10,10,10,0.08)";
-const BLUE_SOFT = "rgba(93,160,232,0.12)";
-const BLUE_BORDER = "rgba(93,160,232,0.28)";
-
-function SubLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        fontFamily: MONO,
-        fontSize: 9.5,
-        letterSpacing: 1,
-        color: MUTED,
-        marginBottom: 10,
-        paddingBottom: 8,
-        borderBottom: `1px solid ${BORDER_BASE}`,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-type ItemCardType = "positive" | "action" | "missing" | "neutral";
-
-function ItemCard({
-  text,
-  pts,
-  type,
-}: {
-  text: string;
-  pts?: string;
-  type: ItemCardType;
-}) {
-  const cfg: Record<
-    ItemCardType,
-    { bg: string; bd: string; bb: string | null; bc: string | null }
-  > = {
-    positive: { bg: LIME_SOFT, bd: LIME_BORDER, bb: "#c6ff3a", bc: LIME_DEEP },
-    action: {
-      bg: AMBER_SOFT,
-      bd: AMBER_BORDER,
-      bb: AMBER,
-      bc: "#fff",
-    },
-    missing: { bg: FAINT, bd: BORDER_BASE, bb: null, bc: null },
-    neutral: { bg: "#fff", bd: BORDER_BASE, bb: null, bc: null },
-  };
-  const c = cfg[type];
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "space-between",
-        gap: 10,
-        padding: "10px 12px",
-        marginBottom: 6,
-        background: c.bg,
-        border: `1px solid ${c.bd}`,
-        borderRadius: 8,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 13,
-          lineHeight: 1.5,
-          flex: 1,
-          color: type === "missing" ? MUTED : "#0a0a0a",
-          fontStyle: type === "missing" ? "italic" : "normal",
-        }}
-      >
-        {text}
-      </div>
-      {pts && c.bb && (
-        <div
-          style={{
-            fontFamily: MONO,
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: 0.5,
-            flexShrink: 0,
-            padding: "3px 7px",
-            borderRadius: 4,
-            background: c.bb,
-            color: c.bc ?? undefined,
-          }}
-        >
-          {pts}
-        </div>
-      )}
-      {type === "missing" && (
-        <div
-          style={{
-            fontFamily: MONO,
-            fontSize: 10,
-            color: MUTED,
-            flexShrink: 0,
-            borderRadius: 4,
-            padding: "3px 7px",
-            border: `1px solid ${BORDER_BASE}`,
-          }}
-        >
-          sem evidência
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ReqRow({ text, met }: { text: string; met: boolean }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 9,
-        padding: "7px 0",
-        borderBottom: "1px solid rgba(10,10,10,0.04)",
-      }}
-    >
-      <div
-        style={{
-          width: 16,
-          height: 16,
-          borderRadius: "50%",
-          flexShrink: 0,
-          marginTop: 2,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: met ? LIME_SOFT : "rgba(10,10,10,0.05)",
-          border: `1.5px solid ${met ? "#c6ff3a" : "rgba(10,10,10,0.1)"}`,
-        }}
-      >
-        {met && (
-          <div
-            style={{
-              width: 5,
-              height: 5,
-              borderRadius: "50%",
-              background: LIME_DEEP,
-            }}
-          />
-        )}
-      </div>
-      <div
-        style={{
-          fontSize: 12.5,
-          lineHeight: 1.4,
-          color: met ? "#0a0a0a" : MUTED,
-        }}
-      >
-        {text}
-      </div>
-    </div>
-  );
-}
-
-function KwChip({
-  label,
-  type,
-}: {
-  label: string;
-  type: "present" | "absent";
-}) {
-  const st =
-    type === "present"
-      ? { bg: LIME_SOFT, bd: LIME_BORDER, color: LIME_DEEP }
-      : { bg: "#fff", bd: BORDER_MED, color: "#0a0a0a" };
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
-        fontFamily: MONO,
-        fontSize: 11,
-        fontWeight: 500,
-        letterSpacing: 0.2,
-        padding: "5px 10px",
-        borderRadius: 6,
-        background: st.bg,
-        border: `1px solid ${st.bd}`,
-        color: st.color,
-      }}
-    >
-      {type === "absent" && (
-        <span
-          style={{
-            display: "inline-block",
-            width: 11,
-            height: 11,
-            border: `1.5px solid ${BORDER_MED}`,
-            borderRadius: 3,
-            flexShrink: 0,
-          }}
-        />
-      )}
-      {type === "present" && (
-        <span style={{ fontSize: 9, opacity: 0.8 }}>✓</span>
-      )}
-      {label}
-    </span>
-  );
-}
-
-function FormatItem({
-  label,
-  note,
-  ok,
-}: {
-  label: string;
-  note?: string;
-  ok: boolean;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 10,
-        padding: "10px 12px",
-        background: ok ? LIME_SOFT : FAINT,
-        border: `1px solid ${ok ? LIME_BORDER : BORDER_BASE}`,
-        borderRadius: 8,
-      }}
-    >
-      <div
-        style={{
-          width: 18,
-          height: 18,
-          borderRadius: "50%",
-          flexShrink: 0,
-          marginTop: 1,
-          background: ok ? "#c6ff3a" : "rgba(10,10,10,0.1)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 10,
-        }}
-      >
-        {ok ? "✓" : "!"}
-      </div>
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>
-          {label}
-        </div>
-        {note && (
-          <div style={{ fontSize: 11.5, color: "#6a6a65", lineHeight: 1.4 }}>
-            {note}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function WarnCard({ title, body }: { title: string; body: string }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        padding: "14px 16px",
-        background: WARN_SOFT,
-        border: `1px solid ${WARN_BORDER}`,
-        borderRadius: 10,
-      }}
-    >
-      <div
-        style={{
-          fontFamily: MONO,
-          fontSize: 9.5,
-          letterSpacing: 1,
-          fontWeight: 500,
-          color: WARN_TEXT,
-          marginBottom: 6,
-        }}
-      >
-        ⚠ ATENÇÃO
-      </div>
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 500,
-          marginBottom: 5,
-          letterSpacing: -0.2,
-        }}
-      >
-        {title}
-      </div>
-      <div style={{ fontSize: 12, color: "#5a5050", lineHeight: 1.5 }}>
-        {body}
-      </div>
-    </div>
-  );
-}
-
-function ReferenceCard({ text, sub }: { text: string; sub?: string }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 10,
-        padding: "11px 13px",
-        background: "rgba(10,10,10,0.02)",
-        border: `1px solid ${BORDER_BASE}`,
-        borderRadius: 9,
-      }}
-    >
-      <div
-        style={{
-          width: 15,
-          height: 15,
-          border: "1.5px solid rgba(10,10,10,0.15)",
-          borderRadius: 4,
-          flexShrink: 0,
-          marginTop: 2,
-        }}
-      />
-      <div>
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 500,
-            marginBottom: 2,
-            letterSpacing: -0.2,
-          }}
-        >
-          {text}
-        </div>
-        {sub && (
-          <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.4 }}>
-            {sub}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SecCard({
-  num,
-  title,
-  score,
-  max,
-  color,
-  warn,
-  children,
-}: {
-  num: string;
-  title: string;
-  score?: number;
-  max?: number;
-  color?: string;
-  warn?: boolean;
-  children: React.ReactNode;
-}) {
-  const hasPts = score !== undefined && max !== undefined;
-  return (
-    <div
-      style={{
-        marginBottom: 22,
-        background: warn ? WARN_SOFT : "#fafaf6",
-        border: `1px solid ${warn ? WARN_BORDER : BORDER_BASE}`,
-        borderRadius: 14,
-        overflow: "hidden",
-      }}
-    >
-      {/* header */}
-      <div
-        style={{
-          padding: "15px 22px",
-          borderBottom: `1px solid ${warn ? WARN_BORDER : BORDER_BASE}`,
-          background: warn ? "rgba(232,168,56,0.06)" : "rgba(10,10,10,0.015)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              fontFamily: MONO,
-              fontSize: 9.5,
-              letterSpacing: 1.2,
-              fontWeight: 500,
-              padding: "4px 8px",
-              borderRadius: 5,
-              background: warn ? "rgba(232,168,56,0.2)" : (color ?? "#0a0a0a"),
-              color: warn
-                ? WARN_TEXT
-                : color === "#c6ff3a"
-                  ? LIME_DEEP
-                  : "#fff",
-              border: warn ? `1px solid ${WARN_BORDER}` : "none",
-            }}
-          >
-            {num}
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: -0.4 }}>
-            {title}
-          </div>
-        </div>
-        {hasPts ? (
-          <div
-            style={{
-              fontFamily: MONO,
-              fontSize: 11,
-              fontWeight: 500,
-              color: LIME_DEEP,
-              background: LIME_SOFT,
-              border: `1px solid ${LIME_BORDER}`,
-              borderRadius: 5,
-              padding: "3px 10px",
-            }}
-          >
-            {score} / {max} pts
-          </div>
-        ) : (
-          <div
-            style={{
-              fontFamily: MONO,
-              fontSize: 10,
-              color: warn ? WARN_TEXT : MUTED,
-              background: warn ? "rgba(232,168,56,0.12)" : FAINT,
-              border: `1px solid ${warn ? WARN_BORDER : BORDER_BASE}`,
-              borderRadius: 5,
-              padding: "3px 10px",
-            }}
-          >
-            {warn ? "não entra na pontuação" : "referência · não pontua"}
-          </div>
-        )}
-      </div>
-      <div style={{ padding: "18px 22px" }}>{children}</div>
-    </div>
-  );
-}
-
-function ScoreBreakdownBar({
-  sections,
-}: {
-  sections: Array<{
-    label: string;
-    current: number;
-    max: number;
-    color: string;
-  }>;
-}) {
-  const totalMax = sections.reduce((s, sec) => s + sec.max, 0);
-  return (
-    <div style={{ marginBottom: 28 }}>
-      <span
-        style={{
-          fontFamily: MONO,
-          fontSize: 10,
-          letterSpacing: 1.2,
-          color: "#8a8a85",
-          fontWeight: 500,
-          display: "block",
-          marginBottom: 8,
-        }}
-      >
-        DISTRIBUIÇÃO DO SCORE POR SEÇÃO
-      </span>
-      <div
-        style={{
-          display: "flex",
-          height: 30,
-          borderRadius: 8,
-          overflow: "hidden",
-          gap: 3,
-        }}
-      >
-        {sections.map((sec) => (
-          <div
-            key={sec.label}
-            style={{
-              flex: `0 0 calc(${(sec.max / totalMax) * 100}% - 2px)`,
-              position: "relative",
-              background: "rgba(10,10,10,0.07)",
-              borderRadius: 5,
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: `${(sec.current / sec.max) * 100}%`,
-                background: sec.color,
-                borderRadius: 5,
-              }}
-            />
-          </div>
-        ))}
-      </div>
-      <div style={{ display: "flex", gap: 3, marginTop: 7 }}>
-        {sections.map((sec) => (
-          <div
-            key={sec.label}
-            style={{
-              flex: `0 0 calc(${(sec.max / totalMax) * 100}% - 2px)`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <div
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: 2,
-                  background: sec.color,
-                  flexShrink: 0,
-                }}
-              />
-              <span
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  color: "#5a5a54",
-                }}
-              >
-                {sec.label}
-              </span>
-            </div>
-            <span
-              style={{ fontFamily: MONO, fontSize: 10.5, color: "#8a8a85" }}
-            >
-              {sec.current}/{sec.max}
-            </span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1775,7 +1189,7 @@ export default function ResultadoPage() {
   const mediaScore = seededInt(vagaSeed, 78, 85);
   const scoreMinimo = 80;
 
-  const _delta = data.score.scoreAtualBase - mediaScore;
+  const delta = data.score.scoreAtualBase - mediaScore;
   const ptsKwSelecionadas = data.keywords.ausentes
     .filter((k) => effectiveSelected.has(k.kw))
     .reduce((s, k) => s + k.pontos, 0);
@@ -2090,14 +1504,27 @@ export default function ResultadoPage() {
               {/* Label */}
               <div
                 style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
                   fontFamily: MONO,
-                  fontSize: 9.5,
+                  fontSize: 10,
                   letterSpacing: 1.2,
-                  color: "#6a6a64",
+                  color: "#a0a098",
                   fontWeight: 500,
-                  marginBottom: 10,
+                  marginBottom: 12,
                 }}
               >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: gaugeColors.primary,
+                    display: "inline-block",
+                    animation: "res-pulse 1.4s infinite",
+                  }}
+                />
                 ATS SCORE · ATUAL
               </div>
 
@@ -2201,241 +1628,1163 @@ export default function ResultadoPage() {
                   alignItems: "baseline",
                   gap: 8,
                   paddingTop: 12,
-                  borderTop: "1px solid rgba(250,250,246,0.08)",
+                  borderTop: "1px solid rgba(250,250,246,0.1)",
                   width: "100%",
                   justifyContent: "center",
-                  marginTop: 8,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 500,
+                    color: "#c6ff3a",
+                    letterSpacing: -0.8,
+                  }}
+                >
+                  +{scoreMaxPossivel - data.score.scoreAtualBase} pts
+                </span>
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#8a8a85",
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  disponíveis com ajustes
+                </span>
+              </div>
+
+              {/* vs media */}
+              <div
+                className="res-gauge-vs"
+                style={{
+                  marginTop: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  background:
+                    delta < 0 ? "rgba(239,68,68,0.15)" : "rgba(198,255,58,0.1)",
+                  borderRadius: 10,
+                  padding: "8px 14px",
+                  width: "100%",
+                  justifyContent: "center",
                 }}
               >
                 <span
                   style={{
                     fontSize: 16,
-                    fontWeight: 500,
-                    color: "#c6ff3a",
-                    letterSpacing: -0.5,
+                    fontWeight: 700,
+                    color: delta < 0 ? "#f87171" : "#c6ff3a",
+                    fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  +{scoreMaxPossivel - data.score.scoreAtualBase} pts possíveis
+                  {delta < 0 ? "" : "+"}
+                  {delta} pts
+                </span>
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    color:
+                      delta < 0
+                        ? "rgba(248,113,113,0.7)"
+                        : "rgba(198,255,58,0.7)",
+                  }}
+                >
+                  vs média da vaga ({mediaScore})
                 </span>
               </div>
             </div>
           </div>
 
-          {/* ── Score Breakdown Bar ── */}
-          <ScoreBreakdownBar
-            sections={[
-              {
-                label: "S1 · Experiência",
-                current: data.secoes.experiencia.score,
-                max: data.secoes.experiencia.max,
-                color: AMBER,
-              },
-              {
-                label: "S2 · Keywords",
-                current: data.secoes.competencias.score,
-                max: data.secoes.competencias.max,
-                color: "#c6ff3a",
-              },
-              {
-                label: "S3 · Formatação",
-                current: data.secoes.formatacao.score,
-                max: data.secoes.formatacao.max,
-                color: BLUE,
-              },
-            ]}
-          />
-
           {/* ════════════════════════════════════════════════════
               SEÇÃO 1 — Experiência Profissional
           ════════════════════════════════════════════════════ */}
-          <SecCard
-            num="S1"
-            title="Experiência Profissional"
+          <SectionHeader
+            label="SEÇÃO 1 — EXPERIÊNCIA PROFISSIONAL"
+            title="Cobertura das experiências exigidas"
+            description="O que a vaga pede e quanto do seu histórico já comprova cada item."
             score={data.secoes.experiencia.score}
-            max={data.secoes.experiencia.max}
-            color={AMBER}
-          >
-            <div
-              className="res-s1-grid"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 22,
-              }}
-            >
-              {/* Left column */}
-              <div>
-                {hardGates.length > 0 && (
-                  <div style={{ marginBottom: 18 }}>
-                    <SubLabel>PONTOS INEGOCIÁVEIS DA VAGA</SubLabel>
-                    {hardGates.map((gate, index) => (
-                      <ReqRow
-                        key={
-                          gate.requirementKey ??
-                          `${gate.requirementText}-${index}`
-                        }
-                        text={gate.requirementText}
-                        met={
-                          gate.status === "covered" || gate.status === "partial"
-                        }
-                      />
-                    ))}
+            maxScore={data.secoes.experiencia.max}
+          />
+
+          {hardGates.length > 0 && (
+            <div style={{ ...CARD, marginBottom: 10 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 16,
+                  marginBottom: 14,
+                  paddingBottom: 14,
+                  borderBottom: "1px solid rgba(10,10,10,0.06)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      background: "rgba(10,10,10,0.08)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>⛳</span>
                   </div>
-                )}
-                <div>
-                  <SubLabel>PONTOS FORTES</SubLabel>
-                  {(isGuestView
-                    ? data.positivos.slice(0, GUEST_VISIBLE)
-                    : data.positivos
-                  ).map((item) => (
-                    <ItemCard
-                      key={item.texto}
-                      type="positive"
-                      text={item.texto}
-                      pts={`+${item.pontos} pts`}
-                    />
-                  ))}
-                  {isGuestView && data.positivos.length > GUEST_VISIBLE && (
-                    <GuestBlurOverlay
-                      count={Math.min(
-                        data.positivos.length - GUEST_VISIBLE,
-                        GUEST_MOCK_POSITIVOS.length,
-                      )}
+                  <div>
+                    <p
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: "#0a0a0a",
+                        margin: 0,
+                      }}
                     >
-                      <div>
-                        {GUEST_MOCK_POSITIVOS.slice(
-                          0,
-                          Math.min(
-                            data.positivos.length - GUEST_VISIBLE,
-                            GUEST_MOCK_POSITIVOS.length,
-                          ),
-                        ).map((item) => (
-                          <ItemCard
-                            key={item.texto}
-                            type="positive"
-                            text={item.texto}
-                            pts={`+${item.pontos} pts`}
-                          />
-                        ))}
-                      </div>
-                    </GuestBlurOverlay>
+                      Pontos inegociáveis da vaga
+                    </p>
+                    <p
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        color: "#8a8a85",
+                        margin: "2px 0 0",
+                      }}
+                    >
+                      requisitos críticos que pesam na triagem inicial
+                    </p>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      color: "#405410",
+                      background: "rgba(198,255,58,0.2)",
+                      borderRadius: 999,
+                      padding: "4px 8px",
+                    }}
+                  >
+                    {hardGateCovered} cobertos
+                  </span>
+                  {hardGatePartial > 0 && (
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        color: "#92400e",
+                        background: "rgba(245,158,11,0.12)",
+                        borderRadius: 999,
+                        padding: "4px 8px",
+                      }}
+                    >
+                      {hardGatePartial} parciais
+                    </span>
+                  )}
+                  {hardGateMissing > 0 && (
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        color: "#991b1b",
+                        background: "rgba(239,68,68,0.1)",
+                        borderRadius: 999,
+                        padding: "4px 8px",
+                      }}
+                    >
+                      {hardGateMissing} ausentes
+                    </span>
                   )}
                 </div>
               </div>
 
-              {/* Right column */}
-              <div>
-                <div style={{ marginBottom: 18 }}>
-                  <SubLabel>AJUSTES DE CONTEÚDO</SubLabel>
-                  {(isGuestView
-                    ? data.ajustes_conteudo.slice(0, GUEST_VISIBLE)
-                    : data.ajustes_conteudo
-                  ).map((a) => (
-                    <ItemCard
-                      key={a.id}
-                      type="action"
-                      text={`${a.titulo}${a.descricao ? ` — ${a.descricao}` : ""}`}
-                      pts={`+${a.pontos} pts`}
-                    />
-                  ))}
-                  {isGuestView &&
-                    data.ajustes_conteudo.length > GUEST_VISIBLE && (
-                      <GuestBlurOverlay
-                        count={Math.min(
-                          data.ajustes_conteudo.length - GUEST_VISIBLE,
-                          GUEST_MOCK_AJUSTES.length,
-                        )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {hardGates.map((gate, index) => {
+                  const visual =
+                    gate.status === "covered"
+                      ? {
+                          label: "coberto",
+                          bg: "rgba(198,255,58,0.12)",
+                          border: "rgba(110,150,20,0.2)",
+                          color: "#405410",
+                          icon: "✓",
+                        }
+                      : gate.status === "partial"
+                        ? {
+                            label: "parcial",
+                            bg: "rgba(245,158,11,0.08)",
+                            border: "rgba(245,158,11,0.18)",
+                            color: "#92400e",
+                            icon: "~",
+                          }
+                        : {
+                            label: "ausente",
+                            bg: "rgba(239,68,68,0.07)",
+                            border: "rgba(239,68,68,0.16)",
+                            color: "#991b1b",
+                            icon: "!",
+                          };
+
+                  return (
+                    <div
+                      key={
+                        gate.requirementKey ??
+                        `${gate.requirementText}-${index}`
+                      }
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "28px 1fr auto",
+                        gap: 12,
+                        alignItems: "start",
+                        background: visual.bg,
+                        border: `1px solid ${visual.border}`,
+                        borderRadius: 12,
+                        padding: "13px 14px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 8,
+                          background: "#fff",
+                          color: visual.color,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          fontWeight: 700,
+                        }}
                       >
-                        <div>
-                          {GUEST_MOCK_AJUSTES.slice(
-                            0,
-                            Math.min(
-                              data.ajustes_conteudo.length - GUEST_VISIBLE,
-                              GUEST_MOCK_AJUSTES.length,
-                            ),
-                          ).map((a) => (
-                            <ItemCard
-                              key={a.id}
-                              type="action"
-                              text={a.titulo}
-                              pts={`+${a.pontos} pts`}
-                            />
-                          ))}
-                        </div>
-                      </GuestBlurOverlay>
-                    )}
-                </div>
-                {data.ajustes_indisponiveis.length > 0 && (
-                  <div>
-                    <SubLabel>MISSINGS REAIS</SubLabel>
-                    {data.ajustes_indisponiveis.map((a) => (
-                      <ItemCard
-                        key={a.id}
-                        type="missing"
-                        text={`${a.titulo}${a.descricao ? ` — ${a.descricao}` : ""}`}
-                      />
-                    ))}
-                  </div>
-                )}
+                        {visual.icon}
+                      </div>
+                      <div>
+                        <p
+                          style={{
+                            fontSize: 13.5,
+                            fontWeight: 500,
+                            color: "#0a0a0a",
+                            lineHeight: 1.45,
+                            margin: 0,
+                          }}
+                        >
+                          {gate.requirementText}
+                        </p>
+                      </div>
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          color: visual.color,
+                          background: "#fff",
+                          borderRadius: 999,
+                          padding: "4px 8px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {visual.label}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          </SecCard>
+          )}
+
+          {/* Pontos fortes */}
+          <div style={{ ...CARD, marginBottom: 10 }}>
+            {/* Card header */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                marginBottom: 16,
+                paddingBottom: 14,
+                borderBottom: "1px solid rgba(10,10,10,0.06)",
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  background: "rgba(198,255,58,0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <span style={{ fontSize: 14, color: "#405410" }}>✓</span>
+              </div>
+              <div>
+                <p
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "#0a0a0a",
+                    margin: 0,
+                  }}
+                >
+                  Pontos fortes identificados
+                </p>
+                <p
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    color: "#8a8a85",
+                    margin: "2px 0 0",
+                  }}
+                >
+                  contribuem positivamente para o score
+                </p>
+              </div>
+              <span
+                style={{
+                  marginLeft: "auto",
+                  background: "rgba(198,255,58,0.2)",
+                  color: "#405410",
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  padding: "3px 8px",
+                  borderRadius: 6,
+                  flexShrink: 0,
+                }}
+              >
+                +{ptsPositivos} pts
+              </span>
+            </div>
+
+            {/* Items */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {(isGuestView
+                ? data.positivos.slice(0, GUEST_VISIBLE)
+                : data.positivos
+              ).map((item, i) => {
+                const coverageLabel = formatCoveragePercent(
+                  (item as { coveragePercent?: number }).coveragePercent,
+                );
+                return (
+                  <div
+                    key={item.texto}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "28px 1fr auto",
+                      gap: 12,
+                      alignItems: "start",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        color: "#8a8a85",
+                        paddingTop: 2,
+                      }}
+                    >
+                      {String(i + 1).padStart(2, "0")}
+                    </div>
+                    <div>
+                      <p
+                        style={{
+                          fontSize: 13.5,
+                          color: "#2a2a28",
+                          lineHeight: 1.5,
+                          margin: 0,
+                        }}
+                      >
+                        {item.texto}
+                      </p>
+                      <div
+                        style={{
+                          marginTop: 6,
+                          height: 3,
+                          background: "rgba(10,10,10,0.06)",
+                          borderRadius: 99,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: "100%",
+                            background: "#c6ff3a",
+                            borderRadius: 99,
+                            width: `${Math.round((item.pontos / Math.max(...data.positivos.map((p) => p.pontos), 1)) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-end",
+                        gap: 4,
+                      }}
+                    >
+                      {coverageLabel && (
+                        <span
+                          style={{
+                            background: "rgba(198,255,58,0.2)",
+                            color: "#405410",
+                            fontFamily: MONO,
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {coverageLabel}
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          background: "rgba(198,255,58,0.12)",
+                          color: "#405410",
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          fontWeight: 500,
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        +{item.pontos} pts
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {isGuestView && data.positivos.length > GUEST_VISIBLE && (
+              <GuestBlurOverlay
+                count={Math.min(
+                  data.positivos.length - GUEST_VISIBLE,
+                  GUEST_MOCK_POSITIVOS.length,
+                )}
+              >
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 12 }}
+                >
+                  {GUEST_MOCK_POSITIVOS.slice(
+                    0,
+                    Math.min(
+                      data.positivos.length - GUEST_VISIBLE,
+                      GUEST_MOCK_POSITIVOS.length,
+                    ),
+                  ).map((item, i) => (
+                    <div
+                      key={item.texto}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "28px 1fr auto",
+                        gap: 12,
+                        alignItems: "start",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          fontWeight: 500,
+                          color: "#8a8a85",
+                          paddingTop: 2,
+                        }}
+                      >
+                        {String(GUEST_VISIBLE + i + 1).padStart(2, "0")}
+                      </div>
+                      <p
+                        style={{
+                          fontSize: 13.5,
+                          color: "#2a2a28",
+                          lineHeight: 1.5,
+                          margin: 0,
+                        }}
+                      >
+                        {item.texto}
+                      </p>
+                      <span
+                        style={{
+                          background: "rgba(198,255,58,0.2)",
+                          color: "#405410",
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        +{item.pontos}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </GuestBlurOverlay>
+            )}
+          </div>
+
+          {/* Ajustes de conteúdo */}
+          <div style={{ ...CARD, marginBottom: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                marginBottom: 16,
+                paddingBottom: 14,
+                borderBottom: "1px solid rgba(10,10,10,0.06)",
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  background: "rgba(245,158,11,0.12)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>🎯</span>
+              </div>
+              <div>
+                <p
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "#0a0a0a",
+                    margin: 0,
+                  }}
+                >
+                  Ajustes de conteúdo
+                </p>
+                <p
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    color: "#8a8a85",
+                    margin: "2px 0 0",
+                  }}
+                >
+                  itens que já contam parcialmente e ainda podem subir a
+                  cobertura
+                </p>
+              </div>
+              <span
+                style={{
+                  marginLeft: "auto",
+                  background: "rgba(245,158,11,0.12)",
+                  color: "#92400e",
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  padding: "3px 8px",
+                  borderRadius: 6,
+                  flexShrink: 0,
+                }}
+              >
+                +{totalAjustesConteudo} pts liberáveis
+              </span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {(isGuestView
+                ? data.ajustes_conteudo.slice(0, GUEST_VISIBLE)
+                : data.ajustes_conteudo
+              ).map((a, i) => {
+                const coverageLabel = formatCoveragePercent(
+                  (a as { coveragePercent?: number }).coveragePercent,
+                );
+                return (
+                  <div
+                    key={a.id}
+                    style={{
+                      background: "#fff",
+                      border: "1px solid rgba(10,10,10,0.06)",
+                      borderRadius: 12,
+                      padding: "14px 16px",
+                      display: "grid",
+                      gridTemplateColumns: "28px 1fr auto",
+                      gap: 12,
+                      alignItems: "start",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        color: "#8a8a85",
+                        paddingTop: 2,
+                      }}
+                    >
+                      {String(i + 1).padStart(2, "0")}
+                    </div>
+                    <div>
+                      <p
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 500,
+                          letterSpacing: -0.2,
+                          color: "#0a0a0a",
+                          margin: "0 0 4px",
+                        }}
+                      >
+                        {a.titulo}
+                      </p>
+                      {a.descricao && (
+                        <p
+                          style={{
+                            fontSize: 12.5,
+                            color: "#5a5a55",
+                            lineHeight: 1.5,
+                            margin: 0,
+                          }}
+                        >
+                          {a.descricao}
+                        </p>
+                      )}
+                      {a.dica && (
+                        <p
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 10.5,
+                            color: "#8a8a85",
+                            marginTop: 6,
+                            fontStyle: "italic",
+                          }}
+                        >
+                          {a.dica}
+                        </p>
+                      )}
+                    </div>
+                    <span
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-end",
+                        gap: 4,
+                      }}
+                    >
+                      {coverageLabel && (
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 9.5,
+                            fontWeight: 600,
+                            padding: "3px 7px",
+                            borderRadius: 4,
+                            background: "rgba(245,158,11,0.12)",
+                            color: "#92400e",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {coverageLabel}
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 9.5,
+                          fontWeight: 500,
+                          letterSpacing: 1,
+                          padding: "3px 7px",
+                          borderRadius: 4,
+                          background: "#0a0a0a",
+                          color: "#fff",
+                          marginTop: 2,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        +{a.pontos} pts
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {isGuestView && data.ajustes_conteudo.length > GUEST_VISIBLE && (
+              <GuestBlurOverlay
+                count={Math.min(
+                  data.ajustes_conteudo.length - GUEST_VISIBLE,
+                  GUEST_MOCK_AJUSTES.length,
+                )}
+              >
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
+                  {GUEST_MOCK_AJUSTES.slice(
+                    0,
+                    Math.min(
+                      data.ajustes_conteudo.length - GUEST_VISIBLE,
+                      GUEST_MOCK_AJUSTES.length,
+                    ),
+                  ).map((a, i) => (
+                    <div
+                      key={a.id}
+                      style={{
+                        background: "#fff",
+                        border: "1px solid rgba(10,10,10,0.06)",
+                        borderRadius: 12,
+                        padding: "14px 16px",
+                        display: "grid",
+                        gridTemplateColumns: "28px 1fr auto",
+                        gap: 12,
+                        alignItems: "start",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          fontWeight: 500,
+                          color: "#8a8a85",
+                          paddingTop: 2,
+                        }}
+                      >
+                        {String(GUEST_VISIBLE + i + 1).padStart(2, "0")}
+                      </div>
+                      <div>
+                        <p
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 500,
+                            color: "#0a0a0a",
+                            margin: "0 0 4px",
+                          }}
+                        >
+                          {a.titulo}
+                        </p>
+                        <p
+                          style={{
+                            fontSize: 12.5,
+                            color: "#5a5a55",
+                            lineHeight: 1.5,
+                            margin: 0,
+                          }}
+                        >
+                          {a.descricao}
+                        </p>
+                      </div>
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 9.5,
+                          fontWeight: 500,
+                          padding: "3px 7px",
+                          borderRadius: 4,
+                          background: "#0a0a0a",
+                          color: "#fff",
+                          marginTop: 2,
+                        }}
+                      >
+                        +{a.pontos} pts
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </GuestBlurOverlay>
+            )}
+
+            <div
+              style={{
+                marginTop: 14,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background: "rgba(245,158,11,0.06)",
+                border: "1px solid rgba(245,158,11,0.15)",
+                borderRadius: 10,
+                padding: "10px 14px",
+              }}
+            >
+              <span style={{ fontSize: 13, flexShrink: 0 }}>🔒</span>
+              <p
+                style={{
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: "#92400e",
+                  margin: 0,
+                }}
+              >
+                Libere seu CV otimizado para aplicar todos os{" "}
+                {data.ajustes_conteudo.length} ajustes de conteúdo e buscar um
+                ganho estimado de +{totalAjustesConteudo} pts só nesta seção.
+                Esses itens já contam parcialmente hoje; o ganho exibido aqui é
+                apenas o trecho que ainda falta capturar.
+              </p>
+              <p
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#8a8a85",
+                  margin: "6px 0 0",
+                }}
+              >
+                Nesta vaga, a seção soma {ptsPositivos} pts já comprovados +{" "}
+                {totalAjustesConteudo} pts liberáveis com o seu histórico atual.
+              </p>
+            </div>
+          </div>
+
+          {data.ajustes_indisponiveis.length > 0 && (
+            <div style={{ ...CARD, marginTop: 10, marginBottom: 0 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  marginBottom: 16,
+                  paddingBottom: 14,
+                  borderBottom: "1px solid rgba(10,10,10,0.06)",
+                }}
+              >
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    background: "rgba(239,68,68,0.1)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{ fontSize: 14, color: "#991b1b" }}>!</span>
+                </div>
+                <div>
+                  <p
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "#0a0a0a",
+                      margin: 0,
+                    }}
+                  >
+                    Missings reais do perfil atual
+                  </p>
+                  <p
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      color: "#8a8a85",
+                      margin: "2px 0 0",
+                    }}
+                  >
+                    lacunas sem evidência no CV, fora do alcance da adaptação
+                  </p>
+                </div>
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    background: "rgba(239,68,68,0.08)",
+                    color: "#991b1b",
+                    fontFamily: MONO,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    padding: "3px 8px",
+                    borderRadius: 6,
+                    flexShrink: 0,
+                  }}
+                >
+                  {totalAjustesIndisponiveis} pts travados
+                </span>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {data.ajustes_indisponiveis.map((a, i) => {
+                  const coverageLabel = formatCoveragePercent(
+                    (a as { coveragePercent?: number }).coveragePercent,
+                  );
+                  return (
+                    <div
+                      key={a.id}
+                      style={{
+                        background: "rgba(239,68,68,0.03)",
+                        border: "1px solid rgba(239,68,68,0.12)",
+                        borderRadius: 12,
+                        padding: "14px 16px",
+                        display: "grid",
+                        gridTemplateColumns: "28px 1fr auto",
+                        gap: 12,
+                        alignItems: "start",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          fontWeight: 500,
+                          color: "#8a8a85",
+                          paddingTop: 2,
+                        }}
+                      >
+                        {String(i + 1).padStart(2, "0")}
+                      </div>
+                      <div>
+                        <p
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 500,
+                            letterSpacing: -0.2,
+                            color: "#0a0a0a",
+                            margin: "0 0 4px",
+                          }}
+                        >
+                          {a.titulo}
+                        </p>
+                        {a.descricao && (
+                          <p
+                            style={{
+                              fontSize: 12.5,
+                              color: "#5a5a55",
+                              lineHeight: 1.5,
+                              margin: 0,
+                            }}
+                          >
+                            {a.descricao}
+                          </p>
+                        )}
+                        {a.dica && (
+                          <p
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#8a8a85",
+                              marginTop: 6,
+                              fontStyle: "italic",
+                            }}
+                          >
+                            {a.dica}
+                          </p>
+                        )}
+                      </div>
+                      <span
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                          gap: 4,
+                        }}
+                      >
+                        {coverageLabel && (
+                          <span
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 9.5,
+                              fontWeight: 600,
+                              padding: "3px 7px",
+                              borderRadius: 4,
+                              background: "rgba(239,68,68,0.08)",
+                              color: "#991b1b",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {coverageLabel}
+                          </span>
+                        )}
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 9.5,
+                            fontWeight: 500,
+                            letterSpacing: 1,
+                            padding: "3px 7px",
+                            borderRadius: 4,
+                            background: "#0a0a0a",
+                            color: "#fff",
+                            marginTop: 2,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {a.pontos} pts fora do CV
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* ════════════════════════════════════════════════════
               SEÇÃO 2 — Competências Técnicas
           ════════════════════════════════════════════════════ */}
-          <SecCard
-            num="S2"
-            title="Competências Técnicas — Keywords"
+          <SectionHeader
+            label="SEÇÃO 2 — COMPETÊNCIAS TÉCNICAS"
+            title="Palavras-chave da vaga"
+            description="Termos que o ATS desta vaga busca no seu CV — presentes e ausentes."
             score={data.secoes.competencias.score}
-            max={data.secoes.competencias.max}
-            color="#c6ff3a"
-          >
-            {/* Presentes */}
-            <div style={{ marginBottom: 16 }}>
-              <SubLabel>
-                KEYWORDS PRESENTES NO CV ({data.keywords.presentes.length})
-              </SubLabel>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {(isGuestView
-                  ? data.keywords.presentes.slice(0, GUEST_VISIBLE)
-                  : data.keywords.presentes
-                ).map((k) => (
-                  <KwChip key={k.kw} label={k.kw} type="present" />
-                ))}
-              </div>
-              {isGuestView &&
-                data.keywords.presentes.length > GUEST_VISIBLE && (
-                  <GuestBlurOverlay
-                    count={Math.min(
-                      data.keywords.presentes.length - GUEST_VISIBLE,
-                      GUEST_MOCK_KW.length,
-                    )}
-                  >
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {GUEST_MOCK_KW.slice(
-                        0,
-                        Math.min(
-                          data.keywords.presentes.length - GUEST_VISIBLE,
-                          GUEST_MOCK_KW.length,
-                        ),
-                      ).map((k) => (
-                        <KwChip key={k.kw} label={k.kw} type="present" />
-                      ))}
-                    </div>
-                  </GuestBlurOverlay>
-                )}
-            </div>
+            maxScore={data.secoes.competencias.max}
+          />
 
-            {/* Possíveis */}
-            {(data.keywords.possiveis?.length ?? 0) > 0 && (
-              <div
+          {/* Keywords banner */}
+          <div
+            style={{
+              background: "#0a0a0a",
+              color: "#fff",
+              borderRadius: 14,
+              padding: "16px 20px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
+              marginBottom: 10,
+            }}
+          >
+            <div>
+              <p style={{ fontSize: 13.5, fontWeight: 500, margin: "0 0 3px" }}>
+                {data.keywords.presentes.length +
+                  (data.keywords.possiveis?.length ?? 0) +
+                  data.keywords.ausentes.length}{" "}
+                keywords identificadas para esta vaga
+              </p>
+              <p
                 style={{
-                  borderTop: `1px solid ${BORDER_BASE}`,
-                  paddingTop: 16,
-                  marginBottom: 16,
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  color: "rgba(255,255,255,0.5)",
+                  margin: 0,
                 }}
               >
+                Libere o CV para inserir as{" "}
+                <span style={{ color: "#facc15", fontWeight: 600 }}>
+                  {data.keywords.possiveis?.length ?? 0} possíveis
+                </span>{" "}
+                e selecionar as{" "}
+                <span style={{ color: "#c6ff3a", fontWeight: 600 }}>
+                  {data.keywords.ausentes.length} que faltam
+                </span>
+              </p>
+            </div>
+          </div>
+
+          {/* Keywords card */}
+          <div style={{ ...CARD, marginBottom: 0 }}>
+            {/* Presentes */}
+            <p
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                letterSpacing: 1.2,
+                color: "#405410",
+                fontWeight: 500,
+                marginBottom: 10,
+              }}
+            >
+              JÁ NO SEU CV ({data.keywords.presentes.length})
+            </p>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 7,
+                marginBottom: 20,
+              }}
+            >
+              {(isGuestView
+                ? data.keywords.presentes.slice(0, GUEST_VISIBLE)
+                : data.keywords.presentes
+              ).map((k) => (
+                <span
+                  key={k.kw}
+                  style={{
+                    background: "rgba(198,255,58,0.2)",
+                    border: "1px solid rgba(110,150,20,0.2)",
+                    color: "#405410",
+                    fontFamily: MONO,
+                    fontSize: 11.5,
+                    fontWeight: 500,
+                    padding: "5px 11px",
+                    borderRadius: 999,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                  }}
+                >
+                  ✓ {k.kw}
+                  <span style={{ fontSize: 10, opacity: 0.6 }}>
+                    +{k.pontos}
+                  </span>
+                </span>
+              ))}
+            </div>
+            {isGuestView && data.keywords.presentes.length > GUEST_VISIBLE && (
+              <GuestBlurOverlay
+                count={Math.min(
+                  data.keywords.presentes.length - GUEST_VISIBLE,
+                  GUEST_MOCK_KW.length,
+                )}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 7,
+                    marginBottom: 20,
+                  }}
+                >
+                  {GUEST_MOCK_KW.slice(
+                    0,
+                    Math.min(
+                      data.keywords.presentes.length - GUEST_VISIBLE,
+                      GUEST_MOCK_KW.length,
+                    ),
+                  ).map((k) => (
+                    <span
+                      key={k.kw}
+                      style={{
+                        background: "rgba(198,255,58,0.2)",
+                        border: "1px solid rgba(110,150,20,0.2)",
+                        color: "#405410",
+                        fontFamily: MONO,
+                        fontSize: 11.5,
+                        fontWeight: 500,
+                        padding: "5px 11px",
+                        borderRadius: 999,
+                      }}
+                    >
+                      ✓ {k.kw}
+                    </span>
+                  ))}
+                </div>
+              </GuestBlurOverlay>
+            )}
+
+            {/* Divisor */}
+            <div
+              style={{
+                borderTop: "1px solid rgba(10,10,10,0.06)",
+                marginBottom: 14,
+              }}
+            />
+
+            {(data.keywords.possiveis?.length ?? 0) > 0 && (
+              <>
                 <p
                   style={{
                     fontFamily: MONO,
@@ -2464,7 +2813,7 @@ export default function ResultadoPage() {
                     display: "flex",
                     flexWrap: "wrap",
                     gap: 7,
-                    marginBottom: 12,
+                    marginBottom: 20,
                   }}
                 >
                   {(isGuestView
@@ -2496,6 +2845,7 @@ export default function ResultadoPage() {
                 </div>
                 <div
                   style={{
+                    marginBottom: 14,
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
@@ -2519,305 +2869,370 @@ export default function ResultadoPage() {
                     verdadeira com o que já existe no seu histórico.
                   </p>
                 </div>
-              </div>
+                <div
+                  style={{
+                    borderTop: "1px solid rgba(10,10,10,0.06)",
+                    marginBottom: 14,
+                  }}
+                />
+              </>
             )}
 
-            {/* Ausentes */}
-            <div
+            {/* Faltando */}
+            <p
               style={{
-                borderTop: `1px solid ${BORDER_BASE}`,
-                paddingTop: 16,
+                fontFamily: MONO,
+                fontSize: 10,
+                letterSpacing: 1.2,
+                color: "#92400e",
+                fontWeight: 500,
+                marginBottom: 6,
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 10,
-                }}
-              >
-                <SubLabel>
-                  KEYWORDS AUSENTES — clique para incluir no CV
-                </SubLabel>
-                {ptsKwSelecionadas > 0 && (
-                  <div
+              FALTANDO NO SEU CV ({data.keywords.ausentes.length})
+            </p>
+            <p style={{ fontSize: 12.5, color: "#8a8a85", marginBottom: 12 }}>
+              {isDownloadReady
+                ? "Seção bloqueada após liberação do CV"
+                : "Selecione quais você deseja incluir. Seu CV otimizado só adicionará as que você aprovar."}
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {(isGuestView
+                ? data.keywords.ausentes.slice(0, GUEST_VISIBLE)
+                : data.keywords.ausentes
+              ).map((k) => {
+                const sel = effectiveSelected.has(k.kw);
+                return (
+                  <label
+                    key={k.kw}
+                    title={
+                      isKeywordSelectionLocked
+                        ? "Seleção bloqueada: CV já liberado"
+                        : undefined
+                    }
+                    aria-label={
+                      isKeywordSelectionLocked
+                        ? `Keyword ${k.kw} bloqueada: CV já liberado`
+                        : undefined
+                    }
                     style={{
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      color: AMBER,
-                      flexShrink: 0,
-                      marginLeft: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      background: sel
+                        ? "rgba(198,255,58,0.08)"
+                        : "rgba(245,158,11,0.06)",
+                      border: `1px solid ${sel ? "rgba(110,150,20,0.25)" : "rgba(245,158,11,0.2)"}`,
+                      borderRadius: 10,
+                      padding: "11px 14px",
+                      cursor: isKeywordSelectionLocked ? "default" : "pointer",
                     }}
                   >
-                    +{ptsKwSelecionadas} pts selecionados
-                  </div>
-                )}
-              </div>
-              <p style={{ fontSize: 12.5, color: "#8a8a85", marginBottom: 12 }}>
-                {isDownloadReady
-                  ? "Seção bloqueada após liberação do CV"
-                  : "Selecione quais você deseja incluir. Seu CV otimizado só adicionará as que você aprovar."}
-              </p>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 6,
-                  marginBottom: 10,
-                }}
-              >
-                {(isGuestView
-                  ? data.keywords.ausentes.slice(0, GUEST_VISIBLE)
-                  : data.keywords.ausentes
-                ).map((k) => {
-                  const sel = effectiveSelected.has(k.kw);
-                  return (
-                    <label
-                      key={k.kw}
-                      title={
-                        isKeywordSelectionLocked
-                          ? "Seleção bloqueada: CV já liberado"
-                          : undefined
-                      }
-                      aria-label={
-                        isKeywordSelectionLocked
-                          ? `Keyword ${k.kw} bloqueada: CV já liberado`
-                          : undefined
-                      }
+                    <div
                       style={{
-                        display: "inline-flex",
+                        width: 18,
+                        height: 18,
+                        borderRadius: 5,
+                        border: `2px solid ${sel ? "#c6ff3a" : "rgba(245,158,11,0.4)"}`,
+                        background: sel ? "#c6ff3a" : "transparent",
+                        display: "flex",
                         alignItems: "center",
-                        gap: 5,
-                        fontFamily: MONO,
-                        fontSize: 11,
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        transition: "all 150ms",
+                      }}
+                    >
+                      {sel && (
+                        // biome-ignore lint/a11y/noSvgWithoutTitle: decorative
+                        <svg
+                          width="9"
+                          height="7"
+                          viewBox="0 0 10 8"
+                          fill="none"
+                          aria-hidden
+                        >
+                          <path
+                            d="M1 4l3 3 5-6"
+                            stroke="#0a0a0a"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={sel}
+                      disabled={isKeywordSelectionLocked}
+                      onChange={() => toggleKw(k.kw)}
+                    />
+                    <span
+                      style={{
+                        flex: 1,
+                        fontSize: 13.5,
                         fontWeight: 500,
-                        letterSpacing: 0.2,
-                        padding: "5px 10px",
-                        borderRadius: 6,
-                        background: sel ? LIME_SOFT : "#fff",
-                        border: `1px solid ${sel ? LIME_BORDER : BORDER_MED}`,
-                        color: sel ? LIME_DEEP : "#0a0a0a",
-                        cursor: isKeywordSelectionLocked
-                          ? "default"
-                          : "pointer",
+                        color: sel ? "#2a3a08" : "#92400e",
+                      }}
+                    >
+                      {k.kw}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        padding: "2px 7px",
+                        borderRadius: 4,
+                        background: sel
+                          ? "rgba(198,255,58,0.25)"
+                          : "rgba(245,158,11,0.15)",
+                        color: sel ? "#405410" : "#92400e",
+                        flexShrink: 0,
+                      }}
+                    >
+                      +{k.pontos} pts
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            {isGuestView && data.keywords.ausentes.length > GUEST_VISIBLE && (
+              <GuestBlurOverlay
+                count={Math.min(
+                  data.keywords.ausentes.length - GUEST_VISIBLE,
+                  GUEST_MOCK_KW.length,
+                )}
+              >
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
+                  {GUEST_MOCK_KW.slice(
+                    0,
+                    Math.min(
+                      data.keywords.ausentes.length - GUEST_VISIBLE,
+                      GUEST_MOCK_KW.length,
+                    ),
+                  ).map((k) => (
+                    <div
+                      key={k.kw}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        background: "rgba(245,158,11,0.06)",
+                        border: "1px solid rgba(245,158,11,0.2)",
+                        borderRadius: 10,
+                        padding: "11px 14px",
                       }}
                     >
                       <div
                         style={{
-                          width: 11,
-                          height: 11,
-                          border: sel
-                            ? `1.5px solid ${LIME_BORDER}`
-                            : `1.5px solid ${BORDER_MED}`,
-                          borderRadius: 3,
+                          width: 18,
+                          height: 18,
+                          borderRadius: 5,
+                          border: "2px solid rgba(245,158,11,0.4)",
                           flexShrink: 0,
-                          background: sel ? "#c6ff3a" : "transparent",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
+                        }}
+                      />
+                      <span
+                        style={{
+                          flex: 1,
+                          fontSize: 13.5,
+                          fontWeight: 500,
+                          color: "#92400e",
                         }}
                       >
-                        {sel && (
-                          // biome-ignore lint/a11y/noSvgWithoutTitle: decorative
-                          <svg
-                            width="7"
-                            height="5"
-                            viewBox="0 0 10 8"
-                            fill="none"
-                            aria-hidden
-                          >
-                            <path
-                              d="M1 4l3 3 5-6"
-                              stroke="#405410"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        )}
-                      </div>
-                      <input
-                        type="checkbox"
-                        className="sr-only"
-                        checked={sel}
-                        disabled={isKeywordSelectionLocked}
-                        onChange={() => toggleKw(k.kw)}
-                      />
-                      {k.kw}
-                    </label>
-                  );
-                })}
-              </div>
-              {isGuestView && data.keywords.ausentes.length > GUEST_VISIBLE && (
-                <GuestBlurOverlay
-                  count={Math.min(
-                    data.keywords.ausentes.length - GUEST_VISIBLE,
-                    GUEST_MOCK_KW.length,
-                  )}
-                >
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {GUEST_MOCK_KW.slice(
-                      0,
-                      Math.min(
-                        data.keywords.ausentes.length - GUEST_VISIBLE,
-                        GUEST_MOCK_KW.length,
-                      ),
-                    ).map((k) => (
-                      <KwChip key={k.kw} label={k.kw} type="absent" />
-                    ))}
-                  </div>
-                </GuestBlurOverlay>
-              )}
-              <p
+                        {k.kw}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          padding: "2px 7px",
+                          borderRadius: 4,
+                          background: "rgba(245,158,11,0.15)",
+                          color: "#92400e",
+                        }}
+                      >
+                        +{k.pontos} pts
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </GuestBlurOverlay>
+            )}
+
+            {effectiveSelected.size > 0 && (
+              <div
                 style={{
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  color: MUTED,
-                  lineHeight: 1.5,
-                  marginTop: 10,
+                  marginTop: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  background: "rgba(198,255,58,0.1)",
+                  border: "1px solid rgba(110,150,20,0.2)",
+                  borderRadius: 10,
+                  padding: "10px 14px",
                 }}
               >
-                Selecione apenas keywords que fazem sentido para sua experiência
-                real. A LLM ajusta o texto naturalmente.
-              </p>
-              {effectiveSelected.size > 0 && (
-                <div
-                  style={{
-                    marginTop: 12,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    background: "rgba(198,255,58,0.1)",
-                    border: "1px solid rgba(110,150,20,0.2)",
-                    borderRadius: 10,
-                    padding: "10px 14px",
-                  }}
-                >
-                  <div>
-                    <p
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: "#2a3a08",
-                        margin: "0 0 2px",
-                      }}
-                    >
-                      {effectiveSelected.size} palavra
-                      {effectiveSelected.size > 1 ? "s" : ""}-chave selecionada
-                      {effectiveSelected.size > 1 ? "s" : ""}
-                    </p>
-                    <p
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 10.5,
-                        color: "#405410",
-                        margin: 0,
-                      }}
-                    >
-                      Serão incluídas no CV otimizado ao liberar
-                    </p>
-                  </div>
-                  <span
+                <div>
+                  <p
                     style={{
-                      background: "rgba(198,255,58,0.3)",
-                      color: "#2a3a08",
-                      fontFamily: MONO,
                       fontSize: 13,
-                      fontWeight: 700,
-                      padding: "5px 12px",
-                      borderRadius: 8,
-                      flexShrink: 0,
+                      fontWeight: 500,
+                      color: "#2a3a08",
+                      margin: "0 0 2px",
                     }}
                   >
-                    +{ptsKwSelecionadas} pts
-                  </span>
+                    {effectiveSelected.size} palavra
+                    {effectiveSelected.size > 1 ? "s" : ""}-chave selecionada
+                    {effectiveSelected.size > 1 ? "s" : ""}
+                  </p>
+                  <p
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10.5,
+                      color: "#405410",
+                      margin: 0,
+                    }}
+                  >
+                    Serão incluídas no CV otimizado ao liberar
+                  </p>
                 </div>
-              )}
-            </div>
-          </SecCard>
+                <span
+                  style={{
+                    background: "rgba(198,255,58,0.3)",
+                    color: "#2a3a08",
+                    fontFamily: MONO,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    padding: "5px 12px",
+                    borderRadius: 8,
+                    flexShrink: 0,
+                  }}
+                >
+                  +{ptsKwSelecionadas} pts
+                </span>
+              </div>
+            )}
+          </div>
 
           {/* ════════════════════════════════════════════════════
               SEÇÃO 3 — Formatação e Campos
           ════════════════════════════════════════════════════ */}
+          <SectionHeader
+            label="SEÇÃO 3 — FORMATAÇÃO E CAMPOS"
+            title="Análise do formato do seu CV"
+            description="Como os sistemas de triagem automática (ATS) leem e interpretam o seu arquivo."
+            score={data.secoes.formatacao.score}
+            maxScore={data.secoes.formatacao.max}
+          />
+
           {data.formato_cv ? (
-            <SecCard
-              num="S3"
-              title="Formatação e Campos"
-              score={data.secoes.formatacao.score}
-              max={data.secoes.formatacao.max}
-              color={BLUE}
-            >
+            <>
               {/* ATS compat summary */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 12,
-                  background:
-                    data.secoes.formatacao.score >= 14
-                      ? "rgba(198,255,58,0.1)"
-                      : data.secoes.formatacao.score >= 8
-                        ? "rgba(245,158,11,0.08)"
-                        : "rgba(239,68,68,0.08)",
-                  border: `1px solid ${data.secoes.formatacao.score >= 14 ? "rgba(110,150,20,0.2)" : data.secoes.formatacao.score >= 8 ? "rgba(245,158,11,0.2)" : "rgba(239,68,68,0.2)"}`,
-                  borderRadius: 12,
-                  padding: "14px 16px",
-                  marginBottom: 16,
-                }}
-              >
-                <IssueIcon
-                  tipo={
-                    data.secoes.formatacao.score >= 14
-                      ? "ok"
-                      : data.secoes.formatacao.score >= 8
-                        ? "atencao"
-                        : "critico"
-                  }
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ ...CARD, marginBottom: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 12,
+                    background:
+                      data.secoes.formatacao.score >= 14
+                        ? "rgba(198,255,58,0.1)"
+                        : data.secoes.formatacao.score >= 8
+                          ? "rgba(245,158,11,0.08)"
+                          : "rgba(239,68,68,0.08)",
+                    border: `1px solid ${data.secoes.formatacao.score >= 14 ? "rgba(110,150,20,0.2)" : data.secoes.formatacao.score >= 8 ? "rgba(245,158,11,0.2)" : "rgba(239,68,68,0.2)"}`,
+                    borderRadius: 12,
+                    padding: "14px 16px",
+                  }}
+                >
+                  <IssueIcon
+                    tipo={
+                      data.secoes.formatacao.score >= 14
+                        ? "ok"
+                        : data.secoes.formatacao.score >= 8
+                          ? "atencao"
+                          : "critico"
+                    }
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <p
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 500,
+                          color: "#0a0a0a",
+                          margin: 0,
+                        }}
+                      >
+                        Formatação e compatibilidade ATS
+                      </p>
+                    </div>
+                    <p
+                      style={{
+                        fontSize: 12.5,
+                        color: "#5a5a55",
+                        lineHeight: 1.5,
+                        margin: "4px 0 0",
+                      }}
+                    >
+                      {ptsFaltando === 0
+                        ? "Você tem todos os campos essenciais. Os itens abaixo são editoriais e servem como orientação, não como desconto de score."
+                        : "Sua nota aqui depende dos campos essenciais. Os itens abaixo são observações qualitativas para melhorar leitura e clareza."}
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 12.5,
+                        color: "#5a5a55",
+                        lineHeight: 1.5,
+                        margin: "6px 0 0",
+                      }}
+                    >
+                      {pontosAtencao.length === 0
+                        ? "Nenhum ponto de atenção editorial relevante."
+                        : `${pontosAtencao.length} ${pontosAtencao.length === 1 ? "ponto de atenção editorial" : "pontos de atenção editoriais"} identificados para melhorar legibilidade e clareza.`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Campos */}
+              <div style={{ ...CARD, marginBottom: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 14,
+                  }}
+                >
                   <p
                     style={{
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: 500,
                       color: "#0a0a0a",
                       margin: 0,
                     }}
                   >
-                    Formatação e compatibilidade ATS
+                    Campos do currículo
                   </p>
-                  <p
-                    style={{
-                      fontSize: 12.5,
-                      color: "#5a5a55",
-                      lineHeight: 1.5,
-                      margin: "4px 0 0",
-                    }}
-                  >
-                    {ptsFaltando === 0
-                      ? "Você tem todos os campos essenciais. Os itens abaixo são editoriais e servem como orientação, não como desconto de score."
-                      : "Sua nota aqui depende dos campos essenciais. Os itens abaixo são observações qualitativas para melhorar leitura e clareza."}
-                  </p>
-                </div>
-              </div>
-
-              {/* Campos grid using FormatItem */}
-              <div style={{ marginBottom: 16 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: 10,
-                  }}
-                >
-                  <SubLabel>CAMPOS DO CURRÍCULO</SubLabel>
                   <span
                     style={{
                       fontFamily: MONO,
                       fontSize: 11,
-                      color: MUTED,
-                      marginLeft: 8,
+                      color: "#8a8a85",
                     }}
                   >
                     {camposPresentes}/{data.formato_cv.campos.length}{" "}
@@ -2832,13 +3247,58 @@ export default function ResultadoPage() {
                   }}
                   className="res-campos-grid"
                 >
-                  {data.formato_cv.campos.map((campo) => (
-                    <FormatItem
-                      key={campo.nome}
-                      label={campo.nome}
-                      ok={campo.presente}
-                    />
-                  ))}
+                  {data.formato_cv.campos.map((campo) => {
+                    const visualPenaltyPerMissingField = 1;
+                    return (
+                      <div
+                        key={campo.nome}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          background: campo.presente
+                            ? "rgba(198,255,58,0.1)"
+                            : "rgba(239,68,68,0.05)",
+                          border: `1px solid ${campo.presente ? "rgba(110,150,20,0.15)" : "rgba(239,68,68,0.12)"}`,
+                          borderRadius: 8,
+                          padding: "8px 11px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: campo.presente ? "#405410" : "#ef4444",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {campo.presente ? "✓" : "✕"}
+                        </span>
+                        <span
+                          style={{
+                            flex: 1,
+                            fontSize: 12,
+                            color: campo.presente ? "#2a2a28" : "#991b1b",
+                          }}
+                        >
+                          {campo.nome}
+                        </span>
+                        {!campo.presente && (
+                          <span
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: "#ef4444",
+                              flexShrink: 0,
+                            }}
+                          >
+                            -{visualPenaltyPerMissingField}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <p
                   style={{
@@ -2868,195 +3328,387 @@ export default function ResultadoPage() {
               </div>
 
               {/* O que está correto */}
-              {oks.length > 0 && (
+              <div style={{ ...CARD, marginBottom: 10 }}>
                 <div
                   style={{
-                    borderTop: `1px solid ${BORDER_BASE}`,
-                    paddingTop: 16,
-                    marginBottom: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 14,
                   }}
                 >
-                  <SubLabel>O QUE ESTÁ CORRETO</SubLabel>
-                  <div
-                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                  <p
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "#0a0a0a",
+                      margin: 0,
+                    }}
                   >
-                    {(isGuestView ? oks.slice(0, GUEST_VISIBLE) : oks).map(
-                      (p) => (
+                    O que está correto
+                  </p>
+                </div>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
+                  {oks.length === 0 && (
+                    <span
+                      style={{
+                        fontSize: 12.5,
+                        color: "#8a8a85",
+                      }}
+                    >
+                      Nenhum item positivo de formatação identificado.
+                    </span>
+                  )}
+                  {(isGuestView ? oks.slice(0, GUEST_VISIBLE) : oks).map(
+                    (p) => (
+                      <div
+                        key={p.titulo}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 12,
+                          background: "rgba(198,255,58,0.07)",
+                          border: "1px solid rgba(110,150,20,0.15)",
+                          borderRadius: 10,
+                          padding: "12px 14px",
+                        }}
+                      >
+                        <IssueIcon tipo="ok" />
+                        <div style={{ flex: 1 }}>
+                          <p
+                            style={{
+                              fontSize: 13.5,
+                              fontWeight: 500,
+                              color: "#0a0a0a",
+                              margin: 0,
+                            }}
+                          >
+                            {p.titulo}
+                          </p>
+                          <p
+                            style={{
+                              fontSize: 12.5,
+                              color: "#5a5a55",
+                              lineHeight: 1.5,
+                              margin: "4px 0 0",
+                            }}
+                          >
+                            {p.descricao}
+                          </p>
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+
+              {/* Problemas */}
+              <div style={{ ...CARD, marginBottom: 0 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginBottom: 14,
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "#0a0a0a",
+                      margin: 0,
+                    }}
+                  >
+                    Pontos de atenção
+                  </p>
+                  {criticos.length > 0 && (
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        padding: "2px 7px",
+                        borderRadius: 99,
+                        background: "rgba(239,68,68,0.1)",
+                        color: "#991b1b",
+                      }}
+                    >
+                      {criticos.length} crítico{criticos.length > 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {atencoes.length > 0 && (
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        padding: "2px 7px",
+                        borderRadius: 99,
+                        background: "rgba(245,158,11,0.12)",
+                        color: "#92400e",
+                      }}
+                    >
+                      {atencoes.length} atenção
+                    </span>
+                  )}
+                </div>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
+                  {pontosAtencao.length === 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        background: "rgba(198,255,58,0.1)",
+                        border: "1px solid rgba(110,150,20,0.15)",
+                        borderRadius: 10,
+                        padding: "12px 14px",
+                      }}
+                    >
+                      <IssueIcon tipo="ok" />
+                      <p
+                        style={{
+                          fontSize: 13.5,
+                          fontWeight: 500,
+                          color: "#2a3a08",
+                          margin: 0,
+                        }}
+                      >
+                        Tudo ok — nenhum problema de formato encontrado
+                      </p>
+                    </div>
+                  )}
+                  {(isGuestView
+                    ? pontosAtencao.slice(0, GUEST_VISIBLE)
+                    : pontosAtencao
+                  ).map((p) => (
+                    <div
+                      key={p.titulo}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 12,
+                        background:
+                          p.tipo === "critico"
+                            ? "rgba(239,68,68,0.05)"
+                            : p.tipo === "atencao"
+                              ? "rgba(245,158,11,0.05)"
+                              : "rgba(198,255,58,0.05)",
+                        border: `1px solid ${p.tipo === "critico" ? "rgba(239,68,68,0.15)" : p.tipo === "atencao" ? "rgba(245,158,11,0.15)" : "rgba(110,150,20,0.15)"}`,
+                        borderRadius: 10,
+                        padding: "12px 14px",
+                      }}
+                    >
+                      <IssueIcon tipo={p.tipo} />
+                      <div style={{ flex: 1 }}>
                         <div
-                          key={p.titulo}
                           style={{
                             display: "flex",
-                            alignItems: "flex-start",
-                            gap: 12,
-                            background: "rgba(198,255,58,0.07)",
-                            border: "1px solid rgba(110,150,20,0.15)",
-                            borderRadius: 10,
-                            padding: "12px 14px",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 8,
                           }}
                         >
-                          <IssueIcon tipo="ok" />
-                          <div style={{ flex: 1 }}>
-                            <p
-                              style={{
-                                fontSize: 13.5,
-                                fontWeight: 500,
-                                color: "#0a0a0a",
-                                margin: 0,
-                              }}
-                            >
-                              {p.titulo}
-                            </p>
-                            <p
-                              style={{
-                                fontSize: 12.5,
-                                color: "#5a5a55",
-                                lineHeight: 1.5,
-                                margin: "4px 0 0",
-                              }}
-                            >
-                              {p.descricao}
-                            </p>
-                          </div>
+                          <p
+                            style={{
+                              fontSize: 13.5,
+                              fontWeight: 500,
+                              color: "#0a0a0a",
+                              margin: 0,
+                            }}
+                          >
+                            {p.titulo}
+                          </p>
                         </div>
-                      ),
-                    )}
-                  </div>
+                        <p
+                          style={{
+                            fontSize: 12.5,
+                            color: "#5a5a55",
+                            lineHeight: 1.5,
+                            margin: "4px 0 0",
+                          }}
+                        >
+                          {p.descricao}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  {isGuestView && pontosAtencao.length > GUEST_VISIBLE && (
+                    <GuestBlurOverlay
+                      count={Math.min(
+                        pontosAtencao.length - GUEST_VISIBLE,
+                        GUEST_MOCK_PROBLEMAS.length,
+                      )}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 8,
+                        }}
+                      >
+                        {GUEST_MOCK_PROBLEMAS.slice(
+                          0,
+                          Math.min(
+                            pontosAtencao.length - GUEST_VISIBLE,
+                            GUEST_MOCK_PROBLEMAS.length,
+                          ),
+                        ).map((p) => (
+                          <div
+                            key={p.titulo}
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: 12,
+                              background:
+                                p.tipo === "critico"
+                                  ? "rgba(239,68,68,0.05)"
+                                  : "rgba(245,158,11,0.05)",
+                              border: "1px solid rgba(10,10,10,0.06)",
+                              borderRadius: 10,
+                              padding: "12px 14px",
+                            }}
+                          >
+                            <IssueIcon tipo={p.tipo} />
+                            <div style={{ flex: 1 }}>
+                              <p
+                                style={{
+                                  fontSize: 13.5,
+                                  fontWeight: 500,
+                                  color: "#0a0a0a",
+                                  margin: "0 0 4px",
+                                }}
+                              >
+                                {p.titulo}
+                              </p>
+                              <p
+                                style={{
+                                  fontSize: 12.5,
+                                  color: "#5a5a55",
+                                  lineHeight: 1.5,
+                                  margin: 0,
+                                }}
+                              >
+                                {p.descricao}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </GuestBlurOverlay>
+                  )}
                 </div>
-              )}
-            </SecCard>
-          ) : (
-            <SecCard num="S3" title="Formatação e Campos" color={BLUE}>
-              <div style={{ textAlign: "center", padding: "16px 0" }}>
-                <p
-                  style={{
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    color: "#2a2a28",
-                    margin: "0 0 6px",
-                  }}
-                >
-                  Análise de formato não incluída nesta análise
-                </p>
-                <p
-                  style={{
-                    fontSize: 12.5,
-                    color: "#8a8a85",
-                    margin: "0 0 20px",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Refaça a análise para obter a avaliação completa de ATS e
-                  compatibilidade de formato.
-                </p>
-                <a
-                  href="/adaptar"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    background: "#0a0a0a",
-                    color: "#fff",
-                    borderRadius: 10,
-                    padding: "10px 18px",
-                    fontSize: 13,
-                    fontWeight: 500,
-                    textDecoration: "none",
-                  }}
-                >
-                  Refazer análise
-                </a>
               </div>
-            </SecCard>
-          )}
-
-          {/* ════════════════════════════════════════════════════
-              SEÇÃO 4 — Pontos de Atenção
-          ════════════════════════════════════════════════════ */}
-          {pontosAtencao.length > 0 && (
-            <SecCard num="S4" title="Pontos de Atenção" warn={true}>
+            </>
+          ) : (
+            <div style={{ ...CARD, textAlign: "center", padding: "32px 24px" }}>
               <p
                 style={{
                   fontSize: 13.5,
-                  color: "#5a4a30",
-                  lineHeight: 1.55,
-                  margin: "0 0 14px",
-                  maxWidth: 680,
+                  fontWeight: 500,
+                  color: "#2a2a28",
+                  margin: "0 0 6px",
                 }}
               >
-                Sinais detectados que podem influenciar a percepção do
-                recrutador. Os itens críticos e de atenção estão listados
-                abaixo.
+                Análise de formato não incluída nesta análise
               </p>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                {(isGuestView
-                  ? pontosAtencao.slice(0, GUEST_VISIBLE)
-                  : pontosAtencao
-                ).map((p) => (
-                  <WarnCard
-                    key={p.titulo}
-                    title={p.titulo}
-                    body={p.descricao}
-                  />
-                ))}
-              </div>
-              {isGuestView && pontosAtencao.length > GUEST_VISIBLE && (
-                <GuestBlurOverlay
-                  count={Math.min(
-                    pontosAtencao.length - GUEST_VISIBLE,
-                    GUEST_MOCK_PROBLEMAS.length,
-                  )}
-                >
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                    {GUEST_MOCK_PROBLEMAS.slice(
-                      0,
-                      Math.min(
-                        pontosAtencao.length - GUEST_VISIBLE,
-                        GUEST_MOCK_PROBLEMAS.length,
-                      ),
-                    ).map((p) => (
-                      <WarnCard
-                        key={p.titulo}
-                        title={p.titulo}
-                        body={p.descricao}
-                      />
-                    ))}
-                  </div>
-                </GuestBlurOverlay>
-              )}
-            </SecCard>
+              <p
+                style={{
+                  fontSize: 12.5,
+                  color: "#8a8a85",
+                  margin: "0 0 20px",
+                  lineHeight: 1.5,
+                }}
+              >
+                Refaça a análise para obter a avaliação completa de ATS e
+                compatibilidade de formato.
+              </p>
+              <a
+                href="/adaptar"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  background: "#0a0a0a",
+                  color: "#fff",
+                  borderRadius: 10,
+                  padding: "10px 18px",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  textDecoration: "none",
+                }}
+              >
+                Refazer análise
+              </a>
+            </div>
           )}
 
-          {/* ════════════════════════════════════════════════════
-              SEÇÃO 5 — Candidatos Fortes
-          ════════════════════════════════════════════════════ */}
           {Array.isArray(data.sinais_referencia) &&
             data.sinais_referencia.length > 0 && (
-              <SecCard num="S5" title="O que candidatos fortes têm">
-                <p
-                  style={{
-                    fontSize: 13.5,
-                    color: "#5a5a55",
-                    lineHeight: 1.55,
-                    margin: "0 0 16px",
-                    maxWidth: 680,
-                  }}
-                >
-                  Sinais que aparecem consistentemente em CVs aprovados para{" "}
-                  <strong>{data.vaga.cargo}</strong>. Não entram no score — mas
-                  podem ser o diferencial em candidaturas competitivas.
-                </p>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 10,
-                  }}
-                  className="res-s5-grid"
-                >
-                  {data.sinais_referencia.map((item) => (
-                    <ReferenceCard key={item} text={item} />
-                  ))}
+              <>
+                <SectionHeader
+                  label="SINAIS DE REFERÊNCIA"
+                  title="O que costuma aparecer em candidatos fortes"
+                  description="Esses itens não entram no score. São sinais comuns para esse tipo de vaga que podem fortalecer o CV se forem verdadeiros no seu histórico."
+                />
+                <div style={{ ...CARD, marginBottom: 10 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                    }}
+                  >
+                    {data.sinais_referencia.map((item) => (
+                      <div
+                        key={item}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 12,
+                          background: "rgba(10,10,10,0.02)",
+                          border: "1px solid rgba(10,10,10,0.06)",
+                          borderRadius: 10,
+                          padding: "12px 14px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: "50%",
+                            background: "rgba(10,10,10,0.06)",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "#0a0a0a",
+                          }}
+                        >
+                          +
+                        </span>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 13,
+                            lineHeight: 1.55,
+                            color: "#2a2a28",
+                          }}
+                        >
+                          {item}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </SecCard>
+              </>
             )}
 
           {/* ── Preview ── */}
@@ -3064,7 +3716,6 @@ export default function ResultadoPage() {
             <>
               <SectionHeader
                 label="PRÉVIA DA OTIMIZAÇÃO"
-                sectionBadge="S6"
                 title="Veja como seu currículo pode ficar mais aderente à vaga"
                 description="Este é um exemplo gerado pela análise. Após liberar o CV, criamos a versão final pronta para download."
               />
@@ -3266,55 +3917,12 @@ export default function ResultadoPage() {
           )}
 
           {/* ── CTA ── */}
-          {!isDemo && !isDownloadReady && data.score.scoreAtualBase < 65 && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 10,
-                background: AMBER_SOFT,
-                border: `1px solid ${AMBER_BORDER}`,
-                borderRadius: 10,
-                padding: "12px 18px",
-                marginTop: 32,
-                marginBottom: 14,
-              }}
-            >
-              <div
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: AMBER,
-                  flexShrink: 0,
-                  marginTop: 5,
-                }}
-              />
-              <p
-                style={{
-                  fontSize: 13,
-                  color: AMBER_TEXT,
-                  lineHeight: 1.55,
-                  margin: 0,
-                }}
-              >
-                Vagas como esta costumam receber CVs com score acima de 65. Com
-                os ajustes disponíveis, você pode ir de{" "}
-                <strong>{data.score.scoreAtualBase}</strong> →{" "}
-                <strong style={{ color: AMBER_TEXT }}>{scoreProjetado}</strong>{" "}
-                — dentro da faixa competitiva.
-              </p>
-            </div>
-          )}
           <div
             style={{
               background: "#0a0a0a",
               borderRadius: 20,
               overflow: "hidden",
-              marginTop:
-                isDemo || isDownloadReady || data.score.scoreAtualBase >= 65
-                  ? 32
-                  : 0,
+              marginTop: 32,
             }}
           >
             {/* Urgency bar */}
@@ -4304,8 +4912,6 @@ export default function ResultadoPage() {
           .res-cta-grid { grid-template-columns: 1fr !important; }
           .res-diff-grid { grid-template-columns: 1fr !important; }
           .res-campos-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .res-s1-grid { grid-template-columns: 1fr !important; }
-          .res-s5-grid { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 768px) {
           .resultado-content { padding: 12px 16px 60px !important; }
