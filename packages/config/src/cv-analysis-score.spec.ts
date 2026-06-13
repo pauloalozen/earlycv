@@ -68,7 +68,7 @@ test("resolveCvAnalysisScores supports requirements_v2 payloads and selected key
     { selectedMissingKeywords: ["Python"] },
   );
 
-  assert.equal(result.scoreBefore, 70);
+  assert.equal(result.scoreBefore, 76);
   assert.equal(result.scoreAfter, 100);
   assert.deepEqual(result.selectedMissingKeywords, ["Python"]);
 });

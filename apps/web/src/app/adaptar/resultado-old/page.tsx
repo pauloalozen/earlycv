@@ -1208,10 +1208,7 @@ export default function ResultadoPage() {
   const _totalAjustes =
     data.ajustes_conteudo.length + data.keywords.ausentes.length;
 
-  const scoreProjetado = Math.min(
-    100,
-    data.score.scoreAposLiberarBase + ptsKwSelecionadas,
-  );
+  const scoreProjetado = data.score.scoreAposLiberarBase;
   const scoreMaxPossivel = data.score.scoreAposLiberarBase;
 
   const criticos =

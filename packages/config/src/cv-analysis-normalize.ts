@@ -213,7 +213,12 @@ function deriveProjectedCoveragePercent(
   if (coveragePercent === 100 || coveragePercent === 0) {
     return coveragePercent;
   }
-  return (coveragePercent + 25) as 25 | 50 | 75 | 100;
+
+  if (coveragePercent >= 50) {
+    return 100;
+  }
+
+  return 75;
 }
 
 function deriveVersionedRequirementBuckets(raw: CvAnalysisLike): null | {
@@ -671,7 +676,10 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
     100,
   );
   const pontosDisponiveisBase = clamp(
-    ajustesConteudoSecao1 + melhoriasFormatacaoSecao3,
+    ajustesConteudoSecao1 +
+      keywordsPossiveisTotal +
+      keywordsAusentesTotal +
+      melhoriasFormatacaoSecao3,
     0,
     100,
   );

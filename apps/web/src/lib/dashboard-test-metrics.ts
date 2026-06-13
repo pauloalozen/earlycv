@@ -39,10 +39,6 @@ function parseNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function normalizeKeyword(value: string): string {
-  return value.trim().toLocaleLowerCase("pt-BR");
-}
-
 function resolveCvAnalysisScores(
   adaptedContentJson: unknown,
   options: ExtractDashboardAnalysisSignalOptions = {},
@@ -90,19 +86,9 @@ function resolveCvAnalysisScores(
   if (looksNormalizedHistoricalPayload) {
     try {
       const normalized = normalizeData(parsed as CvAnalysisData);
-      const selectedSet = new Set(
-        selectedMissingKeywords.map((keyword) => normalizeKeyword(keyword)),
-      );
-      const selectedKeywordsPoints = normalized.keywords.ausentes
-        .filter((keyword) => selectedSet.has(normalizeKeyword(keyword.kw)))
-        .reduce((sum, keyword) => sum + keyword.pontos, 0);
-
       return {
         scoreBefore: normalized.score.scoreAtualBase,
-        scoreAfter: Math.min(
-          100,
-          normalized.score.scoreAposLiberarBase + selectedKeywordsPoints,
-        ),
+        scoreAfter: normalized.score.scoreAposLiberarBase,
         selectedMissingKeywords,
       };
     } catch {

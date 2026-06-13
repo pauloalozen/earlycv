@@ -93,17 +93,7 @@ function extractAdaptationScores(content: unknown): {
   if (hasNormalizedPayload) {
     try {
       const data = normalizeData(parsed as never);
-      // Mirror resultado/page.tsx exactly: direct (non-normalized) keyword match
-      const frozenKeywords = Array.isArray(parsed.selectedMissingKeywords)
-        ? (parsed.selectedMissingKeywords as string[])
-        : [];
-      const effectiveSelected = new Set(frozenKeywords);
-      const ptsKw = (
-        data.keywords.ausentes as Array<{ kw: string; pontos: number }>
-      )
-        .filter((k) => effectiveSelected.has(k.kw))
-        .reduce((s, k) => s + k.pontos, 0);
-      const scoreAfter = Math.min(100, data.score.scoreAposLiberarBase + ptsKw);
+      const scoreAfter = data.score.scoreAposLiberarBase;
       return { scoreBefore: data.score.scoreAtualBase, scoreAfter };
     } catch {
       // fall through to legacy path

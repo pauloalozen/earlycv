@@ -88,11 +88,12 @@ test("normalizeData prefers requirement-driven scoring for requirements_v2 paylo
   assert.equal(normalized.secoes.competencias.score, 22);
   assert.equal(normalized.secoes.formatacao.score, 9);
   assert.equal(normalized.score.scoreAtualBase, 61);
-  assert.equal(normalized.score.scoreAposLiberarBase, 65);
+  assert.equal(normalized.score.scoreAposLiberarBase, 87);
   assert.deepEqual(
     normalized.keywords.presentes.map((item) => item.kw),
     ["Experiencia com SQL"],
   );
+  assert.equal(normalized.ajustes_conteudo[0]?.pontos, 8);
   assert.equal(normalized.ajustes_conteudo[0]?.coveragePercent, 50);
   assert.deepEqual(
     normalized.keywords.possiveis?.map((item) => item.kw),

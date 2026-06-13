@@ -23,10 +23,6 @@ function parseNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function normalizeKeyword(value: string): string {
-  return value.trim().toLocaleLowerCase("pt-BR");
-}
-
 function canResolveNormalizedHistoricalPayload(
   parsed: Record<string, unknown>,
 ): boolean {
@@ -75,23 +71,9 @@ export function resolveCvAnalysisScores(
   if (canResolveNormalizedHistoricalPayload(parsed)) {
     try {
       const normalized = normalizeData(parsed as never);
-      const selectedSet = new Set(
-        selectedMissingKeywords.map((keyword) => normalizeKeyword(keyword)),
-      );
-      const selectedKeywordsPoints = normalized.keywords.ausentes
-        .filter((keyword: { kw: string; pontos: number }) => {
-          return selectedSet.has(normalizeKeyword(keyword.kw));
-        })
-        .reduce((sum: number, keyword: { kw: string; pontos: number }) => {
-          return sum + keyword.pontos;
-        }, 0);
-
       return {
         scoreBefore: normalized.score.scoreAtualBase,
-        scoreAfter: Math.min(
-          100,
-          normalized.score.scoreAposLiberarBase + selectedKeywordsPoints,
-        ),
+        scoreAfter: normalized.score.scoreAposLiberarBase,
         selectedMissingKeywords,
       };
     } catch {

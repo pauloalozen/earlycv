@@ -104,9 +104,9 @@ test("extractDashboardAnalysisSignal resolves historical normalized-analysis pay
   const signal = extractDashboardAnalysisSignal(payload);
 
   assert.equal(signal.adjustments.scoreBefore, 58);
-  assert.equal(signal.adjustments.scoreFinal, 72);
-  assert.equal(signal.score, 72);
-  assert.equal(signal.improvement, 14);
+  assert.equal(signal.adjustments.scoreFinal, 87);
+  assert.equal(signal.score, 87);
+  assert.equal(signal.improvement, 29);
 });
 
 test("extractDashboardAnalysisSignal preserves scalar fallback for malformed historical payloads", () => {
@@ -146,26 +146,20 @@ test("extractDashboardAnalysisSignal uses normalized final score instead of raw 
   assert.notEqual(signal.score, 99);
 });
 
-test("extractDashboardAnalysisSignal adds selected missing keywords to final score", () => {
+test("extractDashboardAnalysisSignal keeps normalized final score when selected missing keywords are present", () => {
   const payload = makeAnalysisPayload() as CvAnalysisData & {
     selectedMissingKeywords?: string[];
   };
   payload.selectedMissingKeywords = ["Python"];
   const normalized = normalizeData(payload);
-  const selectedKwPoints = normalized.keywords.ausentes
-    .filter((item) => item.kw === "Python")
-    .reduce((sum, item) => sum + item.pontos, 0);
-  const expectedFinal = Math.min(
-    100,
-    normalized.score.scoreAposLiberarBase + selectedKwPoints,
-  );
+  const expectedFinal = normalized.score.scoreAposLiberarBase;
 
   const signal = extractDashboardAnalysisSignal(payload);
 
   assert.equal(signal.score, expectedFinal);
 });
 
-test("extractDashboardAnalysisSignal matches selected keywords case-insensitively", () => {
+test("extractDashboardAnalysisSignal keeps normalized final score for case-insensitive selected keywords", () => {
   const payload = makeAnalysisPayload() as CvAnalysisData & {
     selectedMissingKeywords?: string[];
   };
@@ -174,23 +168,17 @@ test("extractDashboardAnalysisSignal matches selected keywords case-insensitivel
   payload.selectedMissingKeywords = ["python"];
 
   const normalized = normalizeData(payload);
-  const expectedFinal = Math.min(
-    100,
-    normalized.score.scoreAposLiberarBase + 15,
-  );
+  const expectedFinal = normalized.score.scoreAposLiberarBase;
 
   const signal = extractDashboardAnalysisSignal(payload);
 
   assert.equal(signal.score, expectedFinal);
 });
 
-test("extractDashboardAnalysisSignal applies selected keywords from runtime override", () => {
+test("extractDashboardAnalysisSignal keeps normalized final score for runtime selected keywords override", () => {
   const payload = makeAnalysisPayload();
   const normalized = normalizeData(payload);
-  const expectedFinal = Math.min(
-    100,
-    normalized.score.scoreAposLiberarBase + 15,
-  );
+  const expectedFinal = normalized.score.scoreAposLiberarBase;
 
   const signal = extractDashboardAnalysisSignal(payload, {
     selectedMissingKeywords: ["Python"],

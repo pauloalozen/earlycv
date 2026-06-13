@@ -74,8 +74,8 @@ describe("normalizeData", () => {
     expect(normalized.score.melhoriasFormatacaoSecao3).toBe(4);
     expect(normalized.score.camposIndisponiveisSecao3).toBe(3);
     expect(normalized.score.scoreAtualBase).toBe(58);
-    expect(normalized.score.pontosDisponiveisBase).toBe(14);
-    expect(normalized.score.scoreAposLiberarBase).toBe(72);
+    expect(normalized.score.pontosDisponiveisBase).toBe(29);
+    expect(normalized.score.scoreAposLiberarBase).toBe(87);
   });
 
   it("keeps scoreAposLiberarBase clamped to 100", () => {

@@ -671,7 +671,10 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
     100,
   );
   const pontosDisponiveisBase = clamp(
-    ajustesConteudoSecao1 + melhoriasFormatacaoSecao3,
+    ajustesConteudoSecao1 +
+      keywordsPossiveisTotal +
+      keywordsAusentesTotal +
+      melhoriasFormatacaoSecao3,
     0,
     100,
   );
