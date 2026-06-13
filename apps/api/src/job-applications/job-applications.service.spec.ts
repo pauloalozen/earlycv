@@ -1010,7 +1010,7 @@ test("getHighlightsSummary counts persisted scoreAfter only for legacy applicati
   const summary = await service.getHighlightsSummary("user-1");
 
   assert.equal(summary.activeApplicationsCount, 2);
-  assert.equal(summary.analyzedCvsCount, 1);
+  assert.equal(summary.analyzedCvsCount, 2);
   assert.equal(summary.averageScore, 84);
 });
 
@@ -1043,7 +1043,7 @@ test("getHighlightsSummary does not trust persisted scoreAfter when adaptations 
   const summary = await service.getHighlightsSummary("user-1");
 
   assert.equal(summary.activeApplicationsCount, 1);
-  assert.equal(summary.analyzedCvsCount, 0);
+  assert.equal(summary.analyzedCvsCount, 1);
   assert.equal(summary.averageScore, null);
 });
 

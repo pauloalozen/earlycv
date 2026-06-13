@@ -455,6 +455,16 @@ export function AppHeader({
                       ),
                     },
                     {
+                      href: "/analises",
+                      label: "Análises",
+                      icon: (
+                        <>
+                          <circle cx="11" cy="11" r="8" />
+                          <path d="m21 21-4.35-4.35" />
+                        </>
+                      ),
+                    },
+                    {
                       href: "/vagas",
                       label: "Vagas",
                       icon: (
@@ -825,6 +835,16 @@ export function AppHeader({
                     <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
                     <path d="M9 12h6" />
                     <path d="M9 16h6" />
+                  </>
+                ),
+              },
+              {
+                href: "/analises",
+                label: "Análises",
+                icon: (
+                  <>
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.35-4.35" />
                   </>
                 ),
               },

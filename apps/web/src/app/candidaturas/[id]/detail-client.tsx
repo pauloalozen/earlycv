@@ -995,20 +995,6 @@ function AnaliseRow({
                 year: "numeric",
               })}
             </span>
-            {adaptation.adaptedResumeId && (
-              <>
-                <span style={{ color: "#c8c6bd" }}>·</span>
-                <span
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 11,
-                    color: "#6a6560",
-                  }}
-                >
-                  {adaptation.adaptedResumeId.slice(0, 8)}
-                </span>
-              </>
-            )}
             <span style={{ color: "#c8c6bd" }}>·</span>
             <span
               style={{
@@ -1018,7 +1004,7 @@ function AnaliseRow({
                 letterSpacing: 0.3,
               }}
             >
-              {adaptation.id.slice(0, 8)}
+              ID: {adaptation.id}
             </span>
           </div>
         </div>
@@ -3469,6 +3455,9 @@ function StatusPopover({
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 500, color: "#0a0a0a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {date}{a.scoreAfter !== null ? ` · ${a.scoreAfter}%` : ""}
+                  </div>
+                  <div style={{ fontFamily: MONO, fontSize: 10, color: "#b0aea6", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    ID: {a.id}
                   </div>
                 </div>
               </button>

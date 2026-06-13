@@ -300,11 +300,18 @@ export class JobApplicationsService {
 
     let activeApplicationsCount = 0;
     let analyzedCvsCount = 0;
+    let scoredCount = 0;
     let totalScore = 0;
 
     for (const item of items) {
       if (ACTIVE_SUMMARY_STATUSES.has(item.status)) {
         activeApplicationsCount += 1;
+      }
+
+      if (item.cvAdaptations.length > 0) {
+        analyzedCvsCount += item.cvAdaptations.length;
+      } else if (typeof item.scoreAfter === "number") {
+        analyzedCvsCount += 1;
       }
 
       const summary = deriveSummaryFromAdaptations(
@@ -317,7 +324,7 @@ export class JobApplicationsService {
           : null);
 
       if (resolvedScore !== null) {
-        analyzedCvsCount += 1;
+        scoredCount += 1;
         totalScore += resolvedScore;
       }
     }
@@ -326,7 +333,7 @@ export class JobApplicationsService {
       activeApplicationsCount,
       analyzedCvsCount,
       averageScore:
-        analyzedCvsCount > 0 ? Math.round(totalScore / analyzedCvsCount) : null,
+        scoredCount > 0 ? Math.round(totalScore / scoredCount) : null,
     };
   }
 

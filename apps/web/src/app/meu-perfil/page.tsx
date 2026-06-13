@@ -119,8 +119,6 @@ export default async function MeuPerfilPage() {
     totalFields > 0
       ? Math.round(((totalFields - missingTotal) / totalFields) * 100)
       : 0;
-  const profileSuggestions = masterResume ? 2 : 0;
-
   return (
     <PageShell>
       <main
@@ -142,7 +140,7 @@ export default async function MeuPerfilPage() {
             <h1 className="text-[clamp(36px,4vw,44px)] font-medium leading-none tracking-[-0.04em]">
               Olá{firstName ? `, ${firstName}` : ""}{" "}
               <em
-                className="not-italic font-normal text-[#5a5a55]"
+                className="not-italic font-normal"
                 style={{ fontFamily: "var(--font-instrument-serif)" }}
               >
                 tudo certo por aqui.
@@ -205,33 +203,6 @@ export default async function MeuPerfilPage() {
                           ? "Você confere e corrige o que a IA extraiu do seu PDF. Quanto mais completo, melhores as adaptações."
                           : "Cadastre o CV base para liberar o fluxo completo de adaptação."}
                       </p>
-                      {profileSuggestions > 0 && (
-                        <div className="mt-3.5 flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-[10px] tracking-[0.03em] text-[#8a8a85]">
-                            {profileSuggestions} sugestões da IA:
-                          </span>
-                          <span
-                            className="rounded-full px-[11px] py-[5px] text-[12px] font-medium"
-                            style={{
-                              color: "#3a5008",
-                              background: "rgba(198,255,58,0.18)",
-                              border: "1px solid rgba(110,150,20,0.22)",
-                            }}
-                          >
-                            Adicione seu telefone
-                          </span>
-                          <span
-                            className="rounded-full px-[11px] py-[5px] text-[12px] font-medium"
-                            style={{
-                              color: "#3a5008",
-                              background: "rgba(198,255,58,0.18)",
-                              border: "1px solid rgba(110,150,20,0.22)",
-                            }}
-                          >
-                            Fortaleça seu resumo
-                          </span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -291,48 +262,62 @@ export default async function MeuPerfilPage() {
 
             {/* 5 · KPIs */}
             <div className="grid gap-3 md:grid-cols-3">
-              {[
-                {
-                  label: "Candidaturas ativas",
-                  value: kpisAvailable
+              <Link
+                href="/candidaturas"
+                className="group rounded-[12px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] px-5 py-4 transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-px hover:border-[rgba(10,10,10,0.16)] hover:shadow-[0_8px_20px_-10px_rgba(10,10,10,0.18)] block"
+              >
+                <p className="font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-[#8a8a85]">
+                  Candidaturas ativas
+                </p>
+                <p className="mt-1.5 text-[32px] font-medium leading-none tracking-[-0.05em] tabular-nums text-[#0a0a0a]">
+                  {kpisAvailable
                     ? String(highlightsSummary.activeApplicationsCount)
-                    : "Erro ao carregar",
-                  accent: false,
-                },
-                {
-                  label: "CVs analisados",
-                  value: kpisAvailable
+                    : "Erro ao carregar"}
+                </p>
+              </Link>
+
+              <Link
+                href="/analises"
+                className="group rounded-[12px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] px-5 py-4 transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-px hover:border-[rgba(10,10,10,0.16)] hover:shadow-[0_8px_20px_-10px_rgba(10,10,10,0.18)] block"
+              >
+                <p className="font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-[#8a8a85]">
+                  CVs analisados
+                </p>
+                <p
+                  className="mt-1.5 text-[32px] font-medium leading-none tracking-[-0.05em] tabular-nums"
+                  style={{
+                    color:
+                      kpisAvailable && highlightsSummary.analyzedCvsCount > 0
+                        ? "#2a6a10"
+                        : "#0a0a0a",
+                  }}
+                >
+                  {kpisAvailable
                     ? String(highlightsSummary.analyzedCvsCount)
-                    : "Erro ao carregar",
-                  accent:
-                    kpisAvailable && highlightsSummary.analyzedCvsCount > 0,
-                },
-                {
-                  label: "Score médio",
-                  value: !kpisAvailable
+                    : "Erro ao carregar"}
+                </p>
+              </Link>
+
+              <div className="rounded-[12px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] px-5 py-4">
+                <p className="font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-[#8a8a85]">
+                  Score médio
+                </p>
+                <p
+                  className="mt-1.5 text-[32px] font-medium leading-none tracking-[-0.05em] tabular-nums"
+                  style={{
+                    color:
+                      kpisAvailable && highlightsSummary.averageScore !== null
+                        ? "#2a6a10"
+                        : "#0a0a0a",
+                  }}
+                >
+                  {!kpisAvailable
                     ? "Erro ao carregar"
                     : highlightsSummary.averageScore === null
                       ? "—"
-                      : `${highlightsSummary.averageScore}%`,
-                  accent:
-                    kpisAvailable && highlightsSummary.averageScore !== null,
-                },
-              ].map((kpi) => (
-                <div
-                  key={kpi.label}
-                  className="rounded-[12px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] px-5 py-4"
-                >
-                  <p className="font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-[#8a8a85]">
-                    {kpi.label}
-                  </p>
-                  <p
-                    className="mt-1.5 text-[32px] font-medium leading-none tracking-[-0.05em] tabular-nums"
-                    style={{ color: kpi.accent ? "#2a6a10" : "#0a0a0a" }}
-                  >
-                    {kpi.value}
-                  </p>
-                </div>
-              ))}
+                      : `${highlightsSummary.averageScore}%`}
+                </p>
+              </div>
             </div>
 
             {/* 6 · Candidaturas recentes */}
