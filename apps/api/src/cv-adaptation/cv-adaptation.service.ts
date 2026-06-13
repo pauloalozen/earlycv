@@ -2485,9 +2485,10 @@ export class CvAdaptationService {
 
     const mapping: Record<string, string> = {};
     for (const ajuste of ajustes) {
-      if (!ajuste.id) continue;
+      const key = ajuste.id ?? ajuste.titulo;
+      if (!key) continue;
       const text = `${ajuste.titulo ?? ""} ${ajuste.descricao ?? ""}`.toLowerCase();
-      mapping[ajuste.id] = this.inferSectionType(text);
+      mapping[key] = this.inferSectionType(text);
     }
     return mapping;
   }
