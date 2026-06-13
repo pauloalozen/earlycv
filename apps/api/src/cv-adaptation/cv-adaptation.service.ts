@@ -1203,6 +1203,15 @@ export class CvAdaptationService {
     }
   }
 
+  private normalizeKeywordRuleKey(value: string): string {
+    return value
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLocaleLowerCase("pt-BR");
+  }
+
   private async resolveExistingKeywordRule(input: {
     userId: string | null;
     jobRequirementSetId: string | null;
@@ -1218,38 +1227,70 @@ export class CvAdaptationService {
       return undefined;
     }
 
-    const latest = await this.database.cvAdaptation.findFirst({
+    const recent = await this.database.cvAdaptation.findMany({
       where: {
         userId: input.userId,
         jobRequirementSetId: input.jobRequirementSetId,
       },
       orderBy: { createdAt: "desc" },
+      take: 20,
       select: {
         adaptedContentJson: true,
       },
     });
 
-    const parsed =
-      latest?.adaptedContentJson &&
-      typeof latest.adaptedContentJson === "object" &&
-      !Array.isArray(latest.adaptedContentJson)
-        ? (latest.adaptedContentJson as Record<string, unknown>)
+    const parsedRecent = recent
+      .map((entry) => {
+        const json = entry.adaptedContentJson;
+        return json && typeof json === "object" && !Array.isArray(json)
+          ? (json as Record<string, unknown>)
+          : null;
+      })
+      .filter((entry): entry is Record<string, unknown> => entry !== null);
+
+    const latest = parsedRecent[0] ?? null;
+    const latestKeywordRecord =
+      latest?.keywords &&
+      typeof latest.keywords === "object" &&
+      !Array.isArray(latest.keywords)
+        ? (latest.keywords as Record<string, unknown>)
         : null;
 
-    const keywordRecord =
-      parsed?.keywords &&
-      typeof parsed.keywords === "object" &&
-      !Array.isArray(parsed.keywords)
-        ? (parsed.keywords as Record<string, unknown>)
-        : null;
+    const frozenSelection = parsedRecent
+      .map((entry) => entry.selectedMissingKeywords)
+      .find(
+        (value): value is string[] =>
+          Array.isArray(value) &&
+          value.some(
+            (item) => typeof item === "string" && item.trim().length > 0,
+          ),
+      );
 
-    const toKeywordItems = (value: unknown) =>
+    const allowedKeys = frozenSelection?.length
+      ? new Set(
+          frozenSelection
+            .map((keyword) => this.normalizeKeywordRuleKey(keyword))
+            .filter((keyword) => keyword.length > 0),
+        )
+      : null;
+
+    const toKeywordItems = (
+      value: unknown,
+      options?: { restrictToSelection?: boolean },
+    ) =>
       Array.isArray(value)
         ? value.flatMap((entry) => {
             if (!entry || typeof entry !== "object") return [];
             const record = entry as Record<string, unknown>;
             const kw = String(record.kw ?? "").trim();
             if (!kw) return [];
+            if (
+              options?.restrictToSelection &&
+              allowedKeys &&
+              !allowedKeys.has(this.normalizeKeywordRuleKey(kw))
+            ) {
+              return [];
+            }
             const rawPoints = Number(record.pontos ?? 0);
             return [
               {
@@ -1261,9 +1302,11 @@ export class CvAdaptationService {
           })
         : [];
 
-    const presentes = toKeywordItems(keywordRecord?.presentes);
-    const possiveis = toKeywordItems(keywordRecord?.possiveis);
-    const ausentes = toKeywordItems(keywordRecord?.ausentes);
+    const presentes = toKeywordItems(latestKeywordRecord?.presentes);
+    const possiveis = toKeywordItems(latestKeywordRecord?.possiveis);
+    const ausentes = toKeywordItems(latestKeywordRecord?.ausentes, {
+      restrictToSelection: true,
+    });
 
     if (
       presentes.length === 0 &&

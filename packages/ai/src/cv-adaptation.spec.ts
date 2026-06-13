@@ -1362,6 +1362,7 @@ function buildAnalysisOutput(overrides: {
   requirementsFromModel: JobRequirementCoverage[];
   atsPresentesFromModel?: string[];
   atsAusentesFromModel?: string[];
+  palavrasAusentesFromModel?: string[];
 }) {
   return {
     vaga: { cargo: "Product Owner", empresa: "FinHub Pagamentos" },
@@ -1397,10 +1398,12 @@ function buildAnalysisOutput(overrides: {
         { kw: "backlog management", pontos: 8 },
         { kw: "KPIs", pontos: 7 },
       ],
-      ausentes: [
-        { kw: "regulatório fintech", pontos: 6 },
-        { kw: "Open Finance", pontos: 5 },
-      ],
+      ausentes: (
+        overrides.palavrasAusentesFromModel ?? [
+          "regulatório fintech",
+          "Open Finance",
+        ]
+      ).map((kw, index) => ({ kw, pontos: index === 0 ? 6 : 5 })),
     },
     formato_cv: {
       ats_score: 78,
@@ -1761,6 +1764,105 @@ describe("analyzeAndAdaptCv — reanálise Camila + Product Owner FinHub", () =>
       omitted?.requirementText,
       rule?.requirementText,
       "requirementText do omitido deve vir da régua",
+    );
+  });
+
+  it("reanálise promove keywords históricas quando elas aparecem nas evidências atuais", async () => {
+    const existingKeywordRule = {
+      presentes: [{ kw: "roadmap", pontos: 5 }],
+      possiveis: [{ kw: "produto digital", pontos: 1 }],
+      ausentes: [
+        { kw: "histórias de usuário", pontos: 5 },
+        { kw: "critérios de aceite", pontos: 5 },
+        { kw: "mercado financeiro", pontos: 1 },
+      ],
+    };
+
+    const modelRequirements: JobRequirementCoverage[] = FINHUB_REQUIREMENTS.map(
+      (requirement) => {
+        if (requirement.requirementKey === "descoberta-usuario") {
+          return {
+            ...requirement,
+            coverageStatus: "partial",
+            evidence: [
+              "conhecimento em histórias de usuário",
+              "conhecimento em critérios de aceite",
+            ],
+            gapExplanation: "",
+            recommendation: "",
+            impactScore: 10,
+          };
+        }
+
+        if (requirement.requirementKey === "fintech-regulatorio") {
+          return {
+            ...requirement,
+            coverageStatus: "partial",
+            evidence: ["mercado financeiro"],
+            gapExplanation: "",
+            recommendation: "",
+            impactScore: 6,
+          };
+        }
+
+        return {
+          ...requirement,
+          coverageStatus: "covered",
+          evidence: ["Cobertura presente no CV"],
+          gapExplanation: "",
+          recommendation: "",
+          impactScore: 10,
+        };
+      },
+    );
+
+    const client = makeAnalysisMockClient(
+      buildAnalysisOutput({
+        requirementsFromModel: modelRequirements,
+        palavrasAusentesFromModel: [
+          "histórias de usuário",
+          "critérios de aceite",
+          "mercado financeiro",
+        ],
+      }),
+    );
+
+    const output = await analyzeAndAdaptCv(client, "gpt-4o-mini", {
+      masterCvText: CAMILA_ADAPTED_CV,
+      jobDescriptionText: FINHUB_JOB,
+      canonicalJobJson: {
+        title: "Product Owner",
+        company: "FinHub Pagamentos",
+      },
+      existingRequirements: FINHUB_REQUIREMENTS,
+      existingKeywordRule,
+    });
+
+    const presentes = output.keywords.presentes.map((item) => item.kw);
+    const ausentes = output.keywords.ausentes.map((item) => item.kw);
+
+    assert.ok(
+      presentes.includes("histórias de usuário"),
+      "histórias de usuário deve sair de ausentes quando já aparece nas evidências",
+    );
+    assert.ok(
+      presentes.includes("critérios de aceite"),
+      "critérios de aceite deve sair de ausentes quando já aparece nas evidências",
+    );
+    assert.ok(
+      presentes.includes("mercado financeiro"),
+      "mercado financeiro deve sair de ausentes quando já aparece nas evidências",
+    );
+    assert.ok(
+      !ausentes.includes("histórias de usuário") &&
+        !ausentes.includes("critérios de aceite") &&
+        !ausentes.includes("mercado financeiro"),
+      "keywords reaproveitadas no CV atual não podem continuar em ausentes",
+    );
+    assert.deepEqual(
+      ausentes,
+      [],
+      "reanálise com régua congelada não pode repovoar ausentes com frases de requirements",
     );
   });
 });

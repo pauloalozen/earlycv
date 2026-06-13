@@ -3204,3 +3204,104 @@ test("service mantém comportamento sem jobApplicationsService explícito — ba
     "adaptação deve ser retornada sem jobApplicationsService explícito",
   );
 });
+
+test("resolveExistingKeywordRule filtra frases contaminadas e preserva apenas a seleção original do usuário", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findMany: async () => [
+          {
+            adaptedContentJson: {
+              keywords: {
+                presentes: [
+                  { kw: "histórias de usuário", pontos: 5 },
+                  { kw: "critérios de aceite", pontos: 5 },
+                  { kw: "mercado financeiro", pontos: 1 },
+                ],
+                possiveis: [{ kw: "produto digital", pontos: 1 }],
+                ausentes: [
+                  {
+                    kw: "Escrita de histórias de usuário e critérios de aceite",
+                    pontos: 1,
+                  },
+                  { kw: "Experiência em mercado financeiro", pontos: 1 },
+                ],
+              },
+            },
+          },
+          {
+            adaptedContentJson: {
+              selectedMissingKeywords: [
+                "histórias de usuário",
+                "critérios de aceite",
+                "mercado financeiro",
+              ],
+              keywords: {
+                ausentes: [
+                  { kw: "histórias de usuário", pontos: 5 },
+                  { kw: "critérios de aceite", pontos: 5 },
+                  { kw: "mercado financeiro", pontos: 1 },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash",
+        result: {
+          adaptedContentJson: {},
+          masterCvText: "CV",
+          previewText: "preview",
+        },
+      }),
+    },
+  );
+
+  const serviceWithPrivate = service as CvAdaptationService & {
+    resolveExistingKeywordRule(input: {
+      userId: string | null;
+      jobRequirementSetId: string | null;
+    }): Promise<
+      | {
+          presentes: Array<{ kw: string; pontos: number }>;
+          possiveis: Array<{ kw: string; pontos: number }>;
+          ausentes: Array<{ kw: string; pontos: number }>;
+        }
+      | undefined
+    >;
+  };
+
+  const rule = await serviceWithPrivate.resolveExistingKeywordRule({
+    userId: "user-1",
+    jobRequirementSetId: "req-1",
+  });
+
+  assert.deepEqual(rule, {
+    presentes: [
+      { kw: "histórias de usuário", pontos: 5 },
+      { kw: "critérios de aceite", pontos: 5 },
+      { kw: "mercado financeiro", pontos: 1 },
+    ],
+    possiveis: [{ kw: "produto digital", pontos: 1 }],
+    ausentes: [],
+  });
+});

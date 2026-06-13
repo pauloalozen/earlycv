@@ -1540,6 +1540,80 @@ function normalizeKeywordKey(value: string): string {
   return sanitizeKeywordLabel(value).toLocaleLowerCase("pt-BR");
 }
 
+function normalizeKeywordSearchText(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const REGEXP_SPECIAL_CHARS = new Set([
+  "\\",
+  "^",
+  "$",
+  ".",
+  "*",
+  "+",
+  "?",
+  "(",
+  ")",
+  "[",
+  "]",
+  "{",
+  "}",
+  "|",
+]);
+
+function escapeRegExp(value: string): string {
+  return Array.from(value, (char) =>
+    REGEXP_SPECIAL_CHARS.has(char) ? `\\${char}` : char,
+  ).join("");
+}
+function containsKeywordInText(text: string, keyword: string): boolean {
+  const normalizedText = normalizeKeywordSearchText(text);
+  const normalizedKeyword = normalizeKeywordSearchText(keyword);
+
+  if (!normalizedText || !normalizedKeyword) {
+    return false;
+  }
+
+  const pattern = new RegExp(
+    `(^|[^a-z0-9])${escapeRegExp(normalizedKeyword)}([^a-z0-9]|$)`,
+  );
+  return pattern.test(normalizedText);
+}
+
+function deriveKeywordMatchesFromEvidence(
+  items: Array<{ kw: string; pontos: number }>,
+  requirements: JobRequirementCoverage[] | undefined,
+): Set<string> {
+  if (!requirements?.length || items.length === 0) {
+    return new Set();
+  }
+
+  const matches = new Set<string>();
+
+  for (const item of items) {
+    const key = normalizeKeywordKey(item.kw);
+    if (!key) continue;
+
+    const matched = requirements.some((requirement) =>
+      requirement.evidence.some((evidence) =>
+        containsKeywordInText(evidence, item.kw),
+      ),
+    );
+
+    if (matched) {
+      matches.add(key);
+    }
+  }
+
+  return matches;
+}
+
 function dedupeKeywordItems(
   items: Array<{ kw: string; pontos: number }>,
 ): Array<{ kw: string; pontos: number }> {
@@ -1566,12 +1640,17 @@ function remapExistingKeywordRule(
   existingRule: KeywordBucket,
   currentKeywords: CvAnalysisOutput["keywords"] | undefined,
   currentAtsKeywords: CvAnalysisOutput["ats_keywords"] | undefined,
+  currentRequirements?: JobRequirementCoverage[],
 ): KeywordBucket {
   const universe = dedupeKeywordItems([
     ...(existingRule.presentes ?? []),
     ...(existingRule.possiveis ?? []),
     ...(existingRule.ausentes ?? []),
   ]);
+  const evidenceMatched = deriveKeywordMatchesFromEvidence(
+    universe,
+    currentRequirements,
+  );
   const currentPresent = new Set(
     dedupeKeywordItems([
       ...(currentKeywords?.presentes ?? []),
@@ -1610,6 +1689,7 @@ function remapExistingKeywordRule(
   for (const item of universe) {
     const key = normalizeKeywordKey(item.kw);
     if (
+      evidenceMatched.has(key) ||
       currentPresent.has(key) ||
       (!currentPossible.has(key) &&
         !currentAbsent.has(key) &&
@@ -1890,11 +1970,7 @@ function buildRequirementScoringSummary(
     totalWeight > 0 ? Math.round((coveredWeight / totalWeight) * 50) : 0;
   const experienceProjectedBudget =
     totalWeight > 0
-      ? Math.round(
-          ((coveredWeight + adjustableWeight) /
-            totalWeight) *
-            50,
-        )
+      ? Math.round(((coveredWeight + adjustableWeight) / totalWeight) * 50)
       : 0;
   const adjustmentBudget = clamp(
     experienceProjectedBudget - experienceCurrentBudget,
@@ -1962,30 +2038,41 @@ function buildRequirementScoringSummary(
     unavailableBudget,
   );
 
+  const freezeKeywordBuckets = Boolean(
+    options?.preserveKeywordWeights && keywordSource,
+  );
   const keywordPresentSeed = dedupeKeywordItems(
-    (keywordSource?.presentes?.length
-      ? keywordSource.presentes
-      : (
-          atsKeywordSource?.presentes ??
-          buildKeywordFallbackFromRequirements(weighted, "covered")
-        ).map((kw) => ({ kw, pontos: 1 }))) as Array<{
+    (freezeKeywordBuckets
+      ? (keywordSource?.presentes ?? [])
+      : keywordSource?.presentes?.length
+        ? keywordSource.presentes
+        : (
+            atsKeywordSource?.presentes ??
+            buildKeywordFallbackFromRequirements(weighted, "covered")
+          ).map((kw) => ({ kw, pontos: 1 }))) as Array<{
       kw: string;
       pontos: number;
     }>,
   );
   const keywordPossibleSeed = dedupeKeywordItems(
-    (keywordSource?.possiveis?.length ? keywordSource.possiveis : []) as Array<{
+    (freezeKeywordBuckets
+      ? (keywordSource?.possiveis ?? [])
+      : keywordSource?.possiveis?.length
+        ? keywordSource.possiveis
+        : []) as Array<{
       kw: string;
       pontos: number;
     }>,
   );
   const keywordAbsentSeed = dedupeKeywordItems(
-    (keywordSource?.ausentes?.length
-      ? keywordSource.ausentes
-      : (
-          atsKeywordSource?.ausentes ??
-          buildKeywordFallbackFromRequirements(weighted, "missing_only")
-        ).map((kw) => ({ kw, pontos: 1 }))) as Array<{
+    (freezeKeywordBuckets
+      ? (keywordSource?.ausentes ?? [])
+      : keywordSource?.ausentes?.length
+        ? keywordSource.ausentes
+        : (
+            atsKeywordSource?.ausentes ??
+            buildKeywordFallbackFromRequirements(weighted, "missing_only")
+          ).map((kw) => ({ kw, pontos: 1 }))) as Array<{
       kw: string;
       pontos: number;
     }>,
@@ -2220,6 +2307,7 @@ export async function analyzeAndAdaptCv(
         input.existingKeywordRule,
         output.keywords,
         output.ats_keywords,
+        output.requirements,
       );
     }
   }
