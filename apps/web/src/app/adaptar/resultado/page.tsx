@@ -522,7 +522,7 @@ function ItemCard({
             border: `1px solid ${BORDER_BASE}`,
           }}
         >
-          sem evidência
+          {pts ?? "sem evidência"}
         </div>
       )}
     </div>
@@ -581,9 +581,11 @@ function ReqRow({ text, met }: { text: string; met: boolean }) {
 function KwChip({
   label,
   type,
+  pontos,
 }: {
   label: string;
   type: "present" | "absent";
+  pontos?: number;
 }) {
   const st =
     type === "present"
@@ -622,6 +624,11 @@ function KwChip({
         <span style={{ fontSize: 9, opacity: 0.8 }}>✓</span>
       )}
       {label}
+      {pontos !== undefined && (
+        <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 2 }}>
+          +{pontos}
+        </span>
+      )}
     </span>
   );
 }
@@ -732,12 +739,12 @@ function ReferenceCard({ text, sub }: { text: string; sub?: string }) {
     >
       <div
         style={{
-          width: 15,
-          height: 15,
-          border: "1.5px solid rgba(10,10,10,0.15)",
-          borderRadius: 4,
+          width: 5,
+          height: 5,
+          borderRadius: "50%",
+          background: "rgba(10,10,10,0.25)",
           flexShrink: 0,
-          marginTop: 2,
+          marginTop: 6,
         }}
       />
       <div>
@@ -778,6 +785,7 @@ function SecCard({
   warn?: boolean;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(true);
   const hasPts = score !== undefined && max !== undefined;
   return (
     <div
@@ -789,15 +797,21 @@ function SecCard({
         overflow: "hidden",
       }}
     >
-      {/* header */}
+      {/* header — clicável */}
       <div
+        onClick={() => setOpen((o) => !o)}
         style={{
           padding: "15px 22px",
-          borderBottom: `1px solid ${warn ? WARN_BORDER : BORDER_BASE}`,
+          borderBottom: open
+            ? `1px solid ${warn ? WARN_BORDER : BORDER_BASE}`
+            : "1px solid transparent",
           background: warn ? "rgba(232,168,56,0.06)" : "rgba(10,10,10,0.015)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          cursor: "pointer",
+          userSelect: "none",
+          transition: "border-color 0.25s",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -824,38 +838,72 @@ function SecCard({
             {title}
           </div>
         </div>
-        {hasPts ? (
-          <div
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {hasPts ? (
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 11,
+                fontWeight: 500,
+                color: LIME_DEEP,
+                background: LIME_SOFT,
+                border: `1px solid ${LIME_BORDER}`,
+                borderRadius: 5,
+                padding: "3px 10px",
+              }}
+            >
+              {score} / {max} pts
+            </div>
+          ) : (
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                color: warn ? WARN_TEXT : MUTED,
+                background: warn ? "rgba(232,168,56,0.12)" : FAINT,
+                border: `1px solid ${warn ? WARN_BORDER : BORDER_BASE}`,
+                borderRadius: 5,
+                padding: "3px 10px",
+              }}
+            >
+              {warn ? "não entra na pontuação" : "referência · não pontua"}
+            </div>
+          )}
+          {/* chevron */}
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="none"
             style={{
-              fontFamily: MONO,
-              fontSize: 11,
-              fontWeight: 500,
-              color: LIME_DEEP,
-              background: LIME_SOFT,
-              border: `1px solid ${LIME_BORDER}`,
-              borderRadius: 5,
-              padding: "3px 10px",
+              flexShrink: 0,
+              transition: "transform 0.3s ease",
+              transform: open ? "rotate(0deg)" : "rotate(-90deg)",
+              color: MUTED,
             }}
           >
-            {score} / {max} pts
-          </div>
-        ) : (
-          <div
-            style={{
-              fontFamily: MONO,
-              fontSize: 10,
-              color: warn ? WARN_TEXT : MUTED,
-              background: warn ? "rgba(232,168,56,0.12)" : FAINT,
-              border: `1px solid ${warn ? WARN_BORDER : BORDER_BASE}`,
-              borderRadius: 5,
-              padding: "3px 10px",
-            }}
-          >
-            {warn ? "não entra na pontuação" : "referência · não pontua"}
-          </div>
-        )}
+            <path
+              d="M2.5 5L7 9.5L11.5 5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
       </div>
-      <div style={{ padding: "18px 22px" }}>{children}</div>
+      {/* body com animação sanfona */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateRows: open ? "1fr" : "0fr",
+          transition: "grid-template-rows 0.3s ease",
+        }}
+      >
+        <div style={{ overflow: "hidden" }}>
+          <div style={{ padding: "18px 22px" }}>{children}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -871,6 +919,23 @@ function ScoreBreakdownBar({
   }>;
 }) {
   const totalMax = sections.reduce((s, sec) => s + sec.max, 0);
+
+  // Give the last (narrowest) section a minimum visual width of 20%,
+  // taking the extra equally from all other sections.
+  const MIN_LAST = 0.20;
+  const rawPcts = sections.map((s) => s.max / totalMax);
+  const lastRaw = rawPcts[rawPcts.length - 1];
+  const displayPcts =
+    lastRaw < MIN_LAST
+      ? (() => {
+          const deficit = MIN_LAST - lastRaw;
+          const perOther = deficit / (sections.length - 1);
+          return rawPcts.map((p, i) =>
+            i === rawPcts.length - 1 ? MIN_LAST : p - perOther
+          );
+        })()
+      : rawPcts;
+
   return (
     <div style={{ marginBottom: 28 }}>
       <span
@@ -895,11 +960,11 @@ function ScoreBreakdownBar({
           gap: 3,
         }}
       >
-        {sections.map((sec) => (
+        {sections.map((sec, i) => (
           <div
             key={sec.label}
             style={{
-              flex: `0 0 calc(${(sec.max / totalMax) * 100}% - 2px)`,
+              flex: `0 0 calc(${displayPcts[i] * 100}% - 2px)`,
               position: "relative",
               background: "rgba(10,10,10,0.07)",
               borderRadius: 5,
@@ -920,43 +985,56 @@ function ScoreBreakdownBar({
         ))}
       </div>
       <div style={{ display: "flex", gap: 3, marginTop: 7 }}>
-        {sections.map((sec) => (
-          <div
-            key={sec.label}
-            style={{
-              flex: `0 0 calc(${(sec.max / totalMax) * 100}% - 2px)`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <div
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: 2,
-                  background: sec.color,
-                  flexShrink: 0,
-                }}
-              />
+        {sections.map((sec, i) => {
+          const isLast = i === sections.length - 1;
+          return (
+            <div
+              key={sec.label}
+              style={{
+                flex: `0 0 calc(${displayPcts[i] * 100}% - 2px)`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingLeft: 6,
+                paddingRight: 6,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <div
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: 2,
+                    background: sec.color,
+                    flexShrink: 0,
+                  }}
+                />
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#5a5a54",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {sec.label}
+                </span>
+              </div>
               <span
                 style={{
                   fontFamily: MONO,
                   fontSize: 10.5,
-                  color: "#5a5a54",
+                  color: "#8a8a85",
+                  whiteSpace: "nowrap",
+                  paddingLeft: isLast ? 8 : 0,
+                  paddingRight: isLast ? 0 : 6,
                 }}
               >
-                {sec.label}
+                {sec.current}/{sec.max}
               </span>
             </div>
-            <span
-              style={{ fontFamily: MONO, fontSize: 10.5, color: "#8a8a85" }}
-            >
-              {sec.current}/{sec.max}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -2364,12 +2442,13 @@ export default function ResultadoPage() {
                 </div>
                 {data.ajustes_indisponiveis.length > 0 && (
                   <div>
-                    <SubLabel>MISSINGS REAIS</SubLabel>
+                    <SubLabel>SEM EVIDÊNCIAS NO SEU CV</SubLabel>
                     {data.ajustes_indisponiveis.map((a) => (
                       <ItemCard
                         key={a.id}
                         type="missing"
                         text={`${a.titulo}${a.descricao ? ` — ${a.descricao}` : ""}`}
+                        pts={`-${a.pontos} pts`}
                       />
                     ))}
                   </div>
@@ -2398,7 +2477,7 @@ export default function ResultadoPage() {
                   ? data.keywords.presentes.slice(0, GUEST_VISIBLE)
                   : data.keywords.presentes
                 ).map((k) => (
-                  <KwChip key={k.kw} label={k.kw} type="present" />
+                  <KwChip key={k.kw} label={k.kw} type="present" pontos={k.pontos} />
                 ))}
               </div>
               {isGuestView &&
@@ -2417,7 +2496,7 @@ export default function ResultadoPage() {
                           GUEST_MOCK_KW.length,
                         ),
                       ).map((k) => (
-                        <KwChip key={k.kw} label={k.kw} type="present" />
+                        <KwChip key={k.kw} label={k.kw} type="present" pontos={k.pontos} />
                       ))}
                     </div>
                   </GuestBlurOverlay>
@@ -2453,7 +2532,7 @@ export default function ResultadoPage() {
                     marginBottom: 12,
                   }}
                 >
-                  A IA consegue reforçar estes termos por contexto, analogia e
+                  O EarlyCV consegue reforçar estes termos por contexto, analogia e
                   reformulação sem inventar fatos.
                 </p>
                 <div
@@ -2642,6 +2721,9 @@ export default function ResultadoPage() {
                         onChange={() => toggleKw(k.kw)}
                       />
                       {k.kw}
+                      <span style={{ fontSize: 10, opacity: 0.55, marginLeft: 2 }}>
+                        +{k.pontos}
+                      </span>
                     </label>
                   );
                 })}
@@ -2661,7 +2743,7 @@ export default function ResultadoPage() {
                         GUEST_MOCK_KW.length,
                       ),
                     ).map((k) => (
-                      <KwChip key={k.kw} label={k.kw} type="absent" />
+                      <KwChip key={k.kw} label={k.kw} type="absent" pontos={k.pontos} />
                     ))}
                   </div>
                 </GuestBlurOverlay>
@@ -2676,7 +2758,7 @@ export default function ResultadoPage() {
                 }}
               >
                 Selecione apenas keywords que fazem sentido para sua experiência
-                real. A LLM ajusta o texto naturalmente.
+                real. O EarlyCV ajusta o texto naturalmente.
               </p>
               {effectiveSelected.size > 0 && (
                 <div
@@ -2792,7 +2874,7 @@ export default function ResultadoPage() {
                     }}
                   >
                     {ptsFaltando === 0
-                      ? "Você tem todos os campos essenciais. Os itens abaixo são editoriais e servem como orientação, não como desconto de score."
+                      ? "Você tem todos os campos essenciais."
                       : "Sua nota aqui depende dos campos essenciais. Os itens abaixo são observações qualitativas para melhorar leitura e clareza."}
                   </p>
                 </div>
@@ -3027,7 +3109,7 @@ export default function ResultadoPage() {
           ════════════════════════════════════════════════════ */}
           {Array.isArray(data.sinais_referencia) &&
             data.sinais_referencia.length > 0 && (
-              <SecCard num="S5" title="O que candidatos fortes têm">
+              <SecCard num="S5" title="Itens de Candidatos Fortes para esta Vaga">
                 <p
                   style={{
                     fontSize: 13.5,
