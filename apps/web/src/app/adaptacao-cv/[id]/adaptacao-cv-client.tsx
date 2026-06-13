@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAtsScoreColors } from "@/app/adaptar/resultado/ats-score-colors";
 import { AppHeader } from "@/components/app-header";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
@@ -16,7 +16,7 @@ import type {
 import { updateCvAdaptationContent } from "@/lib/cv-adaptation-api";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
-const SIDEBAR_W = 288;
+const SIDEBAR_W = 272;
 const HEADER_H = 60;
 const SIDEBAR_BG = "#111";
 const SIDEBAR_BORDER = "rgba(255,255,255,0.07)";
@@ -26,8 +26,9 @@ const LIME = "#c6ff3a";
 const AMBER = "#d4854a";
 const AMBER_SOFT = "rgba(212,133,74,0.1)";
 const AMBER_BORDER = "rgba(212,133,74,0.35)";
-const HIGHLIGHT_BG = "rgba(198,255,58,0.10)";
-const HIGHLIGHT_BORDER = "rgba(198,255,58,0.45)";
+const HIGHLIGHT_BG = "rgba(198,255,58,0.08)";
+const HIGHLIGHT_ITEM_BG = "rgba(198,255,58,0.13)";
+const HIGHLIGHT_BORDER = "rgba(198,255,58,0.4)";
 const CV_DIVIDER = "#e5e5e1";
 const CV_META = "#999";
 const CV_SECONDARY = "#555";
@@ -80,8 +81,8 @@ function hasSections(output: FinalCvOutput | null): boolean {
 function sectionLabel(type: string): string {
   const labels: Record<string, string> = {
     header: "Dados Pessoais",
-    experience: "Experiência",
-    education: "Formação",
+    experience: "Experiência Profissional",
+    education: "Formação Acadêmica",
     skills: "Habilidades",
     projects: "Projetos",
     certifications: "Certificações",
@@ -130,110 +131,217 @@ function buildSectionGroups(
   return Array.from(groupMap.values());
 }
 
+/** Returns the best-matching item index within a section for a given ajuste. */
+function findBestItemIdx(ajuste: AjusteWithKey, section: CvSection): number {
+  const keywords = ajuste.titulo
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 3);
+  if (!keywords.length) return 0;
+
+  let best = 0;
+  let bestScore = -1;
+
+  section.items.forEach((item, idx) => {
+    const text = [item.heading, item.subheading, ...item.bullets]
+      .join(" ")
+      .toLowerCase();
+    const score = keywords.filter((kw) => text.includes(kw)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = idx;
+    }
+  });
+
+  return best;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function ScoreRing({
-  score,
+function ScoreBar({
+  scoreBefore,
   scoreAfter,
 }: {
-  score: number;
+  scoreBefore: number;
   scoreAfter?: number;
 }) {
-  const colors = getAtsScoreColors(score);
-  const r = 40;
-  const circ = 2 * Math.PI * r;
-  const dash = Math.min((score / 100) * circ, circ);
+  const colorsBefore = getAtsScoreColors(scoreBefore);
+  const colorsAfter = scoreAfter ? getAtsScoreColors(scoreAfter) : null;
+  const hasAfter = scoreAfter !== undefined && scoreAfter > scoreBefore;
+  const delta = hasAfter ? (scoreAfter ?? 0) - scoreBefore : 0;
 
   return (
     <div
       style={{
-        padding: "22px 16px 18px",
+        padding: "18px 16px 16px",
         borderBottom: `1px solid ${SIDEBAR_BORDER}`,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 12,
+        flexShrink: 0,
       }}
     >
-      <div style={{ position: "relative", width: 100, height: 100 }}>
-        <svg width={100} height={100} viewBox="0 0 100 100" aria-hidden="true">
-          <circle
-            cx={50}
-            cy={50}
-            r={r}
-            fill="none"
-            stroke="rgba(255,255,255,0.06)"
-            strokeWidth={7}
-          />
-          <circle
-            cx={50}
-            cy={50}
-            r={r}
-            fill="none"
-            stroke={colors.primary}
-            strokeWidth={7}
-            strokeDasharray={`${dash} ${circ - dash}`}
-            strokeDashoffset={circ / 4}
-            strokeLinecap="round"
-          />
-        </svg>
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 0,
-          }}
-        >
-          <span
+      {/* ANTES → DEPOIS numbers */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 10,
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              fontSize: 9,
+              color: "#555",
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+              marginBottom: 2,
+            }}
+          >
+            Antes
+          </div>
+          <div
             style={{
               fontFamily: "monospace",
-              fontSize: 30,
+              fontSize: 28,
               fontWeight: 800,
-              color: colors.primary,
+              color: colorsBefore.primary,
               lineHeight: 1,
               letterSpacing: "-0.03em",
             }}
           >
-            {score}
-          </span>
-          <span
-            style={{
-              fontSize: 9,
-              color: "#555",
-              marginTop: 1,
-              letterSpacing: "0.06em",
-            }}
-          >
-            / 100
-          </span>
+            {scoreBefore}
+          </div>
+          <div style={{ fontSize: 9, color: "#555", marginTop: 2 }}>
+            {scoreLabel(scoreBefore)}
+          </div>
         </div>
-      </div>
 
-      <div style={{ textAlign: "center" }}>
-        <div
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color: colors.primary,
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-          }}
-        >
-          ATS {scoreLabel(score)}
-        </div>
-        {scoreAfter !== undefined && scoreAfter > score && (
-          <div style={{ fontSize: 10, color: "#555", marginTop: 4 }}>
-            após ajustes:{" "}
-            <span style={{ color: LIME, fontWeight: 700 }}>
-              {scoreAfter} pts
-            </span>
+        {hasAfter && (
+          <>
+            <div
+              style={{
+                flex: 1,
+                height: 1,
+                background: SIDEBAR_BORDER,
+                margin: "0 8px",
+                position: "relative",
+                top: 6,
+              }}
+            />
+            <div
+              style={{
+                fontSize: 9,
+                color: LIME,
+                fontFamily: "monospace",
+                fontWeight: 700,
+                position: "relative",
+                top: 6,
+              }}
+            >
+              +{delta}
+            </div>
+            <div
+              style={{
+                flex: 1,
+                height: 1,
+                background: SIDEBAR_BORDER,
+                margin: "0 8px",
+                position: "relative",
+                top: 6,
+              }}
+            />
+            <div style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  fontSize: 9,
+                  color: "#555",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  marginBottom: 2,
+                }}
+              >
+                Depois
+              </div>
+              <div
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: 28,
+                  fontWeight: 800,
+                  color: colorsAfter?.primary ?? LIME,
+                  lineHeight: 1,
+                  letterSpacing: "-0.03em",
+                }}
+              >
+                {scoreAfter}
+              </div>
+              <div
+                style={{
+                  fontSize: 9,
+                  color: colorsAfter?.primary ?? LIME,
+                  marginTop: 2,
+                }}
+              >
+                {scoreLabel(scoreAfter ?? 0)}
+              </div>
+            </div>
+          </>
+        )}
+
+        {!hasAfter && (
+          <div style={{ textAlign: "right" }}>
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                color: colorsBefore.primary,
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+              }}
+            >
+              ATS {scoreLabel(scoreBefore)}
+            </div>
           </div>
         )}
       </div>
+
+      {/* Progress bar */}
+      {hasAfter && (
+        <div
+          style={{
+            height: 4,
+            borderRadius: 2,
+            background: "rgba(255,255,255,0.05)",
+            overflow: "hidden",
+            position: "relative",
+          }}
+        >
+          {/* Before segment */}
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: `${scoreBefore}%`,
+              background: colorsBefore.primary,
+              borderRadius: 2,
+              opacity: 0.4,
+            }}
+          />
+          {/* After segment */}
+          <div
+            style={{
+              position: "absolute",
+              left: `${scoreBefore}%`,
+              top: 0,
+              bottom: 0,
+              width: `${delta}%`,
+              background: LIME,
+              borderRadius: "0 2px 2px 0",
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -251,7 +359,6 @@ function SectionGroupBlock({
 
   return (
     <div style={{ borderBottom: `1px solid ${SIDEBAR_BORDER}` }}>
-      {/* Section header */}
       <div
         style={{
           padding: "8px 16px",
@@ -262,8 +369,8 @@ function SectionGroupBlock({
       >
         <span
           style={{
-            width: 7,
-            height: 7,
+            width: 6,
+            height: 6,
             borderRadius: "50%",
             background: group.color,
             flexShrink: 0,
@@ -271,7 +378,7 @@ function SectionGroupBlock({
         />
         <span
           style={{
-            fontSize: 10,
+            fontSize: 9,
             fontWeight: 700,
             color: group.color,
             textTransform: "uppercase",
@@ -281,18 +388,11 @@ function SectionGroupBlock({
         >
           {group.label}
         </span>
-        <span
-          style={{
-            fontSize: 9,
-            fontFamily: "monospace",
-            color: "#555",
-          }}
-        >
+        <span style={{ fontSize: 9, fontFamily: "monospace", color: "#555" }}>
           +{totalPts}pts
         </span>
       </div>
 
-      {/* Ajuste items */}
       {group.ajustes.map((a) => {
         const isActive = activeKey === a.key;
         return (
@@ -319,7 +419,7 @@ function SectionGroupBlock({
                 justifyContent: "space-between",
                 alignItems: "flex-start",
                 gap: 6,
-                marginBottom: 3,
+                marginBottom: 2,
               }}
             >
               <span
@@ -386,15 +486,13 @@ function HeaderSectionView({
     <div
       data-section-type="header"
       style={{
-        marginBottom: 28,
+        marginBottom: 24,
         paddingBottom: 20,
         borderBottom: `1px solid ${CV_DIVIDER}`,
-        borderRadius: 6,
-        padding: isHighlighted ? "12px 14px" : "0",
+        borderRadius: isHighlighted ? 6 : 0,
+        padding: isHighlighted ? "12px 14px" : "0 0 20px",
         background: isHighlighted ? HIGHLIGHT_BG : "transparent",
-        border: isHighlighted
-          ? `1.5px solid ${HIGHLIGHT_BORDER}`
-          : "1.5px solid transparent",
+        border: isHighlighted ? `1.5px solid ${HIGHLIGHT_BORDER}` : "none",
         transition: "background 0.2s, border-color 0.2s",
         scrollMarginTop: 16,
       }}
@@ -402,17 +500,7 @@ function HeaderSectionView({
       {isEditing ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div>
-            <label
-              htmlFor="hdr-heading"
-              style={{
-                fontSize: 9,
-                color: CV_META,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                display: "block",
-                marginBottom: 3,
-              }}
-            >
+            <label htmlFor="hdr-heading" style={labelStyle}>
               Nome
             </label>
             <input
@@ -424,17 +512,7 @@ function HeaderSectionView({
             />
           </div>
           <div>
-            <label
-              htmlFor="hdr-subheading"
-              style={{
-                fontSize: 9,
-                color: CV_META,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                display: "block",
-                marginBottom: 3,
-              }}
-            >
+            <label htmlFor="hdr-subheading" style={labelStyle}>
               Cargo / Título
             </label>
             <input
@@ -446,17 +524,7 @@ function HeaderSectionView({
             />
           </div>
           <div>
-            <label
-              htmlFor="hdr-contact"
-              style={{
-                fontSize: 9,
-                color: CV_META,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                display: "block",
-                marginBottom: 3,
-              }}
-            >
+            <label htmlFor="hdr-contact" style={labelStyle}>
               Contato (separado por · )
             </label>
             <input
@@ -478,13 +546,7 @@ function HeaderSectionView({
           </div>
         </div>
       ) : (
-        <div
-          style={{
-            marginBottom: 16,
-            paddingBottom: 16,
-            borderBottom: `1px solid ${CV_DIVIDER}`,
-          }}
-        >
+        <>
           {item.heading && (
             <div
               style={{
@@ -519,24 +581,83 @@ function HeaderSectionView({
                 lineHeight: 1.6,
                 display: "flex",
                 flexWrap: "wrap",
-                gap: "2px 8px",
+                gap: "2px 6px",
               }}
             >
               {item.bullets.map((b, i) => (
                 <span key={b}>
                   {i > 0 && (
-                    <span style={{ marginRight: 8, opacity: 0.4 }}>·</span>
+                    <span style={{ marginRight: 6, opacity: 0.4 }}>·</span>
                   )}
                   {b}
                 </span>
               ))}
             </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );
 }
+
+function SummaryBlock({ summary }: { summary: string }) {
+  return (
+    <div
+      data-section-type="summary"
+      style={{ marginBottom: 22, scrollMarginTop: 16 }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 10,
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#9ca3af",
+            flexShrink: 0,
+          }}
+        />
+        <span
+          style={{
+            fontSize: 9,
+            fontWeight: 800,
+            color: "#9ca3af",
+            textTransform: "uppercase",
+            letterSpacing: "0.12em",
+          }}
+        >
+          Perfil Profissional
+        </span>
+        <div style={{ flex: 1, height: 1, background: CV_DIVIDER }} />
+      </div>
+      <p
+        style={{
+          fontSize: 11.5,
+          color: "#333",
+          lineHeight: 1.7,
+          margin: 0,
+        }}
+      >
+        {summary}
+      </p>
+    </div>
+  );
+}
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 9,
+  color: CV_META,
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+  display: "block",
+  marginBottom: 3,
+};
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -554,12 +675,14 @@ const inputStyle: React.CSSProperties = {
 function CvSectionBlock({
   section,
   isHighlighted,
+  highlightedItemIdx,
   isEditing,
   onBulletsChange,
   onItemChange,
 }: {
   section: CvSection;
   isHighlighted: boolean;
+  highlightedItemIdx?: number;
   isEditing: boolean;
   onBulletsChange: (itemIdx: number, bullets: string[]) => void;
   onItemChange: (
@@ -585,7 +708,6 @@ function CvSectionBlock({
         scrollMarginTop: 16,
       }}
     >
-      {/* Section header row */}
       <div
         style={{
           display: "flex",
@@ -612,167 +734,189 @@ function CvSectionBlock({
             letterSpacing: "0.12em",
           }}
         >
-          {sectionLabel(section.sectionType)}
+          {section.title || sectionLabel(section.sectionType)}
         </span>
         <div style={{ flex: 1, height: 1, background: CV_DIVIDER }} />
       </div>
 
-      {/* Items */}
-      {section.items.map((item, itemIdx) => (
-        <div key={item.heading ?? String(itemIdx)} style={{ marginBottom: 14 }}>
-          {/* Item header */}
+      {section.items.map((item, itemIdx) => {
+        const itemHighlighted =
+          isHighlighted &&
+          !isEditing &&
+          highlightedItemIdx !== undefined &&
+          highlightedItemIdx === itemIdx;
+        return (
           <div
+            key={item.heading ?? String(itemIdx)}
+            data-item-idx={itemIdx}
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              gap: 8,
-              marginBottom: 6,
+              marginBottom: 14,
+              borderRadius: 6,
+              padding: itemHighlighted ? "8px 10px" : "0",
+              background: itemHighlighted ? HIGHLIGHT_ITEM_BG : "transparent",
+              border: itemHighlighted
+                ? `1px solid ${HIGHLIGHT_BORDER}`
+                : "1px solid transparent",
+              transition: "background 0.2s, border-color 0.2s",
+              scrollMarginTop: 16,
             }}
           >
-            <div style={{ flex: 1 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 8,
+                marginBottom: 6,
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                {isEditing ? (
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 4 }}
+                  >
+                    <input
+                      type="text"
+                      placeholder="Título / Cargo / Competência"
+                      value={item.heading ?? ""}
+                      onChange={(e) =>
+                        onItemChange(itemIdx, "heading", e.target.value)
+                      }
+                      style={inputStyle}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Subtítulo / Empresa / Nível"
+                      value={item.subheading ?? ""}
+                      onChange={(e) =>
+                        onItemChange(itemIdx, "subheading", e.target.value)
+                      }
+                      style={inputStyle}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    {item.heading && (
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#111",
+                          lineHeight: 1.3,
+                        }}
+                      >
+                        {item.heading}
+                      </div>
+                    )}
+                    {item.subheading && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: CV_SECONDARY,
+                          marginTop: 1,
+                        }}
+                      >
+                        {item.subheading}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
               {isEditing ? (
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 4 }}
-                >
-                  <input
-                    type="text"
-                    placeholder="Título / Cargo / Competência"
-                    value={item.heading ?? ""}
-                    onChange={(e) =>
-                      onItemChange(itemIdx, "heading", e.target.value)
-                    }
-                    style={inputStyle}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Subtítulo / Empresa / Nível"
-                    value={item.subheading ?? ""}
-                    onChange={(e) =>
-                      onItemChange(itemIdx, "subheading", e.target.value)
-                    }
-                    style={inputStyle}
-                  />
-                </div>
+                <input
+                  type="text"
+                  placeholder="Período"
+                  value={item.dateRange ?? ""}
+                  onChange={(e) =>
+                    onItemChange(itemIdx, "dateRange", e.target.value)
+                  }
+                  style={{ ...inputStyle, width: 110, flexShrink: 0 }}
+                />
               ) : (
-                <>
-                  {item.heading && (
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: "#111",
-                        lineHeight: 1.3,
-                      }}
-                    >
-                      {item.heading}
-                    </div>
-                  )}
-                  {item.subheading && (
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: CV_SECONDARY,
-                        marginTop: 1,
-                      }}
-                    >
-                      {item.subheading}
-                    </div>
-                  )}
-                </>
+                item.dateRange && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: CV_META,
+                      fontFamily: "monospace",
+                      whiteSpace: "nowrap",
+                      marginTop: 1,
+                    }}
+                  >
+                    {item.dateRange}
+                  </span>
+                )
               )}
             </div>
+
             {isEditing ? (
-              <input
-                type="text"
-                placeholder="Período"
-                value={item.dateRange ?? ""}
-                onChange={(e) =>
-                  onItemChange(itemIdx, "dateRange", e.target.value)
-                }
-                style={{ ...inputStyle, width: 110, flexShrink: 0 }}
-              />
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {item.bullets.map((bullet, bIdx) => (
+                  <div
+                    key={`edit-${itemIdx}-${bIdx}`}
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: CV_META,
+                        marginTop: 6,
+                        fontSize: 9,
+                        flexShrink: 0,
+                      }}
+                    >
+                      •
+                    </span>
+                    <textarea
+                      value={bullet}
+                      rows={2}
+                      onChange={(e) => {
+                        const next = [...item.bullets];
+                        next[bIdx] = e.target.value;
+                        onBulletsChange(itemIdx, next);
+                      }}
+                      style={{
+                        flex: 1,
+                        fontSize: 11,
+                        color: "#111",
+                        lineHeight: 1.5,
+                        border: "1px solid #ddd",
+                        borderRadius: 4,
+                        padding: "4px 8px",
+                        resize: "none",
+                        fontFamily: "inherit",
+                        background: "#fafaf8",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             ) : (
-              item.dateRange && (
-                <span
-                  style={{
-                    fontSize: 10,
-                    color: CV_META,
-                    fontFamily: "monospace",
-                    whiteSpace: "nowrap",
-                    marginTop: 1,
-                  }}
-                >
-                  {item.dateRange}
-                </span>
+              item.bullets.length > 0 && (
+                <ul style={{ margin: 0, paddingLeft: 14, listStyle: "disc" }}>
+                  {item.bullets.map((bullet) => (
+                    <li
+                      key={bullet}
+                      style={{
+                        fontSize: 11,
+                        color: "#333",
+                        lineHeight: 1.6,
+                        marginBottom: 2,
+                      }}
+                    >
+                      {bullet}
+                    </li>
+                  ))}
+                </ul>
               )
             )}
           </div>
-
-          {/* Bullets */}
-          {isEditing ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {item.bullets.map((bullet, bIdx) => (
-                <div
-                  key={`edit-${itemIdx}-${bIdx}`}
-                  style={{ display: "flex", gap: 6, alignItems: "flex-start" }}
-                >
-                  <span
-                    style={{
-                      color: CV_META,
-                      marginTop: 6,
-                      fontSize: 9,
-                      flexShrink: 0,
-                    }}
-                  >
-                    •
-                  </span>
-                  <textarea
-                    value={bullet}
-                    rows={2}
-                    onChange={(e) => {
-                      const next = [...item.bullets];
-                      next[bIdx] = e.target.value;
-                      onBulletsChange(itemIdx, next);
-                    }}
-                    style={{
-                      flex: 1,
-                      fontSize: 11,
-                      color: "#111",
-                      lineHeight: 1.5,
-                      border: "1px solid #ddd",
-                      borderRadius: 4,
-                      padding: "4px 8px",
-                      resize: "none",
-                      fontFamily: "inherit",
-                      background: "#fafaf8",
-                      outline: "none",
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            item.bullets.length > 0 && (
-              <ul style={{ margin: 0, paddingLeft: 14, listStyle: "disc" }}>
-                {item.bullets.map((bullet) => (
-                  <li
-                    key={bullet}
-                    style={{
-                      fontSize: 11,
-                      color: "#333",
-                      lineHeight: 1.6,
-                      marginBottom: 2,
-                    }}
-                  >
-                    {bullet}
-                  </li>
-                ))}
-              </ul>
-            )
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -795,7 +939,7 @@ function GeneratingState() {
           width: 40,
           height: 40,
           borderRadius: "50%",
-          border: `3px solid rgba(198,255,58,0.15)`,
+          border: "3px solid rgba(198,255,58,0.15)",
           borderTop: `3px solid ${LIME}`,
           animation: "spin 0.9s linear infinite",
         }}
@@ -845,15 +989,24 @@ export function AdaptacaoCvClient({
   const cvPanelRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Lock body scroll so only the main panel scrolls
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   // Poll until finalCvOutput has real sections
   const pollContent = useCallback(async () => {
     try {
       const res = await fetch(`/api/cv-adaptation/${adaptationId}/content`, {
         cache: "no-store",
       });
-      if (!res.ok) return;
+      if (!res.ok) return false;
       const payload = (await res.json()) as {
-        finalCvOutput?: { sections?: unknown[] } | null;
+        finalCvOutput?: { sections?: unknown[]; summary?: string } | null;
         sectionMapping?: Record<string, string>;
       };
       if (
@@ -898,34 +1051,77 @@ export function AdaptacaoCvClient({
     };
   }, [isGenerating, pollContent]);
 
-  const score = analysisData.fit?.score ?? 0;
-  const scoreAfter = analysisData.fit?.score_pos_ajustes ?? undefined;
+  // Score values
+  const scoreBefore =
+    analysisData.scoring?.totals?.scoreAtualBase ??
+    analysisData.projecao_melhoria?.score_atual ??
+    analysisData.fit?.score ??
+    0;
+  const scoreAfter =
+    analysisData.scoring?.totals?.scoreAposLiberarBase ??
+    analysisData.fit?.score_pos_ajustes ??
+    analysisData.projecao_melhoria?.score_pos_otimizacao;
+
   const ajustes = analysisData.ajustes_conteudo ?? [];
   const sectionGroups = buildSectionGroups(ajustes, sectionMapping);
-  const highlightedSection = activeAjusteKey
-    ? (sectionMapping[activeAjusteKey] ?? null)
-    : null;
 
   const displaySections = (
     isEditing
       ? editedSections
       : ((editedCvJson ?? finalCvOutput)?.sections ?? [])
   ) as CvSection[];
+
+  const cvSummary = (editedCvJson ?? finalCvOutput)?.summary;
+
   const headerSection = displaySections.find((s) => s.sectionType === "header");
   const bodySections = displaySections.filter(
     (s) => s.sectionType !== "header",
   );
 
+  // Precompute ajuste → {sectionType, itemIdx} map for item-level navigation
+  const ajusteItemMap = useMemo(() => {
+    const map: Record<string, { sectionType: string; itemIdx: number }> = {};
+    for (const a of ajustes) {
+      const key = a.id ?? a.titulo;
+      if (!key) continue;
+      const sectionType = sectionMapping[key];
+      if (!sectionType) continue;
+      const section = displaySections.find(
+        (s) => s.sectionType === sectionType,
+      );
+      if (!section) continue;
+      map[key] = {
+        sectionType,
+        itemIdx: findBestItemIdx(
+          { key, titulo: a.titulo, descricao: a.descricao, pontos: a.pontos },
+          section,
+        ),
+      };
+    }
+    return map;
+  }, [ajustes, sectionMapping, displaySections]);
+
+  // Active highlight derived from activeAjusteKey
+  const activeMapping = activeAjusteKey
+    ? (ajusteItemMap[activeAjusteKey] ?? null)
+    : null;
+  const highlightedSection = activeMapping?.sectionType ?? null;
+  const highlightedItemIdx = activeMapping?.itemIdx;
+
   function handleAjusteSelect(key: string) {
     const next = key === activeAjusteKey ? null : key;
     setActiveAjusteKey(next);
     if (next && cvPanelRef.current) {
-      const mapped = sectionMapping[key];
-      if (mapped) {
-        const target = cvPanelRef.current.querySelector(
-          `[data-section-type="${mapped}"]`,
+      const mapping = ajusteItemMap[next];
+      if (mapping) {
+        const sectionEl = cvPanelRef.current.querySelector(
+          `[data-section-type="${mapping.sectionType}"]`,
         );
-        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const itemEl = sectionEl?.querySelector(
+          `[data-item-idx="${mapping.itemIdx}"]`,
+        );
+        const target = itemEl ?? sectionEl;
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
       }
     }
   }
@@ -1002,6 +1198,8 @@ export function AdaptacaoCvClient({
     }
   }
 
+  const totalAjustes = ajustes.length;
+
   return (
     <PageShell>
       <AppHeader />
@@ -1022,7 +1220,7 @@ export function AdaptacaoCvClient({
           overflow: "hidden",
         }}
       >
-        {/* ── Sidebar ──────────────────────────────────────────────── */}
+        {/* ── Sidebar ─────────────────────────────────────────────── */}
         <aside
           style={{
             width: SIDEBAR_W,
@@ -1038,7 +1236,7 @@ export function AdaptacaoCvClient({
           {/* Job info + back link */}
           <div
             style={{
-              padding: "14px 16px 12px",
+              padding: "12px 16px 10px",
               borderBottom: `1px solid ${SIDEBAR_BORDER}`,
               flexShrink: 0,
             }}
@@ -1052,8 +1250,7 @@ export function AdaptacaoCvClient({
                 fontSize: 10,
                 color: "#444",
                 textDecoration: "none",
-                marginBottom: 8,
-                letterSpacing: "0.02em",
+                marginBottom: 6,
               }}
             >
               ← análise completa
@@ -1073,7 +1270,7 @@ export function AdaptacaoCvClient({
                   </div>
                 )}
                 {companyName && (
-                  <div style={{ fontSize: 10, color: "#555", marginTop: 2 }}>
+                  <div style={{ fontSize: 10, color: "#555", marginTop: 1 }}>
                     {companyName}
                   </div>
                 )}
@@ -1081,11 +1278,22 @@ export function AdaptacaoCvClient({
             )}
           </div>
 
-          {/* Score ring */}
-          <ScoreRing score={score} scoreAfter={scoreAfter} />
+          {/* Score ANTES/DEPOIS */}
+          <ScoreBar scoreBefore={scoreBefore} scoreAfter={scoreAfter} />
 
-          {/* Improvement groups — scrollable */}
-          <div style={{ flex: 1, overflowY: "auto" }}>
+          {/* Improvement groups — scrollable, no visible scrollbar */}
+          <div
+            style={
+              {
+                flex: 1,
+                overflowY: "auto",
+                // Hide scrollbar across browsers
+                scrollbarWidth: "none",
+                msOverflowStyle: "none",
+              } as React.CSSProperties
+            }
+          >
+            <style>{`aside div::-webkit-scrollbar { display: none; }`}</style>
             {sectionGroups.length > 0 && (
               <div
                 style={{
@@ -1097,7 +1305,7 @@ export function AdaptacaoCvClient({
                   letterSpacing: "0.1em",
                 }}
               >
-                Melhorias aplicadas
+                {totalAjustes} ajuste{totalAjustes !== 1 ? "s" : ""} aplicados
               </div>
             )}
             {sectionGroups.map((g) => (
@@ -1113,11 +1321,11 @@ export function AdaptacaoCvClient({
           {/* Download CTA */}
           <div
             style={{
-              padding: "14px 16px",
+              padding: "12px 16px",
               borderTop: `1px solid ${SIDEBAR_BORDER}`,
               display: "flex",
               flexDirection: "column",
-              gap: 8,
+              gap: 6,
               flexShrink: 0,
             }}
           >
@@ -1126,7 +1334,7 @@ export function AdaptacaoCvClient({
               onClick={() => handleDownload("pdf")}
               style={{
                 width: "100%",
-                padding: "11px 0",
+                padding: "10px 0",
                 background: LIME,
                 color: "#0a0a0a",
                 border: "none",
@@ -1137,17 +1345,17 @@ export function AdaptacaoCvClient({
                 letterSpacing: "0.02em",
               }}
             >
-              ↓ Baixar PDF
+              ↓ Baixar CV adaptado
             </button>
             <button
               type="button"
               onClick={() => handleDownload("docx")}
               style={{
                 width: "100%",
-                padding: "9px 0",
+                padding: "8px 0",
                 background: "transparent",
-                color: "#777",
-                border: "1px solid rgba(255,255,255,0.1)",
+                color: "#666",
+                border: "1px solid rgba(255,255,255,0.08)",
                 borderRadius: 8,
                 fontSize: 11,
                 fontWeight: 600,
@@ -1159,12 +1367,12 @@ export function AdaptacaoCvClient({
           </div>
         </aside>
 
-        {/* ── Main CV panel ─────────────────────────────────────────── */}
+        {/* ── Main CV panel ────────────────────────────────────────── */}
         <main
           style={{
             flex: 1,
             overflowY: "auto",
-            padding: "28px 32px",
+            padding: "24px 32px",
           }}
         >
           {/* Edit toolbar */}
@@ -1175,7 +1383,10 @@ export function AdaptacaoCvClient({
                 justifyContent: "flex-end",
                 alignItems: "center",
                 gap: 8,
-                marginBottom: 18,
+                marginBottom: 16,
+                maxWidth: 720,
+                marginLeft: "auto",
+                marginRight: "auto",
               }}
             >
               {isEditing ? (
@@ -1256,12 +1467,12 @@ export function AdaptacaoCvClient({
                 borderRadius: 12,
                 padding: "40px 44px",
                 maxWidth: 720,
-                margin: "0 auto",
+                margin: "0 auto 40px",
                 boxShadow: "0 2px 32px rgba(0,0,0,0.6)",
                 minHeight: 500,
               }}
             >
-              {/* Header section */}
+              {/* Header */}
               {headerSection && (
                 <HeaderSectionView
                   section={headerSection}
@@ -1274,15 +1485,21 @@ export function AdaptacaoCvClient({
                 />
               )}
 
+              {/* Professional summary */}
+              {cvSummary && <SummaryBlock summary={cvSummary} />}
+
               {/* Body sections */}
               {bodySections.map((section) => {
                 const sectionIdx = displaySections.indexOf(section);
+                const isSectionHighlighted =
+                  !isEditing && highlightedSection === section.sectionType;
                 return (
                   <CvSectionBlock
                     key={section.sectionType}
                     section={section}
-                    isHighlighted={
-                      !isEditing && highlightedSection === section.sectionType
+                    isHighlighted={isSectionHighlighted}
+                    highlightedItemIdx={
+                      isSectionHighlighted ? highlightedItemIdx : undefined
                     }
                     isEditing={isEditing}
                     onBulletsChange={(itemIdx, bullets) =>
@@ -1300,7 +1517,7 @@ export function AdaptacaoCvClient({
                 );
               })}
 
-              {/* Fallback if no sections */}
+              {/* Fallback: no sections */}
               {displaySections.length === 0 && (
                 <div
                   style={{
