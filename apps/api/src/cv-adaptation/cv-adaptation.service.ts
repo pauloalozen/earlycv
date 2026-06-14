@@ -2405,17 +2405,36 @@ export class CvAdaptationService {
       typeof aiAudit?.adaptationNotes === "string"
         ? aiAudit.adaptationNotes
         : null;
-    const aiGeneratedOutput = this.toCvAdaptationOutput(
-      adaptation.adaptedContentJson,
-      adaptation.aiAuditJson,
-    );
+
+    const aiAuditHasSections =
+      adaptation.aiAuditJson != null &&
+      typeof adaptation.aiAuditJson === "object" &&
+      "sections" in (adaptation.aiAuditJson as object);
+    const adaptedContentHasSections =
+      adaptation.adaptedContentJson != null &&
+      typeof adaptation.adaptedContentJson === "object" &&
+      "sections" in (adaptation.adaptedContentJson as object);
+
+    // Only build finalCvOutput when real CV content is available.
+    // If aiAuditJson is still being generated (null) and adaptedContentJson is
+    // analysis JSON (no sections key), return null so the frontend keeps polling.
+    const aiGeneratedOutput =
+      aiAuditHasSections || adaptedContentHasSections
+        ? this.toCvAdaptationOutput(
+            adaptation.adaptedContentJson,
+            adaptation.aiAuditJson,
+          )
+        : null;
     const editedCvJson = adaptation.editedCvJson as CvAdaptationOutput | null;
     const finalCvOutput = editedCvJson ?? aiGeneratedOutput;
 
     const sectionMapping = this.buildSectionMapping(adaptation.adaptedContentJson);
+    const enrichedAnalysis = this.enrichAjustesWithSelectedKeywords(
+      adaptation.adaptedContentJson,
+    );
 
     return {
-      adaptedContentJson: adaptation.adaptedContentJson,
+      adaptedContentJson: enrichedAnalysis,
       finalCvOutput,
       editedCvJson,
       sectionMapping,
@@ -2648,6 +2667,9 @@ export class CvAdaptationService {
     const requirementCoverage = this.extractRequirementCoverageFromAnalysis(
       adaptation.adaptedContentJson,
     );
+    const ajustesConteudo = this.extractAjustesConteudoFromAnalysis(
+      adaptation.adaptedContentJson,
+    );
 
     try {
       const protectionResult =
@@ -2663,6 +2685,7 @@ export class CvAdaptationService {
             jobTitle: adaptation.jobTitle ?? undefined,
             masterCvText,
             requirementCoverage,
+            ajustesConteudo,
             selectedMissingKeywords: this.getSelectedMissingKeywords(
               adaptation.adaptedContentJson,
             ),
@@ -2840,6 +2863,157 @@ export class CvAdaptationService {
       .map((item) => item.trim())
       .filter((item) => item.length > 0)
       .slice(0, 80);
+  }
+
+  private enrichAjustesWithSelectedKeywords(
+    adaptedContentJson: unknown,
+  ): unknown {
+    if (!adaptedContentJson || typeof adaptedContentJson !== "object") {
+      return adaptedContentJson;
+    }
+
+    const json = adaptedContentJson as Record<string, unknown>;
+    const selectedKws = Array.isArray(json.selectedMissingKeywords)
+      ? (json.selectedMissingKeywords as unknown[]).filter(
+          (k): k is string => typeof k === "string" && k.trim().length > 0,
+        )
+      : [];
+
+    if (!selectedKws.length) return adaptedContentJson;
+
+    // Build pontos lookup from keywords.ausentes (authoritative source for kw points)
+    const kwPontosMap = new Map<string, number>();
+    const kwAusentesRaw = (json.keywords as Record<string, unknown> | undefined)
+      ?.ausentes;
+    if (Array.isArray(kwAusentesRaw)) {
+      for (const item of kwAusentesRaw as Record<string, unknown>[]) {
+        if (typeof item.kw === "string" && typeof item.pontos === "number") {
+          kwPontosMap.set(item.kw.toLowerCase().trim(), item.pontos);
+        }
+      }
+    }
+
+    // Normalize helper: remove accents + lowercase for loose matching
+    const norm = (s: string) =>
+      s
+        .normalize("NFKD")
+        .replace(/[̀-ͯ]/g, "")
+        .toLowerCase()
+        .trim();
+
+    const existingAjustes = Array.isArray(json.ajustes_conteudo)
+      ? (json.ajustes_conteudo as Record<string, unknown>[])
+      : [];
+
+    // Build normalized title/id index of existing ajustes
+    const existingNormMap = new Map<string, number>(); // normKey → index in existingAjustes
+    existingAjustes.forEach((a, i) => {
+      existingNormMap.set(norm(String(a.titulo ?? "")), i);
+      existingNormMap.set(norm(String(a.id ?? "")), i);
+    });
+
+    // Patch existing ajustes that match selected keywords with correct pontos
+    const patchedAjustes = existingAjustes.map((a) => ({ ...a }));
+    const coveredKws = new Set<string>();
+
+    for (const kw of selectedKws) {
+      const kwNorm = norm(kw);
+      const idx = existingNormMap.get(kwNorm);
+      if (idx !== undefined) {
+        const correctPontos =
+          kwPontosMap.get(kw.toLowerCase().trim()) ??
+          kwPontosMap.get(kwNorm) ??
+          (patchedAjustes[idx].pontos as number | undefined);
+        if (typeof correctPontos === "number") {
+          patchedAjustes[idx] = { ...patchedAjustes[idx], pontos: correctPontos };
+        }
+        coveredKws.add(kwNorm);
+      }
+    }
+
+    // Add new entries for selected keywords not already covered
+    const newKwAjustes = selectedKws
+      .filter((kw) => !coveredKws.has(norm(kw)))
+      .map((kw) => ({
+        id: norm(kw).replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
+        titulo: kw,
+        descricao: `Keyword "${kw}" incluída no CV adaptado.`,
+        pontos: kwPontosMap.get(kw.toLowerCase().trim()) ?? kwPontosMap.get(norm(kw)) ?? 1,
+        dica: `A keyword "${kw}" foi adicionada onde mais se encaixa no CV.`,
+        categoria: "keywords_incluidas",
+        coveragePercent: 0,
+      }));
+
+    // Add keywords.possiveis (LLM-suggested keywords with real basis)
+    const kwPossiveisRaw = (json.keywords as Record<string, unknown> | undefined)
+      ?.possiveis;
+    const allNormIds = new Set([
+      ...patchedAjustes.map((a) => norm(String(a.titulo ?? ""))),
+      ...newKwAjustes.map((a) => norm(String(a.titulo ?? ""))),
+    ]);
+    const possiveisAjustes = Array.isArray(kwPossiveisRaw)
+      ? (kwPossiveisRaw as Record<string, unknown>[])
+          .filter(
+            (item) =>
+              typeof item.kw === "string" &&
+              item.kw.trim().length > 0 &&
+              !allNormIds.has(norm(item.kw as string)),
+          )
+          .map((item) => ({
+            id: norm(item.kw as string).replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
+            titulo: item.kw as string,
+            descricao: `Keyword incluída pela IA com base em contexto real do CV.`,
+            pontos: typeof item.pontos === "number" ? item.pontos : 1,
+            dica: `"${item.kw}" foi inserida onde melhor se encaixa no CV adaptado.`,
+            categoria: "keywords_incluidas",
+            coveragePercent: 0,
+          }))
+      : [];
+
+    return {
+      ...json,
+      ajustes_conteudo: [...patchedAjustes, ...newKwAjustes, ...possiveisAjustes],
+    };
+  }
+
+  private extractAjustesConteudoFromAnalysis(
+    adaptedContentJson: unknown,
+  ): Array<{
+    id: string;
+    titulo: string;
+    categoria: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
+  }> {
+    const VALID_CATEGORIAS = new Set([
+      "keywords_incluidas",
+      "texto_reescrito",
+      "ajuste_conteudo",
+    ]);
+
+    if (!adaptedContentJson || typeof adaptedContentJson !== "object") {
+      return [];
+    }
+
+    const raw = (adaptedContentJson as { ajustes_conteudo?: unknown })
+      .ajustes_conteudo;
+
+    if (!Array.isArray(raw)) return [];
+
+    return raw
+      .filter(
+        (a): a is Record<string, unknown> =>
+          a !== null && typeof a === "object",
+      )
+      .filter((a) => typeof a.titulo === "string")
+      .map((a) => ({
+        id: typeof a.id === "string" && a.id ? a.id : String(a.titulo).trim(),
+        titulo: String(a.titulo).trim(),
+        categoria: (
+          VALID_CATEGORIAS.has(a.categoria as string)
+            ? a.categoria
+            : "ajuste_conteudo"
+        ) as "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo",
+      }))
+      .slice(0, 50);
   }
 
   private extractRequirementCoverageFromAnalysis(

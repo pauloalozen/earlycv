@@ -124,6 +124,12 @@ export async function deleteCvAdaptation(id: string): Promise<void> {
   }
 }
 
+export type CvSectionItemChange = {
+  ajuste_id: string;
+  highlight_text?: string;
+  bullet_index?: number;
+};
+
 export type CvSection = {
   sectionType:
     | "header"
@@ -140,6 +146,7 @@ export type CvSection = {
     subheading?: string;
     dateRange?: string;
     bullets: string[];
+    changes?: CvSectionItemChange[];
   }>;
 };
 
@@ -221,6 +228,7 @@ export type CvAnalysisData = {
     descricao: string;
     pontos: number;
     dica: string;
+    categoria?: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
     coveragePercent?: 0 | 25 | 50 | 75 | 100;
   }>;
   ajustes_indisponiveis?: Array<{

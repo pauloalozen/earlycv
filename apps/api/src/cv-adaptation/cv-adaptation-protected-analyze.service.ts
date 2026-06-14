@@ -58,6 +58,11 @@ type ProtectedBuildPaidCvOutputInput<TPayload> = {
   masterCvText: string;
   requirementCoverage?: JobRequirementCoverage[];
   selectedMissingKeywords?: string[];
+  ajustesConteudo?: Array<{
+    id: string;
+    titulo: string;
+    categoria: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
+  }>;
   payload: TPayload;
 };
 
@@ -133,6 +138,7 @@ export class CvAdaptationProtectedAnalyzeService {
           masterCvText: input.masterCvText,
           requirementCoverage: input.requirementCoverage,
           selectedMissingKeywords: input.selectedMissingKeywords,
+          ajustesConteudo: input.ajustesConteudo,
         });
       },
     );

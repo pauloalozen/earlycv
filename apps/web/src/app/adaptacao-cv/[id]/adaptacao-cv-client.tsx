@@ -17,7 +17,7 @@ import { updateCvAdaptationContent } from "@/lib/cv-adaptation-api";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const SIDEBAR_W = 272;
-const HEADER_H = 60;
+const HEADER_H = 53;
 const SIDEBAR_BG = "#111";
 const SIDEBAR_BORDER = "rgba(255,255,255,0.07)";
 const PAGE_BG = "#0a0a0a";
@@ -32,6 +32,12 @@ const HIGHLIGHT_BORDER = "rgba(198,255,58,0.4)";
 const CV_DIVIDER = "#e5e5e1";
 const CV_META = "#999";
 const CV_SECONDARY = "#555";
+const CATEGORY_GROUPS = {
+  rewrite:  { label: "Texto reescrito",    color: AMBER },
+  content:  { label: "Ajuste de Conteúdo", color: "#5da0e8" },
+  keywords: { label: "Keywords Incluídas", color: LIME },
+} as const;
+
 const SECTION_COLORS: Record<string, string> = {
   experience: "#5da0e8",
   skills: LIME,
@@ -42,6 +48,22 @@ const SECTION_COLORS: Record<string, string> = {
   languages: "#fb7185",
   other: "#9ca3af",
 };
+
+type CategoryKey = keyof typeof CATEGORY_GROUPS;
+
+function mapCategoriaToGroupKey(
+  categoria: string | undefined,
+  sectionType?: string,
+): CategoryKey {
+  if (categoria === "keywords_incluidas") return "keywords";
+  if (categoria === "texto_reescrito") return "rewrite";
+  if (categoria === "ajuste_conteudo") return "content";
+  // Legacy fallback: infer from sectionType when categoria is absent
+  if (sectionType === "skills") return "keywords";
+  if (["experience", "education", "projects"].includes(sectionType ?? ""))
+    return "rewrite";
+  return "content";
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -69,6 +91,7 @@ type Props = {
   sectionMapping: Record<string, string>;
   jobTitle: string | null;
   companyName: string | null;
+  adaptationStatus: string | null;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -105,22 +128,25 @@ function buildSectionGroups(
 ): SectionGroup[] {
   if (!ajustes?.length) return [];
 
-  const groupMap = new Map<string, SectionGroup>();
+  const groupMap = new Map<CategoryKey, SectionGroup>(
+    (
+      Object.entries(CATEGORY_GROUPS) as [
+        CategoryKey,
+        { label: string; color: string },
+      ][]
+    ).map(([key, def]) => [
+      key,
+      { sectionType: key, label: def.label, color: def.color, ajustes: [] },
+    ]),
+  );
+
   for (const a of ajustes) {
     const key = a.id ?? a.titulo;
     if (!key) continue;
-    const type = sectionMapping[key] ?? "experience";
-    if (!groupMap.has(type)) {
-      groupMap.set(type, {
-        sectionType: type,
-        label: sectionLabel(type),
-        color: SECTION_COLORS[type] ?? "#aaa",
-        ajustes: [],
-      });
-    }
-    const group = groupMap.get(type);
-    if (!group) continue;
-    group.ajustes.push({
+    // Use categoria from analysis when available; fall back to legacy sectionMapping heuristic
+    const legacySectionType = sectionMapping[key];
+    const catKey = mapCategoriaToGroupKey(a.categoria, legacySectionType);
+    groupMap.get(catKey)?.ajustes.push({
       key,
       titulo: a.titulo,
       descricao: a.descricao,
@@ -128,7 +154,8 @@ function buildSectionGroups(
       dica: a.dica,
     });
   }
-  return Array.from(groupMap.values());
+
+  return Array.from(groupMap.values()).filter((g) => g.ajustes.length > 0);
 }
 
 /** Returns the best-matching item index within a section for a given ajuste. */
@@ -388,9 +415,11 @@ function SectionGroupBlock({
         >
           {group.label}
         </span>
-        <span style={{ fontSize: 9, fontFamily: "monospace", color: "#555" }}>
-          +{totalPts}pts
-        </span>
+        {totalPts > 0 && (
+          <span style={{ fontSize: 9, fontFamily: "monospace", color: "#555" }}>
+            +{totalPts}pts
+          </span>
+        )}
       </div>
 
       {group.ajustes.map((a) => {
@@ -434,18 +463,20 @@ function SectionGroupBlock({
               >
                 {a.titulo}
               </span>
-              <span
-                style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  color: isActive ? LIME : AMBER,
-                  fontFamily: "monospace",
-                  whiteSpace: "nowrap",
-                  marginTop: 1,
-                }}
-              >
-                +{a.pontos}
-              </span>
+              {a.pontos > 0 && (
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    color: isActive ? LIME : AMBER,
+                    fontFamily: "monospace",
+                    whiteSpace: "nowrap",
+                    marginTop: 1,
+                  }}
+                >
+                  +{a.pontos}
+                </span>
+              )}
             </div>
             <p
               style={{
@@ -600,11 +631,25 @@ function HeaderSectionView({
   );
 }
 
-function SummaryBlock({ summary }: { summary: string }) {
+function SummaryBlock({
+  summary,
+  isHighlighted,
+}: {
+  summary: string;
+  isHighlighted?: boolean;
+}) {
   return (
     <div
       data-section-type="summary"
-      style={{ marginBottom: 22, scrollMarginTop: 16 }}
+      style={{
+        marginBottom: 22,
+        scrollMarginTop: 16,
+        borderRadius: isHighlighted ? 6 : 0,
+        padding: isHighlighted ? "10px 12px" : "0",
+        background: isHighlighted ? HIGHLIGHT_BG : "transparent",
+        border: isHighlighted ? `1.5px solid ${HIGHLIGHT_BORDER}` : "none",
+        transition: "background 0.2s, border-color 0.2s",
+      }}
     >
       <div
         style={{
@@ -672,10 +717,43 @@ const inputStyle: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
+function HighlightedText({
+  text,
+  highlight,
+  color,
+}: {
+  text: string;
+  highlight?: string;
+  color: string;
+}) {
+  if (!highlight) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(highlight.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark
+        style={{
+          background: `${color}30`,
+          color: "inherit",
+          borderRadius: 2,
+          padding: "0 1px",
+          outline: `1px solid ${color}60`,
+        }}
+      >
+        {text.slice(idx, idx + highlight.length)}
+      </mark>
+      {text.slice(idx + highlight.length)}
+    </>
+  );
+}
+
 function CvSectionBlock({
   section,
   isHighlighted,
   highlightedItemIdx,
+  highlightText,
+  highlightColor,
   isEditing,
   onBulletsChange,
   onItemChange,
@@ -683,6 +761,8 @@ function CvSectionBlock({
   section: CvSection;
   isHighlighted: boolean;
   highlightedItemIdx?: number;
+  highlightText?: string;
+  highlightColor?: string;
   isEditing: boolean;
   onBulletsChange: (itemIdx: number, bullets: string[]) => void;
   onItemChange: (
@@ -898,19 +978,45 @@ function CvSectionBlock({
             ) : (
               item.bullets.length > 0 && (
                 <ul style={{ margin: 0, paddingLeft: 14, listStyle: "disc" }}>
-                  {item.bullets.map((bullet) => (
-                    <li
-                      key={bullet}
-                      style={{
-                        fontSize: 11,
-                        color: "#333",
-                        lineHeight: 1.6,
-                        marginBottom: 2,
-                      }}
-                    >
-                      {bullet}
-                    </li>
-                  ))}
+                  {item.bullets.map((bullet, bIdx) => {
+                    const isHighlightedBullet =
+                      itemHighlighted && highlightText
+                        ? (() => {
+                            // prefer bullet_index from changes if present
+                            const change = item.changes?.find(
+                              (c) => c.highlight_text === highlightText,
+                            );
+                            if (change?.bullet_index !== undefined) {
+                              return bIdx === change.bullet_index;
+                            }
+                            // fallback: check if this bullet contains the text
+                            return bullet
+                              .toLowerCase()
+                              .includes(highlightText.toLowerCase());
+                          })()
+                        : false;
+                    return (
+                      <li
+                        key={`${bullet}-${bIdx}`}
+                        style={{
+                          fontSize: 11,
+                          color: "#333",
+                          lineHeight: 1.6,
+                          marginBottom: 2,
+                        }}
+                      >
+                        {isHighlightedBullet ? (
+                          <HighlightedText
+                            text={bullet}
+                            highlight={highlightText}
+                            color={highlightColor ?? LIME}
+                          />
+                        ) : (
+                          bullet
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )
             )}
@@ -966,12 +1072,14 @@ export function AdaptacaoCvClient({
   sectionMapping: initialSectionMapping,
   jobTitle,
   companyName,
+  adaptationStatus,
 }: Props) {
   const [finalCvOutput, setFinalCvOutput] = useState(initialFinalCvOutput);
   const [sectionMapping, setSectionMapping] = useState(initialSectionMapping);
-  const [isGenerating, setIsGenerating] = useState(
-    !hasSections(editedCvJson ?? initialFinalCvOutput),
-  );
+  const isDelivered =
+    adaptationStatus === "delivered" &&
+    hasSections(editedCvJson ?? initialFinalCvOutput);
+  const [isGenerating, setIsGenerating] = useState(!isDelivered);
 
   const initialSections = ((editedCvJson ?? finalCvOutput)?.sections ??
     []) as CvSection[];
@@ -1008,16 +1116,18 @@ export function AdaptacaoCvClient({
       const payload = (await res.json()) as {
         finalCvOutput?: { sections?: unknown[]; summary?: string } | null;
         sectionMapping?: Record<string, string>;
+        status?: string;
       };
-      if (
+      const isDone =
+        payload.status === "delivered" &&
         payload.finalCvOutput &&
         Array.isArray(payload.finalCvOutput.sections) &&
-        payload.finalCvOutput.sections.length > 0
-      ) {
+        payload.finalCvOutput.sections.length > 0;
+      if (isDone) {
         setFinalCvOutput(payload.finalCvOutput as FinalCvOutput);
         if (payload.sectionMapping) setSectionMapping(payload.sectionMapping);
         setEditedSections(
-          (payload.finalCvOutput.sections ?? []) as CvSection[],
+          (payload.finalCvOutput!.sections ?? []) as CvSection[],
         );
         setIsGenerating(false);
         return true;
@@ -1057,13 +1167,11 @@ export function AdaptacaoCvClient({
     analysisData.projecao_melhoria?.score_atual ??
     analysisData.fit?.score ??
     0;
-  const scoreAfter =
-    analysisData.scoring?.totals?.scoreAposLiberarBase ??
-    analysisData.fit?.score_pos_ajustes ??
-    analysisData.projecao_melhoria?.score_pos_otimizacao;
 
   const ajustes = analysisData.ajustes_conteudo ?? [];
   const sectionGroups = buildSectionGroups(ajustes, sectionMapping);
+  const totalAjustesPontos = ajustes.reduce((s: number, a: { pontos: number }) => s + (a.pontos ?? 0), 0);
+  const scoreAfter = totalAjustesPontos > 0 ? Math.min(100, scoreBefore + totalAjustesPontos) : undefined;
 
   const displaySections = (
     isEditing
@@ -1078,17 +1186,72 @@ export function AdaptacaoCvClient({
     (s) => s.sectionType !== "header",
   );
 
-  // Precompute ajuste → {sectionType, itemIdx} map for item-level navigation
+  // Precompute ajuste → {sectionType, itemIdx, highlightText} map for item-level navigation
   const ajusteItemMap = useMemo(() => {
-    const map: Record<string, { sectionType: string; itemIdx: number }> = {};
+    const map: Record<
+      string,
+      { sectionType: string; itemIdx: number; highlightText?: string }
+    > = {};
+
+    // Primary: scan changes[] embedded in CV items (new contract)
+    for (const section of displaySections) {
+      section.items.forEach((item, itemIdx) => {
+        for (const change of item.changes ?? []) {
+          if (!map[change.ajuste_id]) {
+            map[change.ajuste_id] = {
+              sectionType: section.sectionType,
+              itemIdx,
+              highlightText: change.highlight_text,
+            };
+          }
+        }
+      });
+    }
+
+    // texto_reescrito → always navigate to summary section
     for (const a of ajustes) {
       const key = a.id ?? a.titulo;
-      if (!key) continue;
+      if (!key || map[key]) continue;
+      if (a.categoria === "texto_reescrito") {
+        map[key] = { sectionType: "summary", itemIdx: 0 };
+        continue;
+      }
+      // keywords_incluidas: text-search CV for the keyword term
+      if (a.categoria === "keywords_incluidas") {
+        const term = a.titulo.toLowerCase();
+        let found = false;
+        outer: for (const section of displaySections) {
+          for (let itemIdx = 0; itemIdx < section.items.length; itemIdx++) {
+            const item = section.items[itemIdx];
+            const text = [item.heading ?? "", ...(item.bullets ?? [])]
+              .join(" ")
+              .toLowerCase();
+            if (text.includes(term)) {
+              map[key] = {
+                sectionType: section.sectionType,
+                itemIdx,
+                highlightText: a.titulo,
+              };
+              found = true;
+              break outer;
+            }
+          }
+        }
+        if (!found) {
+          // Last resort: navigate to skills section if present
+          const skillsSection = displaySections.find(
+            (s) => s.sectionType === "skills",
+          );
+          if (skillsSection) {
+            map[key] = { sectionType: "skills", itemIdx: 0, highlightText: a.titulo };
+          }
+        }
+        continue;
+      }
+      // Fallback: legacy sectionMapping + heuristic
       const sectionType = sectionMapping[key];
       if (!sectionType) continue;
-      const section = displaySections.find(
-        (s) => s.sectionType === sectionType,
-      );
+      const section = displaySections.find((s) => s.sectionType === sectionType);
       if (!section) continue;
       map[key] = {
         sectionType,
@@ -1098,6 +1261,7 @@ export function AdaptacaoCvClient({
         ),
       };
     }
+
     return map;
   }, [ajustes, sectionMapping, displaySections]);
 
@@ -1107,6 +1271,15 @@ export function AdaptacaoCvClient({
     : null;
   const highlightedSection = activeMapping?.sectionType ?? null;
   const highlightedItemIdx = activeMapping?.itemIdx;
+  const activeHighlightText = activeMapping?.highlightText;
+
+  // Resolve category color for the active ajuste
+  const activeAjusteCategoria = activeAjusteKey
+    ? ajustes.find((a) => (a.id ?? a.titulo) === activeAjusteKey)?.categoria
+    : undefined;
+  const activeHighlightColor =
+    CATEGORY_GROUPS[mapCategoriaToGroupKey(activeAjusteCategoria)]?.color ??
+    LIME;
 
   function handleAjusteSelect(key: string) {
     const next = key === activeAjusteKey ? null : key;
@@ -1213,9 +1386,12 @@ export function AdaptacaoCvClient({
       {/* Full-height flex container — sidebar fixed, main scrolls */}
       <div
         style={{
+          position: "fixed",
+          top: HEADER_H,
+          left: 0,
+          right: 0,
+          bottom: 0,
           display: "flex",
-          height: `calc(100dvh - ${HEADER_H}px)`,
-          marginTop: HEADER_H,
           background: PAGE_BG,
           overflow: "hidden",
         }}
@@ -1368,13 +1544,95 @@ export function AdaptacaoCvClient({
         </aside>
 
         {/* ── Main CV panel ────────────────────────────────────────── */}
+        <style>{`
+          .cv-main-scroll::-webkit-scrollbar { width: 6px; }
+          .cv-main-scroll::-webkit-scrollbar-track { background: transparent; }
+          .cv-main-scroll::-webkit-scrollbar-thumb { background: rgba(10,10,10,0.18); border-radius: 3px; }
+        `}</style>
         <main
           style={{
             flex: 1,
-            overflowY: "auto",
-            padding: "24px 32px",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
           }}
         >
+          {/* Hint bar — legenda de cores, fora do scroll */}
+          {!isGenerating && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "7px 28px",
+                background: "#cac8c2",
+                borderBottom: "1px solid rgba(10,10,10,0.07)",
+                flexShrink: 0,
+                fontFamily: "var(--font-geist-mono), monospace",
+                fontSize: 10,
+                color: "#7a7874",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <div
+                  style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: "50%",
+                    background: LIME,
+                    boxShadow: "0 0 5px rgba(198,255,58,0.7)",
+                  }}
+                />
+                <span>Clique nos destaques para editar o texto diretamente</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                {[
+                  {
+                    bg: "rgba(198,255,58,0.25)",
+                    bd: "rgba(198,255,58,0.5)",
+                    label: "Palavras-chave / Métricas",
+                  },
+                  {
+                    bg: "rgba(212,133,74,0.2)",
+                    bd: "rgba(212,133,74,0.45)",
+                    label: "Texto reescrito",
+                  },
+                  {
+                    bg: "rgba(93,160,232,0.18)",
+                    bd: "rgba(93,160,232,0.45)",
+                    label: "Formatação",
+                  },
+                ].map((l) => (
+                  <div
+                    key={l.label}
+                    style={{ display: "flex", alignItems: "center", gap: 5 }}
+                  >
+                    <div
+                      style={{
+                        width: 13,
+                        height: 8,
+                        borderRadius: 2,
+                        background: l.bg,
+                        border: `1.5px solid ${l.bd}`,
+                      }}
+                    />
+                    <span>{l.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Scrollable content */}
+          <div
+            className="cv-main-scroll"
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: "24px 32px",
+              background: "#d0cec8",
+            }}
+          >
           {/* Edit toolbar */}
           {!isGenerating && (
             <div
@@ -1486,7 +1744,12 @@ export function AdaptacaoCvClient({
               )}
 
               {/* Professional summary */}
-              {cvSummary && <SummaryBlock summary={cvSummary} />}
+              {cvSummary && (
+                <SummaryBlock
+                  summary={cvSummary}
+                  isHighlighted={!isEditing && highlightedSection === "summary"}
+                />
+              )}
 
               {/* Body sections */}
               {bodySections.map((section) => {
@@ -1500,6 +1763,12 @@ export function AdaptacaoCvClient({
                     isHighlighted={isSectionHighlighted}
                     highlightedItemIdx={
                       isSectionHighlighted ? highlightedItemIdx : undefined
+                    }
+                    highlightText={
+                      isSectionHighlighted ? activeHighlightText : undefined
+                    }
+                    highlightColor={
+                      isSectionHighlighted ? activeHighlightColor : undefined
                     }
                     isEditing={isEditing}
                     onBulletsChange={(itemIdx, bullets) =>
@@ -1542,6 +1811,7 @@ export function AdaptacaoCvClient({
               )}
             </div>
           )}
+          </div>
         </main>
       </div>
     </PageShell>

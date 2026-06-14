@@ -43,6 +43,7 @@ export default async function AdaptacaoCvPage({
       sectionMapping={content.sectionMapping ?? {}}
       jobTitle={content.jobTitle ?? null}
       companyName={content.companyName ?? null}
+      adaptationStatus={content.status ?? null}
     />
   );
 }

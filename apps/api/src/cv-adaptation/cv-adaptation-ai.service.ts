@@ -137,6 +137,11 @@ export class CvAdaptationAiService {
     jobTitle?: string;
     companyName?: string;
     requirementCoverage?: JobRequirementCoverage[];
+    ajustesConteudo?: Array<{
+      id: string;
+      titulo: string;
+      categoria: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
+    }>;
   }): Promise<CvAdaptationOutput> {
     if (process.env.SKIP_AI === "true") {
       return {
@@ -180,6 +185,7 @@ export class CvAdaptationAiService {
       jobTitle: input.jobTitle,
       companyName: input.companyName,
       requirementCoverage: input.requirementCoverage,
+      ajustesConteudo: input.ajustesConteudo,
     });
 
     return output as CvAdaptationOutput;

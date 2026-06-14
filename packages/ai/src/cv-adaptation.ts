@@ -47,6 +47,12 @@ function wrapCvInput(
   return `<CV_CANDIDATO>\n${sanitizeUserInput(cvText, CV_MAX_CHARS)}\n</CV_CANDIDATO>\n\n<DESCRICAO_VAGA>\n${sanitizeUserInput(jobText, JOB_MAX_CHARS)}\n</DESCRICAO_VAGA>\n\n<KEYWORDS_SELECIONADAS>\n${keywordsBlock}\n</KEYWORDS_SELECIONADAS>`;
 }
 
+export type AjusteConteudoRef = {
+  id: string;
+  titulo: string;
+  categoria: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
+};
+
 export type CvAdaptationInput = {
   masterCvText: string;
   jobDescriptionText: string;
@@ -55,6 +61,13 @@ export type CvAdaptationInput = {
   companyName?: string;
   templateHints?: string;
   requirementCoverage?: JobRequirementCoverage[];
+  ajustesConteudo?: AjusteConteudoRef[];
+};
+
+export type CvSectionItemChange = {
+  ajuste_id: string;
+  highlight_text?: string;
+  bullet_index?: number;
 };
 
 export type CvSectionItem = {
@@ -62,6 +75,7 @@ export type CvSectionItem = {
   subheading?: string;
   dateRange?: string;
   bullets: string[];
+  changes?: CvSectionItemChange[];
 };
 
 export type CvSection = {
@@ -273,40 +287,32 @@ User-selected keywords are mandatory inclusion targets.
 
 Every keyword inside <KEYWORDS_SELECIONADAS> must appear in the adapted CV.
 
-The model must include each selected keyword in the safest, most natural, and most strategically useful place.
+The model must include each selected keyword in the most strategically visible place, following a strict priority order.
 
-For each user-selected keyword:
+KEYWORD PLACEMENT PRIORITY — follow this order strictly:
 
-a. First, try to include it in a relevant experience bullet.
-   - Use this option when the keyword can be connected to a real responsibility, project, process, tool, method, business context, or achievement from the original CV.
-   - Do not create false experience.
-   - Do not claim the candidate used a tool, method, certification, or technology in a specific role unless the original CV supports that.
+1. EXPERIENCE BULLETS (STRONGLY PREFERRED)
+   - This is the default target for every keyword.
+   - Try hard to connect the keyword to any real role, project, tool, method, responsibility, or context already in the CV.
+   - Be creative but credible: rewrite a bullet to mention the keyword naturally if the underlying experience supports it.
+   - Do not invent specific facts, metrics, employers, or certifications — but DO integrate keywords into existing bullet context.
+   - Placing a keyword in experience is always better than placing it in skills/competencies.
 
-b. If it does not fit safely in an experience bullet, include it in the professional summary.
-   - Use this option when the keyword represents a domain, positioning, type of responsibility, business capability, leadership theme, or transferable skill.
+2. PROFESSIONAL SUMMARY (SECOND CHOICE)
+   - Use when the keyword represents a domain, capability, methodology, or positioning theme that fits the summary.
    - Keep the wording broad and credible.
+   - Only fall through to this option if no experience bullet can naturally absorb the keyword.
 
-c. If it does not fit naturally in the summary, include it in the skills/competencies section.
-   - Place it inside the most appropriate competency group.
-   - Examples of groups:
-     - Technical Skills
-     - Data & Analytics
-     - Product & Strategy
-     - Leadership & Management
-     - Business & Operations
-     - Tools & Platforms
-     - Methods & Frameworks
-     - Languages
-     - Industry Knowledge
-
-d. As a last resort, include the selected keyword as a standalone competency inside the most appropriate skills group.
+3. SKILLS / COMPETENCIES SECTION (LAST RESORT ONLY)
+   - Use only when the keyword has absolutely no connection to any experience bullet or professional summary context.
+   - Adding a keyword to the skills list without placing it in experience is a missed opportunity — avoid it whenever possible.
+   - Never place a keyword in skills/competencies if it could have been integrated into experience.
 
 Rules:
 - Never omit a user-selected keyword.
 - Never ignore <KEYWORDS_SELECIONADAS>.
 - Never say a selected keyword was not applied.
-- Never invent specific facts, achievements, employers, certifications, metrics, seniority, or hands-on tool usage to force a keyword.
-- If the keyword is weakly supported or not directly supported by the original CV, include it in a safer place such as professional summary or skills/competencies.
+- Never invent specific facts, achievements, employers, certifications, metrics, seniority, or hands-on tool usage.
 - Avoid keyword stuffing. Each selected keyword must appear naturally at least once.
 - Do not repeat selected keywords unnecessarily.
 - Preserve CV credibility and readability.
@@ -595,16 +601,15 @@ Before returning the final JSON, validate every keyword from <KEYWORDS_SELECIONA
 Every selected keyword must appear at least once in the adapted CV.
 
 For each selected keyword:
-- If it fits a real experience, include it in the most relevant experience bullet.
-- If it fits professional positioning, include it in the professional summary.
-- If it cannot be safely connected to experience or summary, include it in the skills/competencies section.
-- As a last resort, include it as a standalone competency inside the most appropriate competency group.
+1. FIRST: find an experience bullet where this keyword can be naturally integrated — prefer this always.
+2. SECOND: if no experience bullet works, integrate it into the professional summary.
+3. LAST RESORT: only if neither experience nor summary works, add it to the skills/competencies section.
 
+Do NOT place a keyword only in skills if it could have been embedded in experience.
 Do not omit selected keywords.
-
 Do not create false factual claims to include selected keywords.
 
-The final adapted CV must contain all user-selected keywords in a natural, credible, and ATS-friendly way.
+The final adapted CV must contain all user-selected keywords in experience bullets or summary wherever possible — skills/competencies is the last resort.
 
 ═══════════════════════════════════════
 ADAPTAÇÃO GUIADA POR RÉGUA DE REQUISITOS
@@ -654,6 +659,28 @@ Regras críticas do mapa:
 Se <REGUA_REQUISITOS> estiver ausente: omita requirementAdaptationActions do output.
 
 ═══════════════════════════════════════
+CHANGE TRACKING — items[].changes
+═══════════════════════════════════════
+
+When the input contains <AJUSTES_ANALISE>:
+
+Items in <AJUSTES_ANALISE> with categoria="keywords_incluidas" are keywords to be integrated into the CV. Apply the same strict placement priority as <KEYWORDS_SELECIONADAS>: prefer experience bullets, then summary, use skills section only as last resort.
+
+For every ajuste you implement, record the change directly inside the section item where it was applied by adding a "changes" array to that item.
+
+Rules:
+- Each entry in "changes" links to one ajuste: use the exact "id" from <AJUSTES_ANALISE>
+- "highlight_text": the exact text fragment that was inserted or changed — rules by category:
+  - keywords_incluidas → the exact keyword term as it appears in the bullet or skills list (e.g., "Power BI", "SQL", "Kafka") — single term or short compound, never a full sentence
+  - ajuste_conteudo → a key phrase or metric that was added/changed in the experience bullet (e.g., "redução de 30%", "liderança de equipe")
+  - texto_reescrito → a key phrase from the rewritten profile/summary text
+- "bullet_index": 0-based index of the altered bullet within the item's "bullets" array — always include for experience items so the UI can locate the exact bullet
+- Only add "changes" to items that were actually modified in response to an ajuste
+- One ajuste may map to one or more items; one item may have multiple change entries (one per ajuste implemented there)
+- If an ajuste was not implemented (not possible without inventing facts), omit it from changes entirely — do not create a placeholder entry
+- Write bullets naturally first; then fill "changes" as metadata — do not let this field affect prose quality
+
+═══════════════════════════════════════
 OUTPUT — valid JSON only, no markdown
 ═══════════════════════════════════════
 {
@@ -674,16 +701,25 @@ OUTPUT — valid JSON only, no markdown
         "heading": "Role title in detected language",
         "subheading": "Company or Institution name — never translated",
         "dateRange": "Mon YYYY – Mon YYYY",
-        "bullets": ["Enhanced bullet using only original content"]
+        "bullets": ["Enhanced bullet using only original content"],
+        "changes": [
+          {
+            "ajuste_id": "id exato do ajuste de <AJUSTES_ANALISE> que motivou esta mudança",
+            "highlight_text": "fragmento do texto novo que representa a mudança (≤ 60 chars, preferencialmente a keyword ou frase-chave inserida)",
+            "bullet_index": 0
+          }
+        ]
       }]
     },
     {
       "sectionType": "skills",
       "title": "Competências Técnicas",
       "items": [
-        { "heading": "BI & Visualização", "bullets": ["Power BI", "Tableau", "Qlik Sense"] },
-        { "heading": "Engenharia de Dados", "bullets": ["SQL", "Python", "dbt", "Airflow"] },
-        { "heading": "Cloud", "bullets": ["AWS", "Google BigQuery", "Databricks"] }
+        {
+          "heading": "BI & Visualização",
+          "bullets": ["Power BI", "Tableau", "Qlik Sense"],
+          "changes": [{ "ajuste_id": "id-do-ajuste", "highlight_text": "Power BI" }]
+        }
       ]
     }
   ],
@@ -730,10 +766,12 @@ export type CvAnalysisOutput = {
   }>;
   /** Ajustes de conteúdo identificados, com ganho estimado de pontos */
   ajustes_conteudo: Array<{
+    id?: string;
     titulo: string;
     descricao: string;
     pontos: number;
     dica: string;
+    categoria?: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
     coveragePercent?: RequirementCoveragePercent;
   }>;
   ajustes_indisponiveis?: Array<{
@@ -866,6 +904,7 @@ REGRAS DE REGUA DE REQUISITOS:
   - para cada requisito, classifique também:
     - "dimension": "experience" | "skill" | "education" | "certification" | "language" | "location" | "work_model" | "other"
     - "gateLevel": "hard" quando o requisito soar eliminatório/binário para screening, senão "soft"
+  - Para CADA ajuste_conteudo, preencha "id" e "categoria" — nunca deixar ausentes ou nulos (veja REGRAS PARA AJUSTES_CONTEUDO abaixo)
 - Se <MODO_ANALISE> for "use_existing_rule":
   - MODO COBERTURA: avalie apenas coverageStatus, evidence, gapExplanation e recommendation para cada requirementKey recebido
   - use EXATAMENTE os requisitos recebidos em <REQUISITOS_EXISTENTES> — mesmos requirementKey, requirementText, importance, dimension, gateLevel e na mesma ordem
@@ -874,6 +913,13 @@ REGRAS DE REGUA DE REQUISITOS:
   - "ats_keywords.ausentes" deve conter APENAS termos de requirements com coverageStatus "missing" ou "partial"
   - "ats_keywords.presentes" deve conter APENAS termos de requirements com coverageStatus "covered"
   - "ajustes_conteudo" deve referenciar APENAS requirements com coverageStatus "missing" ou "partial"
+  - Para CADA ajuste_conteudo derivado de um requirement, você DEVE preencher "id" e "categoria" — nunca deixar esses campos ausentes ou nulos:
+    - "id": slug kebab-case único derivado do titulo (sem acentos, sem espaços) — ex: "adicionar-sql-skills", "reescrever-bullet-experiencia-agil"
+    - "titulo": título curto e acionável do ajuste (NÃO copie o requirementText — crie um título conciso de 4–8 palavras)
+    - "categoria": classifique usando a dimension do requirement:
+      - dimension "skill" ou "certification" E o ajuste consiste em adicionar um termo técnico às skills → "keywords_incluidas". O "titulo" deve ser o termo técnico curto (ex: "SQL", "Power BI", "Scrum") — não uma frase.
+      - dimension "experience" ou qualquer ajuste em bullets de Experiência Profissional → "ajuste_conteudo"
+      - ajuste exclusivo no Perfil Profissional / summary (parágrafo de apresentação do candidato) → "texto_reescrito"
   - "ajustes_indisponiveis" deve referenciar APENAS requirements com lacunas reais não corrigíveis
   - "keywords.possiveis" deve conter APENAS keywords curtas de ATS que podem ser introduzidas por analogia verdadeira, contexto ou reformulação sem inventar fatos
   - "keywords.possiveis" NÃO deve repetir frases longas de requirements
@@ -957,10 +1003,12 @@ SAÍDA — JSON válido, sem markdown:
 
   "ajustes_conteudo": [
     {
+      "id": "slug-kebab-case único e estável nesta análise (derivado do titulo, sem acentos, sem espaços)",
       "titulo": "título curto do ajuste",
       "descricao": "frase curta explicando o que pode ser melhorado",
       "pontos": number,
-      "dica": "exemplo concreto de como aplicar"
+      "dica": "exemplo concreto de como aplicar",
+      "categoria": "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo"
     }
   ],
 
@@ -1243,6 +1291,14 @@ REGRAS PARA CAMPOS SEM INFORMAÇÃO:
 - Se o candidato não informou formação, não inventar formação
 - Se uma seção não tiver conteúdo real, omitir
 
+REGRAS PARA AJUSTES_CONTEUDO (id, categoria):
+
+- Cada ajuste deve ter um "id" em kebab-case, único nesta análise, derivado do titulo sem acentos (ex: "adicionar-sql-nas-skills", "reescrever-bullet-lideranca")
+- O campo "categoria" classifica a natureza do ajuste — use exatamente uma das três opções abaixo:
+  - "texto_reescrito": ajuste no Perfil Profissional (summary/resumo) do candidato — reescrita, reformulação ou enriquecimento do parágrafo de apresentação. Use APENAS para o bloco de summary, nunca para bullets de experiência.
+  - "ajuste_conteudo": qualquer melhoria em itens da Experiência Profissional — reescrita de bullets, reposicionamento de responsabilidades, adequação de linguagem, inclusão de métricas ou contexto em experiências existentes. Também cobre ajustes em educação, certificações, idiomas e organização geral.
+  - "keywords_incluidas": keyword ou competência técnica específica ausente que será adicionada à seção de habilidades/skills (ex: "Power BI", "SQL", "Kafka", "Python"). Deve ser um termo curto e exato — NÃO frases descritivas. Se a keyword vai para experience em vez de skills = use "ajuste_conteudo".
+
 REGRAS PARA LACUNAS:
 
 - O campo lacunas deve ser direto e específico
@@ -1317,6 +1373,10 @@ function buildAdaptationUserMessage(input: CvAdaptationInput): string {
     recommendation: r.recommendation,
   }));
 
+  const ajustesBlock = input.ajustesConteudo?.length
+    ? `\n\n<AJUSTES_ANALISE>\n${JSON.stringify(input.ajustesConteudo)}\n</AJUSTES_ANALISE>`
+    : "";
+
   return `${base}
 
 <REGUA_REQUISITOS>
@@ -1325,7 +1385,7 @@ ${JSON.stringify(requirementSet)}
 
 <COBERTURA_ANALISE>
 ${JSON.stringify(coverageSummary)}
-</COBERTURA_ANALISE>${extraContext ? `\n\n${extraContext}` : ""}`;
+</COBERTURA_ANALISE>${ajustesBlock}${extraContext ? `\n\n${extraContext}` : ""}`;
 }
 
 function normalizeRequirementAdaptationActions(
@@ -1902,6 +1962,17 @@ function deriveProjectedCoveragePercent(
   ) as RequirementCoveragePercent;
 }
 
+function slugifyRequirement(text: string): string {
+  return text
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 60);
+}
+
 function buildRequirementScoringSummary(
   requirements: JobRequirementCoverage[],
   formatoCv: CvAnalysisOutput["formato_cv"],
@@ -2006,6 +2077,7 @@ function buildRequirementScoringSummary(
           b.impactScore - a.impactScore,
       )
       .map((requirement) => ({
+        id: requirement.requirementKey ?? slugifyRequirement(requirement.requirementText),
         titulo: requirement.requirementText,
         descricao:
           requirement.gapExplanation ||
@@ -2016,6 +2088,7 @@ function buildRequirementScoringSummary(
           requirement.recommendation ||
           "Evidencie esse requisito apenas se for verdadeiro no seu CV.",
         coveragePercent: requirement.coveragePercent,
+        categoria: "ajuste_conteudo" as const,
       })),
     adjustmentBudget,
   );
@@ -2195,6 +2268,17 @@ function applyRequirementDrivenOverlay(
     options,
   );
 
+  // Synthetic entry for Perfil Profissional rewrite (always applied by adaptation)
+  const perfilAjuste = {
+    id: "reescrita-perfil-profissional",
+    titulo: "Reescrita do Perfil Profissional",
+    descricao: "O parágrafo de apresentação será reescrito para destacar aderência à vaga.",
+    pontos: 0,
+    dica: "O perfil será adaptado automaticamente — revise e ajuste se necessário.",
+    categoria: "texto_reescrito" as const,
+    coveragePercent: 75 as const,
+  };
+
   return {
     ...output,
     analysisVersion: "requirements_v2",
@@ -2209,7 +2293,7 @@ function applyRequirementDrivenOverlay(
     },
     secoes: summary.sections,
     positivos: summary.positives,
-    ajustes_conteudo: summary.adjustments,
+    ajustes_conteudo: [perfilAjuste, ...summary.adjustments],
     ajustes_indisponiveis: summary.unavailable.map((item) => ({
       titulo: item.titulo,
       descricao: item.descricao,
