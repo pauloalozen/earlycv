@@ -14,10 +14,11 @@ import type {
   FinalCvOutput,
 } from "@/lib/cv-adaptation-api";
 import { updateCvAdaptationContent } from "@/lib/cv-adaptation-api";
+import type { AppInternalRole } from "@/lib/app-session";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
-const SIDEBAR_W = 272;
-const HEADER_H = 53;
+const SIDEBAR_W = 354;
+const HEADER_H = 64;
 const SIDEBAR_BG = "#111";
 const SIDEBAR_BORDER = "rgba(255,255,255,0.07)";
 const PAGE_BG = "#0a0a0a";
@@ -92,6 +93,9 @@ type Props = {
   jobTitle: string | null;
   companyName: string | null;
   adaptationStatus: string | null;
+  userName: string | null;
+  userRole: AppInternalRole | null;
+  availableCredits?: number | "∞" | "—";
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -217,8 +221,8 @@ function ScoreBar({
         <div style={{ textAlign: "center" }}>
           <div
             style={{
-              fontSize: 9,
-              color: "#555",
+              fontSize: 11,
+              color: "#888",
               textTransform: "uppercase",
               letterSpacing: "0.1em",
               marginBottom: 2,
@@ -229,7 +233,7 @@ function ScoreBar({
           <div
             style={{
               fontFamily: "monospace",
-              fontSize: 28,
+              fontSize: 32,
               fontWeight: 800,
               color: colorsBefore.primary,
               lineHeight: 1,
@@ -238,7 +242,7 @@ function ScoreBar({
           >
             {scoreBefore}
           </div>
-          <div style={{ fontSize: 9, color: "#555", marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
             {scoreLabel(scoreBefore)}
           </div>
         </div>
@@ -257,7 +261,7 @@ function ScoreBar({
             />
             <div
               style={{
-                fontSize: 9,
+                fontSize: 11,
                 color: LIME,
                 fontFamily: "monospace",
                 fontWeight: 700,
@@ -280,8 +284,8 @@ function ScoreBar({
             <div style={{ textAlign: "center" }}>
               <div
                 style={{
-                  fontSize: 9,
-                  color: "#555",
+                  fontSize: 11,
+                  color: "#888",
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
                   marginBottom: 2,
@@ -292,7 +296,7 @@ function ScoreBar({
               <div
                 style={{
                   fontFamily: "monospace",
-                  fontSize: 28,
+                  fontSize: 32,
                   fontWeight: 800,
                   color: colorsAfter?.primary ?? LIME,
                   lineHeight: 1,
@@ -303,7 +307,7 @@ function ScoreBar({
               </div>
               <div
                 style={{
-                  fontSize: 9,
+                  fontSize: 11,
                   color: colorsAfter?.primary ?? LIME,
                   marginTop: 2,
                 }}
@@ -318,7 +322,7 @@ function ScoreBar({
           <div style={{ textAlign: "right" }}>
             <div
               style={{
-                fontSize: 9,
+                fontSize: 11,
                 fontWeight: 700,
                 color: colorsBefore.primary,
                 textTransform: "uppercase",
@@ -405,7 +409,7 @@ function SectionGroupBlock({
         />
         <span
           style={{
-            fontSize: 9,
+            fontSize: 11,
             fontWeight: 700,
             color: group.color,
             textTransform: "uppercase",
@@ -416,7 +420,7 @@ function SectionGroupBlock({
           {group.label}
         </span>
         {totalPts > 0 && (
-          <span style={{ fontSize: 9, fontFamily: "monospace", color: "#555" }}>
+          <span style={{ fontSize: 11, fontFamily: "monospace", color: "#888" }}>
             +{totalPts}pts
           </span>
         )}
@@ -453,7 +457,7 @@ function SectionGroupBlock({
             >
               <span
                 style={{
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: 600,
                   color: isActive ? "#fff" : "#c8c8c8",
                   lineHeight: 1.3,
@@ -466,7 +470,7 @@ function SectionGroupBlock({
               {a.pontos > 0 && (
                 <span
                   style={{
-                    fontSize: 9,
+                    fontSize: 11,
                     fontWeight: 700,
                     color: isActive ? LIME : AMBER,
                     fontFamily: "monospace",
@@ -480,8 +484,8 @@ function SectionGroupBlock({
             </div>
             <p
               style={{
-                fontSize: 10,
-                color: "#555",
+                fontSize: 12,
+                color: "#888",
                 lineHeight: 1.4,
                 margin: 0,
               }}
@@ -1055,7 +1059,7 @@ function GeneratingState() {
         <div style={{ fontSize: 14, fontWeight: 600, color: "#e0e0e0" }}>
           Finalizando seu CV adaptado...
         </div>
-        <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>
+        <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
           Aguarde, estamos montando a versão final
         </div>
       </div>
@@ -1073,6 +1077,9 @@ export function AdaptacaoCvClient({
   jobTitle,
   companyName,
   adaptationStatus,
+  userName,
+  userRole,
+  availableCredits,
 }: Props) {
   const [finalCvOutput, setFinalCvOutput] = useState(initialFinalCvOutput);
   const [sectionMapping, setSectionMapping] = useState(initialSectionMapping);
@@ -1375,7 +1382,11 @@ export function AdaptacaoCvClient({
 
   return (
     <PageShell>
-      <AppHeader />
+      <AppHeader
+        userName={userName ?? undefined}
+        userRole={userRole ?? null}
+        availableCredits={availableCredits}
+      />
 
       <DownloadProgressOverlay
         open={downloadOpen}
@@ -1423,7 +1434,7 @@ export function AdaptacaoCvClient({
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 5,
-                fontSize: 10,
+                fontSize: 12,
                 color: "#444",
                 textDecoration: "none",
                 marginBottom: 6,
@@ -1436,7 +1447,7 @@ export function AdaptacaoCvClient({
                 {jobTitle && (
                   <div
                     style={{
-                      fontSize: 12,
+                      fontSize: 14,
                       fontWeight: 600,
                       color: "#d0d0d0",
                       lineHeight: 1.3,
@@ -1446,7 +1457,7 @@ export function AdaptacaoCvClient({
                   </div>
                 )}
                 {companyName && (
-                  <div style={{ fontSize: 10, color: "#555", marginTop: 1 }}>
+                  <div style={{ fontSize: 12, color: "#888", marginTop: 1 }}>
                     {companyName}
                   </div>
                 )}
@@ -1474,7 +1485,7 @@ export function AdaptacaoCvClient({
               <div
                 style={{
                   padding: "8px 16px 4px",
-                  fontSize: 9,
+                  fontSize: 11,
                   fontWeight: 700,
                   color: "#333",
                   textTransform: "uppercase",
@@ -1515,7 +1526,7 @@ export function AdaptacaoCvClient({
                 color: "#0a0a0a",
                 border: "none",
                 borderRadius: 8,
-                fontSize: 12,
+                fontSize: 14,
                 fontWeight: 800,
                 cursor: "pointer",
                 letterSpacing: "0.02em",
@@ -1533,7 +1544,7 @@ export function AdaptacaoCvClient({
                 color: "#666",
                 border: "1px solid rgba(255,255,255,0.08)",
                 borderRadius: 8,
-                fontSize: 11,
+                fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
               }}
@@ -1700,11 +1711,12 @@ export function AdaptacaoCvClient({
                   onClick={() => setIsEditing(true)}
                   style={{
                     padding: "7px 18px",
-                    background: "rgba(255,255,255,0.04)",
-                    color: "#aaa",
-                    border: "1px solid rgba(255,255,255,0.1)",
+                    background: "#1a1a1a",
+                    color: "#f0f0f0",
+                    border: "1px solid rgba(255,255,255,0.18)",
                     borderRadius: 6,
-                    fontSize: 11,
+                    fontSize: 12,
+                    fontWeight: 600,
                     cursor: "pointer",
                   }}
                 >
@@ -1722,7 +1734,7 @@ export function AdaptacaoCvClient({
               ref={cvPanelRef}
               style={{
                 background: CV_BG,
-                borderRadius: 12,
+                borderRadius: 0,
                 padding: "40px 44px",
                 maxWidth: 720,
                 margin: "0 auto 40px",

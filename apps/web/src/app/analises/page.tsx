@@ -608,6 +608,7 @@ export default async function AnalisesPage({ searchParams }: Props) {
                                 null,
                             }}
                             jobApplicationId={item.jobApplicationId}
+                            adaptationId={item.id}
                             hideBaseCvAction
                             removeTopMargin
                           />
