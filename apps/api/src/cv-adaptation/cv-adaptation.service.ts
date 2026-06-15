@@ -2477,6 +2477,7 @@ export class CvAdaptationService {
       status: adaptation.status,
       jobTitle: adaptation.jobTitle,
       companyName: adaptation.companyName,
+      jobDescriptionText: adaptation.jobDescriptionText,
       adaptationNotes,
       jobApplicationId: adaptation.jobApplicationId,
       jobAnalysisCount: await this.countByJob(
@@ -2490,6 +2491,7 @@ export class CvAdaptationService {
     userId: string,
     id: string,
     sections: CvAdaptationOutput["sections"],
+    summary?: string,
   ): Promise<void> {
     const adaptation = await this.database.cvAdaptation.findFirst({
       where: { id, userId },
@@ -2506,7 +2508,7 @@ export class CvAdaptationService {
 
     const base = (adaptation.aiAuditJson ?? {}) as Partial<CvAdaptationOutput>;
     const editedCvJson: CvAdaptationOutput = {
-      summary: base.summary ?? "",
+      summary: summary ?? base.summary ?? "",
       sections,
       highlightedSkills: base.highlightedSkills ?? [],
       removedSections: base.removedSections ?? [],

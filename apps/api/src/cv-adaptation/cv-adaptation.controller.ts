@@ -284,12 +284,13 @@ export class CvAdaptationController {
   updateCvContent(
     @AuthenticatedUser() user: { id: string },
     @Param("id") id: string,
-    @Body() body: { sections: unknown[] },
+    @Body() body: { sections: unknown[]; summary?: string },
   ) {
     return this.cvAdaptationService.updateCvContent(
       user.id,
       id,
       body.sections as Parameters<typeof this.cvAdaptationService.updateCvContent>[2],
+      body.summary,
     );
   }
 

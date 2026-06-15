@@ -52,6 +52,7 @@ export default async function AdaptacaoCvPage({
       sectionMapping={content.sectionMapping ?? {}}
       jobTitle={content.jobTitle ?? null}
       companyName={content.companyName ?? null}
+      jobDescriptionText={content.jobDescriptionText ?? null}
       adaptationStatus={content.status ?? null}
       userName={user.name ?? null}
       userRole={user.internalRole ?? null}

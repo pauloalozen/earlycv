@@ -168,6 +168,7 @@ export type CvAdaptationContentResponse = {
   status?: string;
   jobTitle?: string | null;
   companyName?: string | null;
+  jobDescriptionText?: string | null;
   adaptationNotes?: string | null;
   jobApplicationId?: string | null;
   jobAnalysisCount?: number | null;
@@ -186,12 +187,14 @@ export async function getCvAdaptationContent(
 export async function updateCvAdaptationContent(
   id: string,
   sections: CvSection[],
+  summary?: string,
 ): Promise<void> {
   const response = await apiRequest(
     "PATCH",
     `/cv-adaptation/${id}/cv-content`,
     {
       sections,
+      ...(summary !== undefined && { summary }),
     },
   );
   if (!response.ok) {

@@ -573,21 +573,6 @@ function StatusAccordion({
                 </span>
               )}
             </div>
-            {avgScore !== null && scoreColor !== null && (
-              <span
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 11,
-                  color: scoreColor,
-                  fontWeight: 500,
-                  letterSpacing: 0.2,
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                }}
-              >
-                ø {avgScore}%
-              </span>
-            )}
           </>
         )}
 
@@ -1361,7 +1346,7 @@ function CandRow({
             style={{
               display: "inline-flex",
               alignItems: "center",
-              justifyContent: "space-between",
+              justifyContent: "center",
               gap: 6,
               borderRadius: 8,
               padding: "10px 14px",
@@ -1373,6 +1358,7 @@ function CandRow({
               background: "#fff",
               color: "#0a0a0a",
               border: "1px solid rgba(10,10,10,0.12)",
+              whiteSpace: "nowrap",
             }}
           >
             <svg
@@ -1393,7 +1379,6 @@ function CandRow({
               <path d="M5 20h14" strokeLinecap="round" />
             </svg>
             <span>Baixar melhor CV</span>
-            <span style={{ fontSize: 12, flexShrink: 0 }}>↓</span>
           </a>
         ) : application.bestCvState === "locked" && cvAdaptationIdForActions ? (
           confirmUnlock ? (
@@ -1469,7 +1454,7 @@ function CandRow({
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                justifyContent: "space-between",
+                justifyContent: "center",
                 gap: 6,
                 borderRadius: 8,
                 padding: "10px 14px",
@@ -1481,6 +1466,7 @@ function CandRow({
                 background: "#fff",
                 color: "#0a0a0a",
                 border: "1px solid rgba(10,10,10,0.12)",
+                whiteSpace: "nowrap",
               }}
             >
               <svg
@@ -1514,7 +1500,7 @@ function CandRow({
               cursor: "not-allowed",
             }}
           >
-            CV adaptado indisponível
+            CV indisponível
           </button>
         ) : null}
 
@@ -1723,6 +1709,8 @@ export function CandidaturasClient({
     },
   );
   const [companyFilter, setCompanyFilter] = useState("");
+  const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
+  const companyDropdownRef = useRef<HTMLDivElement>(null);
   const [sectionSorts, setSectionSorts] = useState<Record<string, SortState>>(
     {},
   );
@@ -1780,6 +1768,17 @@ export function CandidaturasClient({
       mounted = false;
     };
   }, [initialApplications, archivedApplications]);
+
+  useEffect(() => {
+    if (!companyDropdownOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (companyDropdownRef.current && !companyDropdownRef.current.contains(e.target as Node)) {
+        setCompanyDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [companyDropdownOpen]);
 
   const scopedApplications =
     segment === "arquivadas" ? archivedApplications : initialApplications;
@@ -2118,40 +2117,89 @@ export function CandidaturasClient({
 
             {companies.length > 1 && (
               <div
+                ref={companyDropdownRef}
                 style={{ marginLeft: "auto", position: "relative" }}
-                className="company-select-wrap"
               >
-                <select
-                  value={companyFilter}
-                  onChange={(e) => setCompanyFilter(e.target.value)}
+                <button
+                  type="button"
+                  onClick={() => setCompanyDropdownOpen((v) => !v)}
                   style={{
-                    appearance: "none",
-                    WebkitAppearance: "none",
-                    background: companyFilter ? "#0a0a0a" : "#fff",
-                    color: companyFilter ? "#fafaf6" : "#3a3a36",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "#fff",
+                    color: companyFilter ? "#0a0a0a" : "#3a3a36",
                     border: companyFilter
-                      ? "1px solid #0a0a0a"
+                      ? "1.5px solid #0a0a0a"
                       : "1px solid rgba(10,10,10,0.10)",
                     borderRadius: 999,
-                    padding: "7px 30px 7px 13px",
+                    padding: "7px 12px 7px 14px",
                     fontSize: 13,
-                    fontWeight: 500,
+                    fontWeight: companyFilter ? 600 : 500,
                     fontFamily: GEIST,
                     cursor: "pointer",
                     outline: "none",
-                    backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='${companyFilter ? "%23fafaf6" : "%238a8a85"}' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>")`,
-                    backgroundRepeat: "no-repeat",
-                    backgroundPosition: "right 10px center",
-                    backgroundSize: "10px 6px",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  <option value="">Empresa</option>
-                  {companies.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
+                  {companyFilter || "Todos"}
+                  <svg
+                    width="10" height="6" viewBox="0 0 10 6" fill="none"
+                    style={{
+                      transition: "transform 0.18s ease",
+                      transform: companyDropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <path d="M1 1l4 4 4-4" stroke="#8a8a85" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+
+                {/* Dropdown list */}
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 6px)",
+                    right: 0,
+                    background: "#fff",
+                    border: "1px solid rgba(10,10,10,0.09)",
+                    borderRadius: 12,
+                    boxShadow: "0 8px 28px rgba(0,0,0,0.10)",
+                    minWidth: 180,
+                    overflow: "hidden",
+                    zIndex: 50,
+                    opacity: companyDropdownOpen ? 1 : 0,
+                    transform: companyDropdownOpen ? "translateY(0)" : "translateY(-6px)",
+                    pointerEvents: companyDropdownOpen ? "auto" : "none",
+                    transition: "opacity 0.16s ease, transform 0.16s ease",
+                  }}
+                >
+                  {[{ label: "Todos", value: "" }, ...companies.map((c) => ({ label: c, value: c }))].map((opt) => (
+                    <button
+                      key={opt.value || "__all__"}
+                      type="button"
+                      onClick={() => {
+                        setCompanyFilter(opt.value);
+                        setCompanyDropdownOpen(false);
+                      }}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "9px 16px",
+                        fontSize: 13,
+                        fontFamily: GEIST,
+                        fontWeight: companyFilter === opt.value ? 600 : 400,
+                        color: companyFilter === opt.value ? "#0a0a0a" : "#3a3a36",
+                        background: companyFilter === opt.value ? "rgba(10,10,10,0.04)" : "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {opt.label}
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
             )}
           </div>

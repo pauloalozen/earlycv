@@ -13,7 +13,11 @@ import type {
   CvSection,
   FinalCvOutput,
 } from "@/lib/cv-adaptation-api";
-import { updateCvAdaptationContent } from "@/lib/cv-adaptation-api";
+import {
+  analyzeAuthenticatedCv,
+  saveGuestPreview,
+  updateCvAdaptationContent,
+} from "@/lib/cv-adaptation-api";
 import type { AppInternalRole } from "@/lib/app-session";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -30,6 +34,19 @@ const AMBER_BORDER = "rgba(212,133,74,0.35)";
 const HIGHLIGHT_BG = "rgba(198,255,58,0.08)";
 const HIGHLIGHT_ITEM_BG = "rgba(198,255,58,0.13)";
 const HIGHLIGHT_BORDER = "rgba(198,255,58,0.4)";
+
+const ADD_ITEM_LABEL: Record<string, string> = {
+  experience: "+ Adicionar experiência",
+  education: "+ Adicionar formação",
+  skills: "+ Adicionar grupo",
+  certifications: "+ Adicionar certificação",
+  languages: "+ Adicionar idioma",
+  projects: "+ Adicionar projeto",
+  other: "+ Adicionar item",
+};
+
+const SECTION_HAS_SUBHEADING = new Set(["experience", "education", "projects", "certifications"]);
+const SECTION_HAS_DATE = new Set(["experience", "education", "projects", "certifications"]);
 const CV_DIVIDER = "#e5e5e1";
 const CV_META = "#999";
 const CV_SECONDARY = "#555";
@@ -39,16 +56,6 @@ const CATEGORY_GROUPS = {
   keywords: { label: "Keywords Incluídas", color: LIME },
 } as const;
 
-const SECTION_COLORS: Record<string, string> = {
-  experience: "#5da0e8",
-  skills: LIME,
-  education: "#a78bfa",
-  header: "#f0f0f0",
-  projects: "#34d399",
-  certifications: "#f59e0b",
-  languages: "#fb7185",
-  other: "#9ca3af",
-};
 
 type CategoryKey = keyof typeof CATEGORY_GROUPS;
 
@@ -92,6 +99,7 @@ type Props = {
   sectionMapping: Record<string, string>;
   jobTitle: string | null;
   companyName: string | null;
+  jobDescriptionText: string | null;
   adaptationStatus: string | null;
   userName: string | null;
   userRole: AppInternalRole | null;
@@ -185,6 +193,58 @@ function findBestItemIdx(ajuste: AjusteWithKey, section: CvSection): number {
   });
 
   return best;
+}
+
+const SECTION_TEXT_LABELS: Record<string, string> = {
+  experience: "EXPERIÊNCIA PROFISSIONAL",
+  education: "FORMAÇÃO ACADÊMICA",
+  skills: "COMPETÊNCIAS",
+  certifications: "CERTIFICAÇÕES",
+  languages: "IDIOMAS",
+  projects: "PROJETOS",
+  other: "OUTROS",
+};
+
+function sectionsToText(sections: CvSection[], summary?: string): string {
+  const lines: string[] = [];
+
+  const header = sections.find((s) => s.sectionType === "header");
+  if (header?.items[0]) {
+    const it = header.items[0];
+    if (it.heading) lines.push(it.heading);
+    if (it.subheading) lines.push(it.subheading);
+    if (it.bullets.length) lines.push(it.bullets.join(" | "));
+    lines.push("");
+  }
+
+  if (summary?.trim()) {
+    lines.push("RESUMO PROFISSIONAL");
+    lines.push(summary.trim());
+    lines.push("");
+  }
+
+  for (const section of sections) {
+    if (section.sectionType === "header") continue;
+    lines.push(SECTION_TEXT_LABELS[section.sectionType] ?? section.title ?? section.sectionType.toUpperCase());
+    for (const item of section.items) {
+      const heading = [item.heading, item.subheading].filter(Boolean).join(" | ");
+      if (heading) lines.push(heading);
+      if (item.dateRange) lines.push(item.dateRange);
+      for (const b of item.bullets) {
+        if (b.trim()) lines.push(`• ${b}`);
+      }
+      lines.push("");
+    }
+  }
+
+  return lines.join("\n").trim();
+}
+
+function stripContactLabel(text: string): string {
+  return text.replace(
+    /^(e-?mail|telefone|tel|fone|phone|linkedin|localiza[çc][aã]o|location|endere[çc]o|cidade|city)\s*:\s*/i,
+    "",
+  );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -521,19 +581,18 @@ function HeaderSectionView({
     <div
       data-section-type="header"
       style={{
-        marginBottom: 24,
-        paddingBottom: 20,
-        borderBottom: `1px solid ${CV_DIVIDER}`,
+        marginBottom: 20,
         borderRadius: isHighlighted ? 6 : 0,
-        padding: isHighlighted ? "12px 14px" : "0 0 20px",
+        padding: isHighlighted ? "12px 14px 16px" : "0 0 16px",
         background: isHighlighted ? HIGHLIGHT_BG : "transparent",
-        border: isHighlighted ? `1.5px solid ${HIGHLIGHT_BORDER}` : "none",
-        transition: "background 0.2s, border-color 0.2s",
+        outline: isHighlighted ? `1.5px solid ${HIGHLIGHT_BORDER}` : "none",
+        transition: "background 0.2s",
         scrollMarginTop: 16,
+        textAlign: "center",
       }}
     >
       {isEditing ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, textAlign: "left" }}>
           <div>
             <label htmlFor="hdr-heading" style={labelStyle}>
               Nome
@@ -547,31 +606,19 @@ function HeaderSectionView({
             />
           </div>
           <div>
-            <label htmlFor="hdr-subheading" style={labelStyle}>
-              Cargo / Título
-            </label>
-            <input
-              id="hdr-subheading"
-              type="text"
-              value={item.subheading ?? ""}
-              onChange={(e) => onItemChange(0, "subheading", e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-          <div>
             <label htmlFor="hdr-contact" style={labelStyle}>
-              Contato (separado por · )
+              Contato (separado por | )
             </label>
             <input
               id="hdr-contact"
               type="text"
-              value={item.bullets.join(" · ")}
+              value={item.bullets.join(" | ")}
               onChange={(e) =>
                 onItemChange(
                   0,
                   "bullets",
                   e.target.value
-                    .split("·")
+                    .split("|")
                     .map((s) => s.trim())
                     .filter(Boolean),
                 )
@@ -586,9 +633,10 @@ function HeaderSectionView({
             <div
               style={{
                 fontSize: 22,
-                fontWeight: 700,
+                fontWeight: 800,
                 color: "#0d0d0d",
-                letterSpacing: "-0.025em",
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
                 lineHeight: 1.15,
               }}
             >
@@ -610,23 +658,13 @@ function HeaderSectionView({
           {item.bullets.length > 0 && (
             <div
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 color: CV_META,
                 marginTop: 6,
                 lineHeight: 1.6,
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "2px 6px",
               }}
             >
-              {item.bullets.map((b, i) => (
-                <span key={b}>
-                  {i > 0 && (
-                    <span style={{ marginRight: 6, opacity: 0.4 }}>·</span>
-                  )}
-                  {b}
-                </span>
-              ))}
+              {item.bullets.map(stripContactLabel).join(" | ")}
             </div>
           )}
         </>
@@ -638,63 +676,73 @@ function HeaderSectionView({
 function SummaryBlock({
   summary,
   isHighlighted,
+  isEditing,
+  onSummaryChange,
 }: {
   summary: string;
   isHighlighted?: boolean;
+  isEditing?: boolean;
+  onSummaryChange?: (value: string) => void;
 }) {
   return (
     <div
       data-section-type="summary"
       style={{
-        marginBottom: 22,
+        marginBottom: 20,
         scrollMarginTop: 16,
         borderRadius: isHighlighted ? 6 : 0,
         padding: isHighlighted ? "10px 12px" : "0",
         background: isHighlighted ? HIGHLIGHT_BG : "transparent",
-        border: isHighlighted ? `1.5px solid ${HIGHLIGHT_BORDER}` : "none",
-        transition: "background 0.2s, border-color 0.2s",
+        outline: isHighlighted ? `1.5px solid ${HIGHLIGHT_BORDER}` : "none",
+        transition: "background 0.2s",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 10,
-        }}
-      >
+      <div style={{ marginBottom: 8 }}>
         <span
           style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: "#9ca3af",
-            flexShrink: 0,
-          }}
-        />
-        <span
-          style={{
-            fontSize: 9,
+            fontSize: 10,
             fontWeight: 800,
-            color: "#9ca3af",
+            color: "#111",
             textTransform: "uppercase",
-            letterSpacing: "0.12em",
+            letterSpacing: "0.1em",
           }}
         >
-          Perfil Profissional
+          Resumo Profissional
         </span>
-        <div style={{ flex: 1, height: 1, background: CV_DIVIDER }} />
+        <div style={{ height: 1.5, background: CV_DIVIDER, marginTop: 5 }} />
       </div>
-      <p
-        style={{
-          fontSize: 11.5,
-          color: "#333",
-          lineHeight: 1.7,
-          margin: 0,
-        }}
-      >
-        {summary}
-      </p>
+      {isEditing ? (
+        <textarea
+          value={summary}
+          rows={6}
+          onChange={(e) => onSummaryChange?.(e.target.value)}
+          style={{
+            width: "100%",
+            fontSize: 11.5,
+            color: "#111",
+            lineHeight: 1.7,
+            border: "1px solid #ddd",
+            borderRadius: 4,
+            padding: "6px 10px",
+            resize: "vertical",
+            fontFamily: "inherit",
+            background: "#fafaf8",
+            outline: "none",
+            boxSizing: "border-box",
+          }}
+        />
+      ) : (
+        <p
+          style={{
+            fontSize: 11.5,
+            color: "#333",
+            lineHeight: 1.7,
+            margin: 0,
+          }}
+        >
+          {summary}
+        </p>
+      )}
     </div>
   );
 }
@@ -761,6 +809,8 @@ function CvSectionBlock({
   isEditing,
   onBulletsChange,
   onItemChange,
+  onAddItem,
+  onRemoveItem,
 }: {
   section: CvSection;
   isHighlighted: boolean;
@@ -774,259 +824,337 @@ function CvSectionBlock({
     field: "heading" | "subheading" | "dateRange",
     value: string,
   ) => void;
+  onAddItem: () => void;
+  onRemoveItem: (itemIdx: number) => void;
 }) {
-  const color = SECTION_COLORS[section.sectionType] ?? "#aaa";
-
   return (
     <div
       data-section-type={section.sectionType}
       style={{
-        marginBottom: 22,
-        borderRadius: 8,
-        padding: "14px 16px",
+        marginBottom: 20,
+        borderRadius: isHighlighted ? 6 : 0,
+        padding: isHighlighted ? "12px 14px" : "0",
         background: isHighlighted ? HIGHLIGHT_BG : "transparent",
-        border: isHighlighted
-          ? `1.5px solid ${HIGHLIGHT_BORDER}`
-          : "1.5px solid transparent",
-        transition: "background 0.2s, border-color 0.2s",
+        outline: isHighlighted ? `1.5px solid ${HIGHLIGHT_BORDER}` : "none",
+        transition: "background 0.2s",
         scrollMarginTop: 16,
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 14,
-        }}
-      >
+      <div style={{ marginBottom: 12 }}>
         <span
           style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: color,
-            flexShrink: 0,
-          }}
-        />
-        <span
-          style={{
-            fontSize: 9,
+            fontSize: 10,
             fontWeight: 800,
-            color,
+            color: "#111",
             textTransform: "uppercase",
-            letterSpacing: "0.12em",
+            letterSpacing: "0.1em",
           }}
         >
           {section.title || sectionLabel(section.sectionType)}
         </span>
-        <div style={{ flex: 1, height: 1, background: CV_DIVIDER }} />
+        <div style={{ height: 1.5, background: CV_DIVIDER, marginTop: 5 }} />
       </div>
 
-      {section.items.map((item, itemIdx) => {
-        const itemHighlighted =
-          isHighlighted &&
-          !isEditing &&
-          highlightedItemIdx !== undefined &&
-          highlightedItemIdx === itemIdx;
-        return (
-          <div
-            key={item.heading ?? String(itemIdx)}
-            data-item-idx={itemIdx}
-            style={{
-              marginBottom: 14,
-              borderRadius: 6,
-              padding: itemHighlighted ? "8px 10px" : "0",
-              background: itemHighlighted ? HIGHLIGHT_ITEM_BG : "transparent",
-              border: itemHighlighted
-                ? `1px solid ${HIGHLIGHT_BORDER}`
-                : "1px solid transparent",
-              transition: "background 0.2s, border-color 0.2s",
-              scrollMarginTop: 16,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: 8,
-                marginBottom: 6,
-              }}
-            >
-              <div style={{ flex: 1 }}>
+      {section.sectionType === "skills" && !isEditing
+        ? section.items.map((item, itemIdx) => {
+            const itemHighlighted =
+              isHighlighted &&
+              highlightedItemIdx !== undefined &&
+              highlightedItemIdx === itemIdx;
+            const allText = [item.heading, ...item.bullets]
+              .filter(Boolean)
+              .join(", ");
+            const hasHighlight =
+              itemHighlighted &&
+              highlightText &&
+              allText.toLowerCase().includes(highlightText.toLowerCase());
+            return (
+              <div
+                key={item.heading ?? String(itemIdx)}
+                data-item-idx={itemIdx}
+                style={{
+                  marginBottom: 5,
+                  borderRadius: itemHighlighted ? 4 : 0,
+                  padding: itemHighlighted ? "4px 6px" : "0",
+                  background: itemHighlighted ? HIGHLIGHT_ITEM_BG : "transparent",
+                  outline: itemHighlighted ? `1px solid ${HIGHLIGHT_BORDER}` : "none",
+                  scrollMarginTop: 16,
+                }}
+              >
+                <span style={{ fontSize: 11.5, lineHeight: 1.65, color: "#333" }}>
+                  {item.heading && (
+                    <strong style={{ fontWeight: 700, color: "#111" }}>
+                      {item.heading}:{" "}
+                    </strong>
+                  )}
+                  {hasHighlight ? (
+                    <HighlightedText
+                      text={item.bullets.join(", ")}
+                      highlight={highlightText}
+                      color={highlightColor ?? LIME}
+                    />
+                  ) : (
+                    item.bullets.join(", ")
+                  )}
+                </span>
+              </div>
+            );
+          })
+        : section.items.map((item, itemIdx) => {
+            const itemHighlighted =
+              isHighlighted &&
+              !isEditing &&
+              highlightedItemIdx !== undefined &&
+              highlightedItemIdx === itemIdx;
+
+            const showSubheading = SECTION_HAS_SUBHEADING.has(section.sectionType);
+            const showDate = SECTION_HAS_DATE.has(section.sectionType);
+
+            return (
+              <div
+                key={item.heading ?? String(itemIdx)}
+                data-item-idx={itemIdx}
+                style={{
+                  marginBottom: isEditing ? 16 : 14,
+                  borderRadius: isEditing ? 6 : itemHighlighted ? 6 : 0,
+                  padding: isEditing ? "10px 12px" : itemHighlighted ? "8px 10px" : "0",
+                  background: isEditing
+                    ? "rgba(0,0,0,0.02)"
+                    : itemHighlighted ? HIGHLIGHT_ITEM_BG : "transparent",
+                  border: isEditing
+                    ? "1px solid #e0e0dc"
+                    : itemHighlighted ? `1px solid ${HIGHLIGHT_BORDER}` : "1px solid transparent",
+                  transition: "background 0.2s, border-color 0.2s",
+                  scrollMarginTop: 16,
+                }}
+              >
                 {isEditing ? (
-                  <div
-                    style={{ display: "flex", flexDirection: "column", gap: 4 }}
-                  >
-                    <input
-                      type="text"
-                      placeholder="Título / Cargo / Competência"
-                      value={item.heading ?? ""}
-                      onChange={(e) =>
-                        onItemChange(itemIdx, "heading", e.target.value)
-                      }
-                      style={inputStyle}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Subtítulo / Empresa / Nível"
-                      value={item.subheading ?? ""}
-                      onChange={(e) =>
-                        onItemChange(itemIdx, "subheading", e.target.value)
-                      }
-                      style={inputStyle}
-                    />
-                  </div>
-                ) : (
                   <>
-                    {item.heading && (
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: "#111",
-                          lineHeight: 1.3,
-                        }}
-                      >
-                        {item.heading}
-                      </div>
-                    )}
-                    {item.subheading && (
-                      <div
+                    {/* Remove item button */}
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveItem(itemIdx)}
                         style={{
                           fontSize: 11,
-                          color: CV_SECONDARY,
-                          marginTop: 1,
+                          color: "#999",
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: "2px 6px",
                         }}
                       >
-                        {item.subheading}
+                        ✕ Remover
+                      </button>
+                    </div>
+
+                    {/* Heading (always shown) */}
+                    <div style={{ marginBottom: 4 }}>
+                      <label htmlFor={`${section.sectionType}-${itemIdx}-heading`} style={labelStyle}>
+                        {section.sectionType === "skills" ? "Categoria" : section.sectionType === "languages" ? "Idioma" : "Cargo / Título"}
+                      </label>
+                      <input
+                        id={`${section.sectionType}-${itemIdx}-heading`}
+                        type="text"
+                        value={item.heading ?? ""}
+                        onChange={(e) => onItemChange(itemIdx, "heading", e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
+
+                    {/* Subheading — only for experience, education, etc. */}
+                    {showSubheading && (
+                      <div style={{ marginBottom: 4 }}>
+                        <label htmlFor={`${section.sectionType}-${itemIdx}-sub`} style={labelStyle}>Empresa / Instituição</label>
+                        <input
+                          id={`${section.sectionType}-${itemIdx}-sub`}
+                          type="text"
+                          value={item.subheading ?? ""}
+                          onChange={(e) => onItemChange(itemIdx, "subheading", e.target.value)}
+                          style={inputStyle}
+                        />
                       </div>
+                    )}
+
+                    {/* Date range — only for experience, education, etc. */}
+                    {showDate && (
+                      <div style={{ marginBottom: 6 }}>
+                        <label htmlFor={`${section.sectionType}-${itemIdx}-date`} style={labelStyle}>Período</label>
+                        <input
+                          id={`${section.sectionType}-${itemIdx}-date`}
+                          type="text"
+                          value={item.dateRange ?? ""}
+                          onChange={(e) => onItemChange(itemIdx, "dateRange", e.target.value)}
+                          style={inputStyle}
+                        />
+                      </div>
+                    )}
+
+                    {/* Bullets */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      <span style={labelStyle}>
+                        {section.sectionType === "skills" ? "Itens (um por linha)" : "Itens"}
+                      </span>
+                      {item.bullets.map((bullet, bIdx) => (
+                        <div
+                          key={`edit-${itemIdx}-${bIdx}`}
+                          style={{ display: "flex", gap: 5, alignItems: "flex-start" }}
+                        >
+                          <textarea
+                            value={bullet}
+                            rows={section.sectionType === "skills" ? 1 : 2}
+                            onChange={(e) => {
+                              const next = [...item.bullets];
+                              next[bIdx] = e.target.value;
+                              onBulletsChange(itemIdx, next);
+                            }}
+                            style={{
+                              flex: 1,
+                              fontSize: 11,
+                              color: "#111",
+                              lineHeight: 1.5,
+                              border: "1px solid #ddd",
+                              borderRadius: 4,
+                              padding: "4px 8px",
+                              resize: "none",
+                              fontFamily: "inherit",
+                              background: "#fafaf8",
+                              outline: "none",
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = item.bullets.filter((_, i) => i !== bIdx);
+                              onBulletsChange(itemIdx, next);
+                            }}
+                            style={{
+                              fontSize: 14,
+                              color: "#bbb",
+                              background: "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: "4px 6px",
+                              lineHeight: 1,
+                              flexShrink: 0,
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => onBulletsChange(itemIdx, [...item.bullets, ""])}
+                        style={{
+                          fontSize: 11,
+                          color: "#666",
+                          background: "transparent",
+                          border: "1px dashed #ccc",
+                          borderRadius: 4,
+                          cursor: "pointer",
+                          padding: "5px 10px",
+                          textAlign: "left",
+                        }}
+                      >
+                        + Adicionar item
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 6 }}>
+                      {(item.heading || item.subheading) && (
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "#111",
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          {item.heading}
+                          {item.heading && item.subheading && (
+                            <span style={{ fontWeight: 400, color: CV_SECONDARY }}> | {item.subheading}</span>
+                          )}
+                          {!item.heading && item.subheading}
+                        </div>
+                      )}
+                      {item.dateRange && (
+                        <div style={{ fontSize: 11, color: CV_META, marginTop: 2 }}>
+                          {item.dateRange}
+                        </div>
+                      )}
+                    </div>
+
+                    {item.bullets.length > 0 && (
+                      <ul style={{ margin: 0, paddingLeft: 14, listStyle: "disc" }}>
+                        {item.bullets.map((bullet, bIdx) => {
+                          const isHighlightedBullet =
+                            itemHighlighted && highlightText
+                              ? (() => {
+                                  const change = item.changes?.find(
+                                    (c) => c.highlight_text === highlightText,
+                                  );
+                                  if (change?.bullet_index !== undefined) {
+                                    return bIdx === change.bullet_index;
+                                  }
+                                  return bullet
+                                    .toLowerCase()
+                                    .includes(highlightText.toLowerCase());
+                                })()
+                              : false;
+                          return (
+                            <li
+                              key={`${bullet}-${bIdx}`}
+                              style={{
+                                fontSize: 11,
+                                color: "#333",
+                                lineHeight: 1.6,
+                                marginBottom: 2,
+                              }}
+                            >
+                              {isHighlightedBullet ? (
+                                <HighlightedText
+                                  text={bullet}
+                                  highlight={highlightText}
+                                  color={highlightColor ?? LIME}
+                                />
+                              ) : (
+                                bullet
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
                     )}
                   </>
                 )}
               </div>
-              {isEditing ? (
-                <input
-                  type="text"
-                  placeholder="Período"
-                  value={item.dateRange ?? ""}
-                  onChange={(e) =>
-                    onItemChange(itemIdx, "dateRange", e.target.value)
-                  }
-                  style={{ ...inputStyle, width: 110, flexShrink: 0 }}
-                />
-              ) : (
-                item.dateRange && (
-                  <span
-                    style={{
-                      fontSize: 10,
-                      color: CV_META,
-                      fontFamily: "monospace",
-                      whiteSpace: "nowrap",
-                      marginTop: 1,
-                    }}
-                  >
-                    {item.dateRange}
-                  </span>
-                )
-              )}
-            </div>
+            );
+          })}
 
-            {isEditing ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {item.bullets.map((bullet, bIdx) => (
-                  <div
-                    key={`edit-${itemIdx}-${bIdx}`}
-                    style={{
-                      display: "flex",
-                      gap: 6,
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <span
-                      style={{
-                        color: CV_META,
-                        marginTop: 6,
-                        fontSize: 9,
-                        flexShrink: 0,
-                      }}
-                    >
-                      •
-                    </span>
-                    <textarea
-                      value={bullet}
-                      rows={2}
-                      onChange={(e) => {
-                        const next = [...item.bullets];
-                        next[bIdx] = e.target.value;
-                        onBulletsChange(itemIdx, next);
-                      }}
-                      style={{
-                        flex: 1,
-                        fontSize: 11,
-                        color: "#111",
-                        lineHeight: 1.5,
-                        border: "1px solid #ddd",
-                        borderRadius: 4,
-                        padding: "4px 8px",
-                        resize: "none",
-                        fontFamily: "inherit",
-                        background: "#fafaf8",
-                        outline: "none",
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              item.bullets.length > 0 && (
-                <ul style={{ margin: 0, paddingLeft: 14, listStyle: "disc" }}>
-                  {item.bullets.map((bullet, bIdx) => {
-                    const isHighlightedBullet =
-                      itemHighlighted && highlightText
-                        ? (() => {
-                            // prefer bullet_index from changes if present
-                            const change = item.changes?.find(
-                              (c) => c.highlight_text === highlightText,
-                            );
-                            if (change?.bullet_index !== undefined) {
-                              return bIdx === change.bullet_index;
-                            }
-                            // fallback: check if this bullet contains the text
-                            return bullet
-                              .toLowerCase()
-                              .includes(highlightText.toLowerCase());
-                          })()
-                        : false;
-                    return (
-                      <li
-                        key={`${bullet}-${bIdx}`}
-                        style={{
-                          fontSize: 11,
-                          color: "#333",
-                          lineHeight: 1.6,
-                          marginBottom: 2,
-                        }}
-                      >
-                        {isHighlightedBullet ? (
-                          <HighlightedText
-                            text={bullet}
-                            highlight={highlightText}
-                            color={highlightColor ?? LIME}
-                          />
-                        ) : (
-                          bullet
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )
-            )}
-          </div>
-        );
-      })}
+      {/* Add item button — only in edit mode */}
+      {isEditing && (
+        <button
+          type="button"
+          onClick={onAddItem}
+          style={{
+            fontSize: 12,
+            color: "#555",
+            background: "transparent",
+            border: "1px dashed #bbb",
+            borderRadius: 6,
+            cursor: "pointer",
+            padding: "7px 14px",
+            width: "100%",
+            textAlign: "left",
+            marginTop: 4,
+          }}
+        >
+          {ADD_ITEM_LABEL[section.sectionType] ?? "+ Adicionar item"}
+        </button>
+      )}
     </div>
   );
 }
@@ -1076,6 +1204,7 @@ export function AdaptacaoCvClient({
   sectionMapping: initialSectionMapping,
   jobTitle,
   companyName,
+  jobDescriptionText,
   adaptationStatus,
   userName,
   userRole,
@@ -1090,11 +1219,17 @@ export function AdaptacaoCvClient({
 
   const initialSections = ((editedCvJson ?? finalCvOutput)?.sections ??
     []) as CvSection[];
+  const initialSummary = (editedCvJson ?? finalCvOutput)?.summary ?? "";
   const [activeAjusteKey, setActiveAjusteKey] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedSections, setEditedSections] =
     useState<CvSection[]>(initialSections);
+  const [editedSummary, setEditedSummary] = useState<string>(initialSummary);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [reanaliseState, setReanaliseState] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [reanaliseAdaptationId, setReanaliseAdaptationId] = useState<string | null>(null);
+  const [reanaliseScore, setReanaliseScore] = useState<number | null>(null);
+  const [reanaliseError, setReanaliseError] = useState<string | null>(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadStage, setDownloadStage] =
     useState<DownloadProgressStage | null>(null);
@@ -1188,10 +1323,23 @@ export function AdaptacaoCvClient({
 
   const cvSummary = (editedCvJson ?? finalCvOutput)?.summary;
 
+  const SECTION_ORDER = [
+    "experience",
+    "skills",
+    "education",
+    "certifications",
+    "projects",
+    "languages",
+    "other",
+  ];
   const headerSection = displaySections.find((s) => s.sectionType === "header");
-  const bodySections = displaySections.filter(
-    (s) => s.sectionType !== "header",
-  );
+  const bodySections = displaySections
+    .filter((s) => s.sectionType !== "header")
+    .sort((a, b) => {
+      const ai = SECTION_ORDER.indexOf(a.sectionType);
+      const bi = SECTION_ORDER.indexOf(b.sectionType);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
 
   // Precompute ajuste → {sectionType, itemIdx, highlightText} map for item-level navigation
   const ajusteItemMap = useMemo(() => {
@@ -1342,10 +1490,24 @@ export function AdaptacaoCvClient({
     }));
   }
 
+  function handleAddItem(sectionIdx: number) {
+    updateSection(sectionIdx, (s) => ({
+      ...s,
+      items: [...s.items, { heading: "", subheading: "", dateRange: "", bullets: [""] }],
+    }));
+  }
+
+  function handleRemoveItem(sectionIdx: number, itemIdx: number) {
+    updateSection(sectionIdx, (s) => ({
+      ...s,
+      items: s.items.filter((_, i) => i !== itemIdx),
+    }));
+  }
+
   async function handleSave() {
     setSaveStatus("saving");
     try {
-      await updateCvAdaptationContent(adaptationId, editedSections);
+      await updateCvAdaptationContent(adaptationId, editedSections, editedSummary);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
     } catch {
@@ -1358,8 +1520,56 @@ export function AdaptacaoCvClient({
     const base = ((editedCvJson ?? finalCvOutput)?.sections ??
       []) as CvSection[];
     setEditedSections(base);
+    setEditedSummary((editedCvJson ?? finalCvOutput)?.summary ?? "");
     setIsEditing(false);
     setSaveStatus("idle");
+  }
+
+  async function handleReanalisar() {
+    if (!jobDescriptionText) return;
+    setReanaliseState("running");
+    setReanaliseError(null);
+    try {
+      const cvText = sectionsToText(
+        isEditing ? editedSections : ((editedCvJson ?? finalCvOutput)?.sections ?? []) as CvSection[],
+        isEditing ? editedSummary : ((editedCvJson ?? finalCvOutput)?.summary ?? ""),
+      );
+
+      const formData = new FormData();
+      formData.set("jobDescriptionText", jobDescriptionText);
+      formData.set("masterCvText", cvText);
+      formData.set("inputMode", "text_paste");
+
+      const result = await analyzeAuthenticatedCv(formData, "text_paste");
+      if (!result.ok) {
+        setReanaliseError(result.error);
+        setReanaliseState("error");
+        return;
+      }
+
+      const saved = await saveGuestPreview({
+        adaptedContentJson: result.adaptedContentJson as Record<string, unknown>,
+        previewText: result.previewText,
+        masterCvText: result.masterCvText,
+        analysisCvSnapshotId: result.analysisCvSnapshotId,
+        jobDescriptionText,
+        jobTitle: jobTitle ?? undefined,
+        companyName: companyName ?? undefined,
+      });
+
+      const newScore =
+        (result.adaptedContentJson as CvAnalysisData)?.scoring?.totals?.scoreAtualBase ??
+        (result.adaptedContentJson as CvAnalysisData)?.projecao_melhoria?.score_atual ??
+        (result.adaptedContentJson as CvAnalysisData)?.fit?.score ??
+        null;
+
+      setReanaliseScore(newScore);
+      setReanaliseAdaptationId(saved.id);
+      setReanaliseState("done");
+    } catch (e) {
+      setReanaliseError(e instanceof Error ? e.message : "Erro ao reanalisar. Tente novamente.");
+      setReanaliseState("error");
+    }
   }
 
   async function handleDownload(format: "pdf" | "docx") {
@@ -1504,6 +1714,95 @@ export function AdaptacaoCvClient({
               />
             ))}
           </div>
+
+          {/* Manual edits warning + re-analysis panel */}
+          {editedCvJson && !isEditing && (
+            <div
+              style={{
+                padding: "10px 14px",
+                borderTop: `1px solid ${SIDEBAR_BORDER}`,
+                flexShrink: 0,
+                background: reanaliseState === "done"
+                  ? "rgba(198,255,58,0.04)"
+                  : "rgba(212,133,74,0.06)",
+              }}
+            >
+              {reanaliseState === "done" && reanaliseScore !== null ? (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 9, color: "#888", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>
+                        Score pós-edição
+                      </div>
+                      <div style={{ fontFamily: "monospace", fontSize: 28, fontWeight: 800, color: getAtsScoreColors(reanaliseScore).primary, lineHeight: 1 }}>
+                        {reanaliseScore}
+                      </div>
+                      <div style={{ fontSize: 10, color: getAtsScoreColors(reanaliseScore).primary, marginTop: 2 }}>
+                        {scoreLabel(reanaliseScore)}
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, fontSize: 11, color: "#666", lineHeight: 1.4 }}>
+                      Análise da versão editada concluída.
+                    </div>
+                  </div>
+                  <Link
+                    href={`/adaptar/resultado?adaptationId=${reanaliseAdaptationId}`}
+                    style={{
+                      display: "block",
+                      textAlign: "center",
+                      padding: "7px 0",
+                      background: "transparent",
+                      color: LIME,
+                      border: `1px solid rgba(198,255,58,0.35)`,
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      textDecoration: "none",
+                    }}
+                  >
+                    Ver análise completa →
+                  </Link>
+                </>
+              ) : reanaliseState === "running" ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
+                  <div style={{
+                    width: 16, height: 16, borderRadius: "50%",
+                    border: "2px solid rgba(212,133,74,0.2)",
+                    borderTop: `2px solid ${AMBER}`,
+                    animation: "spin 0.9s linear infinite",
+                    flexShrink: 0,
+                  }} />
+                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                  <span style={{ fontSize: 12, color: AMBER }}>Analisando versão editada...</span>
+                </div>
+              ) : (
+                <>
+                  <p style={{ fontSize: 11, color: "#a06030", lineHeight: 1.5, margin: "0 0 8px" }}>
+                    {reanaliseState === "error"
+                      ? reanaliseError
+                      : "CV editado manualmente — o score original pode não refletir esta versão."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleReanalisar}
+                    style={{
+                      width: "100%",
+                      padding: "7px 0",
+                      background: "transparent",
+                      color: AMBER,
+                      border: `1px solid ${AMBER_BORDER}`,
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {reanaliseState === "error" ? "Tentar novamente" : "Reanalisar este CV"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Download CTA */}
           <div
@@ -1756,10 +2055,12 @@ export function AdaptacaoCvClient({
               )}
 
               {/* Professional summary */}
-              {cvSummary && (
+              {(cvSummary || isEditing) && (
                 <SummaryBlock
-                  summary={cvSummary}
+                  summary={isEditing ? editedSummary : (cvSummary ?? "")}
                   isHighlighted={!isEditing && highlightedSection === "summary"}
+                  isEditing={isEditing}
+                  onSummaryChange={setEditedSummary}
                 />
               )}
 
@@ -1794,6 +2095,8 @@ export function AdaptacaoCvClient({
                         value as string,
                       )
                     }
+                    onAddItem={() => handleAddItem(sectionIdx)}
+                    onRemoveItem={(itemIdx) => handleRemoveItem(sectionIdx, itemIdx)}
                   />
                 );
               })}
