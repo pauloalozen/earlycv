@@ -187,9 +187,13 @@ export async function updateCvAdaptationContent(
   id: string,
   sections: CvSection[],
 ): Promise<void> {
-  const response = await apiRequest("PATCH", `/cv-adaptation/${id}/cv-content`, {
-    sections,
-  });
+  const response = await apiRequest(
+    "PATCH",
+    `/cv-adaptation/${id}/cv-content`,
+    {
+      sections,
+    },
+  );
   if (!response.ok) {
     throw new Error("Failed to save CV edits");
   }
@@ -429,6 +433,7 @@ export async function saveGuestPreview(payload: {
   saveAsMaster?: boolean;
   file?: File;
   guestSessionPublicToken?: string;
+  jobApplicationId?: string;
 }): Promise<CvAdaptationDto> {
   const body = (() => {
     const formData = new FormData();
@@ -452,6 +457,8 @@ export async function saveGuestPreview(payload: {
       );
     if (payload.saveAsMaster)
       formData.append("saveAsMaster", String(payload.saveAsMaster));
+    if (payload.jobApplicationId)
+      formData.append("jobApplicationId", payload.jobApplicationId);
     return formData;
   })();
 

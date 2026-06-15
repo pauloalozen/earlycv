@@ -328,6 +328,18 @@ export class CvAdaptationService {
       await this.resolveExistingRequirementSet(canonicalJob);
     const canonicalJobId = canonicalJob?.canonicalJobId ?? null;
 
+    // Validate that the supplied jobApplicationId belongs to this user
+    let linkedJobApplicationId: string | null = null;
+    if (dto.jobApplicationId) {
+      const owned = await this.database.jobApplication.findFirst({
+        where: { id: dto.jobApplicationId, userId },
+        select: { id: true },
+      });
+      if (owned) {
+        linkedJobApplicationId = owned.id;
+      }
+    }
+
     const adaptation = await this.database.cvAdaptation.create({
       data: {
         userId,
@@ -340,6 +352,7 @@ export class CvAdaptationService {
         companyName: dto.companyName || null,
         adaptationSource,
         inputMode,
+        jobApplicationId: linkedJobApplicationId,
         analysisInputSnapshotJson: this.buildAnalysisInputSnapshot({
           adaptationSource,
           inputMode,
@@ -1341,6 +1354,17 @@ export class CvAdaptationService {
       dto.guestSessionPublicToken ?? analysisContext?.sessionPublicToken,
     );
 
+    let linkedJobApplicationId: string | null = null;
+    if (dto.jobApplicationId) {
+      const owned = await this.database.jobApplication.findFirst({
+        where: { id: dto.jobApplicationId, userId },
+        select: { id: true },
+      });
+      if (owned) {
+        linkedJobApplicationId = owned.id;
+      }
+    }
+
     const existingMaster = await this.database.resume.findFirst({
       where: { userId, isMaster: true, kind: "master" },
       select: { id: true },
@@ -1422,6 +1446,15 @@ export class CvAdaptationService {
     });
 
     if (existingAdaptation) {
+      if (
+        linkedJobApplicationId &&
+        existingAdaptation.jobApplicationId !== linkedJobApplicationId
+      ) {
+        await this.database.cvAdaptation.update({
+          where: { id: existingAdaptation.id },
+          data: { jobApplicationId: linkedJobApplicationId },
+        });
+      }
       await this.triggerJobApplicationHook({
         cvAdaptationId: existingAdaptation.id,
         userId,
@@ -1448,6 +1481,7 @@ export class CvAdaptationService {
         adaptedContentJson: dto.adaptedContentJson as Prisma.InputJsonValue,
         previewText: dto.previewText ?? null,
         analysisCvSnapshotId: snapshot?.id ?? null,
+        jobApplicationId: linkedJobApplicationId,
         status: "pending",
         paymentStatus: "none",
       },

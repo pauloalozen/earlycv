@@ -46,6 +46,10 @@ export class CreateCvAdaptationDto {
   @IsString()
   @Transform(({ value }) => value?.trim())
   turnstileToken?: string;
+
+  @IsOptional()
+  @IsString()
+  jobApplicationId?: string;
 }
 
 export type FileUpload = {

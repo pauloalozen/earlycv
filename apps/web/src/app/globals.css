@@ -79,8 +79,22 @@ select {
   animation: page-fade-in 480ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-html {
-  scrollbar-width: auto;
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(10, 10, 10, 0.18) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(10, 10, 10, 0.18);
+  border-radius: 3px;
 }
 
 @keyframes lp-pulse {

@@ -135,7 +135,6 @@ export async function getCurrentAppSession() {
   const refreshed = await refreshAppSession(refreshToken);
 
   if (!refreshed) {
-    await clearAppSession();
     return null;
   }
 

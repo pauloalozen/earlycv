@@ -338,11 +338,20 @@ export default function AdaptarPage() {
     [getFlowSessionId],
   );
 
+  const [prefillApplicationId, setPrefillApplicationId] = useState<
+    string | null
+  >(null);
+
   useEffect(() => {
     const prefill = sessionStorage.getItem("adaptar_prefill_job_description");
     if (prefill) {
       setJobDescription(prefill);
       sessionStorage.removeItem("adaptar_prefill_job_description");
+    }
+    const appId = sessionStorage.getItem("adaptar_prefill_application_id");
+    if (appId) {
+      setPrefillApplicationId(appId);
+      sessionStorage.removeItem("adaptar_prefill_application_id");
     }
   }, []);
 
@@ -371,8 +380,8 @@ export default function AdaptarPage() {
       setMasterCvExtractionStatus(extractionStatus ?? null);
       const hasResumeResult = !!resume;
       const profileIsReady =
-        ((status as { profileReadinessStatus?: unknown })
-          .profileReadinessStatus) === "ready";
+        (status as { profileReadinessStatus?: unknown })
+          .profileReadinessStatus === "ready";
       if (status.userName && hasResumeResult) {
         setCvMode("profile");
       } else {
@@ -416,10 +425,14 @@ export default function AdaptarPage() {
 
   useEffect(() => {
     if (!loading) return;
-    const dotsTimer = setInterval(() => setOverlayDots((d) => (d + 1) % 4), 500);
+    const dotsTimer = setInterval(
+      () => setOverlayDots((d) => (d + 1) % 4),
+      500,
+    );
     if (!saveMasterDecided) return () => clearInterval(dotsTimer);
     const msgTimer = setInterval(
-      () => setOverlayMsgIndex((i) => (i + 1) % MASTER_CV_OVERLAY_MESSAGES.length),
+      () =>
+        setOverlayMsgIndex((i) => (i + 1) % MASTER_CV_OVERLAY_MESSAGES.length),
       2200,
     );
     return () => {
@@ -557,7 +570,10 @@ export default function AdaptarPage() {
           masterFormData.append("file", file);
           masterFormData.append("title", file.name.replace(/\.[^.]+$/, ""));
           masterFormData.append("isPrimary", "true");
-          masterFormData.append("turnstileToken", turnstileToken ?? "upload-client-token");
+          masterFormData.append(
+            "turnstileToken",
+            turnstileToken ?? "upload-client-token",
+          );
           const savedResume = await uploadMasterResume(masterFormData);
           formData.append("masterResumeId", savedResume.id);
         } else {
@@ -665,6 +681,7 @@ export default function AdaptarPage() {
             analysisCvSnapshotId: analyzeResult.analysisCvSnapshotId,
             previewText: analyzeResult.previewText,
             file: file ?? undefined,
+            jobApplicationId: prefillApplicationId ?? undefined,
           });
 
           router.push(`/adaptar/resultado?adaptationId=${saved.id}`);
@@ -924,7 +941,11 @@ export default function AdaptarPage() {
                     {isAuthenticated && hasMaster ? (
                       <div
                         className="adaptar-cv-toggle-row"
-                        style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                        }}
                       >
                         <div
                           className="adaptar-cv-mode-toggle"
@@ -976,7 +997,11 @@ export default function AdaptarPage() {
                     ) : (
                       <div
                         className="adaptar-cv-toggle-row"
-                        style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                        }}
                       >
                         <div
                           className="adaptar-cv-mode-toggle"
@@ -1377,45 +1402,47 @@ export default function AdaptarPage() {
                         LinkedIn, Gupy, Infojobs, etc.
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: 12 }}>
-                      <button
-                        type="button"
-                        onClick={() => setJobDescription(EXAMPLE_JOB)}
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 10.5,
-                          color: "#0a0a0a",
-                          background: "none",
-                          border: "none",
-                          textDecoration: "underline",
-                          textUnderlineOffset: 2,
-                          cursor: "pointer",
-                          letterSpacing: 0.3,
-                        }}
-                      >
-                        colar exemplo
-                      </button>
-                      {jobDescription && (
+                    {!prefillApplicationId && (
+                      <div style={{ display: "flex", gap: 12 }}>
                         <button
                           type="button"
-                          onClick={() => setJobDescription("")}
+                          onClick={() => setJobDescription(EXAMPLE_JOB)}
                           style={{
                             fontFamily: MONO,
                             fontSize: 10.5,
-                            color: "#8a8a85",
+                            color: "#0a0a0a",
                             background: "none",
                             border: "none",
+                            textDecoration: "underline",
+                            textUnderlineOffset: 2,
                             cursor: "pointer",
+                            letterSpacing: 0.3,
                           }}
                         >
-                          limpar
+                          colar exemplo
                         </button>
-                      )}
-                    </div>
+                        {jobDescription && (
+                          <button
+                            type="button"
+                            onClick={() => setJobDescription("")}
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#8a8a85",
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                            }}
+                          >
+                            limpar
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div
                     style={{
-                      background: "#fafaf6",
+                      background: prefillApplicationId ? "#f4f4f0" : "#fafaf6",
                       border: "1px solid #d8d6ce",
                       borderRadius: 12,
                       padding: "12px 14px",
@@ -1423,8 +1450,12 @@ export default function AdaptarPage() {
                   >
                     <textarea
                       value={jobDescription}
+                      readOnly={!!prefillApplicationId}
                       onFocus={() => {
-                        if (jobDescriptionFocusTrackedRef.current) {
+                        if (
+                          prefillApplicationId ||
+                          jobDescriptionFocusTrackedRef.current
+                        ) {
                           return;
                         }
 
@@ -1432,7 +1463,10 @@ export default function AdaptarPage() {
                         emitUiFunnelEvent("job_description_focus");
                       }}
                       onPaste={() => {
-                        if (jobDescriptionPasteTrackedRef.current) {
+                        if (
+                          prefillApplicationId ||
+                          jobDescriptionPasteTrackedRef.current
+                        ) {
                           return;
                         }
 
@@ -1440,6 +1474,9 @@ export default function AdaptarPage() {
                         emitUiFunnelEvent("job_description_paste");
                       }}
                       onChange={(e) => {
+                        if (prefillApplicationId) {
+                          return;
+                        }
                         const nextJobDescription = e.target.value.slice(
                           0,
                           12000,
@@ -1462,10 +1499,11 @@ export default function AdaptarPage() {
                         fontFamily: GEIST,
                         fontSize: 13.5,
                         background: "transparent",
-                        color: "#0a0a0a",
+                        color: prefillApplicationId ? "#555550" : "#0a0a0a",
                         minHeight: 128,
                         resize: "none",
                         lineHeight: 1.55,
+                        cursor: prefillApplicationId ? "default" : undefined,
                       }}
                     />
                     <div
@@ -1484,17 +1522,21 @@ export default function AdaptarPage() {
                           color: "#8a8a85",
                         }}
                       >
-                        {jobDescription.length} / 12000
+                        {prefillApplicationId
+                          ? "vaga da candidatura · não editável"
+                          : `${jobDescription.length} / 12000`}
                       </span>
-                      <span
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 10.5,
-                          color: "#8a8a85",
-                        }}
-                      >
-                        ⌘+V para colar
-                      </span>
+                      {!prefillApplicationId && (
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 10.5,
+                            color: "#8a8a85",
+                          }}
+                        >
+                          ⌘+V para colar
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1784,27 +1826,77 @@ export default function AdaptarPage() {
               }}
             >
               {/* Spinner */}
-              <div style={{ position: "relative", width: 56, height: 56, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div
+                style={{
+                  position: "relative",
+                  width: 56,
+                  height: 56,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
                 {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
                 <svg
                   aria-hidden
                   className="animate-spin"
                   viewBox="0 0 56 56"
                   fill="none"
-                  style={{ position: "absolute", inset: 0, width: 56, height: 56 }}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: 56,
+                    height: 56,
+                  }}
                 >
-                  <circle cx="28" cy="28" r="23" stroke="rgba(198,255,58,0.15)" strokeWidth="3" />
-                  <path d="M28 5 A23 23 0 0 1 51 28" stroke="#c6ff3a" strokeWidth="3" strokeLinecap="round" />
+                  <circle
+                    cx="28"
+                    cy="28"
+                    r="23"
+                    stroke="rgba(198,255,58,0.15)"
+                    strokeWidth="3"
+                  />
+                  <path
+                    d="M28 5 A23 23 0 0 1 51 28"
+                    stroke="#c6ff3a"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                  />
                 </svg>
-                <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 600, color: "#c6ff3a" }}>IA</span>
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: "#c6ff3a",
+                  }}
+                >
+                  IA
+                </span>
               </div>
 
               <div style={{ textAlign: "center" }}>
-                <p style={{ fontSize: 15, fontWeight: 500, letterSpacing: -0.01, color: "#fafaf6", margin: 0 }}>
+                <p
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 500,
+                    letterSpacing: -0.01,
+                    color: "#fafaf6",
+                    margin: 0,
+                  }}
+                >
                   {saveMasterDecided ? "Processando CV" : "Analisando..."}
                 </p>
                 {saveMasterDecided && (
-                  <p style={{ marginTop: 4, fontFamily: MONO, fontSize: 10.5, color: "#8a8a85", margin: "4px 0 0" }}>
+                  <p
+                    style={{
+                      marginTop: 4,
+                      fontFamily: MONO,
+                      fontSize: 10.5,
+                      color: "#8a8a85",
+                      margin: "4px 0 0",
+                    }}
+                  >
                     {file?.name ?? "seu currículo"}
                   </p>
                 )}
@@ -1819,7 +1911,15 @@ export default function AdaptarPage() {
                 </p>
               </div>
 
-              <p style={{ textAlign: "center", fontFamily: MONO, fontSize: 10, color: "#5a5a55", margin: 0 }}>
+              <p
+                style={{
+                  textAlign: "center",
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  color: "#5a5a55",
+                  margin: 0,
+                }}
+              >
                 Isso pode levar alguns segundos
               </p>
             </div>

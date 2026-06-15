@@ -17,6 +17,7 @@ import {
 } from "@/components/cv-release-modal";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
+import { PublicFooter } from "@/components/public-footer";
 import {
   type DownloadProgressStage,
   downloadFromApi,
@@ -1097,38 +1098,40 @@ function AnaliseRow({
             Rever análise
           </a>
 
-          <a
-            href={`/adaptacao-cv/${adaptation.id}`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              background: "rgba(255,255,255,0.9)",
-              color: "#3a3a36",
-              border: "1px solid rgba(10,10,10,0.12)",
-              borderRadius: 7,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 500,
-              textDecoration: "none",
-              fontFamily: GEIST,
-            }}
-          >
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
+          {canDownloadNow && (
+            <a
+              href={`/adaptacao-cv/${adaptation.id}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                background: "rgba(255,255,255,0.9)",
+                color: "#3a3a36",
+                border: "1px solid rgba(10,10,10,0.12)",
+                borderRadius: 7,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 500,
+                textDecoration: "none",
+                fontFamily: GEIST,
+              }}
             >
-              <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
-            </svg>
-            Adaptação
-          </a>
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+              </svg>
+              Adaptação
+            </a>
+          )}
 
           {canDownloadNow ? (
             <>
@@ -1714,47 +1717,47 @@ function AnalisesSection({
           </div>
         ) : (
           (() => {
-              const sorted = [...adaptations].sort((a, b) => {
-                const aIsSent =
-                  a.id === application.currentCvAdaptationId &&
-                  application.appliedAt !== null;
-                const bIsSent =
-                  b.id === application.currentCvAdaptationId &&
-                  application.appliedAt !== null;
-                if (aIsSent !== bIsSent) return aIsSent ? -1 : 1;
-                const aScore = a.scoreAfter ?? -1;
-                const bScore = b.scoreAfter ?? -1;
-                return bScore - aScore;
-              });
-              const maxScore = Math.max(
-                ...sorted.map((a) => a.scoreAfter ?? -1),
+            const sorted = [...adaptations].sort((a, b) => {
+              const aIsSent =
+                a.id === application.currentCvAdaptationId &&
+                application.appliedAt !== null;
+              const bIsSent =
+                b.id === application.currentCvAdaptationId &&
+                application.appliedAt !== null;
+              if (aIsSent !== bIsSent) return aIsSent ? -1 : 1;
+              const aScore = a.scoreAfter ?? -1;
+              const bScore = b.scoreAfter ?? -1;
+              return bScore - aScore;
+            });
+            const maxScore = Math.max(...sorted.map((a) => a.scoreAfter ?? -1));
+            const bestId =
+              maxScore >= 0
+                ? (sorted.find((a) => (a.scoreAfter ?? -1) === maxScore)?.id ??
+                  null)
+                : null;
+            return sorted.map((a, idx, arr) => {
+              const isCurrent = a.id === application.currentCvAdaptationId;
+              const isBest = bestId !== null && a.id === bestId;
+              const isSent =
+                a.id === application.currentCvAdaptationId &&
+                application.appliedAt !== null;
+              const isLast = idx === arr.length - 1;
+              return (
+                <AnaliseRow
+                  key={a.id}
+                  adaptation={a}
+                  applicationId={application.id}
+                  isCurrent={isCurrent}
+                  isBest={isBest}
+                  isSent={isSent}
+                  isLast={isLast}
+                  companyName={application.companyName}
+                  jobTitle={application.jobTitle}
+                  onUpdated={onUpdated}
+                />
               );
-              const bestId =
-                maxScore >= 0
-                  ? (sorted.find((a) => (a.scoreAfter ?? -1) === maxScore)
-                      ?.id ?? null)
-                  : null;
-              return sorted.map((a, idx, arr) => {
-                const isCurrent = a.id === application.currentCvAdaptationId;
-                const isBest = bestId !== null && a.id === bestId;
-                const isSent = a.id === application.currentCvAdaptationId && application.appliedAt !== null;
-                const isLast = idx === arr.length - 1;
-                return (
-                  <AnaliseRow
-                    key={a.id}
-                    adaptation={a}
-                    applicationId={application.id}
-                    isCurrent={isCurrent}
-                    isBest={isBest}
-                    isSent={isSent}
-                    isLast={isLast}
-                    companyName={application.companyName}
-                    jobTitle={application.jobTitle}
-                    onUpdated={onUpdated}
-                  />
-                );
-              });
-            })()
+            });
+          })()
         )}
 
         {/* Nova análise button */}
@@ -1767,6 +1770,10 @@ function AnalisesSection({
                 application.jobDescriptionText,
               );
             }
+            sessionStorage.setItem(
+              "adaptar_prefill_application_id",
+              application.id,
+            );
             window.location.href = "/adaptar";
           }}
           style={{
@@ -2063,7 +2070,13 @@ type AdaptationSummary = JobApplicationDetailDto["cvAdaptations"][number];
 
 type TimelineItem =
   | { kind: "event"; event: JobApplicationEvent }
-  | { kind: "analysis"; id: string; createdAt: string; scoreBefore: number | null; scoreAfter: number | null };
+  | {
+      kind: "analysis";
+      id: string;
+      createdAt: string;
+      scoreBefore: number | null;
+      scoreAfter: number | null;
+    };
 
 function Timeline({
   events,
@@ -2082,13 +2095,15 @@ function Timeline({
     ...events
       .filter((e) => e.eventType !== "ANALYSIS_COMPLETED")
       .map((e): TimelineItem => ({ kind: "event", event: e })),
-    ...cvAdaptations.map((a): TimelineItem => ({
-      kind: "analysis",
-      id: a.id,
-      createdAt: a.createdAt,
-      scoreBefore: a.scoreBefore,
-      scoreAfter: a.scoreAfter,
-    })),
+    ...cvAdaptations.map(
+      (a): TimelineItem => ({
+        kind: "analysis",
+        id: a.id,
+        createdAt: a.createdAt,
+        scoreBefore: a.scoreBefore,
+        scoreAfter: a.scoreAfter,
+      }),
+    ),
   ].sort(
     (a, b) =>
       new Date(b.kind === "event" ? b.event.createdAt : b.createdAt).getTime() -
@@ -2122,8 +2137,12 @@ function Timeline({
 
     const event = item.event;
     switch (event.eventType) {
-      case "APPLICATION_CREATED":
-        return "Candidatura criada automaticamente.";
+      case "APPLICATION_CREATED": {
+        const origin = event.metadata?.origin;
+        return origin === "manual" || origin === "imported_url"
+          ? "Candidatura criada manualmente."
+          : "Candidatura criada automaticamente.";
+      }
       case "CV_READY":
         if (scoreAfter !== null && scoreBefore !== null) {
           return (
@@ -2153,7 +2172,10 @@ function Timeline({
           <>
             Status atualizado para <strong>{label}</strong>
             {ititle ? (
-              <> — <em>{ititle}</em></>
+              <>
+                {" "}
+                — <em>{ititle}</em>
+              </>
             ) : null}
             .
           </>
@@ -2192,7 +2214,8 @@ function Timeline({
           REGISTRO DE EVENTOS
         </div>
         <span style={{ fontFamily: MONO, fontSize: 10, color: "#a8a6a0" }}>
-          {displayItems.length} {displayItems.length === 1 ? "evento" : "eventos"}
+          {displayItems.length}{" "}
+          {displayItems.length === 1 ? "evento" : "eventos"}
         </span>
       </div>
 
@@ -2818,9 +2841,9 @@ function HiredConfetti({ active }: { active: boolean }) {
         dur: 1.8 + r4 * 1.4,
         delay: r1 * 0.45,
         size: 6 + r2 * 8,
-        color: (["#c6ff3a", "#0a0a0a", "#f5c518", "#fafaf6", "#c6ff3a"] as const)[
-          Math.floor(r3 * 5)
-        ],
+        color: (
+          ["#c6ff3a", "#0a0a0a", "#f5c518", "#fafaf6", "#c6ff3a"] as const
+        )[Math.floor(r3 * 5)],
         shape: r4 > 0.5 ? "rect" : "circle",
       });
     }
@@ -2945,11 +2968,30 @@ function HiredCelebrationModal({
       >
         <HiredConfetti active={mounted} />
 
-        <div style={{ position: "relative", zIndex: 1, padding: "40px 28px 28px", textAlign: "center" }}>
-
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            padding: "40px 28px 28px",
+            textAlign: "center",
+          }}
+        >
           {/* Check circle */}
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
-            <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              marginBottom: 20,
+            }}
+          >
+            <div
+              style={{
+                position: "relative",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
               <span
                 style={{
                   position: "absolute",
@@ -2957,7 +2999,9 @@ function HiredCelebrationModal({
                   height: 78,
                   borderRadius: "50%",
                   background: "rgba(198,255,58,0.55)",
-                  animation: mounted ? "cv-pulse 1.6s ease-out 0.1s 1 forwards" : "none",
+                  animation: mounted
+                    ? "cv-pulse 1.6s ease-out 0.1s 1 forwards"
+                    : "none",
                 }}
               />
               <div
@@ -2970,12 +3014,19 @@ function HiredCelebrationModal({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  boxShadow: "0 6px 20px -6px rgba(198,255,58,0.6), inset 0 1px 0 rgba(255,255,255,0.4)",
+                  boxShadow:
+                    "0 6px 20px -6px rgba(198,255,58,0.6), inset 0 1px 0 rgba(255,255,255,0.4)",
                   position: "relative",
                   zIndex: 2,
                 }}
               >
-                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <svg
+                  width="34"
+                  height="34"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden
+                >
                   <path
                     d="M5 12.5l4.5 4.5L19 7"
                     stroke="#0a0a0a"
@@ -2985,7 +3036,8 @@ function HiredCelebrationModal({
                     style={{
                       strokeDasharray: 30,
                       strokeDashoffset: mounted ? 0 : 30,
-                      transition: "stroke-dashoffset 0.55s cubic-bezier(0.6,0,0.4,1) 0.2s",
+                      transition:
+                        "stroke-dashoffset 0.55s cubic-bezier(0.6,0,0.4,1) 0.2s",
                     }}
                   />
                 </svg>
@@ -2994,7 +3046,17 @@ function HiredCelebrationModal({
           </div>
 
           {/* Label */}
-          <div style={{ ...stagger(0.3), fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", color: "#8a8a85", fontWeight: 500, marginBottom: 14 }}>
+          <div
+            style={{
+              ...stagger(0.3),
+              fontFamily: MONO,
+              fontSize: 10,
+              letterSpacing: "0.14em",
+              color: "#8a8a85",
+              fontWeight: 500,
+              marginBottom: 14,
+            }}
+          >
             STATUS · CONTRATADO
           </div>
 
@@ -3030,9 +3092,17 @@ function HiredCelebrationModal({
 
           {/* Body */}
           <div style={{ ...stagger(0.46), marginBottom: 28 }}>
-            <p style={{ margin: 0, fontSize: 14, color: "#5a5a55", lineHeight: 1.6, fontFamily: GEIST }}>
-              A vaga de {jobTitle} na {companyName} é sua.{" "}
-              Atualizamos a jornada e guardamos o CV que te levou até aqui.
+            <p
+              style={{
+                margin: 0,
+                fontSize: 14,
+                color: "#5a5a55",
+                lineHeight: 1.6,
+                fontFamily: GEIST,
+              }}
+            >
+              A vaga de {jobTitle} na {companyName} é sua. Atualizamos a jornada
+              e guardamos o CV que te levou até aqui.
             </p>
           </div>
 
@@ -3080,11 +3150,17 @@ function HiredCelebrationModal({
 
           {/* Footer note */}
           <div style={{ ...stagger(0.56), marginTop: 16 }}>
-            <span style={{ fontSize: 11.5, color: "#a8a6a0", fontFamily: MONO, letterSpacing: 0.2 }}>
+            <span
+              style={{
+                fontSize: 11.5,
+                color: "#a8a6a0",
+                fontFamily: MONO,
+                letterSpacing: 0.2,
+              }}
+            >
               ◎ CV enviado preservado · candidatura arquivada como contratada
             </span>
           </div>
-
         </div>
       </div>
     </div>
@@ -3282,9 +3358,7 @@ function RejectionFeedbackModal({
           </div>
 
           <div style={{ marginBottom: 22 }}>
-            <label style={labelStyle}>
-              O que poderia ter ido melhor?
-            </label>
+            <label style={labelStyle}>O que poderia ter ido melhor?</label>
             <textarea
               value={improvements}
               onChange={(e) => setImprovements(e.target.value)}
@@ -3355,7 +3429,13 @@ function StatusPopover({
 }: {
   applicationId: string;
   status: JobApplicationStatus;
-  unlockedAdaptations: Array<{ id: string; jobTitle: string | null; companyName: string | null; createdAt: string; scoreAfter: number | null }>;
+  unlockedAdaptations: Array<{
+    id: string;
+    jobTitle: string | null;
+    companyName: string | null;
+    createdAt: string;
+    scoreAfter: number | null;
+  }>;
   onClose: () => void;
   onUpdated: () => void;
   onInterviewSelected: () => void;
@@ -3363,7 +3443,9 @@ function StatusPopover({
   onRejectedSelected: () => void;
 }) {
   const [pending, startTransition] = useTransition();
-  const [savingStatus, setSavingStatus] = useState<JobApplicationStatus | null>(null);
+  const [savingStatus, setSavingStatus] = useState<JobApplicationStatus | null>(
+    null,
+  );
   const [cvPickStep, setCvPickStep] = useState(false);
   const [selectedCvId, setSelectedCvId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -3382,7 +3464,11 @@ function StatusPopover({
     setSavingStatus("APPLIED");
     startTransition(async () => {
       try {
-        await updateJobApplicationStatus(applicationId, "APPLIED", currentCvAdaptationId);
+        await updateJobApplicationStatus(
+          applicationId,
+          "APPLIED",
+          currentCvAdaptationId,
+        );
         onClose();
         onUpdated();
       } catch {
@@ -3448,13 +3534,31 @@ function StatusPopover({
           animation: "dropdownFadeIn 150ms cubic-bezier(0.22,1,0.36,1)",
         }}
       >
-        <div style={{ fontFamily: GEIST, fontSize: 12.5, fontWeight: 600, color: "#0a0a0a", marginBottom: 10 }}>
+        <div
+          style={{
+            fontFamily: GEIST,
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: "#0a0a0a",
+            marginBottom: 10,
+          }}
+        >
           Qual CV foi usado na candidatura?
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+            marginBottom: 12,
+          }}
+        >
           {unlockedAdaptations.map((a) => {
             const isSelected = selectedCvId === a.id;
-            const date = new Date(a.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+            const date = new Date(a.createdAt).toLocaleDateString("pt-BR", {
+              day: "2-digit",
+              month: "short",
+            });
             return (
               <button
                 key={a.id}
@@ -3466,8 +3570,12 @@ function StatusPopover({
                   gap: 8,
                   padding: "8px 10px",
                   borderRadius: 8,
-                  border: isSelected ? "1.5px solid #aadb2a" : "1px solid rgba(10,10,10,0.10)",
-                  background: isSelected ? "rgba(198,255,58,0.10)" : "rgba(10,10,10,0.02)",
+                  border: isSelected
+                    ? "1.5px solid #aadb2a"
+                    : "1px solid rgba(10,10,10,0.10)",
+                  background: isSelected
+                    ? "rgba(198,255,58,0.10)"
+                    : "rgba(10,10,10,0.02)",
                   cursor: "pointer",
                   textAlign: "left",
                   fontFamily: GEIST,
@@ -3479,17 +3587,39 @@ function StatusPopover({
                     width: 14,
                     height: 14,
                     borderRadius: "50%",
-                    border: isSelected ? "4px solid #aadb2a" : "1.5px solid rgba(10,10,10,0.25)",
+                    border: isSelected
+                      ? "4px solid #aadb2a"
+                      : "1.5px solid rgba(10,10,10,0.25)",
                     flexShrink: 0,
                     background: "#fff",
                     boxSizing: "border-box",
                   }}
                 />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: "#0a0a0a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {date}{a.scoreAfter !== null ? ` · ${a.scoreAfter}%` : ""}
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: "#0a0a0a",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {date}
+                    {a.scoreAfter !== null ? ` · ${a.scoreAfter}%` : ""}
                   </div>
-                  <div style={{ fontFamily: MONO, fontSize: 10, color: "#b0aea6", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <div
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      color: "#b0aea6",
+                      marginTop: 2,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
                     ID: {a.id}
                   </div>
                 </div>
@@ -3507,7 +3637,8 @@ function StatusPopover({
               padding: "8px 0",
               borderRadius: 8,
               border: "none",
-              background: pending || !selectedCvId ? "rgba(10,10,10,0.08)" : "#0a0a0a",
+              background:
+                pending || !selectedCvId ? "rgba(10,10,10,0.08)" : "#0a0a0a",
               color: pending || !selectedCvId ? "#8a8a85" : "#fafaf6",
               fontSize: 12.5,
               fontWeight: 500,
@@ -3690,7 +3821,8 @@ function InterviewScheduleModal({
           padding: "28px 24px 24px",
           boxShadow: "0 20px 60px rgba(10,10,10,0.18)",
           transform: visible ? "translateY(0)" : "translateY(12px)",
-          transition: "transform 200ms cubic-bezier(0.22,1,0.36,1), opacity 180ms ease",
+          transition:
+            "transform 200ms cubic-bezier(0.22,1,0.36,1), opacity 180ms ease",
           opacity: visible ? 1 : 0,
         }}
       >
@@ -3709,7 +3841,14 @@ function InterviewScheduleModal({
         </div>
 
         {/* Date + time row */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 12,
+            marginBottom: 14,
+          }}
+        >
           <div>
             <label style={labelStyle}>Data</label>
             <input
@@ -3942,7 +4081,17 @@ function InterviewScheduledCard({
           color: "#7a5a04",
         }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
           <rect x="3" y="4" width="18" height="18" rx="2" />
           <line x1="16" y1="2" x2="16" y2="6" />
           <line x1="8" y1="2" x2="8" y2="6" />
@@ -3988,7 +4137,9 @@ function InterviewScheduledCard({
       </div>
 
       {/* Actions */}
-      <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
+      <div
+        style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}
+      >
         {application.interviewMeetingUrl && (
           <a
             href={application.interviewMeetingUrl}
@@ -4042,7 +4193,10 @@ function InterviewScheduledCard({
 // ─── Add to calendar ──────────────────────────────────────────────
 
 function formatIcsDate(iso: string): string {
-  return iso.replace(/[-:]/g, "").replace(/\.\d{3}/, "").replace("Z", "Z");
+  return iso
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}/, "")
+    .replace("Z", "Z");
 }
 
 function buildGoogleCalendarUrl(application: JobApplicationDetailDto): string {
@@ -4176,16 +4330,61 @@ function AddToCalendarButton({
           fontFamily: GEIST,
         }}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
           <rect x="3" y="4" width="18" height="18" rx="2" />
           <line x1="16" y1="2" x2="16" y2="6" />
           <line x1="8" y1="2" x2="8" y2="6" />
           <line x1="3" y1="10" x2="21" y2="10" />
-          <line x1="8" y1="14" x2="8" y2="14" strokeWidth="2.5" strokeLinecap="round" />
-          <line x1="12" y1="14" x2="12" y2="14" strokeWidth="2.5" strokeLinecap="round" />
-          <line x1="16" y1="14" x2="16" y2="14" strokeWidth="2.5" strokeLinecap="round" />
-          <line x1="8" y1="18" x2="8" y2="18" strokeWidth="2.5" strokeLinecap="round" />
-          <line x1="12" y1="18" x2="12" y2="18" strokeWidth="2.5" strokeLinecap="round" />
+          <line
+            x1="8"
+            y1="14"
+            x2="8"
+            y2="14"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+          <line
+            x1="12"
+            y1="14"
+            x2="12"
+            y2="14"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+          <line
+            x1="16"
+            y1="14"
+            x2="16"
+            y2="14"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+          <line
+            x1="8"
+            y1="18"
+            x2="8"
+            y2="18"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+          <line
+            x1="12"
+            y1="18"
+            x2="12"
+            y2="18"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
         </svg>
         Salvar na agenda ▾
       </button>
@@ -4217,7 +4416,8 @@ function AddToCalendarButton({
                 "rgba(10,10,10,0.04)")
             }
             onMouseLeave={(e) =>
-              ((e.currentTarget as HTMLElement).style.background = "transparent")
+              ((e.currentTarget as HTMLElement).style.background =
+                "transparent")
             }
           >
             Google Agenda
@@ -4234,7 +4434,8 @@ function AddToCalendarButton({
                 "rgba(10,10,10,0.04)")
             }
             onMouseLeave={(e) =>
-              ((e.currentTarget as HTMLElement).style.background = "transparent")
+              ((e.currentTarget as HTMLElement).style.background =
+                "transparent")
             }
           >
             Apple / iCal / Outlook
@@ -4322,7 +4523,8 @@ function JobUrlModal({
           padding: "28px 24px 24px",
           boxShadow: "0 20px 60px rgba(10,10,10,0.18)",
           transform: visible ? "translateY(0)" : "translateY(12px)",
-          transition: "transform 200ms cubic-bezier(0.22,1,0.36,1), opacity 180ms ease",
+          transition:
+            "transform 200ms cubic-bezier(0.22,1,0.36,1), opacity 180ms ease",
           opacity: visible ? 1 : 0,
         }}
       >
@@ -4758,7 +4960,9 @@ export function DetailClient({ application, header }: Props) {
                     <StatusPopover
                       applicationId={application.id}
                       status={application.status}
-                      unlockedAdaptations={application.cvAdaptations.filter((a) => a.isUnlocked)}
+                      unlockedAdaptations={application.cvAdaptations.filter(
+                        (a) => a.isUnlocked,
+                      )}
                       onClose={() => setShowStatusEdit(false)}
                       onUpdated={handleUpdated}
                       onInterviewSelected={() => setShowInterviewModal(true)}
@@ -4924,7 +5128,10 @@ export function DetailClient({ application, header }: Props) {
           >
             {/* Left column */}
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-              <AnalisesSection application={application} onUpdated={handleUpdated} />
+              <AnalisesSection
+                application={application}
+                onUpdated={handleUpdated}
+              />
               <NotesSection
                 applicationId={application.id}
                 currentNotes={application.notes}
@@ -5090,6 +5297,8 @@ export function DetailClient({ application, header }: Props) {
           .timeline-scroll::-webkit-scrollbar { display: none; }
         `}</style>
       </main>
+
+      <PublicFooter />
 
       <InterviewPrepDrawer
         applicationId={application.id}

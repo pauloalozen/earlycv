@@ -269,9 +269,8 @@ export async function createJobApplication(
     jobTitle: input.jobTitle,
     companyName: input.companyName,
     ...(input.location ? { location: input.location } : {}),
-    ...(input.jobUrl
-      ? { jobUrl: input.jobUrl, origin: "imported_url" as const }
-      : { origin: input.origin ?? "manual" }),
+    ...(input.jobUrl ? { jobUrl: input.jobUrl } : {}),
+    origin: input.origin ?? "manual",
     ...(input.jobDescriptionText
       ? { jobDescriptionText: input.jobDescriptionText }
       : {}),

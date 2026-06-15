@@ -11,15 +11,11 @@ import {
   useTransition,
 } from "react";
 import { PageShell } from "@/components/page-shell";
+import { PublicFooter } from "@/components/public-footer";
+import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import {
-  extractDashboardAnalysisSignal,
-  getDashboardScoreColor,
-} from "@/lib/dashboard-test-metrics";
-import {
-  CLOSED_STATUSES,
   getStatusConfig,
   IN_PROCESS_STATUSES,
-  OPEN_STATUSES,
 } from "@/lib/job-application-status";
 import type {
   JobApplicationDto,
@@ -35,24 +31,81 @@ const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 const SERIF = "var(--font-instrument-serif), serif";
 
-const CARD: React.CSSProperties = {
-  background: "#fafaf6",
-  border: "1px solid rgba(10,10,10,0.08)",
-  borderRadius: 14,
-};
-
-type FilterKey = "todas" | "abertas" | "processo" | "finalizadas";
 type SegmentKey = "ativas" | "arquivadas";
+type SortKey = "date" | "score";
+type SortDir = "asc" | "desc";
+type SortState = { key: SortKey; dir: SortDir };
 
-const FILTERS: {
-  key: FilterKey;
+const SECTION_GROUPS: {
+  key: string;
   label: string;
-  statuses: JobApplicationStatus[] | null;
+  step: number;
+  statuses: JobApplicationStatus[];
+  accent: string;
+  headerBg: string;
+  scoreColor: string | null;
+  dark: boolean;
 }[] = [
-  { key: "todas", label: "Todas", statuses: null },
-  { key: "abertas", label: "Em aberto", statuses: OPEN_STATUSES },
-  { key: "processo", label: "Em andamento", statuses: IN_PROCESS_STATUSES },
-  { key: "finalizadas", label: "Finalizadas", statuses: CLOSED_STATUSES },
+  {
+    key: "saved",
+    step: 1,
+    label: "Salva",
+    statuses: ["SAVED"],
+    accent: "#c0beb4",
+    headerBg: "rgba(192,190,180,0.10)",
+    scoreColor: null,
+    dark: false,
+  },
+  {
+    key: "analyzed",
+    step: 2,
+    label: "CV Analisado",
+    statuses: ["ANALYZED"],
+    accent: "#7a8a85",
+    headerBg: "rgba(122,138,133,0.10)",
+    scoreColor: "#2a6a10",
+    dark: false,
+  },
+  {
+    key: "cv_ready",
+    step: 3,
+    label: "CV liberado",
+    statuses: ["CV_READY"],
+    accent: "#7aa811",
+    headerBg: "rgba(122,168,17,0.09)",
+    scoreColor: "#2a6a10",
+    dark: false,
+  },
+  {
+    key: "applied",
+    step: 4,
+    label: "Candidatura feita",
+    statuses: ["APPLIED"],
+    accent: "#1a1a18",
+    headerBg: "rgba(10,10,10,0.055)",
+    scoreColor: "#2a6a10",
+    dark: true,
+  },
+  {
+    key: "interview",
+    step: 5,
+    label: "Em entrevista",
+    statuses: ["INTERVIEW", "IN_PROCESS", "ASSESSMENT", "OFFER"],
+    accent: "#c8a000",
+    headerBg: "rgba(200,160,0,0.09)",
+    scoreColor: "#7a5a00",
+    dark: false,
+  },
+  {
+    key: "closed",
+    step: 6,
+    label: "Finalizada",
+    statuses: ["HIRED", "REJECTED", "WITHDRAWN"],
+    accent: "#a8a6a0",
+    headerBg: "rgba(168,166,160,0.08)",
+    scoreColor: "#2a6a10",
+    dark: false,
+  },
 ];
 
 type CtaTone = "green" | "dark" | "ghost";
@@ -98,11 +151,9 @@ function formatDate(iso: string) {
 }
 
 function EmptyState({
-  filter,
   segment,
   onAdd,
 }: {
-  filter: FilterKey;
   segment: SegmentKey;
   onAdd: () => void;
 }) {
@@ -134,39 +185,6 @@ function EmptyState({
         >
           Quando você arquivar candidaturas na página de detalhes, elas
           aparecerão aqui.
-        </p>
-      </div>
-    );
-  }
-
-  if (filter !== "todas") {
-    return (
-      <div
-        style={{
-          border: "1.5px dashed rgba(10,10,10,0.14)",
-          borderRadius: 18,
-          padding: "52px 40px 44px",
-          textAlign: "center",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-        }}
-      >
-        <p
-          style={{
-            fontSize: 15,
-            fontWeight: 500,
-            color: "#45443e",
-            margin: "0 0 8px",
-          }}
-        >
-          Nenhuma candidatura nesta categoria
-        </p>
-        <p
-          style={{ fontSize: 13.5, color: "#8a8a85", margin: 0, maxWidth: 360 }}
-        >
-          As candidaturas desta categoria ainda não foram criadas ou estão em
-          outra categoria.
         </p>
       </div>
     );
@@ -397,15 +415,326 @@ function EmptyState({
   );
 }
 
+function StatusAccordion({
+  label,
+  count,
+  open,
+  onToggle,
+  step,
+  accent,
+  headerBg,
+  dark,
+  scoreColor,
+  previewCompanies,
+  avgScore,
+  sortState,
+  onSortChange,
+  children,
+}: {
+  label: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  step: number;
+  accent: string;
+  headerBg: string;
+  dark: boolean;
+  scoreColor: string | null;
+  previewCompanies: string[];
+  avgScore: number | null;
+  sortState: SortState;
+  onSortChange: (key: SortKey) => void;
+  children: ReactNode;
+}) {
+  const stepBg = dark ? accent : `${accent}26`;
+  const stepBorder = dark ? `1.5px solid ${accent}` : `1.5px solid ${accent}60`;
+  const stepColor = dark ? "#fafaf6" : accent;
+  const countBg = open ? `${accent}1c` : "rgba(10,10,10,0.05)";
+  const countColor = open ? accent : "#6a6a66";
+  const countBorder = open
+    ? `1px solid ${accent}36`
+    : "1px solid rgba(10,10,10,0.08)";
+
+  return (
+    <div
+      style={{
+        borderRadius: 13,
+        overflow: "hidden",
+        border: "1px solid rgba(10,10,10,0.07)",
+        borderLeft: `3px solid ${accent}`,
+        background: "#fafaf6",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "13px 18px",
+          background: open ? headerBg : "transparent",
+          borderBottom: open ? "1px solid rgba(10,10,10,0.05)" : "none",
+          transition: "background 0.13s, border-color 0.3s ease",
+        }}
+      >
+        {/* Toggle button (step + label) */}
+        <button
+          type="button"
+          onClick={onToggle}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flex: open ? 0 : 0,
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            fontFamily: GEIST,
+            textAlign: "left",
+            padding: 0,
+          }}
+        >
+          {/* Step indicator */}
+          <div
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 6,
+              flexShrink: 0,
+              background: stepBg,
+              border: stepBorder,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: MONO,
+              fontSize: 9.5,
+              fontWeight: 700,
+              color: stepColor,
+            }}
+          >
+            {step}
+          </div>
+          <span
+            style={{
+              fontSize: 13.5,
+              fontWeight: 500,
+              color: "#0a0a0a",
+              letterSpacing: -0.2,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {label}
+          </span>
+        </button>
+
+        {/* Collapsed: company chips + avg */}
+        {!open && (
+          <>
+            <div
+              style={{
+                display: "flex",
+                gap: 5,
+                marginLeft: 4,
+                flex: 1,
+                overflow: "hidden",
+                alignItems: "center",
+              }}
+            >
+              {previewCompanies.map((company) => (
+                <span
+                  key={company}
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#6a6a66",
+                    background: "rgba(10,10,10,0.04)",
+                    border: "1px solid rgba(10,10,10,0.07)",
+                    borderRadius: 999,
+                    padding: "3px 9px",
+                    whiteSpace: "nowrap",
+                    maxWidth: 130,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {company}
+                </span>
+              ))}
+              {count > previewCompanies.length && (
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#8a8a85",
+                    flexShrink: 0,
+                  }}
+                >
+                  +{count - previewCompanies.length}
+                </span>
+              )}
+            </div>
+            {avgScore !== null && scoreColor !== null && (
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  color: scoreColor,
+                  fontWeight: 500,
+                  letterSpacing: 0.2,
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                }}
+              >
+                ø {avgScore}%
+              </span>
+            )}
+          </>
+        )}
+
+        {open && <div style={{ flex: 1 }} />}
+
+        {/* Sort buttons - só quando aberto */}
+        {open && (
+          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            {(["date", "score"] as SortKey[]).map((sk) => {
+              const active = sortState.key === sk;
+              const arrow = active
+                ? sortState.dir === "desc"
+                  ? " ↓"
+                  : " ↑"
+                : "";
+              return (
+                <button
+                  key={sk}
+                  type="button"
+                  onClick={() => onSortChange(sk)}
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    fontWeight: 500,
+                    color: active ? "#0a0a0a" : "#5a5a55",
+                    background: active
+                      ? "rgba(10,10,10,0.07)"
+                      : "rgba(10,10,10,0.04)",
+                    border: active
+                      ? "1px solid rgba(10,10,10,0.16)"
+                      : "1px solid rgba(10,10,10,0.09)",
+                    borderRadius: 6,
+                    padding: "4px 9px",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    gap: 3,
+                    alignItems: "center",
+                    transition: "all 140ms ease",
+                  }}
+                >
+                  {sk === "date" ? "DATA" : "SCORE"}
+                  {arrow && (
+                    <span style={{ opacity: 0.55, fontSize: 9 }}>{arrow}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Count badge */}
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            minWidth: 22,
+            height: 20,
+            borderRadius: 5,
+            padding: "0 6px",
+            background: countBg,
+            color: countColor,
+            border: countBorder,
+            fontFamily: MONO,
+            fontSize: 10.5,
+            fontWeight: 600,
+            flexShrink: 0,
+            transition: "all 0.13s",
+          }}
+        >
+          {count}
+        </span>
+
+        {/* Chevron */}
+        <button
+          type="button"
+          onClick={onToggle}
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            padding: "2px",
+            display: "flex",
+            alignItems: "center",
+            flexShrink: 0,
+          }}
+          aria-label={open ? "Fechar seção" : "Abrir seção"}
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 14 14"
+            fill="none"
+            aria-hidden="true"
+            style={{
+              color: "#8a8a85",
+              transform: open ? "rotate(0deg)" : "rotate(-90deg)",
+              transition: "transform 0.15s",
+            }}
+          >
+            <path
+              d="M3 5l4 4 4-4"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
+
+      {/* Body com animação suave */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateRows: open ? "1fr" : "0fr",
+          transition: "grid-template-rows 0.3s ease",
+        }}
+      >
+        <div style={{ overflow: "hidden" }}>
+          <div
+            style={{
+              padding: "10px 14px 14px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CandRow({
   application,
   derivedScore,
+  scoreColor,
   isArchivedView,
   onRestored,
   onDeleted,
 }: {
   application: JobApplicationDto;
   derivedScore?: { scoreBefore: number | null; scoreAfter: number | null };
+  scoreColor: string | null;
   isArchivedView: boolean;
   onRestored: (applicationId: string) => void;
   onDeleted: (applicationId: string) => void;
@@ -428,7 +757,8 @@ function CandRow({
   const scoreAfter = derivedScore?.scoreAfter ?? application.scoreAfter ?? null;
   const shortId = `#${application.id.slice(-5).toUpperCase()}`;
   const cfg = getStatusConfig(application.status);
-  const bestScore = derivedScore?.scoreAfter ?? application.bestScore ?? scoreAfter;
+  const bestScore =
+    derivedScore?.scoreAfter ?? application.bestScore ?? scoreAfter;
   const displayedScore = bestScore ?? scoreAfter ?? scoreBefore;
   const scoreDelta =
     scoreAfter !== null && scoreBefore !== null
@@ -557,9 +887,11 @@ function CandRow({
     <div
       className="cand-row"
       style={{
-        ...CARD,
+        background: "#fff",
+        border: "1px solid rgba(10,10,10,0.06)",
+        borderRadius: 11,
         display: "grid",
-        gridTemplateColumns: "1fr 190px 240px",
+        gridTemplateColumns: "1fr 148px 200px",
         gap: 0,
         alignItems: "stretch",
         overflow: "hidden",
@@ -572,7 +904,7 @@ function CandRow({
         style={{
           textDecoration: "none",
           display: "block",
-          padding: "22px 26px",
+          padding: "16px 18px",
         }}
       >
         <div
@@ -777,7 +1109,7 @@ function CandRow({
               whiteSpace: "nowrap",
             }}
           >
-            {formatDate(application.updatedAt)}
+            {formatDate(application.createdAt)}
           </span>
         </div>
       </Link>
@@ -792,7 +1124,7 @@ function CandRow({
           alignItems: "flex-end",
           justifyContent: "center",
           textAlign: "right",
-          padding: "22px 24px 22px 20px",
+          padding: "16px 18px 16px 20px",
           borderLeft: "1px solid rgba(10,10,10,0.06)",
         }}
       >
@@ -803,10 +1135,10 @@ function CandRow({
             letterSpacing: 1,
             color: "#8a8a85",
             fontWeight: 500,
-            marginBottom: 6,
+            marginBottom: 4,
           }}
         >
-          SCORE
+          {displayedScore !== null ? "SCORE APÓS" : "SCORE"}
         </div>
 
         {application.scorePresentation === "not_analyzed" &&
@@ -840,10 +1172,10 @@ function CandRow({
             <div
               data-testid="score-highlight-value"
               style={{
-                fontSize: 32,
+                fontSize: 30,
                 fontWeight: 500,
-                letterSpacing: -0.8,
-                color: getDashboardScoreColor(displayedScore),
+                letterSpacing: -1.4,
+                color: scoreColor ?? "#2a6a10",
                 lineHeight: 1,
                 fontVariantNumeric: "tabular-nums",
               }}
@@ -856,9 +1188,10 @@ function CandRow({
                 data-testid="score-highlight-delta"
                 style={{
                   fontFamily: MONO,
-                  fontSize: 12,
+                  fontSize: 10,
                   marginTop: 3,
-                  color: "#4a8a20",
+                  color: scoreColor ?? "#2a6a10",
+                  opacity: 0.72,
                 }}
               >
                 {scoreDelta >= 0 ? `+${scoreDelta}` : scoreDelta} vs original
@@ -870,8 +1203,8 @@ function CandRow({
           <>
             <div
               style={{
-                fontSize: 32,
-                fontWeight: 500,
+                fontSize: 26,
+                fontWeight: 300,
                 letterSpacing: -1.4,
                 color: "#c0beb4",
                 lineHeight: 1,
@@ -901,8 +1234,7 @@ function CandRow({
           gap: 6,
           alignItems: "stretch",
           justifyContent: "center",
-          padding: "22px 24px",
-          borderLeft: "1px solid rgba(10,10,10,0.06)",
+          padding: "16px 18px",
         }}
       >
         {isArchivedView && (
@@ -1373,7 +1705,6 @@ export function CandidaturasClient({
 }: Props) {
   const router = useRouter();
   const [segment, setSegment] = useState<SegmentKey>(initialView);
-  const [filter, setFilter] = useState<FilterKey>("todas");
   const [showCreate, setShowCreate] = useState(false);
   const [, startTransition] = useTransition();
   const [archivedApplications, setArchivedApplications] = useState(
@@ -1382,12 +1713,24 @@ export function CandidaturasClient({
   const [derivedScores, setDerivedScores] = useState<
     Record<string, { scoreBefore: number | null; scoreAfter: number | null }>
   >({});
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(
+    () => {
+      const initial: Record<string, boolean> = {};
+      for (const g of SECTION_GROUPS) {
+        initial[g.key] = true;
+      }
+      return initial;
+    },
+  );
+  const [companyFilter, setCompanyFilter] = useState("");
+  const [sectionSorts, setSectionSorts] = useState<Record<string, SortState>>(
+    {},
+  );
 
   useEffect(() => {
     const allApplications = [...initialApplications, ...archivedApplications];
-    const targets = allApplications.filter(
-      (application) =>
-        Boolean(application.currentCvAdaptationId),
+    const targets = allApplications.filter((application) =>
+      Boolean(application.currentCvAdaptationId),
     );
 
     if (targets.length === 0) return;
@@ -1441,24 +1784,9 @@ export function CandidaturasClient({
   const scopedApplications =
     segment === "arquivadas" ? archivedApplications : initialApplications;
 
-  const filteredApplications = scopedApplications.filter((app) => {
-    const group = FILTERS.find((f) => f.key === filter);
-    if (!group?.statuses) return true;
-    return group.statuses.includes(app.status as JobApplicationStatus);
-  });
-
-  const counts = {
-    todas: scopedApplications.length,
-    abertas: scopedApplications.filter((a) =>
-      OPEN_STATUSES.includes(a.status as JobApplicationStatus),
-    ).length,
-    processo: scopedApplications.filter((a) =>
-      IN_PROCESS_STATUSES.includes(a.status as JobApplicationStatus),
-    ).length,
-    finalizadas: scopedApplications.filter((a) =>
-      CLOSED_STATUSES.includes(a.status as JobApplicationStatus),
-    ).length,
-  };
+  const inProcessCount = scopedApplications.filter((a) =>
+    IN_PROCESS_STATUSES.includes(a.status as JobApplicationStatus),
+  ).length;
 
   const handleRestored = useCallback(
     (applicationId: string) => {
@@ -1484,6 +1812,38 @@ export function CandidaturasClient({
       current.filter((application) => application.id !== applicationId),
     );
   }, []);
+
+  const toggleSection = useCallback((key: string) => {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const setSectionSort = useCallback(
+    (groupKey: string, clickedKey: SortKey) => {
+      setSectionSorts((prev) => {
+        const current = prev[groupKey] ?? { key: "date", dir: "desc" };
+        if (current.key === clickedKey) {
+          return {
+            ...prev,
+            [groupKey]: {
+              key: clickedKey,
+              dir: current.dir === "desc" ? "asc" : "desc",
+            },
+          };
+        }
+        return { ...prev, [groupKey]: { key: clickedKey, dir: "desc" } };
+      });
+    },
+    [],
+  );
+
+  const companies = Array.from(
+    new Set(scopedApplications.map((a) => a.companyName)),
+  ).sort();
+
+  const filteredApplications =
+    companyFilter === ""
+      ? scopedApplications
+      : scopedApplications.filter((a) => a.companyName === companyFilter);
 
   return (
     <PageShell>
@@ -1604,7 +1964,7 @@ export function CandidaturasClient({
                 />
                 {scopedApplications.length === 0
                   ? "0 CANDIDATURAS"
-                  : `${scopedApplications.length} CANDIDATURAS${counts.processo > 0 ? ` · ${counts.processo} EM PROCESSO` : ""}`}
+                  : `${scopedApplications.length} CANDIDATURAS${inProcessCount > 0 ? ` · ${inProcessCount} EM PROCESSO` : ""}`}
               </div>
 
               <h1
@@ -1670,21 +2030,20 @@ export function CandidaturasClient({
             )}
           </div>
 
-          {/* Filters + sort */}
+          {/* Segment toggle + company filter */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: 8,
               marginBottom: 24,
-              flexWrap: "wrap",
             }}
           >
             <button
               type="button"
               onClick={() => {
                 setSegment("ativas");
-                setFilter("todas");
+                setCompanyFilter("");
               }}
               style={{
                 display: "inline-flex",
@@ -1721,7 +2080,7 @@ export function CandidaturasClient({
               type="button"
               onClick={() => {
                 setSegment("arquivadas");
-                setFilter("todas");
+                setCompanyFilter("");
               }}
               style={{
                 display: "inline-flex",
@@ -1756,99 +2115,173 @@ export function CandidaturasClient({
                 {archivedApplications.length}
               </span>
             </button>
-            <div
-              style={{
-                width: 1,
-                height: 20,
-                background: "rgba(10,10,10,0.1)",
-                marginInline: 2,
-              }}
-            />
-            {FILTERS.map((f) => {
-              const isActive = filter === f.key;
-              const count = counts[f.key];
-              return (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setFilter(f.key)}
+
+            {companies.length > 1 && (
+              <div
+                style={{ marginLeft: "auto", position: "relative" }}
+                className="company-select-wrap"
+              >
+                <select
+                  value={companyFilter}
+                  onChange={(e) => setCompanyFilter(e.target.value)}
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "7px 13px 7px 12px",
-                    borderRadius: 999,
-                    border: isActive
+                    appearance: "none",
+                    WebkitAppearance: "none",
+                    background: companyFilter ? "#0a0a0a" : "#fff",
+                    color: companyFilter ? "#fafaf6" : "#3a3a36",
+                    border: companyFilter
                       ? "1px solid #0a0a0a"
                       : "1px solid rgba(10,10,10,0.10)",
-                    background: isActive ? "#0a0a0a" : "#fff",
-                    color: isActive ? "#fafaf6" : "#3a3a36",
+                    borderRadius: 999,
+                    padding: "7px 30px 7px 13px",
                     fontSize: 13,
                     fontWeight: 500,
-                    cursor: "pointer",
                     fontFamily: GEIST,
-                    transition: "all 120ms ease",
+                    cursor: "pointer",
+                    outline: "none",
+                    backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='${companyFilter ? "%23fafaf6" : "%238a8a85"}' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 10px center",
+                    backgroundSize: "10px 6px",
                   }}
                 >
-                  {f.label}
-                  <span
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 10.5,
-                      fontWeight: 500,
-                      color: isActive ? "rgba(250,250,246,0.7)" : "#8a8a85",
-                    }}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-            <div style={{ flex: 1 }} />
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                fontFamily: MONO,
-                fontSize: 11,
-                color: "#5a5a55",
-                background: "#fff",
-                border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 8,
-                padding: "7px 12px",
-                cursor: "default",
-              }}
-            >
-              <span style={{ color: "#8a8a85", letterSpacing: 0.5 }}>
-                ORDENAR:
-              </span>
-              <span style={{ color: "#0a0a0a", fontWeight: 500 }}>
-                Mais recente
-              </span>
-              <span style={{ fontSize: 9, color: "#8a8a85" }}>▾</span>
-            </div>
+                  <option value="">Empresa</option>
+                  {companies.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
-          {/* List */}
-          {filteredApplications.length === 0 ? (
-            <EmptyState
-              filter={filter}
-              segment={segment}
-              onAdd={() => setShowCreate(true)}
-            />
+          {/* Sections */}
+          {scopedApplications.length === 0 ? (
+            <EmptyState segment={segment} onAdd={() => setShowCreate(true)} />
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {filteredApplications.map((app) => (
-                <CandRow
-                  key={app.id}
-                  application={app}
-                  derivedScore={derivedScores[app.id]}
-                  isArchivedView={segment === "arquivadas"}
-                  onRestored={handleRestored}
-                  onDeleted={handleDeleted}
-                />
-              ))}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {companyFilter !== "" && filteredApplications.length === 0 && (
+                <div
+                  style={{
+                    padding: "28px 22px",
+                    textAlign: "center",
+                    color: "#8a8a85",
+                    fontSize: 14,
+                    border: "1px dashed rgba(10,10,10,0.12)",
+                    borderRadius: 14,
+                  }}
+                >
+                  Nenhuma candidatura encontrada para{" "}
+                  <strong style={{ color: "#3a3a36" }}>{companyFilter}</strong>.{" "}
+                  <button
+                    type="button"
+                    onClick={() => setCompanyFilter("")}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#0a0a0a",
+                      cursor: "pointer",
+                      fontFamily: GEIST,
+                      fontSize: 14,
+                      textDecoration: "underline",
+                      padding: 0,
+                    }}
+                  >
+                    Limpar filtro
+                  </button>
+                </div>
+              )}
+              {SECTION_GROUPS.map((group) => {
+                const { step, accent, headerBg, scoreColor, dark } = group;
+                const sortState = sectionSorts[group.key] ?? {
+                  key: "date",
+                  dir: "desc",
+                };
+                const apps = filteredApplications
+                  .filter((a) =>
+                    group.statuses.includes(a.status as JobApplicationStatus),
+                  )
+                  .sort((a, b) => {
+                    let diff: number;
+                    if (sortState.key === "score") {
+                      const sa =
+                        derivedScores[a.id]?.scoreAfter ??
+                        a.bestScore ??
+                        a.scoreAfter ??
+                        a.scoreBefore ??
+                        -1;
+                      const sb =
+                        derivedScores[b.id]?.scoreAfter ??
+                        b.bestScore ??
+                        b.scoreAfter ??
+                        b.scoreBefore ??
+                        -1;
+                      diff = sb - sa;
+                    } else {
+                      diff =
+                        new Date(b.createdAt).getTime() -
+                        new Date(a.createdAt).getTime();
+                    }
+                    return sortState.dir === "asc" ? -diff : diff;
+                  });
+
+                if (apps.length === 0) return null;
+
+                const isOpen = openSections[group.key] ?? true;
+
+                const previewCompanies = apps
+                  .slice(0, 3)
+                  .map((a) => a.companyName);
+                const scoreSamples = apps
+                  .map(
+                    (a) =>
+                      derivedScores[a.id]?.scoreAfter ??
+                      a.bestScore ??
+                      a.scoreAfter ??
+                      a.scoreBefore ??
+                      null,
+                  )
+                  .filter((s): s is number => s !== null);
+                const avgScore =
+                  scoreSamples.length > 0
+                    ? Math.round(
+                        scoreSamples.reduce((acc, s) => acc + s, 0) /
+                          scoreSamples.length,
+                      )
+                    : null;
+
+                return (
+                  <StatusAccordion
+                    key={group.key}
+                    label={group.label}
+                    count={apps.length}
+                    open={isOpen}
+                    onToggle={() => toggleSection(group.key)}
+                    step={step}
+                    accent={accent}
+                    headerBg={headerBg}
+                    dark={dark}
+                    scoreColor={scoreColor}
+                    previewCompanies={previewCompanies}
+                    avgScore={avgScore}
+                    sortState={sortState}
+                    onSortChange={(sk) => setSectionSort(group.key, sk)}
+                  >
+                    {apps.map((app) => (
+                      <CandRow
+                        key={app.id}
+                        application={app}
+                        derivedScore={derivedScores[app.id]}
+                        scoreColor={scoreColor}
+                        isArchivedView={segment === "arquivadas"}
+                        onRestored={handleRestored}
+                        onDeleted={handleDeleted}
+                      />
+                    ))}
+                  </StatusAccordion>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1864,6 +2297,8 @@ export function CandidaturasClient({
           }
         `}</style>
       </main>
+
+      <PublicFooter />
 
       <CreateApplicationModal
         open={showCreate}
