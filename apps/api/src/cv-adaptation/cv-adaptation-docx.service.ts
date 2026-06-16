@@ -1,11 +1,29 @@
 import { Inject, Injectable } from "@nestjs/common";
 import PizZip from "pizzip";
-
 import { ResumeTemplateDocxService } from "../resume-templates/resume-template-docx.service";
 import type {
   CvAdaptationOutput,
   CvSection,
 } from "./dto/cv-adaptation-output.types";
+
+const SECTION_LABELS = {
+  pt: {
+    summary: "RESUMO PROFISSIONAL",
+    experience: "EXPERIÊNCIA PROFISSIONAL",
+    skills: "COMPETÊNCIAS",
+    education: "EDUCAÇÃO",
+    certifications: "CERTIFICAÇÕES",
+    languages: "IDIOMAS",
+  },
+  en: {
+    summary: "PROFESSIONAL SUMMARY",
+    experience: "WORK EXPERIENCE",
+    skills: "SKILLS",
+    education: "EDUCATION",
+    certifications: "CERTIFICATIONS",
+    languages: "LANGUAGES",
+  },
+} as const;
 
 @Injectable()
 export class CvAdaptationDocxService {
@@ -26,70 +44,7 @@ export class CvAdaptationDocxService {
       return this.buildFallbackDocx(output);
     }
     const data = this.mapOutputToTemplateData(output);
-    let docxBuffer = await this.templateDocx.fillFromStorage(
-      templateFileUrl,
-      data,
-    );
-
-    const extraSections = (output.sections ?? []).filter(
-      (s) => s.sectionType === "other",
-    );
-    if (extraSections.length > 0) {
-      docxBuffer = this.appendExtraSections(docxBuffer, extraSections);
-    }
-
-    return docxBuffer;
-  }
-
-  private appendExtraSections(
-    docxBuffer: Buffer,
-    sections: CvSection[],
-  ): Buffer {
-    try {
-      const zip = new PizZip(docxBuffer);
-      const documentXmlFile = zip.file("word/document.xml");
-      if (!documentXmlFile) return docxBuffer;
-
-      let documentXml = documentXmlFile.asText();
-
-      const extraXml = sections
-        .flatMap((section) => {
-          const titlePara = `<w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:rPr><w:b/><w:caps/></w:rPr><w:t>${this.escapeXml(section.title.toUpperCase())}</w:t></w:r></w:p>`;
-          const itemParas = section.items.flatMap((item) => {
-            const paras: string[] = [];
-            if (item.heading?.trim()) {
-              paras.push(
-                `<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${this.escapeXml(item.heading)}</w:t></w:r></w:p>`,
-              );
-            }
-            for (const b of item.bullets ?? []) {
-              if (b.trim()) {
-                paras.push(
-                  `<w:p><w:r><w:t xml:space="preserve">• ${this.escapeXml(b)}</w:t></w:r></w:p>`,
-                );
-              }
-            }
-            return paras;
-          });
-          return [titlePara, ...itemParas];
-        })
-        .join("");
-
-      documentXml = documentXml.replace("</w:body>", `${extraXml}</w:body>`);
-      zip.file("word/document.xml", documentXml);
-      return zip.generate({ type: "nodebuffer" }) as Buffer;
-    } catch {
-      return docxBuffer;
-    }
-  }
-
-  private escapeXml(value: string): string {
-    return value
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&apos;");
+    return this.templateDocx.fillFromStorage(templateFileUrl, data);
   }
 
   /** Convert a filled DOCX buffer to PDF via LibreOffice. */
@@ -157,7 +112,32 @@ export class CvAdaptationDocxService {
     return zip.generate({ type: "nodebuffer" }) as Buffer;
   }
 
+  private detectLanguage(output: CvAdaptationOutput): "pt" | "en" {
+    const text = [
+      output.summary ?? "",
+      ...(output.sections ?? []).map((s) => s.title),
+    ]
+      .join(" ")
+      .toLowerCase();
+    const ptScore =
+      (
+        text.match(
+          /\b(de|para|com|em|uma|não|por|do|da|experiência|formação|idiomas|competências)\b/g,
+        ) ?? []
+      ).length;
+    const enScore =
+      (
+        text.match(
+          /\b(the|and|with|for|experience|education|skills|languages|certifications|summary)\b/g,
+        ) ?? []
+      ).length;
+    return enScore > ptScore ? "en" : "pt";
+  }
+
   private mapOutputToTemplateData(output: CvAdaptationOutput) {
+    const lang = this.detectLanguage(output);
+    const labels = SECTION_LABELS[lang];
+
     const headerSection = output.sections?.find(
       (s) => s.sectionType === "header",
     );
@@ -184,7 +164,6 @@ export class CvAdaptationDocxService {
     const { candidateName, phone, email, location } =
       this.extractHeader(headerSection);
 
-    // mainGoal: use AI-generated field when available, fallback to first sentence of summary
     const summaryText = output.summary ?? "";
     let mainGoal = output.mainGoal ?? "";
     if (!mainGoal) {
@@ -197,6 +176,20 @@ export class CvAdaptationDocxService {
 
     const certItems = this.mapCourseItems(certSection);
     const langItems = this.mapLanguages(langSection);
+    const extraSections = (output.sections ?? [])
+      .filter((s) => s.sectionType === "other")
+      .map((s) => ({
+        sectionTitle: s.title.toUpperCase(),
+        sectionItems: s.items
+          .map((item) => ({
+            itemHeading: item.heading ?? "",
+            itemBullets: (item.bullets ?? [])
+              .filter((b) => b.trim())
+              .map((b) => ({ bulletText: b })),
+          }))
+          .filter((i) => i.itemHeading || i.itemBullets.length > 0),
+      }))
+      .filter((s) => s.sectionItems.length > 0);
 
     return {
       candidateName,
@@ -206,6 +199,12 @@ export class CvAdaptationDocxService {
       mainGoal,
       hasMainGoal: mainGoal.trim().length > 0,
       summary: summaryText,
+      sectionTitleSummary: labels.summary,
+      sectionTitleExperience: labels.experience,
+      sectionTitleSkills: labels.skills,
+      sectionTitleEducation: labels.education,
+      sectionTitleCertifications: labels.certifications,
+      sectionTitleLanguages: labels.languages,
       items: this.mapExperience(experienceSection),
       competencias: this.mapSkills(skillsSection),
       educacao: this.mapCourseItems(educationSection),
@@ -213,6 +212,7 @@ export class CvAdaptationDocxService {
       hasIdiomas: langItems.length > 0,
       certificacoes: certItems,
       idiomas: langItems,
+      extraSections,
     };
   }
 
