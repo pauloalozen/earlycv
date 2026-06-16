@@ -3189,6 +3189,13 @@ export class CvAdaptationService {
     };
   }
 
+  private stripAiCustomSections(output: CvAdaptationOutput): CvAdaptationOutput {
+    return {
+      ...output,
+      sections: (output.sections ?? []).filter((s) => s.sectionType !== "other"),
+    };
+  }
+
   private async mergeCanonicalProfileFromText(input: {
     userId: string;
     text: string;
@@ -3537,7 +3544,9 @@ export class CvAdaptationService {
       "summary" in aiAuditJson &&
       "sections" in aiAuditJson
     ) {
-      return this.filterEmptySections(aiAuditJson as CvAdaptationOutput);
+      return this.stripAiCustomSections(
+        this.filterEmptySections(aiAuditJson as CvAdaptationOutput),
+      );
     }
 
     if (
@@ -3546,7 +3555,9 @@ export class CvAdaptationService {
       "summary" in adaptedContentJson &&
       "sections" in adaptedContentJson
     ) {
-      return this.filterEmptySections(adaptedContentJson as CvAdaptationOutput);
+      return this.stripAiCustomSections(
+        this.filterEmptySections(adaptedContentJson as CvAdaptationOutput),
+      );
     }
 
     const guest = adaptedContentJson as {
