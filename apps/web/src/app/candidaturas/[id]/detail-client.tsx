@@ -618,6 +618,7 @@ function AnaliseRow({
   isLast,
   companyName,
   jobTitle,
+  isArchived,
   onUpdated,
 }: {
   adaptation: {
@@ -639,6 +640,7 @@ function AnaliseRow({
   isLast: boolean;
   companyName: string;
   jobTitle: string;
+  isArchived?: boolean;
   onUpdated?: () => void;
 }) {
   const MIN_RELEASE_LOADING_MS = 3000;
@@ -1098,7 +1100,7 @@ function AnaliseRow({
             Rever análise
           </a>
 
-          {canDownloadNow && (
+          {!isArchived && canDownloadNow && (
             <a
               href={`/adaptacao-cv/${adaptation.id}`}
               style={{
@@ -1133,7 +1135,7 @@ function AnaliseRow({
             </a>
           )}
 
-          {canDownloadNow ? (
+          {!isArchived && (canDownloadNow ? (
             <>
               <button
                 type="button"
@@ -1264,8 +1266,8 @@ function AnaliseRow({
               </svg>
               {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
             </button>
-          ) : null}
-          {showAdjustments && (
+          ) : null)}
+          {!isArchived && showAdjustments && (
             <button
               data-testid={`analysis-adjustments-${adaptation.id}`}
               type="button"
@@ -1303,7 +1305,7 @@ function AnaliseRow({
             </button>
           )}
         </div>
-        {adaptation.canDownloadBaseCv && (
+        {!isArchived && adaptation.canDownloadBaseCv && (
           <a
             href={`/api/cv-adaptation/${adaptation.id}/base-cv`}
             download
@@ -1661,9 +1663,11 @@ function AnaliseRow({
 
 function AnalisesSection({
   application,
+  isArchived,
   onUpdated,
 }: {
   application: JobApplicationDetailDto;
+  isArchived?: boolean;
   onUpdated: () => void;
 }) {
   const adaptations = application.cvAdaptations;
@@ -1753,6 +1757,7 @@ function AnalisesSection({
                   isLast={isLast}
                   companyName={application.companyName}
                   jobTitle={application.jobTitle}
+                  isArchived={isArchived}
                   onUpdated={onUpdated}
                 />
               );
@@ -1761,7 +1766,7 @@ function AnalisesSection({
         )}
 
         {/* Nova análise button */}
-        <button
+        {!isArchived && <button
           type="button"
           onClick={() => {
             if (application.jobDescriptionText) {
@@ -1808,7 +1813,7 @@ function AnalisesSection({
             <path d="M12 5v14M5 12h14" />
           </svg>
           Fazer nova análise desta vaga
-        </button>
+        </button>}
       </div>
     </div>
   );
@@ -4693,13 +4698,18 @@ export function DetailClient({ application, header }: Props) {
   const isPrepEligible = PREP_ELIGIBLE_STATUSES.includes(application.status);
   const isInterview = application.status === "INTERVIEW";
   const isArchived = application.archivedAt !== null;
+  const isFinalized =
+    application.status === "HIRED" ||
+    application.status === "REJECTED" ||
+    application.status === "WITHDRAWN";
+  const isArchivedManually = isArchived && !isFinalized;
   const hasUnlockedCv =
     application.bestCvState === "unlocked" ||
     application.bestCvState === "ready" ||
     application.cvAdaptations.some(
       (a) => a.isUnlocked || a.status === "delivered",
     );
-  const canDelete = isArchived && !hasUnlockedCv;
+  const canDelete = isArchivedManually && !hasUnlockedCv;
   const hasCvAdaptations = application.cvAdaptations.length > 0;
   const origin = ORIGIN_LABELS[application.origin] ?? application.origin;
   const bestAdaptation =
@@ -5030,38 +5040,40 @@ export function DetailClient({ application, header }: Props) {
                     {isInterview && " →"}
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() =>
-                    void (isArchived ? handleRestore() : handleArchive())
-                  }
-                  disabled={archiving || restoring || deleting}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    padding: "8px 13px",
-                    borderRadius: 8,
-                    border: "1px solid rgba(10,10,10,0.12)",
-                    background: "rgba(255,255,255,0.7)",
-                    color: "#3a3a36",
-                    fontSize: 12.5,
-                    fontWeight: 500,
-                    cursor:
-                      archiving || restoring || deleting
-                        ? "not-allowed"
-                        : "pointer",
-                    fontFamily: GEIST,
-                  }}
-                >
-                  {isArchived
-                    ? restoring
-                      ? "Restaurando..."
-                      : "Restaurar"
-                    : archiving
-                      ? "Arquivando..."
-                      : "Arquivar"}
-                </button>
+                {(isArchived || !isFinalized) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void (isArchived ? handleRestore() : handleArchive())
+                    }
+                    disabled={archiving || restoring || deleting}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      padding: "8px 13px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(10,10,10,0.12)",
+                      background: "rgba(255,255,255,0.7)",
+                      color: "#3a3a36",
+                      fontSize: 12.5,
+                      fontWeight: 500,
+                      cursor:
+                        archiving || restoring || deleting
+                          ? "not-allowed"
+                          : "pointer",
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    {isArchived
+                      ? restoring
+                        ? "Restaurando..."
+                        : "Restaurar"
+                      : archiving
+                        ? "Arquivando..."
+                        : "Arquivar"}
+                  </button>
+                )}
                 {canDelete && (
                   <button
                     type="button"
@@ -5102,19 +5114,23 @@ export function DetailClient({ application, header }: Props) {
           </div>
 
           {/* Jornada stepper */}
-          <Jornada
-            application={application}
-            onUpdated={handleUpdated}
-            onRejected={() => setShowRejectionModal(true)}
-          />
+          {!isArchivedManually && (
+            <Jornada
+              application={application}
+              onUpdated={handleUpdated}
+              onRejected={() => setShowRejectionModal(true)}
+            />
+          )}
 
           {/* Entrevista agendada */}
-          <div style={{ marginBottom: 28 }}>
-            <InterviewScheduledCard
-              application={application}
-              onSchedule={() => setShowInterviewModal(true)}
-            />
-          </div>
+          {!isArchivedManually && (
+            <div style={{ marginBottom: 28 }}>
+              <InterviewScheduledCard
+                application={application}
+                onSchedule={() => setShowInterviewModal(true)}
+              />
+            </div>
+          )}
 
           {/* Main grid */}
           <div
@@ -5130,6 +5146,7 @@ export function DetailClient({ application, header }: Props) {
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
               <AnalisesSection
                 application={application}
+                isArchived={isArchivedManually}
                 onUpdated={handleUpdated}
               />
               <NotesSection

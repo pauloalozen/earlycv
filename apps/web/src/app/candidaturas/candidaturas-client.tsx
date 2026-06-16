@@ -876,7 +876,7 @@ function CandRow({
         border: "1px solid rgba(10,10,10,0.06)",
         borderRadius: 11,
         display: "grid",
-        gridTemplateColumns: "1fr 148px 200px",
+        gridTemplateColumns: "1fr 148px 240px",
         gap: 0,
         alignItems: "stretch",
         overflow: "hidden",
@@ -1340,7 +1340,7 @@ function CandRow({
           </>
         )}
 
-        {canDownloadCv && cvAdaptationIdForActions ? (
+        {!isArchivedView && (canDownloadCv && cvAdaptationIdForActions ? (
           <a
             href={`/api/cv-adaptation/${cvAdaptationIdForActions}/download?format=pdf`}
             style={{
@@ -1502,14 +1502,14 @@ function CandRow({
           >
             CV indisponível
           </button>
-        ) : null}
+        ) : null)}
 
-        <Link
+        {!isArchivedView && <Link
           href={cta.href}
           style={{
             display: "inline-flex",
             alignItems: "center",
-            justifyContent: cta.tone !== "ghost" ? "space-between" : "center",
+            justifyContent: "center",
             gap: 6,
             borderRadius: 8,
             padding: "10px 14px",
@@ -1551,27 +1551,10 @@ function CandRow({
             <path d="M7 17 17 7" strokeLinecap="round" />
             <path d="M8 7h9v9" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <span
-            style={{
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
+          <span style={{ whiteSpace: "nowrap" }}>
             {cta.label}
           </span>
-          {cta.tone !== "ghost" && (
-            <span
-              style={{
-                fontSize: 12,
-                opacity: cta.tone === "dark" ? 0.7 : 1,
-                flexShrink: 0,
-              }}
-            >
-              →
-            </span>
-          )}
-        </Link>
+        </Link>}
       </div>
 
       {confirmDelete ? (

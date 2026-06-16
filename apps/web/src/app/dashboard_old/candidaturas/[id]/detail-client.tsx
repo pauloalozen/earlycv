@@ -294,8 +294,12 @@ function Timeline({
 
   function getEventBody(event: JobApplicationEvent): React.ReactNode {
     switch (event.eventType) {
-      case "APPLICATION_CREATED":
-        return "Candidatura criada automaticamente.";
+      case "APPLICATION_CREATED": {
+        const origin = event.metadata?.origin;
+        return origin === "manual" || origin === "imported_url"
+          ? "Candidatura criada manualmente."
+          : "Candidatura criada automaticamente.";
+      }
       case "ANALYSIS_COMPLETED":
         return scoreBefore !== null ? (
           <>

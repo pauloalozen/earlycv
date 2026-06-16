@@ -73,7 +73,7 @@ export default async function MeuPerfilPage() {
   const [planResult, highlightsResult, summaryResult, masterResumeResult, profileResult] =
     await Promise.allSettled([
       getMyPlan(),
-      listJobApplicationHighlights(3),
+      listJobApplicationHighlights(5),
       getJobApplicationHighlightsSummary(),
       getMyMasterResume(),
       apiRequest("GET", "/users/profile").then(async (r) => {

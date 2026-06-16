@@ -781,55 +781,37 @@ test("listHighlights queries active-only visibility scope", async () => {
   });
 });
 
-test("listHighlights ranks applications by relevance groups and score", async () => {
+test("listHighlights returns applications ordered by most recently updated first", async () => {
   const db = makeDb({
     jobApplication: {
       ...(makeDb().jobApplication as Record<string, unknown>),
       findMany: async () => [
         {
-          id: "app-closed",
+          id: "app-newest",
           userId: "user-1",
-          jobTitle: "Closed",
+          jobTitle: "Newest",
           companyName: "C",
           status: "REJECTED",
           updatedAt: new Date("2026-05-03T10:00:00Z"),
-          cvAdaptations: [
-            {
-              id: "c1",
-              createdAt: new Date("2026-05-01T10:00:00Z"),
-              status: "delivered",
-              adaptedResumeId: "resume-c1",
-              isUnlocked: true,
-              adaptedContentJson: { scoreAfter: 95 },
-            },
-          ],
+          cvAdaptations: [],
           events: [],
           interviewPrep: null,
         },
         {
-          id: "app-open",
+          id: "app-middle",
           userId: "user-1",
-          jobTitle: "Open",
+          jobTitle: "Middle",
           companyName: "O",
           status: "ANALYZED",
           updatedAt: new Date("2026-05-02T10:00:00Z"),
-          cvAdaptations: [
-            {
-              id: "o1",
-              createdAt: new Date("2026-05-01T10:00:00Z"),
-              status: "analyzing",
-              adaptedResumeId: null,
-              isUnlocked: false,
-              adaptedContentJson: { scoreAfter: 81 },
-            },
-          ],
+          cvAdaptations: [],
           events: [],
           interviewPrep: null,
         },
         {
-          id: "app-priority",
+          id: "app-oldest",
           userId: "user-1",
-          jobTitle: "Priority",
+          jobTitle: "Oldest",
           companyName: "P",
           status: "INTERVIEW",
           updatedAt: new Date("2026-05-01T10:00:00Z"),
@@ -847,7 +829,7 @@ test("listHighlights ranks applications by relevance groups and score", async ()
 
   assert.deepEqual(
     items.map((item) => item.id),
-    ["app-priority", "app-open", "app-closed"],
+    ["app-newest", "app-middle", "app-oldest"],
   );
 });
 

@@ -262,20 +262,6 @@ export class JobApplicationsService {
         ),
         currentCvAdaptationId: item.currentCvAdaptationId,
       }))
-      .sort((a, b) => {
-        const groupDelta =
-          this.relevanceGroupRank(a.status) - this.relevanceGroupRank(b.status);
-        if (groupDelta !== 0) return groupDelta;
-
-        if (a.scorePresentation !== b.scorePresentation) {
-          return a.scorePresentation === "scored" ? -1 : 1;
-        }
-
-        const scoreDelta = (b.bestScore ?? -1) - (a.bestScore ?? -1);
-        if (scoreDelta !== 0) return scoreDelta;
-
-        return b.updatedAt.getTime() - a.updatedAt.getTime();
-      })
       .slice(0, Math.max(1, limit));
   }
 
@@ -977,13 +963,5 @@ export class JobApplicationsService {
     const nextIdx = autoOrder.indexOf(next);
     // Only advance within automatic statuses; never overwrite user-set statuses
     return currentIdx !== -1 && nextIdx > currentIdx;
-  }
-
-  private relevanceGroupRank(status: JobApplicationStatus): number {
-    if (status === "IN_PROCESS" || status === "INTERVIEW") return 0;
-    if (status === "HIRED" || status === "REJECTED" || status === "WITHDRAWN") {
-      return 2;
-    }
-    return 1;
   }
 }
