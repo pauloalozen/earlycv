@@ -15,6 +15,7 @@ import type {
 } from "@/lib/cv-adaptation-api";
 import {
   analyzeAuthenticatedCv,
+  resetCvAdaptationContent,
   saveGuestPreview,
   updateCvAdaptationContent,
 } from "@/lib/cv-adaptation-api";
@@ -125,6 +126,13 @@ function sectionLabel(type: string): string {
     other: "Outros",
   };
   return labels[type] ?? type;
+}
+
+function detectCvLanguage(summary: string, sections: CvSection[]): "pt" | "en" {
+  const text = [summary, ...sections.map((s) => s.title)].join(" ").toLowerCase();
+  const ptScore = (text.match(/\b(de|para|com|em|uma|não|por|do|da|experiência|formação|idiomas|competências)\b/g) ?? []).length;
+  const enScore = (text.match(/\b(the|and|with|for|experience|education|skills|languages|certifications|summary)\b/g) ?? []).length;
+  return enScore > ptScore ? "en" : "pt";
 }
 
 function scoreLabel(score: number): string {
@@ -678,12 +686,15 @@ function SummaryBlock({
   isHighlighted,
   isEditing,
   onSummaryChange,
+  lang = "pt",
 }: {
   summary: string;
   isHighlighted?: boolean;
   isEditing?: boolean;
   onSummaryChange?: (value: string) => void;
+  lang?: "pt" | "en";
 }) {
+  const summaryLabel = lang === "en" ? "Professional Summary" : "Resumo Profissional";
   return (
     <div
       data-section-type="summary"
@@ -707,7 +718,7 @@ function SummaryBlock({
             letterSpacing: "0.1em",
           }}
         >
-          Resumo Profissional
+          {summaryLabel}
         </span>
         <div style={{ height: 1.5, background: CV_DIVIDER, marginTop: 5 }} />
       </div>
@@ -811,6 +822,7 @@ function CvSectionBlock({
   onItemChange,
   onAddItem,
   onRemoveItem,
+  onRemoveSection,
 }: {
   section: CvSection;
   isHighlighted: boolean;
@@ -826,6 +838,7 @@ function CvSectionBlock({
   ) => void;
   onAddItem: () => void;
   onRemoveItem: (itemIdx: number) => void;
+  onRemoveSection?: () => void;
 }) {
   return (
     <div
@@ -841,17 +854,35 @@ function CvSectionBlock({
       }}
     >
       <div style={{ marginBottom: 12 }}>
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 800,
-            color: "#111",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-          }}
-        >
-          {section.title || sectionLabel(section.sectionType)}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              color: "#111",
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+            }}
+          >
+            {section.title || sectionLabel(section.sectionType)}
+          </span>
+          {isEditing && section.sectionType === "other" && onRemoveSection && (
+            <button
+              type="button"
+              onClick={onRemoveSection}
+              style={{
+                fontSize: 10,
+                color: "#999",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                padding: "2px 6px",
+              }}
+            >
+              ✕ Excluir seção
+            </button>
+          )}
+        </div>
         <div style={{ height: 1.5, background: CV_DIVIDER, marginTop: 5 }} />
       </div>
 
@@ -870,7 +901,7 @@ function CvSectionBlock({
               allText.toLowerCase().includes(highlightText.toLowerCase());
             return (
               <div
-                key={item.heading ?? String(itemIdx)}
+                key={itemIdx}
                 data-item-idx={itemIdx}
                 style={{
                   marginBottom: 5,
@@ -912,7 +943,7 @@ function CvSectionBlock({
 
             return (
               <div
-                key={item.heading ?? String(itemIdx)}
+                key={itemIdx}
                 data-item-idx={itemIdx}
                 style={{
                   marginBottom: isEditing ? 16 : 14,
@@ -1217,9 +1248,13 @@ export function AdaptacaoCvClient({
     hasSections(editedCvJson ?? initialFinalCvOutput);
   const [isGenerating, setIsGenerating] = useState(!isDelivered);
 
-  const initialSections = ((editedCvJson ?? finalCvOutput)?.sections ??
+  // Local copy of saved output so view mode reflects edits immediately after save
+  const [localEditedOutput, setLocalEditedOutput] =
+    useState<FinalCvOutput | null>(editedCvJson ?? null);
+
+  const initialSections = ((localEditedOutput ?? finalCvOutput)?.sections ??
     []) as CvSection[];
-  const initialSummary = (editedCvJson ?? finalCvOutput)?.summary ?? "";
+  const initialSummary = (localEditedOutput ?? finalCvOutput)?.summary ?? "";
   const [activeAjusteKey, setActiveAjusteKey] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedSections, setEditedSections] =
@@ -1230,6 +1265,19 @@ export function AdaptacaoCvClient({
   const [reanaliseAdaptationId, setReanaliseAdaptationId] = useState<string | null>(null);
   const [reanaliseScore, setReanaliseScore] = useState<number | null>(null);
   const [reanaliseError, setReanaliseError] = useState<string | null>(null);
+  const [addSectionOpen, setAddSectionOpen] = useState(false);
+  const [newSectionTitle, setNewSectionTitle] = useState("");
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetStatus, setResetStatus] = useState<"idle" | "resetting" | "error">("idle");
+  const [resetModalMounted, setResetModalMounted] = useState(false);
+  const resetModalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const shouldShowEditedCard = !!localEditedOutput && !isEditing;
+  const [editCardMounted, setEditCardMounted] = useState(shouldShowEditedCard);
+  const [editCardVisible, setEditCardVisible] = useState(shouldShowEditedCard);
+  const editCardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const addSectionInputRef = useRef<HTMLInputElement>(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadStage, setDownloadStage] =
     useState<DownloadProgressStage | null>(null);
@@ -1303,6 +1351,38 @@ export function AdaptacaoCvClient({
     };
   }, [isGenerating, pollContent]);
 
+  useEffect(() => {
+    if (addSectionOpen) {
+      addSectionInputRef.current?.focus();
+    }
+  }, [addSectionOpen]);
+
+  useEffect(() => {
+    if (resetConfirmOpen) {
+      if (resetModalTimerRef.current) clearTimeout(resetModalTimerRef.current);
+      setResetModalMounted(true);
+    } else if (resetModalMounted) {
+      resetModalTimerRef.current = setTimeout(() => setResetModalMounted(false), 260);
+    }
+    return () => {
+      if (resetModalTimerRef.current) clearTimeout(resetModalTimerRef.current);
+    };
+  }, [resetConfirmOpen, resetModalMounted]);
+
+  useEffect(() => {
+    if (shouldShowEditedCard) {
+      if (editCardTimerRef.current) clearTimeout(editCardTimerRef.current);
+      setEditCardMounted(true);
+      requestAnimationFrame(() => requestAnimationFrame(() => setEditCardVisible(true)));
+    } else {
+      setEditCardVisible(false);
+      editCardTimerRef.current = setTimeout(() => setEditCardMounted(false), 230);
+    }
+    return () => {
+      if (editCardTimerRef.current) clearTimeout(editCardTimerRef.current);
+    };
+  }, [shouldShowEditedCard]);
+
   // Score values
   const scoreBefore =
     analysisData.scoring?.totals?.scoreAtualBase ??
@@ -1318,10 +1398,10 @@ export function AdaptacaoCvClient({
   const displaySections = (
     isEditing
       ? editedSections
-      : ((editedCvJson ?? finalCvOutput)?.sections ?? [])
+      : ((localEditedOutput ?? finalCvOutput)?.sections ?? [])
   ) as CvSection[];
 
-  const cvSummary = (editedCvJson ?? finalCvOutput)?.summary;
+  const cvSummary = (localEditedOutput ?? finalCvOutput)?.summary;
 
   const SECTION_ORDER = [
     "experience",
@@ -1340,6 +1420,8 @@ export function AdaptacaoCvClient({
       const bi = SECTION_ORDER.indexOf(b.sectionType);
       return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     });
+
+  const cvLanguage = detectCvLanguage(cvSummary ?? "", bodySections);
 
   // Precompute ajuste → {sectionType, itemIdx, highlightText} map for item-level navigation
   const ajusteItemMap = useMemo(() => {
@@ -1504,11 +1586,40 @@ export function AdaptacaoCvClient({
     }));
   }
 
+  async function handleReset() {
+    setResetStatus("resetting");
+    try {
+      await resetCvAdaptationContent(adaptationId);
+      setLocalEditedOutput(null);
+      const base = finalCvOutput?.sections ?? [];
+      setEditedSections(base as CvSection[]);
+      setEditedSummary(finalCvOutput?.summary ?? "");
+      setResetConfirmOpen(false);
+      setIsEditing(false);
+      setResetStatus("idle");
+    } catch {
+      setResetStatus("error");
+      setTimeout(() => setResetStatus("idle"), 3000);
+    }
+  }
+
+  function handleRemoveSection(sectionIdx: number) {
+    setEditedSections((prev) => prev.filter((_, i) => i !== sectionIdx));
+  }
+
   async function handleSave() {
     setSaveStatus("saving");
     try {
       await updateCvAdaptationContent(adaptationId, editedSections, editedSummary);
       setSaveStatus("saved");
+      setLocalEditedOutput((prev) => ({
+        ...(prev ?? finalCvOutput ?? {}),
+        sections: editedSections,
+        summary: editedSummary,
+      }));
+      setIsEditing(false);
+      setAddSectionOpen(false);
+      setNewSectionTitle("");
       setTimeout(() => setSaveStatus("idle"), 2000);
     } catch {
       setSaveStatus("error");
@@ -1517,12 +1628,29 @@ export function AdaptacaoCvClient({
   }
 
   function cancelEditing() {
-    const base = ((editedCvJson ?? finalCvOutput)?.sections ??
+    const base = ((localEditedOutput ?? finalCvOutput)?.sections ??
       []) as CvSection[];
     setEditedSections(base);
-    setEditedSummary((editedCvJson ?? finalCvOutput)?.summary ?? "");
+    setEditedSummary((localEditedOutput ?? finalCvOutput)?.summary ?? "");
     setIsEditing(false);
     setSaveStatus("idle");
+    setAddSectionOpen(false);
+    setNewSectionTitle("");
+  }
+
+  function handleAddSection() {
+    const title = newSectionTitle.trim();
+    if (!title) return;
+    setEditedSections((prev) => [
+      ...prev,
+      {
+        sectionType: "other" as const,
+        title,
+        items: [{ heading: "", bullets: [""] }],
+      },
+    ]);
+    setNewSectionTitle("");
+    setAddSectionOpen(false);
   }
 
   async function handleReanalisar() {
@@ -1603,6 +1731,108 @@ export function AdaptacaoCvClient({
         stage={downloadStage}
         format={downloadFormat}
       />
+
+      {/* Reset confirmation modal */}
+      {resetModalMounted && (
+        <>
+          <style>{`
+            @keyframes resetBackdropIn  { from { opacity:0 } to { opacity:1 } }
+            @keyframes resetBackdropOut { from { opacity:1 } to { opacity:0 } }
+            @keyframes resetPanelIn     { from { opacity:0; transform:scale(0.95) translateY(10px) } to { opacity:1; transform:scale(1) translateY(0) } }
+            @keyframes resetPanelOut    { from { opacity:1; transform:scale(1) translateY(0) } to { opacity:0; transform:scale(0.95) translateY(10px) } }
+          `}</style>
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.55)",
+              zIndex: 200,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              animation: `${resetConfirmOpen ? "resetBackdropIn" : "resetBackdropOut"} 0.22s ease forwards`,
+            }}
+          >
+          <div
+            style={{
+              background: "#1a1a1a",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 12,
+              padding: "28px 32px",
+              maxWidth: 420,
+              width: "calc(100% - 48px)",
+              animation: `${resetConfirmOpen ? "resetPanelIn" : "resetPanelOut"} 0.22s ease forwards`,
+            }}
+          >
+            <p
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#f0f0f0",
+                margin: "0 0 10px",
+              }}
+            >
+              Voltar ao CV adaptado original?
+            </p>
+            <p
+              style={{
+                fontSize: 12,
+                color: "#aaa",
+                margin: "0 0 24px",
+                lineHeight: 1.6,
+              }}
+            >
+              Todas as alterações manuais feitas serão descartadas e o CV voltará
+              à versão gerada pela análise.
+            </p>
+            {resetStatus === "error" && (
+              <p style={{ fontSize: 11, color: "#ef4444", margin: "0 0 12px" }}>
+                Erro ao resetar. Tente novamente.
+              </p>
+            )}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setResetConfirmOpen(false);
+                  setResetStatus("idle");
+                }}
+                disabled={resetStatus === "resetting"}
+                style={{
+                  padding: "8px 16px",
+                  background: "transparent",
+                  color: "#999",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 7,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={resetStatus === "resetting"}
+                style={{
+                  padding: "8px 20px",
+                  background: "#ef4444",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 7,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: resetStatus === "resetting" ? "default" : "pointer",
+                  opacity: resetStatus === "resetting" ? 0.6 : 1,
+                }}
+              >
+                {resetStatus === "resetting" ? "Resetando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+          </div>
+        </>
+      )}
 
       {/* Full-height flex container — sidebar fixed, main scrolls */}
       <div
@@ -1715,142 +1945,25 @@ export function AdaptacaoCvClient({
             ))}
           </div>
 
-          {/* Manual edits warning + re-analysis panel */}
-          {editedCvJson && !isEditing && (
+          {/* Manual edits indicator */}
+          {editCardMounted && (
             <div
               style={{
-                padding: "10px 14px",
+                padding: "8px 14px",
                 borderTop: `1px solid ${SIDEBAR_BORDER}`,
                 flexShrink: 0,
-                background: reanaliseState === "done"
-                  ? "rgba(198,255,58,0.04)"
-                  : "rgba(212,133,74,0.06)",
+                background: "rgba(212,133,74,0.06)",
+                opacity: editCardVisible ? 1 : 0,
+                transform: editCardVisible ? "translateY(0)" : "translateY(6px)",
+                transition: "opacity 0.22s ease, transform 0.22s ease",
               }}
             >
-              {reanaliseState === "done" && reanaliseScore !== null ? (
-                <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 9, color: "#888", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>
-                        Score pós-edição
-                      </div>
-                      <div style={{ fontFamily: "monospace", fontSize: 28, fontWeight: 800, color: getAtsScoreColors(reanaliseScore).primary, lineHeight: 1 }}>
-                        {reanaliseScore}
-                      </div>
-                      <div style={{ fontSize: 10, color: getAtsScoreColors(reanaliseScore).primary, marginTop: 2 }}>
-                        {scoreLabel(reanaliseScore)}
-                      </div>
-                    </div>
-                    <div style={{ flex: 1, fontSize: 11, color: "#666", lineHeight: 1.4 }}>
-                      Análise da versão editada concluída.
-                    </div>
-                  </div>
-                  <Link
-                    href={`/adaptar/resultado?adaptationId=${reanaliseAdaptationId}`}
-                    style={{
-                      display: "block",
-                      textAlign: "center",
-                      padding: "7px 0",
-                      background: "transparent",
-                      color: LIME,
-                      border: `1px solid rgba(198,255,58,0.35)`,
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      textDecoration: "none",
-                    }}
-                  >
-                    Ver análise completa →
-                  </Link>
-                </>
-              ) : reanaliseState === "running" ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
-                  <div style={{
-                    width: 16, height: 16, borderRadius: "50%",
-                    border: "2px solid rgba(212,133,74,0.2)",
-                    borderTop: `2px solid ${AMBER}`,
-                    animation: "spin 0.9s linear infinite",
-                    flexShrink: 0,
-                  }} />
-                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                  <span style={{ fontSize: 12, color: AMBER }}>Analisando versão editada...</span>
-                </div>
-              ) : (
-                <>
-                  <p style={{ fontSize: 11, color: "#a06030", lineHeight: 1.5, margin: "0 0 8px" }}>
-                    {reanaliseState === "error"
-                      ? reanaliseError
-                      : "CV editado manualmente — o score original pode não refletir esta versão."}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleReanalisar}
-                    style={{
-                      width: "100%",
-                      padding: "7px 0",
-                      background: "transparent",
-                      color: AMBER,
-                      border: `1px solid ${AMBER_BORDER}`,
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {reanaliseState === "error" ? "Tentar novamente" : "Reanalisar este CV"}
-                  </button>
-                </>
-              )}
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#c45a10", lineHeight: 1.5, margin: 0 }}>
+                CV editado manualmente — use o toolbar para reanalisar ou baixar.
+              </p>
             </div>
           )}
 
-          {/* Download CTA */}
-          <div
-            style={{
-              padding: "12px 16px",
-              borderTop: `1px solid ${SIDEBAR_BORDER}`,
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-              flexShrink: 0,
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => handleDownload("pdf")}
-              style={{
-                width: "100%",
-                padding: "10px 0",
-                background: LIME,
-                color: "#0a0a0a",
-                border: "none",
-                borderRadius: 8,
-                fontSize: 14,
-                fontWeight: 800,
-                cursor: "pointer",
-                letterSpacing: "0.02em",
-              }}
-            >
-              ↓ Baixar CV adaptado
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDownload("docx")}
-              style={{
-                width: "100%",
-                padding: "8px 0",
-                background: "transparent",
-                color: "#666",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              ↓ Baixar DOCX
-            </button>
-          </div>
         </aside>
 
         {/* ── Main CV panel ────────────────────────────────────────── */}
@@ -1867,68 +1980,202 @@ export function AdaptacaoCvClient({
             overflow: "hidden",
           }}
         >
-          {/* Hint bar — legenda de cores, fora do scroll */}
+          {/* Action toolbar — outside scroll so it stays fixed */}
           {!isGenerating && (
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
-                padding: "7px 28px",
+                gap: 6,
+                padding: "7px 20px",
                 background: "#cac8c2",
                 borderBottom: "1px solid rgba(10,10,10,0.07)",
                 flexShrink: 0,
-                fontFamily: "var(--font-geist-mono), monospace",
-                fontSize: 10,
-                color: "#7a7874",
+                minHeight: 44,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                <div
-                  style={{
-                    width: 5,
-                    height: 5,
-                    borderRadius: "50%",
-                    background: LIME,
-                    boxShadow: "0 0 5px rgba(198,255,58,0.7)",
-                  }}
-                />
-                <span>Clique nos destaques para editar o texto diretamente</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                {[
-                  {
-                    bg: "rgba(198,255,58,0.25)",
-                    bd: "rgba(198,255,58,0.5)",
-                    label: "Palavras-chave / Métricas",
-                  },
-                  {
-                    bg: "rgba(212,133,74,0.2)",
-                    bd: "rgba(212,133,74,0.45)",
-                    label: "Texto reescrito",
-                  },
-                  {
-                    bg: "rgba(93,160,232,0.18)",
-                    bd: "rgba(93,160,232,0.45)",
-                    label: "Formatação",
-                  },
-                ].map((l) => (
-                  <div
-                    key={l.label}
-                    style={{ display: "flex", alignItems: "center", gap: 5 }}
-                  >
-                    <div
+              {/* LEFT: secondary / history actions */}
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {!isEditing && localEditedOutput && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setResetConfirmOpen(true)}
                       style={{
-                        width: 13,
-                        height: 8,
-                        borderRadius: 2,
-                        background: l.bg,
-                        border: `1.5px solid ${l.bd}`,
+                        padding: "6px 12px",
+                        background: "#f0ede8",
+                        color: "#444",
+                        border: "1px solid rgba(10,10,10,0.2)",
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
                       }}
-                    />
-                    <span>{l.label}</span>
-                  </div>
-                ))}
+                    >
+                      ↺ Voltar ao CV adaptado original
+                    </button>
+                    {reanaliseState === "running" ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px" }}>
+                        <div style={{
+                          width: 12, height: 12, borderRadius: "50%",
+                          border: `2px solid rgba(212,133,74,0.2)`,
+                          borderTop: `2px solid ${AMBER}`,
+                          animation: "spin 0.9s linear infinite",
+                          flexShrink: 0,
+                        }} />
+                        <span style={{ fontSize: 11, color: AMBER, whiteSpace: "nowrap" }}>Analisando...</span>
+                      </div>
+                    ) : reanaliseState === "done" && reanaliseScore !== null ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 700 }}>
+                          ✓ Score editado: {reanaliseScore}
+                        </span>
+                        <Link
+                          href={`/adaptar/resultado?adaptationId=${reanaliseAdaptationId}`}
+                          style={{ fontSize: 11, color: LIME, textDecoration: "underline", whiteSpace: "nowrap" }}
+                        >
+                          Ver análise →
+                        </Link>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleReanalisar}
+                        style={{
+                          padding: "6px 12px",
+                          background: "#f0ede8",
+                          color: "#7a4a10",
+                          border: `1px solid ${AMBER_BORDER}`,
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {reanaliseState === "error" ? "⟳ Tentar novamente" : "⟳ Reanalisar CV"}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* SPACER */}
+              <div style={{ flex: 1 }} />
+
+              {/* CENTER: edit controls */}
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {isEditing ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={cancelEditing}
+                      style={{
+                        padding: "6px 13px",
+                        background: "#f0ede8",
+                        color: "#333",
+                        border: "1px solid rgba(10,10,10,0.22)",
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={saveStatus === "saving"}
+                      style={{
+                        padding: "6px 16px",
+                        background:
+                          saveStatus === "saved"
+                            ? "#22c55e"
+                            : saveStatus === "error"
+                              ? "#ef4444"
+                              : LIME,
+                        color: "#0a0a0a",
+                        border: "none",
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: saveStatus === "saving" ? "default" : "pointer",
+                        opacity: saveStatus === "saving" ? 0.6 : 1,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {saveStatus === "saving"
+                        ? "Salvando..."
+                        : saveStatus === "saved"
+                          ? "✓ Salvo"
+                          : saveStatus === "error"
+                            ? "Erro — tente novamente"
+                            : "Salvar edições"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    style={{
+                      padding: "6px 16px",
+                      background: "#1a1a1a",
+                      color: "#f0f0f0",
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ✏ Editar CV
+                  </button>
+                )}
+              </div>
+
+              {/* SEPARATOR */}
+              <div style={{ width: 1, height: 22, background: "rgba(10,10,10,0.12)", margin: "0 6px", flexShrink: 0 }} />
+
+              {/* RIGHT: download actions */}
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button
+                  type="button"
+                  onClick={() => handleDownload("docx")}
+                  style={{
+                    padding: "6px 13px",
+                    background: "#f0ede8",
+                    color: "#333",
+                    border: "1px solid rgba(10,10,10,0.2)",
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  ↓ DOCX
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownload("pdf")}
+                  style={{
+                    padding: "6px 16px",
+                    background: LIME,
+                    color: "#0a0a0a",
+                    border: "none",
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  ↓ Baixar PDF
+                </button>
               </div>
             </div>
           )}
@@ -1943,87 +2190,6 @@ export function AdaptacaoCvClient({
               background: "#d0cec8",
             }}
           >
-          {/* Edit toolbar */}
-          {!isGenerating && (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 16,
-                maxWidth: 720,
-                marginLeft: "auto",
-                marginRight: "auto",
-              }}
-            >
-              {isEditing ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={cancelEditing}
-                    style={{
-                      padding: "7px 14px",
-                      background: "transparent",
-                      color: "#666",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      borderRadius: 6,
-                      fontSize: 11,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={saveStatus === "saving"}
-                    style={{
-                      padding: "7px 18px",
-                      background:
-                        saveStatus === "saved"
-                          ? "#22c55e"
-                          : saveStatus === "error"
-                            ? "#ef4444"
-                            : LIME,
-                      color: "#0a0a0a",
-                      border: "none",
-                      borderRadius: 6,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      cursor: saveStatus === "saving" ? "default" : "pointer",
-                      opacity: saveStatus === "saving" ? 0.6 : 1,
-                    }}
-                  >
-                    {saveStatus === "saving"
-                      ? "Salvando..."
-                      : saveStatus === "saved"
-                        ? "✓ Salvo"
-                        : saveStatus === "error"
-                          ? "Erro — tente novamente"
-                          : "Salvar edições"}
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(true)}
-                  style={{
-                    padding: "7px 18px",
-                    background: "#1a1a1a",
-                    color: "#f0f0f0",
-                    border: "1px solid rgba(255,255,255,0.18)",
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  ✏ Editar CV
-                </button>
-              )}
-            </div>
-          )}
 
           {/* CV card or generating spinner */}
           {isGenerating ? (
@@ -2061,17 +2227,18 @@ export function AdaptacaoCvClient({
                   isHighlighted={!isEditing && highlightedSection === "summary"}
                   isEditing={isEditing}
                   onSummaryChange={setEditedSummary}
+                  lang={cvLanguage}
                 />
               )}
 
               {/* Body sections */}
-              {bodySections.map((section) => {
+              {bodySections.map((section, bodyIdx) => {
                 const sectionIdx = displaySections.indexOf(section);
                 const isSectionHighlighted =
                   !isEditing && highlightedSection === section.sectionType;
                 return (
                   <CvSectionBlock
-                    key={section.sectionType}
+                    key={`${section.sectionType}-${section.title || bodyIdx}`}
                     section={section}
                     isHighlighted={isSectionHighlighted}
                     highlightedItemIdx={
@@ -2097,9 +2264,125 @@ export function AdaptacaoCvClient({
                     }
                     onAddItem={() => handleAddItem(sectionIdx)}
                     onRemoveItem={(itemIdx) => handleRemoveItem(sectionIdx, itemIdx)}
+                    onRemoveSection={
+                      section.sectionType === "other"
+                        ? () => handleRemoveSection(sectionIdx)
+                        : undefined
+                    }
                   />
                 );
               })}
+
+              {/* Add new section — only in edit mode */}
+              {isEditing && (
+                <div style={{ marginTop: 8 }}>
+                  {addSectionOpen ? (
+                    <div
+                      style={{
+                        border: "1px solid #d0d0cc",
+                        borderRadius: 8,
+                        padding: "14px 16px",
+                        background: "#fafaf8",
+                      }}
+                    >
+                      <label
+                        htmlFor="new-section-title"
+                        style={{
+                          display: "block",
+                          fontSize: 9,
+                          fontWeight: 700,
+                          color: CV_META,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.09em",
+                          marginBottom: 6,
+                        }}
+                      >
+                        Nome da nova seção
+                      </label>
+                      <input
+                        id="new-section-title"
+                        ref={addSectionInputRef}
+                        type="text"
+                        placeholder="Ex: Voluntariado, Premiações, Publicações…"
+                        value={newSectionTitle}
+                        onChange={(e) => setNewSectionTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddSection();
+                          }
+                          if (e.key === "Escape") {
+                            setAddSectionOpen(false);
+                            setNewSectionTitle("");
+                          }
+                        }}
+                        style={{
+                          ...inputStyle,
+                          marginBottom: 10,
+                          fontSize: 13,
+                          padding: "7px 10px",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          type="button"
+                          onClick={handleAddSection}
+                          disabled={!newSectionTitle.trim()}
+                          style={{
+                            padding: "6px 16px",
+                            background: newSectionTitle.trim() ? "#111" : "#ccc",
+                            color: newSectionTitle.trim() ? "#f0f0f0" : "#888",
+                            border: "none",
+                            borderRadius: 5,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: newSectionTitle.trim() ? "pointer" : "default",
+                          }}
+                        >
+                          Adicionar seção
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddSectionOpen(false);
+                            setNewSectionTitle("");
+                          }}
+                          style={{
+                            padding: "6px 12px",
+                            background: "transparent",
+                            color: "#999",
+                            border: "1px solid #ddd",
+                            borderRadius: 5,
+                            fontSize: 12,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setAddSectionOpen(true)}
+                      style={{
+                        width: "100%",
+                        padding: "9px 0",
+                        background: "transparent",
+                        color: "#888",
+                        border: "1px dashed #ccc",
+                        borderRadius: 7,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        letterSpacing: "0.02em",
+                      }}
+                    >
+                      + Nova seção
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Fallback: no sections */}
               {displaySections.length === 0 && (

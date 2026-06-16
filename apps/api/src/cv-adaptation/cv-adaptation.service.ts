@@ -2487,6 +2487,26 @@ export class CvAdaptationService {
     };
   }
 
+  async resetCvContent(userId: string, id: string): Promise<void> {
+    const adaptation = await this.database.cvAdaptation.findFirst({
+      where: { id, userId },
+      select: { isUnlocked: true },
+    });
+
+    if (!adaptation) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    if (!adaptation.isUnlocked) {
+      throw new BadRequestException("Adaptation is not unlocked.");
+    }
+
+    await this.database.cvAdaptation.update({
+      where: { id },
+      data: { editedCvJson: Prisma.DbNull },
+    });
+  }
+
   async updateCvContent(
     userId: string,
     id: string,
@@ -2722,8 +2742,9 @@ export class CvAdaptationService {
             masterCvText,
             requirementCoverage,
             ajustesConteudo,
-            selectedMissingKeywords: this.getSelectedMissingKeywords(
-              adaptation.adaptedContentJson,
+            selectedMissingKeywords: this.mergeKeywordsForGeneration(
+              this.getSelectedMissingKeywords(adaptation.adaptedContentJson),
+              this.getPossiveisKeywords(adaptation.adaptedContentJson),
             ),
             payload: {
               adaptationId: adaptation.id,
@@ -2899,6 +2920,43 @@ export class CvAdaptationService {
       .map((item) => item.trim())
       .filter((item) => item.length > 0)
       .slice(0, 80);
+  }
+
+  private getPossiveisKeywords(adaptedContentJson: unknown): string[] {
+    if (!adaptedContentJson || typeof adaptedContentJson !== "object") {
+      return [];
+    }
+
+    const keywords = (adaptedContentJson as { keywords?: unknown }).keywords;
+    if (!keywords || typeof keywords !== "object") return [];
+
+    const possiveis = (keywords as { possiveis?: unknown }).possiveis;
+    if (!Array.isArray(possiveis)) return [];
+
+    return possiveis
+      .filter(
+        (item): item is Record<string, unknown> =>
+          item !== null && typeof item === "object",
+      )
+      .map((item) => String(item.kw ?? "").trim())
+      .filter((kw) => kw.length > 0);
+  }
+
+  private mergeKeywordsForGeneration(
+    selectedMissingKeywords: string[],
+    possiveisKeywords: string[],
+  ): string[] {
+    const seen = new Set(
+      selectedMissingKeywords.map((kw) => kw.toLowerCase().trim()),
+    );
+    const merged = [...selectedMissingKeywords];
+    for (const kw of possiveisKeywords) {
+      if (!seen.has(kw.toLowerCase().trim())) {
+        seen.add(kw.toLowerCase().trim());
+        merged.push(kw);
+      }
+    }
+    return merged.slice(0, 80);
   }
 
   private enrichAjustesWithSelectedKeywords(

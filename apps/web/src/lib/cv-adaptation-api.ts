@@ -184,6 +184,16 @@ export async function getCvAdaptationContent(
   return response.json() as Promise<CvAdaptationContentResponse>;
 }
 
+export async function resetCvAdaptationContent(id: string): Promise<void> {
+  const response = await apiRequest(
+    "DELETE",
+    `/cv-adaptation/${id}/cv-content`,
+  );
+  if (!response.ok) {
+    throw new Error("Failed to reset CV edits");
+  }
+}
+
 export async function updateCvAdaptationContent(
   id: string,
   sections: CvSection[],

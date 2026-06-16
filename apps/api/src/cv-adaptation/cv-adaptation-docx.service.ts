@@ -26,7 +26,70 @@ export class CvAdaptationDocxService {
       return this.buildFallbackDocx(output);
     }
     const data = this.mapOutputToTemplateData(output);
-    return this.templateDocx.fillFromStorage(templateFileUrl, data);
+    let docxBuffer = await this.templateDocx.fillFromStorage(
+      templateFileUrl,
+      data,
+    );
+
+    const extraSections = (output.sections ?? []).filter(
+      (s) => s.sectionType === "other",
+    );
+    if (extraSections.length > 0) {
+      docxBuffer = this.appendExtraSections(docxBuffer, extraSections);
+    }
+
+    return docxBuffer;
+  }
+
+  private appendExtraSections(
+    docxBuffer: Buffer,
+    sections: CvSection[],
+  ): Buffer {
+    try {
+      const zip = new PizZip(docxBuffer);
+      const documentXmlFile = zip.file("word/document.xml");
+      if (!documentXmlFile) return docxBuffer;
+
+      let documentXml = documentXmlFile.asText();
+
+      const extraXml = sections
+        .flatMap((section) => {
+          const titlePara = `<w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:rPr><w:b/><w:caps/></w:rPr><w:t>${this.escapeXml(section.title.toUpperCase())}</w:t></w:r></w:p>`;
+          const itemParas = section.items.flatMap((item) => {
+            const paras: string[] = [];
+            if (item.heading?.trim()) {
+              paras.push(
+                `<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${this.escapeXml(item.heading)}</w:t></w:r></w:p>`,
+              );
+            }
+            for (const b of item.bullets ?? []) {
+              if (b.trim()) {
+                paras.push(
+                  `<w:p><w:r><w:t xml:space="preserve">• ${this.escapeXml(b)}</w:t></w:r></w:p>`,
+                );
+              }
+            }
+            return paras;
+          });
+          return [titlePara, ...itemParas];
+        })
+        .join("");
+
+      documentXml = documentXml.replace("</w:body>", `${extraXml}</w:body>`);
+      zip.file("word/document.xml", documentXml);
+      return zip.generate({ type: "nodebuffer" }) as Buffer;
+    } catch {
+      return docxBuffer;
+    }
+  }
+
+  private escapeXml(value: string): string {
+    return value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&apos;");
   }
 
   /** Convert a filled DOCX buffer to PDF via LibreOffice. */

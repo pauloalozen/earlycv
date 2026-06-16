@@ -280,6 +280,14 @@ export class CvAdaptationController {
     return this.cvAdaptationService.getContent(user.id, id);
   }
 
+  @Delete(":id/cv-content")
+  resetCvContent(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+  ) {
+    return this.cvAdaptationService.resetCvContent(user.id, id);
+  }
+
   @Patch(":id/cv-content")
   updateCvContent(
     @AuthenticatedUser() user: { id: string },
