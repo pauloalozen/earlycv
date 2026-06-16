@@ -2465,6 +2465,7 @@ export class CvAdaptationService {
     const sectionMapping = this.buildSectionMapping(adaptation.adaptedContentJson);
     const enrichedAnalysis = this.enrichAjustesWithSelectedKeywords(
       adaptation.adaptedContentJson,
+      finalCvOutput ?? undefined,
     );
 
     return {
@@ -2961,12 +2962,33 @@ export class CvAdaptationService {
 
   private enrichAjustesWithSelectedKeywords(
     adaptedContentJson: unknown,
+    cvOutput?: CvAdaptationOutput,
   ): unknown {
     if (!adaptedContentJson || typeof adaptedContentJson !== "object") {
       return adaptedContentJson;
     }
 
     const json = adaptedContentJson as Record<string, unknown>;
+
+    // Build CV full-text for keyword presence check
+    const cvFullText = cvOutput
+      ? [
+          cvOutput.summary ?? "",
+          ...(cvOutput.sections ?? []).flatMap((s) => [
+            s.title,
+            ...s.items.flatMap((i) => [
+              i.heading ?? "",
+              i.subheading ?? "",
+              ...(i.bullets ?? []),
+            ]),
+          ]),
+        ]
+          .join(" ")
+          .toLowerCase()
+      : "";
+    const kwInCv = (kw: string) =>
+      cvFullText.length > 0 && cvFullText.includes(kw.toLowerCase().trim());
+
     const selectedKws = Array.isArray(json.selectedMissingKeywords)
       ? (json.selectedMissingKeywords as unknown[]).filter(
           (k): k is string => typeof k === "string" && k.trim().length > 0,
@@ -3035,7 +3057,7 @@ export class CvAdaptationService {
         pontos: kwPontosMap.get(kw.toLowerCase().trim()) ?? kwPontosMap.get(norm(kw)) ?? 1,
         dica: `A keyword "${kw}" foi adicionada onde mais se encaixa no CV.`,
         categoria: "keywords_incluidas",
-        coveragePercent: 0,
+        coveragePercent: kwInCv(kw) ? 100 : 0,
       }));
 
     // Add keywords.possiveis (LLM-suggested keywords with real basis)
@@ -3060,7 +3082,7 @@ export class CvAdaptationService {
             pontos: typeof item.pontos === "number" ? item.pontos : 1,
             dica: `"${item.kw}" foi inserida onde melhor se encaixa no CV adaptado.`,
             categoria: "keywords_incluidas",
-            coveragePercent: 0,
+            coveragePercent: kwInCv(item.kw as string) ? 100 : 0,
           }))
       : [];
 
