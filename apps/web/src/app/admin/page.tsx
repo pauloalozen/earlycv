@@ -269,6 +269,7 @@ export default async function AdminOverviewPage({
 
       {/* ── Pendências + Sinais ────────────────────────────────── */}
       <div
+        className="admin-main-grid"
         style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 16 }}
       >
         {/* Pendências */}
@@ -497,6 +498,11 @@ export default async function AdminOverviewPage({
           ))}
         </div>
       </div>
+      <style>{`
+        @media (max-width: 639px) {
+          .admin-main-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </AdminPageWrap>
   );
 }

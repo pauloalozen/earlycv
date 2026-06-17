@@ -149,7 +149,7 @@ function EventSection({
         background: AT.card,
         border: `1px solid ${AT.border}`,
         borderRadius: 10,
-        overflow: "hidden",
+        overflowX: "auto",
       }}
     >
       {/* Header do grupo */}
@@ -357,10 +357,10 @@ function EventResults({ result }: { result: EventResultsState | null }) {
           style={{
             border: `1px solid ${AT.border}`,
             borderRadius: 8,
-            overflow: "hidden",
+            overflowX: "auto",
           }}
         >
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
             <thead>
               <tr style={{ background: AT.bgAlt }}>
                 {["Evento", "Domínio", "Status", "Erro"].map((h) => (

@@ -166,10 +166,10 @@ export function AdminTable({ children }: AdminTableProps) {
         background: AT.card,
         border: `1px solid ${AT.border}`,
         borderRadius: 10,
-        overflow: "hidden",
+        overflowX: "auto",
       }}
     >
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
         {children}
       </table>
     </div>
@@ -246,12 +246,21 @@ export function AdminPageWrap({
 }: AdminPageWrapProps) {
   return (
     <div
+      className="admin-page-wrap"
       style={{
         padding: "0 32px 40px",
         maxWidth,
         margin: "0 auto",
       }}
     >
+      <style>{`
+        @media (max-width: 639px) {
+          .admin-page-wrap { padding: 0 14px 40px !important; }
+          .admin-stats-row { grid-template-columns: repeat(2, 1fr) !important; }
+          .admin-shell-header { flex-direction: column !important; gap: 16px !important; padding: 16px 0 14px !important; }
+          .admin-shell-header-actions { padding-top: 0 !important; }
+        }
+      `}</style>
       {children}
     </div>
   );
@@ -263,6 +272,7 @@ type AdminStatsRowProps = { children: ReactNode; cols?: number };
 export function AdminStatsRow({ children, cols = 4 }: AdminStatsRowProps) {
   return (
     <div
+      className="admin-stats-row"
       style={{
         display: "grid",
         gridTemplateColumns: `repeat(${cols}, 1fr)`,

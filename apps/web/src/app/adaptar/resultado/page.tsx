@@ -4245,6 +4245,7 @@ export default function ResultadoPage() {
             reviewAdaptationId &&
             jobApplicationId && (
               <div
+                className="res-cand-criada"
                 style={{
                   marginTop: 32,
                   display: "grid",
@@ -4410,6 +4411,7 @@ export default function ResultadoPage() {
           .res-campos-grid { grid-template-columns: 1fr !important; }
           .res-preview-chrome { justify-content: flex-start !important; flex-wrap: wrap !important; row-gap: 6px !important; }
           .res-preview-title { position: static !important; width: 100% !important; text-align: left !important; margin-top: 2px !important; display: block !important; }
+          .res-cand-criada { grid-template-columns: 1fr !important; gap: 16px !important; }
         }
       `}</style>
     </PageShell>

@@ -192,13 +192,14 @@ export default async function AnalisesPage({ searchParams }: Props) {
         />
 
         <div
+          className="analises-content"
           style={{
             maxWidth: 1100,
             margin: "0 auto",
             padding: "12px 32px 80px",
           }}
         >
-          <div style={{ paddingTop: 72 }} />
+          <div className="analises-top-spacer" style={{ paddingTop: 72 }} />
 
           {/* Page header */}
           <div style={{ marginBottom: 36 }}>
@@ -760,6 +761,7 @@ export default async function AnalisesPage({ searchParams }: Props) {
         .analises-page-btn:hover { background: rgba(10,10,10,0.05) !important; }
         @media (max-width: 768px) {
           .analises-content { padding: 12px 16px 60px !important; }
+          .analises-top-spacer { padding-top: 54px !important; }
         }
         @media (max-width: 680px) {
           .analises-history-row { align-items: flex-start !important; }

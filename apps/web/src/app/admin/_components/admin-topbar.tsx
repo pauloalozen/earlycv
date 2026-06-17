@@ -50,8 +50,19 @@ export function AdminTopbar({
         zIndex: 5,
       }}
     >
+      <style>{`
+        @media (max-width: 639px) {
+          .admin-topbar-row1 { padding: 10px 14px 8px !important; }
+          .admin-topbar-badge { display: none !important; }
+          .admin-topbar-back-text { display: none !important; }
+          .admin-topbar-username { display: none !important; }
+          .admin-topbar-tabs { padding: 0 8px !important; scrollbar-width: none !important; }
+          .admin-topbar-tabs::-webkit-scrollbar { display: none !important; }
+        }
+      `}</style>
       {/* Linha 1: brand + voltar + avatar */}
       <div
+        className="admin-topbar-row1"
         style={{
           display: "flex",
           alignItems: "center",
@@ -63,6 +74,7 @@ export function AdminTopbar({
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <AdminLogoMark />
           <div
+            className="admin-topbar-badge"
             style={{
               fontFamily: '"Geist Mono", monospace',
               fontSize: 10,
@@ -93,7 +105,7 @@ export function AdminTopbar({
             }}
           >
             <span style={{ fontSize: 14, lineHeight: 1 }}>←</span>
-            Voltar ao app
+            <span className="admin-topbar-back-text">Voltar ao app</span>
           </Link>
           <div
             style={{ height: 18, width: 1, background: "rgba(10,10,10,0.08)" }}
@@ -133,11 +145,13 @@ export function AdminTopbar({
                 {userInitial.toUpperCase()}
               </div>
               <span
+                className="admin-topbar-username"
                 style={{ fontSize: 12.5, color: "#0a0a0a", fontWeight: 500 }}
               >
                 {userName}
               </span>
               <span
+                className="admin-topbar-username"
                 style={{
                   fontSize: 10,
                   color: "#8a8580",
@@ -193,6 +207,7 @@ export function AdminTopbar({
 
       {/* Linha 2: tabs */}
       <div
+        className="admin-topbar-tabs"
         style={{
           display: "flex",
           gap: 2,

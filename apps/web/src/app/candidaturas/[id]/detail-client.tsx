@@ -543,6 +543,14 @@ function Jornada({
 }) {
   const subtitle = getJornadaSubtitle(application.status);
 
+  const currentStepIdx = JORNADA_STEPS.findIndex(
+    (s) => getStepState(s.key, application.status) === "current",
+  );
+  const activeIdx = currentStepIdx >= 0 ? currentStepIdx : JORNADA_STEPS.findLastIndex(
+    (s) => getStepState(s.key, application.status) === "done",
+  );
+  const activeStep = activeIdx >= 0 ? JORNADA_STEPS[activeIdx] : JORNADA_STEPS[0];
+
   return (
     <div
       style={{
@@ -584,7 +592,95 @@ function Jornada({
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "flex-start" }}>
+      {/* Mobile compact view */}
+      <div className="jornada-compact" style={{ display: "none", paddingTop: 4 }}>
+        {/* Progress segments */}
+        <div style={{ display: "flex", gap: 3, marginBottom: 14 }}>
+          {JORNADA_STEPS.map((step) => {
+            const state = getStepState(step.key, application.status);
+            return (
+              <div
+                key={step.key}
+                style={{
+                  flex: 1,
+                  height: 4,
+                  borderRadius: 999,
+                  background:
+                    state === "done"
+                      ? "#aadb2a"
+                      : state === "current"
+                        ? "#c8a000"
+                        : "rgba(10,10,10,0.10)",
+                }}
+              />
+            );
+          })}
+        </div>
+        {/* Current step info */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            {currentStepIdx >= 0 && (
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontFamily: MONO,
+                  fontSize: 9,
+                  fontWeight: 600,
+                  letterSpacing: 0.8,
+                  color: "#7a5a04",
+                  background: "rgba(245,197,24,0.22)",
+                  border: "1px solid rgba(180,140,10,0.3)",
+                  borderRadius: 999,
+                  padding: "2px 8px",
+                  marginBottom: 6,
+                }}
+              >
+                AGORA
+              </div>
+            )}
+            <div
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                color: "#0a0a0a",
+                fontFamily: GEIST,
+                letterSpacing: -0.3,
+                lineHeight: 1.2,
+              }}
+            >
+              {activeStep?.label ?? "—"}
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                color: "#7a5a04",
+                letterSpacing: 0.3,
+                marginTop: 4,
+              }}
+            >
+              {subtitle}
+            </div>
+          </div>
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 12,
+              color: "#8a8a85",
+              letterSpacing: 0.3,
+              flexShrink: 0,
+              textAlign: "right",
+            }}
+          >
+            {activeIdx + 1}<span style={{ color: "#c0beb4" }}>/{JORNADA_STEPS.length}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop full stepper */}
+      <div className="jornada-steps-row" style={{ display: "flex", alignItems: "flex-start" }}>
         {JORNADA_STEPS.map((step, i) => {
           const state = getStepState(step.key, application.status);
           const meta = step.getMeta(application);
@@ -1050,6 +1146,7 @@ function AnaliseRow({
 
       {/* Action buttons */}
       <div
+        className="analise-row-actions"
         style={{
           display: "flex",
           alignItems: "center",
@@ -1059,6 +1156,7 @@ function AnaliseRow({
         }}
       >
         <div
+          className="analise-row-btns"
           style={{
             display: "flex",
             alignItems: "center",
@@ -3525,6 +3623,7 @@ function StatusPopover({
     return (
       <div
         ref={ref}
+        className="status-popover"
         style={{
           position: "absolute",
           top: "calc(100% + 6px)",
@@ -3678,6 +3777,7 @@ function StatusPopover({
   return (
     <div
       ref={ref}
+      className="status-popover"
       style={{
         position: "absolute",
         top: "calc(100% + 6px)",
@@ -4800,6 +4900,32 @@ export function DetailClient({ application, header }: Props) {
           from { opacity: 0; transform: translateY(-5px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @media (max-width: 767px) {
+          .detail-wrapper { padding: 12px 14px 60px !important; }
+          .detail-top-spacer { padding-top: 54px !important; margin-bottom: 12px !important; }
+          .detail-hero-grid { grid-template-columns: 1fr !important; }
+          .detail-hero-actions { flex-wrap: wrap !important; gap: 6px !important; }
+          .jornada-steps-row { display: none !important; }
+          .jornada-compact { display: block !important; }
+          .analise-row-actions { flex-wrap: wrap !important; justify-content: flex-start !important; gap: 6px !important; }
+          .analise-row-btns { flex-wrap: wrap !important; }
+          .status-popover {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            right: auto !important;
+            bottom: auto !important;
+            transform: translate(-50%, -50%) !important;
+            width: 280px !important;
+            max-height: 70vh !important;
+            overflow-y: auto !important;
+            z-index: 300 !important;
+            box-shadow: 0 20px 60px rgba(10,10,10,0.25) !important;
+          }
+        }
+        @media (min-width: 768px) {
+          .jornada-compact { display: none !important; }
+        }
       `}</style>
       <div
         aria-hidden
@@ -4827,6 +4953,7 @@ export function DetailClient({ application, header }: Props) {
         {header}
 
         <div
+          className="detail-wrapper"
           style={{
             maxWidth: 1200,
             margin: "0 auto",
@@ -4836,7 +4963,7 @@ export function DetailClient({ application, header }: Props) {
           }}
         >
           {/* Breadcrumb */}
-          <div style={{ paddingTop: 72, marginBottom: 20 }}>
+          <div className="detail-top-spacer" style={{ paddingTop: 72, marginBottom: 20 }}>
             <div
               style={{
                 display: "flex",
@@ -4890,6 +5017,7 @@ export function DetailClient({ application, header }: Props) {
 
             {/* Badge + stats + actions — all on the same line */}
             <div
+              className="detail-hero-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr auto",
@@ -4941,7 +5069,7 @@ export function DetailClient({ application, header }: Props) {
               </div>
 
               {/* Right: actions */}
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div className="detail-hero-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {/* Status button + inline popover */}
                 <div style={{ position: "relative" }}>
                   <button

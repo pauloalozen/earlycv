@@ -1265,6 +1265,7 @@ export function AdaptacaoCvClient({
   const [reanaliseAdaptationId, setReanaliseAdaptationId] = useState<string | null>(null);
   const [reanaliseScore, setReanaliseScore] = useState<number | null>(null);
   const [reanaliseError, setReanaliseError] = useState<string | null>(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [addSectionOpen, setAddSectionOpen] = useState(false);
   const [newSectionTitle, setNewSectionTitle] = useState("");
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
@@ -1836,6 +1837,7 @@ export function AdaptacaoCvClient({
 
       {/* Full-height flex container — sidebar fixed, main scrolls */}
       <div
+        className="adaptcv-outer"
         style={{
           position: "fixed",
           top: HEADER_H,
@@ -1847,8 +1849,20 @@ export function AdaptacaoCvClient({
           overflow: "hidden",
         }}
       >
+        {/* Mobile backdrop — inside outer container to share stacking context with sidebar */}
+        {mobileSidebarOpen && (
+          // biome-ignore lint/a11y/useKeyWithClickEvents: backdrop tap-to-close
+          // biome-ignore lint/a11y/noStaticElementInteractions: backdrop tap-to-close
+          <div
+            className="adaptcv-backdrop mobile-open"
+            style={{ display: "none" }}
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+        )}
+
         {/* ── Sidebar ─────────────────────────────────────────────── */}
         <aside
+          className={`adaptcv-sidebar${mobileSidebarOpen ? " mobile-open" : ""}`}
           style={{
             width: SIDEBAR_W,
             flexShrink: 0,
@@ -1860,6 +1874,30 @@ export function AdaptacaoCvClient({
             overflow: "hidden",
           }}
         >
+          {/* Mobile close button */}
+          <button
+            type="button"
+            className="adaptcv-sidebar-close"
+            onClick={() => setMobileSidebarOpen(false)}
+            style={{
+              display: "none",
+              alignItems: "center",
+              gap: 6,
+              padding: "12px 16px",
+              background: "transparent",
+              color: "#888",
+              border: "none",
+              borderBottom: `1px solid ${SIDEBAR_BORDER}`,
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 500,
+              width: "100%",
+              textAlign: "left",
+            }}
+          >
+            ← Fechar
+          </button>
+
           {/* Job info + back link */}
           <div
             style={{
@@ -1971,8 +2009,42 @@ export function AdaptacaoCvClient({
           .cv-main-scroll::-webkit-scrollbar { width: 6px; }
           .cv-main-scroll::-webkit-scrollbar-track { background: transparent; }
           .cv-main-scroll::-webkit-scrollbar-thumb { background: rgba(10,10,10,0.18); border-radius: 3px; }
+          @media (max-width: 767px) {
+            .adaptcv-backdrop { display: block !important; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 140; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
+            .adaptcv-backdrop.mobile-open { opacity: 1 !important; pointer-events: auto !important; }
+            .adaptcv-sidebar {
+              position: fixed !important;
+              top: 0 !important;
+              left: 0 !important;
+              bottom: 0 !important;
+              width: 86vw !important;
+              max-width: 300px !important;
+              height: 100dvh !important;
+              z-index: 150 !important;
+              transform: translateX(-110%) !important;
+              transition: transform 0.25s ease !important;
+              overflow-y: auto !important;
+              overflow-x: hidden !important;
+            }
+            .adaptcv-sidebar.mobile-open { transform: translateX(0) !important; }
+            .adaptcv-sidebar-close { display: flex !important; }
+            .adaptcv-main { width: 100% !important; }
+            .adaptcv-toolbar { overflow-x: auto !important; flex-wrap: nowrap !important; padding: 5px 8px !important; gap: 5px !important; min-height: auto !important; scrollbar-width: none !important; }
+            .adaptcv-toolbar::-webkit-scrollbar { display: none !important; }
+            .adaptcv-spacer { display: none !important; }
+            .adaptcv-toolbar-separator { display: none !important; }
+            .adaptcv-scroll { padding: 10px 6px !important; }
+            .adaptcv-cv-card { padding: 20px 14px !important; max-width: 100% !important; box-shadow: 0 1px 8px rgba(0,0,0,0.3) !important; }
+            .adaptcv-mobile-toggle { display: inline-flex !important; }
+          }
+          @media (min-width: 768px) {
+            .adaptcv-mobile-toggle { display: none !important; }
+            .adaptcv-backdrop { display: none !important; }
+            .adaptcv-sidebar-close { display: none !important; }
+          }
         `}</style>
         <main
+          className="adaptcv-main"
           style={{
             flex: 1,
             display: "flex",
@@ -1983,6 +2055,7 @@ export function AdaptacaoCvClient({
           {/* Action toolbar — outside scroll so it stays fixed */}
           {!isGenerating && (
             <div
+              className="adaptcv-toolbar"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1994,6 +2067,29 @@ export function AdaptacaoCvClient({
                 minHeight: 44,
               }}
             >
+              {/* Mobile: open ajustes drawer button */}
+              <button
+                type="button"
+                className="adaptcv-mobile-toggle"
+                onClick={() => setMobileSidebarOpen(true)}
+                style={{
+                  display: "none",
+                  alignItems: "center",
+                  gap: 5,
+                  padding: "6px 11px",
+                  background: "#1a1a1a",
+                  color: "#f0f0f0",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                ☰ {totalAjustes > 0 ? `${totalAjustes} ajustes` : "Ajustes"}
+              </button>
+
               {/* LEFT: secondary / history actions */}
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 {!isEditing && localEditedOutput && (
@@ -2062,7 +2158,7 @@ export function AdaptacaoCvClient({
               </div>
 
               {/* SPACER */}
-              <div style={{ flex: 1 }} />
+              <div className="adaptcv-spacer" style={{ flex: 1 }} />
 
               {/* CENTER: edit controls */}
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -2138,7 +2234,7 @@ export function AdaptacaoCvClient({
               </div>
 
               {/* SEPARATOR */}
-              <div style={{ width: 1, height: 22, background: "rgba(10,10,10,0.12)", margin: "0 6px", flexShrink: 0 }} />
+              <div className="adaptcv-toolbar-separator" style={{ width: 1, height: 22, background: "rgba(10,10,10,0.12)", margin: "0 6px", flexShrink: 0 }} />
 
               {/* RIGHT: download actions */}
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -2182,7 +2278,7 @@ export function AdaptacaoCvClient({
 
           {/* Scrollable content */}
           <div
-            className="cv-main-scroll"
+            className="cv-main-scroll adaptcv-scroll"
             style={{
               flex: 1,
               overflowY: "auto",
@@ -2197,6 +2293,7 @@ export function AdaptacaoCvClient({
           ) : (
             <div
               ref={cvPanelRef}
+              className="adaptcv-cv-card"
               style={{
                 background: CV_BG,
                 borderRadius: 0,

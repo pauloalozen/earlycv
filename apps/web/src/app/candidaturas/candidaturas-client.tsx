@@ -323,7 +323,7 @@ function EmptyState({
       </div>
 
       {/* Flow steps */}
-      <div style={{ display: "flex", gap: 10 }}>
+      <div className="cand-flow-steps" style={{ display: "flex", gap: 10 }}>
         {(
           [
             {
@@ -354,6 +354,7 @@ function EmptyState({
         ).flatMap((step, i, arr) => [
           <div
             key={step.n}
+            className="cand-flow-step"
             style={{
               flex: 1,
               background: "#fafaf6",
@@ -398,6 +399,7 @@ function EmptyState({
             ? [
                 <div
                   key={`arrow-${step.n}`}
+                  className="cand-flow-arrow"
                   style={{
                     flex: "0 0 auto",
                     color: "#c0beb4",
@@ -1854,7 +1856,17 @@ export function CandidaturasClient({
       >
         {header}
 
+        <style>{`
+          @media (max-width: 767px) {
+            .cand-wrapper { padding: 12px 14px 60px !important; }
+            .cand-top-spacer { padding-top: 54px !important; }
+            .cand-flow-steps { flex-direction: column !important; }
+            .cand-flow-step { min-width: 0 !important; }
+            .cand-flow-arrow { display: none !important; }
+          }
+        `}</style>
         <div
+          className="cand-wrapper"
           style={{
             maxWidth: 1100,
             margin: "0 auto",
@@ -1863,7 +1875,7 @@ export function CandidaturasClient({
             zIndex: 2,
           }}
         >
-          <div style={{ paddingTop: 72 }} />
+          <div className="cand-top-spacer" style={{ paddingTop: 72 }} />
 
           {applicationsLoadError && (
             <div
@@ -2318,9 +2330,10 @@ export function CandidaturasClient({
         </div>
 
         <style>{`
-          @media (max-width: 700px) {
-            .cand-row { grid-template-columns: 1fr !important; }
+          @media (max-width: 767px) {
+            .cand-row { grid-template-columns: 1fr !important; max-width: 100% !important; }
             .cand-row > * { border-left: none !important; }
+            .cand-row > :first-child { min-width: 0 !important; overflow: hidden !important; }
           }
           .cand-row:hover {
             border-color: rgba(10,10,10,0.16) !important;
