@@ -5,6 +5,7 @@ import { DatabaseService } from "../database/database.service";
 import type {
   InterviewPrepContent,
   InterviewPrepContext,
+  PastProcessReflection,
 } from "./interview-prep-ai.service";
 import { InterviewPrepAiService } from "./interview-prep-ai.service";
 
@@ -97,11 +98,38 @@ export class JobApplicationInterviewPrepService {
       ? extractStructuredAnalysis(currentAdaptation.adaptedContentJson)
       : null;
 
+    const pastRejected = await this.database.jobApplication.findMany({
+      where: {
+        userId,
+        status: "REJECTED",
+        OR: [
+          { rejectionStrengths: { not: null } },
+          { rejectionImprovements: { not: null } },
+        ],
+      },
+      select: {
+        jobTitle: true,
+        companyName: true,
+        rejectionStrengths: true,
+        rejectionImprovements: true,
+      },
+    });
+
+    const pastProcessesReflections: PastProcessReflection[] = pastRejected.map(
+      (r) => ({
+        jobTitle: r.jobTitle,
+        companyName: r.companyName,
+        strengths: r.rejectionStrengths,
+        improvements: r.rejectionImprovements,
+      }),
+    );
+
     const usedJobDescription = Boolean(jobDescriptionText);
     const usedStructuredData = Boolean(structuredAnalysis);
+    const usedPastReflections = pastProcessesReflections.length > 0;
 
     this.logger.log(
-      `[interview-prep] generating — jobApplicationId=${applicationId} userId=${userId} hasJobDescription=${usedJobDescription} hasStructuredData=${usedStructuredData}`,
+      `[interview-prep] generating — jobApplicationId=${applicationId} userId=${userId} hasJobDescription=${usedJobDescription} hasStructuredData=${usedStructuredData} pastReflections=${pastProcessesReflections.length}`,
     );
 
     const context: InterviewPrepContext = {
@@ -112,6 +140,9 @@ export class JobApplicationInterviewPrepService {
       scoreBefore: application.scoreBefore,
       scoreAfter: application.scoreAfter,
       structuredAnalysis,
+      pastProcessesReflections: usedPastReflections
+        ? pastProcessesReflections
+        : null,
     };
 
     let content: InterviewPrepContent;
@@ -140,6 +171,7 @@ export class JobApplicationInterviewPrepService {
           metadata: {
             usedJobDescription,
             usedStructuredData,
+            usedPastReflections,
           },
         },
       });

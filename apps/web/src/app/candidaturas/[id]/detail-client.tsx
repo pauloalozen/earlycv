@@ -1157,290 +1157,86 @@ function AnaliseRow({
       >
         <div
           className="analise-row-btns"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            flexWrap: "wrap",
-          }}
+          style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}
         >
-          <a
-            href={`/adaptar/resultado?adaptationId=${adaptation.id}`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              background: "rgba(255,255,255,0.9)",
-              color: "#3a3a36",
-              border: "1px solid rgba(10,10,10,0.12)",
-              borderRadius: 7,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 500,
-              textDecoration: "none",
-              fontFamily: GEIST,
-            }}
-          >
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            Rever análise
-          </a>
-
-          {!isArchived && canDownloadNow && (
+          {/* Grupo A: ver / interagir / liberar */}
+          <div className="analise-btns-group-a" style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
             <a
-              href={`/adaptacao-cv/${adaptation.id}`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                background: "rgba(255,255,255,0.9)",
-                color: "#3a3a36",
-                border: "1px solid rgba(10,10,10,0.12)",
-                borderRadius: 7,
-                padding: "6px 10px",
-                fontSize: 12,
-                fontWeight: 500,
-                textDecoration: "none",
-                fontFamily: GEIST,
-              }}
+              href={`/adaptar/resultado?adaptationId=${adaptation.id}`}
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.9)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, textDecoration: "none", fontFamily: GEIST }}
             >
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+                <circle cx="12" cy="12" r="3" />
               </svg>
-              Adaptação
+              Rever análise
             </a>
-          )}
 
-          {!isArchived && (canDownloadNow ? (
-            <>
-              <button
-                type="button"
-                onClick={() => void handleDownload("pdf")}
-                disabled={downloading !== null}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  background: "rgba(255,255,255,0.9)",
-                  color: "#3a3a36",
-                  border: "1px solid rgba(10,10,10,0.12)",
-                  borderRadius: 7,
-                  padding: "6px 10px",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: downloading ? "not-allowed" : "pointer",
-                  fontFamily: GEIST,
-                }}
+            {!isArchived && canDownloadNow && (
+              <a
+                href={`/adaptacao-cv/${adaptation.id}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.9)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, textDecoration: "none", fontFamily: GEIST }}
               >
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <path d="M12 3v12" />
-                  <path d="m7 10 5 5 5-5" />
-                  <path d="M5 21h14" />
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+                </svg>
+                Adaptação
+              </a>
+            )}
+
+            {!isArchived && canRedeemNow && (
+              hasCredits === false ? (
+                <a href={plansHref} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.7)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, textDecoration: "none", fontFamily: GEIST }}>
+                  Liberar CV · 1 Crédito
+                </a>
+              ) : (
+                <button type="button" onClick={() => void handleRedeem()} disabled={redeeming} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.7)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: redeeming ? "not-allowed" : "pointer", fontFamily: GEIST }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <rect x="4" y="11" width="16" height="10" rx="2" />
+                    <path d="M8 11V8a4 4 0 1 1 8 0" />
+                  </svg>
+                  {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
+                </button>
+              )
+            )}
+
+            {!isArchived && showAdjustments && (
+              <button data-testid={`analysis-adjustments-${adaptation.id}`} type="button" onClick={openAdjustments} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.7)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: GEIST }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                Ajustes feitos
+              </button>
+            )}
+          </div>
+
+          {/* Grupo B: downloads */}
+          {!isArchived && canDownloadNow && (
+            <div className="analise-btns-group-b" style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+              <button type="button" onClick={() => void handleDownload("pdf")} disabled={downloading !== null} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.9)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, cursor: downloading ? "not-allowed" : "pointer", fontFamily: GEIST }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
                 </svg>
                 PDF
               </button>
-              <button
-                type="button"
-                onClick={() => void handleDownload("docx")}
-                disabled={downloading !== null}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  background: "rgba(255,255,255,0.9)",
-                  color: "#3a3a36",
-                  border: "1px solid rgba(10,10,10,0.12)",
-                  borderRadius: 7,
-                  padding: "6px 10px",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: downloading ? "not-allowed" : "pointer",
-                  fontFamily: GEIST,
-                }}
-              >
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <path d="M12 3v12" />
-                  <path d="m7 10 5 5 5-5" />
-                  <path d="M5 21h14" />
+              <button type="button" onClick={() => void handleDownload("docx")} disabled={downloading !== null} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.9)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, cursor: downloading ? "not-allowed" : "pointer", fontFamily: GEIST }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
                 </svg>
                 DOCX
               </button>
-            </>
-          ) : canRedeemNow && hasCredits === false ? (
-            <a
-              href={plansHref}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                background: "rgba(255,255,255,0.7)",
-                color: "#3a3a36",
-                border: "1px solid rgba(10,10,10,0.12)",
-                borderRadius: 7,
-                padding: "6px 10px",
-                fontSize: 12,
-                fontWeight: 600,
-                textDecoration: "none",
-                fontFamily: GEIST,
-              }}
-            >
-              Liberar CV · 1 Crédito
-            </a>
-          ) : canRedeemNow ? (
-            <button
-              type="button"
-              onClick={() => void handleRedeem()}
-              disabled={redeeming}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                background: "rgba(255,255,255,0.7)",
-                color: "#3a3a36",
-                border: "1px solid rgba(10,10,10,0.12)",
-                borderRadius: 7,
-                padding: "6px 10px",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: redeeming ? "not-allowed" : "pointer",
-                fontFamily: GEIST,
-              }}
-            >
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <rect x="4" y="11" width="16" height="10" rx="2" />
-                <path d="M8 11V8a4 4 0 1 1 8 0" />
-              </svg>
-              {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
-            </button>
-          ) : null)}
-          {!isArchived && showAdjustments && (
-            <button
-              data-testid={`analysis-adjustments-${adaptation.id}`}
-              type="button"
-              onClick={openAdjustments}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                background: "rgba(255,255,255,0.7)",
-                color: "#3a3a36",
-                border: "1px solid rgba(10,10,10,0.12)",
-                borderRadius: 7,
-                padding: "6px 10px",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
-                fontFamily: GEIST,
-              }}
-            >
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-              Ajustes feitos
-            </button>
+              {adaptation.canDownloadBaseCv && (
+                <a href={`/api/cv-adaptation/${adaptation.id}/base-cv`} download className="analise-btn-base-cv" style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.9)", color: "#6a6560", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, textDecoration: "none", fontFamily: GEIST }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+                  </svg>
+                  CV usado na análise
+                </a>
+              )}
+            </div>
           )}
         </div>
-        {!isArchived && adaptation.canDownloadBaseCv && (
-          <a
-            href={`/api/cv-adaptation/${adaptation.id}/base-cv`}
-            download
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              background: "rgba(255,255,255,0.9)",
-              color: "#6a6560",
-              border: "1px solid rgba(10,10,10,0.12)",
-              borderRadius: 7,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 500,
-              textDecoration: "none",
-              fontFamily: GEIST,
-              flexShrink: 0,
-            }}
-          >
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M12 3v12" />
-              <path d="m7 10 5 5 5-5" />
-              <path d="M5 21h14" />
-            </svg>
-            CV usado na análise
-          </a>
-        )}
       </div>
       <DownloadProgressOverlay
         open={downloadStage !== null}
@@ -3289,6 +3085,7 @@ function RejectionFeedbackModal({
   const [strengths, setStrengths] = useState("");
   const [improvements, setImprovements] = useState("");
   const [pending, startTransition] = useTransition();
+  const [showSkipNudge, setShowSkipNudge] = useState(false);
 
   function handleSave(skip = false) {
     startTransition(async () => {
@@ -3305,6 +3102,14 @@ function RejectionFeedbackModal({
         // silent
       }
     });
+  }
+
+  function handleSkipClick() {
+    if (!strengths.trim() && !improvements.trim()) {
+      setShowSkipNudge(true);
+    } else {
+      handleSave(true);
+    }
   }
 
   const textareaStyle: React.CSSProperties = {
@@ -3470,6 +3275,64 @@ function RejectionFeedbackModal({
             />
           </div>
 
+          {/* Nudge when skipping without filling */}
+          {showSkipNudge && (
+            <div
+              style={{
+                background: "rgba(60,100,220,0.05)",
+                border: "1px solid rgba(60,100,220,0.18)",
+                borderRadius: 10,
+                padding: "12px 14px",
+                marginBottom: 14,
+                fontSize: 13,
+                color: "#1a2a5a",
+                lineHeight: 1.55,
+                fontFamily: GEIST,
+              }}
+            >
+              Preencher esses campos ajuda o EarlyCV a te preparar melhor para os próximos processos — a IA usa esse contexto para dar orientações personalizadas.
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowSkipNudge(false)}
+                  style={{
+                    flex: 1,
+                    padding: "8px 0",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "#1a3a7a",
+                    color: "#fff",
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Preencher
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSave(true)}
+                  disabled={pending}
+                  style={{
+                    flex: 1,
+                    padding: "8px 0",
+                    borderRadius: 8,
+                    border: "1px solid rgba(10,10,10,0.12)",
+                    background: "transparent",
+                    color: "#8a8a85",
+                    fontSize: 12.5,
+                    fontWeight: 400,
+                    cursor: pending ? "not-allowed" : "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Confirmar sem preencher
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
           <div style={{ display: "flex", gap: 8 }}>
             <button
@@ -3494,7 +3357,7 @@ function RejectionFeedbackModal({
             </button>
             <button
               type="button"
-              onClick={() => handleSave(true)}
+              onClick={handleSkipClick}
               disabled={pending}
               style={{
                 flex: 1,
@@ -4161,6 +4024,7 @@ function InterviewScheduledCard({
 
   return (
     <div
+      className="interview-card"
       style={{
         background: "rgba(245,197,24,0.10)",
         border: "1px solid rgba(180,140,10,0.22)",
@@ -4243,6 +4107,7 @@ function InterviewScheduledCard({
 
       {/* Actions */}
       <div
+        className="interview-card-actions"
         style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}
       >
         {application.interviewMeetingUrl && (
@@ -4904,11 +4769,22 @@ export function DetailClient({ application, header }: Props) {
           .detail-wrapper { padding: 12px 14px 60px !important; }
           .detail-top-spacer { padding-top: 54px !important; margin-bottom: 12px !important; }
           .detail-hero-grid { grid-template-columns: 1fr !important; }
-          .detail-hero-actions { flex-wrap: wrap !important; gap: 6px !important; }
+          .detail-hero-actions { flex-wrap: wrap !important; gap: 6px !important; align-items: stretch !important; }
+          .detail-hero-actions > *:not(.detail-prep-btn) { flex: 1 !important; }
+          .detail-hero-actions > div:not(.detail-prep-btn) { display: flex !important; }
+          .detail-hero-actions > div:not(.detail-prep-btn) > button,
+          .detail-hero-actions > button:not(.detail-prep-btn) { width: 100% !important; justify-content: center !important; }
+          .detail-prep-btn { order: 10 !important; width: 100% !important; justify-content: center !important; }
           .jornada-steps-row { display: none !important; }
           .jornada-compact { display: block !important; }
           .analise-row-actions { flex-wrap: wrap !important; justify-content: flex-start !important; gap: 6px !important; }
-          .analise-row-btns { flex-wrap: wrap !important; }
+          .analise-row-btns { flex-direction: column !important; align-items: flex-start !important; }
+          .analise-btns-group-a { flex-wrap: wrap !important; }
+          .analise-btns-group-b { flex-wrap: nowrap !important; width: 100% !important; }
+          .analise-btns-group-b > * { flex: 1 !important; justify-content: center !important; }
+          .analise-btn-base-cv { flex: none !important; white-space: nowrap !important; }
+          .interview-card { flex-wrap: wrap !important; align-items: flex-start !important; }
+          .interview-card-actions { width: 100% !important; flex-shrink: unset !important; padding-left: 50px !important; }
           .status-popover {
             position: fixed !important;
             top: 50% !important;
@@ -5139,6 +5015,7 @@ export function DetailClient({ application, header }: Props) {
                 {isPrepEligible && (
                   <button
                     type="button"
+                    className="detail-prep-btn"
                     onClick={() => setShowPrep(true)}
                     style={{
                       display: "inline-flex",

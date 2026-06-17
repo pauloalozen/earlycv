@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 
 import type { InterviewPrepDto } from "@/lib/job-applications-api";
 import { generateOrGetInterviewPrep } from "@/lib/job-applications-api";
@@ -50,7 +50,7 @@ function PrepSection({
 }: {
   n: string;
   title: string;
-  tone?: "green" | "yellow";
+  tone?: "green" | "yellow" | "blue";
   children: React.ReactNode;
 }) {
   const accent =
@@ -66,11 +66,17 @@ function PrepSection({
             border: "1px solid rgba(180,140,10,0.22)",
             bg: "rgba(245,197,24,0.06)",
           }
-        : {
-            color: "#0a0a0a",
-            border: "1px solid rgba(10,10,10,0.08)",
-            bg: "#fafaf6",
-          };
+        : tone === "blue"
+          ? {
+              color: "#1a3a7a",
+              border: "1px solid rgba(60,100,220,0.20)",
+              bg: "rgba(60,100,220,0.04)",
+            }
+          : {
+              color: "#0a0a0a",
+              border: "1px solid rgba(10,10,10,0.08)",
+              bg: "#fafaf6",
+            };
   return (
     <div style={{ marginBottom: 22 }}>
       <div
@@ -302,6 +308,7 @@ function PrepContent({
     <div>
       {/* Rich header */}
       <div
+        className="prep-header"
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -404,6 +411,7 @@ function PrepContent({
 
         {/* Actions */}
         <div
+          className="prep-header-actions"
           style={{
             display: "flex",
             alignItems: "center",
@@ -413,6 +421,24 @@ function PrepContent({
         >
           <button
             type="button"
+            onClick={() => {
+              const sections: { title: string; content: string }[] = [
+                { title: "Estratégia", content: `<p>${c.strategySummary}</p>` },
+              ];
+              if (c.strengthsToHighlight.length)
+                sections.push({ title: "Pontos Fortes", content: `<ul>${c.strengthsToHighlight.map((s) => `<li>${s}</li>`).join("")}</ul>` });
+              if (c.likelyRisksOrGaps.length)
+                sections.push({ title: "Riscos / Gaps", content: `<ul>${c.likelyRisksOrGaps.map((s) => `<li>${s}</li>`).join("")}</ul>` });
+              if (c.questionsTheyMayAsk.length)
+                sections.push({ title: "Perguntas Prováveis", content: `<ol>${c.questionsTheyMayAsk.map((q) => `<li><strong>${q.question}</strong><br/><em>${q.answerDirection}</em></li>`).join("")}</ol>` });
+              if (c.questionsCandidateShouldAsk.length)
+                sections.push({ title: "Perguntas para Fazer", content: `<ul>${c.questionsCandidateShouldAsk.map((s) => `<li>${s}</li>`).join("")}</ul>` });
+              if (c.finalChecklist.length)
+                sections.push({ title: "Checklist Final", content: `<ul>${c.finalChecklist.map((s) => `<li>☐ ${s}</li>`).join("")}</ul>` });
+              const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Preparação — ${jobTitle} @ ${company}</title><style>body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;color:#111;line-height:1.6}h1{font-size:1.2rem;margin-bottom:4px}h2{font-size:1rem;margin-top:24px;margin-bottom:8px;border-bottom:1px solid #e5e5e5;padding-bottom:4px}p,li{font-size:.875rem}ul,ol{padding-left:20px}@media print{body{margin:20px}}</style></head><body><h1>${jobTitle} — ${company}</h1><p style="color:#666;font-size:.8rem">Preparação para Entrevista</p>${sections.map((s) => `<h2>${s.title}</h2>${s.content}`).join("")}</body></html>`;
+              const win = window.open("", "_blank", "width=800,height=900");
+              if (win) { win.document.write(html); win.document.close(); win.focus(); win.print(); }
+            }}
             style={{
               background: "#fff",
               color: "#0a0a0a",
@@ -421,7 +447,7 @@ function PrepContent({
               padding: "8px 12px",
               fontSize: 12.5,
               fontWeight: 500,
-              cursor: "default",
+              cursor: "pointer",
               fontFamily: GEIST,
             }}
           >
@@ -496,7 +522,47 @@ function PrepContent({
         </PrepSection>
       )}
 
-      {/* 02 · Pontos fortes */}
+      {/* 02 · Lições de processos anteriores */}
+      {c.lessonsFromPastProcesses && (
+        <PrepSection
+          n={nextN()}
+          title="O que seus processos anteriores revelam"
+          tone="blue"
+        >
+          <div
+            style={{ fontSize: 14, color: "#1a2a5a", lineHeight: 1.65, marginBottom: c.lessonsFromPastProcesses.watchOuts.length > 0 ? 14 : 0 }}
+          >
+            {c.lessonsFromPastProcesses.keyInsight}
+          </div>
+          {c.lessonsFromPastProcesses.watchOuts.length > 0 && (
+            <div>
+              <div
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 9.5,
+                  letterSpacing: 0.8,
+                  color: "#3a5098",
+                  fontWeight: 500,
+                  textTransform: "uppercase",
+                  marginBottom: 8,
+                }}
+              >
+                Pontos de atenção
+              </div>
+              {c.lessonsFromPastProcesses.watchOuts.map((item, i) => (
+                <PrepBullet
+                  key={item}
+                  kicker="ATENÇÃO"
+                  body={item}
+                  last={i === c.lessonsFromPastProcesses!.watchOuts.length - 1}
+                />
+              ))}
+            </div>
+          )}
+        </PrepSection>
+      )}
+
+      {/* 03 · Pontos fortes */}
       {c.strengthsToHighlight.length > 0 && (
         <PrepSection
           n={nextN()}
@@ -619,41 +685,7 @@ function PrepContent({
             minute: "2-digit",
           })}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            type="button"
-            style={{
-              background: "#fff",
-              color: "#0a0a0a",
-              border: "1px solid rgba(10,10,10,0.15)",
-              borderRadius: 8,
-              padding: "8px 12px",
-              fontSize: 12.5,
-              fontWeight: 500,
-              cursor: "default",
-              fontFamily: GEIST,
-            }}
-          >
-            Salvar como nota
-          </button>
-          <button
-            type="button"
-            style={{
-              background: "#0a0a0a",
-              color: "#fff",
-              border: "none",
-              borderRadius: 10,
-              padding: "10px 16px",
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: "default",
-              fontFamily: GEIST,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-            }}
-          >
-            Marcar entrevista como feita →
-          </button>
-        </div>
+        <div />
       </div>
     </div>
   );
@@ -678,9 +710,8 @@ export function InterviewPrepDrawer({
   const [visible, setVisible] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) {
-      // Compensate scrollbar width before hiding to avoid layout shift
       const scrollW = window.innerWidth - document.documentElement.clientWidth;
       if (scrollW > 0) {
         document.body.style.paddingRight = `${scrollW}px`;
@@ -688,19 +719,9 @@ export function InterviewPrepDrawer({
       document.documentElement.style.overflow = "hidden";
       document.documentElement.style.scrollbarWidth = "none";
       setIsRendered(true);
-      // Double rAF ensures the browser has committed the initial paint
-      // (opacity:0, translateX(100%)) before starting the transition in
-      let raf1: number;
-      let raf2: number;
-      raf1 = requestAnimationFrame(() => {
-        raf2 = requestAnimationFrame(() => setVisible(true));
-      });
-      return () => {
-        cancelAnimationFrame(raf1);
-        cancelAnimationFrame(raf2);
-      };
+      setVisible(true);
+      return;
     }
-    // Exit: animate out first, then unmount and restore scroll
     setVisible(false);
     setError(null);
     const t = setTimeout(() => {
@@ -746,6 +767,20 @@ export function InterviewPrepDrawer({
 
   return (
     <>
+      <style>{`
+        @keyframes prep-slide-in {
+          from { transform: translateX(100%); }
+          to   { transform: translateX(0); }
+        }
+        @keyframes prep-slide-out {
+          from { transform: translateX(0); }
+          to   { transform: translateX(100%); }
+        }
+        @media (max-width: 767px) {
+          .prep-header { flex-direction: column !important; gap: 12px !important; }
+          .prep-header-actions { flex-shrink: unset !important; align-self: flex-end !important; }
+        }
+      `}</style>
       {/* Backdrop */}
       <div
         aria-hidden
@@ -780,8 +815,9 @@ export function InterviewPrepDrawer({
           boxShadow: "-24px 0 60px -10px rgba(10,10,10,0.28)",
           display: "flex",
           flexDirection: "column",
-          transform: visible ? "translateX(0)" : "translateX(100%)",
-          transition: "transform 280ms cubic-bezier(0.22,1,0.36,1)",
+          animation: visible
+            ? "prep-slide-in 280ms cubic-bezier(0.22,1,0.36,1) both"
+            : "prep-slide-out 280ms cubic-bezier(0.22,1,0.36,1) forwards",
         }}
       >
         {prep ? (

@@ -53,6 +53,10 @@ export type InterviewPrepContent = {
   questionsCandidateShouldAsk: string[];
   recommendedPosture: string[];
   finalChecklist: string[];
+  lessonsFromPastProcesses?: {
+    keyInsight: string;
+    watchOuts: string[];
+  } | null;
 };
 
 export type InterviewPrepDto = {

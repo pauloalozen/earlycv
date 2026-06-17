@@ -1,4 +1,3 @@
-import { normalizeData } from "@earlycv/config/cv-analysis-normalize";
 import { resolveCvAnalysisScores } from "@earlycv/config/cv-analysis-score";
 import {
   BadRequestException,
@@ -73,34 +72,6 @@ function extractAdaptationScores(content: unknown): {
   scoreBefore: number | null;
   scoreAfter: number | null;
 } {
-  if (!content || typeof content !== "object" || Array.isArray(content)) {
-    return { scoreBefore: null, scoreAfter: null };
-  }
-  const parsed = content as Record<string, unknown>;
-
-  const hasNormalizedPayload =
-    parsed.fit &&
-    typeof parsed.fit === "object" &&
-    (Array.isArray(parsed.positivos) ||
-      Array.isArray(parsed.ajustes_conteudo) ||
-      Array.isArray(parsed.ajustes_indisponiveis) ||
-      Array.isArray(parsed.pontos_fortes) ||
-      Array.isArray(parsed.lacunas) ||
-      Boolean(parsed.keywords && typeof parsed.keywords === "object") ||
-      Boolean(parsed.formato_cv && typeof parsed.formato_cv === "object") ||
-      Boolean(parsed.ats_keywords && typeof parsed.ats_keywords === "object"));
-
-  if (hasNormalizedPayload) {
-    try {
-      const data = normalizeData(parsed as never);
-      const scoreAfter = data.score.scoreAposLiberarBase;
-      return { scoreBefore: data.score.scoreAtualBase, scoreAfter };
-    } catch {
-      // fall through to legacy path
-    }
-  }
-
-  // Legacy / scalar fallback
   const result = resolveCvAnalysisScores(content);
   return { scoreBefore: result.scoreBefore, scoreAfter: result.scoreAfter };
 }
@@ -436,6 +407,7 @@ export class JobApplicationsService {
           status: "REJECTED",
           rejectionStrengths: data.rejectionStrengths ?? null,
           rejectionImprovements: data.rejectionImprovements ?? null,
+          archivedAt: application.archivedAt ?? new Date(),
         },
       });
 
@@ -531,8 +503,19 @@ export class JobApplicationsService {
 
     const previousStatus = application.status;
 
+    const TERMINAL_STATUSES: JobApplicationStatus[] = [
+      "REJECTED",
+      "HIRED",
+      "WITHDRAWN",
+    ];
+
     const appliedAt =
       newStatus === "APPLIED" && !application.appliedAt
+        ? new Date()
+        : undefined;
+
+    const autoArchiveAt =
+      TERMINAL_STATUSES.includes(newStatus) && application.archivedAt === null
         ? new Date()
         : undefined;
 
@@ -545,6 +528,7 @@ export class JobApplicationsService {
           ...(currentCvAdaptationId !== undefined
             ? { currentCvAdaptationId }
             : {}),
+          ...(autoArchiveAt !== undefined ? { archivedAt: autoArchiveAt } : {}),
         },
       });
 
@@ -757,14 +741,23 @@ export class JobApplicationsService {
           targetStatus,
         );
 
+        // Only auto-update currentCvAdaptationId and scores while the candidatura
+        // is still in automatic statuses. Once the user sets it to APPLIED or
+        // beyond, only they can change which CV is the "sent" one.
+        const isInAutoStatus = ["SAVED", "ANALYZED", "CV_READY"].includes(
+          application.status,
+        );
+
         await tx.jobApplication.update({
           where: { id: application.id },
           data: {
-            currentCvAdaptationId: cvAdaptationId,
-            ...(resolvedScoreBefore !== null
+            ...(isInAutoStatus
+              ? { currentCvAdaptationId: cvAdaptationId }
+              : {}),
+            ...(isInAutoStatus && resolvedScoreBefore !== null
               ? { scoreBefore: resolvedScoreBefore }
               : {}),
-            ...(resolvedScoreAfter !== null
+            ...(isInAutoStatus && resolvedScoreAfter !== null
               ? { scoreAfter: resolvedScoreAfter }
               : {}),
             ...(shouldAdvance ? { status: targetStatus } : {}),
