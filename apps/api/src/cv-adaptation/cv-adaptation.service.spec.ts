@@ -306,6 +306,7 @@ test("analyzeGuest reuses an existing requirement rule without recreating it", a
       analysisCvSnapshot: {
         create: async () => ({ id: "snapshot-guest-1" }),
       },
+      cvAdaptation: { findFirst: async () => null },
     },
     {
       analyzeAndAdapt: async () => {},
@@ -413,6 +414,7 @@ test("analyzeAuthenticated with adapted CV reuses existing requirement set witho
       analysisCvSnapshot: {
         create: async () => ({ id: "snapshot-adapted-cv-1" }),
       },
+      cvAdaptation: { findFirst: async () => null, findMany: async () => [] },
     },
     {
       analyzeAndAdapt: async () => {},

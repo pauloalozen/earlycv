@@ -60,6 +60,7 @@ function makeDb(app: ReturnType<typeof makeApp> | null = makeApp()) {
   const db = {
     jobApplication: {
       findFirst: async () => app,
+      findMany: async () => [],
     },
     jobApplicationInterviewPrep: {
       create: async ({ data }: { data: Record<string, unknown> }) => {

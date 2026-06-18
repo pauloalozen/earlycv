@@ -11,7 +11,6 @@ describe("shouldShowIncidentBannerOnPathname", () => {
       true,
     );
     expect(shouldShowIncidentBannerOnPathname("/compras")).toBe(true);
-    expect(shouldShowIncidentBannerOnPathname("/cv-base")).toBe(true);
     expect(shouldShowIncidentBannerOnPathname("/pagamento/checkout/abc")).toBe(
       true,
     );

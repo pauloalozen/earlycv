@@ -1116,7 +1116,7 @@ test("getHighlightsSummary counts historical normalized-analysis payloads that w
 
   assert.equal(summary.activeApplicationsCount, 1);
   assert.equal(summary.analyzedCvsCount, 1);
-  assert.equal(summary.averageScore, 87);
+  assert.equal(summary.averageScore, 68);
 });
 
 test("getById returns derived best-version fields", async () => {

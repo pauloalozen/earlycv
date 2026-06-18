@@ -89,7 +89,11 @@ function resolveCvAnalysisScores(
       const scoreAtualBase = normalized.score.scoreAtualBase;
 
       const ptsKwSelecionadas = normalized.keywords.ausentes
-        .filter((k) => selectedMissingKeywords.includes(k.kw))
+        .filter((k) =>
+          selectedMissingKeywords.some(
+            (sk) => sk.toLowerCase() === k.kw.toLowerCase(),
+          ),
+        )
         .reduce((s, k) => s + k.pontos, 0);
       const ptsAjustes =
         normalized.score.ajustesConteudoSecao1 +

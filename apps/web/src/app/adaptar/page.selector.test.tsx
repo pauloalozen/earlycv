@@ -25,6 +25,8 @@ vi.mock("@/lib/session-actions", () => ({
 
 vi.mock("@/lib/resumes-api", () => ({
   getMyMasterResume: getMyMasterResumeMock,
+  getMyMasterCvExtractionStatus: vi.fn().mockResolvedValue(null),
+  uploadMasterResume: vi.fn(),
 }));
 
 vi.mock("@/lib/cv-adaptation-api", () => ({
@@ -57,14 +59,8 @@ describe("AdaptarPage selector defaults", () => {
 
     expect(await screen.findByRole("button", { name: "Upload" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Digitar texto" })).toBeTruthy();
-    const profileButton = screen.getByRole("button", { name: "Meu perfil" });
-    expect(profileButton).toBeTruthy();
-    expect(profileButton).toBeDisabled();
-    expect(
-      screen.getByText(
-        /modo perfil indisponivel enquanto seu perfil nao estiver pronto/i,
-      ),
-    ).toBeTruthy();
+    // Mode toggle (CV Master) only appears when user has a master CV
+    expect(screen.queryByRole("button", { name: "CV Master" })).toBeNull();
   });
 
   it("defaults guest selector to upload mode", async () => {
@@ -79,18 +75,24 @@ describe("AdaptarPage selector defaults", () => {
     );
   });
 
-  it("enables profile mode when readiness is ready", async () => {
+  it("enables profile mode when readiness is ready and master CV exists", async () => {
     getAuthStatusMock.mockResolvedValue({
       userName: "Ana",
       profileReadinessStatus: "ready",
     });
+    getMyMasterResumeMock.mockResolvedValue({
+      id: "resume-1",
+      title: "Meu CV",
+      sourceFileName: null,
+      isMaster: true,
+      updatedAt: new Date().toISOString(),
+    });
 
     render(<AdaptarPage />);
 
-    const profileButton = await screen.findByRole("button", {
-      name: "Meu perfil",
-    });
-    expect(profileButton).toBeEnabled();
+    expect(
+      await screen.findByRole("button", { name: "CV Master" }),
+    ).toBeTruthy();
   });
 
   it("renders legal links and sensitive-data warning in adaptation flow", async () => {
@@ -104,7 +106,7 @@ describe("AdaptarPage selector defaults", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: /pol[ií]tica de privacidade/i }),
+      screen.getByRole("link", { name: /privacidade/i }),
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: /termos de uso/i })).toBeTruthy();
   });

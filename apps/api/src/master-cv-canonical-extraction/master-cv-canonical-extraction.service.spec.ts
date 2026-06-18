@@ -20,11 +20,7 @@ function buildExtractionOutput() {
       professionalSummary: "Resumo profissional",
       experiences: [],
       education: [],
-      skills: {
-        technical: ["SQL"],
-        business: [],
-        soft: ["Comunicacao"],
-      },
+      skills: ["SQL", "Comunicacao"],
       languages: [{ language: "Portugues", level: "Nativo" }],
       certifications: [{ name: "Cert", issuer: null, year: null }],
     },
@@ -149,7 +145,7 @@ test("processJob marks extraction as failed on strict schema mismatch", async ()
             professionalSummary: null,
             experiences: [],
             education: [],
-            skills: { technical: [], business: [], soft: [] },
+            skills: [],
             languages: [],
             certifications: [],
           },
@@ -474,7 +470,7 @@ test("processJob uses the raw file payload when one is supplied", async () => {
           userId: "user-1",
           resumeId: "resume-1",
           status: "pending",
-          resume: { rawText: "texto do cv" },
+          resume: { rawText: null },
         }),
         update: async (args: unknown) => {
           updates.push(args);

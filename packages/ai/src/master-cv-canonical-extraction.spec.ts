@@ -41,11 +41,7 @@ function createValidOutput(): MasterCvCanonicalExtractionOutput {
           endDate: "2019-12",
         },
       ],
-      skills: {
-        technical: ["SQL"],
-        business: ["Stakeholder management"],
-        soft: ["Comunicacao"],
-      },
+      skills: ["SQL", "Stakeholder management", "Comunicacao"],
       languages: [{ language: "Portugues", level: "Nativo" }],
       certifications: [
         { name: "Google Data Analytics", issuer: "Google", year: "2023" },
@@ -101,7 +97,7 @@ describe("extractMasterCvCanonicalProfile", () => {
 
     assert.equal(output.canonicalProfile.fullName, "Ana Silva");
     assert.equal(output.extractionCoverage.fieldStatus.fullName, "filled");
-    assert.deepEqual(output.canonicalProfile.skills.technical, ["SQL"]);
+    assert.deepEqual(output.canonicalProfile.skills, ["SQL", "Stakeholder management", "Comunicacao"]);
     assert.equal(responsesCreate.mock.calls.length, 1);
 
     const request = responsesCreate.mock.calls[0]?.arguments[0] as {

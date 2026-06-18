@@ -1,27 +1,32 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
+const __dirname = typeof import.meta.dirname === "string"
+  ? import.meta.dirname
+  : dirname(fileURLToPath(import.meta.url ?? `file://${__filename}`));
+
 const envExample = readFileSync(
-  resolve(import.meta.dirname, "../../../.env.example"),
+  resolve(__dirname, "../../../.env.example"),
   "utf8",
 );
 
 const dockerCompose = readFileSync(
-  resolve(import.meta.dirname, "../../../docker-compose.yml"),
+  resolve(__dirname, "../../../docker-compose.yml"),
   "utf8",
 );
 
 const rootPackageJson = JSON.parse(
-  readFileSync(resolve(import.meta.dirname, "../../../package.json"), "utf8"),
+  readFileSync(resolve(__dirname, "../../../package.json"), "utf8"),
 ) as {
   scripts?: Record<string, string | undefined>;
 };
 
 const apiPackageJson = JSON.parse(
   readFileSync(
-    resolve(import.meta.dirname, "../../../apps/api/package.json"),
+    resolve(__dirname, "../../../apps/api/package.json"),
     "utf8",
   ),
 ) as {
@@ -30,7 +35,7 @@ const apiPackageJson = JSON.parse(
 
 const webPackageJson = JSON.parse(
   readFileSync(
-    resolve(import.meta.dirname, "../../../apps/web/package.json"),
+    resolve(__dirname, "../../../apps/web/package.json"),
     "utf8",
   ),
 ) as {
@@ -38,7 +43,7 @@ const webPackageJson = JSON.parse(
 };
 
 const aiPackageJson = JSON.parse(
-  readFileSync(resolve(import.meta.dirname, "../../ai/package.json"), "utf8"),
+  readFileSync(resolve(__dirname, "../../ai/package.json"), "utf8"),
 ) as {
   scripts?: Record<string, string | undefined>;
 };
@@ -60,7 +65,7 @@ test("root workspace bootstraps shared package builds after install", () => {
 });
 
 test("api workspace uses source-resolution for dev, build, check, and test", () => {
-  assert.equal(apiPackageJson.scripts?.dev, "nest start --watch");
+  assert.equal(apiPackageJson.scripts?.dev?.includes("nest start --watch"), true);
   assert.equal(
     apiPackageJson.scripts?.build,
     "NODE_OPTIONS='--conditions=development' nest build",

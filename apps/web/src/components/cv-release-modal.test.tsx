@@ -35,7 +35,7 @@ describe("CvReleaseModal", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAttribute("aria-labelledby");
     expect(dialog).toHaveAttribute("aria-describedby");
-    expect(screen.queryByRole("button", { name: "Fechar aviso" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Fechar" })).toBeNull();
   });
 
   it("renders exact success message, one close control, and enabled CTAs", async () => {
@@ -55,11 +55,11 @@ describe("CvReleaseModal", () => {
 
     expect(
       await screen.findByText(
-        "Seu CV já está pronto para ser baixado. Não perca tempo: baixe o CV e candidate-se o mais rápido possível.",
+        "Seu CV está pronto. Baixe e candidate-se o quanto antes.",
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByRole("button", { name: "Fechar aviso" }),
+      screen.getAllByRole("button", { name: "Fechar" }),
     ).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Baixar em PDF" })).toBeEnabled();
     expect(
@@ -192,7 +192,7 @@ describe("CvReleaseModal", () => {
       />,
     );
 
-    const close = await screen.findByRole("button", { name: "Fechar aviso" });
+    const close = await screen.findByRole("button", { name: "Fechar" });
     await waitFor(() => expect(close).toHaveFocus());
 
     close.focus();

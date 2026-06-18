@@ -1107,28 +1107,37 @@ test("analysis reuses the persisted requirement rule by requirementSourceHash", 
     },
   });
 
+  const rawJobHash = createHash("sha256")
+    .update(normalizedRawJobText)
+    .digest("hex");
+
   try {
-    const canonicalJob = await database.canonicalJob.create({
-      data: {
+    const canonicalJob = await database.canonicalJob.upsert({
+      where: { canonicalJobHash },
+      create: {
         canonicalJobHash,
         requirementSourceHash,
         canonicalJobJson: canonicalJobJson as Prisma.InputJsonValue,
         canonicalizationModel: "seed",
         canonicalizationPromptVersion: "seed",
       },
+      update: {},
     });
 
-    await database.jobRawInput.create({
-      data: {
-        rawJobHash: createHash("sha256")
-          .update(normalizedRawJobText)
-          .digest("hex"),
+    await database.jobRawInput.upsert({
+      where: { rawJobHash },
+      create: {
+        rawJobHash,
         rawText: VALID_JOB_DESCRIPTION_TEXT,
         normalizedRawText: normalizedRawJobText,
         canonicalJobId: canonicalJob.id,
       },
+      update: {},
     });
 
+    await database.jobRequirementSet.deleteMany({
+      where: { requirementSourceHash },
+    });
     const existingRule = await database.jobRequirementSet.create({
       data: {
         requirementSourceHash,
