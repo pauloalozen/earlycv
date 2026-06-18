@@ -577,6 +577,7 @@ export default function AdaptarPage() {
           );
           const savedResume = await uploadMasterResume(masterFormData);
           formData.append("masterResumeId", savedResume.id);
+          formData.append("saveAsMaster", "true");
         } else {
           formData.append("file", file);
         }
@@ -602,6 +603,7 @@ export default function AdaptarPage() {
           const savedResume = await uploadMasterResume(masterFormData);
           formData.delete("masterCvText");
           formData.append("masterResumeId", savedResume.id);
+          formData.append("saveAsMaster", "true");
         }
         emitUiFunnelEvent("analysis_started", {
           attemptId: submitAttemptId,

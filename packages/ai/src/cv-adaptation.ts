@@ -253,7 +253,7 @@ Use this understanding to guide ALL rewriting decisions.
 
 ---
 
-1. Extract candidate's personal/contact data from the CV header and include it verbatim in the first section (sectionType "header").
+1. Extract candidate's personal/contact data from the CV header and include ONLY these fields verbatim in the first section (sectionType "header"): full name, location (city/state/country), email address, phone number, LinkedIn URL, GitHub URL (if present). Do NOT include date of birth, age, nationality, marital status, CPF, RG, or any other personal identifiers beyond these six fields.
 
 2. Translate role/job title headings to match the output language.
 
@@ -691,7 +691,7 @@ OUTPUT — valid JSON only, no markdown
       "title": "Header",
       "items": [{
         "heading": "Candidate full name (exact from CV)",
-        "bullets": ["All contact lines from CV header, one per bullet: phone, email, LinkedIn, location, etc."]
+        "bullets": ["Location (city/state only)", "email@address.com", "+55 11 99999-9999", "https://linkedin.com/in/username (if present)", "https://github.com/username (if present)"]
       }]
     },
     {

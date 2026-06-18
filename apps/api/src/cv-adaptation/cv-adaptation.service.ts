@@ -92,6 +92,8 @@ type ValidationTelemetry = {
 @Injectable()
 export class CvAdaptationService {
   private readonly logger = new Logger(CvAdaptationService.name);
+  // Prevents parallel LLM generation calls for the same adaptation
+  private readonly cvGenerationInProgress = new Set<string>();
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
@@ -573,6 +575,7 @@ export class CvAdaptationService {
           analysisCvSnapshot: {
             select: { sourceType: true, originalFileStorageKey: true },
           },
+          masterResume: { select: { rawText: true } },
         },
       });
 
@@ -606,6 +609,17 @@ export class CvAdaptationService {
       targetStatus: "CV_READY",
       origin: "optimized_cv_auto",
       callerMethod: "claimGuest",
+    });
+
+    // Generate aiAuditJson (structured CV sections) in background so
+    // /adaptacao-cv loads without polling when the user navigates there.
+    void this.ensureLegacyStructuredOutput({
+      ...adaptation,
+      masterResume: adaptation.masterResume ?? { rawText: null },
+    }).catch((err) => {
+      this.logger.error(
+        `[claim-guest] CV generation failed for ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     });
 
     return createCvAdaptationResponseDto(adaptation);
@@ -966,6 +980,15 @@ export class CvAdaptationService {
       file: shouldUseUploadedFile ? file : undefined,
       userId,
     });
+
+    if (dto.saveAsMaster) {
+      await this.mergeCanonicalProfileFromText({
+        source: "base_cv_upload",
+        sourceCvId: dto.masterResumeId ?? null,
+        text: finalMasterCvText,
+        userId,
+      });
+    }
 
     return {
       ...protectionResult.result,
@@ -1858,6 +1881,19 @@ export class CvAdaptationService {
       return nextAdaptation;
     });
 
+    // Advance candidatura status to CV_READY synchronously so it reflects
+    // immediately even if the background deliverAdaptation task fails.
+    await this.triggerJobApplicationHook({
+      cvAdaptationId: adaptation.id,
+      userId,
+      jobTitle: adaptation.jobTitle,
+      companyName: adaptation.companyName,
+      jobDescriptionText: adaptation.jobDescriptionText,
+      targetStatus: "CV_READY",
+      origin: "optimized_cv_auto",
+      callerMethod: "redeemWithCredit",
+    });
+
     this.deliverAdaptation(adaptation.id).catch((err) => {
       this.logger.error(
         `[redeem-credit] delivery failed for ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
@@ -2178,6 +2214,18 @@ export class CvAdaptationService {
       internalCheckoutId: adaptation.id,
     });
 
+    // Advance candidatura status to CV_READY synchronously before background tasks.
+    await this.triggerJobApplicationHook({
+      cvAdaptationId: adaptation.id,
+      userId: adaptation.userId,
+      jobTitle: adaptation.jobTitle,
+      companyName: adaptation.companyName,
+      jobDescriptionText: adaptation.jobDescriptionText,
+      targetStatus: "CV_READY",
+      origin: "optimized_cv_auto",
+      callerMethod: "webhookPaymentApproved",
+    });
+
     this.deliverAdaptation(adaptation.id).catch((err) => {
       this.logger.error(
         `[webhook:cv-adaptation] delivery failed for ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
@@ -2434,6 +2482,12 @@ export class CvAdaptationService {
       throw new BadRequestException("Adaptation analysis is not ready yet.");
     }
 
+    // Start countByJob in background so it runs while CPU work happens below.
+    const countPromise = this.countByJob(
+      adaptation.jobTitle,
+      adaptation.companyName,
+    );
+
     const aiAudit = adaptation.aiAuditJson as Record<string, unknown> | null;
     const adaptationNotes =
       typeof aiAudit?.adaptationNotes === "string"
@@ -2468,6 +2522,30 @@ export class CvAdaptationService {
       finalCvOutput ?? undefined,
     );
 
+    // If delivered but still no CV output, background generation may have failed.
+    // Fire a retry without blocking the response so the next poll can pick it up.
+    if (adaptation.status === "delivered" && !finalCvOutput) {
+      void this.database.cvAdaptation
+        .findFirst({
+          where: { id, userId },
+          include: { masterResume: { select: { rawText: true } } },
+        })
+        .then((full) => {
+          if (full) {
+            return this.ensureLegacyStructuredOutput({
+              ...full,
+              masterResume: full.masterResume ?? { rawText: null },
+            });
+          }
+        })
+        .catch((err) => {
+          console.error(
+            `Retry CV generation for ${id}:`,
+            err instanceof Error ? err.message : String(err),
+          );
+        });
+    }
+
     return {
       adaptedContentJson: enrichedAnalysis,
       finalCvOutput,
@@ -2481,10 +2559,7 @@ export class CvAdaptationService {
       jobDescriptionText: adaptation.jobDescriptionText,
       adaptationNotes,
       jobApplicationId: adaptation.jobApplicationId,
-      jobAnalysisCount: await this.countByJob(
-        adaptation.jobTitle,
-        adaptation.companyName,
-      ),
+      jobAnalysisCount: await countPromise,
     };
   }
 
@@ -2715,20 +2790,35 @@ export class CvAdaptationService {
       return adaptation.aiAuditJson as CvAdaptationOutput;
     }
 
-    const masterCvText = await this.resolveGenerationMasterCvText(adaptation);
+    // Deduplicate: only one generation attempt per adaptation at a time
+    if (this.cvGenerationInProgress.has(adaptation.id)) {
+      this.logger.debug(
+        `CV generation already in progress for ${adaptation.id}, skipping duplicate call`,
+      );
+      return null;
+    }
 
-    if (!masterCvText) return null;
-
-    await this.persistGenerationSnapshotIfMissing(adaptation, masterCvText);
-
-    const requirementCoverage = this.extractRequirementCoverageFromAnalysis(
-      adaptation.adaptedContentJson,
-    );
-    const ajustesConteudo = this.extractAjustesConteudoFromAnalysis(
-      adaptation.adaptedContentJson,
-    );
+    this.cvGenerationInProgress.add(adaptation.id);
 
     try {
+      const masterCvText = await this.resolveGenerationMasterCvText(adaptation);
+
+      if (!masterCvText) {
+        this.logger.warn(
+          `No master CV text available for adaptation ${adaptation.id}`,
+        );
+        return null;
+      }
+
+      await this.persistGenerationSnapshotIfMissing(adaptation, masterCvText);
+
+      const requirementCoverage = this.extractRequirementCoverageFromAnalysis(
+        adaptation.adaptedContentJson,
+      );
+      const ajustesConteudo = this.extractAjustesConteudoFromAnalysis(
+        adaptation.adaptedContentJson,
+      );
+
       const protectionResult =
         await this.protectedAnalyzeService.executeProtectedBuildPaidCvOutputFromGuest(
           {
@@ -2759,6 +2849,9 @@ export class CvAdaptationService {
         );
 
       if (!protectionResult.ok) {
+        this.logger.error(
+          `LLM generation returned not-ok for adaptation ${adaptation.id}`,
+        );
         return null;
       }
 
@@ -2769,9 +2862,19 @@ export class CvAdaptationService {
         data: { aiAuditJson: output as unknown as Prisma.InputJsonValue },
       });
 
+      this.logger.log(
+        `aiAuditJson saved successfully for adaptation ${adaptation.id}`,
+      );
+
       return output;
-    } catch {
+    } catch (err) {
+      this.logger.error(
+        `CV generation failed for adaptation ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
+        err instanceof Error ? err.stack : undefined,
+      );
       return null;
+    } finally {
+      this.cvGenerationInProgress.delete(adaptation.id);
     }
   }
 
