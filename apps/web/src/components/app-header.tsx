@@ -744,7 +744,7 @@ export function AppHeader({
                   ) : null}
                   {[
                     {
-                      href: "/dashboard",
+                      href: "/meu-perfil",
                       label: "Meu Perfil",
                       icon: (
                         <>
@@ -876,7 +876,7 @@ export function AppHeader({
                         key={item.href}
                         href={item.href}
                         onClick={() => setOpen(false)}
-                        className={`app-hdr-dd-item${item.href === "/dashboard" ? " app-hdr-dd-item--active" : ""}`}
+                        className={`app-hdr-dd-item${item.href === "/meu-perfil" ? " app-hdr-dd-item--active" : ""}`}
                         style={{
                           display: "flex",
                           alignItems: "center",
@@ -1135,7 +1135,7 @@ export function AppHeader({
           <>
             {[
               {
-                href: "/dashboard",
+                href: "/meu-perfil",
                 label: "Meu Perfil",
                 icon: (
                   <>

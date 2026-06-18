@@ -11,6 +11,6 @@ test("AppHeader exposes Meu Perfil in the global menu", () => {
   const content = readFileSync(filePath, "utf8");
 
   assert.match(content, /label: "Meu Perfil"/g);
-  assert.match(content, /href: "\/dashboard"/g);
+  assert.match(content, /href: "\/meu-perfil"/g);
   assert.doesNotMatch(content, /label: "Meu CV Master"/);
 });
