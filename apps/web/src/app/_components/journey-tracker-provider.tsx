@@ -601,7 +601,7 @@ export function JourneyTrackerProvider({
             : "signin"
           : "unknown";
       const isGoogleOauthLink =
-        nextUrl.pathname.includes("/auth/google/start") ||
+        nextUrl.pathname.includes("/api/auth/google/start") ||
         nextUrl.pathname.includes("/oauth/google");
 
       if (isGoogleOauthLink) {
