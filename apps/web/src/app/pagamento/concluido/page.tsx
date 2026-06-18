@@ -5,14 +5,9 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { Logo } from "@/components/logo";
 import { PageShell } from "@/components/page-shell";
 import { trackEvent } from "@/lib/analytics-tracking";
-import {
-  type DownloadProgressStage,
-  downloadFromApi,
-} from "@/lib/client-download";
 import {
   type CheckoutStatusResponse,
   getCheckoutStatusClient,
@@ -199,7 +194,7 @@ function CheckoutNav({
             fontWeight: 500,
           }}
         >
-          v1.2
+          v2.1
         </span>
       </a>
 
@@ -238,9 +233,6 @@ function ConcluidoContent() {
 
   const [state, setState] = useState<UIState>("polling");
   const [result, setResult] = useState<CheckoutStatusResponse | null>(null);
-  const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
-  const [downloadStage, setDownloadStage] =
-    useState<DownloadProgressStage | null>(null);
   const [approvedMounted, setApprovedMounted] = useState(false);
   const pollCount = useRef(0);
 
@@ -305,24 +297,6 @@ function ConcluidoContent() {
 
     poll();
   }, [checkoutId]);
-
-  const handleDownload = async (
-    format: "pdf" | "docx",
-    targetAdaptationId: string,
-  ) => {
-    if (downloading) return;
-    setDownloading(format);
-    try {
-      await downloadFromApi({
-        url: `/api/cv-adaptation/${targetAdaptationId}/download?format=${format}`,
-        fallbackFilename: `cv-adaptado.${format}`,
-        onStageChange: setDownloadStage,
-      });
-    } finally {
-      setDownloading(null);
-      setDownloadStage(null);
-    }
-  };
 
   const pageStyle: React.CSSProperties = {
     position: "relative",
@@ -682,92 +656,28 @@ function ConcluidoContent() {
                 }}
               >
                 {showCvUnlock && result.originAdaptationId && (
-                  <>
-                    <a
-                      href={`/api/cv-adaptation/${result.originAdaptationId}/download?format=pdf`}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        if (!result.originAdaptationId) return;
-                        void handleDownload("pdf", result.originAdaptationId);
-                      }}
-                      style={{
-                        flex: 1,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 8,
-                        background: "#0a0a0a",
-                        color: "#fafaf6",
-                        border: "none",
-                        borderRadius: 10,
-                        padding: "14px",
-                        fontSize: 14,
-                        fontWeight: 500,
-                        textDecoration: "none",
-                        boxShadow:
-                          "0 4px 12px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.08)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="M12 4v12m0 0l-5-5m5 5l5-5M5 20h14"
-                          stroke="#fafaf6"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      Baixar PDF
-                    </a>
-                    <a
-                      href={`/api/cv-adaptation/${result.originAdaptationId}/download?format=docx`}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        if (!result.originAdaptationId) return;
-                        void handleDownload("docx", result.originAdaptationId);
-                      }}
-                      style={{
-                        flex: 1,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 8,
-                        background: "#fff",
-                        color: "#0a0a0a",
-                        border: "1px solid rgba(10,10,10,0.15)",
-                        borderRadius: 10,
-                        padding: "13px",
-                        fontSize: 14,
-                        fontWeight: 500,
-                        textDecoration: "none",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="M12 4v12m0 0l-5-5m5 5l5-5M5 20h14"
-                          stroke="#0a0a0a"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      Baixar DOCX
-                    </a>
-                  </>
+                  <a
+                    href={`/adaptacao-cv/${result.originAdaptationId}`}
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      background: "#0a0a0a",
+                      color: "#fafaf6",
+                      border: "none",
+                      borderRadius: 10,
+                      padding: "14px",
+                      fontSize: 14,
+                      fontWeight: 500,
+                      textDecoration: "none",
+                      boxShadow:
+                        "0 4px 12px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    Ver meu CV adaptado
+                  </a>
                 )}
 
                 {showAdaptation && result.adaptationId && (
@@ -852,11 +762,6 @@ function ConcluidoContent() {
           </div>
         </div>
 
-        <DownloadProgressOverlay
-          open={downloadStage !== null}
-          stage={downloadStage}
-          format={downloading}
-        />
       </div>
     );
   }

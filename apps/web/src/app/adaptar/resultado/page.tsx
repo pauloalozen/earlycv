@@ -24,6 +24,7 @@ import {
   getGuestAnalysisRaw,
 } from "@/lib/guest-analysis-storage";
 import { getAuthStatus } from "@/lib/session-actions";
+import { EcvPulseLoader } from "@/components/ecv-loader";
 import { getAtsScoreColors } from "./ats-score-colors";
 import { buildContentFetchErrorMessage } from "./content-fetch-error";
 import { shouldPersistGuestAnalysis } from "./guest-analysis-persistence";
@@ -1598,6 +1599,7 @@ export default function ResultadoPage() {
         setReviewPaymentStatus(
           result.isUnlocked ? "completed" : (result.paymentStatus ?? "none"),
         );
+        setJobApplicationId(result.jobApplicationId ?? null);
         const normalized = normalizeData(parsed.adaptedContentJson);
         const score = normalized.score.scoreAtualBase;
         if (typeof score === "number") {
@@ -1822,17 +1824,7 @@ export default function ResultadoPage() {
             "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
         }}
       >
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            border: "2px solid rgba(10,10,10,0.1)",
-            borderTopColor: "#0a0a0a",
-            animation: "res-spin 0.7s linear infinite",
-          }}
-        />
-        <style>{`@keyframes res-spin { to { transform: rotate(360deg); } }`}</style>
+        <EcvPulseLoader size={48} />
       </div>
     );
   }
@@ -1881,6 +1873,11 @@ export default function ResultadoPage() {
 
   const scoreProjetado = data.score.scoreAposLiberarBase;
   const scoreMaxPossivel = data.score.scoreAposLiberarBase;
+  const ptsAjustesTotal = totalAjustesConteudo + ptsKwPossiveis;
+  const scoreProjetadoDinamico = Math.min(
+    100,
+    data.score.scoreAtualBase + ptsAjustesTotal + ptsKwSelecionadas,
+  );
 
   const criticos =
     data.formato_cv?.problemas.filter((p) => p.tipo === "critico") ?? [];
@@ -3387,7 +3384,7 @@ export default function ResultadoPage() {
                 Vagas como esta costumam receber CVs com score acima de 65. Com
                 os ajustes disponíveis, você pode ir de{" "}
                 <strong>{data.score.scoreAtualBase}</strong> →{" "}
-                <strong style={{ color: AMBER_TEXT }}>{scoreProjetado}</strong>{" "}
+                <strong style={{ color: AMBER_TEXT }}>{scoreProjetadoDinamico}</strong>{" "}
                 — dentro da faixa competitiva.
               </p>
             </div>
@@ -3754,7 +3751,7 @@ export default function ResultadoPage() {
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
-                      {scoreProjetado}
+                      {scoreProjetadoDinamico}
                     </p>
                     <div
                       style={{
@@ -3768,20 +3765,17 @@ export default function ResultadoPage() {
                         color: "rgba(255,255,255,0.3)",
                       }}
                     >
-                      <span>{data.score.scoreAtualBase}</span>
-                      {totalAjustesConteudo > 0 && (
-                        <span>+ {totalAjustesConteudo} pts seção 1</span>
-                      )}
-                      {ptsKwPossiveis > 0 && (
-                        <span>+ {ptsKwPossiveis} pts keywords possíveis</span>
+                      <span>{data.score.scoreAtualBase} pts atuais</span>
+                      {ptsAjustesTotal > 0 && (
+                        <span>+ {ptsAjustesTotal} pts de ajustes</span>
                       )}
                       {ptsKwSelecionadas > 0 && (
                         <span>
-                          + {ptsKwSelecionadas} pts keywords selecionadas
+                          + {ptsKwSelecionadas} pts de kw selecionadas
                         </span>
                       )}
                       <span style={{ color: "rgba(255,255,255,0.5)" }}>
-                        = {scoreProjetado}/100
+                        = {scoreProjetadoDinamico}/100
                       </span>
                     </div>
                   </div>

@@ -1226,16 +1226,15 @@ function AnaliseRow({
                 </svg>
                 DOCX
               </button>
-              {adaptation.canDownloadBaseCv && (
-                <a href={`/api/cv-adaptation/${adaptation.id}/base-cv`} download className="analise-btn-base-cv" style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.9)", color: "#6a6560", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, textDecoration: "none", fontFamily: GEIST }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
-                  </svg>
-                  CV usado na análise
-                </a>
-              )}
             </div>
           )}
+
+          <a href={`/api/cv-adaptation/${adaptation.id}/base-cv`} download className="analise-btn-base-cv" style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.9)", color: "#6a6560", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, textDecoration: "none", fontFamily: GEIST, marginLeft: "auto" }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+            </svg>
+            CV usado na análise
+          </a>
         </div>
       </div>
       <DownloadProgressOverlay
@@ -4765,6 +4764,8 @@ export function DetailClient({ application, header }: Props) {
           from { opacity: 0; transform: translateY(-5px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        .analise-row-btns { width: 100%; }
+        .analise-btn-base-cv { margin-left: auto; }
         @media (max-width: 767px) {
           .detail-wrapper { padding: 12px 14px 60px !important; }
           .detail-top-spacer { padding-top: 54px !important; margin-bottom: 12px !important; }
@@ -4782,7 +4783,7 @@ export function DetailClient({ application, header }: Props) {
           .analise-btns-group-a { flex-wrap: wrap !important; }
           .analise-btns-group-b { flex-wrap: nowrap !important; width: 100% !important; }
           .analise-btns-group-b > * { flex: 1 !important; justify-content: center !important; }
-          .analise-btn-base-cv { flex: none !important; white-space: nowrap !important; }
+          .analise-btn-base-cv { flex: none !important; margin-left: 0 !important; white-space: nowrap !important; }
           .interview-card { flex-wrap: wrap !important; align-items: flex-start !important; }
           .interview-card-actions { width: 100% !important; flex-shrink: unset !important; padding-left: 50px !important; }
           .status-popover {

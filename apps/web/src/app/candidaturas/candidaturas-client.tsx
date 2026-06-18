@@ -10,8 +10,10 @@ import {
   useState,
   useTransition,
 } from "react";
+import { EcvBuildLoader } from "@/components/ecv-loader";
 import { PageShell } from "@/components/page-shell";
 import { PublicFooter } from "@/components/public-footer";
+import { downloadFromApi } from "@/lib/client-download";
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import {
   getStatusConfig,
@@ -206,39 +208,22 @@ function EmptyState({
       >
         <svg
           width="40"
-          height="32"
-          viewBox="0 0 40 32"
+          height="40"
+          viewBox="0 0 40 40"
           fill="none"
           aria-hidden="true"
           style={{ marginBottom: 22, opacity: 0.9 }}
         >
-          <rect x="0" y="0" width="11" height="8" fill="rgba(10,10,10,0.18)" />
-          <rect x="14" y="0" width="11" height="8" fill="#c6ff3a" />
-          <rect x="28" y="0" width="11" height="8" fill="rgba(10,10,10,0.45)" />
-          <rect x="0" y="12" width="11" height="8" fill="rgba(10,10,10,0.45)" />
-          <rect
-            x="14"
-            y="12"
-            width="11"
-            height="8"
-            fill="rgba(10,10,10,0.18)"
-          />
-          <rect x="28" y="12" width="11" height="8" fill="#c6ff3a" />
-          <rect x="0" y="24" width="11" height="8" fill="#c6ff3a" />
-          <rect
-            x="14"
-            y="24"
-            width="11"
-            height="8"
-            fill="rgba(10,10,10,0.45)"
-          />
-          <rect
-            x="28"
-            y="24"
-            width="11"
-            height="8"
-            fill="rgba(10,10,10,0.18)"
-          />
+          <rect x="0"  y="0"    width="12" height="6.5" rx="2" fill="#0a0a0a" />
+          <rect x="16" y="0"    width="12" height="6.5" rx="2" fill="#0a0a0a" />
+          <rect x="32" y="0"    width="8"  height="6.5" rx="2" fill="#c6ff3a" />
+          <rect x="0"  y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+          <rect x="20" y="11.2" width="18" height="6.5" rx="2" fill="#0a0a0a" />
+          <rect x="0"  y="22.4" width="7"  height="6.5" rx="2" fill="#0a0a0a" />
+          <rect x="11" y="22.4" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+          <rect x="30" y="22.4" width="8"  height="6.5" rx="2" fill="#0a0a0a" />
+          <rect x="0"  y="33.5" width="22" height="6.5" rx="2" fill="#0a0a0a" />
+          <rect x="26" y="33.5" width="9"  height="6.5" rx="2" fill="rgba(10,10,10,0.14)" />
         </svg>
 
         <div
@@ -736,6 +721,7 @@ function CandRow({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
   const detailUrl = `/candidaturas/${application.id}`;
   const cta = ctaForStatus(application.status, detailUrl);
@@ -842,6 +828,21 @@ function CandRow({
     } finally {
       setDeleting(false);
       closeDeleteModal();
+    }
+  };
+
+  const handleDownloadCv = async () => {
+    if (!cvAdaptationIdForActions || downloading) return;
+    setDownloading(true);
+    try {
+      await downloadFromApi({
+        url: `/api/cv-adaptation/${cvAdaptationIdForActions}/download?format=pdf`,
+        fallbackFilename: "cv-adaptado.pdf",
+      });
+    } catch {
+      // silently ignore — browser may have blocked or download failed
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -1343,45 +1344,109 @@ function CandRow({
         )}
 
         {!isArchivedView && (canDownloadCv && cvAdaptationIdForActions ? (
-          <a
-            href={`/api/cv-adaptation/${cvAdaptationIdForActions}/download?format=pdf`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              borderRadius: 8,
-              padding: "10px 14px",
-              fontSize: 12.5,
-              fontWeight: 500,
-              cursor: "pointer",
-              fontFamily: GEIST,
-              textDecoration: "none",
-              background: "#fff",
-              color: "#0a0a0a",
-              border: "1px solid rgba(10,10,10,0.12)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            <svg
-              aria-hidden="true"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
+          <>
+            <button
+              type="button"
+              onClick={() => void handleDownloadCv()}
+              disabled={downloading}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                borderRadius: 8,
+                padding: "10px 14px",
+                fontSize: 12.5,
+                fontWeight: 500,
+                cursor: downloading ? "default" : "pointer",
+                fontFamily: GEIST,
+                background: "#fff",
+                color: "#0a0a0a",
+                border: "1px solid rgba(10,10,10,0.12)",
+                whiteSpace: "nowrap",
+                opacity: downloading ? 0.6 : 1,
+              }}
             >
-              <path d="M12 4v11" strokeLinecap="round" />
-              <path
-                d="m8 11 4 4 4-4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path d="M5 20h14" strokeLinecap="round" />
-            </svg>
-            <span>Baixar melhor CV</span>
-          </a>
+              <svg
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <path d="M12 4v11" strokeLinecap="round" />
+                <path
+                  d="m8 11 4 4 4-4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path d="M5 20h14" strokeLinecap="round" />
+              </svg>
+              <span>Baixar melhor CV</span>
+            </button>
+
+            {/* Overlay de download */}
+            {downloading && (
+              <div
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  zIndex: 200,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "0 16px",
+                  background: "rgba(10,10,10,0.5)",
+                  backdropFilter: "blur(4px)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 20,
+                    borderRadius: 20,
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "#0a0a0a",
+                    padding: "32px",
+                    width: "100%",
+                    maxWidth: 380,
+                    boxShadow: "0 32px 80px -16px rgba(0,0,0,0.8)",
+                  }}
+                >
+                  <EcvBuildLoader size={64} dark />
+                  <div style={{ textAlign: "center" }}>
+                    <p
+                      style={{
+                        fontFamily: GEIST,
+                        fontSize: 15,
+                        fontWeight: 500,
+                        letterSpacing: -0.2,
+                        color: "#fafaf6",
+                        margin: "0 0 6px",
+                      }}
+                    >
+                      Preparando download...
+                    </p>
+                    <p
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10.5,
+                        color: "#5a5a55",
+                        margin: 0,
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      GERANDO PDF DO CV OTIMIZADO
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         ) : application.bestCvState === "locked" && cvAdaptationIdForActions ? (
           confirmUnlock ? (
             <div

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
+import { EcvPulseLoader, EcvScanLoader } from "@/components/ecv-loader";
 import { PageShell } from "@/components/page-shell";
 import { trackEvent } from "@/lib/analytics-tracking";
 import type { AppInternalRole } from "@/lib/app-session";
@@ -721,7 +722,7 @@ export default function AdaptarPage() {
             "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
         }}
       >
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#d0ceC6] border-t-[#0a0a0a]" />
+        <EcvPulseLoader size={48} />
       </div>
     );
   }
@@ -1825,55 +1826,7 @@ export default function AdaptarPage() {
                 boxShadow: "0 32px 80px -16px rgba(0,0,0,0.8)",
               }}
             >
-              {/* Spinner */}
-              <div
-                style={{
-                  position: "relative",
-                  width: 56,
-                  height: 56,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
-                <svg
-                  aria-hidden
-                  className="animate-spin"
-                  viewBox="0 0 56 56"
-                  fill="none"
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: 56,
-                    height: 56,
-                  }}
-                >
-                  <circle
-                    cx="28"
-                    cy="28"
-                    r="23"
-                    stroke="rgba(198,255,58,0.15)"
-                    strokeWidth="3"
-                  />
-                  <path
-                    d="M28 5 A23 23 0 0 1 51 28"
-                    stroke="#c6ff3a"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: "#c6ff3a",
-                  }}
-                >
-                  IA
-                </span>
-              </div>
+              <EcvScanLoader size={64} dark />
 
               <div style={{ textAlign: "center" }}>
                 <p

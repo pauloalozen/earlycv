@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
+import { PublicFooter } from "@/components/public-footer";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getHistoryActions } from "@/lib/cv-adaptation-actions";
@@ -768,6 +769,7 @@ export default async function AnalisesPage({ searchParams }: Props) {
           .analises-history-score { margin-left: auto !important; text-align: right !important; }
         }
       `}</style>
+      <PublicFooter />
     </PageShell>
   );
 }

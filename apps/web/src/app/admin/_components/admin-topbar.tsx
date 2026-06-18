@@ -250,74 +250,20 @@ function AdminLogoMark() {
       <svg
         aria-label="EarlyCV"
         width="22"
-        height="18"
-        viewBox="0 0 40 32"
+        height="22"
+        viewBox="0 0 40 40"
         fill="none"
       >
-        <rect
-          x="0"
-          y="0"
-          width="13"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.5)"
-        />
-        <rect
-          x="17"
-          y="0"
-          width="10"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.5)"
-        />
-        <rect
-          x="31"
-          y="0"
-          width="9"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.85)"
-        />
-        <rect
-          x="0"
-          y="14"
-          width="15"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.85)"
-        />
-        <rect
-          x="19"
-          y="14"
-          width="21"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.5)"
-        />
-        <rect
-          x="0"
-          y="28"
-          width="8"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.5)"
-        />
-        <rect
-          x="12"
-          y="28"
-          width="15"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.85)"
-        />
-        <rect
-          x="31"
-          y="28"
-          width="9"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.2)"
-        />
+        <rect x="0"  y="0"    width="12" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="16" y="0"    width="12" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="32" y="0"    width="8"  height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="0"  y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="20" y="11.2" width="18" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="0"  y="22.4" width="7"  height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="11" y="22.4" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="30" y="22.4" width="8"  height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="0"  y="33.5" width="22" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="26" y="33.5" width="9"  height="6.5" rx="2" fill="rgba(10,10,10,0.14)" />
       </svg>
       <div style={{ display: "flex", alignItems: "baseline", gap: 0 }}>
         <span

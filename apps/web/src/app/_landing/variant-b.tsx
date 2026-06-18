@@ -71,7 +71,7 @@ export function LandingVariantB() {
               fontWeight: 500,
             }}
           >
-            v1.2
+            v2.1
           </span>
         </Link>
         <LandingNavAuth />

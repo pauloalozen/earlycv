@@ -15,7 +15,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: [
           "/dashboard",
           "/meu-perfil",
-          "/cv-base",
           "/admin",
           "/admin/*",
           "/superadmin",

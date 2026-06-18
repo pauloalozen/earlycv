@@ -86,9 +86,22 @@ function resolveCvAnalysisScores(
   if (looksNormalizedHistoricalPayload) {
     try {
       const normalized = normalizeData(parsed as CvAnalysisData);
+      const scoreAtualBase = normalized.score.scoreAtualBase;
+
+      const ptsKwSelecionadas = normalized.keywords.ausentes
+        .filter((k) => selectedMissingKeywords.includes(k.kw))
+        .reduce((s, k) => s + k.pontos, 0);
+      const ptsAjustes =
+        normalized.score.ajustesConteudoSecao1 +
+        normalized.score.keywordsPossiveisTotal;
+      const scoreAfter = Math.min(
+        100,
+        scoreAtualBase + ptsAjustes + ptsKwSelecionadas,
+      );
+
       return {
-        scoreBefore: normalized.score.scoreAtualBase,
-        scoreAfter: normalized.score.scoreAposLiberarBase,
+        scoreBefore: scoreAtualBase,
+        scoreAfter,
         selectedMissingKeywords,
       };
     } catch {

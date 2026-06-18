@@ -9,7 +9,6 @@ const API_DEPENDENT_ROUTE_PREFIXES = [
   "/adaptar",
   "/auth",
   "/compras",
-  "/cv-base",
   "/dashboard",
   "/entrar",
   "/esqueceu-senha",

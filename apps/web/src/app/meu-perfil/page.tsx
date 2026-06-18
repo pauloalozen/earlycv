@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
+import { PublicFooter } from "@/components/public-footer";
 import { ProgressRing } from "@/components/progress-ring";
 import { apiRequest } from "@/lib/api-request";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
@@ -460,6 +461,7 @@ export default async function MeuPerfilPage() {
           </div>
         </div>
       </main>
+      <PublicFooter />
     </PageShell>
   );
 }

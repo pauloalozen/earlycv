@@ -57,6 +57,7 @@ export default async function AdaptacaoCvPage({
       userName={user.name ?? null}
       userRole={user.internalRole ?? null}
       availableCredits={availableCredits}
+      jobApplicationId={content.jobApplicationId ?? null}
     />
   );
 }

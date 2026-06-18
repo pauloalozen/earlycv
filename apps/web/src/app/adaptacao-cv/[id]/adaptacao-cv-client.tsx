@@ -105,6 +105,7 @@ type Props = {
   userName: string | null;
   userRole: AppInternalRole | null;
   availableCredits?: number | "∞" | "—";
+  jobApplicationId?: string | null;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -253,6 +254,23 @@ function stripContactLabel(text: string): string {
     /^(e-?mail|telefone|tel|fone|phone|linkedin|localiza[çc][aã]o|location|endere[çc]o|cidade|city)\s*:\s*/i,
     "",
   );
+}
+
+function isContactBullet(raw: string): boolean {
+  const labeled =
+    /^(e-?mail|telefone|tel|fone|phone|linkedin|github|behance|portfolio|localiza[çc][aã]o|location|endere[çc]o|cidade|city)\s*:/i.test(
+      raw,
+    );
+  if (labeled) return true;
+  const s = stripContactLabel(raw).trim();
+  if (!s) return false;
+  if (s.includes("@")) return true;
+  if (/\(?\d{2}\)?\s*\d{4,5}[-\s]?\d{4}/.test(s)) return true;
+  if (/linkedin|github|behance/i.test(s)) return true;
+  if (/^https?:\/\//i.test(s) || /^www\./i.test(s)) return true;
+  // city - state (e.g. "Osasco - SP", "São Paulo/SP", "SP")
+  if (/^[\p{L}\s]+([-\/,]\s*[A-Z]{2}|[A-Z]{2})$/u.test(s)) return true;
+  return false;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -663,7 +681,7 @@ function HeaderSectionView({
               {item.subheading}
             </div>
           )}
-          {item.bullets.length > 0 && (
+          {item.bullets.filter(isContactBullet).length > 0 && (
             <div
               style={{
                 fontSize: 12,
@@ -672,7 +690,10 @@ function HeaderSectionView({
                 lineHeight: 1.6,
               }}
             >
-              {item.bullets.map(stripContactLabel).join(" | ")}
+              {item.bullets
+                .filter(isContactBullet)
+                .map(stripContactLabel)
+                .join(" | ")}
             </div>
           )}
         </>
@@ -1190,38 +1211,79 @@ function CvSectionBlock({
   );
 }
 
-function GeneratingState() {
+function SkBar({
+  w,
+  h,
+  mb,
+  center,
+}: {
+  w: string | number;
+  h: number;
+  mb?: number;
+  center?: boolean;
+}) {
   return (
     <div
       style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 16,
-        padding: 40,
+        width: w,
+        height: h,
+        borderRadius: 3,
+        background:
+          "linear-gradient(90deg,#e4e2dc 25%,#d4d2cc 50%,#e4e2dc 75%)",
+        backgroundSize: "600px 100%",
+        animation: "cv-shimmer 1.4s infinite linear",
+        marginBottom: mb ?? 0,
+        ...(center ? { margin: `0 auto ${mb ?? 0}px` } : {}),
+      }}
+    />
+  );
+}
+
+function CvSkeleton() {
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto" }}>
+      <p
+        style={{
+          textAlign: "center",
+          fontSize: 12,
+          color: "#888",
+          marginBottom: 14,
+          letterSpacing: 0.2,
+        }}
+      >
+        Montando seu CV adaptado…
+      </p>
+    <div
+      style={{
+        background: CV_BG,
+        maxWidth: 720,
+        margin: "0 auto 40px",
+        padding: "40px 44px",
+        minHeight: 900,
+        boxShadow: "0 2px 32px rgba(0,0,0,0.6)",
       }}
     >
-      <div
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: "50%",
-          border: "3px solid rgba(198,255,58,0.15)",
-          borderTop: `3px solid ${LIME}`,
-          animation: "spin 0.9s linear infinite",
-        }}
-      />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "#e0e0e0" }}>
-          Finalizando seu CV adaptado...
-        </div>
-        <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
-          Aguarde, estamos montando a versão final
-        </div>
+      <style>{`@keyframes cv-shimmer { 0% { background-position:-600px 0; } 100% { background-position:600px 0; } }`}</style>
+      {/* header */}
+      <div style={{ textAlign: "center", marginBottom: 22 }}>
+        <SkBar w="52%" h={20} mb={10} center />
+        <SkBar w="32%" h={11} mb={7} center />
+        <SkBar w="68%" h={10} center mb={0} />
       </div>
+      <SkBar w="100%" h={1} mb={20} />
+      {/* 4 body sections */}
+      {[1, 2, 3, 4].map((si) => (
+        <div key={si} style={{ marginBottom: 26 }}>
+          <SkBar w="30%" h={10} mb={8} />
+          <SkBar w="100%" h={1} mb={10} />
+          <SkBar w="60%" h={11} mb={5} />
+          <SkBar w="28%" h={9} mb={9} />
+          {[85, 78, 65].map((pct, bi) => (
+            <SkBar key={bi} w={`${pct}%`} h={9} mb={5} />
+          ))}
+        </div>
+      ))}
+    </div>
     </div>
   );
 }
@@ -1240,6 +1302,7 @@ export function AdaptacaoCvClient({
   userName,
   userRole,
   availableCredits,
+  jobApplicationId,
 }: Props) {
   const [finalCvOutput, setFinalCvOutput] = useState(initialFinalCvOutput);
   const [sectionMapping, setSectionMapping] = useState(initialSectionMapping);
@@ -1332,7 +1395,7 @@ export function AdaptacaoCvClient({
   useEffect(() => {
     if (!isGenerating) return;
     let attempts = 0;
-    const MAX = 12;
+    const MAX = 24;
 
     async function attempt() {
       if (attempts >= MAX) {
@@ -1342,11 +1405,11 @@ export function AdaptacaoCvClient({
       attempts++;
       const done = await pollContent();
       if (!done) {
-        pollRef.current = setTimeout(attempt, 2500);
+        pollRef.current = setTimeout(attempt, 1500);
       }
     }
 
-    pollRef.current = setTimeout(attempt, 1500);
+    pollRef.current = setTimeout(attempt, 500);
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
@@ -2065,6 +2128,7 @@ export function AdaptacaoCvClient({
                 borderBottom: "1px solid rgba(10,10,10,0.07)",
                 flexShrink: 0,
                 minHeight: 44,
+                position: "relative",
               }}
             >
               {/* Mobile: open ajustes drawer button */}
@@ -2160,7 +2224,28 @@ export function AdaptacaoCvClient({
               {/* SPACER */}
               <div className="adaptcv-spacer" style={{ flex: 1 }} />
 
-              {/* CENTER: edit controls */}
+              {/* CENTER: candidatura hyperlink — absolutely centered in bar */}
+              {jobApplicationId && (
+                <Link
+                  href={`/candidaturas/${jobApplicationId}`}
+                  style={{
+                    position: "absolute",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    color: "#333",
+                    textDecoration: "underline",
+                    textUnderlineOffset: 3,
+                    textDecorationColor: "rgba(10,10,10,0.3)",
+                    whiteSpace: "nowrap",
+                    pointerEvents: "auto",
+                  }}
+                >
+                  Ver candidatura ↗
+                </Link>
+              )}
+
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 {isEditing ? (
                   <>
@@ -2289,7 +2374,7 @@ export function AdaptacaoCvClient({
 
           {/* CV card or generating spinner */}
           {isGenerating ? (
-            <GeneratingState />
+            <CvSkeleton />
           ) : (
             <div
               ref={cvPanelRef}

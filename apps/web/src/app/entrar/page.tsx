@@ -105,7 +105,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
                   fontWeight: 500,
                 }}
               >
-                v1.2
+                v2.1
               </span>
             </a>
             <span
@@ -298,7 +298,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
             }}
           >
             <span>© earlyCV · 2026</span>
-            <span>v1.2 · status ● operational</span>
+            <span>v2.1 · status ● operational</span>
           </div>
         </div>
 

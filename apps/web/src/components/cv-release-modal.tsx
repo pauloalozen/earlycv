@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { EcvBuildLoader } from "./ecv-loader";
 
 export type CvReleaseModalStatus = "loading" | "success" | "error";
 
@@ -19,6 +20,7 @@ export type CvReleaseModalProps = {
 };
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
 
 export function CvReleaseModal({
   open,
@@ -44,13 +46,9 @@ export function CvReleaseModal({
 
   useEffect(() => {
     if (!open || !visible || !canClose) return;
-
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
+      if (event.key === "Escape") onClose();
     };
-
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open, visible, canClose, onClose]);
@@ -59,10 +57,8 @@ export function CvReleaseModal({
     if (!isClient) return;
     if (!open || !visible) return;
     lastFocusedRef.current = document.activeElement as HTMLElement | null;
-
     const root = dialogRef.current;
     if (!root) return;
-
     const focusables = root.querySelectorAll<HTMLElement>(
       'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     );
@@ -73,29 +69,23 @@ export function CvReleaseModal({
   useEffect(() => {
     if (!isClient) return;
     if (!open || !visible) return;
-
     const handleTabTrap = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
-
       const root = dialogRef.current;
       if (!root) return;
-
       const focusables = Array.from(
         root.querySelectorAll<HTMLElement>(
           'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
         ),
       );
-
       if (focusables.length === 0) {
         event.preventDefault();
         root.focus();
         return;
       }
-
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
       const active = document.activeElement as HTMLElement | null;
-
       if (event.shiftKey && active === first) {
         event.preventDefault();
         last.focus();
@@ -104,7 +94,6 @@ export function CvReleaseModal({
         first.focus();
       }
     };
-
     document.addEventListener("keydown", handleTabTrap);
     return () => document.removeEventListener("keydown", handleTabTrap);
   }, [isClient, open, visible]);
@@ -112,21 +101,18 @@ export function CvReleaseModal({
   useEffect(() => {
     if (open) return;
     const prevFocused = lastFocusedRef.current;
-    if (prevFocused?.isConnected) {
-      prevFocused.focus();
-    }
+    if (prevFocused?.isConnected) prevFocused.focus();
   }, [open]);
 
   useEffect(() => {
     if (!isClient || !open) return;
-    const previousBodyOverflow = document.body.style.overflow;
-    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const prev = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
-
     return () => {
-      document.body.style.overflow = previousBodyOverflow;
-      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = prev;
+      document.documentElement.style.overflow = prevHtml;
     };
   }, [isClient, open]);
 
@@ -135,11 +121,6 @@ export function CvReleaseModal({
   const isLoading = status === "loading";
   const isSuccess = status === "success";
   const isError = status === "error";
-
-  const pdfLabel = downloading === "pdf" ? "Baixando PDF..." : "Baixar em PDF";
-  const docxLabel =
-    downloading === "docx" ? "Baixando DOCX..." : "Baixar em DOCX";
-  const closeDisabled = !canClose;
 
   return createPortal(
     <div
@@ -151,7 +132,8 @@ export function CvReleaseModal({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(10,10,10,0.35)",
+        background: "rgba(10,10,10,0.5)",
+        backdropFilter: "blur(4px)",
         padding: "0 16px",
         transition: "opacity 260ms ease-out",
         opacity: visible ? 1 : 0,
@@ -163,10 +145,11 @@ export function CvReleaseModal({
           type="button"
           aria-hidden="true"
           tabIndex={-1}
-          onClick={closeDisabled ? undefined : onClose}
+          onClick={canClose ? onClose : undefined}
           style={{ position: "absolute", inset: 0 }}
         />
       ) : null}
+
       <div
         role="dialog"
         aria-modal="true"
@@ -177,108 +160,163 @@ export function CvReleaseModal({
         style={{
           position: "relative",
           width: "100%",
-          maxWidth: 520,
-          background: "#fff",
-          border: "1px solid rgba(10,10,10,0.08)",
+          maxWidth: 380,
+          background: "#0a0a0a",
+          border: "1px solid rgba(255,255,255,0.08)",
           borderRadius: 20,
-          padding: "24px",
-          boxShadow: "0 24px 60px -20px rgba(10,10,10,0.35)",
+          padding: "32px",
+          boxShadow: "0 32px 80px -16px rgba(0,0,0,0.8)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 20,
           transition: "all 260ms ease-out",
           opacity: visible ? 1 : 0,
-          transform: visible
-            ? "translateY(0) scale(1)"
-            : "translateY(8px) scale(0.98)",
+          transform: visible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.98)",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 12,
-            marginBottom: 20,
-          }}
-        >
-          <div>
-            <p
-              id={headingId}
-              style={{
-                fontFamily: GEIST,
-                fontSize: 17,
-                fontWeight: 500,
-                color: "#0a0a0a",
-                margin: "0 0 4px",
-              }}
-            >
-              {isLoading
-                ? "Liberando seu CV..."
-                : isSuccess
-                  ? "CV liberado para download"
-                  : "Falha ao liberar CV"}
-            </p>
-            <p
-              id={descriptionId}
-              style={{
-                fontFamily: GEIST,
-                fontSize: 13.5,
-                color: "#6a6560",
-                margin: 0,
-              }}
-            >
-              {isLoading
-                ? "Aguarde alguns instantes enquanto finalizamos a liberacao."
-                : isSuccess
-                  ? "Seu CV já está pronto para ser baixado. Não perca tempo: baixe o CV e candidate-se o mais rápido possível."
-                  : message ||
-                    "Nao foi possivel liberar seu CV agora. Tente novamente em instantes."}
-            </p>
+        {/* Close button */}
+        {canClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              position: "absolute",
+              top: 14,
+              right: 14,
+              background: "rgba(255,255,255,0.06)",
+              border: "none",
+              borderRadius: 8,
+              width: 30,
+              height: 30,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#6a6a64",
+              fontSize: 15,
+              lineHeight: 1,
+            }}
+            aria-label="Fechar"
+          >
+            ×
+          </button>
+        )}
+
+        {/* Icon / loader */}
+        {isLoading && <EcvBuildLoader size={64} dark />}
+
+        {isSuccess && (
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: "50%",
+              background: "rgba(198,255,58,0.12)",
+              border: "1.5px solid rgba(198,255,58,0.35)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 22,
+            }}
+          >
+            ✓
           </div>
-          {canClose ? (
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                background: "rgba(10,10,10,0.05)",
-                border: "none",
-                borderRadius: 8,
-                width: 32,
-                height: 32,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                color: "#6a6560",
-              }}
-              aria-label="Fechar aviso"
-            >
-              x
-            </button>
-          ) : null}
+        )}
+
+        {isError && (
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: "50%",
+              background: "rgba(239,68,68,0.1)",
+              border: "1.5px solid rgba(239,68,68,0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 22,
+            }}
+          >
+            ✕
+          </div>
+        )}
+
+        {/* Text */}
+        <div style={{ textAlign: "center" }}>
+          <p
+            id={headingId}
+            style={{
+              fontFamily: GEIST,
+              fontSize: 15,
+              fontWeight: 500,
+              letterSpacing: -0.2,
+              color: "#fafaf6",
+              margin: "0 0 6px",
+            }}
+          >
+            {isLoading
+              ? "Liberando seu CV..."
+              : isSuccess
+                ? "CV liberado para download"
+                : "Falha ao liberar CV"}
+          </p>
+          <p
+            id={descriptionId}
+            style={{
+              fontFamily: GEIST,
+              fontSize: 13,
+              color: "#8a8a85",
+              margin: 0,
+              lineHeight: 1.5,
+            }}
+          >
+            {isLoading
+              ? "Aguarde alguns instantes."
+              : isSuccess
+                ? "Seu CV está pronto. Baixe e candidate-se o quanto antes."
+                : (message ?? "Não foi possível liberar seu CV agora. Tente novamente.")}
+          </p>
         </div>
 
-        {isSuccess ? (
-          <div className="cv-release-modal-actions">
+        {/* Loading progress label */}
+        {isLoading && (
+          <p
+            style={{
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: "#5a5a55",
+              margin: 0,
+              letterSpacing: 0.3,
+            }}
+          >
+            GERANDO CV OTIMIZADO...
+          </p>
+        )}
+
+        {/* Download buttons */}
+        {isSuccess && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
             <button
               type="button"
               onClick={onDownloadPdf}
               disabled={!canDownload || downloading !== null}
               style={{
-                background: "#fafaf6",
-                border: "1px solid rgba(10,10,10,0.08)",
+                background: downloading === "pdf" ? "rgba(198,255,58,0.08)" : "#fafaf6",
+                border: "1px solid rgba(255,255,255,0.1)",
                 borderRadius: 12,
                 padding: "13px",
                 fontSize: 13.5,
                 fontWeight: 500,
-                cursor:
-                  downloading !== null || !canDownload ? "default" : "pointer",
+                cursor: downloading !== null || !canDownload ? "default" : "pointer",
                 color: "#0a0a0a",
                 fontFamily: GEIST,
-                opacity: downloading !== null || !canDownload ? 0.6 : 1,
+                opacity: downloading !== null && downloading !== "pdf" ? 0.5 : 1,
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
+                width: "100%",
               }}
             >
               <svg
@@ -296,28 +334,28 @@ export function CvReleaseModal({
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              {pdfLabel}
+              {downloading === "pdf" ? "Baixando PDF..." : "Baixar em PDF"}
             </button>
             <button
               type="button"
               onClick={onDownloadDocx}
               disabled={!canDownload || downloading !== null}
               style={{
-                background: "#fafaf6",
-                border: "1px solid rgba(10,10,10,0.08)",
+                background: "transparent",
+                border: "1px solid rgba(255,255,255,0.1)",
                 borderRadius: 12,
                 padding: "13px",
                 fontSize: 13.5,
                 fontWeight: 500,
-                cursor:
-                  downloading !== null || !canDownload ? "default" : "pointer",
-                color: "#0a0a0a",
+                cursor: downloading !== null || !canDownload ? "default" : "pointer",
+                color: "#fafaf6",
                 fontFamily: GEIST,
-                opacity: downloading !== null || !canDownload ? 0.6 : 1,
+                opacity: downloading !== null && downloading !== "docx" ? 0.5 : 1,
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
+                width: "100%",
               }}
             >
               <svg
@@ -335,57 +373,27 @@ export function CvReleaseModal({
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              {docxLabel}
+              {downloading === "docx" ? "Baixando DOCX..." : "Baixar em DOCX"}
             </button>
           </div>
-        ) : null}
+        )}
 
-        {isLoading ? (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              marginTop: 2,
-              marginBottom: 4,
-            }}
-          >
-            <div
-              aria-hidden
-              style={{
-                width: 18,
-                height: 18,
-                borderRadius: "999px",
-                border: "2px solid #D9D9D9",
-                borderTopColor: "#111111",
-                animation: "cv-release-spin 900ms linear infinite",
-              }}
-            />
-            <span
-              style={{
-                fontFamily: GEIST,
-                fontSize: 12.5,
-                color: "#5f5f5f",
-              }}
-            >
-              Estamos preparando seu CV otimizado...
-            </span>
-          </div>
-        ) : null}
-
-        {isError ? (
+        {/* Error retry hint */}
+        {isError && (
           <p
             style={{
-              fontFamily: GEIST,
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: "#ef4444",
               margin: 0,
-              fontSize: 12.5,
-              color: "#991b1b",
+              letterSpacing: 0.3,
             }}
           >
-            Se o problema persistir, tente novamente mais tarde.
+            SE O PROBLEMA PERSISTIR, TENTE NOVAMENTE.
           </p>
-        ) : null}
+        )}
 
+        {/* Screen reader live region */}
         <p
           role="status"
           aria-live="polite"
@@ -410,21 +418,9 @@ export function CvReleaseModal({
         </p>
 
         <style>{`
-          @keyframes cv-release-spin {
-            to {
-              transform: rotate(360deg);
-            }
-          }
-
-          .cv-release-modal-actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-          }
-
-          @media (max-width: 560px) {
-            .cv-release-modal-actions {
-              grid-template-columns: 1fr;
+          @media (max-width: 480px) {
+            [data-ecv-release-modal] {
+              padding: 24px 20px;
             }
           }
         `}</style>
