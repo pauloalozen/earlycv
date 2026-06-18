@@ -25,6 +25,7 @@ import {
 } from "@/lib/guest-analysis-storage";
 import { getAuthStatus } from "@/lib/session-actions";
 import { EcvPulseLoader } from "@/components/ecv-loader";
+import { DEMO_CV_ANALYSIS_MOCK } from "@/lib/demo-cv-analysis-mock";
 import { getAtsScoreColors } from "./ats-score-colors";
 import { buildContentFetchErrorMessage } from "./content-fetch-error";
 import { shouldPersistGuestAnalysis } from "./guest-analysis-persistence";
@@ -1172,8 +1173,12 @@ export default function ResultadoPage() {
   const autoSaveStatusTimeoutRef = useRef<number | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setIsDemo(params.get("demo") === "1");
+    const demo = params.get("demo") === "1";
+    setIsDemo(demo);
     setAutoSave(params.get("autoSave") === "1");
+    if (demo) {
+      setRawData(DEMO_CV_ANALYSIS_MOCK);
+    }
   }, []);
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
