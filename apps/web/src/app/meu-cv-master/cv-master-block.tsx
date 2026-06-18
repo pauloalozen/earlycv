@@ -78,6 +78,9 @@ function getFieldId(blockId: string, fieldName: string) {
 
 // ─── Shared form field atoms ───────────────────────────────────────────────
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const BTN_STYLE = { fontFamily: GEIST, fontSize: "13px" } as const;
+
 const inputCls =
   "h-11 w-full rounded-[8px] border border-[#e3e1d9] bg-white px-3 text-[13px] font-normal text-[#3a3a36] outline-none transition-[border-color] placeholder:text-[#b0aea8] focus:border-[#0a0a0a]";
 
@@ -148,13 +151,7 @@ function TextareaField({
   );
 }
 
-function ReadonlyField({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function ReadonlyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1.5">
       <span className={labelCls}>{label}</span>
@@ -165,18 +162,13 @@ function ReadonlyField({
   );
 }
 
-function AddButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}) {
+function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className="mt-1 inline-flex items-center gap-1.5 rounded-[8px] border border-dashed border-[rgba(10,10,10,0.18)] px-4 py-2 text-[13px] font-medium text-[#8a8a85] transition-colors hover:border-[rgba(10,10,10,0.30)] hover:text-[#0a0a0a]"
+      style={BTN_STYLE}
     >
       + {label}
     </button>
@@ -232,11 +224,9 @@ function asRecord(v: unknown): Record<string, unknown> {
 }
 
 function uid() {
-  return (
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : Math.random().toString(36).slice(2)
-  );
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
 }
 
 // ─── Structured editors ───────────────────────────────────────────────────
@@ -351,7 +341,9 @@ function ExperienciasEditor({ raw }: { raw: unknown }) {
                 Fim
               </label>
               {e.isCurrent ? (
-                <div className={cn(inputCls, "flex items-center text-[#8a8a85]")}>
+                <div
+                  className={cn(inputCls, "flex items-center text-[#8a8a85]")}
+                >
                   Emprego atual
                 </div>
               ) : (
@@ -383,9 +375,7 @@ function ExperienciasEditor({ raw }: { raw: unknown }) {
                 className="w-full resize-none rounded-[8px] border border-[#e3e1d9] bg-white px-3 py-2.5 text-[13px] font-normal leading-relaxed text-[#3a3a36] outline-none transition-[border-color] placeholder:text-[#b0aea8] focus:border-[#0a0a0a]"
                 id={`exp-desc-${e._id}`}
                 value={e.description}
-                onChange={(ev) =>
-                  update(e._id, "description", ev.target.value)
-                }
+                onChange={(ev) => update(e._id, "description", ev.target.value)}
                 rows={5}
                 placeholder="Responsabilidades e conquistas principais"
               />
@@ -484,17 +474,12 @@ function FormacaoEditor({ raw }: { raw: unknown }) {
                 className={inputCls}
                 id={`edu-institution-${e._id}`}
                 value={e.institution}
-                onChange={(ev) =>
-                  update(e._id, "institution", ev.target.value)
-                }
+                onChange={(ev) => update(e._id, "institution", ev.target.value)}
                 placeholder="Nome da instituição"
               />
             </div>
             <div className="space-y-1.5 md:col-span-2">
-              <label
-                className={labelCls}
-                htmlFor={`edu-field-${e._id}`}
-              >
+              <label className={labelCls} htmlFor={`edu-field-${e._id}`}>
                 Área de estudo
               </label>
               <input
@@ -612,6 +597,7 @@ function HabilidadesEditor({ raw }: { raw: unknown }) {
           type="button"
           onClick={add}
           className="h-10 rounded-[8px] border border-[#e3e1d9] bg-white px-4 text-[13px] font-medium text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
+          style={BTN_STYLE}
         >
           Adicionar
         </button>
@@ -645,10 +631,7 @@ function IdiomasEditor({ raw }: { raw: unknown }) {
   const [entries, setEntries] = useState<LangEntry[]>(() => parseLangs(raw));
 
   const add = () =>
-    setEntries((prev) => [
-      ...prev,
-      { _id: uid(), language: "", level: "" },
-    ]);
+    setEntries((prev) => [...prev, { _id: uid(), language: "", level: "" }]);
 
   const remove = (id: string) =>
     setEntries((prev) => prev.filter((e) => e._id !== id));
@@ -658,9 +641,7 @@ function IdiomasEditor({ raw }: { raw: unknown }) {
       prev.map((e) => (e._id === id ? { ...e, [key]: value } : e)),
     );
 
-  const serialized = JSON.stringify(
-    entries.map(({ _id, ...rest }) => rest),
-  );
+  const serialized = JSON.stringify(entries.map(({ _id, ...rest }) => rest));
 
   return (
     <div className="space-y-3 md:col-span-2">
@@ -692,7 +673,10 @@ function IdiomasEditor({ raw }: { raw: unknown }) {
               Nível
             </label>
             <select
-              className={cn(inputCls, "cursor-pointer text-[13px] text-[#3a3a36]")}
+              className={cn(
+                inputCls,
+                "cursor-pointer text-[13px] text-[#3a3a36]",
+              )}
               id={`lang-level-${e._id}`}
               value={e.level}
               onChange={(ev) => update(e._id, "level", ev.target.value)}
@@ -1135,7 +1119,11 @@ export function CvMasterBlock({
       </div>
 
       {/* Hidden form used to submit clearAction after dialog confirmation */}
-      <form id={`${block.id}-clear-form`} action={clearAction} className="hidden" />
+      <form
+        id={`${block.id}-clear-form`}
+        action={clearAction}
+        className="hidden"
+      />
 
       {confirmingClear && (
         <ConfirmDialog
@@ -1163,38 +1151,40 @@ export function CvMasterBlock({
             closing ? "cv-block-panel-close" : "cv-block-panel",
           )}
         >
-            <input name="focus" type="hidden" value={block.id} />
+          <input name="focus" type="hidden" value={block.id} />
 
-            <div className="p-5 md:p-6">
-              <BlockContent
-                block={block}
-                profile={profile}
-                userEmail={userEmail}
-              />
-            </div>
+          <div className="p-5 md:p-6">
+            <BlockContent
+              block={block}
+              profile={profile}
+              userEmail={userEmail}
+            />
+          </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[rgba(10,10,10,0.06)] px-5 py-4 md:px-6">
-              <p className="text-[12.5px] text-[#5a5a55]">
-                {hasGap
-                  ? "Salve este bloco para atualizar o perfil."
-                  : "Edite apenas o bloco que deseja revisar."}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  className="rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 py-2 text-[13px] font-medium text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
-                  type="button"
-                  onClick={handleClose}
-                >
-                  Cancelar
-                </button>
-                <button
-                  className="rounded-[8px] bg-[#0a0a0a] px-5 py-2 text-[13px] font-medium text-[#fafaf6] transition-colors hover:bg-[#1a1a1a]"
-                  type="submit"
-                >
-                  Salvar bloco
-                </button>
-              </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[rgba(10,10,10,0.06)] px-5 py-4 md:px-6">
+            <p className="text-[12.5px] text-[#5a5a55]">
+              {hasGap
+                ? "Salve este bloco para atualizar o perfil."
+                : "Edite apenas o bloco que deseja revisar."}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                className="rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 py-2 text-[13px] font-medium text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
+                type="button"
+                onClick={handleClose}
+                style={BTN_STYLE}
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded-[8px] bg-[#0a0a0a] px-5 py-2 text-[13px] font-medium text-[#fafaf6] transition-colors hover:bg-[#1a1a1a]"
+                type="submit"
+                style={BTN_STYLE}
+              >
+                Salvar bloco
+              </button>
             </div>
+          </div>
         </form>
       )}
     </div>

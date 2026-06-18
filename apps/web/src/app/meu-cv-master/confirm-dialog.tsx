@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+
 type Props = {
   title: string;
   description: string;
@@ -19,7 +21,6 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: Props) {
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCancel();
@@ -28,10 +29,26 @@ export function ConfirmDialog({
     return () => document.removeEventListener("keydown", handler);
   }, [onCancel]);
 
+  useEffect(() => {
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+    };
+  }, []);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(10,10,10,0.45)", backdropFilter: "blur(6px)" }}
+      style={{
+        background: "rgba(10,10,10,0.45)",
+        backdropFilter: "blur(6px)",
+        width: "100vw",
+        height: "100vh",
+      }}
       onClick={onCancel}
     >
       <div
@@ -50,22 +67,24 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 py-2 text-[13px] font-medium [font-family:inherit] text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
+            className="rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 py-2 text-[13px] font-medium text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
+            style={{ fontFamily: GEIST }}
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="rounded-[8px] px-4 py-2 text-[13px] font-medium [font-family:inherit] transition-colors"
+            className="rounded-[8px] px-4 py-2 text-[13px] font-medium transition-colors"
             style={
               danger
                 ? {
+                    fontFamily: GEIST,
                     background: "rgba(154,61,40,0.08)",
                     color: "#9a3d28",
                     border: "1px solid rgba(154,61,40,0.28)",
                   }
-                : { background: "#0a0a0a", color: "#fafaf6" }
+                : { fontFamily: GEIST, background: "#0a0a0a", color: "#fafaf6" }
             }
           >
             {confirmLabel}

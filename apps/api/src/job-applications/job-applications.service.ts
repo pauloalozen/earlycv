@@ -7,9 +7,9 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import type {
-  JobApplicationOrigin,
-  JobApplicationStatus,
+import {
+  type JobApplicationOrigin,
+  type JobApplicationStatus,
   Prisma,
 } from "@prisma/client";
 
@@ -237,23 +237,37 @@ export class JobApplicationsService {
   }
 
   async getHighlightsSummary(userId: string) {
-    const items = await this.database.jobApplication.findMany({
-      where: { userId, archivedAt: null, deletedAt: null },
-      select: {
-        status: true,
-        scoreAfter: true,
-        cvAdaptations: {
-          select: {
-            id: true,
-            status: true,
-            createdAt: true,
-            adaptedResumeId: true,
-            isUnlocked: true,
-            adaptedContentJson: true,
+    const [items, orphanAdaptations] = await Promise.all([
+      this.database.jobApplication.findMany({
+        where: { userId, archivedAt: null, deletedAt: null },
+        select: {
+          status: true,
+          scoreAfter: true,
+          cvAdaptations: {
+            select: {
+              id: true,
+              status: true,
+              createdAt: true,
+              adaptedResumeId: true,
+              isUnlocked: true,
+              adaptedContentJson: true,
+            },
           },
         },
-      },
-    });
+      }),
+      // Legacy CvAdaptation records created before the JobApplication feature
+      this.database.cvAdaptation.findMany({
+        where: {
+          userId,
+          jobApplicationId: null,
+          NOT: [
+            { adaptedContentJson: { equals: Prisma.DbNull } },
+            { adaptedContentJson: { equals: Prisma.JsonNull } },
+          ],
+        },
+        select: { adaptedContentJson: true },
+      }),
+    ]);
 
     let activeApplicationsCount = 0;
     let analyzedCvsCount = 0;
@@ -283,6 +297,17 @@ export class JobApplicationsService {
       if (resolvedScore !== null) {
         scoredCount += 1;
         totalScore += resolvedScore;
+      }
+    }
+
+    for (const adaptation of orphanAdaptations) {
+      analyzedCvsCount += 1;
+      const scoreAfter = extractScoreAfterFromContent(
+        adaptation.adaptedContentJson,
+      );
+      if (scoreAfter !== null) {
+        scoredCount += 1;
+        totalScore += scoreAfter;
       }
     }
 

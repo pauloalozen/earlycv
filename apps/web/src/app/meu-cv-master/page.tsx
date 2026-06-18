@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
-import { PublicFooter } from "@/components/public-footer";
 import { ProgressRing } from "@/components/progress-ring";
+import { PublicFooter } from "@/components/public-footer";
 import { apiRequest } from "@/lib/api-request";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
@@ -16,13 +16,13 @@ import {
   clearProfileBlockAction,
   saveProfileBlockAction,
 } from "./actions";
+import { ClearAllButton } from "./clear-all-button";
 import { CvMasterBlock } from "./cv-master-block";
 import {
   buildProfileBlockStates,
   getPrimaryGapBlockId,
   type UserProfileRecord,
 } from "./profile-blocks";
-import { ClearAllButton } from "./clear-all-button";
 import { ResumeUploadStrip } from "./resume-upload-strip";
 
 export const metadata: Metadata = {
@@ -135,8 +135,14 @@ export default async function MeuCvMasterPage({
     0,
   );
   const requiredBlocks = blockStates.filter((b) => !b.optional);
-  const totalFields = requiredBlocks.reduce((sum, b) => sum + b.fields.length, 0);
-  const missingTotal = requiredBlocks.reduce((sum, b) => sum + b.missingCount, 0);
+  const totalFields = requiredBlocks.reduce(
+    (sum, b) => sum + b.fields.length,
+    0,
+  );
+  const missingTotal = requiredBlocks.reduce(
+    (sum, b) => sum + b.missingCount,
+    0,
+  );
   const profileCompletion =
     totalFields > 0
       ? Math.round(((totalFields - missingTotal) / totalFields) * 100)
@@ -271,10 +277,13 @@ export default async function MeuCvMasterPage({
             <div className="space-y-2">
               {blockStates.map((blockState, index) => (
                 <CvMasterBlock
-                  key={blockState.id}
+                  key={`${blockState.id}-${profileData.updatedAt ?? "empty"}`}
                   index={index + 1}
                   action={saveProfileBlockAction.bind(null, blockState.id)}
-                  clearAction={clearProfileBlockAction.bind(null, blockState.id)}
+                  clearAction={clearProfileBlockAction.bind(
+                    null,
+                    blockState.id,
+                  )}
                   block={blockState}
                   defaultOpen={focusedBlockId === blockState.id}
                   gapHint={blockState.gapHint}

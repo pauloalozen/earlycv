@@ -1,21 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
+import { EcvPulseLoader } from "@/components/ecv-loader";
+import type { ResumeDto } from "@/lib/resumes-api";
 import {
   getMyMasterCvExtractionStatus,
   uploadMasterResume,
 } from "@/lib/resumes-api";
-import type { ResumeDto } from "@/lib/resumes-api";
 
 import { clearAllProfileForReupload } from "./actions";
 import { ConfirmDialog } from "./confirm-dialog";
 
-const UPLOAD_TOKEN =
-  process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()
-    ? "upload-client-token"
-    : "";
+const UPLOAD_TOKEN = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()
+  ? "upload-client-token"
+  : "";
 
 const POLL_INTERVAL_MS = 2500;
 
@@ -85,31 +85,7 @@ function ProcessingOverlay({ fileName }: { fileName: string }) {
         className="flex w-full max-w-[380px] flex-col items-center gap-5 rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[#0a0a0a] px-8 py-8 shadow-[0_32px_80px_-16px_rgba(0,0,0,0.8)]"
         style={{ animation: "cv-block-open 0.2s ease-out both" }}
       >
-        {/* Spinner */}
-        <div className="relative flex h-14 w-14 items-center justify-center">
-          <svg
-            className="absolute inset-0 animate-spin"
-            viewBox="0 0 56 56"
-            fill="none"
-          >
-            <circle
-              cx="28"
-              cy="28"
-              r="23"
-              stroke="rgba(198,255,58,0.15)"
-              strokeWidth="3"
-            />
-            <path
-              d="M28 5 A23 23 0 0 1 51 28"
-              stroke="#c6ff3a"
-              strokeWidth="3"
-              strokeLinecap="round"
-            />
-          </svg>
-          <span className="font-mono text-[10px] font-semibold text-[#c6ff3a]">
-            IA
-          </span>
-        </div>
+        <EcvPulseLoader size={64} dark />
 
         <div className="text-center">
           <p className="text-[15px] font-medium tracking-[-0.01em] text-[#fafaf6]">
@@ -138,8 +114,10 @@ function ProcessingOverlay({ fileName }: { fileName: string }) {
 const labelCls =
   "font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-[#8a8a85]";
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const btnBase =
-  "shrink-0 rounded-[8px] px-4 py-2.5 text-[13px] font-medium [font-family:inherit] transition-colors disabled:opacity-50";
+  "shrink-0 rounded-[8px] px-4 py-2.5 text-[13px] font-medium transition-colors disabled:opacity-50";
+const BTN_STYLE = { fontFamily: GEIST, fontSize: "13px" } as const;
 
 type Props = { masterResume: ResumeDto | null; hasFilledFields: boolean };
 
@@ -227,9 +205,7 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
       await clearAllProfileForReupload();
     } catch (err) {
       setProcessing(false);
-      setError(
-        err instanceof Error ? err.message : "Erro ao limpar o perfil.",
-      );
+      setError(err instanceof Error ? err.message : "Erro ao limpar o perfil.");
       setUploading(false);
       return;
     }
@@ -314,6 +290,7 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
                 onClick={handleCancel}
                 disabled={uploading}
                 className={`${btnBase} border border-[rgba(10,10,10,0.12)] bg-white text-[#0a0a0a] hover:bg-[rgba(10,10,10,0.04)]`}
+                style={BTN_STYLE}
               >
                 Cancelar
               </button>
@@ -322,6 +299,7 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
                 onClick={handleUpload}
                 disabled={uploading}
                 className={`${btnBase} bg-[#0a0a0a] text-[#fafaf6] hover:bg-[#1a1a1a]`}
+                style={BTN_STYLE}
               >
                 {uploading ? "Enviando..." : "Confirmar envio"}
               </button>
@@ -332,6 +310,7 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
               disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
               className={`${btnBase} bg-[#0a0a0a] text-[#fafaf6] hover:bg-[#1a1a1a]`}
+              style={BTN_STYLE}
             >
               {uploading
                 ? "Enviando..."

@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 
 import { ConfirmDialog } from "./confirm-dialog";
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+
 type Props = { action: () => Promise<void> };
 
 export function ClearAllButton({ action }: Props) {
@@ -23,8 +25,10 @@ export function ClearAllButton({ action }: Props) {
         type="button"
         onClick={() => setConfirming(true)}
         disabled={pending}
-        className="inline-flex items-center gap-1.5 rounded-[8px] border px-3 py-1.5 text-[12.5px] font-medium [font-family:inherit] transition-colors disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-[8px] border px-3 py-1.5 font-medium transition-colors disabled:opacity-50"
         style={{
+          fontFamily: GEIST,
+          fontSize: "12.5px",
           color: "#9a3d28",
           borderColor: "rgba(154,61,40,0.28)",
         }}

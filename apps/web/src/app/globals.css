@@ -68,11 +68,13 @@ button:disabled,
   cursor: not-allowed;
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
+@layer base {
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
 }
 
 .page-transition {
