@@ -210,6 +210,14 @@ Engenheira de Dados — Banco ABC (mar/2018–dez/2019)
     subtexto:
       "Baixe o PDF/DOCX ajustado para esta vaga e aumente suas chances de entrevista.",
   },
+  sinais_referencia: [
+    "Experiência com dbt em ambiente de produção (não apenas em projetos pessoais)",
+    "Histórico em fintechs ou empresas de alto volume transacional",
+    "Menção explícita a Data Lakehouse (Databricks + Delta Lake ou similar)",
+    "Impacto financeiro quantificado nas experiências (custo, latência, escala)",
+    "Contribuições em projetos open-source de dados ou comunidades técnicas",
+    "Familiaridade com regulatórios BACEN/PCI-DSS mencionada no CV",
+  ],
 };
 
 export default function DemoResultadoPage() {
