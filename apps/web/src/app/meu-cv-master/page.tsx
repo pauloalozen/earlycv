@@ -126,7 +126,7 @@ export default async function MeuCvMasterPage({
   };
 
   const blockStates = buildProfileBlockStates(profileData);
-  const primaryGapBlockId = getPrimaryGapBlockId(blockStates);
+  const _primaryGapBlockId = getPrimaryGapBlockId(blockStates);
   const focusedBlockId = focus ?? null;
   const gapBlocks = blockStates.filter((block) => block.hasGap);
   const gapCount = gapBlocks.length;

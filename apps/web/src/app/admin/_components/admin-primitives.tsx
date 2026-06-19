@@ -169,7 +169,9 @@ export function AdminTable({ children }: AdminTableProps) {
         overflowX: "auto",
       }}
     >
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
+      <table
+        style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}
+      >
         {children}
       </table>
     </div>

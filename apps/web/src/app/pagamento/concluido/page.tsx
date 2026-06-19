@@ -761,7 +761,6 @@ function ConcluidoContent() {
             </Stagger>
           </div>
         </div>
-
       </div>
     );
   }

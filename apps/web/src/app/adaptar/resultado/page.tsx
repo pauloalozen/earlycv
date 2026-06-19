@@ -8,6 +8,7 @@ import {
   type CvReleaseModalStatus,
 } from "@/components/cv-release-modal";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
+import { EcvPulseLoader } from "@/components/ecv-loader";
 import { PageShell } from "@/components/page-shell";
 import { PublicFooter } from "@/components/public-footer";
 import { trackEvent } from "@/lib/analytics-tracking";
@@ -18,14 +19,13 @@ import {
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 import { saveGuestPreview } from "@/lib/cv-adaptation-api";
 import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
+import { DEMO_CV_ANALYSIS_MOCK } from "@/lib/demo-cv-analysis-mock";
 import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
 import {
   clearGuestAnalysisRaw,
   getGuestAnalysisRaw,
 } from "@/lib/guest-analysis-storage";
 import { getAuthStatus } from "@/lib/session-actions";
-import { EcvPulseLoader } from "@/components/ecv-loader";
-import { DEMO_CV_ANALYSIS_MOCK } from "@/lib/demo-cv-analysis-mock";
 import { getAtsScoreColors } from "./ats-score-colors";
 import { buildContentFetchErrorMessage } from "./content-fetch-error";
 import { shouldPersistGuestAnalysis } from "./guest-analysis-persistence";
@@ -423,8 +423,8 @@ const BORDER_MED = "rgba(10,10,10,0.12)";
 const MUTED = "#8a8a85";
 const FAINT = "rgba(10,10,10,0.04)";
 const BORDER_BASE = "rgba(10,10,10,0.08)";
-const BLUE_SOFT = "rgba(93,160,232,0.12)";
-const BLUE_BORDER = "rgba(93,160,232,0.28)";
+const _BLUE_SOFT = "rgba(93,160,232,0.12)";
+const _BLUE_BORDER = "rgba(93,160,232,0.28)";
 
 function SubLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -800,9 +800,11 @@ function SecCard({
       }}
     >
       {/* header — clicável */}
-      <div
+      <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
         style={{
+          width: "100%",
           padding: "15px 22px",
           borderBottom: open
             ? `1px solid ${warn ? WARN_BORDER : BORDER_BASE}`
@@ -814,6 +816,7 @@ function SecCard({
           cursor: "pointer",
           userSelect: "none",
           transition: "border-color 0.25s",
+          textAlign: "left",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -883,7 +886,9 @@ function SecCard({
               transform: open ? "rotate(0deg)" : "rotate(-90deg)",
               color: MUTED,
             }}
+            aria-hidden
           >
+            <title>Alternar seção</title>
             <path
               d="M2.5 5L7 9.5L11.5 5"
               stroke="currentColor"
@@ -893,7 +898,7 @@ function SecCard({
             />
           </svg>
         </div>
-      </div>
+      </button>
       {/* body com animação sanfona */}
       <div
         style={{
@@ -924,7 +929,7 @@ function ScoreBreakdownBar({
 
   // Give the last (narrowest) section a minimum visual width of 20%,
   // taking the extra equally from all other sections.
-  const MIN_LAST = 0.20;
+  const MIN_LAST = 0.2;
   const rawPcts = sections.map((s) => s.max / totalMax);
   const lastRaw = rawPcts[rawPcts.length - 1];
   const displayPcts =
@@ -933,7 +938,7 @@ function ScoreBreakdownBar({
           const deficit = MIN_LAST - lastRaw;
           const perOther = deficit / (sections.length - 1);
           return rawPcts.map((p, i) =>
-            i === rawPcts.length - 1 ? MIN_LAST : p - perOther
+            i === rawPcts.length - 1 ? MIN_LAST : p - perOther,
           );
         })()
       : rawPcts;
@@ -1121,7 +1126,7 @@ function hasFinalGeneratedCv(output: FinalCvOutput | null): boolean {
   return sections.some((s) => s.sectionType && s.sectionType !== "other");
 }
 
-const CARD: React.CSSProperties = {
+const _CARD: React.CSSProperties = {
   background: "#fafaf6",
   border: "1px solid rgba(10,10,10,0.08)",
   borderRadius: 14,
@@ -1869,14 +1874,14 @@ export default function ResultadoPage() {
     (s, a) => s + a.pontos,
     0,
   );
-  const totalAjustesIndisponiveis = data.ajustes_indisponiveis.reduce(
+  const _totalAjustesIndisponiveis = data.ajustes_indisponiveis.reduce(
     (s, a) => s + a.pontos,
     0,
   );
   const _totalAjustes =
     data.ajustes_conteudo.length + data.keywords.ausentes.length;
 
-  const scoreProjetado = data.score.scoreAposLiberarBase;
+  const _scoreProjetado = data.score.scoreAposLiberarBase;
   const scoreMaxPossivel = data.score.scoreAposLiberarBase;
   const ptsAjustesTotal = totalAjustesConteudo + ptsKwPossiveis;
   const scoreProjetadoDinamico = Math.min(
@@ -1925,13 +1930,13 @@ export default function ResultadoPage() {
             status: requirement.coverageStatus,
             importance: requirement.importance,
           }));
-  const hardGateCovered = hardGates.filter(
+  const _hardGateCovered = hardGates.filter(
     (gate) => gate.status === "covered",
   ).length;
-  const hardGatePartial = hardGates.filter(
+  const _hardGatePartial = hardGates.filter(
     (gate) => gate.status === "partial",
   ).length;
-  const hardGateMissing = hardGates.filter(
+  const _hardGateMissing = hardGates.filter(
     (gate) => gate.status === "missing",
   ).length;
   const previewAntesText = data.preview?.antes ?? "";
@@ -1952,8 +1957,8 @@ export default function ResultadoPage() {
   const dashScore = C_GAUGE * (data.score.scoreAtualBase / 100);
   const dashProjected = C_GAUGE * (scoreMaxPossivel / 100);
   const gaugeColors = getAtsScoreColors(data.score.scoreAtualBase);
-  const ptsPositivos = data.positivos.reduce((s, p) => s + p.pontos, 0);
-  const formatCoveragePercent = (coveragePercent?: number) =>
+  const _ptsPositivos = data.positivos.reduce((s, p) => s + p.pontos, 0);
+  const _formatCoveragePercent = (coveragePercent?: number) =>
     typeof coveragePercent === "number" ? `${coveragePercent}% da régua` : null;
 
   return (
@@ -2486,7 +2491,12 @@ export default function ResultadoPage() {
                   ? data.keywords.presentes.slice(0, GUEST_VISIBLE)
                   : data.keywords.presentes
                 ).map((k) => (
-                  <KwChip key={k.kw} label={k.kw} type="present" pontos={k.pontos} />
+                  <KwChip
+                    key={k.kw}
+                    label={k.kw}
+                    type="present"
+                    pontos={k.pontos}
+                  />
                 ))}
               </div>
               {isGuestView &&
@@ -2505,7 +2515,12 @@ export default function ResultadoPage() {
                           GUEST_MOCK_KW.length,
                         ),
                       ).map((k) => (
-                        <KwChip key={k.kw} label={k.kw} type="present" pontos={k.pontos} />
+                        <KwChip
+                          key={k.kw}
+                          label={k.kw}
+                          type="present"
+                          pontos={k.pontos}
+                        />
                       ))}
                     </div>
                   </GuestBlurOverlay>
@@ -2541,8 +2556,8 @@ export default function ResultadoPage() {
                     marginBottom: 12,
                   }}
                 >
-                  O EarlyCV consegue reforçar estes termos por contexto, analogia e
-                  reformulação sem inventar fatos.
+                  O EarlyCV consegue reforçar estes termos por contexto,
+                  analogia e reformulação sem inventar fatos.
                 </p>
                 <div
                   style={{
@@ -2730,7 +2745,9 @@ export default function ResultadoPage() {
                         onChange={() => toggleKw(k.kw)}
                       />
                       {k.kw}
-                      <span style={{ fontSize: 10, opacity: 0.55, marginLeft: 2 }}>
+                      <span
+                        style={{ fontSize: 10, opacity: 0.55, marginLeft: 2 }}
+                      >
                         +{k.pontos}
                       </span>
                     </label>
@@ -2752,7 +2769,12 @@ export default function ResultadoPage() {
                         GUEST_MOCK_KW.length,
                       ),
                     ).map((k) => (
-                      <KwChip key={k.kw} label={k.kw} type="absent" pontos={k.pontos} />
+                      <KwChip
+                        key={k.kw}
+                        label={k.kw}
+                        type="absent"
+                        pontos={k.pontos}
+                      />
                     ))}
                   </div>
                 </GuestBlurOverlay>
@@ -3118,7 +3140,10 @@ export default function ResultadoPage() {
           ════════════════════════════════════════════════════ */}
           {Array.isArray(data.sinais_referencia) &&
             data.sinais_referencia.length > 0 && (
-              <SecCard num="S5" title="Itens de Candidatos Fortes para esta Vaga">
+              <SecCard
+                num="S5"
+                title="Itens de Candidatos Fortes para esta Vaga"
+              >
                 <p
                   style={{
                     fontSize: 13.5,
@@ -3389,7 +3414,9 @@ export default function ResultadoPage() {
                 Vagas como esta costumam receber CVs com score acima de 65. Com
                 os ajustes disponíveis, você pode ir de{" "}
                 <strong>{data.score.scoreAtualBase}</strong> →{" "}
-                <strong style={{ color: AMBER_TEXT }}>{scoreProjetadoDinamico}</strong>{" "}
+                <strong style={{ color: AMBER_TEXT }}>
+                  {scoreProjetadoDinamico}
+                </strong>{" "}
                 — dentro da faixa competitiva.
               </p>
             </div>

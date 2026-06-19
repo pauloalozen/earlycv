@@ -112,9 +112,7 @@ describe("/meu-cv-master", () => {
     // PDF strip shows the CV title
     expect(screen.getByText("CV Base Ana")).toBeTruthy();
     // Hint text shown when masterResume exists
-    expect(
-      screen.getByText(/substituir re-extrai/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/substituir re-extrai/i)).toBeTruthy();
     // Blocks are collapsed by default — no inputs visible
     expect(screen.queryByRole("textbox")).toBeNull();
     // First block title visible as a button

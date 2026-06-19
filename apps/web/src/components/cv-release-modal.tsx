@@ -172,7 +172,9 @@ export function CvReleaseModal({
           gap: 20,
           transition: "all 260ms ease-out",
           opacity: visible ? 1 : 0,
-          transform: visible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.98)",
+          transform: visible
+            ? "translateY(0) scale(1)"
+            : "translateY(8px) scale(0.98)",
         }}
       >
         {/* Close button */}
@@ -275,7 +277,8 @@ export function CvReleaseModal({
               ? "Aguarde alguns instantes."
               : isSuccess
                 ? "Seu CV está pronto. Baixe e candidate-se o quanto antes."
-                : (message ?? "Não foi possível liberar seu CV agora. Tente novamente.")}
+                : (message ??
+                  "Não foi possível liberar seu CV agora. Tente novamente.")}
           </p>
         </div>
 
@@ -296,22 +299,32 @@ export function CvReleaseModal({
 
         {/* Download buttons */}
         {isSuccess && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              width: "100%",
+            }}
+          >
             <button
               type="button"
               onClick={onDownloadPdf}
               disabled={!canDownload || downloading !== null}
               style={{
-                background: downloading === "pdf" ? "rgba(198,255,58,0.08)" : "#fafaf6",
+                background:
+                  downloading === "pdf" ? "rgba(198,255,58,0.08)" : "#fafaf6",
                 border: "1px solid rgba(255,255,255,0.1)",
                 borderRadius: 12,
                 padding: "13px",
                 fontSize: 13.5,
                 fontWeight: 500,
-                cursor: downloading !== null || !canDownload ? "default" : "pointer",
+                cursor:
+                  downloading !== null || !canDownload ? "default" : "pointer",
                 color: "#0a0a0a",
                 fontFamily: GEIST,
-                opacity: downloading !== null && downloading !== "pdf" ? 0.5 : 1,
+                opacity:
+                  downloading !== null && downloading !== "pdf" ? 0.5 : 1,
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -347,10 +360,12 @@ export function CvReleaseModal({
                 padding: "13px",
                 fontSize: 13.5,
                 fontWeight: 500,
-                cursor: downloading !== null || !canDownload ? "default" : "pointer",
+                cursor:
+                  downloading !== null || !canDownload ? "default" : "pointer",
                 color: "#fafaf6",
                 fontFamily: GEIST,
-                opacity: downloading !== null && downloading !== "docx" ? 0.5 : 1,
+                opacity:
+                  downloading !== null && downloading !== "docx" ? 0.5 : 1,
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",

@@ -24,6 +24,7 @@ export function EcvScanLoader({
       fill="none"
       aria-hidden
     >
+      <title>Carregando análise</title>
       <defs>
         <clipPath id={clipId}>
           <rect x="0" y="0" width="12" height="6.5" rx="2" />
@@ -88,6 +89,7 @@ export function EcvBuildLoader({
       fill="none"
       aria-hidden
     >
+      <title>Carregando interface</title>
       <rect x="0" y="0" width="12" height="6.5" rx="2" fill={word} />
       <rect x="16" y="0" width="12" height="6.5" rx="2" fill={word} />
       <rect x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
@@ -120,16 +122,49 @@ export function EcvPulseLoader({
       fill="none"
       aria-hidden
     >
+      <title>Processando conteúdo</title>
       <rect x="0" y="0" width="12" height="6.5" rx="2" fill={word} />
       <rect x="16" y="0" width="12" height="6.5" rx="2" fill={word} />
-      <rect className="kw k1" x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
-      <rect className="kw k2" x="0" y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+      <rect
+        className="kw k1"
+        x="32"
+        y="0"
+        width="8"
+        height="6.5"
+        rx="2"
+        fill="#c6ff3a"
+      />
+      <rect
+        className="kw k2"
+        x="0"
+        y="11.2"
+        width="16"
+        height="6.5"
+        rx="2"
+        fill="#c6ff3a"
+      />
       <rect x="20" y="11.2" width="18" height="6.5" rx="2" fill={word} />
       <rect x="0" y="22.4" width="7" height="6.5" rx="2" fill={word} />
-      <rect className="kw k3" x="11" y="22.4" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+      <rect
+        className="kw k3"
+        x="11"
+        y="22.4"
+        width="16"
+        height="6.5"
+        rx="2"
+        fill="#c6ff3a"
+      />
       <rect x="30" y="22.4" width="8" height="6.5" rx="2" fill={word} />
       <rect x="0" y="33.5" width="22" height="6.5" rx="2" fill={word} />
-      <rect className="gap" x="26" y="33.5" width="9" height="6.5" rx="2" fill={word} />
+      <rect
+        className="gap"
+        x="26"
+        y="33.5"
+        width="9"
+        height="6.5"
+        rx="2"
+        fill={word}
+      />
     </svg>
   );
 }

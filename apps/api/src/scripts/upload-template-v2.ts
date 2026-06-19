@@ -5,10 +5,11 @@
  * Run from repo root:
  *   npx dotenv-cli -e .env -- npx ts-node -P apps/api/tsconfig.json --transpile-only apps/api/src/scripts/upload-template-v2.ts
  */
+
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { PrismaClient } from "@prisma/client";
-import * as fs from "fs";
-import * as path from "path";
 
 const V2_PATH = path.resolve(
   __dirname,
@@ -48,7 +49,8 @@ async function main() {
       data: {
         name: "ATS Minimalista v2",
         slug: V2_SLUG,
-        description: "Template ATS minimalista com suporte a idiomas PT/EN e seções customizadas",
+        description:
+          "Template ATS minimalista com suporte a idiomas PT/EN e seções customizadas",
         isActive: false,
       },
     });

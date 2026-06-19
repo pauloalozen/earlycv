@@ -49,12 +49,22 @@ export function ConfirmDialog({
         width: "100vw",
         height: "100vh",
       }}
-      onClick={onCancel}
     >
+      <button
+        type="button"
+        aria-label="Fechar confirmação"
+        onClick={onCancel}
+        className="absolute inset-0 border-0 bg-transparent p-0"
+      />
       <div
+        role="dialog"
+        aria-modal="true"
         className="w-full max-w-[400px] rounded-[16px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] p-6 shadow-[0_24px_60px_-12px_rgba(10,10,10,0.35)]"
-        style={{ animation: "cv-block-open 0.18s ease-out both" }}
-        onClick={(e) => e.stopPropagation()}
+        style={{
+          animation: "cv-block-open 0.18s ease-out both",
+          position: "relative",
+          zIndex: 1,
+        }}
       >
         <h2 className="text-[16px] font-semibold leading-tight tracking-[-0.02em] text-[#0a0a0a]">
           {title}

@@ -115,7 +115,14 @@ function RedefinirSenhaContent() {
 
   return (
     <main style={pageStyle}>
-      <a href="/" style={{ textDecoration: "none", marginBottom: 32, display: "inline-flex" }}>
+      <a
+        href="/"
+        style={{
+          textDecoration: "none",
+          marginBottom: 32,
+          display: "inline-flex",
+        }}
+      >
         <Logo size="lg" />
       </a>
 

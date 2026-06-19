@@ -117,7 +117,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
               createdAt: "2026-05-01T00:00:00.000Z",
               scoreBefore: 50,
               scoreAfter: 73,
-        canDownloadBaseCv: false,
+              canDownloadBaseCv: false,
             },
           ],
         })}

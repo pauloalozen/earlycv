@@ -314,9 +314,7 @@ function deriveVersionedRequirementBuckets(raw: CvAnalysisLike): null | {
           ? Math.round((coveredWeight / totalWeight) * 40)
           : 0;
   const adjustmentBudget =
-    totalWeight > 0
-      ? Math.round((adjustableWeight / totalWeight) * 50)
-      : 0;
+    totalWeight > 0 ? Math.round((adjustableWeight / totalWeight) * 50) : 0;
   const unavailableBudget = clamp(
     totalWeight > 0
       ? Math.round(

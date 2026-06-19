@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { EcvPulseLoader } from "@/components/ecv-loader";
 import type { ResumeDto } from "@/lib/resumes-api";
@@ -133,14 +133,14 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
   const [processingFileName, setProcessingFileName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const stopPolling = () => {
+  const stopPolling = useCallback(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
-  };
+  }, []);
 
-  const startPolling = () => {
+  const startPolling = useCallback(() => {
     pollRef.current = setInterval(async () => {
       try {
         const status = await getMyMasterCvExtractionStatus();
@@ -154,9 +154,9 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
         // keep polling
       }
     }, POLL_INTERVAL_MS);
-  };
+  }, [router, stopPolling]);
 
-  useEffect(() => () => stopPolling(), []);
+  useEffect(() => () => stopPolling(), [stopPolling]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;

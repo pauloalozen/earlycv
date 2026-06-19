@@ -27,16 +27,16 @@ export function Logo({ variant = "light", size = "md" }: Props) {
         fill="none"
         aria-hidden="true"
       >
-        <rect x="0"  y="0"    width="12" height="6.5" rx="2" fill={ink} />
-        <rect x="16" y="0"    width="12" height="6.5" rx="2" fill={ink} />
-        <rect x="32" y="0"    width="8"  height="6.5" rx="2" fill="#c6ff3a" />
-        <rect x="0"  y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="0" y="0" width="12" height="6.5" rx="2" fill={ink} />
+        <rect x="16" y="0" width="12" height="6.5" rx="2" fill={ink} />
+        <rect x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="0" y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
         <rect x="20" y="11.2" width="18" height="6.5" rx="2" fill={ink} />
-        <rect x="0"  y="22.4" width="7"  height="6.5" rx="2" fill={ink} />
+        <rect x="0" y="22.4" width="7" height="6.5" rx="2" fill={ink} />
         <rect x="11" y="22.4" width="16" height="6.5" rx="2" fill="#c6ff3a" />
-        <rect x="30" y="22.4" width="8"  height="6.5" rx="2" fill={ink} />
-        <rect x="0"  y="33.5" width="22" height="6.5" rx="2" fill={ink} />
-        <rect x="26" y="33.5" width="9"  height="6.5" rx="2" fill={dimmed} />
+        <rect x="30" y="22.4" width="8" height="6.5" rx="2" fill={ink} />
+        <rect x="0" y="33.5" width="22" height="6.5" rx="2" fill={ink} />
+        <rect x="26" y="33.5" width="9" height="6.5" rx="2" fill={dimmed} />
       </svg>
       <span style={{ display: "inline-flex", alignItems: "baseline" }}>
         <span

@@ -106,7 +106,8 @@ export const profileBlockDefinitions: ProfileBlockDefinition[] = [
   {
     id: "dados-pessoais",
     title: "Dados pessoais e contato",
-    description: "Nome, email, telefone, LinkedIn e localização para o recrutador.",
+    description:
+      "Nome, email, telefone, LinkedIn e localização para o recrutador.",
     fields: [
       { name: "fullName", label: "Nome completo", type: "text" },
       { name: "contactEmail", label: "Email de contato", type: "text" },
@@ -367,10 +368,22 @@ export function buildProfileBlockUpdatePayload(
 }
 
 export function buildClearBlockPayload(blockId: ProfileBlockId) {
-  const emptySkills: ProfileSkillsJson = { technical: [], business: [], soft: [] };
+  const emptySkills: ProfileSkillsJson = {
+    technical: [],
+    business: [],
+    soft: [],
+  };
   switch (blockId) {
     case "dados-pessoais":
-      return { fullName: "", contactEmail: "", phone: "", linkedinUrl: "", city: "", state: "", country: "" };
+      return {
+        fullName: "",
+        contactEmail: "",
+        phone: "",
+        linkedinUrl: "",
+        city: "",
+        state: "",
+        country: "",
+      };
     case "resumo":
       return { professionalSummary: "" };
     case "experiencias":
@@ -400,7 +413,11 @@ export function buildClearAllPayload() {
     professionalSummary: "",
     experiencesJson: [] as unknown[],
     educationJson: [] as unknown[],
-    skillsJson: { technical: [], business: [], soft: [] } satisfies ProfileSkillsJson,
+    skillsJson: {
+      technical: [],
+      business: [],
+      soft: [],
+    } satisfies ProfileSkillsJson,
     languagesJson: [] as unknown[],
     certificationsJson: [] as unknown[],
   };

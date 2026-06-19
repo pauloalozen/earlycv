@@ -215,16 +215,23 @@ function EmptyState({
           aria-hidden="true"
           style={{ marginBottom: 22, opacity: 0.9 }}
         >
-          <rect x="0"  y="0"    width="12" height="6.5" rx="2" fill="#0a0a0a" />
-          <rect x="16" y="0"    width="12" height="6.5" rx="2" fill="#0a0a0a" />
-          <rect x="32" y="0"    width="8"  height="6.5" rx="2" fill="#c6ff3a" />
-          <rect x="0"  y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+          <rect x="0" y="0" width="12" height="6.5" rx="2" fill="#0a0a0a" />
+          <rect x="16" y="0" width="12" height="6.5" rx="2" fill="#0a0a0a" />
+          <rect x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
+          <rect x="0" y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
           <rect x="20" y="11.2" width="18" height="6.5" rx="2" fill="#0a0a0a" />
-          <rect x="0"  y="22.4" width="7"  height="6.5" rx="2" fill="#0a0a0a" />
+          <rect x="0" y="22.4" width="7" height="6.5" rx="2" fill="#0a0a0a" />
           <rect x="11" y="22.4" width="16" height="6.5" rx="2" fill="#c6ff3a" />
-          <rect x="30" y="22.4" width="8"  height="6.5" rx="2" fill="#0a0a0a" />
-          <rect x="0"  y="33.5" width="22" height="6.5" rx="2" fill="#0a0a0a" />
-          <rect x="26" y="33.5" width="9"  height="6.5" rx="2" fill="rgba(10,10,10,0.14)" />
+          <rect x="30" y="22.4" width="8" height="6.5" rx="2" fill="#0a0a0a" />
+          <rect x="0" y="33.5" width="22" height="6.5" rx="2" fill="#0a0a0a" />
+          <rect
+            x="26"
+            y="33.5"
+            width="9"
+            height="6.5"
+            rx="2"
+            fill="rgba(10,10,10,0.14)"
+          />
         </svg>
 
         <div
@@ -412,9 +419,7 @@ function StatusAccordion({
   accent,
   headerBg,
   dark,
-  scoreColor,
   previewCompanies,
-  avgScore,
   sortState,
   onSortChange,
   children,
@@ -427,9 +432,7 @@ function StatusAccordion({
   accent: string;
   headerBg: string;
   dark: boolean;
-  scoreColor: string | null;
   previewCompanies: string[];
-  avgScore: number | null;
   sortState: SortState;
   onSortChange: (key: SortKey) => void;
   children: ReactNode;
@@ -517,51 +520,49 @@ function StatusAccordion({
 
         {/* Collapsed: company chips + avg */}
         {!open && (
-          <>
-            <div
-              style={{
-                display: "flex",
-                gap: 5,
-                marginLeft: 4,
-                flex: 1,
-                overflow: "hidden",
-                alignItems: "center",
-              }}
-            >
-              {previewCompanies.map((company) => (
-                <span
-                  key={company}
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 10.5,
-                    color: "#6a6a66",
-                    background: "rgba(10,10,10,0.04)",
-                    border: "1px solid rgba(10,10,10,0.07)",
-                    borderRadius: 999,
-                    padding: "3px 9px",
-                    whiteSpace: "nowrap",
-                    maxWidth: 130,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {company}
-                </span>
-              ))}
-              {count > previewCompanies.length && (
-                <span
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 10.5,
-                    color: "#8a8a85",
-                    flexShrink: 0,
-                  }}
-                >
-                  +{count - previewCompanies.length}
-                </span>
-              )}
-            </div>
-          </>
+          <div
+            style={{
+              display: "flex",
+              gap: 5,
+              marginLeft: 4,
+              flex: 1,
+              overflow: "hidden",
+              alignItems: "center",
+            }}
+          >
+            {previewCompanies.map((company) => (
+              <span
+                key={company}
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#6a6a66",
+                  background: "rgba(10,10,10,0.04)",
+                  border: "1px solid rgba(10,10,10,0.07)",
+                  borderRadius: 999,
+                  padding: "3px 9px",
+                  whiteSpace: "nowrap",
+                  maxWidth: 130,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {company}
+              </span>
+            ))}
+            {count > previewCompanies.length && (
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#8a8a85",
+                  flexShrink: 0,
+                }}
+              >
+                +{count - previewCompanies.length}
+              </span>
+            )}
+          </div>
         )}
 
         {open && <div style={{ flex: 1 }} />}
@@ -1344,285 +1345,289 @@ function CandRow({
           </>
         )}
 
-        {!isArchivedView && (canDownloadCv && cvAdaptationIdForActions ? (
-          <>
-            <button
-              type="button"
-              onClick={() => void handleDownloadCv()}
-              disabled={downloading}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                borderRadius: 8,
-                padding: "10px 14px",
-                fontSize: 12.5,
-                fontWeight: 500,
-                cursor: downloading ? "default" : "pointer",
-                fontFamily: GEIST,
-                background: "#fff",
-                color: "#0a0a0a",
-                border: "1px solid rgba(10,10,10,0.12)",
-                whiteSpace: "nowrap",
-                opacity: downloading ? 0.6 : 1,
-              }}
-            >
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              >
-                <path d="M12 4v11" strokeLinecap="round" />
-                <path
-                  d="m8 11 4 4 4-4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path d="M5 20h14" strokeLinecap="round" />
-              </svg>
-              <span>Baixar melhor CV</span>
-            </button>
-
-            {/* Overlay de download */}
-            {downloading && (
-              <div
+        {!isArchivedView &&
+          (canDownloadCv && cvAdaptationIdForActions ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleDownloadCv()}
+                disabled={downloading}
                 style={{
-                  position: "fixed",
-                  inset: 0,
-                  zIndex: 200,
-                  display: "flex",
+                  display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  padding: "0 16px",
-                  background: "rgba(10,10,10,0.5)",
-                  backdropFilter: "blur(4px)",
+                  gap: 6,
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  cursor: downloading ? "default" : "pointer",
+                  fontFamily: GEIST,
+                  background: "#fff",
+                  color: "#0a0a0a",
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  whiteSpace: "nowrap",
+                  opacity: downloading ? 0.6 : 1,
                 }}
               >
+                <svg
+                  aria-hidden="true"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path d="M12 4v11" strokeLinecap="round" />
+                  <path
+                    d="m8 11 4 4 4-4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path d="M5 20h14" strokeLinecap="round" />
+                </svg>
+                <span>Baixar melhor CV</span>
+              </button>
+
+              {/* Overlay de download */}
+              {downloading && (
                 <div
                   style={{
+                    position: "fixed",
+                    inset: 0,
+                    zIndex: 200,
                     display: "flex",
-                    flexDirection: "column",
                     alignItems: "center",
-                    gap: 20,
-                    borderRadius: 20,
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background: "#0a0a0a",
-                    padding: "32px",
-                    width: "100%",
-                    maxWidth: 380,
-                    boxShadow: "0 32px 80px -16px rgba(0,0,0,0.8)",
+                    justifyContent: "center",
+                    padding: "0 16px",
+                    background: "rgba(10,10,10,0.5)",
+                    backdropFilter: "blur(4px)",
                   }}
                 >
-                  <EcvBuildLoader size={64} dark />
-                  <div style={{ textAlign: "center" }}>
-                    <p
-                      style={{
-                        fontFamily: GEIST,
-                        fontSize: 15,
-                        fontWeight: 500,
-                        letterSpacing: -0.2,
-                        color: "#fafaf6",
-                        margin: "0 0 6px",
-                      }}
-                    >
-                      Preparando download...
-                    </p>
-                    <p
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 10.5,
-                        color: "#5a5a55",
-                        margin: 0,
-                        letterSpacing: 0.3,
-                      }}
-                    >
-                      GERANDO PDF DO CV OTIMIZADO
-                    </p>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 20,
+                      borderRadius: 20,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "#0a0a0a",
+                      padding: "32px",
+                      width: "100%",
+                      maxWidth: 380,
+                      boxShadow: "0 32px 80px -16px rgba(0,0,0,0.8)",
+                    }}
+                  >
+                    <EcvBuildLoader size={64} dark />
+                    <div style={{ textAlign: "center" }}>
+                      <p
+                        style={{
+                          fontFamily: GEIST,
+                          fontSize: 15,
+                          fontWeight: 500,
+                          letterSpacing: -0.2,
+                          color: "#fafaf6",
+                          margin: "0 0 6px",
+                        }}
+                      >
+                        Preparando download...
+                      </p>
+                      <p
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#5a5a55",
+                          margin: 0,
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        GERANDO PDF DO CV OTIMIZADO
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </>
-        ) : application.bestCvState === "locked" && cvAdaptationIdForActions ? (
-          confirmUnlock ? (
-            <div
-              style={{
-                border: "1px solid rgba(10,10,10,0.12)",
-                borderRadius: 8,
-                padding: "10px 10px 8px",
-                background: "#fff",
-              }}
-            >
-              <p style={{ margin: "0 0 8px", fontSize: 12, color: "#3a3a36" }}>
-                Confirmar liberação de 1 crédito para baixar este CV?
-              </p>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirmUnlock(false);
-                    setRedeemError(null);
-                  }}
-                  style={{
-                    flex: 1,
-                    borderRadius: 8,
-                    border: "1px solid rgba(10,10,10,0.12)",
-                    background: "#fff",
-                    padding: "8px 10px",
-                    fontSize: 12,
-                    cursor: "pointer",
-                    fontFamily: GEIST,
-                  }}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleRedeem()}
-                  disabled={redeeming}
-                  style={{
-                    flex: 1,
-                    borderRadius: 8,
-                    border: "1px solid #0a0a0a",
-                    background: "#0a0a0a",
-                    color: "#fff",
-                    padding: "8px 10px",
-                    fontSize: 12,
-                    cursor: redeeming ? "not-allowed" : "pointer",
-                    fontFamily: GEIST,
-                  }}
-                >
-                  {redeeming ? "Liberando..." : "Confirmar liberação"}
-                </button>
-              </div>
-              {redeemError ? (
+              )}
+            </>
+          ) : application.bestCvState === "locked" &&
+            cvAdaptationIdForActions ? (
+            confirmUnlock ? (
+              <div
+                style={{
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  borderRadius: 8,
+                  padding: "10px 10px 8px",
+                  background: "#fff",
+                }}
+              >
                 <p
-                  style={{
-                    margin: "8px 0 0",
-                    fontSize: 11.5,
-                    color: "#991b1b",
-                  }}
+                  style={{ margin: "0 0 8px", fontSize: 12, color: "#3a3a36" }}
                 >
-                  {redeemError}
+                  Confirmar liberação de 1 crédito para baixar este CV?
                 </p>
-              ) : null}
-            </div>
-          ) : (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmUnlock(false);
+                      setRedeemError(null);
+                    }}
+                    style={{
+                      flex: 1,
+                      borderRadius: 8,
+                      border: "1px solid rgba(10,10,10,0.12)",
+                      background: "#fff",
+                      padding: "8px 10px",
+                      fontSize: 12,
+                      cursor: "pointer",
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRedeem()}
+                    disabled={redeeming}
+                    style={{
+                      flex: 1,
+                      borderRadius: 8,
+                      border: "1px solid #0a0a0a",
+                      background: "#0a0a0a",
+                      color: "#fff",
+                      padding: "8px 10px",
+                      fontSize: 12,
+                      cursor: redeeming ? "not-allowed" : "pointer",
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    {redeeming ? "Liberando..." : "Confirmar liberação"}
+                  </button>
+                </div>
+                {redeemError ? (
+                  <p
+                    style={{
+                      margin: "8px 0 0",
+                      fontSize: 11.5,
+                      color: "#991b1b",
+                    }}
+                  >
+                    {redeemError}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmUnlock(true);
+                  setRedeemError(null);
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: GEIST,
+                  textDecoration: "none",
+                  background: "#fff",
+                  color: "#0a0a0a",
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <svg
+                  aria-hidden="true"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <rect x="4" y="11" width="16" height="9" rx="2" />
+                  <path d="M8 11V8a4 4 0 1 1 8 0" strokeLinecap="round" />
+                </svg>
+                <span>Liberar CV · 1 crédito</span>
+              </button>
+            )
+          ) : application.bestCvState === "missing" ? (
             <button
               type="button"
-              onClick={() => {
-                setConfirmUnlock(true);
-                setRedeemError(null);
-              }}
+              disabled
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
                 borderRadius: 8,
                 padding: "10px 14px",
                 fontSize: 12.5,
                 fontWeight: 500,
-                cursor: "pointer",
                 fontFamily: GEIST,
-                textDecoration: "none",
-                background: "#fff",
-                color: "#0a0a0a",
-                border: "1px solid rgba(10,10,10,0.12)",
-                whiteSpace: "nowrap",
+                border: "1px solid rgba(10,10,10,0.08)",
+                background: "#f4f4f2",
+                color: "#9a9993",
+                cursor: "not-allowed",
               }}
             >
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              >
-                <rect x="4" y="11" width="16" height="9" rx="2" />
-                <path d="M8 11V8a4 4 0 1 1 8 0" strokeLinecap="round" />
-              </svg>
-              <span>Liberar CV · 1 crédito</span>
+              CV indisponível
             </button>
-          )
-        ) : application.bestCvState === "missing" ? (
-          <button
-            type="button"
-            disabled
+          ) : null)}
+
+        {!isArchivedView && (
+          <Link
+            href={cta.href}
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
               borderRadius: 8,
               padding: "10px 14px",
               fontSize: 12.5,
-              fontWeight: 500,
+              fontWeight: cta.tone === "green" ? 600 : 500,
+              cursor: "pointer",
               fontFamily: GEIST,
-              border: "1px solid rgba(10,10,10,0.08)",
-              background: "#f4f4f2",
-              color: "#9a9993",
-              cursor: "not-allowed",
+              textDecoration: "none",
+              ...(cta.tone === "green"
+                ? {
+                    background: "#c6ff3a",
+                    color: "#0a0a0a",
+                    border: "1px solid rgba(110,150,20,0.35)",
+                    boxShadow: "0 4px 12px rgba(198,255,58,0.18)",
+                  }
+                : cta.tone === "dark"
+                  ? {
+                      background: "#0a0a0a",
+                      color: "#fff",
+                      border: "1px solid #0a0a0a",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.10)",
+                    }
+                  : {
+                      background: "#fff",
+                      color: "#5a5a55",
+                      border: "1px solid rgba(10,10,10,0.12)",
+                    }),
             }}
           >
-            CV indisponível
-          </button>
-        ) : null)}
-
-        {!isArchivedView && <Link
-          href={cta.href}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-            borderRadius: 8,
-            padding: "10px 14px",
-            fontSize: 12.5,
-            fontWeight: cta.tone === "green" ? 600 : 500,
-            cursor: "pointer",
-            fontFamily: GEIST,
-            textDecoration: "none",
-            ...(cta.tone === "green"
-              ? {
-                  background: "#c6ff3a",
-                  color: "#0a0a0a",
-                  border: "1px solid rgba(110,150,20,0.35)",
-                  boxShadow: "0 4px 12px rgba(198,255,58,0.18)",
-                }
-              : cta.tone === "dark"
-                ? {
-                    background: "#0a0a0a",
-                    color: "#fff",
-                    border: "1px solid #0a0a0a",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.10)",
-                  }
-                : {
-                    background: "#fff",
-                    color: "#5a5a55",
-                    border: "1px solid rgba(10,10,10,0.12)",
-                  }),
-          }}
-        >
-          <svg
-            aria-hidden="true"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          >
-            <path d="M7 17 17 7" strokeLinecap="round" />
-            <path d="M8 7h9v9" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span style={{ whiteSpace: "nowrap" }}>
-            {cta.label}
-          </span>
-        </Link>}
+            <svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M7 17 17 7" strokeLinecap="round" />
+              <path d="M8 7h9v9" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span style={{ whiteSpace: "nowrap" }}>{cta.label}</span>
+          </Link>
+        )}
       </div>
 
       {confirmDelete ? (
@@ -1827,7 +1832,10 @@ export function CandidaturasClient({
   useEffect(() => {
     if (!companyDropdownOpen) return;
     function handleClickOutside(e: MouseEvent) {
-      if (companyDropdownRef.current && !companyDropdownRef.current.contains(e.target as Node)) {
+      if (
+        companyDropdownRef.current &&
+        !companyDropdownRef.current.contains(e.target as Node)
+      ) {
         setCompanyDropdownOpen(false);
       }
     }
@@ -2209,14 +2217,27 @@ export function CandidaturasClient({
                 >
                   {companyFilter || "Todos"}
                   <svg
-                    width="10" height="6" viewBox="0 0 10 6" fill="none"
+                    width="10"
+                    height="6"
+                    viewBox="0 0 10 6"
+                    fill="none"
                     style={{
                       transition: "transform 0.18s ease",
-                      transform: companyDropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
+                      transform: companyDropdownOpen
+                        ? "rotate(180deg)"
+                        : "rotate(0deg)",
                       flexShrink: 0,
                     }}
+                    aria-hidden
                   >
-                    <path d="M1 1l4 4 4-4" stroke="#8a8a85" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <title>Alternar filtro de empresa</title>
+                    <path
+                      d="M1 1l4 4 4-4"
+                      stroke="#8a8a85"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 </button>
 
@@ -2234,12 +2255,17 @@ export function CandidaturasClient({
                     overflow: "hidden",
                     zIndex: 50,
                     opacity: companyDropdownOpen ? 1 : 0,
-                    transform: companyDropdownOpen ? "translateY(0)" : "translateY(-6px)",
+                    transform: companyDropdownOpen
+                      ? "translateY(0)"
+                      : "translateY(-6px)",
                     pointerEvents: companyDropdownOpen ? "auto" : "none",
                     transition: "opacity 0.16s ease, transform 0.16s ease",
                   }}
                 >
-                  {[{ label: "Todos", value: "" }, ...companies.map((c) => ({ label: c, value: c }))].map((opt) => (
+                  {[
+                    { label: "Todos", value: "" },
+                    ...companies.map((c) => ({ label: c, value: c })),
+                  ].map((opt) => (
                     <button
                       key={opt.value || "__all__"}
                       type="button"
@@ -2255,8 +2281,12 @@ export function CandidaturasClient({
                         fontSize: 13,
                         fontFamily: GEIST,
                         fontWeight: companyFilter === opt.value ? 600 : 400,
-                        color: companyFilter === opt.value ? "#0a0a0a" : "#3a3a36",
-                        background: companyFilter === opt.value ? "rgba(10,10,10,0.04)" : "transparent",
+                        color:
+                          companyFilter === opt.value ? "#0a0a0a" : "#3a3a36",
+                        background:
+                          companyFilter === opt.value
+                            ? "rgba(10,10,10,0.04)"
+                            : "transparent",
                         border: "none",
                         cursor: "pointer",
                       }}
@@ -2356,7 +2386,7 @@ export function CandidaturasClient({
                       null,
                   )
                   .filter((s): s is number => s !== null);
-                const avgScore =
+                const _avgScore =
                   scoreSamples.length > 0
                     ? Math.round(
                         scoreSamples.reduce((acc, s) => acc + s, 0) /
@@ -2375,9 +2405,7 @@ export function CandidaturasClient({
                     accent={accent}
                     headerBg={headerBg}
                     dark={dark}
-                    scoreColor={scoreColor}
                     previewCompanies={previewCompanies}
-                    avgScore={avgScore}
                     sortState={sortState}
                     onSortChange={(sk) => setSectionSort(group.key, sk)}
                   >

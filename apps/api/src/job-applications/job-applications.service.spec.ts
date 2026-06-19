@@ -722,6 +722,8 @@ test("derives best adaptation preferring CV_READY when scores tie", async () => 
   assert.equal(item.bestScore, 82);
   assert.equal(item.bestCvState, "ready");
   assert.equal(item.scorePresentation, "scored");
+  assert.equal(item.interviewPrepLocked, true);
+  assert.equal(item.interviewPrepLockReason, "missing_selected_cv");
 });
 
 test("list scopes by archived flag and always excludes deleted", async () => {
@@ -1164,6 +1166,8 @@ test("getById returns derived best-version fields", async () => {
   assert.equal(response.bestCvAdaptationId, "a2");
   assert.equal(response.bestCvState, "ready");
   assert.equal(response.scorePresentation, "scored");
+  assert.equal(response.interviewPrepLocked, true);
+  assert.equal(response.interviewPrepLockReason, "missing_selected_cv");
 });
 
 test("getById keeps strict CV_READY precedence when scores tie", async () => {
@@ -1211,6 +1215,60 @@ test("getById keeps strict CV_READY precedence when scores tie", async () => {
   assert.equal(response.bestScore, 82);
   assert.equal(response.bestCvState, "ready");
   assert.equal(response.scorePresentation, "scored");
+});
+
+test("getById blocks interview prep when selected CV is locked even if another CV is unlocked", async () => {
+  const db = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findFirst: async () => ({
+        id: "app-1",
+        userId: "user-1",
+        jobTitle: "Engenheiro",
+        companyName: "Empresa",
+        status: "APPLIED",
+        currentCvAdaptationId: "a-locked",
+        updatedAt: new Date("2026-05-02T12:00:00Z"),
+        cvAdaptations: [
+          {
+            id: "a-locked",
+            createdAt: new Date("2026-05-03T10:00:00Z"),
+            status: "awaiting_payment",
+            adaptedResumeId: null,
+            isUnlocked: false,
+            adaptedContentJson: { scoreAfter: 75 },
+            jobTitle: "Engenheiro",
+            companyName: "Empresa",
+            analysisCvSnapshotId: null,
+          },
+          {
+            id: "a-ready",
+            createdAt: new Date("2026-05-01T10:00:00Z"),
+            status: "delivered",
+            adaptedResumeId: "resume-1",
+            isUnlocked: true,
+            adaptedContentJson: { scoreAfter: 82 },
+            jobTitle: "Engenheiro",
+            companyName: "Empresa",
+            analysisCvSnapshotId: null,
+          },
+        ],
+        events: [],
+        interviewPrep: null,
+      }),
+    },
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+  const response = (await service.getById("user-1", "app-1")) as Record<
+    string,
+    unknown
+  >;
+
+  assert.equal(response.selectedCvAdaptationId, "a-locked");
+  assert.equal(response.selectedCvUnlocked, false);
+  assert.equal(response.interviewPrepLocked, true);
+  assert.equal(response.interviewPrepLockReason, "selected_cv_locked");
 });
 
 test("archive and restore are idempotent and keep status unchanged", async () => {

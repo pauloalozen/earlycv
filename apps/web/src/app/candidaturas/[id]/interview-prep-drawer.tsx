@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 
 import { trackEvent } from "@/lib/analytics-tracking";
 import type { InterviewPrepDto } from "@/lib/job-applications-api";
@@ -423,23 +429,46 @@ function PrepContent({
           <button
             type="button"
             onClick={() => {
-              void trackEvent({ eventName: "interview_prep_printed", eventVersion: 1 });
+              void trackEvent({
+                eventName: "interview_prep_printed",
+                eventVersion: 1,
+              });
               const sections: { title: string; content: string }[] = [
                 { title: "Estratégia", content: `<p>${c.strategySummary}</p>` },
               ];
               if (c.strengthsToHighlight.length)
-                sections.push({ title: "Pontos Fortes", content: `<ul>${c.strengthsToHighlight.map((s) => `<li>${s}</li>`).join("")}</ul>` });
+                sections.push({
+                  title: "Pontos Fortes",
+                  content: `<ul>${c.strengthsToHighlight.map((s) => `<li>${s}</li>`).join("")}</ul>`,
+                });
               if (c.likelyRisksOrGaps.length)
-                sections.push({ title: "Riscos / Gaps", content: `<ul>${c.likelyRisksOrGaps.map((s) => `<li>${s}</li>`).join("")}</ul>` });
+                sections.push({
+                  title: "Riscos / Gaps",
+                  content: `<ul>${c.likelyRisksOrGaps.map((s) => `<li>${s}</li>`).join("")}</ul>`,
+                });
               if (c.questionsTheyMayAsk.length)
-                sections.push({ title: "Perguntas Prováveis", content: `<ol>${c.questionsTheyMayAsk.map((q) => `<li><strong>${q.question}</strong><br/><em>${q.answerDirection}</em></li>`).join("")}</ol>` });
+                sections.push({
+                  title: "Perguntas Prováveis",
+                  content: `<ol>${c.questionsTheyMayAsk.map((q) => `<li><strong>${q.question}</strong><br/><em>${q.answerDirection}</em></li>`).join("")}</ol>`,
+                });
               if (c.questionsCandidateShouldAsk.length)
-                sections.push({ title: "Perguntas para Fazer", content: `<ul>${c.questionsCandidateShouldAsk.map((s) => `<li>${s}</li>`).join("")}</ul>` });
+                sections.push({
+                  title: "Perguntas para Fazer",
+                  content: `<ul>${c.questionsCandidateShouldAsk.map((s) => `<li>${s}</li>`).join("")}</ul>`,
+                });
               if (c.finalChecklist.length)
-                sections.push({ title: "Checklist Final", content: `<ul>${c.finalChecklist.map((s) => `<li>☐ ${s}</li>`).join("")}</ul>` });
+                sections.push({
+                  title: "Checklist Final",
+                  content: `<ul>${c.finalChecklist.map((s) => `<li>☐ ${s}</li>`).join("")}</ul>`,
+                });
               const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Preparação — ${jobTitle} @ ${company}</title><style>body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;color:#111;line-height:1.6}h1{font-size:1.2rem;margin-bottom:4px}h2{font-size:1rem;margin-top:24px;margin-bottom:8px;border-bottom:1px solid #e5e5e5;padding-bottom:4px}p,li{font-size:.875rem}ul,ol{padding-left:20px}@media print{body{margin:20px}}</style></head><body><h1>${jobTitle} — ${company}</h1><p style="color:#666;font-size:.8rem">Preparação para Entrevista</p>${sections.map((s) => `<h2>${s.title}</h2>${s.content}`).join("")}</body></html>`;
               const win = window.open("", "_blank", "width=800,height=900");
-              if (win) { win.document.write(html); win.document.close(); win.focus(); win.print(); }
+              if (win) {
+                win.document.write(html);
+                win.document.close();
+                win.focus();
+                win.print();
+              }
             }}
             style={{
               background: "#fff",
@@ -531,12 +560,21 @@ function PrepContent({
           title="O que seus processos anteriores revelam"
           tone="blue"
         >
+          {(() => {
+            const watchOuts = c.lessonsFromPastProcesses?.watchOuts ?? [];
+            return (
+              <>
           <div
-            style={{ fontSize: 14, color: "#1a2a5a", lineHeight: 1.65, marginBottom: c.lessonsFromPastProcesses.watchOuts.length > 0 ? 14 : 0 }}
+            style={{
+              fontSize: 14,
+              color: "#1a2a5a",
+              lineHeight: 1.65,
+              marginBottom: watchOuts.length > 0 ? 14 : 0,
+            }}
           >
             {c.lessonsFromPastProcesses.keyInsight}
           </div>
-          {c.lessonsFromPastProcesses.watchOuts.length > 0 && (
+          {watchOuts.length > 0 && (
             <div>
               <div
                 style={{
@@ -551,16 +589,19 @@ function PrepContent({
               >
                 Pontos de atenção
               </div>
-              {c.lessonsFromPastProcesses.watchOuts.map((item, i) => (
+              {watchOuts.map((item, i) => (
                 <PrepBullet
                   key={item}
                   kicker="ATENÇÃO"
                   body={item}
-                  last={i === c.lessonsFromPastProcesses!.watchOuts.length - 1}
+                  last={i === watchOuts.length - 1}
                 />
               ))}
             </div>
           )}
+              </>
+            );
+          })()}
         </PrepSection>
       )}
 

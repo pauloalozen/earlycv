@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
   AdminPageWrap,
@@ -86,79 +87,6 @@ export default async function AdminOverviewPage({
     );
   }
 
-  const overviewDataResult = await getPhaseOneAdminDataSafely();
-
-  if (overviewDataResult.kind !== "ok") {
-    const state = buildAdminStateModel(overviewDataResult.kind, "/admin");
-
-    return (
-      <div className="px-6 py-10 md:px-10">
-        <AdminTokenState {...state} />
-      </div>
-    );
-  }
-
-  const {
-    adminUsers,
-    adminUserViews,
-    companyViews,
-    companies,
-    jobs,
-    orderedRuns,
-    pendingItems,
-    sourceViews,
-  } = overviewDataResult.data;
-
-  // ── Period cutoff ──────────────────────────────────────────────
-  const since = getSinceDate(period);
-  const sinceIso = since.toISOString();
-  const subLabel = periodSubLabel(period);
-
-  // ── Period-sensitive metrics ───────────────────────────────────
-  const newUsers = adminUsers.filter((u) => u.createdAt >= sinceIso).length;
-  const runsInPeriod = orderedRuns.filter(
-    (r) => r.startedAt != null && r.startedAt >= sinceIso,
-  ).length;
-  const failedRunsInPeriod = orderedRuns.filter(
-    (r) =>
-      r.startedAt != null && r.startedAt >= sinceIso && r.status === "failed",
-  ).length;
-
-  let approvedPaymentsCount = 0;
-  let revenueInCents = 0;
-  try {
-    const paymentsResult = await listAdminPayments({
-      from: sinceIso,
-      limit: 1000,
-    });
-    const approved = paymentsResult.items.filter(
-      (p) => p.status === "approved" || p.status === "completed",
-    );
-    approvedPaymentsCount = approved.length;
-    revenueInCents = approved.reduce(
-      (sum, p) => sum + (p.amountInCents ?? 0),
-      0,
-    );
-  } catch {
-    // payments API indisponível — mantém zeros
-  }
-
-  // ── State metrics (current snapshot) ──────────────────────────
-  const totalUsers = adminUsers.length;
-  const totalAdaptedResumes = adminUserViews.reduce(
-    (sum, u) => sum + u.adaptedResumeCount,
-    0,
-  );
-  const incompleteCompanies = companyViews.filter(
-    (item) => item.status.label !== "completa",
-  ).length;
-  const sourcesAwaitingRun = sourceViews.filter(
-    (item) => item.status.label === "aguardando primeiro run",
-  ).length;
-  const failedRunsTotal = orderedRuns.filter(
-    (r) => r.status === "failed",
-  ).length;
-
   return (
     <AdminPageWrap>
       <AdminShellHeader
@@ -179,7 +107,144 @@ export default async function AdminOverviewPage({
         subtitle="Acompanhe o estado do produto, captura e operação financeira sem sair do backoffice."
         title="Central operacional."
       />
+      <Suspense fallback={<OverviewSkeleton />}>
+        <OverviewContent period={period} />
+      </Suspense>
+      <style>{`
+        @media (max-width: 639px) {
+          .admin-main-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+    </AdminPageWrap>
+  );
+}
 
+function OverviewSkeleton() {
+  const card = {
+    background: AT.card,
+    border: `1px solid ${AT.border}`,
+    borderRadius: 10,
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div
+        style={{
+          height: 18,
+          width: 200,
+          background: AT.borderSoft,
+          borderRadius: 4,
+        }}
+      />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 12,
+        }}
+      >
+        {[76, 77, 78, 79].map((height) => (
+          <div key={height} style={{ ...card, height }} />
+        ))}
+      </div>
+      <div
+        style={{
+          height: 18,
+          width: 180,
+          background: AT.borderSoft,
+          borderRadius: 4,
+          marginTop: 4,
+        }}
+      />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 12,
+        }}
+      >
+        {[86, 87, 88].map((height) => (
+          <div key={height} style={{ ...card, height: 76 }} />
+        ))}
+      </div>
+      <div
+        className="admin-main-grid"
+        style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 16 }}
+      >
+        <div style={{ ...card, height: 280 }} />
+        <div style={{ ...card, height: 280 }} />
+      </div>
+    </div>
+  );
+}
+
+async function OverviewContent({ period }: { period: Period }) {
+  const since = getSinceDate(period);
+  const sinceIso = since.toISOString();
+  const subLabel = periodSubLabel(period);
+
+  const [overviewDataResult, paymentsResult] = await Promise.all([
+    getPhaseOneAdminDataSafely(),
+    listAdminPayments({ from: sinceIso, limit: 1000 }).catch(() => null),
+  ]);
+
+  if (overviewDataResult.kind !== "ok") {
+    const state = buildAdminStateModel(overviewDataResult.kind, "/admin");
+
+    return (
+      <div className="px-6 py-10 md:px-10">
+        <AdminTokenState {...state} />
+      </div>
+    );
+  }
+
+  const {
+    adminUsers,
+    adminUserViews,
+    companyViews,
+    companies,
+    orderedRuns,
+    pendingItems,
+    sourceViews,
+  } = overviewDataResult.data;
+
+  // ── Period-sensitive metrics ───────────────────────────────────
+  const newUsers = adminUsers.filter((u) => u.createdAt >= sinceIso).length;
+  const runsInPeriod = orderedRuns.filter(
+    (r) => r.startedAt != null && r.startedAt >= sinceIso,
+  ).length;
+  const failedRunsInPeriod = orderedRuns.filter(
+    (r) =>
+      r.startedAt != null && r.startedAt >= sinceIso && r.status === "failed",
+  ).length;
+
+  const approved =
+    paymentsResult?.items.filter(
+      (p) => p.status === "approved" || p.status === "completed",
+    ) ?? [];
+  const approvedPaymentsCount = approved.length;
+  const revenueInCents = approved.reduce(
+    (sum, p) => sum + (p.amountInCents ?? 0),
+    0,
+  );
+
+  // ── State metrics (current snapshot) ──────────────────────────
+  const totalUsers = adminUsers.length;
+  const totalAdaptedResumes = adminUserViews.reduce(
+    (sum, u) => sum + u.adaptedResumeCount,
+    0,
+  );
+  const incompleteCompanies = companyViews.filter(
+    (item) => item.status.label !== "completa",
+  ).length;
+  const sourcesAwaitingRun = sourceViews.filter(
+    (item) => item.status.label === "aguardando primeiro run",
+  ).length;
+  const failedRunsTotal = orderedRuns.filter(
+    (r) => r.status === "failed",
+  ).length;
+
+  return (
+    <>
       {/* ── Métricas por período ───────────────────────────────── */}
       <div
         style={{
@@ -244,7 +309,7 @@ export default async function AdminOverviewPage({
         PRODUTO · ESTADO ATUAL
       </div>
 
-      <AdminStatsRow cols={4}>
+      <AdminStatsRow cols={3}>
         <AdminStatCard
           label="Usuários cadastrados"
           value={String(totalUsers)}
@@ -253,11 +318,6 @@ export default async function AdminOverviewPage({
         <AdminStatCard
           label="CVs adaptados"
           value={String(totalAdaptedResumes)}
-          sub="total acumulado"
-        />
-        <AdminStatCard
-          label="Vagas catalogadas"
-          value={String(jobs.length)}
           sub="total acumulado"
         />
         <AdminStatCard
@@ -498,11 +558,6 @@ export default async function AdminOverviewPage({
           ))}
         </div>
       </div>
-      <style>{`
-        @media (max-width: 639px) {
-          .admin-main-grid { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
-    </AdminPageWrap>
+    </>
   );
 }

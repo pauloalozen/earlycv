@@ -105,9 +105,7 @@ describe("AdaptarPage selector defaults", () => {
         /evite enviar dados sens[ií]veis desnecess[áa]rios/i,
       ),
     ).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: /privacidade/i }),
-    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: /privacidade/i })).toBeTruthy();
     expect(screen.getByRole("link", { name: /termos de uso/i })).toBeTruthy();
   });
 });

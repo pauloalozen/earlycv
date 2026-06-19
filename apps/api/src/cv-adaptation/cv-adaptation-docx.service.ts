@@ -119,18 +119,16 @@ export class CvAdaptationDocxService {
     ]
       .join(" ")
       .toLowerCase();
-    const ptScore =
-      (
-        text.match(
-          /\b(de|para|com|em|uma|não|por|do|da|experiência|formação|idiomas|competências)\b/g,
-        ) ?? []
-      ).length;
-    const enScore =
-      (
-        text.match(
-          /\b(the|and|with|for|experience|education|skills|languages|certifications|summary)\b/g,
-        ) ?? []
-      ).length;
+    const ptScore = (
+      text.match(
+        /\b(de|para|com|em|uma|não|por|do|da|experiência|formação|idiomas|competências)\b/g,
+      ) ?? []
+    ).length;
+    const enScore = (
+      text.match(
+        /\b(the|and|with|for|experience|education|skills|languages|certifications|summary)\b/g,
+      ) ?? []
+    ).length;
     return enScore > ptScore ? "en" : "pt";
   }
 

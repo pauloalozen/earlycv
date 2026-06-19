@@ -6,6 +6,7 @@ import { getAtsScoreColors } from "@/app/adaptar/resultado/ats-score-colors";
 import { AppHeader } from "@/components/app-header";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
+import type { AppInternalRole } from "@/lib/app-session";
 import type { DownloadProgressStage } from "@/lib/client-download";
 import { downloadFromApi } from "@/lib/client-download";
 import type {
@@ -19,7 +20,6 @@ import {
   saveGuestPreview,
   updateCvAdaptationContent,
 } from "@/lib/cv-adaptation-api";
-import type { AppInternalRole } from "@/lib/app-session";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const SIDEBAR_W = 354;
@@ -46,17 +46,26 @@ const ADD_ITEM_LABEL: Record<string, string> = {
   other: "+ Adicionar item",
 };
 
-const SECTION_HAS_SUBHEADING = new Set(["experience", "education", "projects", "certifications"]);
-const SECTION_HAS_DATE = new Set(["experience", "education", "projects", "certifications"]);
+const SECTION_HAS_SUBHEADING = new Set([
+  "experience",
+  "education",
+  "projects",
+  "certifications",
+]);
+const SECTION_HAS_DATE = new Set([
+  "experience",
+  "education",
+  "projects",
+  "certifications",
+]);
 const CV_DIVIDER = "#e5e5e1";
 const CV_META = "#999";
 const CV_SECONDARY = "#555";
 const CATEGORY_GROUPS = {
-  rewrite:  { label: "Texto reescrito",    color: AMBER },
-  content:  { label: "Ajuste de Conteúdo", color: "#5da0e8" },
+  rewrite: { label: "Texto reescrito", color: AMBER },
+  content: { label: "Ajuste de Conteúdo", color: "#5da0e8" },
   keywords: { label: "Keywords Incluídas", color: LIME },
 } as const;
-
 
 type CategoryKey = keyof typeof CATEGORY_GROUPS;
 
@@ -130,9 +139,19 @@ function sectionLabel(type: string): string {
 }
 
 function detectCvLanguage(summary: string, sections: CvSection[]): "pt" | "en" {
-  const text = [summary, ...sections.map((s) => s.title)].join(" ").toLowerCase();
-  const ptScore = (text.match(/\b(de|para|com|em|uma|não|por|do|da|experiência|formação|idiomas|competências)\b/g) ?? []).length;
-  const enScore = (text.match(/\b(the|and|with|for|experience|education|skills|languages|certifications|summary)\b/g) ?? []).length;
+  const text = [summary, ...sections.map((s) => s.title)]
+    .join(" ")
+    .toLowerCase();
+  const ptScore = (
+    text.match(
+      /\b(de|para|com|em|uma|não|por|do|da|experiência|formação|idiomas|competências)\b/g,
+    ) ?? []
+  ).length;
+  const enScore = (
+    text.match(
+      /\b(the|and|with|for|experience|education|skills|languages|certifications|summary)\b/g,
+    ) ?? []
+  ).length;
   return enScore > ptScore ? "en" : "pt";
 }
 
@@ -234,9 +253,15 @@ function sectionsToText(sections: CvSection[], summary?: string): string {
 
   for (const section of sections) {
     if (section.sectionType === "header") continue;
-    lines.push(SECTION_TEXT_LABELS[section.sectionType] ?? section.title ?? section.sectionType.toUpperCase());
+    lines.push(
+      SECTION_TEXT_LABELS[section.sectionType] ??
+        section.title ??
+        section.sectionType.toUpperCase(),
+    );
     for (const item of section.items) {
-      const heading = [item.heading, item.subheading].filter(Boolean).join(" | ");
+      const heading = [item.heading, item.subheading]
+        .filter(Boolean)
+        .join(" | ");
       if (heading) lines.push(heading);
       if (item.dateRange) lines.push(item.dateRange);
       for (const b of item.bullets) {
@@ -269,7 +294,7 @@ function isContactBullet(raw: string): boolean {
   if (/linkedin|github|behance/i.test(s)) return true;
   if (/^https?:\/\//i.test(s) || /^www\./i.test(s)) return true;
   // city - state (e.g. "Osasco - SP", "São Paulo/SP", "SP")
-  if (/^[\p{L}\s]+([-\/,]\s*[A-Z]{2}|[A-Z]{2})$/u.test(s)) return true;
+  if (/^[\p{L}\s]+([-/,]\s*[A-Z]{2}|[A-Z]{2})$/u.test(s)) return true;
   return false;
 }
 
@@ -506,7 +531,9 @@ function SectionGroupBlock({
           {group.label}
         </span>
         {totalPts > 0 && (
-          <span style={{ fontSize: 11, fontFamily: "monospace", color: "#888" }}>
+          <span
+            style={{ fontSize: 11, fontFamily: "monospace", color: "#888" }}
+          >
             +{totalPts}pts
           </span>
         )}
@@ -618,7 +645,14 @@ function HeaderSectionView({
       }}
     >
       {isEditing ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, textAlign: "left" }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            textAlign: "left",
+          }}
+        >
           <div>
             <label htmlFor="hdr-heading" style={labelStyle}>
               Nome
@@ -715,7 +749,8 @@ function SummaryBlock({
   onSummaryChange?: (value: string) => void;
   lang?: "pt" | "en";
 }) {
-  const summaryLabel = lang === "en" ? "Professional Summary" : "Resumo Profissional";
+  const summaryLabel =
+    lang === "en" ? "Professional Summary" : "Resumo Profissional";
   return (
     <div
       data-section-type="summary"
@@ -875,7 +910,13 @@ function CvSectionBlock({
       }}
     >
       <div style={{ marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
           <span
             style={{
               fontSize: 10,
@@ -909,6 +950,7 @@ function CvSectionBlock({
 
       {section.sectionType === "skills" && !isEditing
         ? section.items.map((item, itemIdx) => {
+            const itemKey = buildSectionItemKey(item);
             const itemHighlighted =
               isHighlighted &&
               highlightedItemIdx !== undefined &&
@@ -922,18 +964,24 @@ function CvSectionBlock({
               allText.toLowerCase().includes(highlightText.toLowerCase());
             return (
               <div
-                key={itemIdx}
+                key={itemKey}
                 data-item-idx={itemIdx}
                 style={{
                   marginBottom: 5,
                   borderRadius: itemHighlighted ? 4 : 0,
                   padding: itemHighlighted ? "4px 6px" : "0",
-                  background: itemHighlighted ? HIGHLIGHT_ITEM_BG : "transparent",
-                  outline: itemHighlighted ? `1px solid ${HIGHLIGHT_BORDER}` : "none",
+                  background: itemHighlighted
+                    ? HIGHLIGHT_ITEM_BG
+                    : "transparent",
+                  outline: itemHighlighted
+                    ? `1px solid ${HIGHLIGHT_BORDER}`
+                    : "none",
                   scrollMarginTop: 16,
                 }}
               >
-                <span style={{ fontSize: 11.5, lineHeight: 1.65, color: "#333" }}>
+                <span
+                  style={{ fontSize: 11.5, lineHeight: 1.65, color: "#333" }}
+                >
                   {item.heading && (
                     <strong style={{ fontWeight: 700, color: "#111" }}>
                       {item.heading}:{" "}
@@ -953,29 +1001,40 @@ function CvSectionBlock({
             );
           })
         : section.items.map((item, itemIdx) => {
+            const itemKey = buildSectionItemKey(item);
             const itemHighlighted =
               isHighlighted &&
               !isEditing &&
               highlightedItemIdx !== undefined &&
               highlightedItemIdx === itemIdx;
 
-            const showSubheading = SECTION_HAS_SUBHEADING.has(section.sectionType);
+            const showSubheading = SECTION_HAS_SUBHEADING.has(
+              section.sectionType,
+            );
             const showDate = SECTION_HAS_DATE.has(section.sectionType);
 
             return (
               <div
-                key={itemIdx}
+                key={itemKey}
                 data-item-idx={itemIdx}
                 style={{
                   marginBottom: isEditing ? 16 : 14,
                   borderRadius: isEditing ? 6 : itemHighlighted ? 6 : 0,
-                  padding: isEditing ? "10px 12px" : itemHighlighted ? "8px 10px" : "0",
+                  padding: isEditing
+                    ? "10px 12px"
+                    : itemHighlighted
+                      ? "8px 10px"
+                      : "0",
                   background: isEditing
                     ? "rgba(0,0,0,0.02)"
-                    : itemHighlighted ? HIGHLIGHT_ITEM_BG : "transparent",
+                    : itemHighlighted
+                      ? HIGHLIGHT_ITEM_BG
+                      : "transparent",
                   border: isEditing
                     ? "1px solid #e0e0dc"
-                    : itemHighlighted ? `1px solid ${HIGHLIGHT_BORDER}` : "1px solid transparent",
+                    : itemHighlighted
+                      ? `1px solid ${HIGHLIGHT_BORDER}`
+                      : "1px solid transparent",
                   transition: "background 0.2s, border-color 0.2s",
                   scrollMarginTop: 16,
                 }}
@@ -983,7 +1042,13 @@ function CvSectionBlock({
                 {isEditing ? (
                   <>
                     {/* Remove item button */}
-                    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        marginBottom: 6,
+                      }}
+                    >
                       <button
                         type="button"
                         onClick={() => onRemoveItem(itemIdx)}
@@ -1002,14 +1067,23 @@ function CvSectionBlock({
 
                     {/* Heading (always shown) */}
                     <div style={{ marginBottom: 4 }}>
-                      <label htmlFor={`${section.sectionType}-${itemIdx}-heading`} style={labelStyle}>
-                        {section.sectionType === "skills" ? "Categoria" : section.sectionType === "languages" ? "Idioma" : "Cargo / Título"}
+                      <label
+                        htmlFor={`${section.sectionType}-${itemIdx}-heading`}
+                        style={labelStyle}
+                      >
+                        {section.sectionType === "skills"
+                          ? "Categoria"
+                          : section.sectionType === "languages"
+                            ? "Idioma"
+                            : "Cargo / Título"}
                       </label>
                       <input
                         id={`${section.sectionType}-${itemIdx}-heading`}
                         type="text"
                         value={item.heading ?? ""}
-                        onChange={(e) => onItemChange(itemIdx, "heading", e.target.value)}
+                        onChange={(e) =>
+                          onItemChange(itemIdx, "heading", e.target.value)
+                        }
                         style={inputStyle}
                       />
                     </div>
@@ -1017,12 +1091,19 @@ function CvSectionBlock({
                     {/* Subheading — only for experience, education, etc. */}
                     {showSubheading && (
                       <div style={{ marginBottom: 4 }}>
-                        <label htmlFor={`${section.sectionType}-${itemIdx}-sub`} style={labelStyle}>Empresa / Instituição</label>
+                        <label
+                          htmlFor={`${section.sectionType}-${itemIdx}-sub`}
+                          style={labelStyle}
+                        >
+                          Empresa / Instituição
+                        </label>
                         <input
                           id={`${section.sectionType}-${itemIdx}-sub`}
                           type="text"
                           value={item.subheading ?? ""}
-                          onChange={(e) => onItemChange(itemIdx, "subheading", e.target.value)}
+                          onChange={(e) =>
+                            onItemChange(itemIdx, "subheading", e.target.value)
+                          }
                           style={inputStyle}
                         />
                       </div>
@@ -1031,26 +1112,45 @@ function CvSectionBlock({
                     {/* Date range — only for experience, education, etc. */}
                     {showDate && (
                       <div style={{ marginBottom: 6 }}>
-                        <label htmlFor={`${section.sectionType}-${itemIdx}-date`} style={labelStyle}>Período</label>
+                        <label
+                          htmlFor={`${section.sectionType}-${itemIdx}-date`}
+                          style={labelStyle}
+                        >
+                          Período
+                        </label>
                         <input
                           id={`${section.sectionType}-${itemIdx}-date`}
                           type="text"
                           value={item.dateRange ?? ""}
-                          onChange={(e) => onItemChange(itemIdx, "dateRange", e.target.value)}
+                          onChange={(e) =>
+                            onItemChange(itemIdx, "dateRange", e.target.value)
+                          }
                           style={inputStyle}
                         />
                       </div>
                     )}
 
                     {/* Bullets */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 5,
+                      }}
+                    >
                       <span style={labelStyle}>
-                        {section.sectionType === "skills" ? "Itens (um por linha)" : "Itens"}
+                        {section.sectionType === "skills"
+                          ? "Itens (um por linha)"
+                          : "Itens"}
                       </span>
                       {item.bullets.map((bullet, bIdx) => (
                         <div
-                          key={`edit-${itemIdx}-${bIdx}`}
-                          style={{ display: "flex", gap: 5, alignItems: "flex-start" }}
+                          key={buildBulletKey(itemKey, bullet, bIdx)}
+                          style={{
+                            display: "flex",
+                            gap: 5,
+                            alignItems: "flex-start",
+                          }}
                         >
                           <textarea
                             value={bullet}
@@ -1077,7 +1177,9 @@ function CvSectionBlock({
                           <button
                             type="button"
                             onClick={() => {
-                              const next = item.bullets.filter((_, i) => i !== bIdx);
+                              const next = item.bullets.filter(
+                                (_, i) => i !== bIdx,
+                              );
                               onBulletsChange(itemIdx, next);
                             }}
                             style={{
@@ -1097,7 +1199,9 @@ function CvSectionBlock({
                       ))}
                       <button
                         type="button"
-                        onClick={() => onBulletsChange(itemIdx, [...item.bullets, ""])}
+                        onClick={() =>
+                          onBulletsChange(itemIdx, [...item.bullets, ""])
+                        }
                         style={{
                           fontSize: 11,
                           color: "#666",
@@ -1127,20 +1231,33 @@ function CvSectionBlock({
                         >
                           {item.heading}
                           {item.heading && item.subheading && (
-                            <span style={{ fontWeight: 400, color: CV_SECONDARY }}> | {item.subheading}</span>
+                            <span
+                              style={{ fontWeight: 400, color: CV_SECONDARY }}
+                            >
+                              {" "}
+                              | {item.subheading}
+                            </span>
                           )}
                           {!item.heading && item.subheading}
                         </div>
                       )}
                       {item.dateRange && (
-                        <div style={{ fontSize: 11, color: CV_META, marginTop: 2 }}>
+                        <div
+                          style={{ fontSize: 11, color: CV_META, marginTop: 2 }}
+                        >
                           {item.dateRange}
                         </div>
                       )}
                     </div>
 
                     {item.bullets.length > 0 && (
-                      <ul style={{ margin: 0, paddingLeft: 14, listStyle: "disc" }}>
+                      <ul
+                        style={{
+                          margin: 0,
+                          paddingLeft: 14,
+                          listStyle: "disc",
+                        }}
+                      >
                         {item.bullets.map((bullet, bIdx) => {
                           const isHighlightedBullet =
                             itemHighlighted && highlightText
@@ -1158,7 +1275,7 @@ function CvSectionBlock({
                               : false;
                           return (
                             <li
-                              key={`${bullet}-${bIdx}`}
+                              key={buildBulletKey(itemKey, bullet, bIdx)}
                               style={{
                                 fontSize: 11,
                                 color: "#333",
@@ -1239,6 +1356,26 @@ function SkBar({
   );
 }
 
+function buildSectionItemKey(item: {
+  heading?: string;
+  subheading?: string;
+  dateRange?: string;
+  bullets: string[];
+  changes?: Array<{ ajuste_id: string }>;
+}) {
+  return [
+    item.heading ?? "",
+    item.subheading ?? "",
+    item.dateRange ?? "",
+    item.bullets.join("|"),
+    item.changes?.map((change) => change.ajuste_id).join("|") ?? "",
+  ].join("::");
+}
+
+function buildBulletKey(itemKey: string, bullet: string, bulletIdx: number) {
+  return `${itemKey}::${bullet || `empty-${bulletIdx}`}`;
+}
+
 function CvSkeleton() {
   return (
     <div style={{ maxWidth: 720, margin: "0 auto" }}>
@@ -1253,37 +1390,37 @@ function CvSkeleton() {
       >
         Montando seu CV adaptado…
       </p>
-    <div
-      style={{
-        background: CV_BG,
-        maxWidth: 720,
-        margin: "0 auto 40px",
-        padding: "40px 44px",
-        minHeight: 900,
-        boxShadow: "0 2px 32px rgba(0,0,0,0.6)",
-      }}
-    >
-      <style>{`@keyframes cv-shimmer { 0% { background-position:-600px 0; } 100% { background-position:600px 0; } }`}</style>
-      {/* header */}
-      <div style={{ textAlign: "center", marginBottom: 22 }}>
-        <SkBar w="52%" h={20} mb={10} center />
-        <SkBar w="32%" h={11} mb={7} center />
-        <SkBar w="68%" h={10} center mb={0} />
-      </div>
-      <SkBar w="100%" h={1} mb={20} />
-      {/* 4 body sections */}
-      {[1, 2, 3, 4].map((si) => (
-        <div key={si} style={{ marginBottom: 26 }}>
-          <SkBar w="30%" h={10} mb={8} />
-          <SkBar w="100%" h={1} mb={10} />
-          <SkBar w="60%" h={11} mb={5} />
-          <SkBar w="28%" h={9} mb={9} />
-          {[85, 78, 65].map((pct, bi) => (
-            <SkBar key={bi} w={`${pct}%`} h={9} mb={5} />
-          ))}
+      <div
+        style={{
+          background: CV_BG,
+          maxWidth: 720,
+          margin: "0 auto 40px",
+          padding: "40px 44px",
+          minHeight: 900,
+          boxShadow: "0 2px 32px rgba(0,0,0,0.6)",
+        }}
+      >
+        <style>{`@keyframes cv-shimmer { 0% { background-position:-600px 0; } 100% { background-position:600px 0; } }`}</style>
+        {/* header */}
+        <div style={{ textAlign: "center", marginBottom: 22 }}>
+          <SkBar w="52%" h={20} mb={10} center />
+          <SkBar w="32%" h={11} mb={7} center />
+          <SkBar w="68%" h={10} center mb={0} />
         </div>
-      ))}
-    </div>
+        <SkBar w="100%" h={1} mb={20} />
+        {/* 4 body sections */}
+        {[1, 2, 3, 4].map((si) => (
+          <div key={si} style={{ marginBottom: 26 }}>
+            <SkBar w="30%" h={10} mb={8} />
+            <SkBar w="100%" h={1} mb={10} />
+            <SkBar w="60%" h={11} mb={5} />
+            <SkBar w="28%" h={9} mb={9} />
+            {[85, 78, 65].map((pct) => (
+              <SkBar key={pct} w={`${pct}%`} h={9} mb={5} />
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1324,15 +1461,21 @@ export function AdaptacaoCvClient({
     useState<CvSection[]>(initialSections);
   const [editedSummary, setEditedSummary] = useState<string>(initialSummary);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const [reanaliseState, setReanaliseState] = useState<"idle" | "running" | "done" | "error">("idle");
-  const [reanaliseAdaptationId, setReanaliseAdaptationId] = useState<string | null>(null);
+  const [reanaliseState, setReanaliseState] = useState<
+    "idle" | "running" | "done" | "error"
+  >("idle");
+  const [reanaliseAdaptationId, setReanaliseAdaptationId] = useState<
+    string | null
+  >(null);
   const [reanaliseScore, setReanaliseScore] = useState<number | null>(null);
-  const [reanaliseError, setReanaliseError] = useState<string | null>(null);
+  const [_reanaliseError, setReanaliseError] = useState<string | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [addSectionOpen, setAddSectionOpen] = useState(false);
   const [newSectionTitle, setNewSectionTitle] = useState("");
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
-  const [resetStatus, setResetStatus] = useState<"idle" | "resetting" | "error">("idle");
+  const [resetStatus, setResetStatus] = useState<
+    "idle" | "resetting" | "error"
+  >("idle");
   const [resetModalMounted, setResetModalMounted] = useState(false);
   const resetModalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1381,7 +1524,7 @@ export function AdaptacaoCvClient({
         setFinalCvOutput(payload.finalCvOutput as FinalCvOutput);
         if (payload.sectionMapping) setSectionMapping(payload.sectionMapping);
         setEditedSections(
-          (payload.finalCvOutput!.sections ?? []) as CvSection[],
+          (payload.finalCvOutput?.sections ?? []) as CvSection[],
         );
         setIsGenerating(false);
         return true;
@@ -1426,7 +1569,10 @@ export function AdaptacaoCvClient({
       if (resetModalTimerRef.current) clearTimeout(resetModalTimerRef.current);
       setResetModalMounted(true);
     } else if (resetModalMounted) {
-      resetModalTimerRef.current = setTimeout(() => setResetModalMounted(false), 260);
+      resetModalTimerRef.current = setTimeout(
+        () => setResetModalMounted(false),
+        260,
+      );
     }
     return () => {
       if (resetModalTimerRef.current) clearTimeout(resetModalTimerRef.current);
@@ -1437,10 +1583,15 @@ export function AdaptacaoCvClient({
     if (shouldShowEditedCard) {
       if (editCardTimerRef.current) clearTimeout(editCardTimerRef.current);
       setEditCardMounted(true);
-      requestAnimationFrame(() => requestAnimationFrame(() => setEditCardVisible(true)));
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => setEditCardVisible(true)),
+      );
     } else {
       setEditCardVisible(false);
-      editCardTimerRef.current = setTimeout(() => setEditCardMounted(false), 230);
+      editCardTimerRef.current = setTimeout(
+        () => setEditCardMounted(false),
+        230,
+      );
     }
     return () => {
       if (editCardTimerRef.current) clearTimeout(editCardTimerRef.current);
@@ -1456,8 +1607,14 @@ export function AdaptacaoCvClient({
 
   const ajustes = analysisData.ajustes_conteudo ?? [];
   const sectionGroups = buildSectionGroups(ajustes, sectionMapping);
-  const totalAjustesPontos = ajustes.reduce((s: number, a: { pontos: number }) => s + (a.pontos ?? 0), 0);
-  const scoreAfter = totalAjustesPontos > 0 ? Math.min(100, scoreBefore + totalAjustesPontos) : undefined;
+  const totalAjustesPontos = ajustes.reduce(
+    (s: number, a: { pontos: number }) => s + (a.pontos ?? 0),
+    0,
+  );
+  const scoreAfter =
+    totalAjustesPontos > 0
+      ? Math.min(100, scoreBefore + totalAjustesPontos)
+      : undefined;
 
   const displaySections = (
     isEditing
@@ -1544,7 +1701,11 @@ export function AdaptacaoCvClient({
             (s) => s.sectionType === "skills",
           );
           if (skillsSection) {
-            map[key] = { sectionType: "skills", itemIdx: 0, highlightText: a.titulo };
+            map[key] = {
+              sectionType: "skills",
+              itemIdx: 0,
+              highlightText: a.titulo,
+            };
           }
         }
         continue;
@@ -1552,7 +1713,9 @@ export function AdaptacaoCvClient({
       // Fallback: legacy sectionMapping + heuristic
       const sectionType = sectionMapping[key];
       if (!sectionType) continue;
-      const section = displaySections.find((s) => s.sectionType === sectionType);
+      const section = displaySections.find(
+        (s) => s.sectionType === sectionType,
+      );
       if (!section) continue;
       map[key] = {
         sectionType,
@@ -1639,7 +1802,10 @@ export function AdaptacaoCvClient({
   function handleAddItem(sectionIdx: number) {
     updateSection(sectionIdx, (s) => ({
       ...s,
-      items: [...s.items, { heading: "", subheading: "", dateRange: "", bullets: [""] }],
+      items: [
+        ...s.items,
+        { heading: "", subheading: "", dateRange: "", bullets: [""] },
+      ],
     }));
   }
 
@@ -1674,7 +1840,11 @@ export function AdaptacaoCvClient({
   async function handleSave() {
     setSaveStatus("saving");
     try {
-      await updateCvAdaptationContent(adaptationId, editedSections, editedSummary);
+      await updateCvAdaptationContent(
+        adaptationId,
+        editedSections,
+        editedSummary,
+      );
       setSaveStatus("saved");
       setLocalEditedOutput((prev) => ({
         ...(prev ?? finalCvOutput ?? {}),
@@ -1723,8 +1893,12 @@ export function AdaptacaoCvClient({
     setReanaliseError(null);
     try {
       const cvText = sectionsToText(
-        isEditing ? editedSections : ((editedCvJson ?? finalCvOutput)?.sections ?? []) as CvSection[],
-        isEditing ? editedSummary : ((editedCvJson ?? finalCvOutput)?.summary ?? ""),
+        isEditing
+          ? editedSections
+          : (((editedCvJson ?? finalCvOutput)?.sections ?? []) as CvSection[]),
+        isEditing
+          ? editedSummary
+          : ((editedCvJson ?? finalCvOutput)?.summary ?? ""),
       );
 
       const formData = new FormData();
@@ -1740,7 +1914,10 @@ export function AdaptacaoCvClient({
       }
 
       const saved = await saveGuestPreview({
-        adaptedContentJson: result.adaptedContentJson as Record<string, unknown>,
+        adaptedContentJson: result.adaptedContentJson as Record<
+          string,
+          unknown
+        >,
         previewText: result.previewText,
         masterCvText: result.masterCvText,
         analysisCvSnapshotId: result.analysisCvSnapshotId,
@@ -1750,8 +1927,10 @@ export function AdaptacaoCvClient({
       });
 
       const newScore =
-        (result.adaptedContentJson as CvAnalysisData)?.scoring?.totals?.scoreAtualBase ??
-        (result.adaptedContentJson as CvAnalysisData)?.projecao_melhoria?.score_atual ??
+        (result.adaptedContentJson as CvAnalysisData)?.scoring?.totals
+          ?.scoreAtualBase ??
+        (result.adaptedContentJson as CvAnalysisData)?.projecao_melhoria
+          ?.score_atual ??
         (result.adaptedContentJson as CvAnalysisData)?.fit?.score ??
         null;
 
@@ -1759,7 +1938,9 @@ export function AdaptacaoCvClient({
       setReanaliseAdaptationId(saved.id);
       setReanaliseState("done");
     } catch (e) {
-      setReanaliseError(e instanceof Error ? e.message : "Erro ao reanalisar. Tente novamente.");
+      setReanaliseError(
+        e instanceof Error ? e.message : "Erro ao reanalisar. Tente novamente.",
+      );
       setReanaliseState("error");
     }
   }
@@ -1817,83 +1998,87 @@ export function AdaptacaoCvClient({
               animation: `${resetConfirmOpen ? "resetBackdropIn" : "resetBackdropOut"} 0.22s ease forwards`,
             }}
           >
-          <div
-            style={{
-              background: "#1a1a1a",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 12,
-              padding: "28px 32px",
-              maxWidth: 420,
-              width: "calc(100% - 48px)",
-              animation: `${resetConfirmOpen ? "resetPanelIn" : "resetPanelOut"} 0.22s ease forwards`,
-            }}
-          >
-            <p
+            <div
               style={{
-                fontSize: 14,
-                fontWeight: 700,
-                color: "#f0f0f0",
-                margin: "0 0 10px",
+                background: "#1a1a1a",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 12,
+                padding: "28px 32px",
+                maxWidth: 420,
+                width: "calc(100% - 48px)",
+                animation: `${resetConfirmOpen ? "resetPanelIn" : "resetPanelOut"} 0.22s ease forwards`,
               }}
             >
-              Voltar ao CV adaptado original?
-            </p>
-            <p
-              style={{
-                fontSize: 12,
-                color: "#aaa",
-                margin: "0 0 24px",
-                lineHeight: 1.6,
-              }}
-            >
-              Todas as alterações manuais feitas serão descartadas e o CV voltará
-              à versão gerada pela análise.
-            </p>
-            {resetStatus === "error" && (
-              <p style={{ fontSize: 11, color: "#ef4444", margin: "0 0 12px" }}>
-                Erro ao resetar. Tente novamente.
-              </p>
-            )}
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setResetConfirmOpen(false);
-                  setResetStatus("idle");
-                }}
-                disabled={resetStatus === "resetting"}
+              <p
                 style={{
-                  padding: "8px 16px",
-                  background: "transparent",
-                  color: "#999",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: 7,
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                disabled={resetStatus === "resetting"}
-                style={{
-                  padding: "8px 20px",
-                  background: "#ef4444",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 7,
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: 700,
-                  cursor: resetStatus === "resetting" ? "default" : "pointer",
-                  opacity: resetStatus === "resetting" ? 0.6 : 1,
+                  color: "#f0f0f0",
+                  margin: "0 0 10px",
                 }}
               >
-                {resetStatus === "resetting" ? "Resetando..." : "Confirmar"}
-              </button>
+                Voltar ao CV adaptado original?
+              </p>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "#aaa",
+                  margin: "0 0 24px",
+                  lineHeight: 1.6,
+                }}
+              >
+                Todas as alterações manuais feitas serão descartadas e o CV
+                voltará à versão gerada pela análise.
+              </p>
+              {resetStatus === "error" && (
+                <p
+                  style={{ fontSize: 11, color: "#ef4444", margin: "0 0 12px" }}
+                >
+                  Erro ao resetar. Tente novamente.
+                </p>
+              )}
+              <div
+                style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetConfirmOpen(false);
+                    setResetStatus("idle");
+                  }}
+                  disabled={resetStatus === "resetting"}
+                  style={{
+                    padding: "8px 16px",
+                    background: "transparent",
+                    color: "#999",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 7,
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  disabled={resetStatus === "resetting"}
+                  style={{
+                    padding: "8px 20px",
+                    background: "#ef4444",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 7,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: resetStatus === "resetting" ? "default" : "pointer",
+                    opacity: resetStatus === "resetting" ? 0.6 : 1,
+                  }}
+                >
+                  {resetStatus === "resetting" ? "Resetando..." : "Confirmar"}
+                </button>
+              </div>
             </div>
-          </div>
           </div>
         </>
       )}
@@ -2055,16 +2240,26 @@ export function AdaptacaoCvClient({
                 flexShrink: 0,
                 background: "rgba(212,133,74,0.06)",
                 opacity: editCardVisible ? 1 : 0,
-                transform: editCardVisible ? "translateY(0)" : "translateY(6px)",
+                transform: editCardVisible
+                  ? "translateY(0)"
+                  : "translateY(6px)",
                 transition: "opacity 0.22s ease, transform 0.22s ease",
               }}
             >
-              <p style={{ fontSize: 12, fontWeight: 600, color: "#c45a10", lineHeight: 1.5, margin: 0 }}>
-                CV editado manualmente — use o toolbar para reanalisar ou baixar.
+              <p
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "#c45a10",
+                  lineHeight: 1.5,
+                  margin: 0,
+                }}
+              >
+                CV editado manualmente — use o toolbar para reanalisar ou
+                baixar.
               </p>
             </div>
           )}
-
         </aside>
 
         {/* ── Main CV panel ────────────────────────────────────────── */}
@@ -2176,24 +2371,60 @@ export function AdaptacaoCvClient({
                       ↺ Voltar ao CV adaptado original
                     </button>
                     {reanaliseState === "running" ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px" }}>
-                        <div style={{
-                          width: 12, height: 12, borderRadius: "50%",
-                          border: `2px solid rgba(212,133,74,0.2)`,
-                          borderTop: `2px solid ${AMBER}`,
-                          animation: "spin 0.9s linear infinite",
-                          flexShrink: 0,
-                        }} />
-                        <span style={{ fontSize: 11, color: AMBER, whiteSpace: "nowrap" }}>Analisando...</span>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "6px 10px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: "50%",
+                            border: `2px solid rgba(212,133,74,0.2)`,
+                            borderTop: `2px solid ${AMBER}`,
+                            animation: "spin 0.9s linear infinite",
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: AMBER,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Analisando...
+                        </span>
                       </div>
                     ) : reanaliseState === "done" && reanaliseScore !== null ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 700 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "#22c55e",
+                            fontWeight: 700,
+                          }}
+                        >
                           ✓ Score editado: {reanaliseScore}
                         </span>
                         <Link
                           href={`/adaptar/resultado?adaptationId=${reanaliseAdaptationId}`}
-                          style={{ fontSize: 11, color: LIME, textDecoration: "underline", whiteSpace: "nowrap" }}
+                          style={{
+                            fontSize: 11,
+                            color: LIME,
+                            textDecoration: "underline",
+                            whiteSpace: "nowrap",
+                          }}
                         >
                           Ver análise →
                         </Link>
@@ -2214,7 +2445,9 @@ export function AdaptacaoCvClient({
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {reanaliseState === "error" ? "⟳ Tentar novamente" : "⟳ Reanalisar CV"}
+                        {reanaliseState === "error"
+                          ? "⟳ Tentar novamente"
+                          : "⟳ Reanalisar CV"}
                       </button>
                     )}
                   </>
@@ -2319,7 +2552,16 @@ export function AdaptacaoCvClient({
               </div>
 
               {/* SEPARATOR */}
-              <div className="adaptcv-toolbar-separator" style={{ width: 1, height: 22, background: "rgba(10,10,10,0.12)", margin: "0 6px", flexShrink: 0 }} />
+              <div
+                className="adaptcv-toolbar-separator"
+                style={{
+                  width: 1,
+                  height: 22,
+                  background: "rgba(10,10,10,0.12)",
+                  margin: "0 6px",
+                  flexShrink: 0,
+                }}
+              />
 
               {/* RIGHT: download actions */}
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -2371,226 +2613,237 @@ export function AdaptacaoCvClient({
               background: "#d0cec8",
             }}
           >
-
-          {/* CV card or generating spinner */}
-          {isGenerating ? (
-            <CvSkeleton />
-          ) : (
-            <div
-              ref={cvPanelRef}
-              className="adaptcv-cv-card"
-              style={{
-                background: CV_BG,
-                borderRadius: 0,
-                padding: "40px 44px",
-                maxWidth: 720,
-                margin: "0 auto 40px",
-                boxShadow: "0 2px 32px rgba(0,0,0,0.6)",
-                minHeight: 500,
-              }}
-            >
-              {/* Header */}
-              {headerSection && (
-                <HeaderSectionView
-                  section={headerSection}
-                  isHighlighted={!isEditing && highlightedSection === "header"}
-                  isEditing={isEditing}
-                  onItemChange={(itemIdx, field, value) => {
-                    const sectionIdx = displaySections.indexOf(headerSection);
-                    handleItemChange(sectionIdx, itemIdx, field, value);
-                  }}
-                />
-              )}
-
-              {/* Professional summary */}
-              {(cvSummary || isEditing) && (
-                <SummaryBlock
-                  summary={isEditing ? editedSummary : (cvSummary ?? "")}
-                  isHighlighted={!isEditing && highlightedSection === "summary"}
-                  isEditing={isEditing}
-                  onSummaryChange={setEditedSummary}
-                  lang={cvLanguage}
-                />
-              )}
-
-              {/* Body sections */}
-              {bodySections.map((section, bodyIdx) => {
-                const sectionIdx = displaySections.indexOf(section);
-                const isSectionHighlighted =
-                  !isEditing && highlightedSection === section.sectionType;
-                return (
-                  <CvSectionBlock
-                    key={`${section.sectionType}-${section.title || bodyIdx}`}
-                    section={section}
-                    isHighlighted={isSectionHighlighted}
-                    highlightedItemIdx={
-                      isSectionHighlighted ? highlightedItemIdx : undefined
-                    }
-                    highlightText={
-                      isSectionHighlighted ? activeHighlightText : undefined
-                    }
-                    highlightColor={
-                      isSectionHighlighted ? activeHighlightColor : undefined
+            {/* CV card or generating spinner */}
+            {isGenerating ? (
+              <CvSkeleton />
+            ) : (
+              <div
+                ref={cvPanelRef}
+                className="adaptcv-cv-card"
+                style={{
+                  background: CV_BG,
+                  borderRadius: 0,
+                  padding: "40px 44px",
+                  maxWidth: 720,
+                  margin: "0 auto 40px",
+                  boxShadow: "0 2px 32px rgba(0,0,0,0.6)",
+                  minHeight: 500,
+                }}
+              >
+                {/* Header */}
+                {headerSection && (
+                  <HeaderSectionView
+                    section={headerSection}
+                    isHighlighted={
+                      !isEditing && highlightedSection === "header"
                     }
                     isEditing={isEditing}
-                    onBulletsChange={(itemIdx, bullets) =>
-                      handleBulletsChange(sectionIdx, itemIdx, bullets)
-                    }
-                    onItemChange={(itemIdx, field, value) =>
-                      handleItemChange(
-                        sectionIdx,
-                        itemIdx,
-                        field,
-                        value as string,
-                      )
-                    }
-                    onAddItem={() => handleAddItem(sectionIdx)}
-                    onRemoveItem={(itemIdx) => handleRemoveItem(sectionIdx, itemIdx)}
-                    onRemoveSection={
-                      section.sectionType === "other"
-                        ? () => handleRemoveSection(sectionIdx)
-                        : undefined
-                    }
+                    onItemChange={(itemIdx, field, value) => {
+                      const sectionIdx = displaySections.indexOf(headerSection);
+                      handleItemChange(sectionIdx, itemIdx, field, value);
+                    }}
                   />
-                );
-              })}
+                )}
 
-              {/* Add new section — only in edit mode */}
-              {isEditing && (
-                <div style={{ marginTop: 8 }}>
-                  {addSectionOpen ? (
-                    <div
-                      style={{
-                        border: "1px solid #d0d0cc",
-                        borderRadius: 8,
-                        padding: "14px 16px",
-                        background: "#fafaf8",
-                      }}
-                    >
-                      <label
-                        htmlFor="new-section-title"
+                {/* Professional summary */}
+                {(cvSummary || isEditing) && (
+                  <SummaryBlock
+                    summary={isEditing ? editedSummary : (cvSummary ?? "")}
+                    isHighlighted={
+                      !isEditing && highlightedSection === "summary"
+                    }
+                    isEditing={isEditing}
+                    onSummaryChange={setEditedSummary}
+                    lang={cvLanguage}
+                  />
+                )}
+
+                {/* Body sections */}
+                {bodySections.map((section, bodyIdx) => {
+                  const sectionIdx = displaySections.indexOf(section);
+                  const isSectionHighlighted =
+                    !isEditing && highlightedSection === section.sectionType;
+                  return (
+                    <CvSectionBlock
+                      key={`${section.sectionType}-${section.title || bodyIdx}`}
+                      section={section}
+                      isHighlighted={isSectionHighlighted}
+                      highlightedItemIdx={
+                        isSectionHighlighted ? highlightedItemIdx : undefined
+                      }
+                      highlightText={
+                        isSectionHighlighted ? activeHighlightText : undefined
+                      }
+                      highlightColor={
+                        isSectionHighlighted ? activeHighlightColor : undefined
+                      }
+                      isEditing={isEditing}
+                      onBulletsChange={(itemIdx, bullets) =>
+                        handleBulletsChange(sectionIdx, itemIdx, bullets)
+                      }
+                      onItemChange={(itemIdx, field, value) =>
+                        handleItemChange(
+                          sectionIdx,
+                          itemIdx,
+                          field,
+                          value as string,
+                        )
+                      }
+                      onAddItem={() => handleAddItem(sectionIdx)}
+                      onRemoveItem={(itemIdx) =>
+                        handleRemoveItem(sectionIdx, itemIdx)
+                      }
+                      onRemoveSection={
+                        section.sectionType === "other"
+                          ? () => handleRemoveSection(sectionIdx)
+                          : undefined
+                      }
+                    />
+                  );
+                })}
+
+                {/* Add new section — only in edit mode */}
+                {isEditing && (
+                  <div style={{ marginTop: 8 }}>
+                    {addSectionOpen ? (
+                      <div
                         style={{
-                          display: "block",
-                          fontSize: 9,
-                          fontWeight: 700,
-                          color: CV_META,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.09em",
-                          marginBottom: 6,
+                          border: "1px solid #d0d0cc",
+                          borderRadius: 8,
+                          padding: "14px 16px",
+                          background: "#fafaf8",
                         }}
                       >
-                        Nome da nova seção
-                      </label>
-                      <input
-                        id="new-section-title"
-                        ref={addSectionInputRef}
-                        type="text"
-                        placeholder="Ex: Voluntariado, Premiações, Publicações…"
-                        value={newSectionTitle}
-                        onChange={(e) => setNewSectionTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddSection();
-                          }
-                          if (e.key === "Escape") {
-                            setAddSectionOpen(false);
-                            setNewSectionTitle("");
-                          }
-                        }}
-                        style={{
-                          ...inputStyle,
-                          marginBottom: 10,
-                          fontSize: 13,
-                          padding: "7px 10px",
-                        }}
-                      />
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button
-                          type="button"
-                          onClick={handleAddSection}
-                          disabled={!newSectionTitle.trim()}
+                        <label
+                          htmlFor="new-section-title"
                           style={{
-                            padding: "6px 16px",
-                            background: newSectionTitle.trim() ? "#111" : "#ccc",
-                            color: newSectionTitle.trim() ? "#f0f0f0" : "#888",
-                            border: "none",
-                            borderRadius: 5,
-                            fontSize: 12,
+                            display: "block",
+                            fontSize: 9,
                             fontWeight: 700,
-                            cursor: newSectionTitle.trim() ? "pointer" : "default",
+                            color: CV_META,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.09em",
+                            marginBottom: 6,
                           }}
                         >
-                          Adicionar seção
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAddSectionOpen(false);
-                            setNewSectionTitle("");
+                          Nome da nova seção
+                        </label>
+                        <input
+                          id="new-section-title"
+                          ref={addSectionInputRef}
+                          type="text"
+                          placeholder="Ex: Voluntariado, Premiações, Publicações…"
+                          value={newSectionTitle}
+                          onChange={(e) => setNewSectionTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddSection();
+                            }
+                            if (e.key === "Escape") {
+                              setAddSectionOpen(false);
+                              setNewSectionTitle("");
+                            }
                           }}
                           style={{
-                            padding: "6px 12px",
-                            background: "transparent",
-                            color: "#999",
-                            border: "1px solid #ddd",
-                            borderRadius: 5,
-                            fontSize: 12,
-                            cursor: "pointer",
+                            ...inputStyle,
+                            marginBottom: 10,
+                            fontSize: 13,
+                            padding: "7px 10px",
                           }}
-                        >
-                          Cancelar
-                        </button>
+                        />
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={handleAddSection}
+                            disabled={!newSectionTitle.trim()}
+                            style={{
+                              padding: "6px 16px",
+                              background: newSectionTitle.trim()
+                                ? "#111"
+                                : "#ccc",
+                              color: newSectionTitle.trim()
+                                ? "#f0f0f0"
+                                : "#888",
+                              border: "none",
+                              borderRadius: 5,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: newSectionTitle.trim()
+                                ? "pointer"
+                                : "default",
+                            }}
+                          >
+                            Adicionar seção
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddSectionOpen(false);
+                              setNewSectionTitle("");
+                            }}
+                            style={{
+                              padding: "6px 12px",
+                              background: "transparent",
+                              color: "#999",
+                              border: "1px solid #ddd",
+                              borderRadius: 5,
+                              fontSize: 12,
+                              cursor: "pointer",
+                            }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setAddSectionOpen(true)}
-                      style={{
-                        width: "100%",
-                        padding: "9px 0",
-                        background: "transparent",
-                        color: "#888",
-                        border: "1px dashed #ccc",
-                        borderRadius: 7,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        letterSpacing: "0.02em",
-                      }}
-                    >
-                      + Nova seção
-                    </button>
-                  )}
-                </div>
-              )}
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAddSectionOpen(true)}
+                        style={{
+                          width: "100%",
+                          padding: "9px 0",
+                          background: "transparent",
+                          color: "#888",
+                          border: "1px dashed #ccc",
+                          borderRadius: 7,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          letterSpacing: "0.02em",
+                        }}
+                      >
+                        + Nova seção
+                      </button>
+                    )}
+                  </div>
+                )}
 
-              {/* Fallback: no sections */}
-              {displaySections.length === 0 && (
-                <div
-                  style={{
-                    background: AMBER_SOFT,
-                    border: `1px solid ${AMBER_BORDER}`,
-                    borderRadius: 10,
-                    padding: "14px 18px",
-                  }}
-                >
-                  <p
+                {/* Fallback: no sections */}
+                {displaySections.length === 0 && (
+                  <div
                     style={{
-                      fontSize: 12,
-                      color: "#7a3d10",
-                      margin: 0,
-                      lineHeight: 1.6,
+                      background: AMBER_SOFT,
+                      border: `1px solid ${AMBER_BORDER}`,
+                      borderRadius: 10,
+                      padding: "14px 18px",
                     }}
                   >
-                    Esta análise foi gerada em formato legado. Reanalise seu CV
-                    para acessar a visualização completa.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+                    <p
+                      style={{
+                        fontSize: 12,
+                        color: "#7a3d10",
+                        margin: 0,
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      Esta análise foi gerada em formato legado. Reanalise seu
+                      CV para acessar a visualização completa.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </main>
       </div>

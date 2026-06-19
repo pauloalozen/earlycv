@@ -77,7 +77,6 @@ describe("buildProfileBlockStates", () => {
     expect(blocks[0].id).toBe("dados-pessoais");
     expect(blocks[0].hasGap).toBe(true);
   });
-
 });
 
 describe("buildProfileBlockUpdatePayload", () => {
@@ -115,7 +114,11 @@ describe("buildProfileBlockUpdatePayload", () => {
     const formData = new FormData();
     formData.set(
       "skillsJson",
-      JSON.stringify({ technical: ["SQL"], business: [], soft: ["Comunicação"] }),
+      JSON.stringify({
+        technical: ["SQL"],
+        business: [],
+        soft: ["Comunicação"],
+      }),
     );
 
     expect(buildProfileBlockUpdatePayload("habilidades", formData)).toEqual({

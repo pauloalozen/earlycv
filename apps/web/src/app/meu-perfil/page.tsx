@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
-import { PublicFooter } from "@/components/public-footer";
 import { ProgressRing } from "@/components/progress-ring";
+import { PublicFooter } from "@/components/public-footer";
 import { apiRequest } from "@/lib/api-request";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
@@ -71,18 +71,25 @@ export default async function MeuPerfilPage() {
   const redirectPath = getRouteAccessRedirectPath("/meu-perfil", user);
   if (redirectPath) redirect(redirectPath);
 
-  const [planResult, highlightsResult, summaryResult, masterResumeResult, profileResult] =
-    await Promise.allSettled([
-      getMyPlan(),
-      listJobApplicationHighlights(5),
-      getJobApplicationHighlightsSummary(),
-      getMyMasterResume(),
-      apiRequest("GET", "/users/profile").then(async (r) => {
+  const [
+    planResult,
+    highlightsResult,
+    summaryResult,
+    masterResumeResult,
+    profileResult,
+  ] = await Promise.allSettled([
+    getMyPlan(),
+    listJobApplicationHighlights(5),
+    getJobApplicationHighlightsSummary(),
+    getMyMasterResume(),
+    apiRequest("GET", "/users/profile")
+      .then(async (r) => {
         if (!r.ok) return null;
         const body = await r.text();
         return body.trim() ? (JSON.parse(body) as UserProfileRecord) : null;
-      }).catch(() => null),
-    ]);
+      })
+      .catch(() => null),
+  ]);
 
   const plan = planResult.status === "fulfilled" ? planResult.value : null;
   const applicationHighlights =
@@ -430,33 +437,33 @@ export default async function MeuPerfilPage() {
                 </p>
                 <div className="h-px flex-1 bg-[rgba(154,61,40,0.18)]" />
               </div>
-            <div
-              className="flex flex-wrap items-center justify-between gap-5 rounded-[12px] px-5 py-4"
-              style={{
-                background: "rgba(154,61,40,0.06)",
-                border: "1px solid rgba(154,61,40,0.28)",
-              }}
-            >
-              <div>
-                <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#9a3d28]">
-                  Excluir conta
-                </p>
-                <p className="mt-0.5 max-w-[520px] text-[12.5px] leading-relaxed text-[#5a5a55]">
-                  Remove seu CV Master, análises e candidaturas. Esta ação é
-                  permanente, não dá para desfazer.
-                </p>
-              </div>
-              <Link
-                href="/conta/excluir"
-                className="shrink-0 rounded-[8px] px-4 py-2.5 text-[13px] font-medium transition-colors hover:bg-[rgba(154,61,40,0.1)]"
+              <div
+                className="flex flex-wrap items-center justify-between gap-5 rounded-[12px] px-5 py-4"
                 style={{
-                  color: "#9a3d28",
+                  background: "rgba(154,61,40,0.06)",
                   border: "1px solid rgba(154,61,40,0.28)",
                 }}
               >
-                Excluir conta
-              </Link>
-            </div>
+                <div>
+                  <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#9a3d28]">
+                    Excluir conta
+                  </p>
+                  <p className="mt-0.5 max-w-[520px] text-[12.5px] leading-relaxed text-[#5a5a55]">
+                    Remove seu CV Master, análises e candidaturas. Esta ação é
+                    permanente, não dá para desfazer.
+                  </p>
+                </div>
+                <Link
+                  href="/conta/excluir"
+                  className="shrink-0 rounded-[8px] px-4 py-2.5 text-[13px] font-medium transition-colors hover:bg-[rgba(154,61,40,0.1)]"
+                  style={{
+                    color: "#9a3d28",
+                    border: "1px solid rgba(154,61,40,0.28)",
+                  }}
+                >
+                  Excluir conta
+                </Link>
+              </div>
             </div>
           </div>
         </div>

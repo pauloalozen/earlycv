@@ -58,9 +58,7 @@ describe("CvReleaseModal", () => {
         "Seu CV está pronto. Baixe e candidate-se o quanto antes.",
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: "Fechar" }),
-    ).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Fechar" })).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Baixar em PDF" })).toBeEnabled();
     expect(
       screen.getByRole("button", { name: "Baixar em DOCX" }),

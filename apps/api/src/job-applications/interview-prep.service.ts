@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
@@ -16,6 +22,13 @@ type AdaptedContentJson = {
   melhorias_aplicadas?: string[];
   fit?: { headline?: string };
 };
+
+function isAdaptationUnlocked(adaptation: {
+  status?: string | null;
+  isUnlocked?: boolean | null;
+}): boolean {
+  return adaptation.isUnlocked === true || adaptation.status === "delivered";
+}
 
 function extractStructuredAnalysis(
   raw: Prisma.JsonValue | null | undefined,
@@ -66,11 +79,11 @@ export class JobApplicationInterviewPrepService {
           where: { id: { not: undefined } },
           select: {
             id: true,
+            status: true,
+            isUnlocked: true,
             jobDescriptionText: true,
             adaptedContentJson: true,
           },
-          orderBy: { createdAt: "desc" },
-          take: 1,
         },
       },
     });
@@ -86,11 +99,28 @@ export class JobApplicationInterviewPrepService {
       return application.interviewPrep;
     }
 
-    const currentAdaptation = application.currentCvAdaptationId
-      ? (application.cvAdaptations.find(
-          (cv) => cv.id === application.currentCvAdaptationId,
-        ) ?? application.cvAdaptations[0])
-      : application.cvAdaptations[0];
+    if (!application.currentCvAdaptationId) {
+      throw new ConflictException(
+        "Defina o CV desta candidatura antes de preparar sua entrevista.",
+      );
+    }
+
+    const currentAdaptation =
+      application.cvAdaptations.find(
+        (cv) => cv.id === application.currentCvAdaptationId,
+      ) ?? null;
+
+    if (!currentAdaptation) {
+      throw new ConflictException(
+        "Defina o CV desta candidatura antes de preparar sua entrevista.",
+      );
+    }
+
+    if (!isAdaptationUnlocked(currentAdaptation)) {
+      throw new ConflictException(
+        "Libere o CV desta vaga para preparar sua entrevista.",
+      );
+    }
 
     const jobDescriptionText =
       application.jobDescriptionText ??
@@ -189,6 +219,9 @@ export class JobApplicationInterviewPrepService {
     const prepContent = content as {
       questionsTheyMayAsk?: unknown[];
     };
+    if (!this.funnelEvents) {
+      return result;
+    }
     await this.funnelEvents
       .record(
         {

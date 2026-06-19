@@ -27,16 +27,23 @@ function LogoMark() {
       fill="none"
     >
       <title>earlyCV</title>
-      <rect x="0"  y="0"    width="12" height="6.5" rx="2" fill="#0a0a0a" />
-      <rect x="16" y="0"    width="12" height="6.5" rx="2" fill="#0a0a0a" />
-      <rect x="32" y="0"    width="8"  height="6.5" rx="2" fill="#c6ff3a" />
-      <rect x="0"  y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+      <rect x="0" y="0" width="12" height="6.5" rx="2" fill="#0a0a0a" />
+      <rect x="16" y="0" width="12" height="6.5" rx="2" fill="#0a0a0a" />
+      <rect x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
+      <rect x="0" y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
       <rect x="20" y="11.2" width="18" height="6.5" rx="2" fill="#0a0a0a" />
-      <rect x="0"  y="22.4" width="7"  height="6.5" rx="2" fill="#0a0a0a" />
+      <rect x="0" y="22.4" width="7" height="6.5" rx="2" fill="#0a0a0a" />
       <rect x="11" y="22.4" width="16" height="6.5" rx="2" fill="#c6ff3a" />
-      <rect x="30" y="22.4" width="8"  height="6.5" rx="2" fill="#0a0a0a" />
-      <rect x="0"  y="33.5" width="22" height="6.5" rx="2" fill="#0a0a0a" />
-      <rect x="26" y="33.5" width="9"  height="6.5" rx="2" fill="rgba(10,10,10,0.14)" />
+      <rect x="30" y="22.4" width="8" height="6.5" rx="2" fill="#0a0a0a" />
+      <rect x="0" y="33.5" width="22" height="6.5" rx="2" fill="#0a0a0a" />
+      <rect
+        x="26"
+        y="33.5"
+        width="9"
+        height="6.5"
+        rx="2"
+        fill="rgba(10,10,10,0.14)"
+      />
     </svg>
   );
 }

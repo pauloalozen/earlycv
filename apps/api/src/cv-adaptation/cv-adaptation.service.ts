@@ -2516,7 +2516,9 @@ export class CvAdaptationService {
     const editedCvJson = adaptation.editedCvJson as CvAdaptationOutput | null;
     const finalCvOutput = editedCvJson ?? aiGeneratedOutput;
 
-    const sectionMapping = this.buildSectionMapping(adaptation.adaptedContentJson);
+    const sectionMapping = this.buildSectionMapping(
+      adaptation.adaptedContentJson,
+    );
     const enrichedAnalysis = this.enrichAjustesWithSelectedKeywords(
       adaptation.adaptedContentJson,
       finalCvOutput ?? undefined,
@@ -2638,20 +2640,33 @@ export class CvAdaptationService {
     for (const ajuste of ajustes) {
       const key = ajuste.id ?? ajuste.titulo;
       if (!key) continue;
-      const text = `${ajuste.titulo ?? ""} ${ajuste.descricao ?? ""}`.toLowerCase();
+      const text =
+        `${ajuste.titulo ?? ""} ${ajuste.descricao ?? ""}`.toLowerCase();
       mapping[key] = this.inferSectionType(text);
     }
     return mapping;
   }
 
   private inferSectionType(text: string): string {
-    if (/experiên|experi[eê]ncia|cargo|empresa|atua[çc]|profissional|trabalh|ocupa[çc]/.test(text)) {
+    if (
+      /experiên|experi[eê]ncia|cargo|empresa|atua[çc]|profissional|trabalh|ocupa[çc]/.test(
+        text,
+      )
+    ) {
       return "experience";
     }
-    if (/habilidad|competên|skill|tecnolog|ferramenta|técni|stack|linguagem de program|framework/.test(text)) {
+    if (
+      /habilidad|competên|skill|tecnolog|ferramenta|técni|stack|linguagem de program|framework/.test(
+        text,
+      )
+    ) {
       return "skills";
     }
-    if (/forma[çc][ãa]o|educa[çc]|curso|gradua[çc]|acad[eê]m|universid|faculdad|ensino|diploma/.test(text)) {
+    if (
+      /forma[çc][ãa]o|educa[çc]|curso|gradua[çc]|acad[eê]m|universid|faculdad|ensino|diploma/.test(
+        text,
+      )
+    ) {
       return "education";
     }
     if (/resumo profis|objetivo|perfil|sobre m[iı]m|apresenta[çc]/.test(text)) {
@@ -2663,7 +2678,9 @@ export class CvAdaptationService {
     if (/certifica[çc]|certific[aá]do/.test(text)) {
       return "certifications";
     }
-    if (/idioma|l[iíì]ngua|ingl[eê]s|portugu[eê]s|espanhol|franc[eê]s/.test(text)) {
+    if (
+      /idioma|l[iíì]ngua|ingl[eê]s|portugu[eê]s|espanhol|franc[eê]s/.test(text)
+    ) {
       return "languages";
     }
     return "experience";
@@ -3114,11 +3131,7 @@ export class CvAdaptationService {
 
     // Normalize helper: remove accents + lowercase for loose matching
     const norm = (s: string) =>
-      s
-        .normalize("NFKD")
-        .replace(/[̀-ͯ]/g, "")
-        .toLowerCase()
-        .trim();
+      s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
     const existingAjustes = Array.isArray(json.ajustes_conteudo)
       ? (json.ajustes_conteudo as Record<string, unknown>[])
@@ -3144,7 +3157,10 @@ export class CvAdaptationService {
           kwPontosMap.get(kwNorm) ??
           (patchedAjustes[idx].pontos as number | undefined);
         if (typeof correctPontos === "number") {
-          patchedAjustes[idx] = { ...patchedAjustes[idx], pontos: correctPontos };
+          patchedAjustes[idx] = {
+            ...patchedAjustes[idx],
+            pontos: correctPontos,
+          };
         }
         coveredKws.add(kwNorm);
       }
@@ -3154,18 +3170,24 @@ export class CvAdaptationService {
     const newKwAjustes = selectedKws
       .filter((kw) => !coveredKws.has(norm(kw)))
       .map((kw) => ({
-        id: norm(kw).replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
+        id: norm(kw)
+          .replace(/\s+/g, "-")
+          .replace(/[^a-z0-9-]/g, ""),
         titulo: kw,
         descricao: `Keyword "${kw}" incluída no CV adaptado.`,
-        pontos: kwPontosMap.get(kw.toLowerCase().trim()) ?? kwPontosMap.get(norm(kw)) ?? 1,
+        pontos:
+          kwPontosMap.get(kw.toLowerCase().trim()) ??
+          kwPontosMap.get(norm(kw)) ??
+          1,
         dica: `A keyword "${kw}" foi adicionada onde mais se encaixa no CV.`,
         categoria: "keywords_incluidas",
         coveragePercent: kwInCv(kw) ? 100 : 0,
       }));
 
     // Add keywords.possiveis (LLM-suggested keywords with real basis)
-    const kwPossiveisRaw = (json.keywords as Record<string, unknown> | undefined)
-      ?.possiveis;
+    const kwPossiveisRaw = (
+      json.keywords as Record<string, unknown> | undefined
+    )?.possiveis;
     const allNormIds = new Set([
       ...patchedAjustes.map((a) => norm(String(a.titulo ?? ""))),
       ...newKwAjustes.map((a) => norm(String(a.titulo ?? ""))),
@@ -3179,7 +3201,9 @@ export class CvAdaptationService {
               !allNormIds.has(norm(item.kw as string)),
           )
           .map((item) => ({
-            id: norm(item.kw as string).replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
+            id: norm(item.kw as string)
+              .replace(/\s+/g, "-")
+              .replace(/[^a-z0-9-]/g, ""),
             titulo: item.kw as string,
             descricao: `Keyword incluída pela IA com base em contexto real do CV.`,
             pontos: typeof item.pontos === "number" ? item.pontos : 1,
@@ -3191,7 +3215,11 @@ export class CvAdaptationService {
 
     return {
       ...json,
-      ajustes_conteudo: [...patchedAjustes, ...newKwAjustes, ...possiveisAjustes],
+      ajustes_conteudo: [
+        ...patchedAjustes,
+        ...newKwAjustes,
+        ...possiveisAjustes,
+      ],
     };
   }
 
@@ -3226,11 +3254,12 @@ export class CvAdaptationService {
       .map((a) => ({
         id: typeof a.id === "string" && a.id ? a.id : String(a.titulo).trim(),
         titulo: String(a.titulo).trim(),
-        categoria: (
-          VALID_CATEGORIAS.has(a.categoria as string)
-            ? a.categoria
-            : "ajuste_conteudo"
-        ) as "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo",
+        categoria: (VALID_CATEGORIAS.has(a.categoria as string)
+          ? a.categoria
+          : "ajuste_conteudo") as
+          | "keywords_incluidas"
+          | "texto_reescrito"
+          | "ajuste_conteudo",
       }))
       .slice(0, 50);
   }
@@ -3314,10 +3343,14 @@ export class CvAdaptationService {
     };
   }
 
-  private stripAiCustomSections(output: CvAdaptationOutput): CvAdaptationOutput {
+  private stripAiCustomSections(
+    output: CvAdaptationOutput,
+  ): CvAdaptationOutput {
     return {
       ...output,
-      sections: (output.sections ?? []).filter((s) => s.sectionType !== "other"),
+      sections: (output.sections ?? []).filter(
+        (s) => s.sectionType !== "other",
+      ),
     };
   }
 

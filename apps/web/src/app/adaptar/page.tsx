@@ -177,7 +177,7 @@ export default function AdaptarPage() {
   const [profileReadinessStatus, setProfileReadinessStatus] = useState<
     "empty" | "partial" | "ready" | null
   >(null);
-  const [masterCvExtractionStatus, setMasterCvExtractionStatus] =
+  const [_masterCvExtractionStatus, setMasterCvExtractionStatus] =
     useState<MasterCvExtractionStatusDto>(null);
 
   const clearSelectedFile = useCallback(() => {
@@ -380,7 +380,7 @@ export default function AdaptarPage() {
       setMasterResume(resume ?? null);
       setMasterCvExtractionStatus(extractionStatus ?? null);
       const hasResumeResult = !!resume;
-      const profileIsReady =
+      const _profileIsReady =
         (status as { profileReadinessStatus?: unknown })
           .profileReadinessStatus === "ready";
       if (status.userName && hasResumeResult) {
@@ -445,7 +445,7 @@ export default function AdaptarPage() {
   const isAuthenticated = !!userName;
   const hasMaster = !!masterResume;
   const isProfileModeReady = profileReadinessStatus === "ready";
-  const isProfileModeAvailable = isAuthenticated && hasMaster;
+  const _isProfileModeAvailable = isAuthenticated && hasMaster;
 
   const validateCvTextInput = (input: string): string | null => {
     const normalized = input.trim();
@@ -1050,75 +1050,72 @@ export default function AdaptarPage() {
 
                   {/* Master selected */}
                   {isAuthenticated && cvMode === "profile" ? (
-                    <>
+                    <div
+                      style={{
+                        background: "#fafaf6",
+                        border: "1px solid rgba(10,10,10,0.08)",
+                        borderRadius: 14,
+                        padding: "28px 20px",
+                        textAlign: "center",
+                        minHeight: CV_INPUT_BOX_MIN_HEIGHT,
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "center",
+                      }}
+                    >
                       <div
                         style={{
-                          background: "#fafaf6",
-                          border: "1px solid rgba(10,10,10,0.08)",
-                          borderRadius: 14,
-                          padding: "28px 20px",
-                          textAlign: "center",
-                          minHeight: CV_INPUT_BOX_MIN_HEIGHT,
                           display: "flex",
-                          flexDirection: "column",
                           justifyContent: "center",
+                          marginBottom: 10,
                         }}
                       >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "center",
-                            marginBottom: 10,
-                          }}
+                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                        <svg
+                          width="22"
+                          height="22"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          aria-hidden
                         >
-                          {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
-                          <svg
-                            width="22"
-                            height="22"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            aria-hidden
-                          >
-                            <path
-                              d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                              stroke="#0a0a0a"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <polyline
-                              points="14 2 14 8 20 8"
-                              stroke="#0a0a0a"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 500,
-                            marginBottom: 4,
-                          }}
-                        >
-                          {hasMaster
-                            ? (masterResume.sourceFileName ??
-                              masterResume.title)
-                            : "Usando dados do seu perfil canonico"}
-                        </div>
-                        <div
-                          style={{
-                            fontFamily: MONO,
-                            fontSize: 10.5,
-                            color: "#8a8a85",
-                          }}
-                        >
-                          Perfil salvo carregado ·{" "}
-                          <span style={{ color: "#405410" }}>✓ pronto</span>
-                        </div>
+                          <path
+                            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                            stroke="#0a0a0a"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <polyline
+                            points="14 2 14 8 20 8"
+                            stroke="#0a0a0a"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
                       </div>
-                    </>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 500,
+                          marginBottom: 4,
+                        }}
+                      >
+                        {hasMaster
+                          ? (masterResume.sourceFileName ?? masterResume.title)
+                          : "Usando dados do seu perfil canonico"}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#8a8a85",
+                        }}
+                      >
+                        Perfil salvo carregado ·{" "}
+                        <span style={{ color: "#405410" }}>✓ pronto</span>
+                      </div>
+                    </div>
                   ) : cvMode === "text" ? (
                     <div
                       style={{

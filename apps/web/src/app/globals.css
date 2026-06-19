@@ -311,57 +311,132 @@ button:disabled,
 }
 
 /* ══ EarlyCV Loaders ══════════════════════════════════════════════════════ */
-.ecv-loader rect { transform-box: fill-box; }
+.ecv-loader rect {
+  transform-box: fill-box;
+}
 
 /* A · SCAN — faixa verde varre o logo de cima a baixo */
 /* transform-box: view-box makes % values relative to the SVG viewport (size-independent).
    -25% = -10 SVG units, 105% = 42 SVG units (viewBox height = 40). */
 @keyframes ecv-scan-move {
-  0%   { transform: translateY(-25%); }
-  100% { transform: translateY(105%); }
+  0% {
+    transform: translateY(-25%);
+  }
+  100% {
+    transform: translateY(105%);
+  }
 }
 .ld-scan .scanband {
   transform-box: view-box;
-  animation: ecv-scan-move 1.5s cubic-bezier(.45,0,.55,1) infinite;
+  animation: ecv-scan-move 1.5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
-@media (prefers-reduced-motion: reduce) { .ld-scan .scanband { animation: none; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .ld-scan .scanband {
+    animation: none;
+    opacity: 0;
+  }
+}
 
 /* B · BUILD — barras digitam da esquerda, linha a linha */
 @keyframes ecv-grow {
-  0%, 8%  { transform: scaleX(0); }
-  24%     { transform: scaleX(1); }
-  88%     { transform: scaleX(1); }
-  100%    { transform: scaleX(0); }
+  0%,
+  8% {
+    transform: scaleX(0);
+  }
+  24% {
+    transform: scaleX(1);
+  }
+  88% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(0);
+  }
 }
-.ld-build rect { transform-origin: left center; animation: ecv-grow 2s ease infinite; }
-.ld-build rect:nth-child(1)  { animation-delay: 0s; }
-.ld-build rect:nth-child(2)  { animation-delay: .08s; }
-.ld-build rect:nth-child(3)  { animation-delay: .16s; }
-.ld-build rect:nth-child(4)  { animation-delay: .30s; }
-.ld-build rect:nth-child(5)  { animation-delay: .38s; }
-.ld-build rect:nth-child(6)  { animation-delay: .52s; }
-.ld-build rect:nth-child(7)  { animation-delay: .60s; }
-.ld-build rect:nth-child(8)  { animation-delay: .68s; }
-.ld-build rect:nth-child(9)  { animation-delay: .82s; }
-.ld-build rect:nth-child(10) { animation-delay: .90s; }
-@media (prefers-reduced-motion: reduce) { .ld-build rect { animation: none; transform: scaleX(1); } }
+.ld-build rect {
+  transform-origin: left center;
+  animation: ecv-grow 2s ease infinite;
+}
+.ld-build rect:nth-child(1) {
+  animation-delay: 0s;
+}
+.ld-build rect:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.ld-build rect:nth-child(3) {
+  animation-delay: 0.16s;
+}
+.ld-build rect:nth-child(4) {
+  animation-delay: 0.3s;
+}
+.ld-build rect:nth-child(5) {
+  animation-delay: 0.38s;
+}
+.ld-build rect:nth-child(6) {
+  animation-delay: 0.52s;
+}
+.ld-build rect:nth-child(7) {
+  animation-delay: 0.6s;
+}
+.ld-build rect:nth-child(8) {
+  animation-delay: 0.68s;
+}
+.ld-build rect:nth-child(9) {
+  animation-delay: 0.82s;
+}
+.ld-build rect:nth-child(10) {
+  animation-delay: 0.9s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ld-build rect {
+    animation: none;
+    transform: scaleX(1);
+  }
+}
 
 /* C · PULSE — keywords verdes respiram, gap pisca */
 @keyframes ecv-breathe {
-  0%, 100% { opacity: .45; transform: scaleX(.96); }
-  50%      { opacity: 1;   transform: scaleX(1); }
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scaleX(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
 }
 @keyframes ecv-blink {
-  0%, 100% { opacity: .10; }
-  50%      { opacity: .35; }
+  0%,
+  100% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
-.ld-pulse rect { transform-origin: left center; }
-.ld-pulse .kw   { animation: ecv-breathe 1.8s ease-in-out infinite; }
-.ld-pulse .kw.k2 { animation-delay: .22s; }
-.ld-pulse .kw.k3 { animation-delay: .44s; }
-.ld-pulse .gap  { animation: ecv-blink 1.8s ease-in-out infinite; }
+.ld-pulse rect {
+  transform-origin: left center;
+}
+.ld-pulse .kw {
+  animation: ecv-breathe 1.8s ease-in-out infinite;
+}
+.ld-pulse .kw.k2 {
+  animation-delay: 0.22s;
+}
+.ld-pulse .kw.k3 {
+  animation-delay: 0.44s;
+}
+.ld-pulse .gap {
+  animation: ecv-blink 1.8s ease-in-out infinite;
+}
 @media (prefers-reduced-motion: reduce) {
-  .ld-pulse .kw, .ld-pulse .gap { animation: none; opacity: 1; transform: none; }
+  .ld-pulse .kw,
+  .ld-pulse .gap {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @keyframes route-overlay-exit {
@@ -420,8 +495,14 @@ button:disabled,
 
 /* ── CV Master block animation ── */
 @keyframes cv-block-open {
-  from { opacity: 0; transform: translateY(-6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .cv-block-panel {
@@ -429,12 +510,20 @@ button:disabled,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cv-block-panel { animation: none; }
+  .cv-block-panel {
+    animation: none;
+  }
 }
 
 @keyframes cv-block-close {
-  from { opacity: 1; transform: translateY(0); }
-  to   { opacity: 0; transform: translateY(-6px); }
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
 }
 
 .cv-block-panel-close {

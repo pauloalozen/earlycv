@@ -31,12 +31,20 @@ type UpsertFromAdaptationInput = {
 
 type CvState = "ready" | "locked" | "missing";
 type ScorePresentation = "scored" | "not_analyzed";
+type InterviewPrepLockReason = "missing_selected_cv" | "selected_cv_locked";
 
 type DerivedSummary = {
   bestScore: number | null;
   bestCvAdaptationId: string | null;
   bestCvState: CvState;
   scorePresentation: ScorePresentation;
+};
+
+type InterviewPrepEligibility = {
+  interviewPrepLocked: boolean;
+  interviewPrepLockReason: InterviewPrepLockReason | null;
+  selectedCvAdaptationId: string | null;
+  selectedCvUnlocked: boolean;
 };
 
 type AdaptationSummaryView = {
@@ -47,6 +55,49 @@ type AdaptationSummaryView = {
   isUnlocked?: boolean;
   adaptedContentJson?: unknown;
 };
+
+function isAdaptationUnlocked(adaptation: {
+  status: string;
+  isUnlocked?: boolean;
+}): boolean {
+  return adaptation.isUnlocked === true || adaptation.status === "delivered";
+}
+
+function deriveInterviewPrepEligibility(
+  currentCvAdaptationId: string | null,
+  adaptations: AdaptationSummaryView[],
+): InterviewPrepEligibility {
+  if (!currentCvAdaptationId) {
+    return {
+      interviewPrepLocked: true,
+      interviewPrepLockReason: "missing_selected_cv",
+      selectedCvAdaptationId: null,
+      selectedCvUnlocked: false,
+    };
+  }
+
+  const selectedAdaptation =
+    adaptations.find((adaptation) => adaptation.id === currentCvAdaptationId) ??
+    null;
+
+  if (!selectedAdaptation) {
+    return {
+      interviewPrepLocked: true,
+      interviewPrepLockReason: "missing_selected_cv",
+      selectedCvAdaptationId: currentCvAdaptationId,
+      selectedCvUnlocked: false,
+    };
+  }
+
+  const selectedCvUnlocked = isAdaptationUnlocked(selectedAdaptation);
+
+  return {
+    interviewPrepLocked: !selectedCvUnlocked,
+    interviewPrepLockReason: selectedCvUnlocked ? null : "selected_cv_locked",
+    selectedCvAdaptationId: selectedAdaptation.id,
+    selectedCvUnlocked,
+  };
+}
 
 function normalize(value: string): string {
   return value
@@ -171,6 +222,9 @@ export class JobApplicationsService {
     applicationId: string,
     metadata?: Record<string, unknown>,
   ) {
+    if (!this.funnelEvents) {
+      return;
+    }
     const context = this.buildBackendContext(userId, applicationId);
     await this.funnelEvents
       .record({ eventName, eventVersion: 1, metadata }, context, "backend")
@@ -229,6 +283,10 @@ export class JobApplicationsService {
         ...deriveSummaryFromAdaptations(
           item.cvAdaptations as AdaptationSummaryView[],
         ),
+        ...deriveInterviewPrepEligibility(
+          item.currentCvAdaptationId,
+          item.cvAdaptations as AdaptationSummaryView[],
+        ),
       })),
       total,
     };
@@ -261,6 +319,10 @@ export class JobApplicationsService {
       .map((item) => ({
         ...item,
         ...deriveSummaryFromAdaptations(
+          item.cvAdaptations as AdaptationSummaryView[],
+        ),
+        ...deriveInterviewPrepEligibility(
+          item.currentCvAdaptationId,
           item.cvAdaptations as AdaptationSummaryView[],
         ),
         currentCvAdaptationId: item.currentCvAdaptationId,
@@ -392,6 +454,10 @@ export class JobApplicationsService {
       ...application,
       cvAdaptations: mappedAdaptations,
       ...deriveSummaryFromAdaptations(
+        application.cvAdaptations as AdaptationSummaryView[],
+      ),
+      ...deriveInterviewPrepEligibility(
+        application.currentCvAdaptationId,
         application.cvAdaptations as AdaptationSummaryView[],
       ),
     };

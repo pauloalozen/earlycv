@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { AT } from "@/app/admin/_components/admin-primitives";
 import { Card, EmptyState, Input } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
@@ -15,14 +16,22 @@ import { AdminTokenState } from "../_components/admin-token-state";
 
 export const metadata = buildAdminMetadata("Perfis");
 
+const PAGE_SIZE = 50;
+
 type AdminProfilesPageProps = {
-  searchParams: Promise<{ query?: string; status?: string; token?: string }>;
+  searchParams: Promise<{
+    page?: string;
+    query?: string;
+    status?: string;
+    token?: string;
+  }>;
 };
 
 export default async function AdminProfilesPage({
   searchParams,
 }: AdminProfilesPageProps) {
-  const { query, status } = await searchParams;
+  const { page, query, status } = await searchParams;
+  const pageNum = Math.max(1, parseInt(page ?? "1", 10) || 1);
   const token = await getBackofficeSessionToken();
 
   if (!token) {
@@ -55,6 +64,13 @@ export default async function AdminProfilesPage({
       user,
     }))
     .filter((item) => !status || item.profileStatus.label === status);
+
+  const totalPages = Math.max(1, Math.ceil(profileViews.length / PAGE_SIZE));
+  const safePageNum = Math.min(pageNum, totalPages);
+  const paginatedProfileViews = profileViews.slice(
+    (safePageNum - 1) * PAGE_SIZE,
+    safePageNum * PAGE_SIZE,
+  );
 
   return (
     <div className="px-6 py-10 md:px-10">
@@ -104,7 +120,7 @@ export default async function AdminProfilesPage({
           />
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
-            {profileViews.map(({ profileStatus, user }) => (
+            {paginatedProfileViews.map(({ profileStatus, user }) => (
               <Card className="space-y-4" key={user.id}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
@@ -140,7 +156,49 @@ export default async function AdminProfilesPage({
             ))}
           </div>
         )}
+
+        {totalPages > 1 && profileViews.length > 0 && (
+          <div
+            className="flex items-center justify-between text-sm"
+            style={{ color: AT.muted }}
+          >
+            <span>
+              Página {safePageNum} de {totalPages} · {profileViews.length}{" "}
+              perfis
+            </span>
+            <div className="flex gap-2">
+              {safePageNum > 1 && (
+                <Link
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  href={buildPageHref({ page: safePageNum - 1, query, status })}
+                >
+                  ← Anterior
+                </Link>
+              )}
+              {safePageNum < totalPages && (
+                <Link
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  href={buildPageHref({ page: safePageNum + 1, query, status })}
+                >
+                  Próxima →
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function buildPageHref(params: {
+  page: number;
+  query?: string;
+  status?: string;
+}) {
+  const qs = new URLSearchParams();
+  qs.set("page", String(params.page));
+  if (params.query) qs.set("query", params.query);
+  if (params.status) qs.set("status", params.status);
+  return `/admin/perfis?${qs}`;
 }

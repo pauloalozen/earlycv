@@ -297,7 +297,9 @@ export class CvAdaptationController {
     return this.cvAdaptationService.updateCvContent(
       user.id,
       id,
-      body.sections as Parameters<typeof this.cvAdaptationService.updateCvContent>[2],
+      body.sections as Parameters<
+        typeof this.cvAdaptationService.updateCvContent
+      >[2],
       body.summary,
     );
   }

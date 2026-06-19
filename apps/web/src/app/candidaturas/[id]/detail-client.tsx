@@ -18,19 +18,19 @@ import {
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
 import { PublicFooter } from "@/components/public-footer";
+import { trackEvent } from "@/lib/analytics-tracking";
 import {
   type DownloadProgressStage,
   downloadFromApi,
 } from "@/lib/client-download";
 import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
 import { getDashboardScoreColor } from "@/lib/dashboard-test-metrics";
-import { ALL_STATUSES, getStatusConfig } from "@/lib/job-application-status";
+import { getStatusConfig } from "@/lib/job-application-status";
 import type {
   JobApplicationDetailDto,
   JobApplicationEvent,
   JobApplicationStatus,
 } from "@/lib/job-applications-api";
-import { trackEvent } from "@/lib/analytics-tracking";
 import {
   addJobApplicationNote,
   archiveJobApplication,
@@ -367,6 +367,7 @@ function JornadaStep({
               strokeLinejoin="round"
               aria-hidden
             >
+              <title>Etapa concluída</title>
               <path d="M20 6 9 17l-5-5" />
             </svg>
           ) : current ? (
@@ -462,7 +463,8 @@ function JornadaStep({
             </span>
           ) : (
             <>
-              <span
+              <button
+                type="button"
                 style={{
                   fontFamily: MONO,
                   fontSize: 9,
@@ -475,13 +477,11 @@ function JornadaStep({
                   cursor: "pointer",
                 }}
                 onClick={onHired}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && onHired?.()}
               >
                 Contratado
-              </span>
-              <span
+              </button>
+              <button
+                type="button"
                 style={{
                   fontFamily: MONO,
                   fontSize: 9,
@@ -494,12 +494,9 @@ function JornadaStep({
                   cursor: "pointer",
                 }}
                 onClick={onRejected}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && onRejected?.()}
               >
                 Recusada
-              </span>
+              </button>
               <span
                 style={{
                   fontFamily: MONO,
@@ -547,10 +544,14 @@ function Jornada({
   const currentStepIdx = JORNADA_STEPS.findIndex(
     (s) => getStepState(s.key, application.status) === "current",
   );
-  const activeIdx = currentStepIdx >= 0 ? currentStepIdx : JORNADA_STEPS.findLastIndex(
-    (s) => getStepState(s.key, application.status) === "done",
-  );
-  const activeStep = activeIdx >= 0 ? JORNADA_STEPS[activeIdx] : JORNADA_STEPS[0];
+  const activeIdx =
+    currentStepIdx >= 0
+      ? currentStepIdx
+      : JORNADA_STEPS.findLastIndex(
+          (s) => getStepState(s.key, application.status) === "done",
+        );
+  const activeStep =
+    activeIdx >= 0 ? JORNADA_STEPS[activeIdx] : JORNADA_STEPS[0];
 
   return (
     <div
@@ -594,7 +595,10 @@ function Jornada({
       </div>
 
       {/* Mobile compact view */}
-      <div className="jornada-compact" style={{ display: "none", paddingTop: 4 }}>
+      <div
+        className="jornada-compact"
+        style={{ display: "none", paddingTop: 4 }}
+      >
         {/* Progress segments */}
         <div style={{ display: "flex", gap: 3, marginBottom: 14 }}>
           {JORNADA_STEPS.map((step) => {
@@ -618,7 +622,14 @@ function Jornada({
           })}
         </div>
         {/* Current step info */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
           <div>
             {currentStepIdx >= 0 && (
               <div
@@ -675,13 +686,17 @@ function Jornada({
               textAlign: "right",
             }}
           >
-            {activeIdx + 1}<span style={{ color: "#c0beb4" }}>/{JORNADA_STEPS.length}</span>
+            {activeIdx + 1}
+            <span style={{ color: "#c0beb4" }}>/{JORNADA_STEPS.length}</span>
           </div>
         </div>
       </div>
 
       {/* Desktop full stepper */}
-      <div className="jornada-steps-row" style={{ display: "flex", alignItems: "flex-start" }}>
+      <div
+        className="jornada-steps-row"
+        style={{ display: "flex", alignItems: "flex-start" }}
+      >
         {JORNADA_STEPS.map((step, i) => {
           const state = getStepState(step.key, application.status);
           const meta = step.getMeta(application);
@@ -709,7 +724,6 @@ function Jornada({
 function AnaliseRow({
   adaptation,
   applicationId,
-  isCurrent,
   isBest,
   isSent,
   isLast,
@@ -731,7 +745,6 @@ function AnaliseRow({
     canDownloadBaseCv?: boolean;
   };
   applicationId: string;
-  isCurrent: boolean;
   isBest: boolean;
   isSent: boolean;
   isLast: boolean;
@@ -1054,6 +1067,7 @@ function AnaliseRow({
                   strokeLinejoin="round"
                   aria-hidden
                 >
+                  <title>CV enviado</title>
                   <rect x="3" y="11" width="18" height="10" rx="2" />
                   <path d="M7 11V8a5 5 0 0 1 10 0v3" />
                 </svg>
@@ -1158,15 +1172,47 @@ function AnaliseRow({
       >
         <div
           className="analise-row-btns"
-          style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            flexWrap: "wrap",
+          }}
         >
           {/* Grupo A: ver / interagir / liberar */}
-          <div className="analise-btns-group-a" style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+          <div
+            className="analise-btns-group-a"
+            style={{ display: "flex", gap: 7, flexWrap: "wrap" }}
+          >
             <a
               href={`/adaptar/resultado?adaptationId=${adaptation.id}`}
-              style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.9)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, textDecoration: "none", fontFamily: GEIST }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                background: "rgba(255,255,255,0.9)",
+                color: "#3a3a36",
+                border: "1px solid rgba(10,10,10,0.12)",
+                borderRadius: 7,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 500,
+                textDecoration: "none",
+                fontFamily: GEIST,
+              }}
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <title>Rever análise</title>
                 <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
                 <circle cx="12" cy="12" r="3" />
               </svg>
@@ -1176,34 +1222,132 @@ function AnaliseRow({
             {!isArchived && canDownloadNow && (
               <a
                 href={`/adaptacao-cv/${adaptation.id}`}
-                style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.9)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, textDecoration: "none", fontFamily: GEIST }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: "rgba(255,255,255,0.9)",
+                  color: "#3a3a36",
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  borderRadius: 7,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  textDecoration: "none",
+                  fontFamily: GEIST,
+                }}
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <title>Ver adaptação</title>
                   <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
                 </svg>
                 Adaptação
               </a>
             )}
 
-            {!isArchived && canRedeemNow && (
-              hasCredits === false ? (
-                <a href={plansHref} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.7)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, textDecoration: "none", fontFamily: GEIST }}>
+            {!isArchived &&
+              canRedeemNow &&
+              (hasCredits === false ? (
+                <a
+                  href={plansHref}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    background: "rgba(255,255,255,0.7)",
+                    color: "#3a3a36",
+                    border: "1px solid rgba(10,10,10,0.12)",
+                    borderRadius: 7,
+                    padding: "6px 10px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    fontFamily: GEIST,
+                  }}
+                >
                   Liberar CV · 1 Crédito
                 </a>
               ) : (
-                <button type="button" onClick={() => void handleRedeem()} disabled={redeeming} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.7)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: redeeming ? "not-allowed" : "pointer", fontFamily: GEIST }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <button
+                  type="button"
+                  onClick={() => void handleRedeem()}
+                  disabled={redeeming}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    background: "rgba(255,255,255,0.7)",
+                    color: "#3a3a36",
+                    border: "1px solid rgba(10,10,10,0.12)",
+                    borderRadius: 7,
+                    padding: "6px 10px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: redeeming ? "not-allowed" : "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  <svg
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <title>Liberar CV</title>
                     <rect x="4" y="11" width="16" height="10" rx="2" />
                     <path d="M8 11V8a4 4 0 1 1 8 0" />
                   </svg>
                   {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
                 </button>
-              )
-            )}
+              ))}
 
             {!isArchived && showAdjustments && (
-              <button data-testid={`analysis-adjustments-${adaptation.id}`} type="button" onClick={openAdjustments} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.7)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: GEIST }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <button
+                data-testid={`analysis-adjustments-${adaptation.id}`}
+                type="button"
+                onClick={openAdjustments}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: "rgba(255,255,255,0.7)",
+                  color: "#3a3a36",
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  borderRadius: 7,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <title>Ver ajustes feitos</title>
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
@@ -1214,25 +1358,122 @@ function AnaliseRow({
 
           {/* Grupo B: downloads */}
           {!isArchived && canDownloadNow && (
-            <div className="analise-btns-group-b" style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-              <button type="button" onClick={() => void handleDownload("pdf")} disabled={downloading !== null} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.9)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, cursor: downloading ? "not-allowed" : "pointer", fontFamily: GEIST }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+            <div
+              className="analise-btns-group-b"
+              style={{ display: "flex", gap: 7, flexWrap: "wrap" }}
+            >
+              <button
+                type="button"
+                onClick={() => void handleDownload("pdf")}
+                disabled={downloading !== null}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: "rgba(255,255,255,0.9)",
+                  color: "#3a3a36",
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  borderRadius: 7,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: downloading ? "not-allowed" : "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <title>Baixar PDF</title>
+                  <path d="M12 3v12" />
+                  <path d="m7 10 5 5 5-5" />
+                  <path d="M5 21h14" />
                 </svg>
                 PDF
               </button>
-              <button type="button" onClick={() => void handleDownload("docx")} disabled={downloading !== null} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.9)", color: "#3a3a36", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, cursor: downloading ? "not-allowed" : "pointer", fontFamily: GEIST }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+              <button
+                type="button"
+                onClick={() => void handleDownload("docx")}
+                disabled={downloading !== null}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: "rgba(255,255,255,0.9)",
+                  color: "#3a3a36",
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  borderRadius: 7,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: downloading ? "not-allowed" : "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <title>Baixar DOCX</title>
+                  <path d="M12 3v12" />
+                  <path d="m7 10 5 5 5-5" />
+                  <path d="M5 21h14" />
                 </svg>
                 DOCX
               </button>
             </div>
           )}
 
-          <a href={`/api/cv-adaptation/${adaptation.id}/base-cv`} download className="analise-btn-base-cv" style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.9)", color: "#6a6560", border: "1px solid rgba(10,10,10,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 500, textDecoration: "none", fontFamily: GEIST, marginLeft: "auto" }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+          <a
+            href={`/api/cv-adaptation/${adaptation.id}/base-cv`}
+            download
+            className="analise-btn-base-cv"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              background: "rgba(255,255,255,0.9)",
+              color: "#6a6560",
+              border: "1px solid rgba(10,10,10,0.12)",
+              borderRadius: 7,
+              padding: "6px 10px",
+              fontSize: 12,
+              fontWeight: 500,
+              textDecoration: "none",
+              fontFamily: GEIST,
+              marginLeft: "auto",
+            }}
+          >
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <title>Baixar CV usado na análise</title>
+              <path d="M12 3v12" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M5 21h14" />
             </svg>
             CV usado na análise
           </a>
@@ -1257,7 +1498,6 @@ function AnaliseRow({
       />
       {adjustmentsOpen && (
         <div
-          onClick={closeAdjustments}
           style={{
             position: "fixed",
             inset: 0,
@@ -1272,12 +1512,26 @@ function AnaliseRow({
             opacity: adjustmentsVisible ? 1 : 0,
           }}
         >
+          <button
+            type="button"
+            aria-label="Fechar ajustes"
+            onClick={closeAdjustments}
+            style={{
+              position: "absolute",
+              inset: 0,
+              border: "none",
+              background: "transparent",
+              padding: 0,
+              cursor: "default",
+            }}
+          />
           <div
             role="dialog"
             aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             style={{
               position: "relative",
+              zIndex: 1,
               width: "100%",
               maxWidth: 560,
               maxHeight: "calc(100dvh - 32px)",
@@ -1634,7 +1888,6 @@ function AnalisesSection({
                   null)
                 : null;
             return sorted.map((a, idx, arr) => {
-              const isCurrent = a.id === application.currentCvAdaptationId;
               const isBest = bestId !== null && a.id === bestId;
               const isSent =
                 a.id === application.currentCvAdaptationId &&
@@ -1645,7 +1898,6 @@ function AnalisesSection({
                   key={a.id}
                   adaptation={a}
                   applicationId={application.id}
-                  isCurrent={isCurrent}
                   isBest={isBest}
                   isSent={isSent}
                   isLast={isLast}
@@ -1660,54 +1912,57 @@ function AnalisesSection({
         )}
 
         {/* Nova análise button */}
-        {!isArchived && <button
-          type="button"
-          onClick={() => {
-            if (application.jobDescriptionText) {
+        {!isArchived && (
+          <button
+            type="button"
+            onClick={() => {
+              if (application.jobDescriptionText) {
+                sessionStorage.setItem(
+                  "adaptar_prefill_job_description",
+                  application.jobDescriptionText,
+                );
+              }
               sessionStorage.setItem(
-                "adaptar_prefill_job_description",
-                application.jobDescriptionText,
+                "adaptar_prefill_application_id",
+                application.id,
               );
-            }
-            sessionStorage.setItem(
-              "adaptar_prefill_application_id",
-              application.id,
-            );
-            window.location.href = "/adaptar";
-          }}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 7,
-            width: "100%",
-            padding: "15px 0 13px",
-            border: "none",
-            background: "transparent",
-            color: "#3a5008",
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: "pointer",
-            fontFamily: GEIST,
-            textDecoration: "none",
-            boxSizing: "border-box",
-          }}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
+              window.location.href = "/adaptar";
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 7,
+              width: "100%",
+              padding: "15px 0 13px",
+              border: "none",
+              background: "transparent",
+              color: "#3a5008",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: GEIST,
+              textDecoration: "none",
+              boxSizing: "border-box",
+            }}
           >
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Fazer nova análise desta vaga
-        </button>}
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <title>Fazer nova análise</title>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Fazer nova análise desta vaga
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2289,283 +2544,6 @@ function Timeline({
   );
 }
 
-// ─── CV card (sidebar) ────────────────────────────────────────────
-
-function CvCard({ application }: { application: JobApplicationDetailDto }) {
-  const latest = application.cvAdaptations[0] ?? null;
-  const isSent = application.appliedAt !== null;
-  const cvName = `CV-${application.companyName.replace(/\s+/g, "-")}-${application.jobTitle.replace(/\s+/g, "-")}.pdf`;
-  const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
-  const [downloadStage, setDownloadStage] =
-    useState<DownloadProgressStage | null>(null);
-
-  if (!latest) return null;
-
-  const isUnlocked = latest.isUnlocked;
-
-  const handleDownload = async (format: "pdf" | "docx") => {
-    if (downloading) return;
-    setDownloading(format);
-    setDownloadStage("preparing");
-    try {
-      await downloadFromApi({
-        url: `/api/cv-adaptation/${latest.id}/download?format=${format}`,
-        fallbackFilename: cvName.replace(
-          /\.pdf$/i,
-          format === "pdf" ? ".pdf" : ".docx",
-        ),
-        onStageChange: setDownloadStage,
-      });
-    } finally {
-      setDownloading(null);
-      setDownloadStage(null);
-    }
-  };
-
-  return (
-    <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-          marginBottom: 6,
-        }}
-      >
-        <div
-          style={{
-            fontFamily: MONO,
-            fontSize: 10,
-            letterSpacing: 1.2,
-            color: "#8a8a85",
-            fontWeight: 500,
-          }}
-        >
-          {isSent ? "CV ENVIADO" : "CV ADAPTADO"}
-        </div>
-        {isSent && (
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              fontFamily: MONO,
-              fontSize: 10,
-              color: "#3a5008",
-              letterSpacing: 0.3,
-            }}
-          >
-            <svg
-              width="9"
-              height="9"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <rect x="3" y="11" width="18" height="10" rx="2" />
-              <path d="M7 11V8a5 5 0 0 1 10 0v3" />
-            </svg>
-            cravado
-          </div>
-        )}
-      </div>
-
-      <div
-        style={{
-          background: isSent
-            ? "linear-gradient(180deg, rgba(198,255,58,0.10) 0%, rgba(255,255,255,0.55) 70%)"
-            : "rgba(255,255,255,0.55)",
-          border: isSent
-            ? "1px solid rgba(110,150,20,0.28)"
-            : "1px solid rgba(10,10,10,0.07)",
-          borderRadius: 12,
-          padding: "14px 16px",
-        }}
-      >
-        {/* File preview */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 11,
-            marginBottom: 11,
-            background: "#fff",
-            border: "1px solid rgba(10,10,10,0.06)",
-            borderRadius: 9,
-            padding: "9px 11px",
-          }}
-        >
-          <div
-            style={{
-              width: 32,
-              height: 40,
-              background: "#0a0a0a",
-              color: "#c6ff3a",
-              borderRadius: 4,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontFamily: MONO,
-              fontSize: 9.5,
-              fontWeight: 600,
-              letterSpacing: 0.5,
-              flexShrink: 0,
-            }}
-          >
-            PDF
-          </div>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 500,
-                color: "#0a0a0a",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                fontFamily: GEIST,
-              }}
-            >
-              {cvName}
-            </div>
-            <div
-              style={{
-                fontFamily: MONO,
-                fontSize: 9.5,
-                color: "#8a8a85",
-                marginTop: 2,
-              }}
-            >
-              {new Date(latest.createdAt).toLocaleDateString("pt-BR", {
-                day: "2-digit",
-                month: "short",
-              })}
-              {application.scoreAfter !== null &&
-                ` · score ${application.scoreAfter}%`}
-            </div>
-          </div>
-        </div>
-
-        {isSent && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 11,
-              color: "#3a5008",
-              lineHeight: 1.4,
-              marginBottom: 11,
-              fontFamily: GEIST,
-            }}
-          >
-            <svg
-              width="9"
-              height="9"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <rect x="3" y="11" width="18" height="10" rx="2" />
-              <path d="M7 11V8a5 5 0 0 1 10 0v3" />
-            </svg>
-            Cravado no envio ·{" "}
-            {application.appliedAt &&
-              new Date(application.appliedAt).toLocaleDateString("pt-BR", {
-                day: "2-digit",
-                month: "short",
-              })}{" "}
-            · não muda mais.
-          </div>
-        )}
-
-        {isUnlocked ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 8,
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => void handleDownload("pdf")}
-              disabled={downloading !== null}
-              style={{
-                background: "#fff",
-                color: "#0a0a0a",
-                border: "1px solid rgba(10,10,10,0.13)",
-                borderRadius: 7,
-                padding: "7px 10px",
-                fontSize: 11.5,
-                fontWeight: 500,
-                cursor: downloading ? "not-allowed" : "pointer",
-                fontFamily: GEIST,
-              }}
-            >
-              Baixar PDF
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleDownload("docx")}
-              disabled={downloading !== null}
-              style={{
-                background: "#fff",
-                color: "#0a0a0a",
-                border: "1px solid rgba(10,10,10,0.13)",
-                borderRadius: 7,
-                padding: "7px 10px",
-                fontSize: 11.5,
-                fontWeight: 500,
-                cursor: downloading ? "not-allowed" : "pointer",
-                fontFamily: GEIST,
-              }}
-            >
-              Baixar DOCX
-            </button>
-          </div>
-        ) : (
-          <Link
-            href={buildCvUnlockPlansHref({
-              adaptationId: latest.id,
-              source: "candidatura-cv-unlock",
-              nextPath: `/candidaturas/${application.id}`,
-            })}
-            style={{
-              display: "block",
-              textAlign: "center",
-              padding: "8px 12px",
-              borderRadius: 7,
-              border: "1px solid rgba(10,10,10,0.12)",
-              background: "#fff",
-              color: "#0a0a0a",
-              fontSize: 12,
-              fontWeight: 500,
-              textDecoration: "none",
-              fontFamily: GEIST,
-            }}
-          >
-            Liberar CV
-          </Link>
-        )}
-        <DownloadProgressOverlay
-          open={downloadStage !== null}
-          stage={downloadStage}
-          format={downloading}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ─── Detalhes card ────────────────────────────────────────────────
 
 function DetalhesCard({
@@ -2926,6 +2904,7 @@ function HiredCelebrationModal({
                   fill="none"
                   aria-hidden
                 >
+                  <title>Confirmação de contratação</title>
                   <path
                     d="M5 12.5l4.5 4.5L19 7"
                     stroke="#0a0a0a"
@@ -3082,6 +3061,8 @@ function RejectionFeedbackModal({
   onUpdated: () => void;
 }) {
   const { visible, close } = useModalFade(onClose);
+  const strengthsId = useId();
+  const improvementsId = useId();
   const [strengths, setStrengths] = useState("");
   const [improvements, setImprovements] = useState("");
   const [pending, startTransition] = useTransition();
@@ -3144,12 +3125,26 @@ function RejectionFeedbackModal({
         opacity: visible ? 1 : 0,
         transition: "opacity 180ms ease",
       }}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
-      }}
     >
-      <div
+      <button
+        type="button"
+        aria-label="Fechar modal de feedback"
+        onClick={close}
         style={{
+          position: "absolute",
+          inset: 0,
+          border: "none",
+          background: "transparent",
+          padding: 0,
+          cursor: "default",
+        }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: "relative",
+          zIndex: 1,
           width: "100%",
           maxWidth: 480,
           background: "#fafaf6",
@@ -3239,6 +3234,7 @@ function RejectionFeedbackModal({
               aria-hidden
               style={{ color: "#6a6560" }}
             >
+              <title>Aprendizado para próximos processos</title>
               <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" />
               <path d="M12 8v4l3 3" />
             </svg>
@@ -3256,8 +3252,11 @@ function RejectionFeedbackModal({
 
           {/* Fields */}
           <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>O que você foi bem neste processo?</label>
+            <label htmlFor={strengthsId} style={labelStyle}>
+              O que você foi bem neste processo?
+            </label>
             <textarea
+              id={strengthsId}
               value={strengths}
               onChange={(e) => setStrengths(e.target.value)}
               placeholder="Ex: apresentei bem minha trajetória, fui claro nas respostas técnicas..."
@@ -3266,8 +3265,11 @@ function RejectionFeedbackModal({
           </div>
 
           <div style={{ marginBottom: 22 }}>
-            <label style={labelStyle}>O que poderia ter ido melhor?</label>
+            <label htmlFor={improvementsId} style={labelStyle}>
+              O que poderia ter ido melhor?
+            </label>
             <textarea
+              id={improvementsId}
               value={improvements}
               onChange={(e) => setImprovements(e.target.value)}
               placeholder="Ex: poderia ter pesquisado mais sobre a empresa, preparado melhor o case..."
@@ -3290,7 +3292,9 @@ function RejectionFeedbackModal({
                 fontFamily: GEIST,
               }}
             >
-              Preencher esses campos ajuda o EarlyCV a te preparar melhor para os próximos processos — a IA usa esse contexto para dar orientações personalizadas.
+              Preencher esses campos ajuda o EarlyCV a te preparar melhor para
+              os próximos processos — a IA usa esse contexto para dar
+              orientações personalizadas.
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button
                   type="button"
@@ -3721,6 +3725,12 @@ function InterviewScheduleModal({
   const [location, setLocation] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const dateId = useId();
+  const timeId = useId();
+  const titleId = useId();
+  const interviewerId = useId();
+  const meetingUrlId = useId();
+  const locationId = useId();
 
   function handleSave() {
     if (!date || !time || !title.trim()) {
@@ -3776,12 +3786,26 @@ function InterviewScheduleModal({
         opacity: visible ? 1 : 0,
         transition: "opacity 180ms ease",
       }}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
-      }}
     >
-      <div
+      <button
+        type="button"
+        aria-label="Fechar modal de agendamento"
+        onClick={close}
         style={{
+          position: "absolute",
+          inset: 0,
+          border: "none",
+          background: "transparent",
+          padding: 0,
+          cursor: "default",
+        }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: "relative",
+          zIndex: 1,
           width: "100%",
           maxWidth: 460,
           background: "#fafaf6",
@@ -3818,8 +3842,11 @@ function InterviewScheduleModal({
           }}
         >
           <div>
-            <label style={labelStyle}>Data</label>
+            <label htmlFor={dateId} style={labelStyle}>
+              Data
+            </label>
             <input
+              id={dateId}
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -3827,8 +3854,11 @@ function InterviewScheduleModal({
             />
           </div>
           <div>
-            <label style={labelStyle}>Hora</label>
+            <label htmlFor={timeId} style={labelStyle}>
+              Hora
+            </label>
             <input
+              id={timeId}
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
@@ -3839,8 +3869,11 @@ function InterviewScheduleModal({
 
         {/* Title */}
         <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>Título da entrevista</label>
+          <label htmlFor={titleId} style={labelStyle}>
+            Título da entrevista
+          </label>
           <input
+            id={titleId}
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -3851,8 +3884,11 @@ function InterviewScheduleModal({
 
         {/* Interviewer */}
         <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>Entrevistador (opcional)</label>
+          <label htmlFor={interviewerId} style={labelStyle}>
+            Entrevistador (opcional)
+          </label>
           <input
+            id={interviewerId}
             type="text"
             value={interviewer}
             onChange={(e) => setInterviewer(e.target.value)}
@@ -3863,8 +3899,11 @@ function InterviewScheduleModal({
 
         {/* Meeting link */}
         <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>Link da reunião (opcional)</label>
+          <label htmlFor={meetingUrlId} style={labelStyle}>
+            Link da reunião (opcional)
+          </label>
           <input
+            id={meetingUrlId}
             type="url"
             value={meetingUrl}
             onChange={(e) => setMeetingUrl(e.target.value)}
@@ -3875,8 +3914,11 @@ function InterviewScheduleModal({
 
         {/* Location */}
         <div style={{ marginBottom: error ? 8 : 20 }}>
-          <label style={labelStyle}>Endereço / local (opcional)</label>
+          <label htmlFor={locationId} style={labelStyle}>
+            Endereço / local (opcional)
+          </label>
           <input
+            id={locationId}
             type="text"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
@@ -4012,7 +4054,10 @@ function InterviewScheduledCard({
     );
   }
 
-  const dt = new Date(application.nextActionAt!);
+  const scheduledAt = application.nextActionAt;
+  if (!scheduledAt) return null;
+
+  const dt = new Date(scheduledAt);
   const dateStr = dt.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "short",
@@ -4061,6 +4106,7 @@ function InterviewScheduledCard({
           strokeLinejoin="round"
           aria-hidden
         >
+          <title>Entrevista agendada</title>
           <rect x="3" y="4" width="18" height="18" rx="2" />
           <line x1="16" y1="2" x2="16" y2="6" />
           <line x1="8" y1="2" x2="8" y2="6" />
@@ -4170,7 +4216,11 @@ function formatIcsDate(iso: string): string {
 }
 
 function buildGoogleCalendarUrl(application: JobApplicationDetailDto): string {
-  const dt = new Date(application.nextActionAt!);
+  if (!application.nextActionAt) {
+    return "https://calendar.google.com/calendar/render";
+  }
+
+  const dt = new Date(application.nextActionAt);
   const end = new Date(dt.getTime() + 60 * 60 * 1000); // +1h
   const fmt = (d: Date) =>
     d
@@ -4194,18 +4244,21 @@ function buildGoogleCalendarUrl(application: JobApplicationDetailDto): string {
     ]
       .filter(Boolean)
       .join("\n"),
-    ...(application.interviewLocation || application.interviewMeetingUrl
-      ? {
-          location:
-            application.interviewLocation ?? application.interviewMeetingUrl!,
-        }
-      : {}),
   });
+  const location =
+    application.interviewLocation ?? application.interviewMeetingUrl;
+  if (location) {
+    params.set("location", location);
+  }
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 function downloadIcs(application: JobApplicationDetailDto) {
-  const dt = new Date(application.nextActionAt!);
+  if (!application.nextActionAt) {
+    return;
+  }
+
+  const dt = new Date(application.nextActionAt);
   const end = new Date(dt.getTime() + 60 * 60 * 1000);
   const title = [application.interviewTitle, application.companyName]
     .filter(Boolean)
@@ -4311,6 +4364,7 @@ function AddToCalendarButton({
           strokeLinejoin="round"
           aria-hidden
         >
+          <title>Adicionar ao calendário</title>
           <rect x="3" y="4" width="18" height="18" rx="2" />
           <line x1="16" y1="2" x2="16" y2="6" />
           <line x1="8" y1="2" x2="8" y2="6" />
@@ -4480,12 +4534,26 @@ function JobUrlModal({
         opacity: visible ? 1 : 0,
         transition: "opacity 180ms ease",
       }}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
-      }}
     >
-      <div
+      <button
+        type="button"
+        aria-label="Fechar modal de URL"
+        onClick={close}
         style={{
+          position: "absolute",
+          inset: 0,
+          border: "none",
+          background: "transparent",
+          padding: 0,
+          cursor: "default",
+        }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: "relative",
+          zIndex: 1,
           width: "100%",
           maxWidth: 440,
           background: "#fafaf6",
@@ -4682,7 +4750,23 @@ export function DetailClient({ application, header }: Props) {
       (a) => a.isUnlocked || a.status === "delivered",
     );
   const canDelete = isArchivedManually && !hasUnlockedCv;
-  const hasCvAdaptations = application.cvAdaptations.length > 0;
+  const selectedAdaptation =
+    application.cvAdaptations.find(
+      (adaptation) => adaptation.id === application.selectedCvAdaptationId,
+    ) ?? null;
+  const interviewPrepUnlockHref = selectedAdaptation
+    ? buildCvUnlockPlansHref({
+        adaptationId: selectedAdaptation.id,
+        source: "candidatura-interview-prep-unlock",
+        nextPath: `/candidaturas/${application.id}`,
+      })
+    : null;
+  const interviewPrepHelperText =
+    application.interviewPrepLockReason === "selected_cv_locked"
+      ? "Libere o CV desta vaga para preparar sua entrevista."
+      : application.interviewPrepLockReason === "missing_selected_cv"
+        ? "Defina o CV desta candidatura antes de preparar sua entrevista."
+        : null;
   const origin = ORIGIN_LABELS[application.origin] ?? application.origin;
   const bestAdaptation =
     application.cvAdaptations.find(
@@ -4848,7 +4932,10 @@ export function DetailClient({ application, header }: Props) {
           }}
         >
           {/* Breadcrumb */}
-          <div className="detail-top-spacer" style={{ paddingTop: 72, marginBottom: 20 }}>
+          <div
+            className="detail-top-spacer"
+            style={{ paddingTop: 72, marginBottom: 20 }}
+          >
             <div
               style={{
                 display: "flex",
@@ -4954,7 +5041,10 @@ export function DetailClient({ application, header }: Props) {
               </div>
 
               {/* Right: actions */}
-              <div className="detail-hero-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div
+                className="detail-hero-actions"
+                style={{ display: "flex", gap: 8, alignItems: "center" }}
+              >
                 {/* Status button + inline popover */}
                 <div style={{ position: "relative" }}>
                   <button
@@ -5021,39 +5111,109 @@ export function DetailClient({ application, header }: Props) {
                   {application.jobUrl ? "Editar link ↗" : "+ Link da vaga"}
                 </button>
 
-                {isPrepEligible && (
-                  <button
-                    type="button"
-                    className="detail-prep-btn"
-                    onClick={() => setShowPrep(true)}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 5,
-                      padding: "8px 15px",
-                      borderRadius: 8,
-                      border: isInterview
-                        ? "1px solid rgba(110,150,20,0.35)"
-                        : "1px solid rgba(10,10,10,0.12)",
-                      background: isInterview
-                        ? "#c6ff3a"
-                        : "rgba(255,255,255,0.7)",
-                      color: "#0a0a0a",
-                      fontSize: 12.5,
-                      fontWeight: isInterview ? 600 : 500,
-                      cursor: "pointer",
-                      fontFamily: GEIST,
-                      boxShadow: isInterview
-                        ? "0 6px 14px rgba(198,255,58,0.2)"
-                        : "none",
-                    }}
-                  >
-                    {application.interviewPrep
-                      ? "Ver preparação"
-                      : "Preparar entrevista"}
-                    {isInterview && " →"}
-                  </button>
-                )}
+                {isPrepEligible &&
+                  (application.interviewPrepLocked === true ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: 6,
+                      }}
+                    >
+                      {interviewPrepUnlockHref ? (
+                        <Link
+                          href={interviewPrepUnlockHref}
+                          className="detail-prep-btn"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 5,
+                            padding: "8px 15px",
+                            borderRadius: 8,
+                            border: "1px solid rgba(10,10,10,0.12)",
+                            background: "rgba(255,255,255,0.7)",
+                            color: "#0a0a0a",
+                            fontSize: 12.5,
+                            fontWeight: 500,
+                            cursor: "pointer",
+                            fontFamily: GEIST,
+                            textDecoration: "none",
+                          }}
+                        >
+                          Liberar CV para entrevista
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          className="detail-prep-btn"
+                          disabled
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 5,
+                            padding: "8px 15px",
+                            borderRadius: 8,
+                            border: "1px solid rgba(10,10,10,0.12)",
+                            background: "rgba(255,255,255,0.55)",
+                            color: "#8a8a85",
+                            fontSize: 12.5,
+                            fontWeight: 500,
+                            cursor: "not-allowed",
+                            fontFamily: GEIST,
+                          }}
+                        >
+                          Preparação indisponível
+                        </button>
+                      )}
+                      {interviewPrepHelperText && (
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 11.5,
+                            color: "#6a6560",
+                            lineHeight: 1.45,
+                            maxWidth: 260,
+                            fontFamily: GEIST,
+                          }}
+                        >
+                          {interviewPrepHelperText}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="detail-prep-btn"
+                      onClick={() => setShowPrep(true)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        padding: "8px 15px",
+                        borderRadius: 8,
+                        border: isInterview
+                          ? "1px solid rgba(110,150,20,0.35)"
+                          : "1px solid rgba(10,10,10,0.12)",
+                        background: isInterview
+                          ? "#c6ff3a"
+                          : "rgba(255,255,255,0.7)",
+                        color: "#0a0a0a",
+                        fontSize: 12.5,
+                        fontWeight: isInterview ? 600 : 500,
+                        cursor: "pointer",
+                        fontFamily: GEIST,
+                        boxShadow: isInterview
+                          ? "0 6px 14px rgba(198,255,58,0.2)"
+                          : "none",
+                      }}
+                    >
+                      {application.interviewPrep
+                        ? "Ver preparação"
+                        : "Preparar entrevista"}
+                      {isInterview && " →"}
+                    </button>
+                  ))}
                 {(isArchived || !isFinalized) && (
                   <button
                     type="button"

@@ -83,6 +83,10 @@ export type JobApplicationDto = {
   bestCvAdaptationId: string | null;
   bestCvState: "ready" | "locked" | "unlocked" | "missing";
   scorePresentation: "scored" | "not_analyzed";
+  interviewPrepLocked?: boolean;
+  interviewPrepLockReason?: "missing_selected_cv" | "selected_cv_locked" | null;
+  selectedCvAdaptationId?: string | null;
+  selectedCvUnlocked?: boolean;
   notes: string | null;
   appliedAt: string | null;
   nextActionAt: string | null;
@@ -361,8 +365,20 @@ export async function generateOrGetInterviewPrep(
     "POST",
     `/job-applications/${id}/interview-prep`,
   );
-  if (!response.ok)
-    throw new Error("Falha ao gerar preparação para entrevista");
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(detail || "Falha ao gerar preparação para entrevista");
+  }
   return response.json() as Promise<InterviewPrepDto>;
 }
 

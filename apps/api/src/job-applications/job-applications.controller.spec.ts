@@ -19,6 +19,7 @@ function makeDb() {
           jobTitle: "Engenheiro de Dados",
           companyName: "Acme",
           status: "ANALYZED",
+          currentCvAdaptationId: null,
           updatedAt: new Date("2026-05-02T12:00:00Z"),
           createdAt: new Date("2026-05-01T12:00:00Z"),
           cvAdaptations: [
@@ -104,6 +105,10 @@ test("list/controller payload includes derived best-version fields", async () =>
   assert.equal(item.bestCvAdaptationId, "a2");
   assert.equal(item.bestCvState, "ready");
   assert.equal(item.scorePresentation, "scored");
+  assert.equal(item.interviewPrepLocked, true);
+  assert.equal(item.interviewPrepLockReason, "missing_selected_cv");
+  assert.equal(item.selectedCvAdaptationId, null);
+  assert.equal(item.selectedCvUnlocked, false);
 });
 
 test("highlights/controller returns relevance-ranked items with derived fields", async () => {
@@ -122,6 +127,8 @@ test("highlights/controller returns relevance-ranked items with derived fields",
   assert.equal(item.bestCvAdaptationId, "a2");
   assert.equal(item.bestCvState, "ready");
   assert.equal(item.scorePresentation, "scored");
+  assert.equal(item.interviewPrepLocked, true);
+  assert.equal(item.interviewPrepLockReason, "missing_selected_cv");
 });
 
 test("highlights summary/controller delegates with authenticated user and returns service payload", async () => {

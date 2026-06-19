@@ -151,7 +151,7 @@ function TextareaField({
   );
 }
 
-function ReadonlyField({ label, value }: { label: string; value: string }) {
+function _ReadonlyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1.5">
       <span className={labelCls}>{label}</span>
@@ -191,7 +191,9 @@ function RemoveButton({ onClick }: { onClick: () => void }) {
         stroke="currentColor"
         strokeWidth="1.7"
         strokeLinecap="round"
+        aria-hidden
       >
+        <title>Remover item</title>
         <path d="M2 2l8 8M10 2l-8 8" />
       </svg>
     </button>
@@ -563,15 +565,15 @@ function HabilidadesEditor({ raw }: { raw: unknown }) {
     <div className="space-y-3 md:col-span-2">
       <input type="hidden" name="skillsJson" value={serialized} />
       <div className="flex flex-wrap gap-2">
-        {chips.map((chip, i) => (
+        {chips.map((chip) => (
           <span
-            key={i}
+            key={chip}
             className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#e3e1d9] bg-white px-2.5 py-1 font-mono text-[12px] text-[#0a0a0a]"
           >
             {chip}
             <button
               type="button"
-              onClick={() => remove(i)}
+              onClick={() => remove(chips.indexOf(chip))}
               className="text-[#8a8a85] transition-colors hover:text-[#9a3d28]"
               aria-label={`Remover ${chip}`}
             >
@@ -1087,7 +1089,9 @@ export function CvMasterBlock({
               strokeWidth="1.7"
               strokeLinecap="round"
               strokeLinejoin="round"
+              aria-hidden
             >
+              <title>Expandir ou recolher seção</title>
               <path d="M2 4l5 5 5-5" />
             </svg>
           </span>

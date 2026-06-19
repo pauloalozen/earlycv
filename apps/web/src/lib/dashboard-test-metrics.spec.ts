@@ -100,7 +100,10 @@ test("extractDashboardAnalysisSignal returns delivered score (no keywords select
   const signal = extractDashboardAnalysisSignal(payload);
 
   assert.equal(signal.score, expectedScore);
-  assert.equal(signal.improvement, expectedScore - normalized.score.scoreAtualBase);
+  assert.equal(
+    signal.improvement,
+    expectedScore - normalized.score.scoreAtualBase,
+  );
 });
 
 test("extractDashboardAnalysisSignal resolves historical normalized-analysis payloads consistently", () => {
@@ -171,7 +174,8 @@ test("extractDashboardAnalysisSignal adds only selected missing keyword points",
   payload.selectedMissingKeywords = ["Python"];
   const normalized = normalizeData(payload);
   // "Python" is in ausentes with 15 pts; should be added on top of base adjustments
-  const pythonPts = normalized.keywords.ausentes.find((k) => k.kw === "Python")?.pontos ?? 0;
+  const pythonPts =
+    normalized.keywords.ausentes.find((k) => k.kw === "Python")?.pontos ?? 0;
   const expectedScore = Math.min(
     100,
     normalized.score.scoreAtualBase +
@@ -189,7 +193,9 @@ test("extractDashboardAnalysisSignal matches selected keywords case-insensitivel
   const payload = makeAnalysisPayload() as CvAnalysisData & {
     selectedMissingKeywords?: string[];
   };
-  (payload.keywords as { ausentes: unknown[] }).ausentes = [{ kw: "Python", pontos: 15 }];
+  (payload.keywords as { ausentes: unknown[] }).ausentes = [
+    { kw: "Python", pontos: 15 },
+  ];
   payload.selectedMissingKeywords = ["python"];
 
   const normalized = normalizeData(payload);
@@ -209,7 +215,8 @@ test("extractDashboardAnalysisSignal matches selected keywords case-insensitivel
 test("extractDashboardAnalysisSignal applies runtime selected keywords override", () => {
   const payload = makeAnalysisPayload();
   const normalized = normalizeData(payload);
-  const pythonPts = normalized.keywords.ausentes.find((k) => k.kw === "Python")?.pontos ?? 0;
+  const pythonPts =
+    normalized.keywords.ausentes.find((k) => k.kw === "Python")?.pontos ?? 0;
   const expectedScore = Math.min(
     100,
     normalized.score.scoreAtualBase +

@@ -56,6 +56,10 @@ function buildApplication(
     bestScore: 78,
     bestCvState: "ready",
     scorePresentation: "scored",
+    interviewPrepLocked: false,
+    interviewPrepLockReason: null,
+    selectedCvAdaptationId: "adp_123",
+    selectedCvUnlocked: true,
     notes: null,
     appliedAt: null,
     nextActionAt: null,
@@ -438,7 +442,9 @@ describe("DetailClient - CV ADAPTADO card", () => {
     );
 
     expect(screen.queryByRole("button", { name: /subir eventos/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /descer eventos/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /descer eventos/i }),
+    ).toBeNull();
   });
 
   it("shows timeline scroll controls when there are more than five events", () => {
@@ -460,7 +466,9 @@ describe("DetailClient - CV ADAPTADO card", () => {
     );
 
     expect(screen.getByRole("button", { name: /subir eventos/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /descer eventos/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /descer eventos/i }),
+    ).toBeTruthy();
   });
 
   it("shows newest timeline events first", () => {
@@ -481,11 +489,124 @@ describe("DetailClient - CV ADAPTADO card", () => {
       />,
     );
 
-    const timelineTexts = screen.getAllByText(/Nota adicionada\.|Status atualizado para/i);
+    const timelineTexts = screen.getAllByText(
+      /Nota adicionada\.|Status atualizado para/i,
+    );
 
-    expect(timelineTexts[0]).toHaveTextContent("Status atualizado para Enviada");
+    expect(timelineTexts[0]).toHaveTextContent(
+      "Status atualizado para Enviada",
+    );
     expect(timelineTexts[1]).toHaveTextContent("Nota adicionada.");
-    expect(timelineTexts[2]).toHaveTextContent("Status atualizado para Enviada");
+    expect(timelineTexts[2]).toHaveTextContent(
+      "Status atualizado para Enviada",
+    );
+  });
+
+  it("shows unlock path for interview prep when selected CV is locked", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 0 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          status: "APPLIED",
+          interviewPrepLocked: true,
+          interviewPrepLockReason: "selected_cv_locked",
+          selectedCvAdaptationId: "adp_123",
+          selectedCvUnlocked: false,
+          cvAdaptations: [
+            {
+              id: "adp_123",
+              status: "awaiting_payment",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: false,
+              adaptedResumeId: null,
+              createdAt: "2026-05-01T00:00:00.000Z",
+              scoreBefore: 50,
+              scoreAfter: 73,
+              canDownloadBaseCv: false,
+              resumeUsedTitle: "CV Master",
+            },
+          ],
+        })}
+        header={<div />}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /liberar cv para entrevista/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/libere o cv desta vaga para preparar sua entrevista/i),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /preparar entrevista/i }),
+    ).toBeNull();
+  });
+
+  it("keeps interview prep available when the selected CV is unlocked", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ creditsRemaining: 1 }),
+      })) as unknown as typeof fetch,
+    );
+
+    render(
+      <DetailClient
+        application={buildApplication({
+          status: "APPLIED",
+          interviewPrepLocked: false,
+          interviewPrepLockReason: null,
+          selectedCvAdaptationId: "adp_current",
+          selectedCvUnlocked: true,
+          currentCvAdaptationId: "adp_current",
+          cvAdaptations: [
+            {
+              id: "adp_current",
+              status: "delivered",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_123",
+              createdAt: "2026-05-02T00:00:00.000Z",
+              scoreBefore: 50,
+              scoreAfter: 73,
+              canDownloadBaseCv: false,
+              resumeUsedTitle: "CV Master",
+            },
+            {
+              id: "adp_latest",
+              status: "delivered",
+              jobTitle: "Software Engineer",
+              companyName: "Acme",
+              isUnlocked: true,
+              adaptedResumeId: "res_124",
+              createdAt: "2026-05-03T00:00:00.000Z",
+              scoreBefore: 52,
+              scoreAfter: 79,
+              canDownloadBaseCv: false,
+              resumeUsedTitle: "Meu CV Dados",
+            },
+          ],
+        })}
+        header={<div />}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /preparar entrevista/i }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: /liberar cv para entrevista/i }),
+    ).toBeNull();
   });
 
   it("splits an analysis into a new application and navigates", async () => {
