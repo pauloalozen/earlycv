@@ -13,6 +13,7 @@ import {
 import { EcvBuildLoader } from "@/components/ecv-loader";
 import { PageShell } from "@/components/page-shell";
 import { PublicFooter } from "@/components/public-footer";
+import { trackEvent } from "@/lib/analytics-tracking";
 import { downloadFromApi } from "@/lib/client-download";
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import {
@@ -1764,6 +1765,10 @@ export function CandidaturasClient({
   const [sectionSorts, setSectionSorts] = useState<Record<string, SortState>>(
     {},
   );
+
+  useEffect(() => {
+    void trackEvent({ eventName: "candidaturas_page_viewed", eventVersion: 1 });
+  }, []);
 
   useEffect(() => {
     const allApplications = [...initialApplications, ...archivedApplications];

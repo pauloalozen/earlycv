@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 
+import { trackEvent } from "@/lib/analytics-tracking";
 import type { InterviewPrepDto } from "@/lib/job-applications-api";
 import { generateOrGetInterviewPrep } from "@/lib/job-applications-api";
 
@@ -422,6 +423,7 @@ function PrepContent({
           <button
             type="button"
             onClick={() => {
+              void trackEvent({ eventName: "interview_prep_printed", eventVersion: 1 });
               const sections: { title: string; content: string }[] = [
                 { title: "Estratégia", content: `<p>${c.strategySummary}</p>` },
               ];
@@ -737,6 +739,19 @@ export function InterviewPrepDrawer({
       document.body.style.paddingRight = "";
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const hasExistingPrep = initialPrep !== null;
+    void trackEvent({
+      eventName: "interview_prep_drawer_opened",
+      eventVersion: 1,
+      properties: { has_existing_prep: hasExistingPrep },
+    });
+    if (hasExistingPrep) {
+      void trackEvent({ eventName: "interview_prep_viewed", eventVersion: 1 });
+    }
+  }, [open, initialPrep]);
 
   useEffect(() => {
     if (!open) return;

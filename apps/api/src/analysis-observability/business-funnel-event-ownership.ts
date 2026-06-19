@@ -45,4 +45,19 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   teaser_scroll: "frontend",
   teaser_viewed: "backend",
   unlock_cv_click: "frontend",
+  // Candidaturas
+  candidaturas_page_viewed: "frontend",
+  candidatura_created: "backend",
+  candidatura_detail_viewed: "frontend",
+  candidatura_status_changed: "backend",
+  candidatura_marked_as_applied: "backend",
+  candidatura_archived: "backend",
+  candidatura_deleted: "backend",
+  candidatura_note_added: "backend",
+  candidatura_rejection_feedback_submitted: "backend",
+  // Interview Prep
+  interview_prep_drawer_opened: "frontend",
+  interview_prep_generated: "backend",
+  interview_prep_viewed: "frontend",
+  interview_prep_printed: "frontend",
 };

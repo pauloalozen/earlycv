@@ -30,6 +30,7 @@ import type {
   JobApplicationEvent,
   JobApplicationStatus,
 } from "@/lib/job-applications-api";
+import { trackEvent } from "@/lib/analytics-tracking";
 import {
   addJobApplicationNote,
   archiveJobApplication,
@@ -4654,6 +4655,13 @@ export function DetailClient({ application, header }: Props) {
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const closeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    void trackEvent({
+      eventName: "candidatura_detail_viewed",
+      eventVersion: 1,
+    });
+  }, []);
 
   function handleUpdated() {
     router.refresh();

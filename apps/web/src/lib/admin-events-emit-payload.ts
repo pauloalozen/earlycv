@@ -29,6 +29,20 @@ export function resolveEmitPayload(
     };
   }
 
+  if (mode === "list") {
+    const eventNames = formData
+      .getAll("eventNames")
+      .map(String)
+      .map((n) => n.trim())
+      .filter(Boolean);
+
+    if (eventNames.length === 0) {
+      throw new Error("eventNames is required for list mode");
+    }
+
+    return { mode: "list", eventNames };
+  }
+
   if (mode !== "all") {
     throw new Error("Modo invalido para disparo.");
   }

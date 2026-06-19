@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 
+import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { DatabaseService } from "../database/database.service";
 import type {
   InterviewPrepContent,
@@ -52,6 +53,8 @@ export class JobApplicationInterviewPrepService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(InterviewPrepAiService)
     private readonly aiService: InterviewPrepAiService,
+    @Inject(BusinessFunnelEventService)
+    private readonly funnelEvents: BusinessFunnelEventService,
   ) {}
 
   async generateOrGet(userId: string, applicationId: string) {
@@ -182,6 +185,42 @@ export class JobApplicationInterviewPrepService {
     this.logger.log(
       `[interview-prep] generated — jobApplicationId=${applicationId} prepId=${result.id}`,
     );
+
+    const prepContent = content as {
+      questionsTheyMayAsk?: unknown[];
+    };
+    await this.funnelEvents
+      .record(
+        {
+          eventName: "interview_prep_generated",
+          eventVersion: 1,
+          idempotencyKey: `interview_prep_generated:${result.id}`,
+          metadata: {
+            has_previous_rejection_context: usedPastReflections,
+            used_job_description: usedJobDescription,
+            used_structured_data: usedStructuredData,
+            questions_count: Array.isArray(prepContent.questionsTheyMayAsk)
+              ? prepContent.questionsTheyMayAsk.length
+              : 0,
+          },
+        },
+        {
+          correlationId: `interview-prep:${applicationId}`,
+          ip: null,
+          requestId: `interview-prep:${result.id}`,
+          routePath: "/api/job-applications/:id/interview-prep",
+          sessionInternalId: null,
+          sessionPublicToken: null,
+          userAgentHash: null,
+          userId,
+        },
+        "backend",
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `[interview-prep] failed to record interview_prep_generated: ${err}`,
+        );
+      });
 
     return result;
   }

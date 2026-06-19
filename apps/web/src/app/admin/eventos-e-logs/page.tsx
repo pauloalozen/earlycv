@@ -42,6 +42,25 @@ const AUTH_EVENT_NAMES = [
   "auth_session_identified",
 ] as const;
 
+const CANDIDATURAS_EVENT_NAMES = [
+  "candidaturas_page_viewed",
+  "candidatura_created",
+  "candidatura_detail_viewed",
+  "candidatura_status_changed",
+  "candidatura_marked_as_applied",
+  "candidatura_archived",
+  "candidatura_deleted",
+  "candidatura_note_added",
+  "candidatura_rejection_feedback_submitted",
+] as const;
+
+const INTERVIEW_PREP_EVENT_NAMES = [
+  "interview_prep_drawer_opened",
+  "interview_prep_generated",
+  "interview_prep_viewed",
+  "interview_prep_printed",
+] as const;
+
 type EventResultsState = {
   error?: string;
   failed: number;
@@ -137,11 +156,13 @@ function EventSection({
   group,
   title,
   desc,
+  dispatchMode = "group",
 }: {
   entries: EventCatalogEntry[];
   group: "protection" | "business";
   title: string;
   desc: string;
+  dispatchMode?: "group" | "list";
 }) {
   return (
     <div
@@ -186,8 +207,19 @@ function EventSection({
           </span>
         </div>
         <form action={emitEventsAction}>
-          <input name="group" type="hidden" value={group} />
-          <input name="mode" type="hidden" value="group" />
+          <input name="mode" type="hidden" value={dispatchMode} />
+          {dispatchMode === "group" ? (
+            <input name="group" type="hidden" value={group} />
+          ) : (
+            entries.map((entry) => (
+              <input
+                key={entry.eventName}
+                name="eventNames"
+                type="hidden"
+                value={entry.eventName}
+              />
+            ))
+          )}
           <button
             className={buttonVariants({ size: "sm", variant: "outline" })}
             type="submit"
@@ -278,104 +310,119 @@ function EventResults({ result }: { result: EventResultsState | null }) {
     return null;
   }
 
+  const hasError = !!result.error || result.failed > 0;
+  const accentColor = hasError ? AT.danger : AT.ok;
+  const accentBg = hasError ? AT.dangerBg : AT.okBg;
+  const accentBorder = hasError
+    ? "rgba(155,44,44,0.25)"
+    : "rgba(31,122,77,0.22)";
+  const headline = hasError
+    ? result.error
+      ? `Erro: ${result.error}`
+      : `${result.failed} evento(s) falharam ao ser disparados`
+    : `${result.sent} evento(s) disparados com sucesso`;
+
   return (
     <div
+      id="result"
       style={{
-        background: AT.card,
-        border: `1px solid ${AT.border}`,
+        background: accentBg,
+        border: `1.5px solid ${accentBorder}`,
         borderRadius: 10,
-        padding: "16px 18px",
+        padding: "14px 18px",
         display: "flex",
         flexDirection: "column",
         gap: 12,
-        marginBottom: 8,
+        marginBottom: 16,
       }}
     >
-      <div>
-        <div
-          style={{
-            fontSize: 14.5,
-            fontWeight: 600,
-            color: AT.ink2,
-            marginBottom: 4,
-          }}
-        >
-          Resultado da operação
-        </div>
-        {result.error ? (
-          <div style={{ fontSize: 12.5, color: AT.danger }}>{result.error}</div>
-        ) : null}
-      </div>
-
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 8,
+          fontSize: 14,
+          fontWeight: 600,
+          color: accentColor,
         }}
       >
-        {[
-          { label: "requested", value: result.requested },
-          { label: "sent", value: result.sent },
-          { label: "failed", value: result.failed },
-        ].map(({ label, value }) => (
-          <div
-            key={label}
-            style={{
-              background: AT.bgAlt,
-              border: `1px solid ${AT.borderSoft}`,
-              borderRadius: 6,
-              padding: "8px 12px",
-            }}
-          >
-            <div
-              style={{
-                fontFamily: '"Geist Mono", monospace',
-                fontSize: 10,
-                color: AT.muted2,
-                marginBottom: 2,
-              }}
-            >
-              {label}
-            </div>
-            <div
-              style={{
-                fontFamily: '"Geist Mono", monospace',
-                fontSize: 18,
-                fontWeight: 600,
-                color: AT.ink2,
-              }}
-            >
-              {value}
-            </div>
-          </div>
-        ))}
+        {headline}
       </div>
+
+      {!result.error && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 8,
+            maxWidth: 360,
+          }}
+        >
+          {[
+            { label: "solicitados", value: result.requested },
+            { label: "enviados", value: result.sent },
+            { label: "falhas", value: result.failed },
+          ].map(({ label, value }) => (
+            <div
+              key={label}
+              style={{
+                background: "rgba(255,255,255,0.55)",
+                border: `1px solid ${accentBorder}`,
+                borderRadius: 6,
+                padding: "7px 12px",
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: '"Geist Mono", monospace',
+                  fontSize: 10,
+                  color: accentColor,
+                  opacity: 0.75,
+                  marginBottom: 2,
+                }}
+              >
+                {label}
+              </div>
+              <div
+                style={{
+                  fontFamily: '"Geist Mono", monospace',
+                  fontSize: 17,
+                  fontWeight: 700,
+                  color: accentColor,
+                }}
+              >
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {result.results.length > 0 ? (
         <div
           style={{
-            border: `1px solid ${AT.border}`,
+            border: `1px solid ${accentBorder}`,
             borderRadius: 8,
             overflowX: "auto",
+            background: "rgba(255,255,255,0.45)",
           }}
         >
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
+          <table
+            style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}
+          >
             <thead>
-              <tr style={{ background: AT.bgAlt }}>
+              <tr style={{ background: "rgba(255,255,255,0.3)" }}>
                 {["Evento", "Domínio", "Status", "Erro"].map((h) => (
                   <th
                     key={h}
                     style={{
-                      padding: "8px 12px",
+                      padding: "7px 12px",
                       textAlign: "left",
                       fontFamily: '"Geist Mono", monospace',
                       fontSize: 10,
                       fontWeight: 600,
-                      color: AT.muted2,
+                      color: accentColor,
+                      opacity: 0.8,
                       letterSpacing: "0.06em",
                       textTransform: "uppercase",
-                      borderBottom: `1px solid ${AT.border}`,
+                      borderBottom: `1px solid ${accentBorder}`,
                     }}
                   >
                     {h}
@@ -388,30 +435,32 @@ function EventResults({ result }: { result: EventResultsState | null }) {
                 <tr
                   key={`${item.domain}-${item.eventName}`}
                   style={{
-                    borderTop: i === 0 ? "none" : `1px solid ${AT.borderSoft}`,
+                    borderTop: i === 0 ? "none" : `1px solid ${accentBorder}`,
+                    opacity: i === 0 ? 1 : 0.9,
                   }}
                 >
                   <td
                     style={{
-                      padding: "9px 12px",
+                      padding: "8px 12px",
                       fontFamily: '"Geist Mono", monospace',
-                      fontSize: 12.5,
+                      fontSize: 12,
                       fontWeight: 600,
-                      color: AT.ink2,
+                      color: accentColor,
                     }}
                   >
                     {item.eventName}
                   </td>
                   <td
                     style={{
-                      padding: "9px 12px",
-                      fontSize: 12.5,
-                      color: AT.muted,
+                      padding: "8px 12px",
+                      fontSize: 12,
+                      color: accentColor,
+                      opacity: 0.7,
                     }}
                   >
                     {item.domain}
                   </td>
-                  <td style={{ padding: "9px 12px" }}>
+                  <td style={{ padding: "8px 12px" }}>
                     <AdminPill
                       tone={item.status === "sent" ? "ok" : "danger"}
                       mono
@@ -421,9 +470,10 @@ function EventResults({ result }: { result: EventResultsState | null }) {
                   </td>
                   <td
                     style={{
-                      padding: "9px 12px",
-                      fontSize: 12.5,
-                      color: AT.muted,
+                      padding: "8px 12px",
+                      fontSize: 12,
+                      color: accentColor,
+                      opacity: 0.7,
                     }}
                   >
                     {item.error ?? "—"}
@@ -451,7 +501,7 @@ async function emitEventsAction(formData: FormData) {
       sent: 0,
     });
 
-    redirect(`/admin/eventos-e-logs?result=${result}`);
+    redirect(`/admin/eventos-e-logs?result=${result}#result`);
   }
 
   try {
@@ -465,9 +515,16 @@ async function emitEventsAction(formData: FormData) {
         requested: response.requested,
         results: response.results,
         sent: response.sent,
-      })}`,
+      })}#result`,
     );
   } catch (error) {
+    if (
+      typeof (error as { digest?: string }).digest === "string" &&
+      (error as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw error;
+    }
+
     const message =
       error instanceof Error
         ? error.message
@@ -480,7 +537,7 @@ async function emitEventsAction(formData: FormData) {
         requested: 0,
         results: [],
         sent: 0,
-      })}`,
+      })}#result`,
     );
   }
 }
@@ -515,11 +572,7 @@ async function AdminEventsLogsPageBody({
   try {
     const catalog = await listAdminAnalysisEventsCatalog();
     const result = decodeResult(resultParam);
-    const totalEvents =
-      catalog.protection.length +
-      catalog.business.length +
-      BLOG_EVENT_NAMES.length +
-      AUTH_EVENT_NAMES.length;
+    const totalEvents = catalog.protection.length + catalog.business.length;
 
     return (
       <AdminPageWrap maxWidth={1100}>
@@ -536,6 +589,8 @@ async function AdminEventsLogsPageBody({
           subtitle="Disparos manuais para validar observabilidade. Todos os eventos desta tela são synthetic: true para separar do tráfego real."
           title="Eventos e logs."
         />
+
+        <EventResults result={result} />
 
         {/* Aviso */}
         <div
@@ -579,8 +634,6 @@ async function AdminEventsLogsPageBody({
           <AdminStatCard label="Erros de envio" value="0" sub="tudo verde" />
         </AdminStatsRow>
 
-        <EventResults result={result} />
-
         {catalog.protection.length === 0 && catalog.business.length === 0 ? (
           <EmptyState
             description="Não há eventos catalogados para disparo manual no momento."
@@ -605,6 +658,28 @@ async function AdminEventsLogsPageBody({
               title="Auth"
             />
             <EventSection
+              desc="Criação, status, archiving e exclusão de candidaturas"
+              dispatchMode="list"
+              entries={catalog.business.filter((e) =>
+                CANDIDATURAS_EVENT_NAMES.includes(
+                  e.eventName as (typeof CANDIDATURAS_EVENT_NAMES)[number],
+                ),
+              )}
+              group="business"
+              title="Candidaturas"
+            />
+            <EventSection
+              desc="Geração, visualização e impressão da preparação para entrevista"
+              dispatchMode="list"
+              entries={catalog.business.filter((e) =>
+                INTERVIEW_PREP_EVENT_NAMES.includes(
+                  e.eventName as (typeof INTERVIEW_PREP_EVENT_NAMES)[number],
+                ),
+              )}
+              group="business"
+              title="Preparação para Entrevista"
+            />
+            <EventSection
               desc="Checkout, aprovação, estorno"
               entries={catalog.business.filter(
                 (e) =>
@@ -613,6 +688,12 @@ async function AdminEventsLogsPageBody({
                   ) &&
                   !BLOG_EVENT_NAMES.includes(
                     e.eventName as (typeof BLOG_EVENT_NAMES)[number],
+                  ) &&
+                  !CANDIDATURAS_EVENT_NAMES.includes(
+                    e.eventName as (typeof CANDIDATURAS_EVENT_NAMES)[number],
+                  ) &&
+                  !INTERVIEW_PREP_EVENT_NAMES.includes(
+                    e.eventName as (typeof INTERVIEW_PREP_EVENT_NAMES)[number],
                   ),
               )}
               group="business"

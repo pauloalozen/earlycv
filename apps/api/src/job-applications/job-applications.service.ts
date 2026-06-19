@@ -13,6 +13,7 @@ import {
   Prisma,
 } from "@prisma/client";
 
+import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { DatabaseService } from "../database/database.service";
 import type { CreateJobApplicationDto } from "./dto/create-job-application.dto";
 
@@ -147,7 +148,38 @@ export class JobApplicationsService {
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(BusinessFunnelEventService)
+    private readonly funnelEvents: BusinessFunnelEventService,
   ) {}
+
+  private buildBackendContext(userId: string, key: string) {
+    return {
+      correlationId: `job-applications:${key}`,
+      ip: null,
+      requestId: `job-applications:${key}`,
+      routePath: "/api/job-applications",
+      sessionInternalId: null,
+      sessionPublicToken: null,
+      userAgentHash: null,
+      userId,
+    };
+  }
+
+  private async recordEvent(
+    eventName: string,
+    userId: string,
+    applicationId: string,
+    metadata?: Record<string, unknown>,
+  ) {
+    const context = this.buildBackendContext(userId, applicationId);
+    await this.funnelEvents
+      .record({ eventName, eventVersion: 1, metadata }, context, "backend")
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `[job-applications] failed to record ${eventName}: ${err}`,
+        );
+      });
+  }
 
   async list(
     userId: string,
@@ -409,6 +441,11 @@ export class JobApplicationsService {
       return created;
     });
 
+    await this.recordEvent("candidatura_created", userId, application.id, {
+      origin,
+      has_job_description: Boolean(dto.jobDescriptionText),
+    });
+
     return application;
   }
 
@@ -425,8 +462,8 @@ export class JobApplicationsService {
       throw new NotFoundException("job application not found");
     }
 
-    return this.database.$transaction(async (tx) => {
-      const result = await tx.jobApplication.update({
+    const result = await this.database.$transaction(async (tx) => {
+      const updated = await tx.jobApplication.update({
         where: { id },
         data: {
           status: "REJECTED",
@@ -445,8 +482,26 @@ export class JobApplicationsService {
         },
       });
 
-      return result;
+      return updated;
     });
+
+    await this.recordEvent(
+      "candidatura_rejection_feedback_submitted",
+      userId,
+      id,
+      {
+        has_strengths: Boolean(data.rejectionStrengths),
+        has_improvements: Boolean(data.rejectionImprovements),
+        from_status: application.status,
+      },
+    );
+
+    await this.recordEvent("candidatura_status_changed", userId, id, {
+      from_status: application.status,
+      to_status: "REJECTED",
+    });
+
+    return result;
   }
 
   async scheduleInterview(
@@ -470,8 +525,8 @@ export class JobApplicationsService {
 
     const previousStatus = application.status;
 
-    return this.database.$transaction(async (tx) => {
-      const result = await tx.jobApplication.update({
+    const result = await this.database.$transaction(async (tx) => {
+      const updated = await tx.jobApplication.update({
         where: { id },
         data: {
           status: "INTERVIEW",
@@ -493,8 +548,15 @@ export class JobApplicationsService {
         },
       });
 
-      return result;
+      return updated;
     });
+
+    await this.recordEvent("candidatura_status_changed", userId, id, {
+      from_status: previousStatus,
+      to_status: "INTERVIEW",
+    });
+
+    return result;
   }
 
   async updateUrl(userId: string, id: string, jobUrl: string) {
@@ -570,6 +632,17 @@ export class JobApplicationsService {
       return result;
     });
 
+    await this.recordEvent("candidatura_status_changed", userId, id, {
+      from_status: previousStatus,
+      to_status: newStatus,
+    });
+
+    if (newStatus === "APPLIED") {
+      await this.recordEvent("candidatura_marked_as_applied", userId, id, {
+        from_status: previousStatus,
+      });
+    }
+
     return updated;
   }
 
@@ -599,6 +672,10 @@ export class JobApplicationsService {
       return result;
     });
 
+    await this.recordEvent("candidatura_note_added", userId, id, {
+      note_length: note.length,
+    });
+
     return updated;
   }
 
@@ -617,6 +694,8 @@ export class JobApplicationsService {
         where: { id },
         data: { archivedAt: new Date() },
       });
+
+      await this.recordEvent("candidatura_archived", userId, id);
     }
 
     return this.getById(userId, id);
@@ -672,10 +751,14 @@ export class JobApplicationsService {
       );
     }
 
-    return this.database.jobApplication.update({
+    const deleted = await this.database.jobApplication.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
+
+    await this.recordEvent("candidatura_deleted", userId, id);
+
+    return deleted;
   }
 
   async upsertFromCvAdaptation(
@@ -843,6 +926,12 @@ export class JobApplicationsService {
               metadata: { cvAdaptationId },
             },
           ],
+        });
+
+        await this.recordEvent("candidatura_created", userId, created.id, {
+          origin,
+          has_job_description: Boolean(jobDescriptionText),
+          has_cv_adaptation: true,
         });
       }
     });
