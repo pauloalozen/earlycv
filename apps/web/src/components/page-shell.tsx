@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EcvBuildLoader } from "./ecv-loader";
+import { EcvPulseLoader } from "./ecv-loader";
 
 export function PageShell({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
@@ -30,7 +30,7 @@ export function PageShell({ children }: { children: React.ReactNode }) {
         className={`page-shell-cover${ready ? " page-shell-cover--ready" : ""}`}
         aria-hidden="true"
       >
-        <EcvBuildLoader size={48} />
+        <EcvPulseLoader size={48} />
       </div>
       {children}
     </>

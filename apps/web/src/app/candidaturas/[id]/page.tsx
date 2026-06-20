@@ -13,6 +13,7 @@ import {
 } from "@/lib/cv-adaptation-api";
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
+import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getJobApplication } from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
 import { listMyResumes } from "@/lib/resumes-api";
@@ -49,6 +50,7 @@ export default async function CandidaturaDetailPage({ params }: Props) {
   const application = applicationResult.value;
   const planInfo = planResult.status === "fulfilled" ? planResult.value : null;
   const availableCredits = toHeaderAvailableCredits(planInfo);
+  const initialHasCredits = hasAvailableCredits(planInfo);
 
   // Compute per-adaptation scores exactly like dashboard_old does
   const resumeList =
@@ -133,6 +135,7 @@ export default async function CandidaturaDetailPage({ params }: Props) {
   return (
     <DetailClient
       application={applicationWithScores}
+      initialHasCredits={initialHasCredits}
       header={
         <AppHeader
           userName={user.name}

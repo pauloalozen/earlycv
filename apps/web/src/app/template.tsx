@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { EcvBuildLoader } from "@/components/ecv-loader";
+import { EcvPulseLoader } from "@/components/ecv-loader";
 import { AnalyticsConsentBanner } from "./_components/analytics-consent-banner";
 import { JourneyTrackerProvider } from "./_components/journey-tracker-provider";
 import { PosthogAuthProvider } from "./_components/posthog-auth-provider";
@@ -33,7 +33,7 @@ export default function Template({
               aria-live="polite"
               aria-atomic="true"
             >
-              <EcvBuildLoader size={48} />
+              <EcvPulseLoader size={48} />
               <span className="sr-only">Loading page content</span>
             </div>
           )}

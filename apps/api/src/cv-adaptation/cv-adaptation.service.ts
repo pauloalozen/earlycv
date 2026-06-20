@@ -1488,7 +1488,18 @@ export class CvAdaptationService {
         origin: "analysis_auto",
         callerMethod: "saveGuestPreview(existing)",
       });
-      return createCvAdaptationResponseDto(existingAdaptation);
+      const refreshedExisting = await this.database.cvAdaptation.findUnique({
+        where: { id: existingAdaptation.id },
+        include: {
+          template: { select: { id: true, name: true, slug: true } },
+          analysisCvSnapshot: {
+            select: { sourceType: true, originalFileStorageKey: true },
+          },
+        },
+      });
+      return createCvAdaptationResponseDto(
+        refreshedExisting ?? existingAdaptation,
+      );
     }
 
     const adaptation = await this.database.cvAdaptation.create({
@@ -1527,7 +1538,17 @@ export class CvAdaptationService {
       callerMethod: "saveGuestPreview",
     });
 
-    return createCvAdaptationResponseDto(adaptation);
+    const refreshedAdaptation = await this.database.cvAdaptation.findUnique({
+      where: { id: adaptation.id },
+      include: {
+        template: { select: { id: true, name: true, slug: true } },
+        analysisCvSnapshot: {
+          select: { sourceType: true, originalFileStorageKey: true },
+        },
+      },
+    });
+
+    return createCvAdaptationResponseDto(refreshedAdaptation ?? adaptation);
   }
 
   async list(userId: string, page: number = 1, limit: number = 20) {
@@ -1856,6 +1877,9 @@ export class CvAdaptationService {
         dto?.selectedMissingKeywords,
       );
 
+      // Always clear pre-generated aiAuditJson on unlock so deliverAdaptation
+      // regenerates the CV incorporating both user-selected keywords and the
+      // LLM-derived "possiveis" keywords (which mergeKeywordsForGeneration handles).
       const nextAdaptation = await tx.cvAdaptation.update({
         where: { id: currentAdaptation.id },
         data: {
@@ -1863,6 +1887,7 @@ export class CvAdaptationService {
           isUnlocked: true,
           unlockedAt: new Date(),
           adaptedContentJson: updatedContent as Prisma.InputJsonValue,
+          aiAuditJson: Prisma.DbNull,
         },
         include: { template: { select: { id: true, name: true, slug: true } } },
       });
@@ -2524,9 +2549,16 @@ export class CvAdaptationService {
       finalCvOutput ?? undefined,
     );
 
-    // If delivered but still no CV output, background generation may have failed.
-    // Fire a retry without blocking the response so the next poll can pick it up.
-    if (adaptation.status === "delivered" && !finalCvOutput) {
+    // If delivered but CV output is missing or has no displayable sections
+    // (e.g. stripAiCustomSections wiped all "other" sections), fire a forced
+    // regeneration. Pass aiAuditJson: null so ensureLegacyStructuredOutput
+    // skips the early-return and rebuilds from scratch.
+    const hasRealSections = (finalCvOutput?.sections ?? []).some(
+      (s) =>
+        typeof (s as { sectionType?: string }).sectionType === "string" &&
+        (s as { sectionType: string }).sectionType !== "other",
+    );
+    if (adaptation.status === "delivered" && (!finalCvOutput || !hasRealSections)) {
       void this.database.cvAdaptation
         .findFirst({
           where: { id, userId },
@@ -2537,6 +2569,7 @@ export class CvAdaptationService {
             return this.ensureLegacyStructuredOutput({
               ...full,
               masterResume: full.masterResume ?? { rawText: null },
+              aiAuditJson: null, // force regeneration even when broken output already exists
             });
           }
         })
@@ -3115,7 +3148,12 @@ export class CvAdaptationService {
         )
       : [];
 
-    if (!selectedKws.length) return adaptedContentJson;
+    const kwPossiveisRawEarly = (
+      json.keywords as Record<string, unknown> | undefined
+    )?.possiveis;
+    if (!selectedKws.length && !Array.isArray(kwPossiveisRawEarly)) {
+      return adaptedContentJson;
+    }
 
     // Build pontos lookup from keywords.ausentes (authoritative source for kw points)
     const kwPontosMap = new Map<string, number>();

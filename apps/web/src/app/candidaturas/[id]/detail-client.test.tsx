@@ -156,7 +156,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
             },
           ],
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -209,7 +209,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
             },
           ],
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -248,7 +248,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
             },
           ],
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -285,7 +285,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
             },
           ],
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -323,7 +323,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
             },
           ],
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -360,7 +360,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
             },
           ],
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -411,7 +411,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
             },
           ],
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -437,7 +437,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
         application={buildApplication({
           events: Array.from({ length: 5 }, (_, index) => makeEvent(index)),
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -461,7 +461,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
         application={buildApplication({
           events: Array.from({ length: 6 }, (_, index) => makeEvent(index)),
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -485,7 +485,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
         application={buildApplication({
           events: [makeEvent(0), makeEvent(1), makeEvent(2)],
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -535,7 +535,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
             },
           ],
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -597,7 +597,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
             },
           ],
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -625,7 +625,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
       vi.fn(() => true),
     );
 
-    render(<DetailClient application={buildApplication()} header={<div />} />);
+    render(<DetailClient application={buildApplication()} header={<div />} initialHasCredits={true} />);
 
     fireEvent.click(
       screen.getAllByRole("button", {
@@ -655,7 +655,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
       vi.fn(() => false),
     );
 
-    render(<DetailClient application={buildApplication()} header={<div />} />);
+    render(<DetailClient application={buildApplication()} header={<div />} initialHasCredits={true} />);
 
     fireEvent.click(
       screen.getAllByRole("button", {
@@ -686,7 +686,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
       vi.fn(() => true),
     );
 
-    render(<DetailClient application={buildApplication()} header={<div />} />);
+    render(<DetailClient application={buildApplication()} header={<div />} initialHasCredits={true} />);
 
     fireEvent.click(
       screen.getAllByRole("button", {
@@ -708,7 +708,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
       })) as unknown as typeof fetch,
     );
 
-    render(<DetailClient application={buildApplication()} header={<div />} />);
+    render(<DetailClient application={buildApplication()} header={<div />} initialHasCredits={true} />);
 
     expect(screen.getByRole("button", { name: /liberar cv/i })).toBeTruthy();
   });
@@ -722,7 +722,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
       })) as unknown as typeof fetch,
     );
 
-    render(<DetailClient application={buildApplication()} header={<div />} />);
+    render(<DetailClient application={buildApplication()} header={<div />} initialHasCredits={true} />);
 
     await waitFor(() => {
       expect(screen.getByRole("link", { name: /liberar cv/i })).toBeTruthy();
@@ -764,7 +764,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
             },
           ],
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -795,7 +795,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<DetailClient application={buildApplication()} header={<div />} />);
+    render(<DetailClient application={buildApplication()} header={<div />} initialHasCredits={true} />);
 
     const unlockButton = screen.getByRole("button", { name: /liberar cv/i });
     fireEvent.click(unlockButton);
@@ -834,7 +834,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
           archivedAt: "2026-05-01T00:00:00.000Z",
           bestCvState: "locked",
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -846,7 +846,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
           archivedAt: "2026-05-01T00:00:00.000Z",
           bestCvState: "unlocked",
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -858,7 +858,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
           archivedAt: "2026-05-01T00:00:00.000Z",
           bestCvState: "ready",
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 
@@ -886,7 +886,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
           archivedAt: "2026-05-01T00:00:00.000Z",
           bestCvState: "locked",
         })}
-        header={<div />}
+        header={<div />} initialHasCredits={true}
       />,
     );
 

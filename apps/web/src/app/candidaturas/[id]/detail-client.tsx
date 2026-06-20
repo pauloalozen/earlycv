@@ -731,6 +731,7 @@ function AnaliseRow({
   jobTitle,
   isArchived,
   onUpdated,
+  hasCredits,
 }: {
   adaptation: {
     id: string;
@@ -752,23 +753,29 @@ function AnaliseRow({
   jobTitle: string;
   isArchived?: boolean;
   onUpdated?: () => void;
+  hasCredits: boolean;
 }) {
   const MIN_RELEASE_LOADING_MS = 3000;
   const REDEEM_REQUEST_TIMEOUT_MS = 15_000;
   const redeemHref = `/api/cv-adaptation/${adaptation.id}/redeem-credit`;
   const redeemSessionKey = `dashboard-cv-redeemed:${redeemHref}`;
+  const router = useRouter();
 
   const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
   const [downloadStage, setDownloadStage] =
     useState<DownloadProgressStage | null>(null);
   const [redeeming, setRedeeming] = useState(false);
   const [wasRedeemedInSession, setWasRedeemedInSession] = useState(false);
-  const [hasCredits, setHasCredits] = useState<boolean | null>(null);
   const [releaseModalOpen, setReleaseModalOpen] = useState(false);
   const [releaseModalVisible, setReleaseModalVisible] = useState(false);
   const [releaseStatus, setReleaseStatus] =
     useState<CvReleaseModalStatus>("loading");
   const [releaseError, setReleaseError] = useState<string | null>(null);
+  const [noCreditsOpen, setNoCreditsOpen] = useState(false);
+  const [noCreditsVisible, setNoCreditsVisible] = useState(false);
+  const noCreditsCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const redeemInFlightRef = useRef(false);
   const isMountedRef = useRef(true);
   const redeemAbortControllerRef = useRef<AbortController | null>(null);
@@ -827,8 +834,32 @@ function AnaliseRow({
         clearTimeout(releaseCloseTimeoutRef.current);
       if (adjustmentsCloseTimerRef.current)
         clearTimeout(adjustmentsCloseTimerRef.current);
+      if (noCreditsCloseTimerRef.current)
+        clearTimeout(noCreditsCloseTimerRef.current);
     };
   }, []);
+
+  const openNoCreditsModal = () => {
+    setNoCreditsOpen(true);
+    requestAnimationFrame(() => setNoCreditsVisible(true));
+  };
+
+  const closeNoCreditsModal = () => {
+    setNoCreditsVisible(false);
+    if (noCreditsCloseTimerRef.current)
+      clearTimeout(noCreditsCloseTimerRef.current);
+    noCreditsCloseTimerRef.current = setTimeout(() => {
+      if (isMountedRef.current) setNoCreditsOpen(false);
+    }, 200);
+  };
+
+  const handleUnlockClick = () => {
+    if (hasCredits === false) {
+      openNoCreditsModal();
+      return;
+    }
+    void handleRedeem();
+  };
 
   useEffect(() => {
     try {
@@ -840,26 +871,6 @@ function AnaliseRow({
     }
   }, [redeemSessionKey]);
 
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/plans/me", { cache: "no-store" });
-        if (!res.ok) return;
-        const plan = (await res.json()) as { creditsRemaining?: number | null };
-        if (!mounted) return;
-        setHasCredits(
-          plan.creditsRemaining == null ? true : plan.creditsRemaining > 0,
-        );
-      } catch {
-        if (mounted) setHasCredits(null);
-      }
-    };
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!releaseModalOpen || releaseStatus !== "loading") return;
@@ -962,8 +973,7 @@ function AnaliseRow({
       } catch {
         /* no-op */
       }
-      onUpdated?.();
-      setReleaseStatus("success");
+      router.push(`/adaptacao-cv/${adaptation.id}`);
     } catch (err) {
       if (!isMountedRef.current) return;
       const msg = (() => {
@@ -1255,66 +1265,44 @@ function AnaliseRow({
               </a>
             )}
 
-            {!isArchived &&
-              canRedeemNow &&
-              (hasCredits === false ? (
-                <a
-                  href={plansHref}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    background: "rgba(255,255,255,0.7)",
-                    color: "#3a3a36",
-                    border: "1px solid rgba(10,10,10,0.12)",
-                    borderRadius: 7,
-                    padding: "6px 10px",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    textDecoration: "none",
-                    fontFamily: GEIST,
-                  }}
+            {!isArchived && canRedeemNow && (
+              <button
+                type="button"
+                onClick={handleUnlockClick}
+                disabled={redeeming}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: "rgba(255,255,255,0.7)",
+                  color: "#3a3a36",
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  borderRadius: 7,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: redeeming ? "not-allowed" : "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
                 >
-                  Liberar CV · 1 Crédito
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void handleRedeem()}
-                  disabled={redeeming}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    background: "rgba(255,255,255,0.7)",
-                    color: "#3a3a36",
-                    border: "1px solid rgba(10,10,10,0.12)",
-                    borderRadius: 7,
-                    padding: "6px 10px",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: redeeming ? "not-allowed" : "pointer",
-                    fontFamily: GEIST,
-                  }}
-                >
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <title>Liberar CV</title>
-                    <rect x="4" y="11" width="16" height="10" rx="2" />
-                    <path d="M8 11V8a4 4 0 1 1 8 0" />
-                  </svg>
-                  {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
-                </button>
-              ))}
+                  <title>Liberar CV</title>
+                  <rect x="4" y="11" width="16" height="10" rx="2" />
+                  <path d="M8 11V8a4 4 0 1 1 8 0" />
+                </svg>
+                {redeeming ? "Liberando..." : "Liberar CV · 1 Crédito"}
+              </button>
+            )}
 
             {!isArchived && showAdjustments && (
               <button
@@ -1496,6 +1484,123 @@ function AnaliseRow({
         downloading={downloading}
         canDownload={releaseStatus === "success"}
       />
+      {noCreditsOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 120,
+            background: "rgba(10,10,10,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+            transition: "opacity 200ms ease-out",
+            opacity: noCreditsVisible ? 1 : 0,
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Fechar"
+            onClick={closeNoCreditsModal}
+            style={{
+              position: "absolute",
+              inset: 0,
+              border: "none",
+              background: "transparent",
+              padding: 0,
+              cursor: "default",
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="no-credits-title"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: "relative",
+              zIndex: 1,
+              width: "100%",
+              maxWidth: 420,
+              background: "#fafaf6",
+              border: "1px solid rgba(10,10,10,0.08)",
+              borderRadius: 18,
+              padding: "28px 28px 24px",
+              fontFamily: GEIST,
+              boxShadow: "0 24px 60px -20px rgba(10,10,10,0.4)",
+              transition: "opacity 200ms ease-out, transform 200ms ease-out",
+              opacity: noCreditsVisible ? 1 : 0,
+              transform: noCreditsVisible
+                ? "translateY(0) scale(1)"
+                : "translateY(8px) scale(0.98)",
+            }}
+          >
+            <h3
+              id="no-credits-title"
+              style={{
+                fontSize: 18,
+                fontWeight: 500,
+                letterSpacing: "-0.4px",
+                color: "#0a0a0a",
+                margin: "0 0 8px",
+                fontFamily: GEIST,
+              }}
+            >
+              Sem créditos disponíveis
+            </h3>
+            <p
+              style={{
+                fontSize: 13.5,
+                color: "#6a6560",
+                lineHeight: 1.55,
+                margin: "0 0 24px",
+                fontFamily: GEIST,
+              }}
+            >
+              Você não tem créditos para liberar este CV. Adquira um crédito
+              para gerar o CV adaptado desta vaga.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <a
+                href={plansHref}
+                style={{
+                  display: "block",
+                  textAlign: "center",
+                  background: "#0a0a0a",
+                  color: "#fafaf6",
+                  borderRadius: 10,
+                  padding: "12px 16px",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  textDecoration: "none",
+                  fontFamily: GEIST,
+                }}
+              >
+                Comprar crédito
+              </a>
+              <button
+                type="button"
+                onClick={closeNoCreditsModal}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  background: "transparent",
+                  color: "#6a6560",
+                  border: "1px solid rgba(10,10,10,0.10)",
+                  borderRadius: 10,
+                  padding: "12px 16px",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {adjustmentsOpen && (
         <div
           style={{
@@ -1813,10 +1918,12 @@ function AnalisesSection({
   application,
   isArchived,
   onUpdated,
+  hasCredits,
 }: {
   application: JobApplicationDetailDto;
   isArchived?: boolean;
   onUpdated: () => void;
+  hasCredits: boolean;
 }) {
   const adaptations = application.cvAdaptations;
 
@@ -1905,6 +2012,7 @@ function AnalisesSection({
                   jobTitle={application.jobTitle}
                   isArchived={isArchived}
                   onUpdated={onUpdated}
+                  hasCredits={hasCredits}
                 />
               );
             });
@@ -4698,6 +4806,7 @@ function StatusBadge({ status }: { status: string }) {
 type Props = {
   application: JobApplicationDetailDto;
   header: ReactNode;
+  initialHasCredits: boolean;
 };
 
 const PREP_ELIGIBLE_STATUSES: JobApplicationStatus[] = [
@@ -4708,7 +4817,7 @@ const PREP_ELIGIBLE_STATUSES: JobApplicationStatus[] = [
   "OFFER",
 ];
 
-export function DetailClient({ application, header }: Props) {
+export function DetailClient({ application, header, initialHasCredits }: Props) {
   const router = useRouter();
   const [showPrep, setShowPrep] = useState(false);
   const [showStatusEdit, setShowStatusEdit] = useState(false);
@@ -4725,7 +4834,7 @@ export function DetailClient({ application, header }: Props) {
   const closeTimerRef = useRef<number | null>(null);
   const [hasCreditsForInterview, setHasCreditsForInterview] = useState<
     boolean | null
-  >(null);
+  >(initialHasCredits);
   const [cvPickerOpen, setCvPickerOpen] = useState(false);
   const [cvPickerVisible, setCvPickerVisible] = useState(false);
   const [interviewUnlocking, setInterviewUnlocking] = useState(false);
@@ -4859,27 +4968,6 @@ export function DetailClient({ application, header }: Props) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!isPrepEligible || !application.interviewPrepLocked) return;
-    let mounted = true;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/plans/me", { cache: "no-store" });
-        if (!res.ok || !mounted) return;
-        const plan = (await res.json()) as { creditsRemaining?: number | null };
-        if (!mounted) return;
-        setHasCreditsForInterview(
-          plan.creditsRemaining == null ? true : plan.creditsRemaining > 0,
-        );
-      } catch {
-        if (mounted) setHasCreditsForInterview(null);
-      }
-    };
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, [isPrepEligible, application.interviewPrepLocked]);
 
   const closeCvPicker = () => {
     setCvPickerVisible(false);
@@ -5403,6 +5491,7 @@ export function DetailClient({ application, header }: Props) {
                 application={application}
                 isArchived={isArchivedManually}
                 onUpdated={handleUpdated}
+                hasCredits={initialHasCredits}
               />
               <NotesSection
                 applicationId={application.id}
