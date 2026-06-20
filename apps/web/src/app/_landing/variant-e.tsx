@@ -170,235 +170,235 @@ export function LandingVariantE() {
             overflow: "hidden",
           }}
         >
-        <div
-          style={{
-            maxWidth: 1200,
-            margin: "0 auto",
-            padding: "48px 40px",
-            display: "grid",
-            gridTemplateColumns: "1.1fr 0.9fr",
-            gap: 80,
-            alignItems: "center",
-            width: "100%",
-          }}
-          className="e-hero-grid"
-        >
-          {/* Left */}
-          <div>
-            <a
-              href="#candidaturas"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                fontSize: 12.5,
-                fontWeight: 500,
-                color: "#0a0a0a",
-                background: "rgba(198,255,58,0.18)",
-                border: "1px solid rgba(110,150,20,0.28)",
-                borderRadius: 999,
-                padding: "6px 12px",
-                marginBottom: 28,
-                textDecoration: "none",
-              }}
-            >
-              <span
+          <div
+            style={{
+              maxWidth: 1200,
+              margin: "0 auto",
+              padding: "48px 40px",
+              display: "grid",
+              gridTemplateColumns: "1.1fr 0.9fr",
+              gap: 80,
+              alignItems: "center",
+              width: "100%",
+            }}
+            className="e-hero-grid"
+          >
+            {/* Left */}
+            <div>
+              <a
+                href="#candidaturas"
                 style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "#c6ff3a",
-                  boxShadow: "0 0 6px #c6ff3a",
-                  flexShrink: 0,
-                  display: "inline-block",
-                }}
-              />
-              <span>Novo · candidaturas + entrevistas</span>
-              <span style={{ opacity: 0.55 }}>→</span>
-            </a>
-
-            <h1
-              style={{
-                fontSize: "clamp(40px, 6vw, 68px)",
-                fontWeight: 500,
-                letterSpacing: -2.6,
-                lineHeight: 0.98,
-                margin: "0 0 12px",
-                color: "#0a0a0a",
-              }}
-              className="e-hero-h1"
-            >
-              Um CV{" "}
-              <em
-                style={{
-                  fontFamily: SERIF_ITALIC,
-                  fontStyle: "italic",
-                  fontWeight: 400,
-                  letterSpacing: -1,
-                }}
-              >
-                ajustado
-              </em>
-              <br />
-              para cada vaga.
-            </h1>
-            <p
-              style={{
-                fontSize: "clamp(28px, 4vw, 44px)",
-                fontWeight: 400,
-                letterSpacing: -1.4,
-                lineHeight: 1.1,
-                margin: "0 0 28px",
-                color: "#b0aea8",
-                fontFamily: SERIF_ITALIC,
-                fontStyle: "italic",
-              }}
-            >
-              Uma candidatura organizada
-              <br />
-              até a entrevista.
-            </p>
-
-            <p
-              style={{
-                fontSize: 17,
-                lineHeight: 1.55,
-                color: "#45443e",
-                margin: "0 0 32px",
-                maxWidth: 480,
-                fontWeight: 400,
-              }}
-            >
-              Cole seu CV e a vaga. O EarlyCV mostra o que falta, gera uma
-              versão mais alinhada, organiza sua candidatura e ajuda você a se
-              preparar para a entrevista.
-            </p>
-
-            <div
-              style={{
-                display: "flex",
-                gap: 12,
-                alignItems: "center",
-                marginBottom: 52,
-              }}
-            >
-              <Link
-                href="/adaptar"
-                style={{
-                  background: "#0a0a0a",
-                  color: "#fff",
-                  borderRadius: 10,
-                  padding: "14px 22px",
-                  fontSize: 14.5,
-                  fontWeight: 500,
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: 10,
-                  letterSpacing: -0.1,
-                  textDecoration: "none",
-                  boxShadow:
-                    "0 4px 12px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.08)",
-                  transition: "transform 180ms, box-shadow 180ms",
-                }}
-                className="lp-cta-primary"
-              >
-                <span className="lp-cta-text-desktop">
-                  Adaptar meu CV grátis
-                </span>
-                <span className="lp-cta-text-mobile">Testar grátis</span>
-                <span className="lp-cta-arrow">→</span>
-              </Link>
-              <Link
-                href="/demo-resultado"
-                style={{
-                  background: "transparent",
-                  color: "#0a0a0a",
-                  fontSize: 14,
+                  gap: 8,
+                  fontSize: 12.5,
                   fontWeight: 500,
-                  padding: "14px",
-                  textDecoration: "underline",
-                  textDecorationColor: "rgba(10,10,10,0.2)",
-                  textUnderlineOffset: 4,
+                  color: "#0a0a0a",
+                  background: "rgba(198,255,58,0.18)",
+                  border: "1px solid rgba(110,150,20,0.28)",
+                  borderRadius: 999,
+                  padding: "6px 12px",
+                  marginBottom: 28,
+                  textDecoration: "none",
                 }}
               >
-                Ver Demo
-              </Link>
-            </div>
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "#c6ff3a",
+                    boxShadow: "0 0 6px #c6ff3a",
+                    flexShrink: 0,
+                    display: "inline-block",
+                  }}
+                />
+                <span>Novo · candidaturas + entrevistas</span>
+                <span style={{ opacity: 0.55 }}>→</span>
+              </a>
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 20,
-                paddingTop: 28,
-                borderTop: "1px solid rgba(10,10,10,0.08)",
-              }}
-            >
-              {[
-                { num: "≈90s", label: "ANÁLISE\nCOMPLETA" },
-                { num: "32%", label: "GANHO MÉDIO DE\nADERÊNCIA À VAGA" },
-                { num: "12+", label: "MELHORIAS\nSUGERIDAS POR CV" },
-              ].map((item, i) => (
-                <React.Fragment key={item.num}>
-                  {i > 0 && (
+              <h1
+                style={{
+                  fontSize: "clamp(40px, 6vw, 68px)",
+                  fontWeight: 500,
+                  letterSpacing: -2.6,
+                  lineHeight: 0.98,
+                  margin: "0 0 12px",
+                  color: "#0a0a0a",
+                }}
+                className="e-hero-h1"
+              >
+                Um CV{" "}
+                <em
+                  style={{
+                    fontFamily: SERIF_ITALIC,
+                    fontStyle: "italic",
+                    fontWeight: 400,
+                    letterSpacing: -1,
+                  }}
+                >
+                  ajustado
+                </em>
+                <br />
+                para cada vaga.
+              </h1>
+              <p
+                style={{
+                  fontSize: "clamp(28px, 4vw, 44px)",
+                  fontWeight: 400,
+                  letterSpacing: -1.4,
+                  lineHeight: 1.1,
+                  margin: "0 0 28px",
+                  color: "#b0aea8",
+                  fontFamily: SERIF_ITALIC,
+                  fontStyle: "italic",
+                }}
+              >
+                Uma candidatura organizada
+                <br />
+                até a entrevista.
+              </p>
+
+              <p
+                style={{
+                  fontSize: 17,
+                  lineHeight: 1.55,
+                  color: "#45443e",
+                  margin: "0 0 32px",
+                  maxWidth: 480,
+                  fontWeight: 400,
+                }}
+              >
+                Cole seu CV e a vaga. O EarlyCV mostra o que falta, gera uma
+                versão mais alinhada, organiza sua candidatura e ajuda você a se
+                preparar para a entrevista.
+              </p>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "center",
+                  marginBottom: 52,
+                }}
+              >
+                <Link
+                  href="/adaptar"
+                  style={{
+                    background: "#0a0a0a",
+                    color: "#fff",
+                    borderRadius: 10,
+                    padding: "14px 22px",
+                    fontSize: 14.5,
+                    fontWeight: 500,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 10,
+                    letterSpacing: -0.1,
+                    textDecoration: "none",
+                    boxShadow:
+                      "0 4px 12px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.08)",
+                    transition: "transform 180ms, box-shadow 180ms",
+                  }}
+                  className="lp-cta-primary"
+                >
+                  <span className="lp-cta-text-desktop">
+                    Adaptar meu CV grátis
+                  </span>
+                  <span className="lp-cta-text-mobile">Testar grátis</span>
+                  <span className="lp-cta-arrow">→</span>
+                </Link>
+                <Link
+                  href="/demo-resultado"
+                  style={{
+                    background: "transparent",
+                    color: "#0a0a0a",
+                    fontSize: 14,
+                    fontWeight: 500,
+                    padding: "14px",
+                    textDecoration: "underline",
+                    textDecorationColor: "rgba(10,10,10,0.2)",
+                    textUnderlineOffset: 4,
+                  }}
+                >
+                  Ver Demo
+                </Link>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 20,
+                  paddingTop: 28,
+                  borderTop: "1px solid rgba(10,10,10,0.08)",
+                }}
+              >
+                {[
+                  { num: "≈90s", label: "ANÁLISE\nCOMPLETA" },
+                  { num: "32%", label: "GANHO MÉDIO DE\nADERÊNCIA À VAGA" },
+                  { num: "12+", label: "MELHORIAS\nSUGERIDAS POR CV" },
+                ].map((item, i) => (
+                  <React.Fragment key={item.num}>
+                    {i > 0 && (
+                      <div
+                        style={{
+                          width: 1,
+                          height: 36,
+                          background: "rgba(10,10,10,0.1)",
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
                     <div
                       style={{
-                        width: 1,
-                        height: 36,
-                        background: "rgba(10,10,10,0.1)",
-                        flexShrink: 0,
-                      }}
-                    />
-                  )}
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 2,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 26,
-                        fontWeight: 500,
-                        letterSpacing: -1,
-                        color: "#0a0a0a",
-                        lineHeight: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
                       }}
                     >
-                      {item.num}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 10.5,
-                        color: "#6a6a66",
-                        lineHeight: 1.25,
-                        fontFamily: MONO,
-                        letterSpacing: 0.3,
-                        textTransform: "uppercase",
-                        whiteSpace: "pre-line",
-                      }}
-                    >
-                      {item.label}
-                    </span>
-                  </div>
-                </React.Fragment>
-              ))}
+                      <span
+                        style={{
+                          fontSize: 26,
+                          fontWeight: 500,
+                          letterSpacing: -1,
+                          color: "#0a0a0a",
+                          lineHeight: 1,
+                        }}
+                      >
+                        {item.num}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          color: "#6a6a66",
+                          lineHeight: 1.25,
+                          fontFamily: MONO,
+                          letterSpacing: 0.3,
+                          textTransform: "uppercase",
+                          whiteSpace: "pre-line",
+                        }}
+                      >
+                        {item.label}
+                      </span>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+
+            {/* Right — ATS Widget */}
+            <div
+              className="e-hero-widget"
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <AtsWidget />
             </div>
           </div>
-
-          {/* Right — ATS Widget */}
-          <div
-            className="e-hero-widget"
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <AtsWidget />
-          </div>
-        </div>
         </div>
 
         {/* ── Company logos ticker ── */}
@@ -415,6 +415,7 @@ export function LandingVariantE() {
           className="e-logos-bar"
         >
           <span
+            className="e-logos-label"
             style={{
               fontFamily: MONO,
               fontSize: 9.5,
@@ -429,8 +430,15 @@ export function LandingVariantE() {
             USADO POR CANDIDATOS EM PROCESSOS DE EMPRESAS COMO:
           </span>
           <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
-            <div className="e-logos-ticker" style={{ display: "flex", alignItems: "center", width: "max-content" }}>
-              {[...LOGOS, ...LOGOS].map((name, i) => (
+            <div
+              className="e-logos-ticker"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                width: "max-content",
+              }}
+            >
+              {[...LOGOS, ...LOGOS, ...LOGOS, ...LOGOS].map((name, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: duplicated list for infinite scroll
                 <React.Fragment key={`${name}-${i}`}>
                   <span
@@ -445,7 +453,11 @@ export function LandingVariantE() {
                   >
                     {name}
                   </span>
-                  <span style={{ color: "#d8d6ce", fontSize: 12, margin: "0 14px" }}>·</span>
+                  <span
+                    style={{ color: "#d8d6ce", fontSize: 12, margin: "0 14px" }}
+                  >
+                    ·
+                  </span>
                 </React.Fragment>
               ))}
             </div>
@@ -677,7 +689,7 @@ export function LandingVariantE() {
       <section
         id="como-funciona"
         style={{
-          background: "#fff",
+          background: "#fafaf8",
           minHeight: "100dvh",
           display: "flex",
           alignItems: "center",
@@ -772,7 +784,7 @@ export function LandingVariantE() {
               {
                 step: "01",
                 title: "Envie seu CV e a vaga",
-                body: "Tire a foto do texto ou cole a descrição e o currículo. Funciona com qualquer formato e qualquer vaga. Leva menos de um minuto.",
+                body: "Cole a descrição e o currículo. Funciona com qualquer formato e qualquer vaga. Leva menos de dois minuto.",
                 detail: "Upload · Cole a vaga",
                 dark: false,
               },
@@ -995,9 +1007,8 @@ export function LandingVariantE() {
                 lineHeight: 1.6,
               }}
             >
-              Análise grátis sempre. Pague só quando quiser gerar CVs
-              adaptados, acompanhar candidaturas e se preparar para
-              entrevistas.
+              Análise grátis sempre. Pague só quando quiser gerar CVs adaptados,
+              acompanhar candidaturas e se preparar para entrevistas.
             </p>
           </div>
 
@@ -1247,8 +1258,8 @@ export function LandingVariantE() {
                 lineHeight: 1.4,
               }}
             >
-              1 crédito = 1 CV adaptado + preparação de entrevista daquela
-              vaga. Organizar candidaturas e análises de CV são grátis.
+              1 crédito = 1 CV adaptado + preparação de entrevista daquela vaga.
+              Organizar candidaturas e análises de CV são grátis.
             </span>
           </div>
 
@@ -1347,7 +1358,6 @@ export function LandingVariantE() {
             {[
               "Reembolso integral garantido",
               "Sem perguntas ou burocracia",
-              "Resposta em até 24 horas",
             ].map((b) => (
               <div
                 key={b}
@@ -1463,9 +1473,31 @@ export function LandingVariantE() {
                   color: "#6a6a66",
                   letterSpacing: 0.2,
                   marginBottom: 14,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
                 }}
               >
                 Criador do EarlyCV
+                <a
+                  href="https://www.linkedin.com/in/pauloalozen/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    fontSize: 11,
+                    color: "#5a5a55",
+                    textDecoration: "none",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 3,
+                    fontFamily: MONO,
+                    letterSpacing: 0.3,
+                    borderBottom: "1px solid rgba(10,10,10,0.18)",
+                    paddingBottom: 1,
+                  }}
+                >
+                  ↗ LinkedIn
+                </a>
               </div>
               <p
                 style={{
@@ -1546,10 +1578,11 @@ export function LandingVariantE() {
               margin: "0 0 44px",
             }}
           >
-            Análise gratuita. Sem cartão de crédito. Em 30 segundos você já
-            sabe o que falta.
+            Análise gratuita. Sem cartão de crédito. Em 30 segundos você já sabe
+            o que falta.
           </p>
           <div
+            className="e-cta-final-btns"
             style={{
               display: "flex",
               gap: 12,
@@ -1569,6 +1602,7 @@ export function LandingVariantE() {
                 textDecoration: "none",
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 8,
                 letterSpacing: -0.2,
                 boxShadow: "0 4px 20px rgba(198,255,58,0.20)",
@@ -1589,6 +1623,9 @@ export function LandingVariantE() {
                 fontSize: 14,
                 fontWeight: 500,
                 textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
               Ver Demo
@@ -1777,7 +1814,7 @@ export function LandingVariantE() {
           left: 0;
           right: 0;
           height: 2px;
-          background: #8bc720;
+          background: #3a3a38;
           border-radius: 1px;
           transform: scaleX(0);
           transform-origin: center;
@@ -1788,7 +1825,7 @@ export function LandingVariantE() {
         /* Logos ticker */
         @keyframes eLogosTicker {
           from { transform: translateX(0); }
-          to { transform: translateX(-50%); }
+          to { transform: translateX(-25%); }
         }
         .e-logos-ticker {
           animation: eLogosTicker 36s linear infinite;
@@ -1892,7 +1929,19 @@ export function LandingVariantE() {
           .e-candidaturas-visual { order: 2 !important; }
           .e-candidaturas-text { order: 1 !important; }
           .e-prep-visual { display: none !important; }
-          .e-logos-bar { padding: 14px 20px !important; }
+          .e-logos-bar {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            padding: 14px 0 !important;
+            margin-left: -20px !important;
+            margin-right: -20px !important;
+          }
+          .e-logos-label {
+            display: block !important;
+            padding: 0 20px 10px !important;
+          }
+          .e-logos-bar > div { width: 100% !important; }
+          .e-cta-final-btns { flex-direction: column !important; align-items: stretch !important; }
           section { padding-left: 20px !important; padding-right: 20px !important; }
           .e-notpare-row { grid-template-columns: 32px 40px 1fr !important; }
           .e-notpare-row > a:last-child { display: none !important; }

@@ -71,6 +71,7 @@ export function CandidaturasSection() {
   }, []);
 
   return (
+    <>
     <section
       id="candidaturas"
       style={{
@@ -467,6 +468,30 @@ export function CandidaturasSection() {
 
           <a
             href="/candidaturas"
+            className="e-candidaturas-cta"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              background: "#0a0a0a",
+              color: "#fff",
+              borderRadius: 10,
+              padding: "14px 22px",
+              fontSize: 14,
+              fontWeight: 500,
+              textDecoration: "none",
+              letterSpacing: -0.1,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.10)",
+            }}
+          >
+            Começar a acompanhar →
+          </a>
+        </div>
+
+        {/* Mobile-only CTA — below the visual (order: 3) */}
+        <div className="e-candidaturas-cta-mobile" style={{ order: 3, display: "none", justifyContent: "center" }}>
+          <a
+            href="/candidaturas"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -487,5 +512,13 @@ export function CandidaturasSection() {
         </div>
       </div>
     </section>
+
+    <style>{`
+      @media (max-width: 768px) {
+        .e-candidaturas-cta { display: none !important; }
+        .e-candidaturas-cta-mobile { display: flex !important; }
+      }
+    `}</style>
+    </>
   );
 }

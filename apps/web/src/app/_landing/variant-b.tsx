@@ -973,7 +973,6 @@ export function LandingVariantB() {
             {[
               "Reembolso integral garantido",
               "Sem perguntas ou burocracia",
-              "Resposta em até 24 horas",
             ].map((text) => (
               <span
                 key={text}

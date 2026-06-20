@@ -9,15 +9,9 @@ const QUESTIONS = [
   "Relate uma situação de conflito no time e como resolveu.",
 ];
 
-const STRENGTHS = [
-  "React · Node.js em produção",
-  "Experiência com fintech",
-];
+const STRENGTHS = ["React · Node.js em produção", "Experiência com fintech"];
 
-const ALERTS = [
-  "AWS pouco detalhado no CV",
-  "CI/CD não mencionado",
-];
+const ALERTS = ["AWS pouco detalhado no CV", "CI/CD não mencionado"];
 
 export function InterviewPrepSection() {
   return (
@@ -90,8 +84,8 @@ export function InterviewPrepSection() {
               maxWidth: 440,
             }}
           >
-            Com base no CV adaptado, na descrição da vaga e em padrões comuns
-            de entrevistas para posições semelhantes, o EarlyCV gera perguntas
+            Com base no CV adaptado, na descrição da vaga e em padrões comuns de
+            entrevistas para posições semelhantes, o EarlyCV gera perguntas
             prováveis, destaca seus pontos fortes e mostra pontos de atenção
             antes da conversa.
           </p>
@@ -148,7 +142,14 @@ export function InterviewPrepSection() {
             ))}
           </ul>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              alignItems: "flex-start",
+            }}
+          >
             <Link
               href="/candidaturas"
               style={{
@@ -174,7 +175,7 @@ export function InterviewPrepSection() {
                 letterSpacing: 0.2,
               }}
             >
-              disponível nos planos pagos
+              disponível ao liberar o CV adaptado
             </span>
           </div>
         </div>
@@ -340,7 +341,11 @@ export function InterviewPrepSection() {
                       0{i + 1}
                     </span>
                     <span
-                      style={{ fontSize: 12.5, color: "#2a2a28", lineHeight: 1.4 }}
+                      style={{
+                        fontSize: 12.5,
+                        color: "#2a2a28",
+                        lineHeight: 1.4,
+                      }}
                     >
                       {q}
                     </span>
@@ -349,7 +354,14 @@ export function InterviewPrepSection() {
               </div>
 
               {/* Pontos fortes + Atenção */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 8,
+                  marginBottom: 12,
+                }}
+              >
                 <div
                   style={{
                     background: "rgba(198,255,58,0.12)",
