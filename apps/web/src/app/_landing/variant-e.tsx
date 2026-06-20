@@ -427,7 +427,8 @@ export function LandingVariantE() {
               padding: "0 32px",
             }}
           >
-            USADO POR CANDIDATOS EM PROCESSOS DE EMPRESAS COMO:
+            <span className="e-logos-label-desktop">USADO POR CANDIDATOS EM PROCESSOS DE EMPRESAS COMO:</span>
+            <span className="e-logos-label-mobile">EMPRESAS DOS NOSSOS CANDIDATOS:</span>
           </span>
           <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
             <div
@@ -1876,6 +1877,7 @@ export function LandingVariantE() {
         }
 
         .lp-cta-text-mobile { display: none; }
+        .e-logos-label-mobile { display: none; }
         @media (max-width: 768px) {
           .lp-cta-text-desktop { display: none; }
           .lp-cta-text-mobile { display: inline; }
@@ -1940,6 +1942,8 @@ export function LandingVariantE() {
             display: block !important;
             padding: 0 20px 10px !important;
           }
+          .e-logos-label-desktop { display: none !important; }
+          .e-logos-label-mobile { display: inline !important; }
           .e-logos-bar > div { width: 100% !important; }
           .e-cta-final-btns { flex-direction: column !important; align-items: stretch !important; }
           section { padding-left: 20px !important; padding-right: 20px !important; }
