@@ -672,14 +672,29 @@ export class JobApplicationsService {
         ? new Date()
         : undefined;
 
+    // When moving to APPLIED without an explicit CV selection, ensure we don't
+    // keep a locked (not yet purchased) adaptation as the "sent CV". If the
+    // auto-selected adaptation is still locked, clear the selection so the user
+    // isn't gated behind a spurious "Liberar CV para entrevista" prompt.
+    let resolvedCvAdaptationId: string | null | undefined = currentCvAdaptationId;
+    if (newStatus === "APPLIED" && currentCvAdaptationId === undefined && application.currentCvAdaptationId) {
+      const existingAdaptation = await this.database.cvAdaptation.findFirst({
+        where: { id: application.currentCvAdaptationId, userId },
+        select: { isUnlocked: true, status: true },
+      });
+      if (existingAdaptation && !isAdaptationUnlocked(existingAdaptation)) {
+        resolvedCvAdaptationId = null;
+      }
+    }
+
     const updated = await this.database.$transaction(async (tx) => {
       const result = await tx.jobApplication.update({
         where: { id },
         data: {
           status: newStatus,
           ...(appliedAt !== undefined ? { appliedAt } : {}),
-          ...(currentCvAdaptationId !== undefined
-            ? { currentCvAdaptationId }
+          ...(resolvedCvAdaptationId !== undefined
+            ? { currentCvAdaptationId: resolvedCvAdaptationId }
             : {}),
           ...(autoArchiveAt !== undefined ? { archivedAt: autoArchiveAt } : {}),
         },

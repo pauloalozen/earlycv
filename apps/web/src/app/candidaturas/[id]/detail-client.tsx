@@ -4723,6 +4723,16 @@ export function DetailClient({ application, header }: Props) {
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const closeTimerRef = useRef<number | null>(null);
+  const [hasCreditsForInterview, setHasCreditsForInterview] = useState<
+    boolean | null
+  >(null);
+  const [cvPickerOpen, setCvPickerOpen] = useState(false);
+  const [cvPickerVisible, setCvPickerVisible] = useState(false);
+  const [interviewUnlocking, setInterviewUnlocking] = useState(false);
+  const [interviewUnlockError, setInterviewUnlockError] = useState<
+    string | null
+  >(null);
+  const cvPickerCloseTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     void trackEvent({
@@ -4848,6 +4858,95 @@ export function DetailClient({ application, header }: Props) {
       if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isPrepEligible || !application.interviewPrepLocked) return;
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/plans/me", { cache: "no-store" });
+        if (!res.ok || !mounted) return;
+        const plan = (await res.json()) as { creditsRemaining?: number | null };
+        if (!mounted) return;
+        setHasCreditsForInterview(
+          plan.creditsRemaining == null ? true : plan.creditsRemaining > 0,
+        );
+      } catch {
+        if (mounted) setHasCreditsForInterview(null);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, [isPrepEligible, application.interviewPrepLocked]);
+
+  const closeCvPicker = () => {
+    setCvPickerVisible(false);
+    if (cvPickerCloseTimerRef.current)
+      window.clearTimeout(cvPickerCloseTimerRef.current);
+    cvPickerCloseTimerRef.current = window.setTimeout(() => {
+      setCvPickerOpen(false);
+      setInterviewUnlockError(null);
+      cvPickerCloseTimerRef.current = null;
+    }, 180);
+  };
+
+  const redeemAdaptationForInterview = async (adaptationId: string) => {
+    setInterviewUnlocking(true);
+    setInterviewUnlockError(null);
+    try {
+      const res = await fetch(
+        `/api/cv-adaptation/${adaptationId}/redeem-credit`,
+        { method: "POST", cache: "no-store" },
+      );
+      if (!res.ok) {
+        let msg = "Falha ao liberar CV";
+        try {
+          const body = (await res.json()) as { message?: string };
+          if (typeof body.message === "string" && body.message.trim())
+            msg = body.message;
+        } catch {
+          /* no-op */
+        }
+        throw new Error(msg);
+      }
+      // Ensure the unlocked adaptation becomes the selected CV so
+      // interviewPrepLocked resolves to false on the next refresh.
+      await updateJobApplicationStatus(
+        application.id,
+        application.status,
+        adaptationId,
+      );
+      closeCvPicker();
+      handleUpdated();
+    } catch (err) {
+      setInterviewUnlockError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível liberar o CV.",
+      );
+    } finally {
+      setInterviewUnlocking(false);
+    }
+  };
+
+  const handleInterviewCvUnlock = () => {
+    const lockedAdaptations = application.cvAdaptations.filter(
+      (a) => !a.isUnlocked,
+    );
+    if (hasCreditsForInterview === false) {
+      if (interviewPrepUnlockHref) router.push(interviewPrepUnlockHref);
+      return;
+    }
+    if (lockedAdaptations.length <= 1) {
+      const target = lockedAdaptations[0] ?? selectedAdaptation;
+      if (target) void redeemAdaptationForInterview(target.id);
+      return;
+    }
+    setCvPickerOpen(true);
+    window.requestAnimationFrame(() => setCvPickerVisible(true));
+  };
 
   return (
     <PageShell>
@@ -5113,74 +5212,56 @@ export function DetailClient({ application, header }: Props) {
 
                 {isPrepEligible &&
                   (application.interviewPrepLocked === true ? (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                        gap: 6,
-                      }}
-                    >
-                      {interviewPrepUnlockHref ? (
-                        <Link
-                          href={interviewPrepUnlockHref}
-                          className="detail-prep-btn"
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 5,
-                            padding: "8px 15px",
-                            borderRadius: 8,
-                            border: "1px solid rgba(10,10,10,0.12)",
-                            background: "rgba(255,255,255,0.7)",
-                            color: "#0a0a0a",
-                            fontSize: 12.5,
-                            fontWeight: 500,
-                            cursor: "pointer",
-                            fontFamily: GEIST,
-                            textDecoration: "none",
-                          }}
-                        >
-                          Liberar CV para entrevista
-                        </Link>
-                      ) : (
-                        <button
-                          type="button"
-                          className="detail-prep-btn"
-                          disabled
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 5,
-                            padding: "8px 15px",
-                            borderRadius: 8,
-                            border: "1px solid rgba(10,10,10,0.12)",
-                            background: "rgba(255,255,255,0.55)",
-                            color: "#8a8a85",
-                            fontSize: 12.5,
-                            fontWeight: 500,
-                            cursor: "not-allowed",
-                            fontFamily: GEIST,
-                          }}
-                        >
-                          Preparação indisponível
-                        </button>
-                      )}
-                      {interviewPrepHelperText && (
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: 11.5,
-                            color: "#6a6560",
-                            lineHeight: 1.45,
-                            maxWidth: 260,
-                            fontFamily: GEIST,
-                          }}
-                        >
-                          {interviewPrepHelperText}
-                        </p>
-                      )}
-                    </div>
+                    interviewPrepUnlockHref || hasCreditsForInterview !== false ? (
+                      <button
+                        type="button"
+                        className="detail-prep-btn"
+                        onClick={handleInterviewCvUnlock}
+                        disabled={interviewUnlocking}
+                        title={interviewPrepHelperText ?? undefined}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          padding: "8px 15px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(10,10,10,0.12)",
+                          background: "rgba(255,255,255,0.7)",
+                          color: "#0a0a0a",
+                          fontSize: 12.5,
+                          fontWeight: 500,
+                          cursor: interviewUnlocking ? "not-allowed" : "pointer",
+                          fontFamily: GEIST,
+                        }}
+                      >
+                        {interviewUnlocking
+                          ? "Liberando..."
+                          : "Liberar CV para entrevista"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="detail-prep-btn"
+                        disabled
+                        title={interviewPrepHelperText ?? undefined}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          padding: "8px 15px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(10,10,10,0.12)",
+                          background: "rgba(255,255,255,0.55)",
+                          color: "#8a8a85",
+                          fontSize: 12.5,
+                          fontWeight: 500,
+                          cursor: "not-allowed",
+                          fontFamily: GEIST,
+                        }}
+                      >
+                        Preparação indisponível
+                      </button>
+                    )
                   ) : (
                     <button
                       type="button"
@@ -5387,6 +5468,229 @@ export function DetailClient({ application, header }: Props) {
         )}
 
         {/* Delete confirmation modal */}
+        {cvPickerOpen && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 70,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(10,10,10,0.35)",
+              padding: "0 16px",
+              transition: "opacity 180ms ease",
+              opacity: cvPickerVisible ? 1 : 0,
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !interviewUnlocking)
+                closeCvPicker();
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              style={{
+                width: "100%",
+                maxWidth: 480,
+                background: "#fff",
+                border: "1px solid rgba(10,10,10,0.12)",
+                borderRadius: 16,
+                padding: "20px 18px",
+                boxShadow: "0 24px 60px -20px rgba(10,10,10,0.35)",
+                transition: "opacity 180ms ease, transform 180ms ease",
+                opacity: cvPickerVisible ? 1 : 0,
+                transform: cvPickerVisible
+                  ? "translateY(0) scale(1)"
+                  : "translateY(6px) scale(0.98)",
+              }}
+            >
+              <p
+                style={{
+                  margin: "0 0 4px",
+                  fontSize: 16,
+                  fontWeight: 600,
+                  color: "#0a0a0a",
+                  fontFamily: GEIST,
+                }}
+              >
+                Escolher análise para liberar
+              </p>
+              <p
+                style={{
+                  margin: "0 0 14px",
+                  fontSize: 13,
+                  color: "#55524d",
+                  lineHeight: 1.45,
+                  fontFamily: GEIST,
+                }}
+              >
+                Selecione qual CV deseja liberar para preparar sua entrevista. O
+                crédito será consumido após a confirmação.
+              </p>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 8 }}
+              >
+                {application.cvAdaptations
+                  .filter((a) => !a.isUnlocked)
+                  .map((a, i) => {
+                    const score = a.scoreAfter ?? a.scoreBefore;
+                    const date = new Date(a.createdAt).toLocaleDateString(
+                      "pt-BR",
+                      { day: "2-digit", month: "short" },
+                    );
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        disabled={interviewUnlocking}
+                        onClick={() => void redeemAdaptationForInterview(a.id)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "10px 12px",
+                          borderRadius: 10,
+                          border: "1px solid rgba(10,10,10,0.12)",
+                          background: "#fafaf8",
+                          cursor: interviewUnlocking ? "not-allowed" : "pointer",
+                          textAlign: "left",
+                          fontFamily: GEIST,
+                        }}
+                      >
+                        <span
+                          style={{
+                            flexShrink: 0,
+                            width: 28,
+                            height: 28,
+                            borderRadius: 6,
+                            background: "rgba(10,10,10,0.06)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: "#55524d",
+                          }}
+                        >
+                          {i + 1}
+                        </span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 13,
+                              fontWeight: 500,
+                              color: "#0a0a0a",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {a.resumeUsedTitle ?? `Análise ${i + 1}`}
+                          </span>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 11.5,
+                              color: "#8a8a85",
+                            }}
+                          >
+                            {date}
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontFamily: MONO,
+                                fontSize: 10.5,
+                                color: "#b0aea6",
+                                letterSpacing: 0.3,
+                              }}
+                            >
+                              ID: {a.id}
+                            </span>
+                          </span>
+                        </span>
+                        {score != null && (
+                          <span
+                            style={{
+                              flexShrink: 0,
+                              textAlign: "right",
+                              lineHeight: 1,
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "block",
+                                fontSize: 20,
+                                fontWeight: 600,
+                                letterSpacing: -0.5,
+                                color: getDashboardScoreColor(score),
+                                fontVariantNumeric: "tabular-nums",
+                              }}
+                            >
+                              {score}
+                              <span
+                                style={{ fontSize: 12, fontWeight: 500 }}
+                              >
+                                %
+                              </span>
+                            </span>
+                          </span>
+                        )}
+                        <span
+                          style={{
+                            fontSize: 11.5,
+                            color: "#8a8a85",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {interviewUnlocking ? "..." : "Liberar →"}
+                        </span>
+                      </button>
+                    );
+                  })}
+              </div>
+              {interviewUnlockError && (
+                <p
+                  style={{
+                    margin: "10px 0 0",
+                    fontSize: 12.5,
+                    color: "#7f1d1d",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  {interviewUnlockError}
+                </p>
+              )}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  marginTop: 14,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={closeCvPicker}
+                  disabled={interviewUnlocking}
+                  style={{
+                    borderRadius: 8,
+                    border: "1px solid rgba(10,10,10,0.12)",
+                    background: "#fff",
+                    color: "#0a0a0a",
+                    fontSize: 12,
+                    padding: "8px 10px",
+                    cursor: interviewUnlocking ? "not-allowed" : "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {confirmDelete && (
           <div
             style={{

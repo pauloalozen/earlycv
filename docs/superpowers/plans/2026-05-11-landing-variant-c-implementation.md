@@ -20,6 +20,7 @@
 ### Task 1: Extend Variant Resolver for C
 
 **Files:**
+
 - Modify: `apps/web/src/app/_landing/variant.ts`
 - Test: `apps/web/src/app/_landing/variant.test.ts`
 
@@ -82,6 +83,7 @@ git commit -m "feat(web): support landing variant C in resolver"
 ### Task 2: Add LandingVariantC Component
 
 **Files:**
+
 - Create: `apps/web/src/app/_landing/variant-c.tsx`
 
 - [ ] **Step 1: Create variant-c from variant-a baseline**
@@ -121,223 +123,224 @@ In `apps/web/src/app/_landing/variant-c.tsx`, locate the final CTA section in A 
 Guarantee block:
 
 ```tsx
-      {/* ── Guarantee ── */}
-      <section
+{
+  /* ── Guarantee ── */
+}
+<section
+  style={{
+    background: "#fff",
+    borderTop: "1px solid rgba(10,10,10,0.06)",
+    borderBottom: "1px solid rgba(10,10,10,0.06)",
+    padding: "80px 32px",
+  }}
+>
+  <div
+    style={{
+      maxWidth: 640,
+      margin: "0 auto",
+      textAlign: "center",
+    }}
+  >
+    <p
+      style={{
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: 1.8,
+        color: "#8a8a85",
+        marginBottom: 18,
+        textTransform: "uppercase",
+      }}
+    >
+      Garantia de satisfação
+    </p>
+
+    <h3
+      style={{
+        fontSize: "clamp(26px, 4vw, 38px)",
+        fontWeight: 500,
+        letterSpacing: -1.2,
+        lineHeight: 1.1,
+        color: "#0a0a0a",
+        margin: "0 0 16px",
+      }}
+    >
+      Não ficou bom?{" "}
+      <em
         style={{
-          background: "#fff",
-          borderTop: "1px solid rgba(10,10,10,0.06)",
-          borderBottom: "1px solid rgba(10,10,10,0.06)",
-          padding: "80px 32px",
+          fontFamily: SERIF_ITALIC,
+          fontStyle: "italic",
+          fontWeight: 400,
         }}
       >
-        <div
-          style={{
-            maxWidth: 640,
-            margin: "0 auto",
-            textAlign: "center",
-          }}
-        >
-          <p
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: 1.8,
-              color: "#8a8a85",
-              marginBottom: 18,
-              textTransform: "uppercase",
-            }}
-          >
-            Garantia de satisfação
-          </p>
+        Devolvemos seu dinheiro.
+      </em>
+    </h3>
+    <p
+      style={{
+        fontSize: 16,
+        color: "#5a5a55",
+        lineHeight: 1.65,
+        maxWidth: 440,
+        margin: "0 auto 36px",
+      }}
+    >
+      Sem formulário, sem burocracia. Se a adaptação não entregou valor, manda
+      uma mensagem e o dinheiro volta.
+    </p>
 
-          <h3
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        gap: 20,
+        flexWrap: "wrap",
+        marginBottom: 36,
+      }}
+    >
+      {["Reembolso integral garantido", "Sem perguntas ou burocracia"].map(
+        (text) => (
+          <span
+            key={text}
             style={{
-              fontSize: "clamp(26px, 4vw, 38px)",
-              fontWeight: 500,
-              letterSpacing: -1.2,
-              lineHeight: 1.1,
-              color: "#0a0a0a",
-              margin: "0 0 16px",
-            }}
-          >
-            Não ficou bom?{" "}
-            <em
-              style={{
-                fontFamily: SERIF_ITALIC,
-                fontStyle: "italic",
-                fontWeight: 400,
-              }}
-            >
-              Devolvemos seu dinheiro.
-            </em>
-          </h3>
-          <p
-            style={{
-              fontSize: 16,
-              color: "#5a5a55",
-              lineHeight: 1.65,
-              maxWidth: 440,
-              margin: "0 auto 36px",
-            }}
-          >
-            Sem formulário, sem burocracia. Se a adaptação não entregou valor,
-            manda uma mensagem e o dinheiro volta.
-          </p>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: 20,
-              flexWrap: "wrap",
-              marginBottom: 36,
-            }}
-          >
-            {[
-              "Reembolso integral garantido",
-              "Sem perguntas ou burocracia",
-              "Resposta em até 24 horas",
-            ].map((text) => (
-              <span
-                key={text}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  fontSize: 13.5,
-                  color: "#0a0a0a",
-                  fontWeight: 400,
-                }}
-              >
-                <span
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: "#c6ff3a",
-                    flexShrink: 0,
-                    display: "inline-block",
-                  }}
-                />
-                {text}
-              </span>
-            ))}
-          </div>
-
-          <Link
-            href="/adaptar"
-            className="lp-cta-primary"
-            style={{
-              background: "#0a0a0a",
-              color: "#fff",
-              borderRadius: 10,
-              padding: "14px 28px",
-              fontSize: 15,
-              fontWeight: 500,
-              textDecoration: "none",
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              boxShadow:
-                "0 4px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
+              fontSize: 13.5,
+              color: "#0a0a0a",
+              fontWeight: 400,
             }}
           >
-            Testar grátis agora
-            <span className="lp-cta-arrow">→</span>
-          </Link>
-        </div>
-      </section>
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: "#c6ff3a",
+                flexShrink: 0,
+                display: "inline-block",
+              }}
+            />
+            {text}
+          </span>
+        ),
+      )}
+    </div>
+
+    <Link
+      href="/adaptar"
+      className="lp-cta-primary"
+      style={{
+        background: "#0a0a0a",
+        color: "#fff",
+        borderRadius: 10,
+        padding: "14px 28px",
+        fontSize: 15,
+        fontWeight: 500,
+        textDecoration: "none",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        boxShadow:
+          "0 4px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
+      }}
+    >
+      Testar grátis agora
+      <span className="lp-cta-arrow">→</span>
+    </Link>
+  </div>
+</section>;
 ```
 
 Creator quote block:
 
 ```tsx
-      {/* ── Founder ── */}
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "80px 32px" }}>
-        <div
+{
+  /* ── Founder ── */
+}
+<div style={{ maxWidth: 1100, margin: "0 auto", padding: "80px 32px" }}>
+  <div
+    style={{
+      background: "rgba(255,255,255,0.7)",
+      border: "1px solid rgba(10,10,10,0.08)",
+      borderRadius: 16,
+      padding: "28px 32px",
+      display: "flex",
+      gap: 20,
+      alignItems: "flex-start",
+      maxWidth: 620,
+      margin: "0 auto",
+      backdropFilter: "blur(6px)",
+    }}
+  >
+    <Image
+      src="/paulo-alozen.jpg"
+      alt="Paulo Alozen"
+      width={52}
+      height={52}
+      style={{
+        borderRadius: "50%",
+        objectFit: "cover",
+        flexShrink: 0,
+      }}
+    />
+    <div>
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 500,
+          color: "#0a0a0a",
+          marginBottom: 2,
+        }}
+      >
+        Paulo Alozen
+      </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          fontSize: 12,
+          color: "#8a8a85",
+          marginBottom: 10,
+        }}
+      >
+        Criador do EarlyCV
+        <Link
+          href="https://www.linkedin.com/in/pauloalozen/"
+          target="_blank"
+          rel="noopener noreferrer"
           style={{
-            background: "rgba(255,255,255,0.7)",
-            border: "1px solid rgba(10,10,10,0.08)",
-            borderRadius: 16,
-            padding: "28px 32px",
-            display: "flex",
-            gap: 20,
-            alignItems: "flex-start",
-            maxWidth: 620,
-            margin: "0 auto",
-            backdropFilter: "blur(6px)",
+            fontSize: 11,
+            color: "#5a5a55",
+            textDecoration: "none",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 3,
+            fontFamily: MONO,
+            letterSpacing: 0.3,
+            borderBottom: "1px solid rgba(10,10,10,0.18)",
+            paddingBottom: 1,
           }}
         >
-          <Image
-            src="/paulo-alozen.jpg"
-            alt="Paulo Alozen"
-            width={52}
-            height={52}
-            style={{
-              borderRadius: "50%",
-              objectFit: "cover",
-              flexShrink: 0,
-            }}
-          />
-          <div>
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 500,
-                color: "#0a0a0a",
-                marginBottom: 2,
-              }}
-            >
-              Paulo Alozen
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                fontSize: 12,
-                color: "#8a8a85",
-                marginBottom: 10,
-              }}
-            >
-              Criador do EarlyCV
-              <Link
-                href="https://www.linkedin.com/in/pauloalozen/"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  fontSize: 11,
-                  color: "#5a5a55",
-                  textDecoration: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 3,
-                  fontFamily: MONO,
-                  letterSpacing: 0.3,
-                  borderBottom: "1px solid rgba(10,10,10,0.18)",
-                  paddingBottom: 1,
-                }}
-              >
-                ↗ LinkedIn
-              </Link>
-            </div>
-            <p
-              style={{
-                fontSize: 13,
-                color: "#5a5a55",
-                lineHeight: 1.65,
-                fontStyle: "italic",
-                margin: 0,
-              }}
-            >
-              "Criei o EarlyCV depois de mandar o mesmo currículo para vagas
-              diferentes e não passar em nenhuma triagem. Hoje uso essa mesma
-              ferramenta para adaptar meu CV a cada vaga que realmente me
-              interessa."
-            </p>
-          </div>
-        </div>
+          ↗ LinkedIn
+        </Link>
       </div>
+      <p
+        style={{
+          fontSize: 13,
+          color: "#5a5a55",
+          lineHeight: 1.65,
+          fontStyle: "italic",
+          margin: 0,
+        }}
+      >
+        "Criei o EarlyCV depois de mandar o mesmo currículo para vagas
+        diferentes e não passar em nenhuma triagem. Hoje uso essa mesma
+        ferramenta para adaptar meu CV a cada vaga que realmente me interessa."
+      </p>
+    </div>
+  </div>
+</div>;
 ```
 
 - [ ] **Step 4: Run targeted checks for type/lint safety**
@@ -355,6 +358,7 @@ git commit -m "feat(web): add landing variant C layout"
 ### Task 3: Wire Variant C in Landing Entrypoint
 
 **Files:**
+
 - Modify: `apps/web/src/app/page.tsx`
 
 - [ ] **Step 1: Write failing behavior check**
@@ -437,6 +441,7 @@ git commit -m "feat(web): route landing variant C from homepage"
 ### Task 4: Final Verification
 
 **Files:**
+
 - Verify: `apps/web/src/app/_landing/variant.ts`
 - Verify: `apps/web/src/app/_landing/variant.test.ts`
 - Verify: `apps/web/src/app/_landing/variant-c.tsx`
@@ -463,6 +468,7 @@ NEXT_PUBLIC_LANDING_VARIANT=C pnpm --filter web dev
 ```
 
 Expected:
+
 - A unchanged
 - B unchanged
 - C = A base + guarantee + creator quote before final CTA
