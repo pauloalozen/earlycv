@@ -114,7 +114,7 @@ const SECTION_GROUPS: {
 type CtaTone = "green" | "dark" | "ghost";
 type Cta = { label: string; tone: CtaTone; href: string };
 
-function ctaForStatus(status: JobApplicationStatus, detailUrl: string): Cta {
+function ctaForStatus(status: JobApplicationStatus, detailUrl: string, hasInterviewPrep?: boolean): Cta {
   switch (status) {
     case "SAVED":
       return { label: "Analisar vaga", tone: "dark", href: "/adaptar" };
@@ -129,9 +129,9 @@ function ctaForStatus(status: JobApplicationStatus, detailUrl: string): Cta {
         href: detailUrl,
       };
     case "IN_PROCESS":
-      return { label: "Preparar entrevista", tone: "green", href: detailUrl };
+      return { label: hasInterviewPrep ? "Registrar próximo passo" : "Preparar entrevista", tone: "green", href: detailUrl };
     case "INTERVIEW":
-      return { label: "Preparar entrevista", tone: "green", href: detailUrl };
+      return { label: hasInterviewPrep ? "Registrar próximo passo" : "Preparar entrevista", tone: "green", href: detailUrl };
     case "ASSESSMENT":
       return { label: "Registrar teste/case", tone: "dark", href: detailUrl };
     case "OFFER":
@@ -726,7 +726,7 @@ function CandRow({
   const [downloading, setDownloading] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
   const detailUrl = `/candidaturas/${application.id}`;
-  const cta = ctaForStatus(application.status, detailUrl);
+  const cta = ctaForStatus(application.status, detailUrl, !!application.interviewPrep);
   const scoreBefore =
     derivedScore?.scoreBefore ?? application.scoreBefore ?? null;
   const scoreAfter = derivedScore?.scoreAfter ?? application.scoreAfter ?? null;
