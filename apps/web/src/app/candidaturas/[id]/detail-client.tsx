@@ -5513,7 +5513,7 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
                       className="detail-prep-btn"
                       disabled={interviewUnlocking}
                       onClick={() => {
-                        if (application.interviewPrep || !application.interviewPrepLocked) {
+                        if (application.interviewPrep || (!application.interviewPrepLocked && unlockedAdaptations.length <= 1)) {
                           setShowPrep(true);
                         } else {
                           handlePrepWithUnlockedCv();
