@@ -11,6 +11,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   CvReleaseModal,
   type CvReleaseModalStatus,
@@ -38,9 +39,14 @@ import {
   restoreJobApplication,
   scheduleInterview,
   submitRejectionFeedback,
+  updateJobApplicationDescription,
   updateJobApplicationStatus,
   updateJobApplicationUrl,
 } from "@/lib/job-applications-api";
+import {
+  JOB_DESCRIPTION_MAX_CHARS,
+  validateJobDescription,
+} from "@/lib/job-description-validation";
 import { InterviewPrepDrawer } from "./interview-prep-drawer";
 
 const USER_VISIBLE_STATUS_OPTIONS: Array<{
@@ -1926,8 +1932,60 @@ function AnalisesSection({
   hasCredits: boolean;
 }) {
   const adaptations = application.cvAdaptations;
+  const [noDescOpen, setNoDescOpen] = useState(false);
+  const [noDescVisible, setNoDescVisible] = useState(false);
+  const [descInput, setDescInput] = useState("");
+  const [descError, setDescError] = useState<string | null>(null);
+  const [descSaving, setDescSaving] = useState(false);
+  const noDescCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isClient, setIsClient] = useState(false);
+  useEffect(() => { setIsClient(true); }, []);
+
+  const closeNoDescModal = () => {
+    setNoDescVisible(false);
+    if (noDescCloseTimerRef.current) clearTimeout(noDescCloseTimerRef.current);
+    noDescCloseTimerRef.current = setTimeout(() => {
+      setNoDescOpen(false);
+      setDescInput("");
+      setDescError(null);
+    }, 240);
+  };
+
+  const handleNovaAnalise = () => {
+    if (!application.jobDescriptionText) {
+      setDescInput("");
+      setDescError(null);
+      setNoDescOpen(true);
+      requestAnimationFrame(() => setNoDescVisible(true));
+      return;
+    }
+    sessionStorage.setItem("adaptar_prefill_job_description", application.jobDescriptionText);
+    sessionStorage.setItem("adaptar_prefill_application_id", application.id);
+    window.location.href = "/adaptar";
+  };
+
+  const handleDescSubmit = async () => {
+    const validationError = validateJobDescription(descInput);
+    if (validationError) {
+      setDescError(validationError);
+      return;
+    }
+    const trimmed = descInput.trim();
+    setDescError(null);
+    setDescSaving(true);
+    try {
+      await updateJobApplicationDescription(application.id, trimmed);
+      sessionStorage.setItem("adaptar_prefill_job_description", trimmed);
+      sessionStorage.setItem("adaptar_prefill_application_id", application.id);
+      window.location.href = "/adaptar";
+    } catch {
+      setDescError("Falha ao salvar descrição. Tente novamente.");
+      setDescSaving(false);
+    }
+  };
 
   return (
+    <>
     <div>
       <div
         style={{
@@ -2023,19 +2081,7 @@ function AnalisesSection({
         {!isArchived && (
           <button
             type="button"
-            onClick={() => {
-              if (application.jobDescriptionText) {
-                sessionStorage.setItem(
-                  "adaptar_prefill_job_description",
-                  application.jobDescriptionText,
-                );
-              }
-              sessionStorage.setItem(
-                "adaptar_prefill_application_id",
-                application.id,
-              );
-              window.location.href = "/adaptar";
-            }}
+            onClick={handleNovaAnalise}
             style={{
               display: "flex",
               alignItems: "center",
@@ -2073,6 +2119,145 @@ function AnalisesSection({
         )}
       </div>
     </div>
+
+    {/* Popup: inserir descrição da vaga */}
+    {isClient && noDescOpen && createPortal(
+      <div
+        onClick={closeNoDescModal}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 200,
+          background: "rgba(10,10,10,0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 16,
+          transition: "opacity 240ms ease-out",
+          opacity: noDescVisible ? 1 : 0,
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="no-desc-title"
+          style={{
+            background: "#fafaf6",
+            border: "1px solid rgba(10,10,10,0.08)",
+            borderRadius: 18,
+            padding: "24px",
+            maxWidth: 480,
+            width: "100%",
+            boxShadow: "0 24px 60px -20px rgba(10,10,10,0.4)",
+            fontFamily: GEIST,
+            transition: "opacity 240ms ease-out, transform 240ms ease-out",
+            opacity: noDescVisible ? 1 : 0,
+            transform: noDescVisible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.98)",
+          }}
+        >
+          <p id="no-desc-title" style={{ fontSize: 15, fontWeight: 600, color: "#0a0a0a", margin: "0 0 6px", letterSpacing: -0.3 }}>
+            Descrição da vaga
+          </p>
+          <p style={{ fontSize: 13.5, color: "#6a6560", margin: "0 0 16px", lineHeight: 1.55 }}>
+            Cole a descrição completa da vaga para continuar com a análise.
+          </p>
+
+          <div style={{
+            background: "#fff",
+            border: `1px solid ${descError ? "#d9534f" : "#d8d6ce"}`,
+            borderRadius: 12,
+            padding: "12px 14px",
+            marginBottom: 6,
+          }}>
+            <textarea
+              value={descInput}
+              onChange={(e) => {
+                const next = e.target.value.slice(0, JOB_DESCRIPTION_MAX_CHARS);
+                setDescInput(next);
+                if (descError) setDescError(null);
+              }}
+              placeholder="Cole a vaga completa"
+              disabled={descSaving}
+              style={{
+                width: "100%",
+                border: "none",
+                outline: "none",
+                fontFamily: GEIST,
+                fontSize: 13.5,
+                background: "transparent",
+                color: "#0a0a0a",
+                minHeight: 140,
+                resize: "none",
+                lineHeight: 1.55,
+              }}
+            />
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              borderTop: "1px solid rgba(10,10,10,0.06)",
+              paddingTop: 8,
+              marginTop: 6,
+            }}>
+              <span style={{ fontFamily: MONO, fontSize: 10.5, color: descInput.length >= JOB_DESCRIPTION_MAX_CHARS ? "#d9534f" : "#8a8a85" }}>
+                {descInput.length} / {JOB_DESCRIPTION_MAX_CHARS}
+              </span>
+              <span style={{ fontFamily: MONO, fontSize: 10.5, color: "#8a8a85" }}>
+                ⌘+V para colar
+              </span>
+            </div>
+          </div>
+
+          {descError && (
+            <p style={{ fontSize: 12.5, color: "#d9534f", margin: "0 0 12px", fontFamily: GEIST }}>
+              {descError}
+            </p>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={closeNoDescModal}
+              disabled={descSaving}
+              style={{
+                background: "transparent",
+                color: "#6a6560",
+                border: "1px solid #d8d6ce",
+                borderRadius: 10,
+                padding: "10px 16px",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: GEIST,
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleDescSubmit}
+              disabled={descSaving}
+              style={{
+                background: "#0a0a0a",
+                color: "#fafaf6",
+                border: "none",
+                borderRadius: 10,
+                padding: "10px 18px",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: descSaving ? "not-allowed" : "pointer",
+                fontFamily: GEIST,
+                opacity: descSaving ? 0.7 : 1,
+              }}
+            >
+              {descSaving ? "Salvando..." : "Continuar →"}
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body,
+    )}
+    </>
   );
 }
 
@@ -4837,6 +5022,8 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
   >(initialHasCredits);
   const [cvPickerOpen, setCvPickerOpen] = useState(false);
   const [cvPickerVisible, setCvPickerVisible] = useState(false);
+  const [cvPickerMode, setCvPickerMode] = useState<"unlock" | "select">("unlock");
+  const [pendingPrepAdaptationId, setPendingPrepAdaptationId] = useState<string | null>(null);
   const [interviewUnlocking, setInterviewUnlocking] = useState(false);
   const [interviewUnlockError, setInterviewUnlockError] = useState<
     string | null
@@ -4868,6 +5055,9 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
     application.cvAdaptations.some(
       (a) => a.isUnlocked || a.status === "delivered",
     );
+  const unlockedAdaptations = application.cvAdaptations.filter(
+    (a) => a.isUnlocked || a.status === "delivered",
+  );
   const canDelete = isArchivedManually && !hasUnlockedCv;
   const selectedAdaptation =
     application.cvAdaptations.find(
@@ -5032,6 +5222,23 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
       if (target) void redeemAdaptationForInterview(target.id);
       return;
     }
+    setCvPickerMode("unlock");
+    setCvPickerOpen(true);
+    window.requestAnimationFrame(() => setCvPickerVisible(true));
+  };
+
+  const selectAdaptationAndOpenPrep = (adaptationId: string) => {
+    setPendingPrepAdaptationId(adaptationId);
+    closeCvPicker();
+    setShowPrep(true);
+  };
+
+  const handlePrepWithUnlockedCv = () => {
+    if (unlockedAdaptations.length === 1) {
+      selectAdaptationAndOpenPrep(unlockedAdaptations[0].id);
+      return;
+    }
+    setCvPickerMode("select");
     setCvPickerOpen(true);
     window.requestAnimationFrame(() => setCvPickerVisible(true));
   };
@@ -5299,7 +5506,50 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
                 </button>
 
                 {isPrepEligible &&
-                  (application.interviewPrepLocked === true ? (
+                  (unlockedAdaptations.length > 0 || !application.interviewPrepLocked ? (
+                    // Has unlocked CVs (or prep already set up) → show prep button
+                    <button
+                      type="button"
+                      className="detail-prep-btn"
+                      disabled={interviewUnlocking}
+                      onClick={() => {
+                        if (application.interviewPrep || !application.interviewPrepLocked) {
+                          setShowPrep(true);
+                        } else {
+                          handlePrepWithUnlockedCv();
+                        }
+                      }}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        padding: "8px 15px",
+                        borderRadius: 8,
+                        border: isInterview
+                          ? "1px solid rgba(110,150,20,0.35)"
+                          : "1px solid rgba(10,10,10,0.12)",
+                        background: isInterview
+                          ? "#c6ff3a"
+                          : "rgba(255,255,255,0.7)",
+                        color: "#0a0a0a",
+                        fontSize: 12.5,
+                        fontWeight: isInterview ? 600 : 500,
+                        cursor: interviewUnlocking ? "not-allowed" : "pointer",
+                        fontFamily: GEIST,
+                        boxShadow: isInterview
+                          ? "0 6px 14px rgba(198,255,58,0.2)"
+                          : "none",
+                      }}
+                    >
+                      {interviewUnlocking
+                        ? "Aguarde..."
+                        : application.interviewPrep
+                          ? "Ver preparação"
+                          : "Preparar entrevista"}
+                      {isInterview && !interviewUnlocking && " →"}
+                    </button>
+                  ) : (
+                    // No unlocked CVs → show unlock button
                     interviewPrepUnlockHref || hasCreditsForInterview !== false ? (
                       <button
                         type="button"
@@ -5350,38 +5600,6 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
                         Preparação indisponível
                       </button>
                     )
-                  ) : (
-                    <button
-                      type="button"
-                      className="detail-prep-btn"
-                      onClick={() => setShowPrep(true)}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 5,
-                        padding: "8px 15px",
-                        borderRadius: 8,
-                        border: isInterview
-                          ? "1px solid rgba(110,150,20,0.35)"
-                          : "1px solid rgba(10,10,10,0.12)",
-                        background: isInterview
-                          ? "#c6ff3a"
-                          : "rgba(255,255,255,0.7)",
-                        color: "#0a0a0a",
-                        fontSize: 12.5,
-                        fontWeight: isInterview ? 600 : 500,
-                        cursor: "pointer",
-                        fontFamily: GEIST,
-                        boxShadow: isInterview
-                          ? "0 6px 14px rgba(198,255,58,0.2)"
-                          : "none",
-                      }}
-                    >
-                      {application.interviewPrep
-                        ? "Ver preparação"
-                        : "Preparar entrevista"}
-                      {isInterview && " →"}
-                    </button>
                   ))}
                 {(isArchived || !isFinalized) && (
                   <button
@@ -5603,7 +5821,9 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
                   fontFamily: GEIST,
                 }}
               >
-                Escolher análise para liberar
+                {cvPickerMode === "select"
+                  ? "Escolher CV para preparação"
+                  : "Escolher análise para liberar"}
               </p>
               <p
                 style={{
@@ -5614,26 +5834,32 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
                   fontFamily: GEIST,
                 }}
               >
-                Selecione qual CV deseja liberar para preparar sua entrevista. O
-                crédito será consumido após a confirmação.
+                {cvPickerMode === "select"
+                  ? "Selecione qual CV liberado deseja usar para preparar sua entrevista."
+                  : "Selecione qual CV deseja liberar para preparar sua entrevista. O crédito será consumido após a confirmação."}
               </p>
               <div
                 style={{ display: "flex", flexDirection: "column", gap: 8 }}
               >
-                {application.cvAdaptations
-                  .filter((a) => !a.isUnlocked)
+                {(cvPickerMode === "select" ? unlockedAdaptations : application.cvAdaptations.filter((a) => !a.isUnlocked))
                   .map((a, i) => {
                     const score = a.scoreAfter ?? a.scoreBefore;
                     const date = new Date(a.createdAt).toLocaleDateString(
                       "pt-BR",
                       { day: "2-digit", month: "short" },
                     );
+                    const handleClick = cvPickerMode === "select"
+                      ? () => void selectAdaptationAndOpenPrep(a.id)
+                      : () => void redeemAdaptationForInterview(a.id);
+                    const actionLabel = cvPickerMode === "select"
+                      ? (interviewUnlocking ? "..." : "Usar este →")
+                      : (interviewUnlocking ? "..." : "Liberar →");
                     return (
                       <button
                         key={a.id}
                         type="button"
                         disabled={interviewUnlocking}
-                        onClick={() => void redeemAdaptationForInterview(a.id)}
+                        onClick={handleClick}
                         style={{
                           display: "flex",
                           alignItems: "center",
@@ -5733,7 +5959,7 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
                             flexShrink: 0,
                           }}
                         >
-                          {interviewUnlocking ? "..." : "Liberar →"}
+                          {actionLabel}
                         </span>
                       </button>
                     );
@@ -5888,11 +6114,16 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
         applicationId={application.id}
         initialPrep={application.interviewPrep}
         open={showPrep}
-        onClose={() => setShowPrep(false)}
+        onClose={() => {
+          setShowPrep(false);
+          setPendingPrepAdaptationId(null);
+        }}
+        onGenerated={handleUpdated}
         jobTitle={application.jobTitle}
         company={application.companyName}
         scoreAfter={application.scoreAfter}
         nextActionAt={application.nextActionAt}
+        adaptationId={pendingPrepAdaptationId ?? undefined}
       />
     </PageShell>
   );

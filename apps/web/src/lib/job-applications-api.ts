@@ -347,6 +347,19 @@ export async function updateJobApplicationUrl(
   return response.json() as Promise<JobApplicationDto>;
 }
 
+export async function updateJobApplicationDescription(
+  id: string,
+  jobDescriptionText: string,
+): Promise<JobApplicationDto> {
+  const response = await apiRequest(
+    "PATCH",
+    `/job-applications/${id}/description`,
+    { jobDescriptionText },
+  );
+  if (!response.ok) throw new Error("Falha ao salvar descrição da vaga");
+  return response.json() as Promise<JobApplicationDto>;
+}
+
 export async function addJobApplicationNote(
   id: string,
   note: string,
@@ -360,10 +373,12 @@ export async function addJobApplicationNote(
 
 export async function generateOrGetInterviewPrep(
   id: string,
+  adaptationId?: string,
 ): Promise<InterviewPrepDto> {
   const response = await apiRequest(
     "POST",
     `/job-applications/${id}/interview-prep`,
+    adaptationId ? { adaptationId } : undefined,
   );
   if (!response.ok) {
     let detail = "";

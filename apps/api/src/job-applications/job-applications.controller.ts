@@ -20,6 +20,7 @@ import { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import { RejectionFeedbackDto } from "./dto/rejection-feedback.dto";
 import { ScheduleInterviewDto } from "./dto/schedule-interview.dto";
 import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
+import { UpdateJobApplicationDescriptionDto } from "./dto/update-job-application-description.dto";
 import { UpdateJobApplicationUrlDto } from "./dto/update-job-application-url.dto";
 import { JobApplicationInterviewPrepService } from "./interview-prep.service";
 import { JobApplicationsService } from "./job-applications.service";
@@ -163,6 +164,27 @@ export class JobApplicationsController {
     });
   }
 
+  @Patch(":id/description")
+  updateDescription(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        expectedType: UpdateJobApplicationDescriptionDto,
+      }),
+    )
+    dto: UpdateJobApplicationDescriptionDto,
+  ) {
+    return this.service.updateDescription(
+      user.id,
+      id,
+      dto.jobDescriptionText,
+    );
+  }
+
   @Patch(":id/url")
   updateUrl(
     @AuthenticatedUser() user: { id: string },
@@ -216,8 +238,13 @@ export class JobApplicationsController {
   generateOrGetInterviewPrep(
     @AuthenticatedUser() user: { id: string },
     @Param("id") id: string,
+    @Body() body?: { adaptationId?: string },
   ) {
-    return this.interviewPrepService.generateOrGet(user.id, id);
+    return this.interviewPrepService.generateOrGet(
+      user.id,
+      id,
+      body?.adaptationId,
+    );
   }
 
   @Post(":id/analyses/:adaptationId/split")

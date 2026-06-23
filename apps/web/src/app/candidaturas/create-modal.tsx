@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { validateJobDescription } from "@/lib/job-description-validation";
 import { createJobApplication } from "@/lib/job-applications-api";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -133,6 +134,15 @@ export function CreateApplicationModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!jobTitle.trim() || !companyName.trim()) return;
+
+    if (jobDescriptionText.trim()) {
+      const descError = validateJobDescription(jobDescriptionText);
+      if (descError) {
+        setError(descError);
+        return;
+      }
+    }
+
     setPending(true);
     setError(null);
     try {
@@ -353,7 +363,7 @@ export function CreateApplicationModal({
               id="cm-description"
               placeholder="Cole a descrição se quiser usar a preparação para entrevista depois."
               value={jobDescriptionText}
-              onChange={(e) => setJobDescriptionText(e.target.value)}
+              onChange={(e) => setJobDescriptionText(e.target.value.slice(0, 12000))}
               rows={4}
               style={{
                 ...inputStyle,

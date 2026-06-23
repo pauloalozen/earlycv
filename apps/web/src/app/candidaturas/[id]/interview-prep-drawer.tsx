@@ -20,10 +20,12 @@ type Props = {
   initialPrep: InterviewPrepDto | null;
   open: boolean;
   onClose: () => void;
+  onGenerated?: () => void;
   jobTitle: string;
   company: string;
   scoreAfter?: number | null;
   nextActionAt?: string | null;
+  adaptationId?: string;
 };
 
 function PrepChip({ label }: { label: string }) {
@@ -739,10 +741,12 @@ export function InterviewPrepDrawer({
   initialPrep,
   open,
   onClose,
+  onGenerated,
   jobTitle,
   company,
   scoreAfter,
   nextActionAt,
+  adaptationId,
 }: Props) {
   const TRANSITION_MS = 280;
 
@@ -807,8 +811,9 @@ export function InterviewPrepDrawer({
     setError(null);
     startTransition(async () => {
       try {
-        const result = await generateOrGetInterviewPrep(applicationId);
+        const result = await generateOrGetInterviewPrep(applicationId, adaptationId);
         setPrep(result);
+        onGenerated?.();
       } catch (err) {
         setError(
           err instanceof Error

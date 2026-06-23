@@ -70,7 +70,11 @@ export class JobApplicationInterviewPrepService {
     private readonly funnelEvents: BusinessFunnelEventService,
   ) {}
 
-  async generateOrGet(userId: string, applicationId: string) {
+  async generateOrGet(
+    userId: string,
+    applicationId: string,
+    adaptationId?: string,
+  ) {
     const application = await this.database.jobApplication.findFirst({
       where: { id: applicationId, userId },
       include: {
@@ -99,7 +103,10 @@ export class JobApplicationInterviewPrepService {
       return application.interviewPrep;
     }
 
-    if (!application.currentCvAdaptationId) {
+    const resolvedAdaptationId =
+      adaptationId ?? application.currentCvAdaptationId;
+
+    if (!resolvedAdaptationId) {
       throw new ConflictException(
         "Defina o CV desta candidatura antes de preparar sua entrevista.",
       );
@@ -107,7 +114,7 @@ export class JobApplicationInterviewPrepService {
 
     const currentAdaptation =
       application.cvAdaptations.find(
-        (cv) => cv.id === application.currentCvAdaptationId,
+        (cv) => cv.id === resolvedAdaptationId,
       ) ?? null;
 
     if (!currentAdaptation) {
@@ -196,6 +203,14 @@ export class JobApplicationInterviewPrepService {
           generatedContentJson: content as unknown as Prisma.InputJsonValue,
         },
       });
+
+      // Persist the selected adaptation so interviewPrepLocked resolves correctly.
+      if (adaptationId && adaptationId !== application.currentCvAdaptationId) {
+        await tx.jobApplication.update({
+          where: { id: applicationId },
+          data: { currentCvAdaptationId: adaptationId },
+        });
+      }
 
       await tx.jobApplicationEvent.create({
         data: {

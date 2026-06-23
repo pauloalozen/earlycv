@@ -249,7 +249,7 @@ export function LandingVariantE() {
                   letterSpacing: -1.4,
                   lineHeight: 1.1,
                   margin: "0 0 28px",
-                  color: "#b0aea8",
+                  color: "#6e6c66",
                   fontFamily: SERIF_ITALIC,
                   fontStyle: "italic",
                 }}
