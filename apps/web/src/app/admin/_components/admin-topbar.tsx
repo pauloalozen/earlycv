@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { id: "liberacoes", label: "Liberações", href: "/admin/liberacoes-cv" },
   { id: "ingestao", label: "Ingestão", href: "/admin/ingestion" },
   { id: "templates", label: "Templates", href: "/admin/templates" },
+  { id: "cv-benchmark", label: "CV Benchmark", href: "/admin/cv-benchmark" },
   {
     id: "configuracoes",
     label: "Configurações",
