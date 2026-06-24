@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common";
-import OpenAI from "openai";
-
 import { AnalysisProtectionModule } from "../analysis-protection/analysis-protection.module";
+import { createAiClientFromEnv } from "../common/ai-client-factory";
 import { DatabaseModule } from "../database/database.module";
 import { JobApplicationsModule } from "../job-applications/job-applications.module";
 import { ProfilesModule } from "../profiles/profiles.module";
@@ -40,10 +39,7 @@ import { JobRequirementSetsService } from "./job-requirement-sets.service";
     JobRequirementSetsService,
     {
       provide: "OPENAI_CLIENT",
-      useFactory: () =>
-        new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY,
-        }),
+      useFactory: () => createAiClientFromEnv(),
     },
   ],
 })

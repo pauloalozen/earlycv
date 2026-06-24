@@ -1,6 +1,8 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type OpenAI from "openai";
 
+import { getAiModel } from "../common/ai-client-factory";
+
 export type InterviewPrepContent = {
   strategySummary: string;
   strengthsToHighlight: string[];
@@ -199,7 +201,7 @@ export class InterviewPrepAiService {
       return validateAndNormalizeInterviewPrep(this.buildStub(context));
     }
 
-    const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+    const model = getAiModel();
     const userPrompt = this.buildUserPrompt(context);
 
     const response = await this.aiClient.chat.completions.create({

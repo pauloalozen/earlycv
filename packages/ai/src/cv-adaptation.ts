@@ -1238,316 +1238,268 @@ IMPORTANTE:
 Você NÃO está escrevendo um relatório.
 Você está gerando conteúdo para uma interface visual.
 
-REGRAS:
-- Frases curtas, no máximo 1 linha
-- Linguagem direta e impactante
-- Sem parágrafos longos
-- Sem explicações genéricas
-- Sem buzzwords
-- Foco em diagnóstico + ação
-- Nunca inventar informação inexistente no CV
-- Beneficiar o candidato sempre que houver base real no currículo
-- Toda lacuna importante deve estar ligada a um requisito estruturado
-- Toda recomendação deve derivar da cobertura de um requisito estruturado
+REGRAS GERAIS:
+- Responda somente com JSON válido, sem markdown e sem comentários fora do JSON.
+- Use frases curtas, diretas e acionáveis.
+- Evite parágrafos longos, buzzwords e explicações genéricas.
+- Nunca invente informação inexistente no CV.
+- Beneficie o candidato sempre que houver base real no currículo.
+- Toda lacuna importante deve estar ligada a um requisito estruturado.
+- Toda recomendação deve derivar da cobertura de um requisito estruturado.
+- Se houver dúvida entre "corrigível por reescrita" e "informação inexistente", trate como lacuna real ou indisponível.
 
-REGRAS DE REGUA DE REQUISITOS:
-- O input inclui <MODO_ANALISE>, <VAGA_CANONICA> e <REQUISITOS_EXISTENTES>
-- Se <MODO_ANALISE> for "create_rule":
-  - extraia os requisitos estruturados da vaga dentro desta mesma análise
-  - gere requisitos objetivos, avaliáveis e relevantes para decisão
-  - descarte formulações vagas como "perfil dinâmico" e converta apenas critérios reais em requisitos observáveis
-  - para cada requisito, classifique também:
-    - "dimension": "experience" | "skill" | "education" | "certification" | "language" | "location" | "work_model" | "other"
-    - "gateLevel": "hard" quando o requisito soar eliminatório/binário para screening, senão "soft"
-  - Para CADA ajuste_conteudo, preencha "id" e "categoria" — nunca deixar ausentes ou nulos (veja REGRAS PARA AJUSTES_CONTEUDO abaixo)
-- Se <MODO_ANALISE> for "use_existing_rule":
-  - MODO COBERTURA: avalie apenas coverageStatus, evidence, gapExplanation e recommendation para cada requirementKey recebido
-  - use EXATAMENTE os requisitos recebidos em <REQUISITOS_EXISTENTES> — mesmos requirementKey, requirementText, importance, dimension, gateLevel e na mesma ordem
-  - não criar novos requisitos, não remover requisitos existentes
-  - não alterar requirementKey, requirementText, importance, dimension nem gateLevel
-  - "ats_keywords.ausentes" deve conter APENAS termos de requirements com coverageStatus "missing" ou "partial"
-  - "ats_keywords.presentes" deve conter APENAS termos de requirements com coverageStatus "covered"
-  - "ajustes_conteudo" deve referenciar APENAS requirements com coverageStatus "missing" ou "partial"
-  - Para CADA ajuste_conteudo derivado de um requirement, você DEVE preencher "id" e "categoria" — nunca deixar esses campos ausentes ou nulos:
-    - "id": slug kebab-case único derivado do titulo (sem acentos, sem espaços) — ex: "adicionar-sql-skills", "reescrever-bullet-experiencia-agil"
-    - "titulo": título curto e acionável do ajuste (NÃO copie o requirementText — crie um título conciso de 4–8 palavras)
-    - "categoria": classifique usando a dimension do requirement:
-      - dimension "skill" ou "certification" E o ajuste consiste em adicionar um termo técnico às skills → "keywords_incluidas". O "titulo" deve ser o termo técnico curto (ex: "SQL", "Power BI", "Scrum") — não uma frase.
-      - dimension "experience" ou qualquer ajuste em bullets de Experiência Profissional → "ajuste_conteudo"
-      - ajuste exclusivo no Perfil Profissional / summary (parágrafo de apresentação do candidato) → "texto_reescrito"
-  - "ajustes_indisponiveis" deve referenciar APENAS requirements com lacunas reais não corrigíveis
-  - "keywords.possiveis" deve conter APENAS keywords curtas de ATS que podem ser introduzidas por analogia verdadeira, contexto ou reformulação sem inventar fatos
-  - "keywords.possiveis" NÃO deve repetir frases longas de requirements
-  - "keywords.possiveis" NÃO deve conter requisitos de experiência, gestão, senioridade ou escopo executivo
-  - não gerar lacunas, keywords ausentes ou ajustes que não correspondam a um requirementKey da régua
-- Em ambos os modos:
-  - retornar "requirements" com cobertura por requisito
-  - cada requisito deve informar coverageStatus, evidence, gapExplanation, recommendation e impactScore
-  - "lacunas" deve ser derivado apenas de requisitos com coverageStatus "partial" ou "missing"
-  - "ajustes_conteudo", "ajustes_indisponiveis" e "melhorias_aplicadas" devem refletir a mesma régua
-  - nunca marcar um requisito como coberto sem evidência no CV
-  - se faltar evidência, deixe claro que a recomendação só deve ser aplicada se for verdadeira
+==================================================
+RÉGUA DE REQUISITOS
+==================================================
 
-REGRAS DE QUALIDADE PARA KEYWORDS SELECIONÁVEIS:
+O input inclui:
+- <MODO_ANALISE>
+- <VAGA_CANONICA>
+- <REQUISITOS_EXISTENTES>
+
+Se <MODO_ANALISE> for "create_rule":
+- Extraia os requisitos estruturados da vaga dentro desta mesma análise.
+- Gere requisitos objetivos, avaliáveis e relevantes para decisão.
+- Descarte formulações vagas e converta apenas critérios reais em requisitos observáveis.
+- Para cada requisito, classifique:
+  - "dimension": "experience" | "skill" | "education" | "certification" | "language" | "location" | "work_model" | "other"
+  - "gateLevel": "hard" quando o requisito soar eliminatório/binário para screening; caso contrário, "soft"
+- Para CADA ajuste_conteudo, preencha "id" e "categoria"; nunca deixe ausente ou nulo.
+
+Se <MODO_ANALISE> for "use_existing_rule":
+- MODO COBERTURA: avalie apenas coverageStatus, evidence, gapExplanation e recommendation para cada requirementKey recebido.
+- Use EXATAMENTE os requisitos recebidos em <REQUISITOS_EXISTENTES>:
+  - mesmos requirementKey, requirementText, importance, dimension e gateLevel;
+  - mesma ordem;
+  - não crie, remova ou altere requisitos.
+- "ats_keywords.ausentes" deve conter apenas requirements com coverageStatus "missing" ou "partial".
+- "ats_keywords.presentes" deve conter apenas requirements com coverageStatus "covered".
+- "ajustes_conteudo" deve referenciar apenas requirements com coverageStatus "missing" ou "partial".
+- "ajustes_indisponiveis" deve referenciar apenas requirements com lacunas reais não corrigíveis.
+- Não gere lacunas, keywords ausentes ou ajustes que não correspondam a um requirementKey da régua.
+
+Em ambos os modos:
+- Retorne "requirements" com cobertura por requisito.
+- Cada requisito deve informar coverageStatus, evidence, gapExplanation, recommendation e impactScore.
+- "lacunas" deve ser derivado apenas de requisitos com coverageStatus "partial" ou "missing".
+- "ajustes_conteudo" deve representar melhorias que a IA consegue aplicar sem inventar fatos.
+- "ajustes_indisponiveis" deve representar lacunas que a IA NÃO pode corrigir sem informação nova.
+- Toda pontuação deve ser coerente com a cobertura dos requisitos.
+
+==================================================
+COBERTURA DOS REQUISITOS
+==================================================
+
+coverageStatus:
+- "covered": o CV já comprova claramente o requisito.
+- "partial": há evidência real, mas fraca, incompleta ou pouco visível.
+- "missing": não há evidência suficiente no CV.
+
+evidence:
+- Use trechos curtos do CV.
+- Não invente evidência.
+- Se coverageStatus for "missing", evidence deve ser [].
+
+gapExplanation:
+- Explique a lacuna em uma frase curta.
+- Não culpe o candidato.
+- Seja específico.
+
+recommendation:
+- Diga o que fazer sem inventar experiência.
+- Se for algo que depende de informação nova, sinalize isso.
+
+impactScore:
+- Use peso proporcional à importância real do requisito para a vaga.
+- Requisitos hard/high devem pesar mais.
+- Requisitos administrativos ou complementares devem pesar menos.
+
+==================================================
+AJUSTES_CONTEUDO
+==================================================
+
+Todo ajuste_conteudo deve ter:
+- "id": slug kebab-case único, derivado do título, sem acentos e sem espaços.
+- "titulo": título curto e acionável, sem copiar literalmente o requirementText.
+- "categoria": uma das opções:
+  - "texto_reescrito"
+  - "ajuste_conteudo"
+  - "keywords_incluidas"
+
+Use as categorias assim:
+- "texto_reescrito": ajuste exclusivo no Perfil Profissional / summary.
+- "ajuste_conteudo": melhoria em bullets de experiência, reposicionamento de responsabilidades, adequação de linguagem, inclusão de contexto real, educação, certificações, idiomas ou organização geral.
+- "keywords_incluidas": keyword ou competência específica ausente que será adicionada à seção de habilidades/skills. Deve ser termo curto e exato, nunca frase descritiva.
+
+Se uma melhoria é uma forma melhor de contar a experiência existente, use "ajuste_conteudo", não "keywords_incluidas".
+
+==================================================
+REGRAS DE KEYWORDS SELECIONÁVEIS
+==================================================
 
 O objeto "keywords" deve conter apenas termos selecionáveis para adaptação de CV.
 
-Uma keyword selecionável é um termo curto que pode aparecer naturalmente em um currículo como:
-- ferramenta
-- tecnologia
-- sistema
-- módulo
-- método
-- framework
-- métrica de negócio
-- prática profissional
-- processo específico
-- domínio técnico ou funcional específico
+Uma keyword selecionável é um termo que:
+1. Pode aparecer sozinho em uma seção de Competências, Ferramentas, Métodos, Métricas, Sistemas, Tecnologias ou Domínios profissionais sem soar artificial.
+2. Tem valor de triagem por si só, fora da frase original da vaga.
+3. É reconhecível como ferramenta, tecnologia, sistema, módulo, método, framework, métrica, prática profissional específica ou domínio funcional/técnico específico.
+4. Não depende de uma frase maior para fazer sentido.
+5. Não é apenas uma orientação para reescrever melhor o resumo ou os bullets.
 
-Exemplos válidos:
-- SQL
-- Python
-- Power BI
-- SAP MM
-- SAP SD
-- SAP EWM
-- TOS
-- Docker
-- Node.js
-- forecast
-- budget
-- EBITDA
-- OPEX
-- CAPEX
-- churn
-- LTV
-- upsell
-- roadmap
-- backlog
-- discovery
-- testes A/B
-- People Analytics
-- Business Intelligence
-- logística integrada
-- operação portuária
-- documentação funcional
-- critérios de aceite
+TESTE DA SEÇÃO DE COMPETÊNCIAS:
+Antes de adicionar qualquer item em keywords.presentes, keywords.possiveis ou keywords.ausentes, imagine:
 
-NÃO incluir em keywords.presentes, keywords.possiveis ou keywords.ausentes:
-- modelo de trabalho: remoto, híbrido, presencial, modelo híbrido, trabalho remoto
-- localização: São Paulo, Pinheiros, Brasil, cidade, país
-- disponibilidade: disponibilidade para viagem, mudança, horário, turno
-- idiomas: inglês avançado, espanhol avançado, português avançado
-- formação: graduação, bacharelado, MBA, pós-graduação, ensino superior
-- senioridade/cargo genérico: júnior, pleno, sênior, gerente, especialista
-- nomes de empresa
-- setores genéricos isolados: energia, indústria, varejo, tecnologia, financeiro, saúde, educação
-- soft skills genéricas: comunicação, perfil analítico, visão de negócio, colaboração, proatividade
-- frases longas de requisito
-- condições administrativas da vaga
+Competências
+- [keyword]
 
-Se um requisito for de localização, idioma, formação, senioridade, modelo de trabalho ou disponibilidade:
-- mantenha em "requirements"
-- use a dimension adequada: "location", "language", "education", "work_model" ou "other"
-- pode aparecer em "lacunas" ou "ajustes_indisponiveis"
-- NUNCA colocar em "keywords"
+Se isso parecer estranho, genérico, incompleto ou artificial, NÃO é keyword.
+Nesse caso, use "ajustes_conteudo", "requirements", "lacunas" ou "ajustes_indisponiveis", conforme o caso.
 
-Se um setor ou contexto for relevante, mas genérico:
-- represente como requirement, não como keyword
-- não use termos isolados como "energia", "indústria", "varejo" ou "financeiro" em keywords
-- só use keyword de domínio quando for expressão profissional específica, por exemplo:
-  - mercado financeiro
-  - setor de energia
-  - indústria de grande porte
-  - logística integrada
-  - operação portuária
-  - People Analytics
+DIFERENÇA ENTRE KEYWORD E AJUSTE DE CONTEÚDO:
+- Use "keywords" para termos que o usuário poderia selecionar manualmente e que poderiam ser adicionados ao CV como competência, ferramenta, método, métrica, sistema ou domínio específico.
+- Use "ajustes_conteudo" quando o item indicar uma forma melhor de contar a experiência existente.
 
-REGRA ESPECÍFICA PARA keywords.ausentes:
-Inclua em "keywords.ausentes" apenas termos que:
-1. aparecem explicitamente na vaga ou são sinônimo direto;
-2. são relevantes para triagem;
-3. podem ser inseridos naturalmente no CV como competência, ferramenta, método, métrica, processo ou domínio profissional específico;
-4. não são melhor representados como requisito de localização, idioma, formação, modelo de trabalho, disponibilidade, senioridade ou contexto genérico.
+Pergunta de decisão:
+"Este item é uma competência/termo selecionável ou uma orientação de reescrita?"
 
-ERRADO em keywords.ausentes:
-- modelo híbrido
-- remoto
-- São Paulo
-- inglês avançado
-- MBA
-- energia
-- indústria
-- perfil analítico
-- visão de negócio
+Se for orientação de reescrita, não é keyword.
 
-CERTO em keywords.ausentes:
-- SQL
-- Power BI
-- SAP MM
-- TOS
-- roadmap
-- backlog
-- UX
-- churn
-- LTV
-- forecast
-- EBITDA
+NÃO colocar em keywords termos que representem:
+- credencial obrigatória;
+- registro profissional;
+- formação acadêmica;
+- idioma;
+- localização;
+- modelo de trabalho;
+- disponibilidade;
+- senioridade;
+- condição administrativa da vaga;
+- requisito legal ou regulatório pessoal;
+- soft skill genérica;
+- setor genérico sem especificidade profissional;
+- frase longa de requisito;
+- pedaço de frase que só faz sentido dentro da vaga.
 
-REGRA DE ESPECIFICIDADE PARA KEYWORDS:
+Esses itens devem ficar em requirements, lacunas, ajustes_conteudo ou ajustes_indisponiveis.
 
-Não basta o termo aparecer na vaga. Para entrar em "keywords", ele precisa ser específico o suficiente para funcionar como sinal de triagem em um CV.
+DOMÍNIOS SETORIAIS:
+- Domínio setorial só deve entrar em keywords se for específico, profissionalmente relevante e selecionável como posicionamento.
+- Não inclua domínio setorial quando ele for apenas contexto da empresa, diferencial fraco ou não sustentado pelo CV.
+- Se o domínio for útil apenas para orientar a narrativa, coloque em ajustes_conteudo.
+- Se o domínio não estiver sustentado pelo CV e não puder ser adicionado sem sugerir experiência inexistente, trate como lacuna ou ajuste_indisponivel.
 
-Evite termos genéricos de negócio, substantivos amplos ou palavras comuns que, sozinhas, não indicam ferramenta, método, métrica, prática profissional específica ou domínio claro.
+NORMALIZAÇÃO:
+- Não coloque em keywords.ausentes termo que já aparece no CV com variação simples de maiúsculas/minúsculas, singular/plural, acento ou dentro de expressão composta.
+- Não duplique o mesmo conceito entre keywords.possiveis e keywords.ausentes.
+- Se um termo estiver em keywords.presentes, ele não pode aparecer também em possiveis ou ausentes.
+- Se um termo estiver em keywords.possiveis, ele não pode aparecer também em ausentes.
 
-NÃO incluir como keyword termos genéricos isolados como:
-- ofertas
-- processos
-- resultados
-- clientes
-- negócio
-- valor
-- crescimento
-- eficiência
-- produtividade
-- performance
-- operação
-- comunicação
-- parceria
-- experiência
-- melhorias
-- iniciativas
-- oportunidades
-- jornada
-- dados
-- tecnologia
-- sistemas
-- áreas
-- projetos
+==================================================
+REGRAS ESPECÍFICAS DE KEYWORDS
+==================================================
 
-Esses termos só podem entrar em keywords quando fizerem parte de uma expressão profissional específica e forte, por exemplo:
-- proposta de valor
-- eficiência operacional
-- jornada do cliente
-- análise de performance
-- indicadores operacionais
-- produtos digitais
-- sistemas empresariais
-- integração de sistemas
-- automação de processos
-- gestão de orçamento
-- planejamento financeiro
+keywords.presentes:
+- Termos selecionáveis já comprovados no CV.
+- Devem ter evidência clara no CV.
+- Não marque como presente algo apenas inferido.
 
-Mesmo nesses casos compostos, só incluir se o termo for realmente relevante para triagem e puder aparecer naturalmente em um CV.
+keywords.possiveis:
+- Termos selecionáveis com base parcial no CV.
+- Só use quando houver analogia verdadeira, contexto real ou reformulação honesta.
+- Não use para requisito de experiência, gestão, senioridade, escopo executivo, modelo de trabalho, localização, idioma, formação ou disponibilidade.
+- Não use frases longas de requirements.
 
-REGRA PARA TERMOS GENÉRICOS COMPOSTOS:
-
-Termos compostos como "eficiência operacional", "planos comerciais", "ofertas", "jornada", "performance" ou "engajamento" devem ser tratados com cautela.
-
-Use como keyword somente se:
-1. forem centrais para a vaga;
-2. forem termos recorrentes ou claramente relevantes no mercado daquela função;
-3. puderem ser inseridos no CV sem parecer palavra solta;
-4. não forem melhor representados como ajuste de conteúdo.
-
-Se o termo for apenas uma melhoria de narrativa, colocar em "ajustes_conteudo", não em "keywords".
-
-Exemplos:
-
-CERTO como keyword:
-- proposta de valor
-- conversão
-- ativação
-- churn
-- LTV
-- roadmap
-- backlog
-- discovery
-- testes A/B
-- eficiência operacional, quando a vaga for explicitamente sobre operações, automação ou melhoria operacional
-- planos comerciais, quando a vaga for explicitamente sobre gestão de planos, pricing ou portfólio de ofertas
-
-ERRADO como keyword:
-- ofertas
-- clientes
-- negócio
-- crescimento
-- melhorias
-- iniciativas
-- oportunidades
-- processos
-- resultados
-- operação
-
-REGRA MAIS RESTRITA PARA keywords.ausentes:
-
-"keywords.ausentes" deve ser mais restritivo que "keywords.presentes" e "keywords.possiveis".
-
-Só inclua em "keywords.ausentes" termos realmente fortes para triagem e que o usuário poderia escolher conscientemente para inserir no CV.
-
-Não inclua em "keywords.ausentes":
-- palavras genéricas isoladas;
-- termos amplos de negócio;
-- palavras que parecem apenas parte de uma frase da vaga;
-- termos que funcionam melhor como ajuste de conteúdo;
-- termos que não seriam naturalmente listados em uma seção de competências.
-
-Se houver dúvida, NÃO inclua em "keywords.ausentes".
-Prefira transformar em "ajustes_conteudo".
-
-Exemplo:
-Vaga pede "gerenciar planos e ofertas para clientes B2C".
-
-CERTO:
 keywords.ausentes:
-- planos comerciais, se não estiver no CV e for central para a vaga
+- Deve ser a lista mais conservadora.
+- Inclua apenas termos fortes, específicos e selecionáveis.
+- Só inclua termo que exigiria seleção explícita do usuário ou informação nova.
+- Não inclua termo que funciona melhor como ajuste de conteúdo.
+- Não inclua termo que pertence a ajuste_indisponivel.
+- Se houver dúvida entre keywords.ausentes e ajustes_conteudo, escolha ajustes_conteudo.
+- É melhor retornar poucas keywords ausentes e boas do que muitas opções fracas.
 
-ERRADO:
-keywords.ausentes:
-- ofertas
+REGRA DE ELEGIBILIDADE FINAL PARA keywords.ausentes:
+Antes de adicionar uma keyword em "keywords.ausentes", confirme:
+1. Ela funcionaria naturalmente como item em Competências?
+2. Ela tem valor de triagem sozinha?
+3. Ela é ferramenta, tecnologia, método, métrica, sistema, módulo, prática ou domínio específico?
+4. Ela não é apenas uma frase para orientar reescrita?
+5. Ela não é requisito administrativo, credencial, idioma, localização, modelo de trabalho, formação, disponibilidade ou senioridade?
+6. Ela não pertence a uma lacuna indisponível?
 
-Exemplo:
-Vaga pede "liderar iniciativas de automação e eficiência operacional".
+Se qualquer resposta for "não", não incluir em keywords.ausentes.
 
-CERTO:
-ajustes_conteudo:
-- reforçar automação e eficiência operacional nos bullets existentes
+==================================================
+REGRA DE CONSISTÊNCIA ENTRE LACUNAS E KEYWORDS
+==================================================
 
-ERRADO:
-keywords.ausentes:
-- eficiencia operacional
+Antes de adicionar qualquer item em keywords.ausentes, verifique se ele está ligado a um requisito sem evidência suficiente no CV.
 
-TESTE FINAL PARA keywords.ausentes:
+Se o requisito correspondente tiver coverageStatus = "missing" e a recomendação indicar que só deve ser incluído se o candidato tiver experiência real adicional, então NÃO coloque o termo em keywords.ausentes.
 
-Antes de adicionar uma keyword em "keywords.ausentes", pergunte:
+Nesse caso, mantenha o item apenas em:
+- requirements
+- lacunas
+- ajustes_indisponiveis
 
-1. Esse termo poderia aparecer de forma natural em uma seção de Competências?
-2. Esse termo é mais parecido com ferramenta, tecnologia, método, métrica, sistema, módulo ou domínio específico?
-3. O usuário conseguiria selecionar esse termo sem precisar explicar uma frase inteira?
-4. O termo tem valor real de triagem sozinho?
+Regra prática:
+keywords.ausentes deve conter termos ausentes que podem ser inseridos de forma segura como competência, ferramenta, método, métrica ou domínio profissional selecionável.
 
-Se a resposta para qualquer item for "não", não incluir em "keywords.ausentes".
+ajustes_indisponiveis deve conter lacunas que dependem de informação factual nova do candidato.
 
-Nesses casos, use "ajustes_conteudo".
+Um mesmo tema não deve aparecer ao mesmo tempo em keywords.ausentes e ajustes_indisponiveis.
 
-FORMATAÇÃO DE LIST ITEMS:
+==================================================
+VALIDAÇÃO FINAL DE CONSISTÊNCIA DAS KEYWORDS
+==================================================
+
+Antes de retornar o JSON final, compare keywords.ausentes com ajustes_indisponiveis.
+
+Regra obrigatória:
+Nenhum termo em keywords.ausentes pode representar o mesmo tema, requisito ou lacuna de um item em ajustes_indisponiveis.
+
+Se um termo em keywords.ausentes estiver semanticamente ligado a qualquer item de ajustes_indisponiveis, remova esse termo de keywords.ausentes.
+
+Exemplos de conflito:
+- ajustes_indisponiveis contém "Experiência com auditorias internas"
+  então keywords.ausentes NÃO pode conter "Auditorias Internas".
+
+- ajustes_indisponiveis contém "Experiência em fintech ou meios de pagamento"
+  então keywords.ausentes NÃO pode conter "Fintech" nem "Meios de Pagamento".
+
+- ajustes_indisponiveis contém "OAB ativa"
+  então keywords.ausentes NÃO pode conter "OAB".
+
+Ajustes indisponíveis dependem de informação factual nova do candidato.
+Keywords ausentes devem conter apenas termos seguros para adaptação do CV com base no histórico existente ou selecionáveis sem sugerir experiência inexistente.
+
+Se houver conflito, mantenha em ajustes_indisponiveis e remova de keywords.ausentes.
+
+Depois de gerar o JSON, faça uma última varredura:
+para cada item de keywords.ausentes, pergunte se ele depende de experiência nova não comprovada.
+Se depender, remova de keywords.ausentes.
+
+==================================================
+FORMATAÇÃO DE LIST ITEMS
+==================================================
+
 Aplicável a pontos_fortes, lacunas e melhorias_aplicadas.
 
-- Cada item: máximo 6–8 palavras
-- Remover conectivos desnecessários
-- Evitar: "com", "de", "para", "através de", "sólida", "grande"
-- ERRADO: "Sólida experiência em liderança de times multidisciplinares"
-- CERTO: "Liderança de times multidisciplinares"
-- Se necessário passar de 8 palavras, quebrar em duas linhas curtas separadas por " / "
+- Cada item: máximo 6–8 palavras.
+- Remover conectivos desnecessários.
+- Evitar frases longas.
+- Se necessário passar de 8 palavras, quebrar em duas partes curtas separadas por " / ".
 
 OBJETIVO:
 Ajudar o usuário a entender rapidamente:
-- onde está perdendo vaga
-- o que está errado
-- o que foi corrigido
-- por que isso melhora suas chances
+- onde está perdendo vaga;
+- o que está errado;
+- o que foi corrigido;
+- por que isso melhora suas chances.
 
-SAÍDA — JSON válido, sem markdown:
+==================================================
+SAÍDA — JSON VÁLIDO, SEM MARKDOWN
+==================================================
 
 {
   "vaga": {
@@ -1600,7 +1552,7 @@ SAÍDA — JSON válido, sem markdown:
 
   "ajustes_conteudo": [
     {
-      "id": "slug-kebab-case único e estável nesta análise (derivado do titulo, sem acentos, sem espaços)",
+      "id": "slug-kebab-case único e estável nesta análise",
       "titulo": "título curto do ajuste",
       "descricao": "frase curta explicando o que pode ser melhorado",
       "pontos": number,
@@ -1621,19 +1573,19 @@ SAÍDA — JSON válido, sem markdown:
   "keywords": {
     "presentes": [
       {
-        "kw": "palavra-chave presente no CV",
+        "kw": "keyword presente no CV",
         "pontos": number
       }
     ],
     "possiveis": [
       {
-        "kw": "palavra-chave com base parcial no CV e que pode ser reforçada sem inventar fatos",
+        "kw": "keyword com base parcial no CV e que pode ser reforçada sem inventar fatos",
         "pontos": number
       }
     ],
     "ausentes": [
       {
-        "kw": "termo selecionável de CV ausente, curto e relevante para triagem"
+        "kw": "termo selecionável de CV ausente, curto e relevante para triagem",
         "pontos": number
       }
     ]
@@ -1650,42 +1602,15 @@ SAÍDA — JSON válido, sem markdown:
       }
     ],
     "campos": [
-      {
-        "nome": "Nome completo",
-        "presente": boolean
-      },
-      {
-        "nome": "E-mail",
-        "presente": boolean
-      },
-      {
-        "nome": "Telefone",
-        "presente": boolean
-      },
-      {
-        "nome": "LinkedIn",
-        "presente": boolean
-      },
-      {
-        "nome": "Localização",
-        "presente": boolean
-      },
-      {
-        "nome": "Resumo profissional",
-        "presente": boolean
-      },
-      {
-        "nome": "Formação acadêmica",
-        "presente": boolean
-      },
-      {
-        "nome": "Experiências com datas",
-        "presente": boolean
-      },
-      {
-        "nome": "Habilidades e Competências",
-        "presente": boolean
-      }
+      { "nome": "Nome completo", "presente": boolean },
+      { "nome": "E-mail", "presente": boolean },
+      { "nome": "Telefone", "presente": boolean },
+      { "nome": "LinkedIn", "presente": boolean },
+      { "nome": "Localização", "presente": boolean },
+      { "nome": "Resumo profissional", "presente": boolean },
+      { "nome": "Formação acadêmica", "presente": boolean },
+      { "nome": "Experiências com datas", "presente": boolean },
+      { "nome": "Habilidades e Competências", "presente": boolean }
     ]
   },
 
@@ -1696,7 +1621,7 @@ SAÍDA — JSON válido, sem markdown:
 
   "preview": {
     "antes": "Resumo profissional original do candidato, copiado literalmente do CV. Se não houver resumo, usar o primeiro bullet da experiência mais recente.",
-    "depois": "Somente o resumo profissional reescrito para esta vaga. Usar 3-4 frases fortes e diretas. Abrir conectando o perfil real do candidato à vaga, sem inventar cargo, senioridade ou resultado inexistente. Sem títulos, sem bullets, só o parágrafo de resumo."
+    "depois": "Somente o resumo profissional reescrito para esta vaga. Usar 3-4 frases fortes e diretas. Sem títulos, sem bullets."
   },
 
   "pontos_fortes": [
@@ -1728,25 +1653,29 @@ SAÍDA — JSON válido, sem markdown:
     "titulo": "frase curta focada em resultado prático para esta vaga específica",
     "subtexto": "frase direta sobre ganho concreto"
   },
+
   "sinais_referencia": [
     "3 a 5 sinais comuns em candidatos fortes para esse tipo de vaga, sem repetir requisitos explícitos da vaga"
   ],
-  "adaptation_notes": "3 frases em PT-BR descrevendo as principais adaptações feitas no CV para esta vaga: (1) o que foi reposicionado ou reescrito, (2) quais keywords foram incorporadas e onde, (3) o que foi priorizado ou condensado. Escrever como se a adaptação já tivesse sido feita. Direto, específico, sem fluff."
+
+  "adaptation_notes": "3 frases em PT-BR descrevendo as principais adaptações feitas no CV para esta vaga: (1) o que foi reposicionado ou reescrito, (2) quais termos foram incorporados e onde, (3) o que foi priorizado ou condensado. Escrever como se a adaptação já tivesse sido feita. Direto, específico, sem fluff."
 }
 
-REGRA DE CALIBRAÇÃO DE PONTOS — OBRIGATÓRIA:
+==================================================
+CALIBRAÇÃO DE PONTOS
+==================================================
 
 A IA deve atribuir pontos aos itens, mas NÃO deve calcular os campos finais do sistema.
 
 Não retornar:
-- ATS Score
-- score atual
-- pontos disponíveis
-- score após liberar ajustes
-- score pós otimização
-- score total final
+- ATS Score;
+- score atual;
+- pontos disponíveis;
+- score após liberar ajustes;
+- score pós otimização;
+- score total final.
 
-Os pontos por item serão usados pelo sistema para cálculo posterior.
+O sistema calculará a pontuação final depois.
 
 SEÇÃO 1 — EXPERIÊNCIA PROFISSIONAL
 
@@ -1757,25 +1686,12 @@ sum(positivos[].pontos)
 + sum(ajustes_conteudo[].pontos)
 + sum(ajustes_indisponiveis[].pontos)
 
-Onde:
-- positivos[].pontos são pontos que o usuário já tem no CV
-- ajustes_conteudo[].pontos são pontos que podem ser atribuídos após adaptação da IA
-- ajustes_indisponiveis[].pontos são pontos que não podem ser incluídos porque representam lacunas reais no perfil do candidato
-
-Regra:
-- A soma dos três grupos deve ser exatamente 50
-- A IA deve ser justa na atribuição de pontos
-- A IA deve tentar beneficiar o candidato sempre que houver base real no CV
-- A IA nunca deve incluir informação inexistente
-- Lacunas reais devem ir em ajustes_indisponiveis
-- Melhorias possíveis com reescrita devem ir em ajustes_conteudo
-- Pontos já comprovados no CV devem ir em positivos
-
-Exemplo:
-positivos = 18 pontos
-ajustes_conteudo = 12 pontos
-ajustes_indisponiveis = 10 pontos
-Total = 50 pontos
+Regras:
+- A soma dos três grupos deve ser exatamente 50.
+- positivos[].pontos = pontos já comprovados no CV.
+- ajustes_conteudo[].pontos = pontos que podem ser ganhos por adaptação sem inventar.
+- ajustes_indisponiveis[].pontos = pontos que não podem ser ganhos sem informação nova.
+- Seja justo, mas beneficie o candidato quando houver base real.
 
 SEÇÃO 2 — COMPETÊNCIAS TÉCNICAS
 
@@ -1786,60 +1702,48 @@ sum(keywords.presentes[].pontos)
 + sum(keywords.possiveis[].pontos)
 + sum(keywords.ausentes[].pontos)
 
-Onde:
-- keywords.presentes[].pontos são competências já identificadas no CV
-- keywords.possiveis[].pontos são competências que podem ser reforçadas pela IA com base real já existente no CV
-- keywords.ausentes[].pontos são competências relevantes para a vaga que não aparecem no CV
-
-Regra:
-- A soma deve ser exatamente 40
-- Priorizar palavras-chave realmente importantes para a vaga
-- Não listar keywords irrelevantes só para preencher espaço
-- Não marcar como presente uma competência que não aparece ou não fica evidente no CV
-- "keywords.possiveis" deve conter APENAS termos selecionáveis de CV, curtos e profissionais, que possam ser introduzidos por analogia verdadeira, contexto ou reformulação sem inventar fatos
-- "keywords.possiveis" NUNCA deve conter modelo de trabalho, localização, idioma, formação, senioridade, disponibilidade, setor genérico isolado, soft skill genérica ou frase longa de requisito
-- "keywords.possiveis" deve parecer keyword de ATS, não frase de requirement
-- exemplos válidos: "engenharia de dados", "data platform", "cloud-native", "observabilidade", "arquitetura de dados"
-- exemplos inválidos: "Liderar arquitetura e roadmap de plataforma de dados", "Comunicar riscos, trade-offs e decisões de roadmap"
-- "keywords.ausentes" deve conter apenas termos que exigiriam seleção explícita do usuário ou informação nova
-
-Exemplo:
-keywords.presentes = 24 pontos
-keywords.possiveis = 8 pontos
-keywords.ausentes = 8 pontos
-Total = 40 pontos
+Regras:
+- A soma deve ser exatamente 40.
+- Priorize keywords realmente importantes para a vaga.
+- Não liste keywords irrelevantes só para preencher espaço.
+- Não marque como presente competência que não aparece ou não fica evidente no CV.
+- keywords.presentes = competências já identificadas no CV.
+- keywords.possiveis = competências que podem ser reforçadas com base real já existente.
+- keywords.ausentes = competências selecionáveis relevantes que não aparecem no CV.
 
 SEÇÃO 3 — FORMATAÇÃO E CAMPOS
 
 Orçamento total prático: 10 pontos.
 
 Total Pontos Seção 3 = 10
-- 1 ponto perdido por campo essencial ausente
+- 1 ponto perdido por campo essencial ausente.
 
-Regra:
-- A IA deve listar problemas de formato em formato_cv.problemas
-- A IA deve listar campos presentes/ausentes em formato_cv.campos
-- A IA não deve retornar ats_score
-- O sistema calculará a pontuação final da seção
+Regras:
+- Liste problemas de formato em formato_cv.problemas.
+- Liste campos presentes/ausentes em formato_cv.campos.
+- O sistema calculará a pontuação final da seção.
 
 Problemas possíveis:
-- Layout com múltiplas colunas
-- Dados de contato incompletos
-- Ausência de LinkedIn
-- Uso de tabelas
-- Resumo profissional ausente
-- Experiências sem datas
-- Formação acadêmica ausente
-- Habilidades sem organização
-- Texto excessivamente genérico
-- Estrutura difícil para leitura ATS
+- Layout com múltiplas colunas.
+- Dados de contato incompletos.
+- Ausência de LinkedIn.
+- Uso de tabelas.
+- Resumo profissional ausente.
+- Experiências sem datas.
+- Formação acadêmica ausente.
+- Habilidades sem organização.
+- Texto excessivamente genérico.
+- Estrutura difícil para leitura por sistemas.
 
-REGRAS CRÍTICAS:
+==================================================
+TOM E CAMPOS TEXTUAIS
+==================================================
 
-- O campo headline deve ser direto e gerar incômodo leve
-- Usar linguagem que indique perda, risco ou penalização
-- Sempre falar diretamente com o usuário
-- Nunca escrever em terceira pessoa
+headline:
+- Deve ser direto e gerar incômodo leve.
+- Fale diretamente com o usuário.
+- Indique perda, risco ou oportunidade clara.
+- Evite frases neutras, acadêmicas ou descritivas demais.
 
 TOM CORRETO:
 - "Você está perdendo força nesta vaga"
@@ -1847,90 +1751,89 @@ TOM CORRETO:
 - "Faltam sinais claros para o recrutador"
 - "Seu CV esconde experiências relevantes"
 
-REGRAS DE SINAIS DE REFERÊNCIA:
-- "sinais_referencia" NÃO entra no score
-- Listar apenas atributos, contextos ou sinais comuns em candidatos fortes para esse tipo de vaga
-- NÃO repetir requisitos explícitos já presentes em "requirements"
-- NÃO inventar fatos do candidato
-- Formular como sugestões condicionais do que valeria destacar no CV se for verdadeiro
-
 TOM PROIBIDO:
 - "O candidato possui experiência..."
 - "Seu perfil apresenta..."
 - "O currículo demonstra..."
-- Frases neutras, acadêmicas ou descritivas demais
 
-REGRAS PARA EXPERIÊNCIA:
+sinais_referencia:
+- Não entra no score.
+- Liste apenas atributos, contextos ou sinais comuns em candidatos fortes para esse tipo de vaga.
+- Não repita requisitos explícitos já presentes em requirements.
+- Não invente fatos do candidato.
+- Formule como sinais condicionais do que valeria destacar se for verdadeiro.
 
-- Não usar o nome exato do cargo da vaga dentro da experiência se isso não estiver no CV
-- Não transformar o candidato em algo que ele não é
-- Adaptar com ações correlatas, não com invenção de cargo
-- Exemplo:
-  - Vaga: Gerente de Dados
-  - Correto: "Liderança de iniciativas de dados"
-  - Errado: "Atuação como Gerente de Dados"
+preview.depois:
+- Escrever apenas o resumo profissional.
+- Não incluir título.
+- Não incluir bullets.
+- Não inventar cargo, senioridade, certificação, resultado ou tecnologia.
+- Conectar o perfil real do candidato ao que a vaga exige.
+- Usar 3-4 frases fortes e diretas.
+- Não criar seção de Objetivo.
 
-REGRAS PARA PREVIEW.DEPOIS:
+comparacao:
+- comparacao.antes deve evidenciar o problema.
+- comparacao.depois deve evidenciar a solução.
+- Nunca usar descrições neutras.
 
-- Escrever apenas o resumo profissional
-- Não incluir título
-- Não incluir bullets
-- Não inventar cargo, senioridade, certificação, resultado ou tecnologia
-- Conectar o perfil real do candidato ao que a vaga exige
-- Usar 3-4 frases fortes e diretas
-- Se a vaga for executiva, ainda manter resumo, mas sem seção "Objetivo"
-- Não criar seção de Objetivo em nenhuma hipótese
+projecao_melhoria:
+- Não retornar números de score.
+- Explicar qualitativamente o impacto esperado.
+- Ser realista.
+- Não prometer entrevista, contratação ou aprovação.
 
-REGRAS PARA CAMPOS SEM INFORMAÇÃO:
+melhorias_aplicadas:
+- Cada item deve justificar valor prático.
+- Foque em melhoria visível para recrutador e sistemas.
+- Evite promessa exagerada.
 
-- Não gerar seções vazias no CV otimizado
-- Se o candidato não informou idiomas, não criar seção de idiomas
-- Se o candidato não informou certificações, não criar seção de certificações
-- Se o candidato não informou formação, não inventar formação
-- Se uma seção não tiver conteúdo real, omitir
+lacunas:
+- Diretas e específicas.
+- Misturar lacunas corrigíveis e indisponíveis quando necessário.
+- Lacunas corrigíveis vêm de ajustes_conteudo.
+- Lacunas não corrigíveis vêm de ajustes_indisponiveis.
 
-REGRAS PARA AJUSTES_CONTEUDO (id, categoria):
+==================================================
+REGRAS PARA EXPERIÊNCIA E PREVIEW
+==================================================
 
-- Cada ajuste deve ter um "id" em kebab-case, único nesta análise, derivado do titulo sem acentos (ex: "adicionar-sql-nas-skills", "reescrever-bullet-lideranca")
-- O campo "categoria" classifica a natureza do ajuste — use exatamente uma das três opções abaixo:
-  - "texto_reescrito": ajuste no Perfil Profissional (summary/resumo) do candidato — reescrita, reformulação ou enriquecimento do parágrafo de apresentação. Use APENAS para o bloco de summary, nunca para bullets de experiência.
-  - "ajuste_conteudo": qualquer melhoria em itens da Experiência Profissional — reescrita de bullets, reposicionamento de responsabilidades, adequação de linguagem, inclusão de métricas ou contexto em experiências existentes. Também cobre ajustes em educação, certificações, idiomas e organização geral.
-  - "keywords_incluidas": keyword ou competência técnica específica ausente que será adicionada à seção de habilidades/skills (ex: "Power BI", "SQL", "Kafka", "Python"). Deve ser um termo curto e exato — NÃO frases descritivas. Se a keyword vai para experience em vez de skills = use "ajuste_conteudo".
+- Não use o nome exato do cargo da vaga dentro da experiência se isso não estiver no CV.
+- Não transforme o candidato em algo que ele não é.
+- Adapte com ações correlatas, não com invenção de cargo.
+- Não invente cargo, senioridade, certificação, resultado ou tecnologia.
+- Se a vaga for executiva, ainda mantenha resumo profissional; não crie seção "Objetivo".
 
-REGRAS PARA LACUNAS:
+==================================================
+CAMPOS SEM INFORMAÇÃO
+==================================================
 
-- O campo lacunas deve ser direto e específico
-- Misturar lacunas corrigíveis e indisponíveis quando necessário
-- Lacunas corrigíveis vêm de ajustes_conteudo
-- Lacunas não corrigíveis vêm de ajustes_indisponiveis
+- Não gere seções vazias no CV otimizado.
+- Se o candidato não informou idiomas, não criar seção de idiomas.
+- Se o candidato não informou certificações, não criar seção de certificações.
+- Se o candidato não informou formação, não inventar formação.
+- Se uma seção não tiver conteúdo real, omitir.
 
-REGRAS PARA MELHORIAS APLICADAS:
+==================================================
+VALIDAÇÃO FINAL ANTES DE RESPONDER
+==================================================
 
-- Cada item deve justificar valor prático
-- Focar em melhoria visível para recrutador e ATS
-- Evitar promessa exagerada
+Antes de retornar o JSON, valide:
 
-REGRAS PARA COMPARAÇÃO:
-
-- comparacao.antes deve evidenciar o problema
-- comparacao.depois deve evidenciar a solução
-- Nunca usar descrições neutras
-
-REGRAS PARA PROJEÇÃO DE MELHORIA:
-
-- Não retornar números de score
-- Explicar qualitativamente o impacto esperado
-- Ser realista
-- Não prometer entrevista, contratação ou aprovação
-
-REGRAS GERAIS:
-
-- Evitar qualquer texto longo
-- Pensar sempre em leitura rápida
-- Manter tom direto
-- Gerar JSON válido
-- Não incluir markdown
-- Não incluir comentários fora do JSON`;
+1. O JSON é válido.
+2. Não há markdown.
+3. Não há comentários fora do JSON.
+4. Todas as lacunas derivam de requirements partial/missing.
+5. Todo ajuste_conteudo tem id e categoria.
+6. Nenhuma keyword é requisito administrativo, credencial, idioma, localização, modelo de trabalho, disponibilidade, formação ou senioridade.
+7. Nenhuma keyword é frase longa de requirement.
+8. Nenhuma keyword é apenas orientação de reescrita.
+9. keywords.ausentes é conservador e contém apenas termos fortes e selecionáveis.
+10. Não há duplicidade entre keywords.presentes, keywords.possiveis e keywords.ausentes.
+11. A soma da seção 1 é 50.
+12. A soma da seção 2 é 40.
+13. A seção de formatação segue o orçamento de 10.
+14. Nada foi inventado a partir do CV.`;
 
 function buildAdaptationUserMessage(input: CvAdaptationInput): string {
   const base = wrapCvInput(
@@ -3047,8 +2950,16 @@ export async function adaptCv(
     }
 
     if (Array.isArray(output?.sections)) {
+      for (const section of output.sections) {
+        if (Array.isArray(section?.items)) {
+          for (const item of section.items) {
+            if (!Array.isArray(item.bullets)) item.bullets = [];
+          }
+        }
+      }
+
       const itemHasContent = (item: CvSectionItem, sectionTitle: string) =>
-        (Array.isArray(item.bullets) &&
+        (item.bullets.length > 0 &&
           item.bullets.some(
             (b) => typeof b === "string" && b.trim().length > 0,
           )) ||

@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common";
-import OpenAI from "openai";
-
 import { AnalysisObservabilityModule } from "../analysis-observability/analysis-observability.module";
+import { createAiClientFromEnv } from "../common/ai-client-factory";
 import { DatabaseModule } from "../database/database.module";
 import { JobApplicationInterviewPrepService } from "./interview-prep.service";
 import { InterviewPrepAiService } from "./interview-prep-ai.service";
@@ -17,10 +16,7 @@ import { JobApplicationsService } from "./job-applications.service";
     JobApplicationInterviewPrepService,
     {
       provide: "OPENAI_CLIENT",
-      useFactory: () =>
-        new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY,
-        }),
+      useFactory: () => createAiClientFromEnv(),
     },
   ],
   exports: [JobApplicationsService],

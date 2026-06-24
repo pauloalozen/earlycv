@@ -4,6 +4,7 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 
+import { getAiModel } from "../common/ai-client-factory";
 import { DatabaseService } from "../database/database.service";
 import type {
   CanonicalProfileData,
@@ -171,10 +172,7 @@ export class MasterCvCanonicalExtractionService {
     }
 
     const { extractMasterCvCanonicalProfile } = await import("@earlycv/ai");
-    const model =
-      process.env.OPENAI_MODEL_MASTERCV ??
-      process.env.OPENAI_MODEL ??
-      "gpt-4o-mini";
+    const model = getAiModel("MASTERCV");
     const { output } = await extractMasterCvCanonicalProfile(
       this.aiClient as never,
       model,

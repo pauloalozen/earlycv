@@ -2,6 +2,7 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 
+import { getAiModel } from "../common/ai-client-factory";
 import { DatabaseService } from "../database/database.service";
 import {
   buildCanonicalJobHash,
@@ -258,11 +259,7 @@ export class JobCanonicalizationService {
   }
 
   private getModel(): string {
-    return (
-      process.env.OPENAI_MODEL_JOB_CANONICALIZATION ??
-      process.env.OPENAI_MODEL ??
-      "gpt-4o-mini"
-    );
+    return getAiModel("JOB_CANONICALIZATION");
   }
 
   private getPromptVersion(): string {

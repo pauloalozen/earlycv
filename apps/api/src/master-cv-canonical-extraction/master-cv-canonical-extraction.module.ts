@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import OpenAI from "openai";
+import { createAiClientFromEnv } from "../common/ai-client-factory";
 
 import { DatabaseModule } from "../database/database.module";
 import { ProfilesModule } from "../profiles/profiles.module";
@@ -13,10 +13,7 @@ import { MasterCvCanonicalExtractionWorker } from "./master-cv-canonical-extract
     MasterCvCanonicalExtractionWorker,
     {
       provide: "OPENAI_CLIENT",
-      useFactory: () =>
-        new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY,
-        }),
+      useFactory: () => createAiClientFromEnv(),
     },
   ],
   exports: [MasterCvCanonicalExtractionService],

@@ -210,7 +210,7 @@ function findBestItemIdx(ajuste: AjusteWithKey, section: CvSection): number {
   let bestScore = -1;
 
   section.items.forEach((item, idx) => {
-    const text = [item.heading, item.subheading, ...item.bullets]
+    const text = [item.heading, item.subheading, ...(item.bullets ?? [])]
       .join(" ")
       .toLowerCase();
     const score = keywords.filter((kw) => text.includes(kw)).length;
@@ -264,7 +264,7 @@ function sectionsToText(sections: CvSection[], summary?: string): string {
         .join(" | ");
       if (heading) lines.push(heading);
       if (item.dateRange) lines.push(item.dateRange);
-      for (const b of item.bullets) {
+      for (const b of (item.bullets ?? [])) {
         if (b.trim()) lines.push(`• ${b}`);
       }
       lines.push("");
@@ -672,7 +672,7 @@ function HeaderSectionView({
             <input
               id="hdr-contact"
               type="text"
-              value={item.bullets.join(" | ")}
+              value={(item.bullets ?? []).join(" | ")}
               onChange={(e) =>
                 onItemChange(
                   0,
@@ -715,7 +715,7 @@ function HeaderSectionView({
               {item.subheading}
             </div>
           )}
-          {item.bullets.filter(isContactBullet).length > 0 && (
+          {(item.bullets ?? []).filter(isContactBullet).length > 0 && (
             <div
               style={{
                 fontSize: 12,
@@ -724,7 +724,7 @@ function HeaderSectionView({
                 lineHeight: 1.6,
               }}
             >
-              {item.bullets
+              {(item.bullets ?? [])
                 .filter(isContactBullet)
                 .map(stripContactLabel)
                 .join(" | ")}
@@ -955,7 +955,7 @@ function CvSectionBlock({
               isHighlighted &&
               highlightedItemIdx !== undefined &&
               highlightedItemIdx === itemIdx;
-            const allText = [item.heading, ...item.bullets]
+            const allText = [item.heading, ...(item.bullets ?? [])]
               .filter(Boolean)
               .join(", ");
             const hasHighlight =
@@ -989,12 +989,12 @@ function CvSectionBlock({
                   )}
                   {hasHighlight ? (
                     <HighlightedText
-                      text={item.bullets.join(", ")}
+                      text={(item.bullets ?? []).join(", ")}
                       highlight={highlightText}
                       color={highlightColor ?? LIME}
                     />
                   ) : (
-                    item.bullets.join(", ")
+                    (item.bullets ?? []).join(", ")
                   )}
                 </span>
               </div>
@@ -1143,7 +1143,7 @@ function CvSectionBlock({
                           ? "Itens (um por linha)"
                           : "Itens"}
                       </span>
-                      {item.bullets.map((bullet, bIdx) => (
+                      {(item.bullets ?? []).map((bullet, bIdx) => (
                         <div
                           key={buildBulletKey(itemKey, bullet, bIdx)}
                           style={{
@@ -1156,7 +1156,7 @@ function CvSectionBlock({
                             value={bullet}
                             rows={section.sectionType === "skills" ? 1 : 2}
                             onChange={(e) => {
-                              const next = [...item.bullets];
+                              const next = [...(item.bullets ?? [])];
                               next[bIdx] = e.target.value;
                               onBulletsChange(itemIdx, next);
                             }}
@@ -1177,7 +1177,7 @@ function CvSectionBlock({
                           <button
                             type="button"
                             onClick={() => {
-                              const next = item.bullets.filter(
+                              const next = (item.bullets ?? []).filter(
                                 (_, i) => i !== bIdx,
                               );
                               onBulletsChange(itemIdx, next);
@@ -1200,7 +1200,7 @@ function CvSectionBlock({
                       <button
                         type="button"
                         onClick={() =>
-                          onBulletsChange(itemIdx, [...item.bullets, ""])
+                          onBulletsChange(itemIdx, [...(item.bullets ?? []), ""])
                         }
                         style={{
                           fontSize: 11,
@@ -1250,7 +1250,7 @@ function CvSectionBlock({
                       )}
                     </div>
 
-                    {item.bullets.length > 0 && (
+                    {(item.bullets ?? []).length > 0 && (
                       <ul
                         style={{
                           margin: 0,
@@ -1258,7 +1258,7 @@ function CvSectionBlock({
                           listStyle: "disc",
                         }}
                       >
-                        {item.bullets.map((bullet, bIdx) => {
+                        {(item.bullets ?? []).map((bullet, bIdx) => {
                           const isHighlightedBullet =
                             itemHighlighted && highlightText
                               ? (() => {
@@ -1367,7 +1367,7 @@ function buildSectionItemKey(item: {
     item.heading ?? "",
     item.subheading ?? "",
     item.dateRange ?? "",
-    item.bullets.join("|"),
+    (item.bullets ?? []).join("|"),
     item.changes?.map((change) => change.ajuste_id).join("|") ?? "",
   ].join("::");
 }
