@@ -1722,7 +1722,7 @@ export default function AdaptarPage() {
                 {/* Trust badges */}
                 <div style={{ display: "flex", gap: 8 }}>
                   {[
-                    { label: "DIAGNÓSTICO", v: "≈ 2min" },
+                    { label: "DIAGNÓSTICO", v: "≈ 90s" },
                     { label: "DADOS", v: "protegidos" },
                     { label: "MELHORIAS", v: "10+" },
                   ].map((b) => (
