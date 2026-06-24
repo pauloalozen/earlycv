@@ -185,7 +185,7 @@ function computeReanalysis(c: BatchCase): {
     }
   }
 
-  return { scoreAfter, foundKeywords, missingKeywords };
+  return { scoreAfter: Math.min(scoreAfter, 100), foundKeywords, missingKeywords };
 }
 
 function buildExportJson(cases: BatchCase[]) {
