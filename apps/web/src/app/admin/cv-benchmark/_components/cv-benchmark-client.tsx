@@ -164,8 +164,18 @@ function buildExportJson(cases: BatchCase[]) {
       const scoreProjected = c.analysisOutput?.fit?.score_pos_ajustes ?? null;
       const scoreAfter = c.reanalysisOutput?.fit?.score ?? null;
       const drift =
-        scoreAfter !== null && scoreBefore !== null
-          ? scoreAfter - scoreBefore
+        scoreAfter !== null
+          ? scoreProjected !== null
+            ? scoreAfter - scoreProjected
+            : scoreBefore !== null
+              ? scoreAfter - scoreBefore
+              : null
+          : null;
+      const driftBasis =
+        drift !== null
+          ? scoreProjected !== null
+            ? "vs_esperado"
+            : "vs_antes"
           : null;
 
       return {
@@ -204,6 +214,7 @@ function buildExportJson(cases: BatchCase[]) {
               output: c.reanalysisOutput,
               scoreAfter,
               drift,
+              driftBasis,
               model: c.reanalysisModel ?? null,
             }
           : null,
@@ -238,7 +249,7 @@ export function CvBenchmarkClient() {
       const parsed = await parseFolderBatch(files);
       if (!parsed.length) {
         alert(
-          "Nenhum par válido encontrado.\n\nEstrutura esperada:\n  case-001/cv.pdf + case-001/vaga.txt\n\nOu avulso:\n  001-cv.pdf + 001-vaga.txt",
+          "Nenhum par válido encontrado.\n\nEstrutura esperada:\n  case-001/cv.txt (ou cv.md) + case-001/vaga.txt\n\nOu avulso:\n  001-cv.txt + 001-vaga.txt",
         );
         return;
       }
@@ -627,11 +638,23 @@ export function CvBenchmarkClient() {
 
           {cases.map((c) => {
             const scoreBefore = c.analysisOutput?.fit?.score ?? null;
+            const scoreProjected =
+              c.analysisOutput?.fit?.score_pos_ajustes ?? null;
             const scoreAfter = c.reanalysisOutput?.fit?.score ?? null;
             const drift =
-              scoreAfter !== null && scoreBefore !== null
-                ? scoreAfter - scoreBefore
+              scoreAfter !== null
+                ? scoreProjected !== null
+                  ? scoreAfter - scoreProjected
+                  : scoreBefore !== null
+                    ? scoreAfter - scoreBefore
+                    : null
                 : null;
+            const driftTitle =
+              drift !== null
+                ? scoreProjected !== null
+                  ? `vs score esperado (${scoreProjected})`
+                  : `vs score inicial (${scoreBefore})`
+                : undefined;
             const ausentes = c.analysisOutput?.keywords?.ausentes ?? [];
             const hasErrors = c.errors.length > 0;
 
@@ -723,7 +746,7 @@ export function CvBenchmarkClient() {
 
                   <ScoreCell value={scoreBefore} />
                   <ScoreCell value={scoreAfter} />
-                  <DriftCell value={drift} />
+                  <DriftCell title={driftTitle} value={drift} />
                 </div>
 
                 {/* KW selection panel */}
@@ -882,7 +905,7 @@ function ScoreCell({ value }: { value: number | null }) {
   );
 }
 
-function DriftCell({ value }: { value: number | null }) {
+function DriftCell({ value, title }: { value: number | null; title?: string }) {
   if (value === null)
     return (
       <span
@@ -904,6 +927,7 @@ function DriftCell({ value }: { value: number | null }) {
         color,
         fontFamily: '"Geist", sans-serif',
       }}
+      title={title}
     >
       {value > 0 ? "+" : ""}
       {value}
