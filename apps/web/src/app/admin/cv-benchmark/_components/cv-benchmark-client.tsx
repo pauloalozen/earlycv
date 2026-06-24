@@ -170,7 +170,11 @@ function computeReanalysis(c: BatchCase): {
 } {
   const adaptedNorm = normalizeForSearch(c.adaptedCvText ?? "");
   const kwAusentes = c.analysisOutput?.keywords?.ausentes ?? [];
-  let scoreAfter = c.analysisOutput?.fit?.score ?? 0;
+  // Parte do score_pos_ajustes (promessa dos ajustes de conteúdo), igual ao produto
+  let scoreAfter =
+    c.analysisOutput?.fit?.score_pos_ajustes ??
+    c.analysisOutput?.fit?.score ??
+    0;
   const foundKeywords: string[] = [];
   const missingKeywords: string[] = [];
 
@@ -185,7 +189,11 @@ function computeReanalysis(c: BatchCase): {
     }
   }
 
-  return { scoreAfter: Math.min(scoreAfter, 100), foundKeywords, missingKeywords };
+  return {
+    scoreAfter: Math.min(scoreAfter, 100),
+    foundKeywords,
+    missingKeywords,
+  };
 }
 
 function buildExportJson(cases: BatchCase[]) {
