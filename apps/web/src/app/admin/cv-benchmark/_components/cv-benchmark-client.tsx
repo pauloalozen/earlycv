@@ -31,8 +31,6 @@ type CvAdaptationOutput = {
 };
 
 type CaseStep =
-  | "idle"
-  | "parsing"
   | "parsed"
   | "analyzing"
   | "analyzed"
@@ -69,6 +67,10 @@ type BatchCase = {
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
+function isTextCvFile(fileName: string): boolean {
+  return /^cv\.(txt|md)$/i.test(fileName);
+}
+
 async function parseFolderBatch(files: FileList): Promise<BatchCase[]> {
   const groups = new Map<string, { cvFile?: File; vagaFile?: File }>();
 
@@ -83,17 +85,17 @@ async function parseFolderBatch(files: FileList): Promise<BatchCase[]> {
       const fileName = parts[parts.length - 1].toLowerCase();
       if (!groups.has(caseId)) groups.set(caseId, {});
       const g = groups.get(caseId)!;
-      if (fileName === "cv.pdf" || fileName === "cv.docx") g.cvFile = file;
+      if (isTextCvFile(fileName)) g.cvFile = file;
       else if (fileName === "vaga.txt") g.vagaFile = file;
     } else {
-      // Avulso mode: 001-cv.pdf, 001-vaga.txt
-      const match = file.name.match(/^(\d+)-(cv\.(pdf|docx)|vaga\.txt)$/i);
+      // Avulso mode: 001-cv.txt, 001-cv.md, 001-vaga.txt
+      const match = file.name.match(/^(\d+)-(cv\.(txt|md)|vaga\.txt)$/i);
       if (!match) continue;
       const caseId = match[1];
       if (!groups.has(caseId)) groups.set(caseId, {});
       const g = groups.get(caseId)!;
       const lower = file.name.toLowerCase();
-      if (lower.endsWith("-cv.pdf") || lower.endsWith("-cv.docx"))
+      if (lower.endsWith("-cv.txt") || lower.endsWith("-cv.md"))
         g.cvFile = file;
       else if (lower.endsWith("-vaga.txt")) g.vagaFile = file;
     }
@@ -105,13 +107,17 @@ async function parseFolderBatch(files: FileList): Promise<BatchCase[]> {
   for (const caseId of sortedIds) {
     const { cvFile, vagaFile } = groups.get(caseId)!;
     if (!cvFile || !vagaFile) continue;
-    const jobText = await vagaFile.text();
+    const [cvText, jobText] = await Promise.all([
+      cvFile.text(),
+      vagaFile.text(),
+    ]);
     cases.push({
       id: caseId,
       cvFileName: cvFile.name,
       cvFile,
       jobText,
-      step: "idle",
+      step: "parsed", // texto já disponível, sem necessidade de parse via API
+      cvText,
       errors: [],
       selectedKeywords: [],
     });
@@ -240,35 +246,6 @@ export function CvBenchmarkClient() {
     } finally {
       setImporting(false);
     }
-  }
-
-  // ── Parse ─────────────────────────────────────────────────────────────────
-
-  async function parseCase(c: BatchCase) {
-    updateCase(c.id, { step: "parsing" });
-    try {
-      const fd = new FormData();
-      fd.append("file", c.cvFile, c.cvFileName);
-      fd.append("fileName", c.cvFileName);
-      const { cvText } = await callApi<{ cvText: string }>(
-        "/api/admin/cv-benchmark/parse",
-        fd,
-      );
-      updateCase(c.id, { step: "parsed", cvText });
-    } catch (err) {
-      updateCase(c.id, {
-        step: "idle",
-        errors: [...c.errors, { step: "parse", message: String(err) }],
-      });
-    }
-  }
-
-  async function parseAll() {
-    const targets = cases.filter((c) => c.step === "idle");
-    await runConcurrently(
-      targets.map((c) => () => parseCase(c)),
-      CONCURRENCY,
-    );
   }
 
   // ── Analyze ───────────────────────────────────────────────────────────────
@@ -445,13 +422,12 @@ export function CvBenchmarkClient() {
 
   // ── Derived state ─────────────────────────────────────────────────────────
 
-  const hasIdle = cases.some((c) => c.step === "idle");
   const hasParsed = cases.some((c) => c.step === "parsed");
   const hasAnalyzed = cases.some((c) => c.step === "analyzed");
   const hasAdapted = cases.some((c) => c.step === "adapted");
   const hasDone = cases.some((c) => c.step === "done");
   const busy = cases.some((c) =>
-    ["parsing", "analyzing", "adapting", "reanalyzing"].includes(c.step),
+    ["analyzing", "adapting", "reanalyzing"].includes(c.step),
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -504,8 +480,6 @@ export function CvBenchmarkClient() {
   }
 
   const stepLabel: Record<CaseStep, string> = {
-    idle: "aguardando parse",
-    parsing: "parseando…",
     parsed: "pronto p/ análise",
     analyzing: "analisando…",
     analyzed: "analisado",
@@ -516,8 +490,6 @@ export function CvBenchmarkClient() {
   };
 
   const stepColor: Record<CaseStep, string> = {
-    idle: AT.muted2,
-    parsing: AT.warn,
     parsed: AT.ok,
     analyzing: AT.warn,
     analyzed: AT.ok,
@@ -563,7 +535,7 @@ export function CvBenchmarkClient() {
           )}
 
           <input
-            accept=".pdf,.docx,.txt"
+            accept=".txt,.md"
             multiple
             onChange={(e) => e.target.files && handleFiles(e.target.files)}
             ref={fileInputRef}
@@ -582,8 +554,8 @@ export function CvBenchmarkClient() {
             fontFamily: '"Geist Mono", monospace',
           }}
         >
-          Selecione uma pasta com subpastas case-001/ case-002/ contendo cv.pdf
-          + vaga.txt · ou arquivos avulsos 001-cv.pdf 001-vaga.txt
+          Selecione uma pasta com subpastas case-001/ case-002/ contendo cv.txt
+          (ou cv.md) + vaga.txt · ou arquivos avulsos 001-cv.txt 001-vaga.txt
         </div>
       </div>
 
@@ -601,9 +573,6 @@ export function CvBenchmarkClient() {
             alignItems: "center",
           }}
         >
-          <Btn disabled={!hasIdle} onClick={parseAll}>
-            Parsear CVs ({cases.filter((c) => c.step === "idle").length})
-          </Btn>
           <Btn disabled={!hasParsed} onClick={analyzeAll}>
             Analisar ({cases.filter((c) => c.step === "parsed").length})
           </Btn>
