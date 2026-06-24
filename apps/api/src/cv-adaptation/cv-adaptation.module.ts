@@ -27,7 +27,7 @@ import { JobRequirementSetsService } from "./job-requirement-sets.service";
     ProfilesModule,
   ],
   controllers: [CvAdaptationController, CvAdaptationPublicController],
-  exports: [CvAdaptationService],
+  exports: [CvAdaptationService, CvAdaptationAiService],
   providers: [
     CvAdaptationService,
     CvAdaptationAiService,

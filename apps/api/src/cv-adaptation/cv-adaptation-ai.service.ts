@@ -130,6 +130,46 @@ export class CvAdaptationAiService {
     };
   }
 
+  async adaptWithAudit(input: {
+    masterCvText: string;
+    jobDescriptionText: string;
+    selectedKeywords?: string[];
+    jobTitle?: string;
+    companyName?: string;
+    requirementCoverage?: JobRequirementCoverage[];
+    ajustesConteudo?: Array<{
+      id: string;
+      titulo: string;
+      categoria: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
+    }>;
+  }): Promise<{ output: CvAdaptationOutput; audit: unknown }> {
+    if (process.env.SKIP_AI === "true") {
+      const stub: CvAdaptationOutput = {
+        summary: input.masterCvText.slice(0, 300),
+        sections: [],
+        highlightedSkills: [],
+        removedSections: [],
+        adaptationNotes: "SKIP_AI mode active",
+      };
+      return { output: stub, audit: { stub: true } };
+    }
+
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const { adaptCv } = await import("@earlycv/ai");
+    // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
+    const { output, audit } = await adaptCv(this.aiClient as any, model, {
+      masterCvText: input.masterCvText,
+      jobDescriptionText: input.jobDescriptionText,
+      selectedKeywords: input.selectedKeywords,
+      jobTitle: input.jobTitle,
+      companyName: input.companyName,
+      requirementCoverage: input.requirementCoverage,
+      ajustesConteudo: input.ajustesConteudo,
+    });
+
+    return { output: output as CvAdaptationOutput, audit };
+  }
+
   async buildPaidCvOutputFromGuest(input: {
     masterCvText: string;
     jobDescriptionText: string;
