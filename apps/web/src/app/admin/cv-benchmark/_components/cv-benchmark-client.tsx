@@ -365,6 +365,7 @@ export function CvBenchmarkClient() {
       jobText: c.jobText,
       requirements,
       canonicalJobJson: c.canonicalJobJson,
+      existingKeywordRule: c.analysisOutput.keywords ?? null,
     };
 
     updateCase(c.id, { step: "reanalyzing", reanalysisPayload });

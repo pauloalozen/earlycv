@@ -142,6 +142,11 @@ export class CvBenchmarkAdminController {
       jobText: string;
       requirements: JobRequirementCoverage[];
       canonicalJobJson: unknown;
+      existingKeywordRule?: {
+        presentes: Array<{ kw: string; pontos: number }>;
+        ausentes: Array<{ kw: string; pontos: number }>;
+        possiveis: Array<{ kw: string; pontos: number }>;
+      };
     },
   ) {
     if (!body.adaptedCvText?.trim())
@@ -156,6 +161,7 @@ export class CvBenchmarkAdminController {
         rawDescription: body.jobText,
       },
       existingRequirements: body.requirements ?? [],
+      existingKeywordRule: body.existingKeywordRule,
     });
 
     return {
