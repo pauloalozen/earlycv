@@ -75,29 +75,32 @@ async function parseFolderBatch(files: FileList): Promise<BatchCase[]> {
   const groups = new Map<string, { cvFile?: File; vagaFile?: File }>();
 
   for (const file of Array.from(files)) {
+    const lower = file.name.toLowerCase();
+
+    // Avulso pattern checked by filename first, regardless of folder depth:
+    // 001-cv.txt, 001-cv.md, 001-vaga.txt, 001-vaga.md
+    const avulso = file.name.match(/^(\d+)-(cv\.(txt|md)|vaga\.(txt|md))$/i);
+    if (avulso) {
+      const caseId = avulso[1];
+      if (!groups.has(caseId)) groups.set(caseId, {});
+      const g = groups.get(caseId)!;
+      if (lower.includes("-cv.")) g.cvFile = file;
+      else g.vagaFile = file;
+      continue;
+    }
+
+    // Folder structure: case-001/cv.txt (or cv.md, vaga.txt, vaga.md)
     const parts = file.webkitRelativePath
       ? file.webkitRelativePath.split("/")
       : [file.name];
-
     if (parts.length >= 2) {
-      // Folder mode: last part = filename, second-to-last = case folder
       const caseId = parts[parts.length - 2];
       const fileName = parts[parts.length - 1].toLowerCase();
       if (!groups.has(caseId)) groups.set(caseId, {});
       const g = groups.get(caseId)!;
       if (isTextCvFile(fileName)) g.cvFile = file;
-      else if (fileName === "vaga.txt") g.vagaFile = file;
-    } else {
-      // Avulso mode: 001-cv.txt, 001-cv.md, 001-vaga.txt
-      const match = file.name.match(/^(\d+)-(cv\.(txt|md)|vaga\.txt)$/i);
-      if (!match) continue;
-      const caseId = match[1];
-      if (!groups.has(caseId)) groups.set(caseId, {});
-      const g = groups.get(caseId)!;
-      const lower = file.name.toLowerCase();
-      if (lower.endsWith("-cv.txt") || lower.endsWith("-cv.md"))
-        g.cvFile = file;
-      else if (lower.endsWith("-vaga.txt")) g.vagaFile = file;
+      else if (fileName === "vaga.txt" || fileName === "vaga.md")
+        g.vagaFile = file;
     }
   }
 
