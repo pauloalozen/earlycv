@@ -51,7 +51,6 @@ type BatchCase = {
   // Accumulated per stage
   cvText?: string;
   analysisOutput?: CvAnalysisOutput;
-  canonicalJobJson?: unknown;
   analysisModel?: string;
   analysisPromptVersion?: string;
   selectedKeywords: string[];
@@ -59,9 +58,10 @@ type BatchCase = {
   adaptedCv?: CvAdaptationOutput;
   adaptedCvText?: string;
   adaptedCvAudit?: unknown;
-  reanalysisPayload?: unknown;
-  reanalysisOutput?: CvAnalysisOutput;
-  reanalysisModel?: string;
+  // Reanalysis: deterministic (idêntico ao produto — keyword encontrada = pontos)
+  reanalysisFoundKeywords?: string[];
+  reanalysisMissingKeywords?: string[];
+  reanalysisScoreAfter?: number;
   kwExpanded?: boolean;
 };
 
@@ -159,13 +159,42 @@ async function callApi<T>(path: string, body: unknown | FormData): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+function normalizeForSearch(text: string): string {
+  return text.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+function computeReanalysis(c: BatchCase): {
+  scoreAfter: number;
+  foundKeywords: string[];
+  missingKeywords: string[];
+} {
+  const adaptedNorm = normalizeForSearch(c.adaptedCvText ?? "");
+  const kwAusentes = c.analysisOutput?.keywords?.ausentes ?? [];
+  let scoreAfter = c.analysisOutput?.fit?.score ?? 0;
+  const foundKeywords: string[] = [];
+  const missingKeywords: string[] = [];
+
+  for (const kw of c.selectedKeywords) {
+    const kwData = kwAusentes.find((k) => k.kw === kw);
+    const pontos = kwData?.pontos ?? 0;
+    if (adaptedNorm.includes(normalizeForSearch(kw))) {
+      scoreAfter += pontos;
+      foundKeywords.push(kw);
+    } else {
+      missingKeywords.push(kw);
+    }
+  }
+
+  return { scoreAfter, foundKeywords, missingKeywords };
+}
+
 function buildExportJson(cases: BatchCase[]) {
   return {
     exportedAt: new Date().toISOString(),
     cases: cases.map((c) => {
       const scoreBefore = c.analysisOutput?.fit?.score ?? null;
       const scoreProjected = c.analysisOutput?.fit?.score_pos_ajustes ?? null;
-      const scoreAfter = c.reanalysisOutput?.fit?.score ?? null;
+      const scoreAfter = c.reanalysisScoreAfter ?? null;
       const drift =
         scoreAfter !== null
           ? scoreProjected !== null
@@ -190,11 +219,7 @@ function buildExportJson(cases: BatchCase[]) {
         },
         analysis: c.analysisOutput
           ? {
-              payload: {
-                cvText: c.cvText,
-                jobText: c.jobText,
-                canonicalJobJson: c.canonicalJobJson,
-              },
+              payload: { cvText: c.cvText, jobText: c.jobText },
               output: c.analysisOutput,
               scoreBefore,
               scoreProjected,
@@ -211,16 +236,17 @@ function buildExportJson(cases: BatchCase[]) {
               audit: c.adaptedCvAudit,
             }
           : null,
-        reanalysis: c.reanalysisOutput
-          ? {
-              payload: c.reanalysisPayload,
-              output: c.reanalysisOutput,
-              scoreAfter,
-              drift,
-              driftBasis,
-              model: c.reanalysisModel ?? null,
-            }
-          : null,
+        reanalysis:
+          c.reanalysisScoreAfter !== undefined
+            ? {
+                mode: "deterministic",
+                scoreAfter,
+                foundKeywords: c.reanalysisFoundKeywords ?? [],
+                missingKeywords: c.reanalysisMissingKeywords ?? [],
+                drift,
+                driftBasis,
+              }
+            : null,
         errors: c.errors.reduce<Record<string, string>>((acc, e) => {
           acc[e.step] = e.message;
           return acc;
@@ -281,7 +307,6 @@ export function CvBenchmarkClient() {
       updateCase(c.id, {
         step: "analyzed",
         analysisOutput: result.analysisOutput,
-        canonicalJobJson: result.canonicalJobJson,
         analysisModel: result.model,
         analysisPromptVersion: result.promptVersion,
       });
@@ -354,46 +379,25 @@ export function CvBenchmarkClient() {
     );
   }
 
-  // ── Reanalyze ─────────────────────────────────────────────────────────────
+  // ── Reanalyze (determinístico — idêntico ao produto) ─────────────────────
+  // Keyword encontrada no adaptedCvText = pontos creditados. Sem call de LLM.
 
-  async function reanalyzeCase(c: BatchCase) {
+  function reanalyzeCase(c: BatchCase) {
     if (!c.adaptedCvText || !c.analysisOutput) return;
-
-    const requirements = (c.analysisOutput.requirements ?? []) as unknown[];
-    const reanalysisPayload = {
-      adaptedCvText: c.adaptedCvText,
-      jobText: c.jobText,
-      requirements,
-      canonicalJobJson: c.canonicalJobJson,
-      existingKeywordRule: c.analysisOutput.keywords ?? null,
-    };
-
-    updateCase(c.id, { step: "reanalyzing", reanalysisPayload });
-    try {
-      const result = await callApi<{
-        reanalysisOutput: CvAnalysisOutput;
-        model: string;
-      }>("/api/admin/cv-benchmark/reanalyze", reanalysisPayload);
-
-      updateCase(c.id, {
-        step: "done",
-        reanalysisOutput: result.reanalysisOutput,
-        reanalysisModel: result.model,
-      });
-    } catch (err) {
-      updateCase(c.id, {
-        step: "adapted",
-        errors: [...c.errors, { step: "reanalyze", message: String(err) }],
-      });
-    }
+    updateCase(c.id, { step: "reanalyzing" });
+    const { scoreAfter, foundKeywords, missingKeywords } = computeReanalysis(c);
+    updateCase(c.id, {
+      step: "done",
+      reanalysisScoreAfter: scoreAfter,
+      reanalysisFoundKeywords: foundKeywords,
+      reanalysisMissingKeywords: missingKeywords,
+    });
   }
 
-  async function reanalyzeAll() {
-    const targets = cases.filter((c) => c.step === "adapted");
-    await runConcurrently(
-      targets.map((c) => () => reanalyzeCase(c)),
-      CONCURRENCY,
-    );
+  function reanalyzeAll() {
+    for (const c of cases.filter((c) => c.step === "adapted")) {
+      reanalyzeCase(c);
+    }
   }
 
   // ── Export ────────────────────────────────────────────────────────────────
@@ -442,9 +446,7 @@ export function CvBenchmarkClient() {
   const hasAnalyzed = cases.some((c) => c.step === "analyzed");
   const hasAdapted = cases.some((c) => c.step === "adapted");
   const hasDone = cases.some((c) => c.step === "done");
-  const busy = cases.some((c) =>
-    ["analyzing", "adapting", "reanalyzing"].includes(c.step),
-  );
+  const busy = cases.some((c) => ["analyzing", "adapting"].includes(c.step));
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -666,7 +668,7 @@ export function CvBenchmarkClient() {
             const scoreBefore = c.analysisOutput?.fit?.score ?? null;
             const scoreProjected =
               c.analysisOutput?.fit?.score_pos_ajustes ?? null;
-            const scoreAfter = c.reanalysisOutput?.fit?.score ?? null;
+            const scoreAfter = c.reanalysisScoreAfter ?? null;
             const drift =
               scoreAfter !== null
                 ? scoreProjected !== null
