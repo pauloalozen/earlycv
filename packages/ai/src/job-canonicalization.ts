@@ -266,6 +266,7 @@ export async function canonicalizeJobDescription(
       },
     ],
     model,
+    temperature: 0,
     text: {
       format: {
         type: "json_object",

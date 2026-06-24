@@ -1281,6 +1281,7 @@ test("saveGuestPreview does not auto-promote a resume to master when user did no
       },
       cvAdaptation: {
         findFirst: async () => null,
+        findUnique: async () => null,
         create: async ({
           data,
         }: {
@@ -1401,6 +1402,7 @@ test("saveGuestPreview returns existing adaptation for same snapshot and user", 
           userId: "user-1",
           analysisCvSnapshot: null,
         }),
+        findUnique: async () => null,
         create: async () => {
           createCalls += 1;
           throw new Error("should not create duplicate adaptation");
@@ -1480,6 +1482,7 @@ test("saveGuestPreview accepts original guest session token after login context 
       },
       cvAdaptation: {
         findFirst: async () => null,
+        findUnique: async () => null,
         create: async () => {
           createCalls += 1;
           return {
@@ -2709,6 +2712,7 @@ test("saveGuestPreview: chama upsertFromCvAdaptation com ANALYZED ao criar nova 
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
       cvAdaptation: {
         findFirst: async () => null,
+        findUnique: async () => null,
         create: async () => adaptation,
       },
     },
@@ -2751,6 +2755,7 @@ test("saveGuestPreview: chama upsertFromCvAdaptation com ANALYZED quando adapta�
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
       cvAdaptation: {
         findFirst: async () => existing,
+        findUnique: async () => null,
       },
     },
     {},
@@ -2792,6 +2797,7 @@ test("saveGuestPreview retorna adaptação mesmo sem jobTitle/companyName e não
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
       cvAdaptation: {
         findFirst: async () => null,
+        findUnique: async () => null,
         create: async () => adaptation,
       },
     },
@@ -3061,6 +3067,7 @@ test("hook envia targetStatus correto — regra de não rebaixar status é respo
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
       cvAdaptation: {
         findFirst: async () => null,
+        findUnique: async () => null,
         create: async () => adaptation,
       },
     },
@@ -3141,6 +3148,7 @@ test("falha no upsertFromCvAdaptation não quebra fluxo do saveGuestPreview", as
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
       cvAdaptation: {
         findFirst: async () => null,
+        findUnique: async () => null,
         create: async () => adaptation,
       },
     },
@@ -3182,6 +3190,7 @@ test("service mantém comportamento sem jobApplicationsService explícito — ba
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
       cvAdaptation: {
         findFirst: async () => null,
+        findUnique: async () => null,
         create: async () => adaptation,
       },
     },
