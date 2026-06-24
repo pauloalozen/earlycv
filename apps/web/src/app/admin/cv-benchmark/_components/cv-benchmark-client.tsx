@@ -234,7 +234,8 @@ const CONCURRENCY = 3;
 export function CvBenchmarkClient() {
   const [cases, setCases] = useState<BatchCase[]>([]);
   const [importing, setImporting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const filesInputRef = useRef<HTMLInputElement>(null);
 
   function updateCase(id: string, patch: Partial<BatchCase>) {
     setCases((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -534,9 +535,19 @@ export function CvBenchmarkClient() {
           IMPORTAR LOTE
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Btn onClick={() => fileInputRef.current?.click()} primary>
-            {importing ? "Importando…" : "Selecionar pasta ou arquivos"}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <Btn onClick={() => folderInputRef.current?.click()} primary>
+            {importing ? "Importando…" : "Selecionar pasta"}
+          </Btn>
+          <Btn onClick={() => filesInputRef.current?.click()}>
+            {importing ? "Importando…" : "Selecionar arquivos avulsos"}
           </Btn>
 
           {cases.length > 0 && (
@@ -545,15 +556,25 @@ export function CvBenchmarkClient() {
             </span>
           )}
 
+          {/* Folder picker */}
           <input
             accept=".txt,.md"
             multiple
             onChange={(e) => e.target.files && handleFiles(e.target.files)}
-            ref={fileInputRef}
+            ref={folderInputRef}
             style={{ display: "none" }}
             type="file"
             // @ts-expect-error – webkitdirectory não existe no tipo TS padrão mas funciona no browser
             webkitdirectory=""
+          />
+          {/* Avulso picker — sem webkitdirectory */}
+          <input
+            accept=".txt,.md"
+            multiple
+            onChange={(e) => e.target.files && handleFiles(e.target.files)}
+            ref={filesInputRef}
+            style={{ display: "none" }}
+            type="file"
           />
         </div>
 
@@ -565,8 +586,9 @@ export function CvBenchmarkClient() {
             fontFamily: '"Geist Mono", monospace',
           }}
         >
-          Selecione uma pasta com subpastas case-001/ case-002/ contendo cv.txt
-          (ou cv.md) + vaga.txt · ou arquivos avulsos 001-cv.txt 001-vaga.txt
+          Pasta: subpastas case-001/ … contendo cv.txt (ou cv.md) + vaga.txt
+          {" · "}
+          Avulso: 001-cv.txt + 001-vaga.txt (selecione todos de uma vez)
         </div>
       </div>
 
