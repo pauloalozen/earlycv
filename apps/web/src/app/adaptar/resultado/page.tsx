@@ -8,7 +8,7 @@ import {
   type CvReleaseModalStatus,
 } from "@/components/cv-release-modal";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
-import { EcvPulseLoader } from "@/components/ecv-loader";
+import { EcvBuildLoader } from "@/components/ecv-loader";
 import { PageShell } from "@/components/page-shell";
 import { PublicFooter } from "@/components/public-footer";
 import { trackEvent } from "@/lib/analytics-tracking";
@@ -1834,7 +1834,7 @@ export default function ResultadoPage() {
             "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
         }}
       >
-        <EcvPulseLoader size={48} />
+        <EcvBuildLoader size={48} />
       </div>
     );
   }

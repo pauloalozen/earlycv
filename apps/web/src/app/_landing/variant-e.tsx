@@ -427,8 +427,12 @@ export function LandingVariantE() {
               padding: "0 32px",
             }}
           >
-            <span className="e-logos-label-desktop">USADO POR CANDIDATOS EM PROCESSOS DE EMPRESAS COMO:</span>
-            <span className="e-logos-label-mobile">EMPRESAS DOS NOSSOS CANDIDATOS:</span>
+            <span className="e-logos-label-desktop">
+              USADO POR CANDIDATOS EM PROCESSOS DE EMPRESAS COMO:
+            </span>
+            <span className="e-logos-label-mobile">
+              EMPRESAS DOS NOSSOS CANDIDATOS:
+            </span>
           </span>
           <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
             <div
@@ -1421,13 +1425,16 @@ export function LandingVariantE() {
           }}
         >
           <div
+            className="e-creator-card"
             style={{
               background: "#fafaf6",
               border: "1px solid rgba(10,10,10,0.08)",
               borderRadius: 18,
               padding: "30px 34px",
               display: "flex",
-              gap: 22,
+              flexWrap: "wrap",
+              columnGap: 22,
+              rowGap: 10,
               alignItems: "flex-start",
               boxShadow: "0 4px 24px rgba(10,10,10,0.04)",
             }}
@@ -1446,7 +1453,7 @@ export function LandingVariantE() {
                 border: "1px solid rgba(10,10,10,0.08)",
               }}
             />
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
                   display: "flex",
@@ -1468,18 +1475,20 @@ export function LandingVariantE() {
                 </span>
               </div>
               <div
+                className="e-creator-subtitle"
                 style={{
                   fontFamily: MONO,
                   fontSize: 11.5,
                   color: "#6a6a66",
                   letterSpacing: 0.2,
-                  marginBottom: 14,
+                  marginBottom: 0,
                   display: "flex",
+                  flexWrap: "wrap",
                   alignItems: "center",
-                  gap: 10,
+                  gap: 6,
                 }}
               >
-                Criador do EarlyCV
+                <span style={{ whiteSpace: "nowrap" }}>Criador do EarlyCV</span>
                 <a
                   href="https://www.linkedin.com/in/pauloalozen/"
                   target="_blank"
@@ -1495,27 +1504,31 @@ export function LandingVariantE() {
                     letterSpacing: 0.3,
                     borderBottom: "1px solid rgba(10,10,10,0.18)",
                     paddingBottom: 1,
+                    whiteSpace: "nowrap",
                   }}
                 >
                   ↗ LinkedIn
                 </a>
               </div>
-              <p
-                style={{
-                  fontSize: 14.5,
-                  fontStyle: "italic",
-                  color: "#45443e",
-                  lineHeight: 1.65,
-                  margin: 0,
-                  maxWidth: 540,
-                }}
-              >
-                &ldquo;Criei o EarlyCV depois de mandar o mesmo currículo para
-                vagas diferentes e não passar em nenhuma triagem. Hoje uso essa
-                mesma ferramenta para adaptar meu CV a cada vaga que realmente
-                me interessa.&rdquo;
-              </p>
             </div>
+            <p
+              className="e-creator-quote"
+              style={{
+                fontSize: 14.5,
+                fontStyle: "italic",
+                color: "#45443e",
+                lineHeight: 1.65,
+                margin: 0,
+                maxWidth: 540,
+                flexBasis: "100%",
+                paddingLeft: 74,
+              }}
+            >
+              &ldquo;Criei o EarlyCV depois de mandar o mesmo currículo para
+              vagas diferentes e não passar em nenhuma triagem. Hoje uso essa
+              mesma ferramenta para adaptar meu CV a cada vaga que realmente
+              me interessa.&rdquo;
+            </p>
           </div>
         </div>
       </section>
@@ -1579,7 +1592,7 @@ export function LandingVariantE() {
               margin: "0 0 44px",
             }}
           >
-            Análise gratuita. Sem cartão de crédito. Em 30 segundos você já sabe
+            Análise gratuita. Sem cartão de crédito. Em 90 segundos você já sabe
             o que falta.
           </p>
           <div
@@ -1949,6 +1962,8 @@ export function LandingVariantE() {
           section { padding-left: 20px !important; padding-right: 20px !important; }
           .e-notpare-row { grid-template-columns: 32px 40px 1fr !important; }
           .e-notpare-row > a:last-child { display: none !important; }
+          .e-creator-subtitle { flex-direction: column !important; align-items: flex-start !important; gap: 4px !important; }
+          .e-creator-quote { padding-left: 0 !important; }
         }
         @media (max-width: 580px) {
           .e-pricing-grid { grid-template-columns: 1fr !important; }

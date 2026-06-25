@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
-import { EcvPulseLoader, EcvScanLoader } from "@/components/ecv-loader";
+import { EcvBuildLoader, EcvScanLoader } from "@/components/ecv-loader";
 import { PageShell } from "@/components/page-shell";
 import { trackEvent } from "@/lib/analytics-tracking";
 import type { AppInternalRole } from "@/lib/app-session";
@@ -724,7 +724,7 @@ export default function AdaptarPage() {
             "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
         }}
       >
-        <EcvPulseLoader size={48} />
+        <EcvBuildLoader size={48} />
       </div>
     );
   }
