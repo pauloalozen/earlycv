@@ -54,7 +54,7 @@ export function ClearAllButton({ action }: Props) {
       {confirming && (
         <ConfirmDialog
           title="Limpar todos os campos?"
-          description="Todos os dados do CV Master serão apagados. O arquivo original não é afetado — você pode re-extrair fazendo um novo upload."
+          description="Todos os dados do CV Master e o arquivo de CV base serão removidos. Essa ação não pode ser desfeita."
           confirmLabel="Limpar tudo"
           danger
           onConfirm={handleConfirm}

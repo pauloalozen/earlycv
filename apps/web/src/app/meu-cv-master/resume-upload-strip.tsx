@@ -85,7 +85,7 @@ function ProcessingOverlay({ fileName }: { fileName: string }) {
         className="flex w-full max-w-[380px] flex-col items-center gap-5 rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[#0a0a0a] px-8 py-8 shadow-[0_32px_80px_-16px_rgba(0,0,0,0.8)]"
         style={{ animation: "cv-block-open 0.2s ease-out both" }}
       >
-        <EcvBuildLoader size={64} />
+        <EcvBuildLoader size={64} dark />
 
         <div className="text-center">
           <p className="text-[15px] font-medium tracking-[-0.01em] text-[#fafaf6]">

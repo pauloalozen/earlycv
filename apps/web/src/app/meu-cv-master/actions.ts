@@ -54,6 +54,26 @@ export async function clearAllProfileAction() {
   redirect("/meu-cv-master");
 }
 
+export async function clearAllProfileAndResumeAction() {
+  const payload = buildClearAllPayload();
+  const profileResponse = await apiRequest("PUT", "/users/profile", payload);
+
+  if (!profileResponse.ok) {
+    throw new Error("Falha ao limpar o perfil");
+  }
+
+  const listResponse = await apiRequest("GET", "/resumes");
+  if (listResponse.ok) {
+    const resumes = (await listResponse.json()) as Array<{ id: string }>;
+    for (const resume of resumes) {
+      await apiRequest("DELETE", `/resumes/${resume.id}`);
+    }
+  }
+
+  revalidatePath("/meu-cv-master");
+  redirect("/meu-cv-master");
+}
+
 export async function clearAllProfileForReupload() {
   const payload = buildClearAllPayload();
   const response = await apiRequest("PUT", "/users/profile", payload);

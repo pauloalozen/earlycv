@@ -41,7 +41,7 @@ export function ProgressRing({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-semibold leading-none tracking-tight tabular-nums text-[#0a0a0a]">
+        <span className="text-lg font-semibold leading-none tracking-tight tabular-nums text-[#0a0a0a]">
           {value}%
         </span>
         <span className="mt-0.5 font-mono text-[8.5px] tracking-[0.06em] text-[#8a8a85]">

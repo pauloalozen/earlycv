@@ -12,7 +12,7 @@ import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getMyMasterResume } from "@/lib/resumes-api";
 
 import {
-  clearAllProfileAction,
+  clearAllProfileAndResumeAction,
   clearProfileBlockAction,
   saveProfileBlockAction,
 } from "./actions";
@@ -272,7 +272,7 @@ export default async function MeuCvMasterPage({
               <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-[#8a8a85]">
                 {blockStates.length} blocos
               </p>
-              <ClearAllButton action={clearAllProfileAction} />
+              <ClearAllButton action={clearAllProfileAndResumeAction} />
             </div>
             <div className="space-y-2">
               {blockStates.map((blockState, index) => (
