@@ -2363,25 +2363,6 @@ export function AdaptacaoCvClient({
 
               {/* LEFT: secondary / history actions */}
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                {!isEditing && localEditedOutput && (
-                  <button
-                    type="button"
-                    onClick={() => setResetConfirmOpen(true)}
-                    style={{
-                      padding: "6px 12px",
-                      background: "#f0ede8",
-                      color: "#444",
-                      border: "1px solid rgba(10,10,10,0.2)",
-                      borderRadius: 6,
-                      fontSize: 11,
-                      fontWeight: 500,
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    ↺ Voltar ao CV adaptado original
-                  </button>
-                )}
                 {(isEditing || localEditedOutput) &&
                   (reanaliseState === "running" ? (
                     <div
@@ -2418,24 +2399,56 @@ export function AdaptacaoCvClient({
                       style={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 6,
+                        gap: 8,
                       }}
                     >
                       <span
                         style={{
-                          fontSize: 11,
-                          color: "#22c55e",
-                          fontWeight: 700,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          alignSelf: "stretch",
+                          margin: "-7px 0",
+                          padding: "0 14px",
+                          background: "#0a0a0a",
+                          gap: 6,
+                          whiteSpace: "nowrap",
                         }}
                       >
-                        ✓ Score editado: {reanaliseScore}
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 500,
+                            color: getAtsScoreColors(reanaliseScore).primary,
+                            lineHeight: 1,
+                          }}
+                        >
+                          Score editado:
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 24,
+                            fontWeight: 800,
+                            color: getAtsScoreColors(reanaliseScore).primary,
+                            lineHeight: 1,
+                            letterSpacing: "-0.5px",
+                          }}
+                        >
+                          {reanaliseScore}
+                        </span>
                       </span>
                       <Link
                         href={`/adaptar/resultado?adaptationId=${reanaliseAdaptationId}`}
                         style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "6px 13px",
+                          background: "#f0ede8",
+                          color: "#333",
+                          border: "1px solid rgba(10,10,10,0.2)",
+                          borderRadius: 6,
                           fontSize: 11,
-                          color: LIME,
-                          textDecoration: "underline",
+                          fontWeight: 500,
+                          textDecoration: "none",
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -2465,6 +2478,25 @@ export function AdaptacaoCvClient({
                           : "⟳ Reanalisar CV"}
                     </button>
                   ))}
+                {!isEditing && localEditedOutput && (
+                  <button
+                    type="button"
+                    onClick={() => setResetConfirmOpen(true)}
+                    style={{
+                      padding: "6px 12px",
+                      background: "#f0ede8",
+                      color: "#444",
+                      border: "1px solid rgba(10,10,10,0.2)",
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ↺ Voltar ao CV adaptado original
+                  </button>
+                )}
               </div>
 
               {/* SPACER */}
@@ -2613,7 +2645,7 @@ export function AdaptacaoCvClient({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  ↓ Baixar PDF
+                  ↓ PDF
                 </button>
               </div>
             </div>
