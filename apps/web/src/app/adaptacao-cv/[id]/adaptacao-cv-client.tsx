@@ -16,6 +16,7 @@ import type {
 } from "@/lib/cv-adaptation-api";
 import {
   analyzeAuthenticatedCv,
+  getCvAdaptationContent,
   resetCvAdaptationContent,
   saveGuestPreview,
   saveReanalysisResult,
@@ -1828,10 +1829,15 @@ export function AdaptacaoCvClient({
     setResetStatus("resetting");
     try {
       await resetCvAdaptationContent(adaptationId);
+      const fresh = await getCvAdaptationContent(adaptationId);
+      const originalOutput = fresh.finalCvOutput ?? null;
+      setFinalCvOutput(originalOutput);
       setLocalEditedOutput(null);
-      const base = finalCvOutput?.sections ?? [];
-      setEditedSections(base as CvSection[]);
-      setEditedSummary(finalCvOutput?.summary ?? "");
+      setEditedSections((originalOutput?.sections ?? []) as CvSection[]);
+      setEditedSummary(originalOutput?.summary ?? "");
+      setReanaliseState("idle");
+      setReanaliseScore(null);
+      setReanaliseAdaptationId(null);
       setResetConfirmOpen(false);
       setIsEditing(false);
       setResetStatus("idle");
@@ -2172,8 +2178,8 @@ export function AdaptacaoCvClient({
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 5,
-                fontSize: 12,
-                color: "#444",
+                fontSize: 14,
+                color: "#888",
                 textDecoration: "none",
                 marginBottom: 6,
               }}
