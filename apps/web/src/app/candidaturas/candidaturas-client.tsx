@@ -114,7 +114,11 @@ const SECTION_GROUPS: {
 type CtaTone = "green" | "dark" | "ghost";
 type Cta = { label: string; tone: CtaTone; href: string };
 
-function ctaForStatus(status: JobApplicationStatus, detailUrl: string, hasInterviewPrep?: boolean): Cta {
+function ctaForStatus(
+  status: JobApplicationStatus,
+  detailUrl: string,
+  hasInterviewPrep?: boolean,
+): Cta {
   switch (status) {
     case "SAVED":
       return { label: "Analisar vaga", tone: "dark", href: "/adaptar" };
@@ -129,9 +133,21 @@ function ctaForStatus(status: JobApplicationStatus, detailUrl: string, hasInterv
         href: detailUrl,
       };
     case "IN_PROCESS":
-      return { label: hasInterviewPrep ? "Registrar próximo passo" : "Preparar entrevista", tone: "green", href: detailUrl };
+      return {
+        label: hasInterviewPrep
+          ? "Registrar próximo passo"
+          : "Preparar entrevista",
+        tone: "green",
+        href: detailUrl,
+      };
     case "INTERVIEW":
-      return { label: hasInterviewPrep ? "Registrar próximo passo" : "Preparar entrevista", tone: "green", href: detailUrl };
+      return {
+        label: hasInterviewPrep
+          ? "Registrar próximo passo"
+          : "Preparar entrevista",
+        tone: "green",
+        href: detailUrl,
+      };
     case "ASSESSMENT":
       return { label: "Registrar teste/case", tone: "dark", href: detailUrl };
     case "OFFER":
@@ -456,8 +472,19 @@ function StatusAccordion({
         background: "#fafaf6",
       }}
     >
-      {/* Header */}
+      {/* Header — div intencional: contém buttons internos, <button> aninhado é HTML inválido */}
+      {/* biome-ignore lint/a11y/useSemanticElements: cannot use <button> here — contains interactive children */}
       <div
+        role="button"
+        tabIndex={0}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        aria-expanded={open}
         style={{
           display: "flex",
           alignItems: "center",
@@ -466,23 +493,17 @@ function StatusAccordion({
           background: open ? headerBg : "transparent",
           borderBottom: open ? "1px solid rgba(10,10,10,0.05)" : "none",
           transition: "background 0.13s, border-color 0.3s ease",
+          cursor: "pointer",
         }}
       >
-        {/* Toggle button (step + label) */}
-        <button
-          type="button"
-          onClick={onToggle}
+        {/* Step + label */}
+        <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: 10,
             flex: open ? 0 : 0,
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
             fontFamily: GEIST,
-            textAlign: "left",
-            padding: 0,
           }}
         >
           {/* Step indicator */}
@@ -516,7 +537,7 @@ function StatusAccordion({
           >
             {label}
           </span>
-        </button>
+        </div>
 
         {/* Collapsed: company chips + avg */}
         {!open && (
@@ -581,7 +602,10 @@ function StatusAccordion({
                 <button
                   key={sk}
                   type="button"
-                  onClick={() => onSortChange(sk)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSortChange(sk);
+                  }}
                   style={{
                     fontFamily: MONO,
                     fontSize: 10.5,
@@ -636,19 +660,16 @@ function StatusAccordion({
         </span>
 
         {/* Chevron */}
-        <button
-          type="button"
-          onClick={onToggle}
+        <div
+          aria-hidden="true"
           style={{
             background: "transparent",
             border: "none",
-            cursor: "pointer",
             padding: "2px",
             display: "flex",
             alignItems: "center",
             flexShrink: 0,
           }}
-          aria-label={open ? "Fechar seção" : "Abrir seção"}
         >
           <svg
             width="13"
@@ -670,7 +691,7 @@ function StatusAccordion({
               strokeLinejoin="round"
             />
           </svg>
-        </button>
+        </div>
       </div>
 
       {/* Body com animação suave */}
@@ -726,7 +747,11 @@ function CandRow({
   const [downloading, setDownloading] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
   const detailUrl = `/candidaturas/${application.id}`;
-  const cta = ctaForStatus(application.status, detailUrl, !!application.interviewPrep);
+  const cta = ctaForStatus(
+    application.status,
+    detailUrl,
+    !!application.interviewPrep,
+  );
   const scoreBefore =
     derivedScore?.scoreBefore ?? application.scoreBefore ?? null;
   const scoreAfter = derivedScore?.scoreAfter ?? application.scoreAfter ?? null;
