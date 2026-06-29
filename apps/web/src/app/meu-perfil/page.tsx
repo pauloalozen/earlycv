@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
 import { ProgressRing } from "@/components/progress-ring";
@@ -19,6 +18,7 @@ import {
 } from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
+import { DeleteAccountDangerZone } from "../dashboard/delete-account-danger-zone";
 
 import {
   buildProfileBlockStates,
@@ -437,33 +437,9 @@ export default async function MeuPerfilPage() {
                 </p>
                 <div className="h-px flex-1 bg-[rgba(154,61,40,0.18)]" />
               </div>
-              <div
-                className="flex flex-wrap items-center justify-between gap-5 rounded-[12px] px-5 py-4"
-                style={{
-                  background: "rgba(154,61,40,0.06)",
-                  border: "1px solid rgba(154,61,40,0.28)",
-                }}
-              >
-                <div>
-                  <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#9a3d28]">
-                    Excluir conta
-                  </p>
-                  <p className="mt-0.5 max-w-[520px] text-[12.5px] leading-relaxed text-[#5a5a55]">
-                    Remove seu CV Master, análises e candidaturas. Esta ação é
-                    permanente, não dá para desfazer.
-                  </p>
-                </div>
-                <Link
-                  href="/conta/excluir"
-                  className="shrink-0 rounded-[8px] px-4 py-2.5 text-[13px] font-medium transition-colors hover:bg-[rgba(154,61,40,0.1)]"
-                  style={{
-                    color: "#9a3d28",
-                    border: "1px solid rgba(154,61,40,0.28)",
-                  }}
-                >
-                  Excluir conta
-                </Link>
-              </div>
+              <DeleteAccountDangerZone
+                creditsRemaining={availableCredits ?? 0}
+              />
             </div>
           </div>
         </div>
