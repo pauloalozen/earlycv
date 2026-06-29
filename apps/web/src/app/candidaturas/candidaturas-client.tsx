@@ -1664,6 +1664,36 @@ function CandRow({
             >
               Liberar CV
             </p>
+            <div
+              style={{
+                margin: "0 0 12px",
+                padding: "8px 10px",
+                background: "rgba(10,10,10,0.04)",
+                borderRadius: 8,
+                border: "1px solid rgba(10,10,10,0.08)",
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  color: "#0a0a0a",
+                  lineHeight: 1.3,
+                }}
+              >
+                {application.jobTitle}
+              </p>
+              <p
+                style={{
+                  margin: "2px 0 0",
+                  fontSize: 12,
+                  color: "#6a6a65",
+                }}
+              >
+                {application.companyName}
+              </p>
+            </div>
             <p
               style={{
                 margin: "0 0 14px",
