@@ -695,8 +695,13 @@ export class JobApplicationsService {
     // keep a locked (not yet purchased) adaptation as the "sent CV". If the
     // auto-selected adaptation is still locked, clear the selection so the user
     // isn't gated behind a spurious "Liberar CV para entrevista" prompt.
-    let resolvedCvAdaptationId: string | null | undefined = currentCvAdaptationId;
-    if (newStatus === "APPLIED" && currentCvAdaptationId === undefined && application.currentCvAdaptationId) {
+    let resolvedCvAdaptationId: string | null | undefined =
+      currentCvAdaptationId;
+    if (
+      newStatus === "APPLIED" &&
+      currentCvAdaptationId === undefined &&
+      application.currentCvAdaptationId
+    ) {
       const existingAdaptation = await this.database.cvAdaptation.findFirst({
         where: { id: application.currentCvAdaptationId, userId },
         select: { isUnlocked: true, status: true },
@@ -913,15 +918,21 @@ export class JobApplicationsService {
       let application: { id: string; status: JobApplicationStatus } | null =
         null;
 
-      // 1. Already linked
+      // 1. Already linked — only reuse if the candidatura is still active
       if (adaptation.jobApplicationId) {
         application = await tx.jobApplication.findFirst({
-          where: { id: adaptation.jobApplicationId, userId },
+          where: {
+            id: adaptation.jobApplicationId,
+            userId,
+            deletedAt: null,
+            archivedAt: null,
+          },
           select: { id: true, status: true },
         });
       }
 
       // 2. Find existing by (userId, normalizedTitle, normalizedCompany) in recent window
+      // Exclude deleted and archived so a new analysis always creates a fresh candidatura
       if (!application) {
         const windowStart = new Date(
           Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000,
@@ -933,6 +944,8 @@ export class JobApplicationsService {
             normalizedJobTitle,
             normalizedCompanyName,
             createdAt: { gte: windowStart },
+            deletedAt: null,
+            archivedAt: null,
           },
           orderBy: { createdAt: "desc" },
           select: { id: true, status: true },
