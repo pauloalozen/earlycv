@@ -1896,13 +1896,12 @@ export function AdaptacaoCvClient({
     setReanaliseState("running");
     setReanaliseError(null);
     try {
+      const savedOutput = localEditedOutput ?? editedCvJson ?? finalCvOutput;
       const cvText = sectionsToText(
         isEditing
           ? editedSections
-          : (((editedCvJson ?? finalCvOutput)?.sections ?? []) as CvSection[]),
-        isEditing
-          ? editedSummary
-          : ((editedCvJson ?? finalCvOutput)?.summary ?? ""),
+          : ((savedOutput?.sections ?? []) as CvSection[]),
+        isEditing ? editedSummary : (savedOutput?.summary ?? ""),
       );
 
       const formData = new FormData();
