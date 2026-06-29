@@ -113,9 +113,8 @@ export class JobApplicationInterviewPrepService {
     }
 
     const currentAdaptation =
-      application.cvAdaptations.find(
-        (cv) => cv.id === resolvedAdaptationId,
-      ) ?? null;
+      application.cvAdaptations.find((cv) => cv.id === resolvedAdaptationId) ??
+      null;
 
     if (!currentAdaptation) {
       throw new ConflictException(

@@ -19,8 +19,8 @@ import { ListJobApplicationHighlightsDto } from "./dto/list-job-application-high
 import { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import { RejectionFeedbackDto } from "./dto/rejection-feedback.dto";
 import { ScheduleInterviewDto } from "./dto/schedule-interview.dto";
-import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
 import { UpdateJobApplicationDescriptionDto } from "./dto/update-job-application-description.dto";
+import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
 import { UpdateJobApplicationUrlDto } from "./dto/update-job-application-url.dto";
 import { JobApplicationInterviewPrepService } from "./interview-prep.service";
 import { JobApplicationsService } from "./job-applications.service";
@@ -178,11 +178,7 @@ export class JobApplicationsController {
     )
     dto: UpdateJobApplicationDescriptionDto,
   ) {
-    return this.service.updateDescription(
-      user.id,
-      id,
-      dto.jobDescriptionText,
-    );
+    return this.service.updateDescription(user.id, id, dto.jobDescriptionText);
   }
 
   @Patch(":id/url")

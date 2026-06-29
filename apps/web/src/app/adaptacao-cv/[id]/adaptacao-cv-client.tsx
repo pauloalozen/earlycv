@@ -18,6 +18,7 @@ import {
   analyzeAuthenticatedCv,
   resetCvAdaptationContent,
   saveGuestPreview,
+  saveReanalysisResult,
   updateCvAdaptationContent,
 } from "@/lib/cv-adaptation-api";
 
@@ -1464,13 +1465,16 @@ export function AdaptacaoCvClient({
     useState<CvSection[]>(initialSections);
   const [editedSummary, setEditedSummary] = useState<string>(initialSummary);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const persistedReanalysis = editedCvJson?.reanalysisResult ?? null;
   const [reanaliseState, setReanaliseState] = useState<
     "idle" | "running" | "done" | "error"
-  >("idle");
+  >(persistedReanalysis ? "done" : "idle");
   const [reanaliseAdaptationId, setReanaliseAdaptationId] = useState<
     string | null
-  >(null);
-  const [reanaliseScore, setReanaliseScore] = useState<number | null>(null);
+  >(persistedReanalysis?.adaptationId ?? null);
+  const [reanaliseScore, setReanaliseScore] = useState<number | null>(
+    persistedReanalysis?.score ?? null,
+  );
   const [_reanaliseError, setReanaliseError] = useState<string | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [addSectionOpen, setAddSectionOpen] = useState(false);
@@ -1940,6 +1944,11 @@ export function AdaptacaoCvClient({
       setReanaliseScore(newScore);
       setReanaliseAdaptationId(saved.id);
       setReanaliseState("done");
+      if (newScore !== null) {
+        saveReanalysisResult(adaptationId, saved.id, newScore).catch(() => {
+          // non-critical — state already updated in memory
+        });
+      }
     } catch (e) {
       setReanaliseError(
         e instanceof Error ? e.message : "Erro ao reanalisar. Tente novamente.",

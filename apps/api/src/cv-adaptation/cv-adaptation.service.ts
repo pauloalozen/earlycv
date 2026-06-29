@@ -2558,7 +2558,10 @@ export class CvAdaptationService {
         typeof (s as { sectionType?: string }).sectionType === "string" &&
         (s as { sectionType: string }).sectionType !== "other",
     );
-    if (adaptation.status === "delivered" && (!finalCvOutput || !hasRealSections)) {
+    if (
+      adaptation.status === "delivered" &&
+      (!finalCvOutput || !hasRealSections)
+    ) {
       void this.database.cvAdaptation
         .findFirst({
           where: { id, userId },
@@ -2615,6 +2618,46 @@ export class CvAdaptationService {
     await this.database.cvAdaptation.update({
       where: { id },
       data: { editedCvJson: Prisma.DbNull },
+    });
+  }
+
+  async saveReanalysisResult(
+    userId: string,
+    id: string,
+    reanalysisResult: { adaptationId: string; score: number },
+  ): Promise<void> {
+    const adaptation = await this.database.cvAdaptation.findFirst({
+      where: { id, userId },
+      select: { isUnlocked: true, editedCvJson: true },
+    });
+
+    if (!adaptation) {
+      throw new NotFoundException("adaptation not found");
+    }
+
+    if (!adaptation.isUnlocked) {
+      throw new BadRequestException("Adaptation is not unlocked.");
+    }
+
+    const existing = (adaptation.editedCvJson ??
+      {}) as Partial<CvAdaptationOutput>;
+    const updated: CvAdaptationOutput = {
+      summary: existing.summary ?? "",
+      sections: existing.sections ?? [],
+      highlightedSkills: existing.highlightedSkills ?? [],
+      removedSections: existing.removedSections ?? [],
+      adaptationNotes: existing.adaptationNotes,
+      requirementAdaptationActions: existing.requirementAdaptationActions,
+      reanalysisResult: {
+        adaptationId: reanalysisResult.adaptationId,
+        score: reanalysisResult.score,
+        analyzedAt: new Date().toISOString(),
+      },
+    };
+
+    await this.database.cvAdaptation.update({
+      where: { id },
+      data: { editedCvJson: updated as unknown as Prisma.InputJsonValue },
     });
   }
 

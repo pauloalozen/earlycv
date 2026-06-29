@@ -26,6 +26,12 @@ export type CvSection = {
   items: CvSectionItem[];
 };
 
+export type CvReanalysisResult = {
+  adaptationId: string;
+  score: number;
+  analyzedAt: string;
+};
+
 export type CvAdaptationOutput = {
   summary: string;
   mainGoal?: string;
@@ -34,4 +40,5 @@ export type CvAdaptationOutput = {
   removedSections: string[];
   adaptationNotes?: string;
   requirementAdaptationActions?: RequirementAdaptationAction[];
+  reanalysisResult?: CvReanalysisResult;
 };

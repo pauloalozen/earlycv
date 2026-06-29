@@ -150,12 +150,19 @@ export type CvSection = {
   }>;
 };
 
+export type CvReanalysisResult = {
+  adaptationId: string;
+  score: number;
+  analyzedAt: string;
+};
+
 export type FinalCvOutput = {
   summary?: string;
   sections?: CvSection[];
   highlightedSkills?: string[];
   removedSections?: string[];
   adaptationNotes?: string;
+  reanalysisResult?: CvReanalysisResult;
 };
 
 export type CvAdaptationContentResponse = {
@@ -182,6 +189,21 @@ export async function getCvAdaptationContent(
     throw new Error("Failed to fetch adaptation content");
   }
   return response.json() as Promise<CvAdaptationContentResponse>;
+}
+
+export async function saveReanalysisResult(
+  id: string,
+  adaptationId: string,
+  score: number,
+): Promise<void> {
+  const response = await apiRequest(
+    "PATCH",
+    `/cv-adaptation/${id}/reanalysis-result`,
+    { adaptationId, score },
+  );
+  if (!response.ok) {
+    throw new Error("Failed to save reanalysis result");
+  }
 }
 
 export async function resetCvAdaptationContent(id: string): Promise<void> {

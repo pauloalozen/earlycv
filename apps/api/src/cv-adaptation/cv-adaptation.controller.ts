@@ -288,6 +288,15 @@ export class CvAdaptationController {
     return this.cvAdaptationService.resetCvContent(user.id, id);
   }
 
+  @Patch(":id/reanalysis-result")
+  saveReanalysisResult(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+    @Body() body: { adaptationId: string; score: number },
+  ) {
+    return this.cvAdaptationService.saveReanalysisResult(user.id, id, body);
+  }
+
   @Patch(":id/cv-content")
   updateCvContent(
     @AuthenticatedUser() user: { id: string },
