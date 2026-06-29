@@ -2355,15 +2355,93 @@ export function AdaptacaoCvClient({
               {/* LEFT: secondary / history actions */}
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 {!isEditing && localEditedOutput && (
-                  <>
+                  <button
+                    type="button"
+                    onClick={() => setResetConfirmOpen(true)}
+                    style={{
+                      padding: "6px 12px",
+                      background: "#f0ede8",
+                      color: "#444",
+                      border: "1px solid rgba(10,10,10,0.2)",
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ↺ Voltar ao CV adaptado original
+                  </button>
+                )}
+                {(isEditing || localEditedOutput) &&
+                  (reanaliseState === "running" ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "6px 10px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: "50%",
+                          border: `2px solid rgba(212,133,74,0.2)`,
+                          borderTop: `2px solid ${AMBER}`,
+                          animation: "spin 0.9s linear infinite",
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: AMBER,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Analisando...
+                      </span>
+                    </div>
+                  ) : reanaliseState === "done" && reanaliseScore !== null ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "#22c55e",
+                          fontWeight: 700,
+                        }}
+                      >
+                        ✓ Score editado: {reanaliseScore}
+                      </span>
+                      <Link
+                        href={`/adaptar/resultado?adaptationId=${reanaliseAdaptationId}`}
+                        style={{
+                          fontSize: 11,
+                          color: LIME,
+                          textDecoration: "underline",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Ver análise →
+                      </Link>
+                    </div>
+                  ) : (
                     <button
                       type="button"
-                      onClick={() => setResetConfirmOpen(true)}
+                      onClick={handleReanalisar}
                       style={{
                         padding: "6px 12px",
                         background: "#f0ede8",
-                        color: "#444",
-                        border: "1px solid rgba(10,10,10,0.2)",
+                        color: "#7a4a10",
+                        border: `1px solid ${AMBER_BORDER}`,
                         borderRadius: 6,
                         fontSize: 11,
                         fontWeight: 500,
@@ -2371,90 +2449,13 @@ export function AdaptacaoCvClient({
                         whiteSpace: "nowrap",
                       }}
                     >
-                      ↺ Voltar ao CV adaptado original
-                    </button>
-                    {reanaliseState === "running" ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "6px 10px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 12,
-                            height: 12,
-                            borderRadius: "50%",
-                            border: `2px solid rgba(212,133,74,0.2)`,
-                            borderTop: `2px solid ${AMBER}`,
-                            animation: "spin 0.9s linear infinite",
-                            flexShrink: 0,
-                          }}
-                        />
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: AMBER,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Analisando...
-                        </span>
-                      </div>
-                    ) : reanaliseState === "done" && reanaliseScore !== null ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: "#22c55e",
-                            fontWeight: 700,
-                          }}
-                        >
-                          ✓ Score editado: {reanaliseScore}
-                        </span>
-                        <Link
-                          href={`/adaptar/resultado?adaptationId=${reanaliseAdaptationId}`}
-                          style={{
-                            fontSize: 11,
-                            color: LIME,
-                            textDecoration: "underline",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Ver análise →
-                        </Link>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleReanalisar}
-                        style={{
-                          padding: "6px 12px",
-                          background: "#f0ede8",
-                          color: "#7a4a10",
-                          border: `1px solid ${AMBER_BORDER}`,
-                          borderRadius: 6,
-                          fontSize: 11,
-                          fontWeight: 500,
-                          cursor: "pointer",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {reanaliseState === "error"
-                          ? "⟳ Tentar novamente"
+                      {reanaliseState === "error"
+                        ? "⟳ Tentar novamente"
+                        : isEditing
+                          ? "⟳ Reanalisar edições"
                           : "⟳ Reanalisar CV"}
-                      </button>
-                    )}
-                  </>
-                )}
+                    </button>
+                  ))}
               </div>
 
               {/* SPACER */}
@@ -2536,7 +2537,10 @@ export function AdaptacaoCvClient({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setIsEditing(true)}
+                    onClick={() => {
+                      setIsEditing(true);
+                      setReanaliseState("idle");
+                    }}
                     style={{
                       padding: "6px 16px",
                       background: "#1a1a1a",
