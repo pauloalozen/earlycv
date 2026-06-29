@@ -199,7 +199,7 @@ type RequirementScoringSummary = {
   qualitativeSignals: string[];
 };
 
-export const CV_ANALYSIS_PROMPT_VERSION = "2026-06-12.v1";
+export const CV_ANALYSIS_PROMPT_VERSION = "2026-06-29.v1";
 
 const SYSTEM_PROMPT = `You are an expert CV enhancement specialist focused on the Brazilian job market. Your task is to improve a candidate's existing CV to better match a specific job opening and improve machine readability, while keeping the final CV natural, credible, and human-written.
 
@@ -1294,6 +1294,11 @@ coverageStatus:
 - "covered": o CV já comprova claramente o requisito.
 - "partial": há evidência real, mas fraca, incompleta ou pouco visível.
 - "missing": não há evidência suficiente no CV.
+
+Requisitos com dimension "experience":
+- Evidência DEVE vir de uma entrada de experiência profissional (cargo com empresa, período ou responsabilidade concreta).
+- Keywords encontradas apenas em seção de competências, habilidades ou resumo NÃO constituem evidência para dimension "experience".
+- Se não houver nenhuma entrada de experiência que suporte o requisito → coverageStatus: "missing", evidence: [], coveragePercent: 0.
 
 evidence:
 - Use trechos curtos do CV.
