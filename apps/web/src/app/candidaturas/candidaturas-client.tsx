@@ -736,6 +736,7 @@ function CandRow({
 }) {
   const router = useRouter();
   const [confirmUnlock, setConfirmUnlock] = useState(false);
+  const [confirmUnlockVisible, setConfirmUnlockVisible] = useState(false);
   const [redeeming, setRedeeming] = useState(false);
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -822,7 +823,7 @@ function CandRow({
         }
         throw new Error(apiMessage);
       }
-      setConfirmUnlock(false);
+      closeUnlockModal();
       router.refresh();
     } catch (error) {
       if (error instanceof TypeError) {
@@ -871,6 +872,25 @@ function CandRow({
     } finally {
       setDownloading(false);
     }
+  };
+
+  const openUnlockModal = () => {
+    setRedeemError(null);
+    setConfirmUnlock(true);
+    setConfirmUnlockVisible(false);
+    window.requestAnimationFrame(() => setConfirmUnlockVisible(true));
+  };
+
+  const closeUnlockModal = () => {
+    setConfirmUnlockVisible(false);
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      setConfirmUnlock(false);
+      setRedeemError(null);
+      closeTimerRef.current = null;
+    }, 180);
   };
 
   const openDeleteModal = () => {
@@ -1477,111 +1497,41 @@ function CandRow({
             </>
           ) : application.bestCvState === "locked" &&
             cvAdaptationIdForActions ? (
-            confirmUnlock ? (
-              <div
-                style={{
-                  border: "1px solid rgba(10,10,10,0.12)",
-                  borderRadius: 8,
-                  padding: "10px 10px 8px",
-                  background: "#fff",
-                }}
+            <button
+              type="button"
+              onClick={openUnlockModal}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                borderRadius: 8,
+                padding: "10px 14px",
+                fontSize: 12.5,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: GEIST,
+                textDecoration: "none",
+                background: "#fff",
+                color: "#0a0a0a",
+                border: "1px solid rgba(10,10,10,0.12)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <svg
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
               >
-                <p
-                  style={{ margin: "0 0 8px", fontSize: 12, color: "#3a3a36" }}
-                >
-                  Confirmar liberação de 1 crédito para baixar este CV?
-                </p>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setConfirmUnlock(false);
-                      setRedeemError(null);
-                    }}
-                    style={{
-                      flex: 1,
-                      borderRadius: 8,
-                      border: "1px solid rgba(10,10,10,0.12)",
-                      background: "#fff",
-                      padding: "8px 10px",
-                      fontSize: 12,
-                      cursor: "pointer",
-                      fontFamily: GEIST,
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleRedeem()}
-                    disabled={redeeming}
-                    style={{
-                      flex: 1,
-                      borderRadius: 8,
-                      border: "1px solid #0a0a0a",
-                      background: "#0a0a0a",
-                      color: "#fff",
-                      padding: "8px 10px",
-                      fontSize: 12,
-                      cursor: redeeming ? "not-allowed" : "pointer",
-                      fontFamily: GEIST,
-                    }}
-                  >
-                    {redeeming ? "Liberando..." : "Confirmar liberação"}
-                  </button>
-                </div>
-                {redeemError ? (
-                  <p
-                    style={{
-                      margin: "8px 0 0",
-                      fontSize: 11.5,
-                      color: "#991b1b",
-                    }}
-                  >
-                    {redeemError}
-                  </p>
-                ) : null}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setConfirmUnlock(true);
-                  setRedeemError(null);
-                }}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  fontSize: 12.5,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  fontFamily: GEIST,
-                  textDecoration: "none",
-                  background: "#fff",
-                  color: "#0a0a0a",
-                  border: "1px solid rgba(10,10,10,0.12)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <svg
-                  aria-hidden="true"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <rect x="4" y="11" width="16" height="9" rx="2" />
-                  <path d="M8 11V8a4 4 0 1 1 8 0" strokeLinecap="round" />
-                </svg>
-                <span>Liberar CV · 1 crédito</span>
-              </button>
-            )
+                <rect x="4" y="11" width="16" height="9" rx="2" />
+                <path d="M8 11V8a4 4 0 1 1 8 0" strokeLinecap="round" />
+              </svg>
+              <span>Liberar CV · 1 crédito</span>
+            </button>
           ) : application.bestCvState === "missing" ? (
             <button
               type="button"
@@ -1654,6 +1604,129 @@ function CandRow({
           </Link>
         )}
       </div>
+
+      {confirmUnlock ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 70,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(10,10,10,0.35)",
+            padding: "0 16px",
+            transition: "opacity 180ms ease",
+            opacity: confirmUnlockVisible ? 1 : 0,
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Fechar"
+            onClick={() => {
+              if (!redeeming) closeUnlockModal();
+            }}
+            style={{
+              position: "absolute",
+              inset: 0,
+              border: 0,
+              background: "transparent",
+              cursor: "pointer",
+            }}
+          />
+          <div
+            style={{
+              position: "relative",
+              zIndex: 1,
+              width: "100%",
+              maxWidth: 420,
+              background: "#fff",
+              border: "1px solid rgba(10,10,10,0.12)",
+              borderRadius: 16,
+              padding: "20px 18px",
+              boxShadow: "0 24px 60px -20px rgba(10,10,10,0.35)",
+              transition: "opacity 180ms ease, transform 180ms ease",
+              opacity: confirmUnlockVisible ? 1 : 0,
+              transform: confirmUnlockVisible
+                ? "translateY(0) scale(1)"
+                : "translateY(6px) scale(0.98)",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 6px",
+                fontSize: 16,
+                fontWeight: 600,
+                color: "#0a0a0a",
+              }}
+            >
+              Liberar CV
+            </p>
+            <p
+              style={{
+                margin: "0 0 14px",
+                fontSize: 13.5,
+                color: "#55524d",
+                lineHeight: 1.45,
+              }}
+            >
+              Será usado 1 crédito para liberar o download deste CV adaptado.
+              Essa ação não pode ser desfeita.
+            </p>
+            {redeemError ? (
+              <p
+                style={{
+                  margin: "-8px 0 12px",
+                  fontSize: 12,
+                  color: "#991b1b",
+                }}
+              >
+                {redeemError}
+              </p>
+            ) : null}
+            <div
+              style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+            >
+              <button
+                type="button"
+                onClick={() => closeUnlockModal()}
+                disabled={redeeming}
+                style={{
+                  borderRadius: 8,
+                  border: "1px solid rgba(10,10,10,0.12)",
+                  background: "#fff",
+                  color: "#0a0a0a",
+                  fontSize: 12,
+                  padding: "8px 10px",
+                  cursor: redeeming ? "not-allowed" : "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRedeem()}
+                disabled={redeeming}
+                style={{
+                  borderRadius: 8,
+                  border: "1px solid #0a0a0a",
+                  background: "#0a0a0a",
+                  color: "#fff",
+                  fontSize: 12,
+                  padding: "8px 10px",
+                  cursor: redeeming ? "not-allowed" : "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                {redeeming ? "Liberando..." : "Confirmar liberação"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {confirmDelete ? (
         <div
