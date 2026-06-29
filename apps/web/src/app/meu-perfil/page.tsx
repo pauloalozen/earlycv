@@ -18,12 +18,11 @@ import {
 } from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
-import { DeleteAccountDangerZone } from "../dashboard/delete-account-danger-zone";
-
 import {
   buildProfileBlockStates,
   type UserProfileRecord,
 } from "../meu-cv-master/profile-blocks";
+import { DeleteAccountSection } from "./delete-account-section";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -437,9 +436,7 @@ export default async function MeuPerfilPage() {
                 </p>
                 <div className="h-px flex-1 bg-[rgba(154,61,40,0.18)]" />
               </div>
-              <DeleteAccountDangerZone
-                creditsRemaining={availableCredits ?? 0}
-              />
+              <DeleteAccountSection creditsRemaining={availableCredits ?? 0} />
             </div>
           </div>
         </div>
