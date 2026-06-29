@@ -754,6 +754,9 @@ export function InterviewPrepDrawer({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [isRendered, setIsRendered] = useState(false);
+  // backdropReady and visible are separate so the backdrop can appear
+  // instantly on mount (no flicker) while the panel slides in via rAF.
+  const [backdropReady, setBackdropReady] = useState(false);
   const [visible, setVisible] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
@@ -765,11 +768,15 @@ export function InterviewPrepDrawer({
       }
       document.documentElement.style.overflow = "hidden";
       document.documentElement.style.scrollbarWidth = "none";
+      // Mount + backdrop instantly opaque in same synchronous flush (paint #1:
+      // background covered, panel still off-screen). Panel slides in on rAF.
       setIsRendered(true);
-      setVisible(true);
-      return;
+      setBackdropReady(true);
+      const raf = requestAnimationFrame(() => setVisible(true));
+      return () => cancelAnimationFrame(raf);
     }
     setVisible(false);
+    setBackdropReady(false);
     setError(null);
     const t = setTimeout(() => {
       setIsRendered(false);
@@ -829,14 +836,6 @@ export function InterviewPrepDrawer({
   return (
     <>
       <style>{`
-        @keyframes prep-slide-in {
-          from { transform: translateX(100%); }
-          to   { transform: translateX(0); }
-        }
-        @keyframes prep-slide-out {
-          from { transform: translateX(0); }
-          to   { transform: translateX(100%); }
-        }
         @media (max-width: 767px) {
           .prep-header { flex-direction: column !important; gap: 12px !important; }
           .prep-header-actions { flex-shrink: unset !important; align-self: flex-end !important; }
@@ -851,10 +850,12 @@ export function InterviewPrepDrawer({
           inset: 0,
           zIndex: 100,
           background: "rgba(10,10,10,0.45)",
-          backdropFilter: visible ? "blur(3px)" : "none",
-          opacity: visible ? 1 : 0,
-          pointerEvents: visible ? "auto" : "none",
-          transition: "opacity 200ms ease, backdrop-filter 200ms ease",
+          backdropFilter: backdropReady ? "blur(3px)" : "none",
+          opacity: backdropReady ? 1 : 0,
+          pointerEvents: backdropReady ? "auto" : "none",
+          // No transition on entry (backdropReady=true in same flush as mount)
+          // so backdrop is instant. On exit (backdropReady→false) transition plays.
+          transition: backdropReady ? "none" : "opacity 200ms ease, backdrop-filter 200ms ease",
         }}
       />
 
@@ -876,9 +877,9 @@ export function InterviewPrepDrawer({
           boxShadow: "-24px 0 60px -10px rgba(10,10,10,0.28)",
           display: "flex",
           flexDirection: "column",
-          animation: visible
-            ? "prep-slide-in 280ms cubic-bezier(0.22,1,0.36,1) both"
-            : "prep-slide-out 280ms cubic-bezier(0.22,1,0.36,1) forwards",
+          transform: visible ? "translateX(0)" : "translateX(100%)",
+          transition: "transform 280ms cubic-bezier(0.22,1,0.36,1)",
+          willChange: "transform",
         }}
       >
         {prep ? (

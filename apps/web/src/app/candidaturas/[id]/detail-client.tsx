@@ -5234,6 +5234,10 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
   };
 
   const handlePrepWithUnlockedCv = () => {
+    if (selectedAdaptation) {
+      selectAdaptationAndOpenPrep(selectedAdaptation.id);
+      return;
+    }
     if (unlockedAdaptations.length === 1) {
       selectAdaptationAndOpenPrep(unlockedAdaptations[0].id);
       return;
