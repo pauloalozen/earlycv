@@ -823,8 +823,7 @@ function CandRow({
         }
         throw new Error(apiMessage);
       }
-      closeUnlockModal();
-      router.refresh();
+      router.push(`/adaptacao-cv/${cvAdaptationIdForActions}`);
     } catch (error) {
       if (error instanceof TypeError) {
         setRedeemError(
@@ -1703,7 +1702,6 @@ function CandRow({
               }}
             >
               Será usado 1 crédito para liberar o download deste CV adaptado.
-              Essa ação não pode ser desfeita.
             </p>
             {redeemError ? (
               <p
