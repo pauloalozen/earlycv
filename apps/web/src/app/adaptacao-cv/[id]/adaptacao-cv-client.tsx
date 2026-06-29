@@ -264,7 +264,7 @@ function sectionsToText(sections: CvSection[], summary?: string): string {
         .join(" | ");
       if (heading) lines.push(heading);
       if (item.dateRange) lines.push(item.dateRange);
-      for (const b of (item.bullets ?? [])) {
+      for (const b of item.bullets ?? []) {
         if (b.trim()) lines.push(`• ${b}`);
       }
       lines.push("");
@@ -1200,7 +1200,10 @@ function CvSectionBlock({
                       <button
                         type="button"
                         onClick={() =>
-                          onBulletsChange(itemIdx, [...(item.bullets ?? []), ""])
+                          onBulletsChange(itemIdx, [
+                            ...(item.bullets ?? []),
+                            "",
+                          ])
                         }
                         style={{
                           fontSize: 11,
@@ -1526,6 +1529,7 @@ export function AdaptacaoCvClient({
         setEditedSections(
           (payload.finalCvOutput?.sections ?? []) as CvSection[],
         );
+        setEditedSummary(payload.finalCvOutput?.summary ?? "");
         setIsGenerating(false);
         return true;
       }
