@@ -65,4 +65,8 @@ export class SaveGuestPreviewDto {
   @MaxLength(512)
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   guestSessionPublicToken?: string;
+
+  @IsOptional()
+  @IsString()
+  jobApplicationId?: string;
 }

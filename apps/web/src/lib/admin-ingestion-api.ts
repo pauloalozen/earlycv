@@ -221,10 +221,11 @@ async function resolveToken(token?: string) {
 
 async function apiRequest<T>(path: string, token?: string, init?: RequestInit) {
   const bearerToken = await resolveToken(token);
+  const isRead = !init?.method || init.method === "GET";
 
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
-    cache: "no-store",
+    ...(isRead ? { next: { revalidate: 60 } } : { cache: "no-store" as const }),
     headers: {
       Authorization: `Bearer ${bearerToken}`,
       ...(init?.headers ?? {}),
@@ -258,7 +259,10 @@ export async function listJobSourcesPaginated(
   if (params.search) qs.set("search", params.search);
   if (params.statusFilter) qs.set("statusFilter", params.statusFilter);
   if (params.typeFilter) qs.set("typeFilter", params.typeFilter);
-  return apiRequest<JobSourcePagedResult>(`/job-sources/paginated?${qs}`, token);
+  return apiRequest<JobSourcePagedResult>(
+    `/job-sources/paginated?${qs}`,
+    token,
+  );
 }
 
 export async function listCompanies(token?: string) {

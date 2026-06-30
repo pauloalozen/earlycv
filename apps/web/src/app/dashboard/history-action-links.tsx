@@ -42,6 +42,8 @@ type Props = {
     masterResumeTitle: string | null;
   };
   hasCredits: boolean | null;
+  jobApplicationId?: string | null;
+  adaptationId?: string | null;
   hideBaseCvAction?: boolean;
   removeTopMargin?: boolean;
 };
@@ -148,6 +150,8 @@ export function HistoryActionLinks({
   adjustments,
   analysisContext,
   hasCredits,
+  jobApplicationId,
+  adaptationId,
   hideBaseCvAction = false,
   removeTopMargin = false,
 }: Props) {
@@ -406,6 +410,35 @@ export function HistoryActionLinks({
         {getReviewActionCopy(openingReview)}
       </button>
 
+      {jobApplicationId && (
+        <a
+          href={`/candidaturas/${jobApplicationId}`}
+          style={{ color: "#405410", ...sharedChipTextStyle }}
+          className="inline-flex h-8 w-full appearance-none items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border border-[rgba(110,150,20,0.3)] bg-[rgba(198,255,58,0.12)] px-3 text-xs leading-none font-semibold transition-colors hover:bg-[rgba(198,255,58,0.2)] sm:w-auto"
+          data-testid="ver-candidatura-link"
+        >
+          <span aria-hidden="true" style={{ display: "inline-flex" }}>
+            <svg
+              aria-hidden="true"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+              <path d="M9 12h6" />
+              <path d="M9 16h6" />
+            </svg>
+          </span>
+          Ver candidatura
+        </a>
+      )}
+
       {!hideBaseCvAction && actions.canDownloadBaseCv ? (
         <button
           type="button"
@@ -494,17 +527,30 @@ export function HistoryActionLinks({
               REDEEM_REQUEST_TIMEOUT_MS,
             );
 
+            let storedKeywords: string[] = [];
+            if (adaptationId) {
+              try {
+                const raw = sessionStorage.getItem(`kw_sel_${adaptationId}`);
+                if (raw) storedKeywords = JSON.parse(raw) as string[];
+              } catch {
+                // unavailable or malformed
+              }
+            }
+            const effectiveKeywords =
+              (actions.selectedMissingKeywords ?? []).length > 0
+                ? (actions.selectedMissingKeywords ?? [])
+                : storedKeywords;
+
             try {
               const redeemRequest = fetch(actions.redeemHref, {
                 method: "POST",
                 cache: "no-store",
                 signal: controller.signal,
-                ...(actions.selectedMissingKeywords?.length
+                ...(effectiveKeywords.length > 0
                   ? {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        selectedMissingKeywords:
-                          actions.selectedMissingKeywords,
+                        selectedMissingKeywords: effectiveKeywords,
                       }),
                     }
                   : {}),

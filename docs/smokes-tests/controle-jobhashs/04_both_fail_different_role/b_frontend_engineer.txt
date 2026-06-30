@@ -1,0 +1,17 @@
+Frontend Engineer Pleno
+
+Empresa: Bradesco
+Local: São Paulo
+Modelo: Híbrido
+
+Responsabilidades:
+- Desenvolver interfaces web com React.
+- Construir componentes reutilizáveis.
+- Integrar aplicações frontend com APIs REST.
+- Garantir qualidade visual e performance.
+
+Requisitos:
+- React.
+- TypeScript.
+- HTML e CSS.
+- Testes frontend.

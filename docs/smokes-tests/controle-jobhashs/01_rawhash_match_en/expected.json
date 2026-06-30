@@ -1,0 +1,6 @@
+{
+  "rawHash": "MATCH",
+  "canonicalHash": "MATCH",
+  "requirementSourceHash": "MATCH",
+  "reason": "Same content, only casing, spacing and line breaks differ."
+}

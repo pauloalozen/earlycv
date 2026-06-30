@@ -1,0 +1,35 @@
+Analytics Engineer
+Orbit Metrics
+Austin, TX, United States
+Hybrid
+Full-time
+
+Indeed's salary guide
+Not provided by employer
+$110,000 - $140,000 a year is Indeed's estimated salary for this role in Austin, TX, United States.
+
+Job details
+Here’s how the job details align with your profile.
+Pay
+Full-time
+Hybrid
+
+Easily apply
+Save this job
+Company page
+Report job
+
+Full job description
+We are looking for an Analytics Engineer to build reliable analytics datasets and self-serve dashboards for go-to-market teams.
+
+Responsibilities:
+- Model data in dbt.
+- Build and maintain dashboards in Looker.
+- Partner with sales and marketing teams on KPI definitions.
+- Improve data quality across analytics workflows.
+
+Requirements:
+- Strong SQL skills.
+- Experience with dbt.
+- Experience with BI tools such as Looker.
+- Ability to work with business stakeholders.

@@ -9,8 +9,12 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = req.nextUrl;
-  const page = searchParams.get("page") ? Number(searchParams.get("page")) : undefined;
-  const pageSize = searchParams.get("pageSize") ? Number(searchParams.get("pageSize")) : undefined;
+  const page = searchParams.get("page")
+    ? Number(searchParams.get("page"))
+    : undefined;
+  const pageSize = searchParams.get("pageSize")
+    ? Number(searchParams.get("pageSize"))
+    : undefined;
   const search = searchParams.get("search") ?? undefined;
   const statusFilter = searchParams.get("statusFilter") ?? undefined;
   const typeFilter = searchParams.get("typeFilter") ?? undefined;
@@ -22,6 +26,9 @@ export async function GET(req: NextRequest) {
     );
     return NextResponse.json(result);
   } catch {
-    return NextResponse.json({ error: "Failed to fetch sources" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch sources" },
+      { status: 500 },
+    );
   }
 }

@@ -74,12 +74,19 @@ export class ResumesController {
     )
     dto: CreateResumeDto,
   ) {
-    return this.resumesService.create(user.id, dto, file);
+    return this.resumesService.create(user.id, dto, file, dto.turnstileToken);
   }
 
   @Get()
   list(@AuthenticatedUser() user: AuthenticatedRequestUser) {
     return this.resumesService.list(user.id);
+  }
+
+  @Get("master-cv-extraction-status")
+  getMasterCvExtractionStatus(
+    @AuthenticatedUser() user: AuthenticatedRequestUser,
+  ) {
+    return this.resumesService.getMasterCvExtractionStatus(user.id);
   }
 
   @Get(":id")

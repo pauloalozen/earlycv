@@ -1,8 +1,9 @@
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Card, EmptyState, Input } from "@/components/ui";
-import { filterJobs } from "@/lib/admin-operations";
-import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import { listJobSources, listJobs } from "@/lib/admin-ingestion-api";
+import { buildSourceStatus, filterJobs } from "@/lib/admin-operations";
 import { buildAdminStateModel } from "@/lib/admin-state";
+import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
@@ -33,19 +34,34 @@ export default async function AdminJobsPage({ searchParams }: JobsPageProps) {
     );
   }
 
-  const jobsDataResult = await getPhaseOneAdminDataSafely();
+  let jobs: Awaited<ReturnType<typeof listJobs>>;
+  let sourceViews: Array<
+    Awaited<ReturnType<typeof listJobSources>>[number] & {
+      status: ReturnType<typeof buildSourceStatus>;
+    }
+  >;
 
-  if (jobsDataResult.kind !== "ok") {
-    const state = buildAdminStateModel(jobsDataResult.kind, "/admin/vagas");
-
+  try {
+    const [fetchedJobs, jobSources] = await Promise.all([
+      listJobs(),
+      listJobSources(),
+    ]);
+    jobs = fetchedJobs;
+    sourceViews = jobSources.map((s) => ({
+      ...s,
+      status: buildSourceStatus(s),
+    }));
+  } catch (error) {
+    const state = buildAdminStateModel(
+      getAdminDataErrorKind(error),
+      "/admin/vagas",
+    );
     return (
       <div className="px-6 py-10 md:px-10">
         <AdminTokenState {...state} />
       </div>
     );
   }
-
-  const { jobs, sourceViews } = jobsDataResult.data;
   const sourceMap = new Map(sourceViews.map((source) => [source.id, source]));
   const availableSourceNames = [
     ...new Set(sourceViews.map((source) => source.sourceName)),

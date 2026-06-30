@@ -14,28 +14,29 @@ const SIZES = {
 export function Logo({ variant = "light", size = "md" }: Props) {
   const { icon, font, gap, ls } = SIZES[size];
   const color = variant === "dark" ? "#fafaf6" : "#0a0a0a";
-  const bar =
-    variant === "dark" ? "rgba(250,250,246,0.4)" : "rgba(10,10,10,0.45)";
+  const ink = variant === "dark" ? "rgba(250,250,246,0.93)" : "#0a0a0a";
   const dimmed =
-    variant === "dark" ? "rgba(250,250,246,0.12)" : "rgba(10,10,10,0.18)";
+    variant === "dark" ? "rgba(250,250,246,0.14)" : "rgba(10,10,10,0.14)";
 
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap }}>
       <svg
         width={icon}
-        height={Math.round(icon * 0.8)}
-        viewBox="0 0 40 32"
+        height={icon}
+        viewBox="0 0 40 40"
         fill="none"
         aria-hidden="true"
       >
-        <rect x="0" y="0" width="13" height="4" rx="1.5" fill={bar} />
-        <rect x="17" y="0" width="10" height="4" rx="1.5" fill={bar} />
-        <rect x="31" y="0" width="9" height="4" rx="1.5" fill="#c6ff3a" />
-        <rect x="0" y="14" width="15" height="4" rx="1.5" fill="#c6ff3a" />
-        <rect x="19" y="14" width="21" height="4" rx="1.5" fill={bar} />
-        <rect x="0" y="28" width="8" height="4" rx="1.5" fill={bar} />
-        <rect x="12" y="28" width="15" height="4" rx="1.5" fill="#c6ff3a" />
-        <rect x="31" y="28" width="9" height="4" rx="1.5" fill={dimmed} />
+        <rect x="0" y="0" width="12" height="6.5" rx="2" fill={ink} />
+        <rect x="16" y="0" width="12" height="6.5" rx="2" fill={ink} />
+        <rect x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="0" y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="20" y="11.2" width="18" height="6.5" rx="2" fill={ink} />
+        <rect x="0" y="22.4" width="7" height="6.5" rx="2" fill={ink} />
+        <rect x="11" y="22.4" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="30" y="22.4" width="8" height="6.5" rx="2" fill={ink} />
+        <rect x="0" y="33.5" width="22" height="6.5" rx="2" fill={ink} />
+        <rect x="26" y="33.5" width="9" height="6.5" rx="2" fill={dimmed} />
       </svg>
       <span style={{ display: "inline-flex", alignItems: "baseline" }}>
         <span

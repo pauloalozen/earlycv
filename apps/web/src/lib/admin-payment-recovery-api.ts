@@ -30,7 +30,10 @@ export type PaymentRecoveryPendingResponse = {
   totalPages: number;
 };
 
-type RawPaymentRecoveryItem = Omit<PaymentRecoveryItem, "alreadySent" | "score"> & {
+type RawPaymentRecoveryItem = Omit<
+  PaymentRecoveryItem,
+  "alreadySent" | "score"
+> & {
   score?: number | null;
   scoreAfter?: number | null;
   recoveryEmailCount?: number;
@@ -38,7 +41,10 @@ type RawPaymentRecoveryItem = Omit<PaymentRecoveryItem, "alreadySent" | "score">
   alreadySent?: boolean;
 };
 
-type RawPaymentRecoveryPendingResponse = Omit<PaymentRecoveryPendingResponse, "items"> & {
+type RawPaymentRecoveryPendingResponse = Omit<
+  PaymentRecoveryPendingResponse,
+  "items"
+> & {
   items: RawPaymentRecoveryItem[];
 };
 
@@ -91,10 +97,12 @@ export async function listAdminPaymentRecoveryPending(params: {
   pageSize?: number;
 }) {
   const qs = new URLSearchParams();
-  if (params.eligibilityStatus) qs.set("eligibilityStatus", params.eligibilityStatus);
+  if (params.eligibilityStatus)
+    qs.set("eligibilityStatus", params.eligibilityStatus);
   if (params.originAction) qs.set("originAction", params.originAction);
   if (params.alreadySent) qs.set("alreadySent", params.alreadySent);
-  if (params.hasAvailableCredits) qs.set("hasAvailableCredits", params.hasAvailableCredits);
+  if (params.hasAvailableCredits)
+    qs.set("hasAvailableCredits", params.hasAvailableCredits);
   if (params.ignored) qs.set("ignored", params.ignored);
   if (params.dateFrom) qs.set("dateFrom", params.dateFrom);
   if (params.dateTo) qs.set("dateTo", params.dateTo);

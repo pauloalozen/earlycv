@@ -26,10 +26,7 @@ describe("AnalyticsConsentBanner", () => {
 
     expect(screen.queryByText("Aceitar")).toBeNull();
 
-    fireEvent(
-      window,
-      new CustomEvent("analytics-consent-preferences-open"),
-    );
+    fireEvent(window, new CustomEvent("analytics-consent-preferences-open"));
 
     expect(screen.getByText("Aceitar")).toBeTruthy();
   });

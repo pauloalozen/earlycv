@@ -13,3 +13,15 @@ test("dashboard page mounts GuestAnalysisClaimer for guest persistence recovery"
   );
   assert.match(content, /<GuestAnalysisClaimer\s*\/>/);
 });
+
+test("dashboard page removes legacy analysis history block and links to candidaturas page", () => {
+  const pagePath = resolve(process.cwd(), "src/app/dashboard/page.tsx");
+  const content = readFileSync(pagePath, "utf8");
+
+  assert.doesNotMatch(content, /Hist[oó]rico de An[aá]lises/);
+  assert.match(content, /Suas candidaturas/);
+  assert.match(
+    content,
+    /href="\/dashboard\/candidaturas"[^>]*>\s*Ver todas as candidaturas/,
+  );
+});

@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
-  AT,
   AdminPagination,
   AdminPill,
   AdminTable,
   AdminTd,
   AdminTh,
+  AT,
 } from "@/app/admin/_components/admin-primitives";
 import {
   deleteJobSourceAction,
@@ -78,11 +78,14 @@ function RunStatusBadge({ run }: { run?: IngestionRunSummary | null }) {
             animation: "pulse 1.5s ease-in-out infinite",
           }}
         />
-        <AdminPill tone="warn">rodando há {elapsedLabel(run.startedAt)}</AdminPill>
+        <AdminPill tone="warn">
+          rodando há {elapsedLabel(run.startedAt)}
+        </AdminPill>
       </span>
     );
   }
-  if (run.status === "completed") return <AdminPill tone="ok">concluído</AdminPill>;
+  if (run.status === "completed")
+    return <AdminPill tone="ok">concluído</AdminPill>;
   return <AdminPill tone="danger">falhou</AdminPill>;
 }
 
@@ -95,7 +98,12 @@ export function FontesTableClient({ initialData }: Props) {
   const [togglePending, setTogglePending] = useState(false);
 
   const isFirstRender = useRef(true);
-  const paramsRef = useRef({ search: "", statusFilter: "", typeFilter: "", page: 1 });
+  const paramsRef = useRef({
+    search: "",
+    statusFilter: "",
+    typeFilter: "",
+    page: 1,
+  });
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -107,7 +115,10 @@ export function FontesTableClient({ initialData }: Props) {
       page: number;
     }) => {
       try {
-        const qs = new URLSearchParams({ page: String(params.page), pageSize: "50" });
+        const qs = new URLSearchParams({
+          page: String(params.page),
+          pageSize: "50",
+        });
         if (params.search) qs.set("search", params.search);
         if (params.statusFilter) qs.set("statusFilter", params.statusFilter);
         if (params.typeFilter) qs.set("typeFilter", params.typeFilter);
@@ -172,7 +183,14 @@ export function FontesTableClient({ initialData }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Filter bar */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
         <input
           type="text"
           placeholder="Buscar fonte ou empresa"
@@ -203,7 +221,9 @@ export function FontesTableClient({ initialData }: Props) {
           }}
         >
           <option value="">Todos os status</option>
-          <option value="aguardando primeiro run">aguardando primeiro run</option>
+          <option value="aguardando primeiro run">
+            aguardando primeiro run
+          </option>
           <option value="falha recente">falha recente</option>
           <option value="ativa">ativa</option>
         </select>
@@ -246,7 +266,14 @@ export function FontesTableClient({ initialData }: Props) {
         >
           Mostrando {firstItem}–{lastItem} de {total}
         </span>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
           <span
             style={{
               fontSize: 12,
@@ -260,7 +287,11 @@ export function FontesTableClient({ initialData }: Props) {
             <input name="redirectPath" type="hidden" value={redirectPath} />
             <input
               className="h-8 rounded-md border px-2 text-xs"
-              style={{ borderColor: AT.border, background: AT.card, color: AT.ink2 }}
+              style={{
+                borderColor: AT.border,
+                background: AT.card,
+                color: AT.ink2,
+              }}
               accept=".csv"
               name="file"
               required
@@ -328,10 +359,12 @@ export function FontesTableClient({ initialData }: Props) {
                   transition: "background 0.15s",
                 }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLTableRowElement).style.background = AT.bgAlt;
+                  (e.currentTarget as HTMLTableRowElement).style.background =
+                    AT.bgAlt;
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLTableRowElement).style.background = "";
+                  (e.currentTarget as HTMLTableRowElement).style.background =
+                    "";
                 }}
               >
                 <AdminTd>{source.company.name}</AdminTd>
@@ -349,8 +382,11 @@ export function FontesTableClient({ initialData }: Props) {
                   </span>
                 </AdminTd>
                 <AdminTd>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    {source.consecutive403Count && source.consecutive403Count > 0 ? (
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 2 }}
+                  >
+                    {source.consecutive403Count &&
+                    source.consecutive403Count > 0 ? (
                       <AdminPill tone="warn" mono>
                         {source.consecutive403Count} 403s
                       </AdminPill>
@@ -363,7 +399,9 @@ export function FontesTableClient({ initialData }: Props) {
                   </div>
                 </AdminTd>
                 <AdminTd>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
                     <button
                       type="button"
                       title={
@@ -425,33 +463,66 @@ export function FontesTableClient({ initialData }: Props) {
                   <RunStatusBadge run={latestRun} />
                 </AdminTd>
                 <AdminTd align="right">
-                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      justifyContent: "flex-end",
+                    }}
+                  >
                     <form action={runJobSourceAction}>
-                      <input name="jobSourceId" type="hidden" value={source.id} />
-                      <input name="redirectPath" type="hidden" value={redirectPath} />
+                      <input
+                        name="jobSourceId"
+                        type="hidden"
+                        value={source.id}
+                      />
+                      <input
+                        name="redirectPath"
+                        type="hidden"
+                        value={redirectPath}
+                      />
                       <button
-                        className={buttonVariants({ size: "sm", variant: "outline" })}
+                        className={buttonVariants({
+                          size: "sm",
+                          variant: "outline",
+                        })}
                         type="submit"
                         disabled={isRunning}
                         title={isRunning ? "Em execução" : undefined}
                         style={
-                          isRunning ? { opacity: 0.45, cursor: "not-allowed" } : undefined
+                          isRunning
+                            ? { opacity: 0.45, cursor: "not-allowed" }
+                            : undefined
                         }
                       >
                         Rodar
                       </button>
                     </form>
                     <Link
-                      className={buttonVariants({ size: "sm", variant: "outline" })}
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
                       href={`/admin/ingestion/${source.id}`}
                     >
                       Detalhe
                     </Link>
                     <form action={deleteJobSourceAction}>
-                      <input name="jobSourceId" type="hidden" value={source.id} />
-                      <input name="redirectPath" type="hidden" value={redirectPath} />
+                      <input
+                        name="jobSourceId"
+                        type="hidden"
+                        value={source.id}
+                      />
+                      <input
+                        name="redirectPath"
+                        type="hidden"
+                        value={redirectPath}
+                      />
                       <button
-                        className={buttonVariants({ size: "sm", variant: "outline" })}
+                        className={buttonVariants({
+                          size: "sm",
+                          variant: "outline",
+                        })}
                         type="submit"
                       >
                         Excluir

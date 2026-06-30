@@ -164,14 +164,89 @@ export default async function AdminIngestionPage({
   }
 
   try {
-    const [sources, manualRuns, globalRuns, schedulerConfig, sourcesFirstPage] =
-      await Promise.all([
-        listJobSources(),
-        listManualRuns(),
-        listAllIngestionRuns(),
-        getGlobalSchedulerConfig(),
-        listJobSourcesPaginated({ pageSize: 50 }),
-      ]);
+    const [
+      sourcesResult,
+      manualRunsResult,
+      globalRunsResult,
+      schedulerConfigResult,
+      sourcesFirstPageResult,
+    ] = await Promise.all([
+      listJobSources().catch((e: unknown) => e),
+      listManualRuns().catch((e: unknown) => e),
+      listAllIngestionRuns().catch((e: unknown) => e),
+      getGlobalSchedulerConfig().catch((e: unknown) => e),
+      listJobSourcesPaginated({ pageSize: 50 }).catch((e: unknown) => e),
+    ]);
+
+    const sources =
+      sourcesResult instanceof Error
+        ? []
+        : (sourcesResult as Awaited<ReturnType<typeof listJobSources>>);
+    const manualRuns =
+      manualRunsResult instanceof Error
+        ? []
+        : (manualRunsResult as Awaited<ReturnType<typeof listManualRuns>>);
+    const globalRuns =
+      globalRunsResult instanceof Error
+        ? []
+        : (globalRunsResult as Awaited<
+            ReturnType<typeof listAllIngestionRuns>
+          >);
+    const schedulerConfig =
+      schedulerConfigResult instanceof Error
+        ? null
+        : (schedulerConfigResult as Awaited<
+            ReturnType<typeof getGlobalSchedulerConfig>
+          >);
+    const sourcesFirstPage =
+      sourcesFirstPageResult instanceof Error
+        ? null
+        : (sourcesFirstPageResult as Awaited<
+            ReturnType<typeof listJobSourcesPaginated>
+          >);
+
+    const sourcesError =
+      sourcesResult instanceof Error ? sourcesResult.message : null;
+    const manualRunsError =
+      manualRunsResult instanceof Error ? manualRunsResult.message : null;
+    const globalRunsError =
+      globalRunsResult instanceof Error ? globalRunsResult.message : null;
+    const schedulerError =
+      schedulerConfigResult instanceof Error
+        ? schedulerConfigResult.message
+        : null;
+    const sourcesPageError =
+      sourcesFirstPageResult instanceof Error
+        ? sourcesFirstPageResult.message
+        : null;
+
+    if (sourcesError) {
+      console.error("[admin/ingestion] listJobSources falhou:", sourcesError);
+    }
+    if (manualRunsError) {
+      console.error(
+        "[admin/ingestion] listManualRuns falhou:",
+        manualRunsError,
+      );
+    }
+    if (globalRunsError) {
+      console.error(
+        "[admin/ingestion] listAllIngestionRuns falhou:",
+        globalRunsError,
+      );
+    }
+    if (schedulerError) {
+      console.error(
+        "[admin/ingestion] getGlobalSchedulerConfig falhou:",
+        schedulerError,
+      );
+    }
+    if (sourcesPageError) {
+      console.error(
+        "[admin/ingestion] listJobSourcesPaginated falhou:",
+        sourcesPageError,
+      );
+    }
 
     const sourceMap = new Map(sources.map((s) => [s.id, s]));
 
@@ -266,8 +341,22 @@ export default async function AdminIngestionPage({
         {/* ── FONTES ── */}
         {activeTab === "fontes" && (
           <div className="flex flex-col gap-4">
+            {sourcesError && (
+              <StatusBanner
+                message={`Fontes indisponíveis: ${sourcesError}`}
+                status="error"
+              />
+            )}
+            {sourcesPageError && (
+              <StatusBanner
+                message={`Tabela de fontes indisponível: ${sourcesPageError}`}
+                status="error"
+              />
+            )}
             <IngestionDashboardCards />
-            <FontesTableClient initialData={sourcesFirstPage} />
+            {sourcesFirstPage && (
+              <FontesTableClient initialData={sourcesFirstPage} />
+            )}
           </div>
         )}
 
@@ -284,6 +373,18 @@ export default async function AdminIngestionPage({
         {/* ── RUNS ── */}
         {activeTab === "runs" && (
           <div className="flex flex-col gap-6">
+            {manualRunsError && (
+              <StatusBanner
+                message={`Execuções em lote indisponíveis: ${manualRunsError}`}
+                status="error"
+              />
+            )}
+            {globalRunsError && (
+              <StatusBanner
+                message={`Execuções de fonte indisponíveis: ${globalRunsError}`}
+                status="error"
+              />
+            )}
             <div className="flex flex-col gap-3">
               <h2 className="text-base font-semibold text-stone-900">
                 Execucoes em lote
@@ -491,77 +592,88 @@ export default async function AdminIngestionPage({
               <h2 className="text-base font-semibold text-stone-900">
                 Scheduler global
               </h2>
-              <form
-                action={updateGlobalSchedulerAction}
-                className="flex flex-col gap-3"
-              >
-                <input
-                  name="redirectPath"
-                  type="hidden"
-                  value="/admin/ingestion?tab=scheduler"
+              {schedulerError ? (
+                <StatusBanner
+                  message={`Scheduler indisponível neste ambiente: ${schedulerError}`}
+                  status="error"
                 />
-                <label className="flex items-center gap-3">
-                  <input
-                    className="size-4 accent-stone-700"
-                    defaultChecked={schedulerConfig.enabled}
-                    name="enabled"
-                    type="checkbox"
-                  />
-                  <span className="text-sm font-medium text-stone-700">
-                    Ativar cron global
-                  </span>
-                </label>
-                <div className="flex flex-col gap-1">
-                  <p className="text-xs font-medium text-stone-500">
-                    Cron expression
-                  </p>
-                  <Input
-                    defaultValue={schedulerConfig.globalCron ?? "*/30 * * * *"}
-                    name="globalCron"
-                    placeholder="*/30 * * * *"
-                  />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1">
-                    <p className="text-xs font-medium text-stone-500">
-                      Delay normal (ms)
-                    </p>
-                    <Input
-                      defaultValue={String(schedulerConfig.normalDelayMs)}
-                      min={1000}
-                      name="normalDelayMs"
-                      type="number"
+              ) : schedulerConfig ? (
+                <>
+                  <form
+                    action={updateGlobalSchedulerAction}
+                    className="flex flex-col gap-3"
+                  >
+                    <input
+                      name="redirectPath"
+                      type="hidden"
+                      value="/admin/ingestion?tab=scheduler"
                     />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <p className="text-xs font-medium text-stone-500">
-                      Delay de erro (ms)
-                    </p>
-                    <Input
-                      defaultValue={String(schedulerConfig.errorDelayMs)}
-                      min={1000}
-                      name="errorDelayMs"
-                      type="number"
+                    <label className="flex items-center gap-3">
+                      <input
+                        className="size-4 accent-stone-700"
+                        defaultChecked={schedulerConfig.enabled}
+                        name="enabled"
+                        type="checkbox"
+                      />
+                      <span className="text-sm font-medium text-stone-700">
+                        Ativar cron global
+                      </span>
+                    </label>
+                    <div className="flex flex-col gap-1">
+                      <p className="text-xs font-medium text-stone-500">
+                        Cron expression
+                      </p>
+                      <Input
+                        defaultValue={
+                          schedulerConfig.globalCron ?? "*/30 * * * *"
+                        }
+                        name="globalCron"
+                        placeholder="*/30 * * * *"
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="flex flex-col gap-1">
+                        <p className="text-xs font-medium text-stone-500">
+                          Delay normal (ms)
+                        </p>
+                        <Input
+                          defaultValue={String(schedulerConfig.normalDelayMs)}
+                          min={1000}
+                          name="normalDelayMs"
+                          type="number"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <p className="text-xs font-medium text-stone-500">
+                          Delay de erro (ms)
+                        </p>
+                        <Input
+                          defaultValue={String(schedulerConfig.errorDelayMs)}
+                          min={1000}
+                          name="errorDelayMs"
+                          type="number"
+                        />
+                      </div>
+                    </div>
+                    <button className={buttonVariants()} type="submit">
+                      Salvar scheduler
+                    </button>
+                  </form>
+                  <form action={runGlobalSchedulerNowAction}>
+                    <input
+                      name="redirectPath"
+                      type="hidden"
+                      value="/admin/ingestion?tab=scheduler"
                     />
-                  </div>
-                </div>
-                <button className={buttonVariants()} type="submit">
-                  Salvar scheduler
-                </button>
-              </form>
-              <form action={runGlobalSchedulerNowAction}>
-                <input
-                  name="redirectPath"
-                  type="hidden"
-                  value="/admin/ingestion?tab=scheduler"
-                />
-                <button
-                  className={buttonVariants({ variant: "outline" })}
-                  type="submit"
-                >
-                  Rodar global agora
-                </button>
-              </form>
+                    <button
+                      className={buttonVariants({ variant: "outline" })}
+                      type="submit"
+                    >
+                      Rodar global agora
+                    </button>
+                  </form>
+                </>
+              ) : null}
             </Card>
 
             <Card className="space-y-4 p-4" padding="lg">

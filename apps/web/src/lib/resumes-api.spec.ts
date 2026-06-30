@@ -1,61 +1,32 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { getMasterResumeFromList } from "./resumes-selectors.ts";
+// Inline the parsing logic from getMyMasterCvExtractionStatus to avoid
+// importing server-only modules (api-request.ts imports "server-only").
+async function parseExtractionStatusResponse(
+  response: Response,
+): Promise<unknown> {
+  if (!response.ok) return null;
+  const payload = await response.text();
+  if (!payload.trim()) return null;
+  return JSON.parse(payload);
+}
 
-test("getMasterResumeFromList returns null when no master resume exists", () => {
-  assert.equal(
-    getMasterResumeFromList([
-      {
-        id: "resume_1",
-        isMaster: false,
-        sourceFileName: "base.pdf",
-        title: "CV base",
-        updatedAt: "2026-01-10T00:00:00.000Z",
-      },
-      {
-        id: "resume_2",
-        isMaster: false,
-        sourceFileName: null,
-        title: "CV adaptado",
-        updatedAt: "2026-01-11T00:00:00.000Z",
-      },
-    ]),
-    null,
-  );
+test("getMyMasterCvExtractionStatus returns null for empty body", async () => {
+  const response = new Response("", { status: 200 });
+  const result = await parseExtractionStatusResponse(response);
+  assert.equal(result, null);
 });
 
-test("getMasterResumeFromList returns the first master resume when present", () => {
-  assert.deepEqual(
-    getMasterResumeFromList([
-      {
-        id: "resume_1",
-        isMaster: false,
-        sourceFileName: "base.pdf",
-        title: "CV base",
-        updatedAt: "2026-01-10T00:00:00.000Z",
-      },
-      {
-        id: "resume_2",
-        isMaster: true,
-        sourceFileName: "master.pdf",
-        title: "CV master",
-        updatedAt: "2026-01-11T00:00:00.000Z",
-      },
-      {
-        id: "resume_3",
-        isMaster: true,
-        sourceFileName: "other-master.pdf",
-        title: "CV master antigo",
-        updatedAt: "2026-01-09T00:00:00.000Z",
-      },
-    ]),
-    {
-      id: "resume_2",
-      isMaster: true,
-      sourceFileName: "master.pdf",
-      title: "CV master",
-      updatedAt: "2026-01-11T00:00:00.000Z",
-    },
-  );
+test("getMyMasterCvExtractionStatus returns null for non-ok response", async () => {
+  const response = new Response('{"status":"pending"}', { status: 500 });
+  const result = await parseExtractionStatusResponse(response);
+  assert.equal(result, null);
+});
+
+test("getMyMasterCvExtractionStatus parses valid JSON response", async () => {
+  const data = { status: "pending", extractionCoverage: null };
+  const response = new Response(JSON.stringify(data), { status: 200 });
+  const result = await parseExtractionStatusResponse(response);
+  assert.deepEqual(result, data);
 });

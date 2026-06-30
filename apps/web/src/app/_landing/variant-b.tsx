@@ -71,7 +71,7 @@ export function LandingVariantB() {
               fontWeight: 500,
             }}
           >
-            v1.2
+            v2.1
           </span>
         </Link>
         <LandingNavAuth />
@@ -772,7 +772,11 @@ export function LandingVariantB() {
 
                 {plan.checkoutPlanId ? (
                   <form action="/plans/checkout" method="post">
-                    <input type="hidden" name="planId" value={plan.checkoutPlanId} />
+                    <input
+                      type="hidden"
+                      name="planId"
+                      value={plan.checkoutPlanId}
+                    />
                     <button
                       type="submit"
                       style={{
@@ -969,7 +973,6 @@ export function LandingVariantB() {
             {[
               "Reembolso integral garantido",
               "Sem perguntas ou burocracia",
-              "Resposta em até 24 horas",
             ].map((text) => (
               <span
                 key={text}

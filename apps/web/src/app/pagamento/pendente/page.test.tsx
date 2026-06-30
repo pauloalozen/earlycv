@@ -25,7 +25,8 @@ vi.mock("@/components/page-shell", () => ({
 vi.mock("@/lib/payments-browser-api", () => ({
   getCheckoutStatusClient: (...args: unknown[]) =>
     mockGetCheckoutStatusClient(...args),
-  resumeCheckoutClient: (...args: unknown[]) => mockResumeCheckoutClient(...args),
+  resumeCheckoutClient: (...args: unknown[]) =>
+    mockResumeCheckoutClient(...args),
 }));
 
 vi.mock("@/lib/client-download", () => ({
@@ -170,7 +171,9 @@ describe("PagamentoPendente", () => {
     const originalLocation = window.location;
     Object.defineProperty(window, "location", {
       configurable: true,
-      value: { href: "http://localhost:3000/pagamento/pendente?checkoutId=chk-1" },
+      value: {
+        href: "http://localhost:3000/pagamento/pendente?checkoutId=chk-1",
+      },
     });
 
     render(<PagamentoPendente />);

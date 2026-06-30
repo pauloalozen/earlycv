@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 
 import { APP_ACCESS_TOKEN_COOKIE_NAME } from "@/lib/app-session";
 
@@ -22,7 +22,8 @@ export default async function RecoveryPage({ params }: RecoveryPageProps) {
   const { token } = await params;
   const cookieStore = await cookies();
   const headerStore = await headers();
-  const accessToken = cookieStore.get(APP_ACCESS_TOKEN_COOKIE_NAME)?.value ?? null;
+  const accessToken =
+    cookieStore.get(APP_ACCESS_TOKEN_COOKIE_NAME)?.value ?? null;
 
   const requestHeaders: Record<string, string> = {
     Cookie: cookieStore.toString(),
@@ -50,7 +51,11 @@ export default async function RecoveryPage({ params }: RecoveryPageProps) {
     redirect(location);
   }
 
-  if (response.status === 401 || response.status === 403 || response.status === 404) {
+  if (
+    response.status === 401 ||
+    response.status === 403 ||
+    response.status === 404
+  ) {
     notFound();
   }
 

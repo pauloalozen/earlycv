@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 const MIN_CV_CHARS = 100;
 const MAX_CV_CHARS = 30_000;
 const MAX_CV_UPLOAD_BYTES = 5 * 1024 * 1024;
-const EXTRACTION_TIMEOUT_MS = 8_000;
+const EXTRACTION_TIMEOUT_MS = 30_000;
 const CV_SIGNALS_PT = [
   "experiência",
   "experiencia",

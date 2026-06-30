@@ -246,7 +246,7 @@ describe("Template journey tracking", () => {
     render(
       <Template>
         <a
-          href="https://api.earlycv.local/auth/google/start?next=%2Fadaptar"
+          href="https://api.earlycv.local/api/auth/google/start?next=%2Fadaptar"
           data-testid="google-oauth"
         >
           Entrar com Google

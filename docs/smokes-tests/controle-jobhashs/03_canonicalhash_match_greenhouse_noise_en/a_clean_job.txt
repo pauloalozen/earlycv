@@ -1,0 +1,19 @@
+Senior Data Analyst
+
+Company: Acme Analytics
+Location: Remote
+Employment type: Full-time
+
+We are looking for a Senior Data Analyst to support business teams with analytics, dashboards, and KPI modeling.
+
+Responsibilities:
+- Build dashboards in Power BI.
+- Write SQL queries for data analysis.
+- Define and monitor KPIs.
+- Support business teams in data-driven decision making.
+
+Requirements:
+- Advanced experience with SQL.
+- Experience with Power BI.
+- Knowledge of data modeling.
+- Ability to communicate with business stakeholders.

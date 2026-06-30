@@ -29,6 +29,7 @@ export type CvAdaptationResponseDto = {
     | "original_file"
     | "markdown_snapshot"
     | "unavailable_legacy";
+  jobApplicationId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -71,6 +72,7 @@ export const createCvAdaptationResponseDto = (
       ? "original_file"
       : "markdown_snapshot"
     : "unavailable_legacy",
+  jobApplicationId: adaptation.jobApplicationId,
   createdAt: adaptation.createdAt.toISOString(),
   updatedAt: adaptation.updatedAt.toISOString(),
 });

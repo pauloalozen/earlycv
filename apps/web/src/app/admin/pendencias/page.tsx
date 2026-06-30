@@ -5,7 +5,7 @@ import {
   buildPendingTypeLabel,
   filterPendingItems,
 } from "@/lib/admin-operations";
-import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import { getPendingDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
@@ -34,7 +34,7 @@ export default async function AdminPendingPage({
     );
   }
 
-  const pendingDataResult = await getPhaseOneAdminDataSafely();
+  const pendingDataResult = await getPendingDataSafely();
 
   if (pendingDataResult.kind !== "ok") {
     const state = buildAdminStateModel(

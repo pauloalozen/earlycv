@@ -1,3 +1,4 @@
+import { resolveCvAnalysisScores } from "@earlycv/config/cv-analysis-score";
 import { Inject, Injectable } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
@@ -148,22 +149,12 @@ function readScoreFields(adaptedContentJson: unknown): {
   scoreAfter: number | null;
   scoreDelta: number | null;
 } {
-  if (!adaptedContentJson || typeof adaptedContentJson !== "object") {
-    return { scoreBefore: null, scoreAfter: null, scoreDelta: null };
-  }
-
-  const content = adaptedContentJson as Record<string, unknown>;
-
-  const scoreBefore =
-    typeof content.scoreBefore === "number" ? content.scoreBefore : null;
-  const scoreAfter =
-    typeof content.scoreAfter === "number" ? content.scoreAfter : null;
+  const { scoreBefore, scoreAfter } =
+    resolveCvAnalysisScores(adaptedContentJson);
   const scoreDelta =
-    typeof content.scoreDelta === "number"
-      ? content.scoreDelta
-      : scoreBefore !== null && scoreAfter !== null
-        ? scoreAfter - scoreBefore
-        : null;
+    scoreBefore !== null && scoreAfter !== null
+      ? scoreAfter - scoreBefore
+      : null;
 
   return { scoreBefore, scoreAfter, scoreDelta };
 }

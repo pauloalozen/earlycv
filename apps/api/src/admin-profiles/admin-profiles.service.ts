@@ -1,4 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import type { UpdateAdminProfileDto } from "./dto/update-admin-profile.dto";
@@ -29,7 +30,14 @@ export class AdminProfilesService {
 
     return this.database.userProfile.update({
       where: { userId },
-      data: dto,
+      data: {
+        ...dto,
+        experiencesJson: this.toJsonValue(dto.experiencesJson),
+        educationJson: this.toJsonValue(dto.educationJson),
+        skillsJson: this.toJsonValue(dto.skillsJson),
+        languagesJson: this.toJsonValue(dto.languagesJson),
+        certificationsJson: this.toJsonValue(dto.certificationsJson),
+      },
     });
   }
 
@@ -48,5 +56,13 @@ export class AdminProfilesService {
     }
 
     return profile;
+  }
+
+  private toJsonValue(value: unknown): Prisma.InputJsonValue | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    return value as Prisma.InputJsonValue;
   }
 }

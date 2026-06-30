@@ -1,0 +1,18 @@
+Backend Developer Pleno
+
+Empresa: Acme
+Local: Remoto
+Tipo: Tempo integral
+
+Responsabilidades:
+- Desenvolver microsserviços com Java e Spring Boot.
+- Trabalhar com Kafka.
+- Atuar com arquitetura distribuída.
+- Monitorar aplicações em produção.
+
+Requisitos:
+- Java.
+- Spring Boot.
+- Kafka.
+- Microsserviços.
+- Observabilidade.

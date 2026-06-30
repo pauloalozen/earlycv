@@ -8,15 +8,11 @@ import {
   listAllIngestionRuns,
   listCompanies,
   listJobSources,
-  listJobs,
 } from "./admin-ingestion-api";
 import {
   buildCompanyStatus,
-  buildOverviewMetrics,
   buildPendingItems,
   buildSourceStatus,
-  countJobs,
-  countSuccessfulRuns,
   groupSourcesByCompany,
   sortRunsDescending,
 } from "./admin-operations";
@@ -25,7 +21,6 @@ import {
   type AdminUserRecord,
   type AssistedSessionRecord,
   listAdminUsers,
-  listResumeTemplates,
 } from "./admin-users-api";
 import {
   buildAdminUserState,
@@ -57,15 +52,12 @@ type AdminUserWithAssistedSession = AdminUserRecord & {
 };
 
 export async function getPhaseOneAdminData(token?: string) {
-  const [adminUsersResult, companies, jobSources, jobs, resumeTemplates, runs] =
-    await Promise.all([
-      listAdminUsers(token),
-      listCompanies(token),
-      listJobSources(token),
-      listJobs(token),
-      listResumeTemplates(token),
-      listAllIngestionRuns(token),
-    ]);
+  const [adminUsersResult, companies, jobSources, runs] = await Promise.all([
+    listAdminUsers(token),
+    listCompanies(token),
+    listJobSources(token),
+    listAllIngestionRuns(token),
+  ]);
   const adminUsers = adminUsersResult as AdminUserWithAssistedSession[];
   const groupedSources = groupSourcesByCompany(jobSources);
   const companyViews = companies.map((company) => {
@@ -102,27 +94,14 @@ export async function getPhaseOneAdminData(token?: string) {
     jobSources,
   });
   const orderedRuns = sortRunsDescending(runs);
-  const overviewMetrics = buildOverviewMetrics({
-    companies,
-    jobsCount: countJobs(jobs),
-    missingMasterResumeCount: pendingItems.filter(
-      (item) => item.type === "user-missing-master-resume",
-    ).length,
-    pendingCount: pendingItems.length,
-    sourceCount: jobSources.length,
-    successfulRunsCount: countSuccessfulRuns(runs),
-  });
 
   return {
     adminUserViews,
     adminUsers,
     companies,
     companyViews,
-    jobs,
     orderedRuns,
-    overviewMetrics,
     pendingItems,
-    resumeTemplates,
     runs,
     sourceViews,
   };
@@ -216,4 +195,43 @@ export function buildSourceRunViews(
 
 export function buildJobsBySource(jobSourceId: string, jobs: JobRecord[]) {
   return jobs.filter((job) => job.jobSourceId === jobSourceId);
+}
+
+async function getPendingData(token?: string) {
+  const [adminUsersResult, companies, jobSources] = await Promise.all([
+    listAdminUsers(token),
+    listCompanies(token),
+    listJobSources(token),
+  ]);
+  const adminUsers = adminUsersResult as AdminUserWithAssistedSession[];
+  const pendingItems = buildPendingItems({ adminUsers, companies, jobSources });
+  return { pendingItems };
+}
+
+export async function getPendingDataSafely(token?: string) {
+  try {
+    return { data: await getPendingData(token), kind: "ok" } as const;
+  } catch (error) {
+    return { kind: getAdminDataErrorKind(error) } as const;
+  }
+}
+
+async function getRunsData(token?: string) {
+  const [runs, jobSources] = await Promise.all([
+    listAllIngestionRuns(token),
+    listJobSources(token),
+  ]);
+  const sourceViews = jobSources.map((jobSource) => ({
+    ...jobSource,
+    status: buildSourceStatus(jobSource),
+  })) satisfies AdminJobSourceView[];
+  return { orderedRuns: sortRunsDescending(runs), sourceViews };
+}
+
+export async function getRunsDataSafely(token?: string) {
+  try {
+    return { data: await getRunsData(token), kind: "ok" } as const;
+  } catch (error) {
+    return { kind: getAdminDataErrorKind(error) } as const;
+  }
 }

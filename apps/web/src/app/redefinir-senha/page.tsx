@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { PasswordInput } from "@/app/entrar/password-input";
+import { Logo } from "@/components/logo";
 import { PageShell } from "@/components/page-shell";
 import {
   SIGNUP_PASSWORD_RULES,
@@ -114,37 +115,15 @@ function RedefinirSenhaContent() {
 
   return (
     <main style={pageStyle}>
-      {/* Logo */}
       <a
         href="/"
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
           textDecoration: "none",
           marginBottom: 32,
+          display: "inline-flex",
         }}
       >
-        <div
-          style={{
-            width: 18,
-            height: 18,
-            borderRadius: 5,
-            background: "#0a0a0a",
-            boxShadow: "inset -2px -2px 0 rgba(198,255,58,0.85)",
-            flexShrink: 0,
-          }}
-        />
-        <span
-          style={{
-            fontSize: 17,
-            fontWeight: 600,
-            letterSpacing: -0.4,
-            color: "#0a0a0a",
-          }}
-        >
-          earlyCV
-        </span>
+        <Logo size="lg" />
       </a>
 
       <div style={cardStyle}>

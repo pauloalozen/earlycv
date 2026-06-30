@@ -12,7 +12,10 @@ describe("/api/payments/brick/checkout/[purchaseId] proxy", () => {
   it("preserves 401 from backend", async () => {
     apiRequestMock.mockResolvedValueOnce(
       new Response(
-        JSON.stringify({ errorCode: "unauthorized", message: "Nao autenticado" }),
+        JSON.stringify({
+          errorCode: "unauthorized",
+          message: "Nao autenticado",
+        }),
         { status: 401, headers: { "content-type": "application/json" } },
       ),
     );

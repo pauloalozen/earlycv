@@ -201,6 +201,418 @@ test("analyzeGuest accepts CV text without file", async () => {
   assert.equal(result.masterCvText, "CV texto");
 });
 
+test("analyzeGuest persists the first requirement rule for a requirementSourceHash", async () => {
+  const protectedCalls: Array<Record<string, unknown>> = [];
+  const createdRules: Array<Record<string, unknown>> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-1" }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async (input: Record<string, unknown>) => {
+        protectedCalls.push(input);
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-1",
+          result: {
+            adaptedContentJson: { ok: true },
+            previewText: "preview",
+            masterCvText: "CV texto",
+            analysisModel: "gpt-test",
+            analysisPromptVersion: "2026-06-09.v1",
+            structuredRequirements: [
+              {
+                requirementKey: "sql-analytics",
+                requirementText: "Experiencia com SQL para analise de dados",
+                importance: "high",
+              },
+            ],
+          },
+        };
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      getOrCreateCanonicalJob: async () => ({
+        canonicalJobId: "canonical-1",
+        rawJobHash: "raw-hash",
+        canonicalJobHash: "canonical-hash",
+        requirementSourceHash: "req-source-1",
+        canonicalJobJson: { title: "Analista de Dados" },
+        reusedByRawHash: false,
+        reusedByCanonicalHash: false,
+      }),
+    },
+    {
+      findByRequirementSourceHash: async () => null,
+      getOrCreateFromAnalysis: async (input: Record<string, unknown>) => {
+        createdRules.push(input);
+        return {
+          id: "rule-1",
+          requirementSourceHash: "req-source-1",
+          canonicalJobId: "canonical-1",
+          requirements: input.requirements,
+          analysisModel: "gpt-test",
+          analysisPromptVersion: "2026-06-09.v1",
+        };
+      },
+    },
+  );
+
+  await service.analyzeGuest(
+    "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    undefined,
+    validMasterCvText,
+    "token",
+  );
+
+  assert.equal(createdRules.length, 1);
+  assert.deepEqual(createdRules[0]?.requirements, [
+    {
+      requirementKey: "sql-analytics",
+      requirementText: "Experiencia com SQL para analise de dados",
+      importance: "high",
+    },
+  ]);
+  assert.deepEqual(protectedCalls[0]?.existingRequirements, undefined);
+});
+
+test("analyzeGuest reuses an existing requirement rule without recreating it", async () => {
+  const protectedCalls: Array<Record<string, unknown>> = [];
+  let createCalls = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-1" }),
+      },
+      cvAdaptation: { findFirst: async () => null },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async (input: Record<string, unknown>) => {
+        protectedCalls.push(input);
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-1",
+          result: {
+            adaptedContentJson: { ok: true },
+            previewText: "preview",
+            masterCvText: "CV texto",
+            analysisModel: "gpt-test",
+            analysisPromptVersion: "2026-06-09.v1",
+            structuredRequirements: [
+              {
+                requirementKey: "sql-analytics",
+                requirementText: "Experiencia com SQL para analise de dados",
+                importance: "high",
+              },
+            ],
+          },
+        };
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      getOrCreateCanonicalJob: async () => ({
+        canonicalJobId: "canonical-1",
+        rawJobHash: "raw-hash",
+        canonicalJobHash: "canonical-hash",
+        requirementSourceHash: "req-source-1",
+        canonicalJobJson: { title: "Analista de Dados" },
+        reusedByRawHash: true,
+        reusedByCanonicalHash: true,
+      }),
+    },
+    {
+      findByRequirementSourceHash: async () => ({
+        id: "rule-1",
+        requirementSourceHash: "req-source-1",
+        canonicalJobId: "canonical-1",
+        requirements: [
+          {
+            requirementKey: "sql-analytics",
+            requirementText: "Experiencia com SQL para analise de dados",
+            importance: "high",
+          },
+        ],
+        analysisModel: "gpt-old",
+        analysisPromptVersion: "2026-06-08.v1",
+      }),
+      getOrCreateFromAnalysis: async () => {
+        createCalls += 1;
+        throw new Error("should not create");
+      },
+    },
+  );
+
+  await service.analyzeGuest(
+    "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    undefined,
+    validMasterCvText,
+    "token",
+  );
+
+  assert.equal(createCalls, 0);
+  assert.deepEqual(protectedCalls[0]?.existingRequirements, [
+    {
+      requirementKey: "sql-analytics",
+      requirementText: "Experiencia com SQL para analise de dados",
+      importance: "high",
+    },
+  ]);
+});
+
+test("analyzeAuthenticated with adapted CV reuses existing requirement set without recreating", async () => {
+  const protectedCalls: Array<Record<string, unknown>> = [];
+  let createRuleCalls = 0;
+
+  const existingRequirements = [
+    {
+      requirementKey: "sql-analytics",
+      requirementText: "Experiencia com SQL para analise de dados",
+      importance: "high",
+    },
+  ];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-adapted-cv-1" }),
+      },
+      cvAdaptation: { findFirst: async () => null, findMany: async () => [] },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async (input: Record<string, unknown>) => {
+        protectedCalls.push(input);
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-1",
+          result: {
+            adaptedContentJson: { ok: true },
+            previewText: "preview-adaptado",
+            masterCvText: "CV adaptado texto",
+            analysisModel: "gpt-test",
+            analysisPromptVersion: "2026-06-09.v1",
+            structuredRequirements: existingRequirements,
+          },
+        };
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      getOrCreateCanonicalJob: async () => ({
+        canonicalJobId: "canonical-vaga-a",
+        rawJobHash: "raw-hash-a",
+        canonicalJobHash: "canonical-hash-a",
+        requirementSourceHash: "req-source-a",
+        canonicalJobJson: { title: "Analista de Dados" },
+        reusedByRawHash: true,
+        reusedByCanonicalHash: true,
+      }),
+    },
+    {
+      findByRequirementSourceHash: async () => ({
+        id: "rule-existente-1",
+        requirementSourceHash: "req-source-a",
+        canonicalJobId: "canonical-vaga-a",
+        requirements: existingRequirements,
+        analysisModel: "gpt-antigo",
+        analysisPromptVersion: "2026-06-08.v1",
+      }),
+      getOrCreateFromAnalysis: async () => {
+        createRuleCalls += 1;
+        throw new Error("should not create a new rule when reusing adapted CV");
+      },
+    },
+  );
+
+  const result = await service.analyzeAuthenticated("user-1", {
+    jobDescriptionText:
+      "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    masterCvText: validMasterCvText,
+    saveAsMaster: false,
+    turnstileToken: "token",
+  });
+
+  assert.equal(
+    createRuleCalls,
+    0,
+    "must not create a new requirement set when one already exists",
+  );
+  assert.equal(protectedCalls.length, 1);
+  assert.deepEqual(
+    protectedCalls[0]?.existingRequirements,
+    existingRequirements,
+    "must pass existing requirements to AI so it uses the same rule",
+  );
+  assert.equal(result.previewText, "preview-adaptado");
+});
+
+test("analyzeAuthenticated creates separate requirement sets for two different vagas", async () => {
+  const createdRules: Array<{ requirementSourceHash: string }> = [];
+
+  let callCount = 0;
+  const requirementSourceHashes = ["req-source-vaga-a", "req-source-vaga-b"];
+  const canonicalJobIds = ["canonical-vaga-a", "canonical-vaga-b"];
+
+  const makeService = () =>
+    new CvAdaptationServiceCtor(
+      {
+        analysisCvSnapshot: {
+          create: async () => ({ id: `snapshot-${++callCount}` }),
+        },
+      },
+      {
+        analyzeAndAdapt: async () => {},
+        buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+      },
+      { createIntent: async () => ({}) },
+      { generatePdf: async () => Buffer.from("pdf") },
+      {
+        generateDocx: async () => Buffer.from("docx"),
+        toPdf: async () => Buffer.from("pdf"),
+      },
+      {
+        executeProtectedAnalyze: async () => ({
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-x",
+          result: {
+            adaptedContentJson: { ok: true },
+            previewText: "preview",
+            masterCvText: "CV texto",
+            analysisModel: "gpt-test",
+            analysisPromptVersion: "2026-06-09.v1",
+            structuredRequirements: [
+              {
+                requirementKey: "req-key",
+                requirementText: "Requisito da vaga",
+                importance: "high",
+              },
+            ],
+          },
+        }),
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        getOrCreateCanonicalJob: async () => {
+          const idx = callCount - 1;
+          return {
+            canonicalJobId: canonicalJobIds[idx] ?? `canonical-${idx}`,
+            rawJobHash: `raw-hash-${idx}`,
+            canonicalJobHash: `canonical-hash-${idx}`,
+            requirementSourceHash:
+              requirementSourceHashes[idx] ?? `req-source-${idx}`,
+            canonicalJobJson: { title: `Vaga ${idx}` },
+            reusedByRawHash: false,
+            reusedByCanonicalHash: false,
+          };
+        },
+      },
+      {
+        findByRequirementSourceHash: async () => null,
+        getOrCreateFromAnalysis: async (input: {
+          requirementSourceHash: string;
+        }) => {
+          createdRules.push({
+            requirementSourceHash: input.requirementSourceHash,
+          });
+          return {
+            id: `rule-${createdRules.length}`,
+            requirementSourceHash: input.requirementSourceHash,
+            canonicalJobId: "canonical-x",
+            requirements: [],
+            analysisModel: "gpt-test",
+            analysisPromptVersion: "2026-06-09.v1",
+          };
+        },
+      },
+    );
+
+  const service = makeService();
+
+  await service.analyzeAuthenticated("user-1", {
+    jobDescriptionText:
+      "Descricao da vaga A com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    masterCvText: validMasterCvText,
+    saveAsMaster: false,
+    turnstileToken: "token",
+  });
+
+  await service.analyzeAuthenticated("user-1", {
+    jobDescriptionText:
+      "Descricao da vaga B com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    masterCvText: validMasterCvText,
+    saveAsMaster: false,
+    turnstileToken: "token",
+  });
+
+  assert.equal(
+    createdRules.length,
+    2,
+    "must create a separate requirement set for each distinct vaga",
+  );
+  assert.notEqual(
+    createdRules[0]?.requirementSourceHash,
+    createdRules[1]?.requirementSourceHash,
+    "the two requirement sets must have different requirementSourceHash values",
+  );
+});
+
 test("analyzeGuest validates job description before CV text checks", async () => {
   let protectedCalls = 0;
 
@@ -497,6 +909,245 @@ test("create delegates async analysis through protected boundary instead of dire
   assert.equal(protectedCalls, 1);
 });
 
+test("create rejects profile mode when file upload is provided", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      userProfile: {
+        findUnique: async () => ({ profileReadinessStatus: "ready" }),
+      },
+      resume: {
+        findFirst: async () => ({ id: "resume-1", rawText: "CV base" }),
+      },
+      cvAdaptation: {
+        create: async () => {
+          throw new Error("cvAdaptation.create should not be called");
+        },
+      },
+    },
+    {},
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: undefined,
+      }),
+    },
+  );
+
+  await assert.rejects(
+    service.create(
+      "user-1",
+      {
+        inputMode: "profile",
+        jobDescriptionText:
+          "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+      },
+      makeFile(Buffer.from("resume")),
+    ),
+    /modo profile/i,
+  );
+});
+
+test("create rejects profile mode when profile readiness is not ready", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      userProfile: {
+        findUnique: async () => ({ profileReadinessStatus: "partial" }),
+      },
+      cvAdaptation: {
+        create: async () => {
+          throw new Error("cvAdaptation.create should not be called");
+        },
+      },
+    },
+    {},
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: undefined,
+      }),
+    },
+  );
+
+  await assert.rejects(
+    service.create("user-1", {
+      inputMode: "profile",
+      jobDescriptionText:
+        "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+      masterResumeId: "resume-1",
+    }),
+    /perfil salvo ainda nao esta pronto/i,
+  );
+});
+
+test("create persists inferred adaptationSource and inputMode", async () => {
+  const now = new Date();
+  const createCalls: Array<Record<string, unknown>> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: {
+        findFirst: async () => ({ id: "resume-1", rawText: "CV base" }),
+      },
+      cvAdaptation: {
+        create: async (args: Record<string, unknown>) => {
+          createCalls.push(args);
+          return {
+            adaptedResumeId: null,
+            companyName: null,
+            createdAt: now,
+            id: "adapt-1",
+            jobDescriptionText:
+              "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+            jobTitle: null,
+            masterResumeId: "resume-1",
+            paidAt: null,
+            paymentStatus: "none",
+            previewText: null,
+            status: "analyzing",
+            template: null,
+            templateId: null,
+            updatedAt: now,
+            userId: "user-1",
+          };
+        },
+        update: async () => ({}),
+      },
+    },
+    {},
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: undefined,
+      }),
+    },
+  );
+
+  await service.create("user-1", {
+    inputMode: "file_upload",
+    jobDescriptionText:
+      "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+    masterResumeId: "resume-1",
+  });
+
+  const createData = createCalls[0]?.data as Record<string, unknown>;
+  assert.equal(createData.inputMode, "file_upload");
+  assert.equal(createData.adaptationSource, "uploaded_content");
+  assert.equal(typeof createData.analysisInputSnapshotJson, "object");
+  assert.equal(typeof createData.uploadedContentSnapshotJson, "object");
+  assert.notDeepEqual(
+    createData.analysisInputSnapshotJson,
+    createData.uploadedContentSnapshotJson,
+  );
+});
+
+test("create merges canonical profile from uploaded/text content", async () => {
+  const profileUpdates: Array<Record<string, unknown>> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: {
+        findFirst: async () => ({
+          id: "resume-1",
+          rawText: "Ana Silva\nAnalista\n",
+        }),
+      },
+      userProfile: {
+        findUnique: async () => ({
+          userId: "user-1",
+          city: null,
+          country: null,
+          educationJson: [],
+          experiencesJson: [],
+          fullName: null,
+          headline: null,
+          linkedinUrl: null,
+          phone: null,
+          professionalSummary: null,
+          profileFieldMetaJson: {},
+          profileSuggestionsJson: [],
+          skillsJson: { technical: [], business: [], soft: [] },
+          state: null,
+        }),
+        update: async (args: Record<string, unknown>) => {
+          profileUpdates.push(args);
+          return {};
+        },
+      },
+      cvAdaptation: {
+        create: async () => ({
+          adaptedResumeId: null,
+          companyName: null,
+          createdAt: new Date(),
+          id: "adapt-1",
+          jobDescriptionText:
+            "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+          jobTitle: null,
+          masterResumeId: "resume-1",
+          paidAt: null,
+          paymentStatus: "none",
+          previewText: null,
+          status: "analyzing",
+          template: null,
+          templateId: null,
+          updatedAt: new Date(),
+          userId: "user-1",
+        }),
+        update: async () => ({}),
+      },
+    },
+    {},
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: undefined,
+      }),
+    },
+  );
+
+  await service.create("user-1", {
+    inputMode: "text_paste",
+    jobDescriptionText:
+      "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+    masterResumeId: "resume-1",
+  });
+
+  assert.equal(profileUpdates.length, 1);
+  const data = profileUpdates[0]?.data as Record<string, unknown>;
+  assert.equal(data.profileReadinessStatus, "partial");
+});
+
 test("create marks adaptation as failed when protected boundary blocks analysis", async () => {
   const updates: Array<Record<string, unknown>> = [];
   const now = new Date();
@@ -630,6 +1281,7 @@ test("saveGuestPreview does not auto-promote a resume to master when user did no
       },
       cvAdaptation: {
         findFirst: async () => null,
+        findUnique: async () => null,
         create: async ({
           data,
         }: {
@@ -750,6 +1402,7 @@ test("saveGuestPreview returns existing adaptation for same snapshot and user", 
           userId: "user-1",
           analysisCvSnapshot: null,
         }),
+        findUnique: async () => null,
         create: async () => {
           createCalls += 1;
           throw new Error("should not create duplicate adaptation");
@@ -829,6 +1482,7 @@ test("saveGuestPreview accepts original guest session token after login context 
       },
       cvAdaptation: {
         findFirst: async () => null,
+        findUnique: async () => null,
         create: async () => {
           createCalls += 1;
           return {
@@ -1009,6 +1663,7 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
   const updates: Array<Record<string, unknown>> = [];
   let protectedCalls = 0;
   let directCalls = 0;
+  let protectedPayload: Record<string, unknown> | null = null;
 
   const service = new CvAdaptationServiceCtor(
     {
@@ -1053,8 +1708,11 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
         canonicalHash: "hash-1",
         result: undefined,
       }),
-      executeProtectedBuildPaidCvOutputFromGuest: async () => {
+      executeProtectedBuildPaidCvOutputFromGuest: async (
+        args: Record<string, unknown>,
+      ) => {
         protectedCalls += 1;
+        protectedPayload = args;
         return {
           ok: true,
           cached: false,
@@ -1072,7 +1730,22 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
 
   // biome-ignore lint/suspicious/noExplicitAny: test mock
   const output = await (service as any).ensureLegacyStructuredOutput({
-    adaptedContentJson: { fit: { headline: "headline" } },
+    adaptedContentJson: {
+      fit: { headline: "headline" },
+      requirements: [
+        {
+          requirementKey: "sql-analytics",
+          requirementText: "Experiencia com SQL para analise de dados",
+          importance: "high",
+          coverageStatus: "partial",
+          evidence: ["Resumo menciona SQL"],
+          gapExplanation: "Sem profundidade em projetos",
+          recommendation: "Destacar entregas com SQL",
+          impactScore: 18,
+        },
+      ],
+      selectedMissingKeywords: ["Power BI", "Stakeholders"],
+    },
     aiAuditJson: null,
     companyName: "Acme",
     id: "adapt-1",
@@ -1086,7 +1759,30 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
   assert.equal(protectedCalls, 1);
   assert.equal(directCalls, 0);
   assert.equal(output.summary, "Resumo");
-  assert.deepEqual(updates[0], {
+  assert.deepEqual(protectedPayload?.requirementCoverage, [
+    {
+      requirementKey: "sql-analytics",
+      requirementText: "Experiencia com SQL para analise de dados",
+      importance: "high",
+      coverageStatus: "partial",
+      evidence: ["Resumo menciona SQL"],
+      gapExplanation: "Sem profundidade em projetos",
+      recommendation: "Destacar entregas com SQL",
+      impactScore: 18,
+    },
+  ]);
+  assert.deepEqual(protectedPayload?.selectedMissingKeywords, [
+    "Power BI",
+    "Stakeholders",
+  ]);
+  const aiAuditUpdate = updates.find(
+    (entry) =>
+      typeof entry === "object" &&
+      entry !== null &&
+      "data" in entry &&
+      (entry as { data?: Record<string, unknown> }).data?.aiAuditJson,
+  );
+  assert.deepEqual(aiAuditUpdate, {
     where: { id: "adapt-1" },
     data: {
       aiAuditJson: {
@@ -1105,6 +1801,7 @@ test("ensureLegacyStructuredOutput returns null when protected boundary blocks",
   const service = new CvAdaptationServiceCtor(
     {
       cvAdaptation: {
+        updateMany: async () => ({ count: 1 }),
         update: async () => {
           throw new Error("cvAdaptation.update should not be called");
         },
@@ -1169,6 +1866,83 @@ test("ensureLegacyStructuredOutput returns null when protected boundary blocks",
 
   assert.equal(protectedCalls, 1);
   assert.equal(output, null);
+});
+
+test("ensureLegacyStructuredOutput persists immutable generation snapshot with null-guard", async () => {
+  const updateManyCalls: Array<Record<string, unknown>> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        updateMany: async (args: Record<string, unknown>) => {
+          updateManyCalls.push(args);
+          return { count: 1 };
+        },
+        update: async () => ({}),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => {
+        throw new Error("buildPaidCvOutputFromGuest should not be called");
+      },
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: undefined,
+      }),
+      executeProtectedBuildPaidCvOutputFromGuest: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-1",
+        result: {
+          summary: "Resumo",
+          sections: [],
+          highlightedSkills: [],
+          removedSections: [],
+        },
+      }),
+    },
+  );
+
+  // biome-ignore lint/suspicious/noExplicitAny: test access to private method
+  await (service as any).ensureLegacyStructuredOutput({
+    adaptedContentJson: { fit: { headline: "headline" } },
+    aiAuditJson: null,
+    analysisCvSnapshotId: null,
+    companyName: "Acme",
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    generationInputSnapshotJson: null,
+    id: "adapt-1",
+    inputMode: "file_upload",
+    jobDescriptionText:
+      "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+    jobTitle: "Engenheiro",
+    masterResume: { rawText: "CV" },
+    masterResumeId: "resume-1",
+    userId: "user-1",
+  });
+
+  assert.equal(updateManyCalls.length, 1);
+  const where = updateManyCalls[0]?.where as Record<string, unknown>;
+  assert.equal(where?.id, "adapt-1");
+  assert.equal(
+    typeof (where?.generationInputSnapshotJson as { equals?: unknown })?.equals,
+    "object",
+  );
 });
 
 test("analyzeGuest persists snapshot hash from stored markdown content", async () => {
@@ -1861,4 +2635,684 @@ test("analyzeGuest emits safe payload_invalid telemetry for rejected upload enve
   assert.equal(emitted[0]?.metadata?.mimeType, "application/msword");
   assert.equal("cvText" in (emitted[0]?.metadata ?? {}), false);
   assert.equal("jobDescriptionText" in (emitted[0]?.metadata ?? {}), false);
+});
+
+// ─── ETAPA 2: JobApplication hook integration ─────────────────────────────────
+
+const makeAdaptationRecord = (id = "adapt-1") => ({
+  id,
+  userId: "user-1",
+  masterResumeId: "master-1",
+  adaptedResumeId: null,
+  templateId: null,
+  jobApplicationId: null,
+  jobTitle: "Engenheiro de Software",
+  companyName: "Acme Corp",
+  jobDescriptionText:
+    "Descricao com requisitos tecnicos e responsabilidades claras.",
+  adaptedContentJson: { sections: [] },
+  aiAuditJson: { summary: "ok", sections: [] },
+  previewText: "preview",
+  paymentStatus: "none",
+  status: "pending",
+  isUnlocked: false,
+  unlockedAt: null,
+  paidAt: null,
+  analysisCvSnapshotId: "snap-1",
+  mpPaymentId: null,
+  mpMerchantOrderId: null,
+  mpPreferenceId: null,
+  paymentReference: null,
+  paymentAmountInCents: null,
+  paymentCurrency: null,
+  failureReason: null,
+  createdAt: new Date("2026-05-01"),
+  updatedAt: new Date("2026-05-01"),
+  template: null,
+  analysisCvSnapshot: null,
+});
+
+const makeOwnedSnapshot = () => ({
+  id: "snap-1",
+  userId: "user-1",
+  guestSessionHash: null,
+  expiresAt: null,
+  claimedAt: null,
+  claimedByUserId: null,
+});
+
+const makeHookSpy = () => {
+  const calls: unknown[] = [];
+  return {
+    service: {
+      upsertFromCvAdaptation: async (input: unknown) => {
+        calls.push(input);
+      },
+    },
+    calls,
+  };
+};
+
+const noopStorage = {
+  deleteObject: async () => undefined as undefined,
+  getObject: async () => Buffer.alloc(0),
+  putObject: async () => "",
+};
+
+const noopTelemetry = { emit: async () => {} };
+
+test("saveGuestPreview: chama upsertFromCvAdaptation com ANALYZED ao criar nova adaptação", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord();
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => null,
+        findUnique: async () => null,
+        create: async () => adaptation,
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV text",
+    jobTitle: adaptation.jobTitle,
+    companyName: adaptation.companyName,
+    jobDescriptionText: adaptation.jobDescriptionText,
+    adaptedContentJson: { sections: [] },
+    previewText: "preview",
+  });
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.targetStatus, "ANALYZED");
+  assert.equal(call.origin, "analysis_auto");
+  assert.equal(call.userId, "user-1");
+  assert.equal(call.cvAdaptationId, "adapt-1");
+});
+
+test("saveGuestPreview: chama upsertFromCvAdaptation com ANALYZED quando adaptação existente é encontrada", async () => {
+  const spy = makeHookSpy();
+  const existing = makeAdaptationRecord("adapt-existing");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => existing,
+        findUnique: async () => null,
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV text",
+    jobDescriptionText: existing.jobDescriptionText,
+    adaptedContentJson: {},
+  });
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.targetStatus, "ANALYZED");
+  assert.equal(call.origin, "analysis_auto");
+  assert.equal(call.cvAdaptationId, "adapt-existing");
+});
+
+test("saveGuestPreview retorna adaptação mesmo sem jobTitle/companyName e não bloqueia entrega da análise", async () => {
+  const spy = makeHookSpy();
+  const adaptation = {
+    ...makeAdaptationRecord("adapt-no-identity"),
+    jobTitle: null,
+    companyName: null,
+  };
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => null,
+        findUnique: async () => null,
+        create: async () => adaptation,
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  const result = await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV text",
+    jobDescriptionText: adaptation.jobDescriptionText,
+    adaptedContentJson: { sections: [] },
+    previewText: "preview",
+  });
+
+  assert.equal(result.id, "adapt-no-identity");
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.jobTitle, null);
+  assert.equal(call.companyName, null);
+  assert.equal(call.targetStatus, "ANALYZED");
+});
+
+test("persistApplicationIdentity atualiza identidade ausente e chama upsert manual", async () => {
+  const spy = makeHookSpy();
+  const updateCalls: Array<Record<string, unknown>> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findFirst: async () => ({
+          ...makeAdaptationRecord("adapt-identity"),
+          jobTitle: null,
+          companyName: null,
+          status: "pending",
+        }),
+        update: async (input: Record<string, unknown>) => {
+          updateCalls.push(input);
+          return {
+            ...makeAdaptationRecord("adapt-identity"),
+            jobTitle: "Senior Engineer",
+            companyName: "Acme",
+            status: "pending",
+          };
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  await service.persistApplicationIdentity("user-1", "adapt-identity", {
+    jobTitle: "  Senior Engineer  ",
+    companyName: "  Acme  ",
+  });
+
+  assert.equal(updateCalls.length, 1);
+  const updateData = updateCalls[0]?.data as Record<string, unknown>;
+  assert.equal(updateData.jobTitle, "Senior Engineer");
+  assert.equal(updateData.companyName, "Acme");
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.cvAdaptationId, "adapt-identity");
+  assert.equal(call.jobTitle, "Senior Engineer");
+  assert.equal(call.companyName, "Acme");
+  assert.equal(call.targetStatus, "ANALYZED");
+  assert.equal(call.origin, "optimized_cv_auto");
+});
+
+test("claimGuest: chama upsertFromCvAdaptation com CV_READY e origin optimized_cv_auto", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord("adapt-claimed");
+
+  const mockTx = {
+    resume: {
+      findFirst: async () => ({ id: "master-1" }),
+      create: async () => ({ id: "adapted-resume-1" }),
+    },
+    cvAdaptation: {
+      create: async () => adaptation,
+      update: async () => adaptation,
+    },
+    user: { update: async () => ({}) },
+    cvUnlock: { create: async () => ({}) },
+    analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+  };
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      user: {
+        findUnique: async () => ({ creditsRemaining: 5, internalRole: "user" }),
+      },
+      resumeTemplate: { findFirst: async () => null },
+      $transaction: async (fn: (tx: typeof mockTx) => Promise<unknown>) =>
+        fn(mockTx),
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  await service.claimGuest("user-1", {
+    adaptedContentJson: { sections: [] },
+    jobDescriptionText: adaptation.jobDescriptionText,
+    masterCvText: "CV text",
+    analysisCvSnapshotId: "snap-1",
+    jobTitle: adaptation.jobTitle,
+    companyName: adaptation.companyName,
+  });
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.targetStatus, "CV_READY");
+  assert.equal(call.origin, "optimized_cv_auto");
+  assert.equal(call.userId, "user-1");
+  assert.equal(call.cvAdaptationId, "adapt-claimed");
+});
+
+test("deliverAdaptation: chama upsertFromCvAdaptation com CV_READY após persistir adaptedResume", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord("adapt-delivered");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findUnique: async () => ({
+          ...adaptation,
+          masterResume: { title: "CV Base", rawText: "CV text" },
+          template: null,
+        }),
+        update: async () => ({}),
+      },
+      resume: { create: async () => ({ id: "adapted-resume-1" }) },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  const svc = service as unknown as {
+    deliverAdaptation: (id: string) => Promise<void>;
+  };
+  await svc.deliverAdaptation("adapt-delivered");
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.targetStatus, "CV_READY");
+  assert.equal(call.origin, "optimized_cv_auto");
+  assert.equal(call.cvAdaptationId, "adapt-delivered");
+  assert.equal(call.userId, "user-1");
+});
+
+test("deliverAdaptation: chamada repetida chama hook duas vezes — dedup delegado ao JobApplicationsService", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord("adapt-repeat");
+  let resumeCreateCount = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findUnique: async () => ({
+          ...adaptation,
+          masterResume: { title: "CV", rawText: "text" },
+          template: null,
+        }),
+        update: async () => ({}),
+      },
+      resume: {
+        create: async () => ({ id: `adapted-${++resumeCreateCount}` }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  const svc = service as unknown as {
+    deliverAdaptation: (id: string) => Promise<void>;
+  };
+  await svc.deliverAdaptation("adapt-repeat");
+  await svc.deliverAdaptation("adapt-repeat");
+
+  assert.equal(spy.calls.length, 2);
+  const c0 = spy.calls[0] as Record<string, unknown>;
+  const c1 = spy.calls[1] as Record<string, unknown>;
+  assert.equal(c0.cvAdaptationId, "adapt-repeat");
+  assert.equal(c1.cvAdaptationId, "adapt-repeat");
+});
+
+test("hook repassa cvAdaptationId, jobDescriptionText e userId corretos ao JobApplicationsService", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord("adapt-fields");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findUnique: async () => ({
+          ...adaptation,
+          id: "adapt-fields",
+          masterResume: { title: "CV", rawText: "text" },
+          template: null,
+        }),
+        update: async () => ({}),
+      },
+      resume: { create: async () => ({ id: "adapted-1" }) },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  const svc = service as unknown as {
+    deliverAdaptation: (id: string) => Promise<void>;
+  };
+  await svc.deliverAdaptation("adapt-fields");
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.cvAdaptationId, "adapt-fields");
+  assert.equal(call.userId, "user-1");
+  assert.equal(call.jobDescriptionText, adaptation.jobDescriptionText);
+  assert.equal(call.jobTitle, adaptation.jobTitle);
+  assert.equal(call.companyName, adaptation.companyName);
+});
+
+test("hook envia targetStatus correto — regra de não rebaixar status é responsabilidade do JobApplicationsService", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord();
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => null,
+        findUnique: async () => null,
+        create: async () => adaptation,
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV",
+    jobDescriptionText: adaptation.jobDescriptionText,
+    adaptedContentJson: {},
+  });
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.targetStatus, "ANALYZED");
+  assert.equal(call.origin, "analysis_auto");
+});
+
+test("falha no upsertFromCvAdaptation não quebra fluxo do deliverAdaptation", async () => {
+  let updateCalled = false;
+  const adaptation = makeAdaptationRecord("adapt-failhook");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findUnique: async () => ({
+          ...adaptation,
+          masterResume: { title: "CV", rawText: "text" },
+          template: null,
+        }),
+        update: async () => {
+          updateCalled = true;
+          return {};
+        },
+      },
+      resume: { create: async () => ({ id: "adapted-1" }) },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    {
+      upsertFromCvAdaptation: async () => {
+        throw new Error("JobApplicationsService indisponivel");
+      },
+    },
+  );
+
+  const svc = service as unknown as {
+    deliverAdaptation: (id: string) => Promise<void>;
+  };
+  await svc.deliverAdaptation("adapt-failhook");
+
+  assert.ok(
+    updateCalled,
+    "cvAdaptation.update deve ter sido chamado antes do hook",
+  );
+});
+
+test("falha no upsertFromCvAdaptation não quebra fluxo do saveGuestPreview", async () => {
+  const adaptation = makeAdaptationRecord();
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => null,
+        findUnique: async () => null,
+        create: async () => adaptation,
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    {
+      upsertFromCvAdaptation: async () => {
+        throw new Error("DB timeout");
+      },
+    },
+  );
+
+  const result = await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV",
+    jobDescriptionText: adaptation.jobDescriptionText,
+    adaptedContentJson: {},
+  });
+
+  assert.ok(
+    result.id,
+    "saveGuestPreview deve retornar adaptação mesmo com falha no hook",
+  );
+});
+
+test("service mantém comportamento sem jobApplicationsService explícito — backward compat", async () => {
+  const adaptation = makeAdaptationRecord();
+
+  // Only 8 constructor args — jobApplicationsService uses default no-op
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => null,
+        findUnique: async () => null,
+        create: async () => adaptation,
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+  );
+
+  const result = await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV",
+    jobDescriptionText: adaptation.jobDescriptionText,
+    adaptedContentJson: {},
+  });
+
+  assert.ok(
+    result.id,
+    "adaptação deve ser retornada sem jobApplicationsService explícito",
+  );
+});
+
+test("resolveExistingKeywordRule filtra frases contaminadas e preserva apenas a seleção original do usuário", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findMany: async () => [
+          {
+            adaptedContentJson: {
+              keywords: {
+                presentes: [
+                  { kw: "histórias de usuário", pontos: 5 },
+                  { kw: "critérios de aceite", pontos: 5 },
+                  { kw: "mercado financeiro", pontos: 1 },
+                ],
+                possiveis: [{ kw: "produto digital", pontos: 1 }],
+                ausentes: [
+                  {
+                    kw: "Escrita de histórias de usuário e critérios de aceite",
+                    pontos: 1,
+                  },
+                  { kw: "Experiência em mercado financeiro", pontos: 1 },
+                ],
+              },
+            },
+          },
+          {
+            adaptedContentJson: {
+              selectedMissingKeywords: [
+                "histórias de usuário",
+                "critérios de aceite",
+                "mercado financeiro",
+              ],
+              keywords: {
+                ausentes: [
+                  { kw: "histórias de usuário", pontos: 5 },
+                  { kw: "critérios de aceite", pontos: 5 },
+                  { kw: "mercado financeiro", pontos: 1 },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash",
+        result: {
+          adaptedContentJson: {},
+          masterCvText: "CV",
+          previewText: "preview",
+        },
+      }),
+    },
+  );
+
+  const serviceWithPrivate = service as CvAdaptationService & {
+    resolveExistingKeywordRule(input: {
+      userId: string | null;
+      jobRequirementSetId: string | null;
+    }): Promise<
+      | {
+          presentes: Array<{ kw: string; pontos: number }>;
+          possiveis: Array<{ kw: string; pontos: number }>;
+          ausentes: Array<{ kw: string; pontos: number }>;
+        }
+      | undefined
+    >;
+  };
+
+  const rule = await serviceWithPrivate.resolveExistingKeywordRule({
+    userId: "user-1",
+    jobRequirementSetId: "req-1",
+  });
+
+  assert.deepEqual(rule, {
+    presentes: [
+      { kw: "histórias de usuário", pontos: 5 },
+      { kw: "critérios de aceite", pontos: 5 },
+      { kw: "mercado financeiro", pontos: 1 },
+    ],
+    possiveis: [{ kw: "produto digital", pontos: 1 }],
+    ausentes: [],
+  });
 });

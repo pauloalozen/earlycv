@@ -103,12 +103,12 @@ describe("resultado unlock tracking", () => {
   }) {
     const redeemOk = options?.redeemOk ?? true;
     const isUnlocked = options?.isUnlocked ?? false;
-    const adaptedContentJson =
-      (options?.adaptedContentJson as Record<string, unknown> | undefined) ??
-      {
-        selectedMissingKeywords: ["sql"],
-        vaga: { cargo: "Analista", empresa: "Empresa" },
-      };
+    const adaptedContentJson = (options?.adaptedContentJson as
+      | Record<string, unknown>
+      | undefined) ?? {
+      selectedMissingKeywords: ["sql"],
+      vaga: { cargo: "Analista", empresa: "Empresa" },
+    };
     const finalCvOutput = options?.finalCvOutput ?? null;
 
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
@@ -116,8 +116,8 @@ describe("resultado unlock tracking", () => {
 
       if (url.includes("/api/cv-adaptation/") && url.includes("/content")) {
         return Promise.resolve({
-            ok: true,
-            json: async () => ({
+          ok: true,
+          json: async () => ({
             adaptedContentJson,
             finalCvOutput,
             isUnlocked,
@@ -242,7 +242,10 @@ describe("resultado unlock tracking", () => {
       redeemOk: true,
       isUnlocked: true,
       adaptedContentJson: {
-        preview: { antes: "preview antes resumido", depois: "preview depois resumido" },
+        preview: {
+          antes: "preview antes resumido",
+          depois: "preview depois resumido",
+        },
         vaga: { cargo: "Analista", empresa: "Empresa" },
       },
       finalCvOutput: {
@@ -324,7 +327,10 @@ describe("resultado unlock tracking", () => {
       redeemOk: true,
       isUnlocked: true,
       adaptedContentJson: {
-        preview: { antes: "preview antes resumido", depois: "preview depois resumido" },
+        preview: {
+          antes: "preview antes resumido",
+          depois: "preview depois resumido",
+        },
         vaga: { cargo: "Analista", empresa: "Empresa" },
       },
       finalCvOutput: {
@@ -347,7 +353,9 @@ describe("resultado unlock tracking", () => {
     render(<ResultadoPage />);
 
     expect(
-      await screen.findByText("Resumo profissional final vindo do CV liberado."),
+      await screen.findByText(
+        "Resumo profissional final vindo do CV liberado.",
+      ),
     ).not.toBeNull();
   });
 

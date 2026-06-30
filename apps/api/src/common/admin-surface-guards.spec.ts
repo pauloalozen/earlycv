@@ -8,6 +8,7 @@ import { AdminResumesController } from "../admin-resumes/admin-resumes.controlle
 import { AdminUsersController } from "../admin-users/admin-users.controller";
 import { AdminEventsController } from "../analysis-observability/admin-events.controller";
 import { AnalysisConfigController } from "../analysis-protection/analysis-config.controller";
+import { CvBenchmarkAdminController } from "../cv-benchmark-admin/cv-benchmark-admin.controller";
 import { CvUnlocksController } from "../cv-unlocks/cv-unlocks.controller";
 import { PaymentsController } from "../payments/payments.controller";
 import { SuperadminStaffController } from "../superadmin-staff/superadmin-staff.controller";
@@ -21,6 +22,7 @@ const adminControllers = [
   AdminProfilesController,
   AnalysisConfigController,
   AdminEventsController,
+  CvBenchmarkAdminController,
 ] as const;
 
 test("admin controllers enforce JwtAuthGuard + RolesGuard + admin/superadmin roles", () => {

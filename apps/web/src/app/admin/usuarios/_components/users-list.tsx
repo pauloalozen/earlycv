@@ -35,7 +35,7 @@ export function UsersList({ users, deleteAction }: UsersListProps) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-stone-100 bg-stone-50 text-left">

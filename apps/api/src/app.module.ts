@@ -12,13 +12,16 @@ import { AuthModule } from "./auth/auth.module";
 import { CompaniesModule } from "./companies/companies.module";
 import { EnvModule } from "./config/env.module";
 import { CvAdaptationModule } from "./cv-adaptation/cv-adaptation.module";
+import { CvBenchmarkAdminModule } from "./cv-benchmark-admin/cv-benchmark-admin.module";
 import { CvUnlocksModule } from "./cv-unlocks/cv-unlocks.module";
 import { DatabaseModule } from "./database/database.module";
 import { Ga4Module } from "./ga4/ga4.module";
 import { HealthModule } from "./health/health.module";
 import { InfraModule } from "./infra/infra.module";
+import { JobApplicationsModule } from "./job-applications/job-applications.module";
 import { JobSourcesModule } from "./job-sources/job-sources.module";
 import { JobsModule } from "./jobs/jobs.module";
+import { MasterCvCanonicalExtractionModule } from "./master-cv-canonical-extraction/master-cv-canonical-extraction.module";
 import { PaymentRecoveryModule } from "./payment-recovery/payment-recovery.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { PlansModule } from "./plans/plans.module";
@@ -52,14 +55,19 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     CompaniesModule,
     JobSourcesModule,
     JobsModule,
+    ...(process.env.MASTER_CV_CANONICAL_EXTRACTION_ENABLED === "true"
+      ? [MasterCvCanonicalExtractionModule]
+      : []),
     AnalysisProtectionModule,
     AnalysisObservabilityModule,
     CvAdaptationModule,
     CvUnlocksModule,
+    JobApplicationsModule,
     PlansModule,
     PaymentsModule,
     PaymentRecoveryModule,
     PosthogIntegrationModule,
+    CvBenchmarkAdminModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

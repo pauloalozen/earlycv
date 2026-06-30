@@ -59,8 +59,8 @@ export const ANALYSIS_PROTECTION_FACADE_OPTIONS =
 const DEFAULT_OPTIONS = {
   cooldownMs: 0,
   dailyLimit: 50,
-  providerMaxExecutionMs: 60_000,
-  providerTimeoutMs: 45_000,
+  providerMaxExecutionMs: 180_000,
+  providerTimeoutMs: 150_000,
 } as const satisfies Required<AnalysisProtectionFacadeOptions>;
 
 @Injectable()

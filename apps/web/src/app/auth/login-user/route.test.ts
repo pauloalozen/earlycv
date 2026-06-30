@@ -33,7 +33,9 @@ describe("POST /auth/login-user", () => {
         internalRole: "none",
       },
     });
-    createPostRedirectResponseMock.mockReturnValueOnce(new Response(null, { status: 303 }));
+    createPostRedirectResponseMock.mockReturnValueOnce(
+      new Response(null, { status: 303 }),
+    );
 
     const form = new FormData();
     form.set("email", "u@x.com");

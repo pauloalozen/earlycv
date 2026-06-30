@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "sh -c 'if [ -f ../../../.env ]; then set -a && . ../../../.env && set +a; fi && node --import tsx ./run-smoke.ts'"
+  }
+}

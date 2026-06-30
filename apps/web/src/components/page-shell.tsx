@@ -1,18 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { EcvBuildLoader } from "./ecv-loader";
 
 export function PageShell({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setReady(false);
+    // Revela assim que a tela termina de montar no cliente.
     const timeoutId = setTimeout(() => setReady(true), 100);
 
-    const handlePageShow = () => {
-      setReady(true);
-    };
-
+    // Restore via bfcache: a página reaparece sem remontar — revela na hora.
+    const handlePageShow = () => setReady(true);
     window.addEventListener("pageshow", handlePageShow);
 
     return () => {
@@ -21,23 +20,19 @@ export function PageShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // O cover segura a tela enquanto ela monta (UX: nunca montar na cara do
+  // usuário). O JS o remove quando a montagem conclui. Caso o JS nunca rode
+  // (restore de bfcache sem hidratação), a animação failsafe em CSS dissolve o
+  // cover sozinha — então ele jamais fica preso como spinner infinito.
   return (
     <>
-      {!ready && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#F2F2F2]">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#CCCCCC] border-t-[#111111]" />
-        </div>
-      )}
       <div
-        style={{
-          opacity: ready ? 1 : 0,
-          transition: ready
-            ? "opacity 480ms cubic-bezier(0.22,1,0.36,1)"
-            : "none",
-        }}
+        className={`page-shell-cover${ready ? " page-shell-cover--ready" : ""}`}
+        aria-hidden="true"
       >
-        {children}
+        <EcvBuildLoader size={48} />
       </div>
+      {children}
     </>
   );
 }

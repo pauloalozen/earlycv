@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
+import { AT } from "@/app/admin/_components/admin-primitives";
 import { Badge, Card, EmptyState, Input } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
@@ -15,6 +16,8 @@ import { AdminTokenState } from "../_components/admin-token-state";
 
 export const metadata = buildAdminMetadata("Curriculos");
 
+const PAGE_SIZE = 50;
+
 function normalizeQuery(value: string) {
   return value.trim().toLowerCase();
 }
@@ -22,6 +25,7 @@ function normalizeQuery(value: string) {
 type AdminResumesPageProps = {
   searchParams: Promise<{
     kind?: string;
+    page?: string;
     query?: string;
     status?: string;
     token?: string;
@@ -31,7 +35,8 @@ type AdminResumesPageProps = {
 export default async function AdminResumesPage({
   searchParams,
 }: AdminResumesPageProps) {
-  const { kind, query, status } = await searchParams;
+  const { kind, page, query, status } = await searchParams;
+  const pageNum = Math.max(1, parseInt(page ?? "1", 10) || 1);
   const token = await getBackofficeSessionToken();
 
   if (!token) {
@@ -86,6 +91,13 @@ export default async function AdminResumesPage({
         (!status || resume.status === status)
       );
     });
+
+  const totalPages = Math.max(1, Math.ceil(resumeViews.length / PAGE_SIZE));
+  const safePageNum = Math.min(pageNum, totalPages);
+  const paginatedResumeViews = resumeViews.slice(
+    (safePageNum - 1) * PAGE_SIZE,
+    safePageNum * PAGE_SIZE,
+  );
 
   return (
     <div className="px-6 py-10 md:px-10">
@@ -147,7 +159,7 @@ export default async function AdminResumesPage({
           />
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
-            {resumeViews.map(({ owner, resume, resumeKind }) => (
+            {paginatedResumeViews.map(({ owner, resume, resumeKind }) => (
               <Card className="space-y-4" key={resume.id}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
@@ -199,7 +211,61 @@ export default async function AdminResumesPage({
             ))}
           </div>
         )}
+
+        {totalPages > 1 && resumeViews.length > 0 && (
+          <div
+            className="flex items-center justify-between text-sm"
+            style={{ color: AT.muted }}
+          >
+            <span>
+              Página {safePageNum} de {totalPages} · {resumeViews.length}{" "}
+              currículos
+            </span>
+            <div className="flex gap-2">
+              {safePageNum > 1 && (
+                <Link
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  href={buildPageHref({
+                    page: safePageNum - 1,
+                    kind,
+                    query,
+                    status,
+                  })}
+                >
+                  ← Anterior
+                </Link>
+              )}
+              {safePageNum < totalPages && (
+                <Link
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  href={buildPageHref({
+                    page: safePageNum + 1,
+                    kind,
+                    query,
+                    status,
+                  })}
+                >
+                  Próxima →
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function buildPageHref(params: {
+  kind?: string;
+  page: number;
+  query?: string;
+  status?: string;
+}) {
+  const qs = new URLSearchParams();
+  qs.set("page", String(params.page));
+  if (params.kind) qs.set("kind", params.kind);
+  if (params.query) qs.set("query", params.query);
+  if (params.status) qs.set("status", params.status);
+  return `/admin/curriculos?${qs}`;
 }

@@ -111,7 +111,7 @@ function CompactDonut({ scoreState }: { scoreState: ScoreState }) {
   if (scoreState === "no-cv") {
     return (
       <a
-        href="/cv-base"
+        href="/meu-cv-master"
         title="Suba seu CV para ver compatibilidade"
         style={{
           display: "flex",
@@ -401,7 +401,7 @@ function ExpandedScoreWidget({ scoreState }: { scoreState: ScoreState }) {
             O score é calculado com base no seu CV Master.
           </p>
           <a
-            href="/cv-base"
+            href="/meu-cv-master"
             style={{
               background: "#fafaf6",
               color: "#0a0a0a",

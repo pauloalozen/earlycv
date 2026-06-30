@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import {
+  type AnalyticsConsentState,
   isAnalyticsConsentGateEnabled,
   onAnalyticsConsentPreferencesOpen,
   readAnalyticsConsentState,
   setAnalyticsConsentState,
-  type AnalyticsConsentState,
 } from "@/lib/analytics-consent";
 
 export function AnalyticsConsentBanner() {
@@ -36,28 +36,28 @@ export function AnalyticsConsentBanner() {
             melhorar sua experiência.
           </p>
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            className="rounded-md border border-transparent bg-transparent px-3 py-2 text-neutral-600 transition hover:bg-white/50 hover:text-neutral-700"
-            onClick={() => {
-              setAnalyticsConsentState("denied");
-              setState("denied");
-              setForceOpen(false);
-            }}
-          >
-            Recusar opcionais
-          </button>
-          <button
-            type="button"
-            className="rounded-md bg-neutral-900 px-3 py-2 text-white transition hover:bg-neutral-800"
-            onClick={() => {
-              setAnalyticsConsentState("accepted");
-              setState("accepted");
-              setForceOpen(false);
-            }}
-          >
-            Aceitar
-          </button>
+            <button
+              type="button"
+              className="rounded-md border border-transparent bg-transparent px-3 py-2 text-neutral-600 transition hover:bg-white/50 hover:text-neutral-700"
+              onClick={() => {
+                setAnalyticsConsentState("denied");
+                setState("denied");
+                setForceOpen(false);
+              }}
+            >
+              Recusar opcionais
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-neutral-900 px-3 py-2 text-white transition hover:bg-neutral-800"
+              onClick={() => {
+                setAnalyticsConsentState("accepted");
+                setState("accepted");
+                setForceOpen(false);
+              }}
+            >
+              Aceitar
+            </button>
           </div>
         </div>
       </div>

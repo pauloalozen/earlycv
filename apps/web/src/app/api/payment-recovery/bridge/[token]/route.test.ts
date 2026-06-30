@@ -20,20 +20,15 @@ describe("GET /api/payment-recovery/bridge/[token]", () => {
     cookiesMock.mockResolvedValueOnce({
       get: vi.fn().mockReturnValue({ value: "access-token-1" }),
     });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(null, {
-          status: 302,
-          headers: {
-            location: "https://www.mercadopago.com.br/checkout/v1/redirect",
-          },
-        }),
-      );
-    vi.stubGlobal(
-      "fetch",
-      fetchMock,
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: {
+          location: "https://www.mercadopago.com.br/checkout/v1/redirect",
+        },
+      }),
     );
+    vi.stubGlobal("fetch", fetchMock);
 
     const response = await GET(
       new Request("http://localhost/api/payment-recovery/bridge/token-2"),

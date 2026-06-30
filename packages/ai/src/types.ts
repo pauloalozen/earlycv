@@ -1,4 +1,4 @@
-export type AIProvider = "openai";
+export type AIProvider = "openai" | "xai" | "anthropic";
 
 export type AIGenerationRequest = {
   input: string;

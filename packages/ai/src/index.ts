@@ -2,7 +2,7 @@ import OpenAI from "openai";
 
 import type { OpenAIClientConfig } from "./types.js";
 
-export const aiProviders = ["openai"] as const;
+export const aiProviders = ["openai", "xai", "anthropic"] as const;
 export const defaultAIProvider = aiProviders[0];
 
 export function createOpenAIClient(config: OpenAIClientConfig) {
@@ -21,8 +21,32 @@ export type {
   CvAnalysisOutput,
   CvSection,
   CvSectionItem,
+  JobRequirementCoverage,
+  JobRequirementDimension,
+  JobRequirementGateLevel,
+  JobRequirementImportance,
+  RequirementAdaptationAction,
+  RequirementCoverageStatus,
+  StructuredJobRequirement,
 } from "./cv-adaptation.js";
-export { adaptCv, analyzeAndAdaptCv } from "./cv-adaptation.js";
+export {
+  adaptCv,
+  analyzeAndAdaptCv,
+  CV_ANALYSIS_PROMPT_VERSION,
+} from "./cv-adaptation.js";
+export type { CanonicalJobJson } from "./job-canonicalization.js";
+export {
+  canonicalizeJobDescription,
+  JOB_CANONICALIZATION_PROMPT_VERSION,
+} from "./job-canonicalization.js";
+export {
+  type CanonicalProfile,
+  type ExtractionCoverage,
+  extractMasterCvCanonicalProfile,
+  type FieldStatus,
+  type MasterCvCanonicalExtractionInput,
+  type MasterCvCanonicalExtractionOutput,
+} from "./master-cv-canonical-extraction.js";
 export {
   extractTextFromPdf,
   NotACvError,

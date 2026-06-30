@@ -37,5 +37,5 @@ test("ai package exposes development source exports and compiled default runtime
 
 test("ai package exposes stable provider contract metadata", () => {
   assert.equal(defaultAIProvider, "openai");
-  assert.deepEqual(aiProviders, ["openai"]);
+  assert.deepEqual(aiProviders, ["openai", "xai", "anthropic"]);
 });

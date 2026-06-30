@@ -1,8 +1,8 @@
-import { getFrontendAnalyticsContext } from "@/lib/analytics-context";
 import {
   isAnalyticsConsentGateEnabled,
   readAnalyticsConsentState,
 } from "@/lib/analytics-consent";
+import { getFrontendAnalyticsContext } from "@/lib/analytics-context";
 import { emitBusinessFunnelEvent } from "@/lib/cv-adaptation-api";
 import {
   getPosthogSessionId,
@@ -257,7 +257,8 @@ function isProhibitedKey(key: string): boolean {
 function sanitizeLeadCode(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
-  if (!trimmed || trimmed.includes("@") || trimmed.includes(" ")) return undefined;
+  if (!trimmed || trimmed.includes("@") || trimmed.includes(" "))
+    return undefined;
   if (!/^[A-Za-z0-9_-]{3,64}$/.test(trimmed)) return undefined;
   return trimmed;
 }
@@ -438,7 +439,9 @@ export function captureAndPersistUtmParams(): UtmParams {
 
   if (!hasCurrentUtm) {
     const persisted = getPersistedUtmParams();
-    return Object.keys(persisted).length > 0 ? persisted : transientFirstTouchUtm;
+    return Object.keys(persisted).length > 0
+      ? persisted
+      : transientFirstTouchUtm;
   }
 
   const existing = getPersistedUtmParams();
@@ -534,7 +537,9 @@ function emitGa4Event(eventName: string, properties: Record<string, unknown>) {
   const pagePath =
     typeof window !== "undefined" ? window.location.pathname : undefined;
   const pageReferrer =
-    typeof document !== "undefined" ? sanitizeReferrer(document.referrer) : undefined;
+    typeof document !== "undefined"
+      ? sanitizeReferrer(document.referrer)
+      : undefined;
 
   window.gtag("event", eventName, {
     utm_source: properties.utm_source,

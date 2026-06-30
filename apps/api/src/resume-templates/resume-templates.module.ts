@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import OpenAI from "openai";
+import { createAiClientFromEnv } from "../common/ai-client-factory";
 
 import { RolesGuard } from "../common/roles.guard";
 import { DatabaseModule } from "../database/database.module";
@@ -21,10 +21,7 @@ import { ResumeTemplatesService } from "./resume-templates.service";
     RolesGuard,
     {
       provide: "OPENAI_CLIENT",
-      useFactory: () =>
-        new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY,
-        }),
+      useFactory: () => createAiClientFromEnv(),
     },
   ],
   exports: [ResumeTemplateDocxService],

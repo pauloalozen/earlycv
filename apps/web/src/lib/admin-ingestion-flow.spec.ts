@@ -5,10 +5,10 @@ import {
   buildAdminRedirect,
   getSourceDefaults,
   isRedirectControlFlowError,
-  parseManualAdapterType,
-  parseManualBatchRunId,
   parseCompanyFormData,
   parseJobSourceFormData,
+  parseManualAdapterType,
+  parseManualBatchRunId,
 } from "./admin-ingestion-flow.ts";
 
 test("buildAdminRedirect preserves unrelated query params and appends wizard state", () => {
@@ -155,8 +155,14 @@ test("parseManualAdapterType accepts allowed adapter types", () => {
 });
 
 test("parseManualAdapterType rejects empty and unknown adapter values", () => {
-  assert.throws(() => parseManualAdapterType(null), /Informe o tipo de adaptador/);
-  assert.throws(() => parseManualAdapterType("workday"), /Tipo de adaptador invalido/);
+  assert.throws(
+    () => parseManualAdapterType(null),
+    /Informe o tipo de adaptador/,
+  );
+  assert.throws(
+    () => parseManualAdapterType("workday"),
+    /Tipo de adaptador invalido/,
+  );
 });
 
 test("parseManualBatchRunId trims and validates run id", () => {

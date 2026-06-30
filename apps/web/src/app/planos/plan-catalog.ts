@@ -39,7 +39,7 @@ function formatCents(cents: number): { whole: string; decimal: string } {
   return { whole: `R$${reais}`, decimal: `,${centavos}` };
 }
 
-function unitPriceLabel(totalCents: number, qty: number): string {
+function _unitPriceLabel(totalCents: number, qty: number): string {
   const unitReais = (Math.round(totalCents / qty) / 100)
     .toFixed(2)
     .replace(".", ",");
@@ -81,6 +81,7 @@ export function buildPlanCatalog(
         "Análises gratuitas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
+        "Candidaturas organizadas",
         "Sem cartão de crédito",
       ],
     },
@@ -89,7 +90,7 @@ export function buildPlanCatalog(
       label: "Starter",
       price: starterPrice.whole,
       cents: starterPrice.decimal,
-      description: "Para uma vaga específica",
+      description: "Para os primeiros CVs adaptados",
       featured: false,
       badge: null,
       cta: "Ajustar meu CV agora",
@@ -99,12 +100,13 @@ export function buildPlanCatalog(
       downloadCredits: qntStarterDownloads,
       unitPriceCents: Math.round(starterCents / qntStarterDownloads),
       features: [
-        `${qntStarterDownloads} créditos de download de CV`,
+        `${qntStarterDownloads} créditos EarlyCV`,
         "Análises gratuitas incluídas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
+        "Candidaturas organizadas",
+        "Preparação para entrevista",
         "Download em PDF e DOCX",
-        "Pontos fortes e melhorias",
       ],
     },
     {
@@ -112,7 +114,7 @@ export function buildPlanCatalog(
       label: "Pro",
       price: proPrice.whole,
       cents: proPrice.decimal,
-      description: "Para quem aplica para várias vagas",
+      description: "Mais candidaturas e preparação",
       featured: true,
       badge: "Mais escolhido",
       cta: "Aumentar as chances",
@@ -122,12 +124,13 @@ export function buildPlanCatalog(
       downloadCredits: qntProDownloads,
       unitPriceCents: Math.round(proCents / qntProDownloads),
       features: [
-        `${qntProDownloads} créditos de download de CV`,
+        `${qntProDownloads} créditos EarlyCV`,
         "Análises gratuitas incluídas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
+        "Candidaturas organizadas",
+        "Preparação para entrevista",
         "Download em PDF e DOCX",
-        "Pontos fortes e melhorias",
       ],
     },
     {
@@ -135,7 +138,7 @@ export function buildPlanCatalog(
       label: "Turbo",
       price: turboPrice.whole,
       cents: turboPrice.decimal,
-      description: "Para quem aplica todos os dias",
+      description: "Para quem aplica em volume",
       featured: false,
       badge: null,
       cta: "Aplicar para mais vagas",
@@ -145,12 +148,13 @@ export function buildPlanCatalog(
       downloadCredits: qntTurboDownloads,
       unitPriceCents: Math.round(turboCents / qntTurboDownloads),
       features: [
-        `${qntTurboDownloads} créditos de download de CV`,
+        `${qntTurboDownloads} créditos EarlyCV`,
         "Análises gratuitas incluídas",
         "Score de compatibilidade ATS",
         "Análise de keywords da vaga",
+        "Candidaturas organizadas",
+        "Preparação para entrevista",
         "Download em PDF e DOCX",
-        "Pontos fortes e melhorias",
       ],
     },
   ];

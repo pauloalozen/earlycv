@@ -22,7 +22,10 @@ export async function POST(request: Request) {
 
   const payload = (await request.json().catch(() => ({}))) as CheckoutPayload;
 
-  if (!payload.planId || !VALID_PLAN_IDS.includes(payload.planId as CheckoutPlanId)) {
+  if (
+    !payload.planId ||
+    !VALID_PLAN_IDS.includes(payload.planId as CheckoutPlanId)
+  ) {
     return NextResponse.json({ message: "plano-invalido" }, { status: 400 });
   }
 

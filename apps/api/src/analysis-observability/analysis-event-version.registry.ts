@@ -70,6 +70,21 @@ export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   teaser_scroll: 1,
   teaser_viewed: 1,
   unlock_cv_click: 1,
+  // Candidaturas
+  candidaturas_page_viewed: 1,
+  candidatura_created: 1,
+  candidatura_detail_viewed: 1,
+  candidatura_status_changed: 1,
+  candidatura_marked_as_applied: 1,
+  candidatura_archived: 1,
+  candidatura_deleted: 1,
+  candidatura_note_added: 1,
+  candidatura_rejection_feedback_submitted: 1,
+  // Interview Prep
+  interview_prep_drawer_opened: 1,
+  interview_prep_generated: 1,
+  interview_prep_viewed: 1,
+  interview_prep_printed: 1,
 } as const;
 
 export type BusinessFunnelEventName =

@@ -1,0 +1,18 @@
+Analista de Dados Sênior
+
+Empresa: Dados & Co
+Local: São Paulo
+Modelo: Híbrido
+
+Responsabilidades:
+- Liderar definição de KPIs.
+- Criar modelos de dados.
+- Construir dashboards executivos.
+- Orientar analistas menos experientes.
+- Influenciar decisões estratégicas.
+
+Requisitos:
+- Experiência avançada com SQL.
+- Experiência avançada com Power BI.
+- Modelagem de dados.
+- Comunicação com liderança executiva.

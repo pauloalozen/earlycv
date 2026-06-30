@@ -79,7 +79,7 @@ export function LandingVariantA() {
               fontWeight: 500,
             }}
           >
-            v1.2
+            v2.1
           </span>
         </Link>
 
@@ -849,7 +849,11 @@ export function LandingVariantA() {
 
                 {plan.checkoutPlanId ? (
                   <form action="/plans/checkout" method="post">
-                    <input type="hidden" name="planId" value={plan.checkoutPlanId} />
+                    <input
+                      type="hidden"
+                      name="planId"
+                      value={plan.checkoutPlanId}
+                    />
                     <button
                       type="submit"
                       style={{

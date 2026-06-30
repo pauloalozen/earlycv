@@ -124,7 +124,29 @@ export class CvAdaptationPdfService {
       .replace("{{summary}}", summary)
       .replace("{{sectionsHtml}}", sectionsHtml);
 
-    return this.translateEnglishLabels(injected);
+    return this.detectCvLanguage(output) === "pt"
+      ? this.translateEnglishLabels(injected)
+      : injected;
+  }
+
+  private detectCvLanguage(output: CvAdaptationOutput): "pt" | "en" {
+    const text = [
+      output.summary ?? "",
+      ...(output.sections ?? []).map((s) => s.title),
+    ]
+      .join(" ")
+      .toLowerCase();
+    const ptScore = (
+      text.match(
+        /\b(de|para|com|em|uma|não|por|do|da|experiência|formação|idiomas|competências)\b/g,
+      ) ?? []
+    ).length;
+    const enScore = (
+      text.match(
+        /\b(the|and|with|for|experience|education|skills|languages|certifications|summary)\b/g,
+      ) ?? []
+    ).length;
+    return enScore > ptScore ? "en" : "pt";
   }
 
   // Translate common English CV section labels to Portuguese for templates

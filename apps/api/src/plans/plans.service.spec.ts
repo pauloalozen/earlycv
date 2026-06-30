@@ -1207,11 +1207,13 @@ test("getProAccessToken prefers MERCADOPAGO_PRO_ACCESS_TOKEN over legacy token",
 test("getProAccessToken uses MERCADOPAGO_PRO_ACCESS_TOKEN_TEST in non-production", async () => {
   const originalMode = process.env.MERCADOPAGO_MODE;
   const originalNodeEnv = process.env.NODE_ENV;
+  const originalProToken = process.env.MERCADOPAGO_PRO_ACCESS_TOKEN;
   const originalProTestToken = process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST;
   const originalLegacyTestToken = process.env.MERCADOPAGO_ACCESS_TOKEN_TEST;
 
   process.env.MERCADOPAGO_MODE = "sandbox";
   process.env.NODE_ENV = "development";
+  delete process.env.MERCADOPAGO_PRO_ACCESS_TOKEN;
   process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST = "pro-test-token";
   process.env.MERCADOPAGO_ACCESS_TOKEN_TEST = "legacy-test-token";
 
@@ -1226,6 +1228,9 @@ test("getProAccessToken uses MERCADOPAGO_PRO_ACCESS_TOKEN_TEST in non-production
   else process.env.MERCADOPAGO_MODE = originalMode;
   if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = originalNodeEnv;
+  if (originalProToken === undefined)
+    delete process.env.MERCADOPAGO_PRO_ACCESS_TOKEN;
+  else process.env.MERCADOPAGO_PRO_ACCESS_TOKEN = originalProToken;
   if (originalProTestToken === undefined)
     delete process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST;
   else process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST = originalProTestToken;
@@ -1308,7 +1313,7 @@ test("createCheckout updates existing none purchase to pending before returning 
   }
 });
 
-test("createCheckout stores gaClientId in purchase metadata when provided", async () => {
+test("createCheckout accepts gaClientId input without persisting metadata", async () => {
   const originalMode = process.env.PAYMENT_CHECKOUT_MODE;
   process.env.PAYMENT_CHECKOUT_MODE = "brick";
 
@@ -1349,8 +1354,7 @@ test("createCheckout stores gaClientId in purchase metadata when provided", asyn
     );
 
     assert.equal(result.purchaseId, "purchase-ga-1");
-    const metadataJson = createdData?.metadataJson as Record<string, unknown>;
-    assert.equal(metadataJson.gaClientId, "1234567890.1234567890");
+    assert.equal(createdData?.metadataJson, undefined);
   } finally {
     if (originalMode === undefined) delete process.env.PAYMENT_CHECKOUT_MODE;
     else process.env.PAYMENT_CHECKOUT_MODE = originalMode;
@@ -1683,7 +1687,10 @@ test("ga4 failure does not break approved purchase flow", async () => {
       },
     } as never,
     {
-      record: async () => ({ event: { id: "evt-ga4-failure-1" }, ingested: true }),
+      record: async () => ({
+        event: { id: "evt-ga4-failure-1" },
+        ingested: true,
+      }),
     } as never,
     {
       sendPurchaseEvent: async () => {

@@ -9,13 +9,17 @@ export async function GET(
   context: { params: Promise<{ purchaseId: string }> },
 ) {
   const { purchaseId } = await context.params;
-  const response = await apiRequest("GET", `/payments/brick/checkout/${purchaseId}`);
+  const response = await apiRequest(
+    "GET",
+    `/payments/brick/checkout/${purchaseId}`,
+  );
   const text = await response.text();
 
   return new NextResponse(text, {
     status: response.status,
     headers: {
-      "content-type": response.headers.get("content-type") ?? "application/json",
+      "content-type":
+        response.headers.get("content-type") ?? "application/json",
     },
   });
 }

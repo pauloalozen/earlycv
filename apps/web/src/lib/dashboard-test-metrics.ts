@@ -1,3 +1,6 @@
+import { normalizeData } from "@/app/adaptar/resultado/normalize-data";
+import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
+
 export type DashboardMetricInput = {
   id: string;
   improvement: number | null;
@@ -23,12 +26,119 @@ function parseText(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
+function parseTextArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      )
+    : [];
+}
+
 function parseNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function normalizeKeyword(value: string): string {
-  return value.trim().toLocaleLowerCase("pt-BR");
+function resolveCvAnalysisScores(
+  adaptedContentJson: unknown,
+  options: ExtractDashboardAnalysisSignalOptions = {},
+) {
+  const parsed =
+    adaptedContentJson && typeof adaptedContentJson === "object"
+      ? (adaptedContentJson as Record<string, unknown>)
+      : null;
+
+  if (!parsed) {
+    return {
+      scoreBefore: null,
+      scoreAfter: null,
+      selectedMissingKeywords: [],
+    };
+  }
+
+  const payloadSelectedMissingKeywords = parseTextArray(
+    parsed.selectedMissingKeywords,
+  );
+  const selectedMissingKeywords =
+    options.selectedMissingKeywords &&
+    options.selectedMissingKeywords.length > 0
+      ? parseTextArray(options.selectedMissingKeywords).map((keyword) =>
+          keyword.trim(),
+        )
+      : payloadSelectedMissingKeywords;
+
+  const fit =
+    parsed.fit && typeof parsed.fit === "object"
+      ? (parsed.fit as Record<string, unknown>)
+      : null;
+
+  const looksNormalizedHistoricalPayload =
+    !!fit &&
+    (Array.isArray(parsed.positivos) ||
+      Array.isArray(parsed.ajustes_conteudo) ||
+      Array.isArray(parsed.ajustes_indisponiveis) ||
+      Array.isArray(parsed.pontos_fortes) ||
+      Array.isArray(parsed.lacunas) ||
+      Boolean(parsed.keywords && typeof parsed.keywords === "object") ||
+      Boolean(parsed.formato_cv && typeof parsed.formato_cv === "object") ||
+      Boolean(parsed.ats_keywords && typeof parsed.ats_keywords === "object"));
+
+  if (looksNormalizedHistoricalPayload) {
+    try {
+      const normalized = normalizeData(parsed as CvAnalysisData);
+      const scoreAtualBase = normalized.score.scoreAtualBase;
+
+      const ptsKwSelecionadas = normalized.keywords.ausentes
+        .filter((k) =>
+          selectedMissingKeywords.some(
+            (sk) => sk.toLowerCase() === k.kw.toLowerCase(),
+          ),
+        )
+        .reduce((s, k) => s + k.pontos, 0);
+      const ptsAjustes =
+        normalized.score.ajustesConteudoSecao1 +
+        normalized.score.keywordsPossiveisTotal;
+      const scoreAfter = Math.min(
+        100,
+        scoreAtualBase + ptsAjustes + ptsKwSelecionadas,
+      );
+
+      return {
+        scoreBefore: scoreAtualBase,
+        scoreAfter,
+        selectedMissingKeywords,
+      };
+    } catch {
+      // Preserve scalar fallbacks for malformed historical payloads.
+    }
+  }
+
+  const projection =
+    parsed.projecao_melhoria && typeof parsed.projecao_melhoria === "object"
+      ? (parsed.projecao_melhoria as Record<string, unknown>)
+      : null;
+  const atsScore =
+    parsed.atsScore && typeof parsed.atsScore === "object"
+      ? (parsed.atsScore as Record<string, unknown>)
+      : null;
+
+  return {
+    scoreBefore:
+      parseNumber(parsed.scoreBefore) ??
+      parseNumber(projection?.score_atual) ??
+      null,
+    scoreAfter:
+      parseNumber(parsed.scoreAfter) ??
+      parseNumber(parsed.score_pos_ajustes) ??
+      parseNumber(atsScore?.after) ??
+      parseNumber(fit?.score_pos_ajustes) ??
+      parseNumber(projection?.score_pos_otimizacao) ??
+      parseNumber(projection?.score_pos_ajustes) ??
+      parseNumber(projection?.scoreAfter) ??
+      parseNumber(fit?.score) ??
+      null,
+    selectedMissingKeywords,
+  };
 }
 
 export function extractDashboardAnalysisSignal(
@@ -48,58 +158,9 @@ export function extractDashboardAnalysisSignal(
         })
       : {};
 
-  try {
-    const normalized = normalizeData(parsed as CvAnalysisData);
-    const payloadSelectedMissingKeywords = Array.isArray(
-      parsed.selectedMissingKeywords,
-    )
-      ? parsed.selectedMissingKeywords.filter(
-          (value): value is string =>
-            typeof value === "string" && value.trim().length > 0,
-        )
-      : [];
-    const selectedMissingKeywords =
-      options.selectedMissingKeywords && options.selectedMissingKeywords.length > 0
-        ? options.selectedMissingKeywords
-            .filter(
-              (value): value is string =>
-                typeof value === "string" && value.trim().length > 0,
-            )
-            .map((keyword) => keyword.trim())
-        : payloadSelectedMissingKeywords;
-    const selectedSet = new Set(
-      selectedMissingKeywords.map((keyword) => normalizeKeyword(keyword)),
-    );
-    const selectedKeywordsPoints = normalized.keywords.ausentes
-      .filter((keyword) => selectedSet.has(normalizeKeyword(keyword.kw)))
-      .reduce((sum, keyword) => sum + keyword.pontos, 0);
-    const scoreBefore = normalized.score.scoreAtualBase;
-    const scoreFinal = Math.min(
-      100,
-      normalized.score.scoreAposLiberarBase + selectedKeywordsPoints,
-    );
-
-    return {
-      adjustments: {
-        notes: parseText(parsed.adaptation_notes),
-        scoreBefore,
-        scoreFinal,
-      },
-      selectedMissingKeywords,
-      score: scoreFinal,
-      improvement: scoreFinal - scoreBefore,
-    };
-  } catch {
-    // Keep legacy fallback for malformed historical payloads.
-  }
-
-  const fitScore = parseNumber(parsed.fit?.score);
-  const fitScorePosAjustes = parseNumber(parsed.fit?.score_pos_ajustes);
-  const scoreAtual = parseNumber(parsed.projecao_melhoria?.score_atual);
-  const scorePosOtimizacao = parseNumber(
-    parsed.projecao_melhoria?.score_pos_otimizacao,
-  );
-  const finalScore = fitScorePosAjustes ?? scorePosOtimizacao ?? fitScore;
+  const resolved = resolveCvAnalysisScores(parsed as CvAnalysisData, options);
+  const scoreAtual = resolved.scoreBefore;
+  const finalScore = resolved.scoreAfter;
 
   return {
     adjustments: {
@@ -107,11 +168,11 @@ export function extractDashboardAnalysisSignal(
       scoreBefore: scoreAtual,
       scoreFinal: finalScore,
     },
-    selectedMissingKeywords: [],
+    selectedMissingKeywords: resolved.selectedMissingKeywords,
     score: finalScore,
     improvement:
-      scoreAtual !== null && scorePosOtimizacao !== null
-        ? scorePosOtimizacao - scoreAtual
+      scoreAtual !== null && finalScore !== null
+        ? finalScore - scoreAtual
         : null,
   };
 }
@@ -178,6 +239,3 @@ export function getDashboardScoreColor(score: number): string {
 
   return `rgb(${r}, ${g}, ${b})`;
 }
-
-import { normalizeData } from "@/app/adaptar/resultado/normalize-data";
-import type { CvAnalysisData } from "@/lib/cv-adaptation-api";

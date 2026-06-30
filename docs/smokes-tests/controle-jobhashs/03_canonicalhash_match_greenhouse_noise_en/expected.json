@@ -1,0 +1,6 @@
+{
+  "rawHash": "DIFFERENT",
+  "canonicalHash": "MATCH",
+  "requirementSourceHash": "MATCH",
+  "reason": "Same job content, but one version includes common ATS/careers-site section noise."
+}

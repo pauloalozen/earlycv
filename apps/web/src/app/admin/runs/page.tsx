@@ -2,7 +2,7 @@ import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Card, EmptyState, Input } from "@/components/ui";
 import { filterRuns } from "@/lib/admin-operations";
-import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import { getRunsDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
@@ -30,7 +30,7 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
     );
   }
 
-  const runsDataResult = await getPhaseOneAdminDataSafely();
+  const runsDataResult = await getRunsDataSafely();
 
   if (runsDataResult.kind !== "ok") {
     const state = buildAdminStateModel(runsDataResult.kind, "/admin/runs");

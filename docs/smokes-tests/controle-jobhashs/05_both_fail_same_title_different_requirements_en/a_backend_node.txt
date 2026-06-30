@@ -1,0 +1,18 @@
+Backend Developer
+
+Company: Acme
+Location: Remote
+Employment type: Full-time
+
+Responsibilities:
+- Develop REST APIs with Node.js.
+- Work with PostgreSQL.
+- Implement automated tests.
+- Participate in backend technical decisions.
+
+Requirements:
+- Node.js.
+- TypeScript.
+- PostgreSQL.
+- REST APIs.
+- Automated testing.

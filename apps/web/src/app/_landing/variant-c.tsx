@@ -80,7 +80,7 @@ export function LandingVariantC() {
               fontWeight: 500,
             }}
           >
-            v1.2
+            v2.1
           </span>
         </Link>
 
@@ -575,7 +575,6 @@ export function LandingVariantC() {
               </div>
             ))}
           </div>
-
         </div>
       </section>
 
@@ -839,7 +838,11 @@ export function LandingVariantC() {
 
                 {plan.checkoutPlanId ? (
                   <form action="/plans/checkout" method="post">
-                    <input type="hidden" name="planId" value={plan.checkoutPlanId} />
+                    <input
+                      type="hidden"
+                      name="planId"
+                      value={plan.checkoutPlanId}
+                    />
                     <button
                       type="submit"
                       style={{
@@ -976,7 +979,6 @@ export function LandingVariantC() {
             {[
               "Reembolso integral garantido",
               "Sem perguntas ou burocracia",
-              "Resposta em até 24 horas",
             ].map((text) => (
               <span
                 key={text}
@@ -1025,7 +1027,6 @@ export function LandingVariantC() {
             Testar grátis agora
             <span className="lp-cta-arrow">→</span>
           </Link>
-
         </div>
       </section>
 

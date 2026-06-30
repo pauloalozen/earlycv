@@ -25,6 +25,8 @@ vi.mock("@/lib/session-actions", () => ({
 
 vi.mock("@/lib/resumes-api", () => ({
   getMyMasterResume: getMyMasterResumeMock,
+  getMyMasterCvExtractionStatus: vi.fn().mockResolvedValue(null),
+  uploadMasterResume: vi.fn(),
 }));
 
 vi.mock("@/lib/cv-adaptation-api", () => ({
@@ -48,12 +50,17 @@ describe("AdaptarPage selector defaults", () => {
   });
 
   it("shows upload/text selector for authenticated user without master CV", async () => {
-    getAuthStatusMock.mockResolvedValue({ userName: "Ana" });
+    getAuthStatusMock.mockResolvedValue({
+      userName: "Ana",
+      profileReadinessStatus: "partial",
+    });
 
     render(<AdaptarPage />);
 
     expect(await screen.findByRole("button", { name: "Upload" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Digitar texto" })).toBeTruthy();
+    // Mode toggle (CV Master) only appears when user has a master CV
+    expect(screen.queryByRole("button", { name: "CV Master" })).toBeNull();
   });
 
   it("defaults guest selector to upload mode", async () => {
@@ -68,17 +75,37 @@ describe("AdaptarPage selector defaults", () => {
     );
   });
 
+  it("enables profile mode when readiness is ready and master CV exists", async () => {
+    getAuthStatusMock.mockResolvedValue({
+      userName: "Ana",
+      profileReadinessStatus: "ready",
+    });
+    getMyMasterResumeMock.mockResolvedValue({
+      id: "resume-1",
+      title: "Meu CV",
+      sourceFileName: null,
+      isMaster: true,
+      updatedAt: new Date().toISOString(),
+    });
+
+    render(<AdaptarPage />);
+
+    expect(
+      await screen.findByRole("button", { name: "CV Master" }),
+    ).toBeTruthy();
+  });
+
   it("renders legal links and sensitive-data warning in adaptation flow", async () => {
     getAuthStatusMock.mockResolvedValue({ userName: null });
 
     render(<AdaptarPage />);
 
     expect(
-      await screen.findByText(/evite enviar dados sens[ií]veis desnecess[áa]rios/i),
+      await screen.findByText(
+        /evite enviar dados sens[ií]veis desnecess[áa]rios/i,
+      ),
     ).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: /pol[ií]tica de privacidade/i }),
-    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: /privacidade/i })).toBeTruthy();
     expect(screen.getByRole("link", { name: /termos de uso/i })).toBeTruthy();
   });
 });

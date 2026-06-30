@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+
 import {
   cleanup,
   fireEvent,
@@ -14,6 +16,8 @@ const analyzeGuestCvMock = vi.hoisted(() => vi.fn());
 const analyzeAuthenticatedCvMock = vi.hoisted(() => vi.fn());
 const saveGuestPreviewMock = vi.hoisted(() => vi.fn());
 const getAuthStatusMock = vi.hoisted(() => vi.fn());
+const getMyMasterResumeMock = vi.hoisted(() => vi.fn());
+const getMyMasterCvExtractionStatusMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -35,7 +39,8 @@ vi.mock("@/lib/session-actions", () => ({
 }));
 
 vi.mock("@/lib/resumes-api", () => ({
-  getMyMasterResume: vi.fn(async () => null),
+  getMyMasterResume: getMyMasterResumeMock,
+  getMyMasterCvExtractionStatus: getMyMasterCvExtractionStatusMock,
 }));
 
 vi.mock("@/lib/cv-adaptation-api", () => ({
@@ -67,7 +72,11 @@ describe("AdaptarPage submit analytics flow", () => {
     analyzeAuthenticatedCvMock.mockReset();
     saveGuestPreviewMock.mockReset();
     getAuthStatusMock.mockReset();
+    getMyMasterResumeMock.mockReset();
+    getMyMasterCvExtractionStatusMock.mockReset();
     getAuthStatusMock.mockResolvedValue({ userName: null });
+    getMyMasterResumeMock.mockResolvedValue(null);
+    getMyMasterCvExtractionStatusMock.mockResolvedValue(null);
     trackEventMock.mockResolvedValue(undefined);
     analyzeGuestCvMock.mockResolvedValue({
       ok: true,
@@ -120,9 +129,7 @@ describe("AdaptarPage submit analytics flow", () => {
 
     const { container } = render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
 
@@ -173,9 +180,7 @@ describe("AdaptarPage submit analytics flow", () => {
 
     const { container } = render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
 
@@ -208,12 +213,53 @@ describe("AdaptarPage submit analytics flow", () => {
     expect(formDataArg?.get("turnstileToken")).toBeNull();
   });
 
+  it("shows extraction feedback with missing fields CTA for authenticated users", async () => {
+    getAuthStatusMock.mockResolvedValue({
+      userName: "Aline",
+      availableCreditsDisplay: 1,
+      internalRole: null,
+      profileReadinessStatus: "partial",
+    });
+    getMyMasterResumeMock.mockResolvedValue({
+      id: "resume-1",
+      title: "CV Base",
+      sourceFileName: "cv-base.pdf",
+      isMaster: true,
+      updatedAt: new Date().toISOString(),
+    });
+    getMyMasterCvExtractionStatusMock.mockResolvedValue({
+      status: "succeeded",
+      extractionCoverage: {
+        identifiedFields: ["fullName", "experiences"],
+        missingFields: ["education", "certifications"],
+        fieldStatus: {
+          fullName: "filled",
+          experiences: "partial",
+          education: "missing",
+          certifications: "missing",
+        },
+      },
+      updatedAt: new Date().toISOString(),
+    });
+
+    render(<AdaptarPage />);
+
+    await screen.findByText(/Dados extraidos:/i);
+
+    assert.ok(screen.getByText(/Dados extraidos:\s*fullName, experiences/i));
+    assert.ok(
+      screen.getByText(/Campos faltando:\s*education, certifications/i),
+    );
+    const completionLink = screen.getByRole("link", {
+      name: /Completar CV base manualmente/i,
+    });
+    assert.equal(completionLink.getAttribute("href"), "/cv-base");
+  });
+
   it("emits analyze_submit_clicked but not analysis_started for guest submit without file", async () => {
     render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
 
     trackEventMock.mockClear();
 
@@ -256,9 +302,7 @@ describe("AdaptarPage submit analytics flow", () => {
 
     const { container } = render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
 
@@ -308,9 +352,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const cvTextarea = screen.getByPlaceholderText(
       /Cole seu currículo em texto/i,
     );
-    const jobTextarea = screen.getByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const jobTextarea = screen.getByPlaceholderText("Cole a vaga completa");
 
     fireEvent.change(cvTextarea, {
       target: { value: "oi" },
@@ -342,9 +384,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const cvTextarea = screen.getByPlaceholderText(
       /Cole seu currículo em texto/i,
     );
-    const jobTextarea = screen.getByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const jobTextarea = screen.getByPlaceholderText("Cole a vaga completa");
 
     fireEvent.change(cvTextarea, {
       target: {
@@ -372,12 +412,147 @@ describe("AdaptarPage submit analytics flow", () => {
     expect(formDataArg?.get("file")).toBeNull();
   });
 
+  it("sends inputMode=text_paste for authenticated text mode", async () => {
+    getAuthStatusMock.mockResolvedValue({
+      userName: "Ana",
+      profileReadinessStatus: "ready",
+    });
+
+    render(<AdaptarPage />);
+
+    const textModeButton = await screen.findByRole("button", {
+      name: /Digitar texto/i,
+    });
+    fireEvent.click(textModeButton);
+
+    const cvTextarea = screen.getByPlaceholderText(
+      /Cole seu curr[ií]culo em texto/i,
+    );
+    const jobTextarea = screen.getByPlaceholderText("Cole a vaga completa");
+
+    fireEvent.change(cvTextarea, {
+      target: {
+        value:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL e Python",
+      },
+    });
+    fireEvent.change(jobTextarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeAuthenticatedCvMock).toHaveBeenCalledTimes(1);
+    });
+
+    const formDataArg = analyzeAuthenticatedCvMock.mock.calls[0]?.[0] as
+      | FormData
+      | undefined;
+    const inputModeArg = analyzeAuthenticatedCvMock.mock.calls[0]?.[1] as
+      | string
+      | undefined;
+    expect(inputModeArg).toBe("text_paste");
+    expect(formDataArg?.get("inputMode")).toBeNull();
+  });
+
+  it("sends inputMode=profile for authenticated profile mode when readiness is ready", async () => {
+    getAuthStatusMock.mockResolvedValue({
+      userName: "Ana",
+      profileReadinessStatus: "ready",
+    });
+
+    render(<AdaptarPage />);
+
+    const profileModeButton = await screen.findByRole("button", {
+      name: /Meu perfil/i,
+    });
+    fireEvent.click(profileModeButton);
+
+    const jobTextarea = screen.getByPlaceholderText("Cole a vaga completa");
+    fireEvent.change(jobTextarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeAuthenticatedCvMock).toHaveBeenCalledTimes(1);
+    });
+
+    const formDataArg = analyzeAuthenticatedCvMock.mock.calls[0]?.[0] as
+      | FormData
+      | undefined;
+    const inputModeArg = analyzeAuthenticatedCvMock.mock.calls[0]?.[1] as
+      | string
+      | undefined;
+    expect(inputModeArg).toBe("profile");
+    expect(formDataArg?.get("inputMode")).toBeNull();
+    expect(formDataArg?.get("file")).toBeNull();
+    expect(formDataArg?.get("masterCvText")).toBeNull();
+  });
+
+  it("keeps authenticated profile submit flowing with masterResumeId when readiness is partial", async () => {
+    getAuthStatusMock.mockResolvedValue({
+      userName: "Ana",
+      profileReadinessStatus: "partial",
+    });
+    getMyMasterResumeMock.mockResolvedValue({
+      id: "master-123",
+      title: "CV Base",
+      kind: "master",
+      status: "uploaded",
+      rawText: "Resumo",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      sourceFileName: null,
+      sourceFileType: null,
+      sourceFileUrl: null,
+      isMaster: true,
+    });
+
+    render(<AdaptarPage />);
+
+    const jobTextarea = await screen.findByPlaceholderText(
+      "Cole a vaga completa",
+    );
+    fireEvent.change(jobTextarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeAuthenticatedCvMock).toHaveBeenCalledTimes(1);
+    });
+
+    const formDataArg = analyzeAuthenticatedCvMock.mock.calls[0]?.[0] as
+      | FormData
+      | undefined;
+    const inputModeArg = analyzeAuthenticatedCvMock.mock.calls[0]?.[1] as
+      | string
+      | undefined;
+    expect(inputModeArg).toBe("profile");
+    expect(formDataArg?.get("inputMode")).toBeNull();
+    expect(formDataArg?.get("masterResumeId")).toBe("master-123");
+    expect(
+      screen.queryByText(/seu perfil ainda nao esta pronto para essa opcao/i),
+    ).toBeNull();
+  });
+
   it("persists guest analysis in sessionStorage and localStorage before redirect", async () => {
     const { container } = render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
 
@@ -427,9 +602,7 @@ describe("AdaptarPage submit analytics flow", () => {
     const cvTextarea = screen.getByPlaceholderText(
       /Cole seu currículo em texto/i,
     );
-    const jobTextarea = screen.getByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const jobTextarea = screen.getByPlaceholderText("Cole a vaga completa");
 
     fireEvent.change(cvTextarea, {
       target: {
@@ -462,9 +635,7 @@ describe("AdaptarPage submit analytics flow", () => {
   it("emits job_description_focus and job_description_paste only once per page visit", async () => {
     render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
 
     trackEventMock.mockClear();
 
@@ -549,9 +720,7 @@ describe("AdaptarPage submit analytics flow", () => {
 
     const { container } = render(<AdaptarPage />);
 
-    const textarea = await screen.findByPlaceholderText(
-      "Cole a vaga completa",
-    );
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
     const fileInput =
       container.querySelector<HTMLInputElement>('input[type="file"]');
 

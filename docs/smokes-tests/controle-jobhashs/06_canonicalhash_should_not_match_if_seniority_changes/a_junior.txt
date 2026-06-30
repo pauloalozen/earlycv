@@ -1,0 +1,16 @@
+Analista de Dados Júnior
+
+Empresa: Dados & Co
+Local: São Paulo
+Modelo: Híbrido
+
+Responsabilidades:
+- Apoiar criação de dashboards.
+- Executar consultas SQL simples.
+- Atualizar relatórios recorrentes.
+- Apoiar análise de indicadores.
+
+Requisitos:
+- Conhecimento básico de SQL.
+- Conhecimento básico de Power BI.
+- Boa vontade para aprender.

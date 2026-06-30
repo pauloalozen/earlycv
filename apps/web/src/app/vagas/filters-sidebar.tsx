@@ -287,7 +287,7 @@ function CvUploadCard() {
         em cada vaga.
       </p>
       <a
-        href="/cv-base"
+        href="/meu-cv-master"
         style={{
           background: "#fff",
           border: "1px dashed rgba(10,10,10,0.2)",

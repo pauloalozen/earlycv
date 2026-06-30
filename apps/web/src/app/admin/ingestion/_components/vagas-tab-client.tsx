@@ -1,16 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
-  AT,
   AdminPagination,
   AdminPill,
   AdminTable,
   AdminTd,
   AdminTh,
+  AT,
 } from "@/app/admin/_components/admin-primitives";
-import { buttonVariants } from "@/app/admin/_components/admin-button";
-import Link from "next/link";
 
 type JobRow = {
   id: string;
@@ -84,7 +83,7 @@ export function VagasTabClient({
   useEffect(() => {
     setPage(1);
     fetchJobs(1);
-  }, [debouncedSearch, sourceFilter, statusFilter, fetchJobs]);
+  }, [fetchJobs]);
 
   useEffect(() => {
     fetchJobs(page);
@@ -121,7 +120,11 @@ export function VagasTabClient({
         />
         <select
           className="h-9 rounded-md border px-3 text-[12.5px]"
-          style={{ borderColor: AT.border, background: AT.card, color: AT.ink2 }}
+          style={{
+            borderColor: AT.border,
+            background: AT.card,
+            color: AT.ink2,
+          }}
           value={sourceFilter}
           onChange={(e) => setSourceFilter(e.target.value)}
         >
@@ -134,7 +137,11 @@ export function VagasTabClient({
         </select>
         <select
           className="h-9 rounded-md border px-3 text-[12.5px]"
-          style={{ borderColor: AT.border, background: AT.card, color: AT.ink2 }}
+          style={{
+            borderColor: AT.border,
+            background: AT.card,
+            color: AT.ink2,
+          }}
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
         >
@@ -213,7 +220,9 @@ export function VagasTabClient({
         </tbody>
       </AdminTable>
 
-      <AdminPagination summary={`página ${page} de ${totalPages} · ${total} vagas`}>
+      <AdminPagination
+        summary={`página ${page} de ${totalPages} · ${total} vagas`}
+      >
         {page > 1 && (
           <button
             type="button"

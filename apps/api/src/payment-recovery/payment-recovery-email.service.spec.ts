@@ -154,9 +154,11 @@ test("DRY_RUN true inside allowlist skips real send", async () => {
 
 test("recovery link points to public payment recovery endpoint", async () => {
   const originalNodeEnv = process.env.NODE_ENV;
+  const originalAppEnv = process.env.APP_ENV;
   const originalFrontendUrl = process.env.FRONTEND_URL;
   const originalApiUrl = process.env.API_URL;
   process.env.NODE_ENV = "production";
+  process.env.APP_ENV = "production";
   process.env.FRONTEND_URL = "https://earlycv.com.br";
   process.env.API_URL = "https://api.earlycv.com.br";
 
@@ -182,6 +184,7 @@ test("recovery link points to public payment recovery endpoint", async () => {
   } finally {
     global.fetch = originalFetch;
     process.env.NODE_ENV = originalNodeEnv;
+    process.env.APP_ENV = originalAppEnv;
     process.env.FRONTEND_URL = originalFrontendUrl;
     process.env.API_URL = originalApiUrl;
   }
@@ -311,9 +314,11 @@ test("real send creates email and token; token persisted as hash", async () => {
 
 test("provider failure returns failed with error message", async () => {
   const originalNodeEnv = process.env.NODE_ENV;
+  const originalAppEnv = process.env.APP_ENV;
   const originalFrontendUrl = process.env.FRONTEND_URL;
   const originalApiUrl = process.env.API_URL;
   process.env.NODE_ENV = "production";
+  process.env.APP_ENV = "production";
   process.env.FRONTEND_URL = "https://earlycv.com.br";
   process.env.API_URL = "https://api.earlycv.com.br";
 
@@ -333,6 +338,7 @@ test("provider failure returns failed with error message", async () => {
   assert.equal(emails[0].errorMessage, "boom");
   global.fetch = originalFetch;
   process.env.NODE_ENV = originalNodeEnv;
+  process.env.APP_ENV = originalAppEnv;
   process.env.FRONTEND_URL = originalFrontendUrl;
   process.env.API_URL = originalApiUrl;
 });

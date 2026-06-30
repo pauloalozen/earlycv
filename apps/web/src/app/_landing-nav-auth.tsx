@@ -82,7 +82,7 @@ export function LandingNavAuth() {
           />
         ) : authState === "authenticated" ? (
           <Link
-            href="/dashboard"
+            href="/meu-perfil"
             style={{
               ...BTN_PRIMARY,
               display: "inline-flex",

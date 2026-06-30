@@ -1,4 +1,4 @@
-"use server";
+import "server-only";
 
 import { cookies } from "next/headers";
 
@@ -17,6 +17,7 @@ export async function apiRequest(
   method: string,
   path: string,
   body?: FormData | Record<string, unknown>,
+  timeoutMs = 180_000,
 ): Promise<Response> {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get(APP_ACCESS_TOKEN_COOKIE_NAME)?.value;
@@ -48,5 +49,11 @@ export async function apiRequest(
     options.body = body instanceof FormData ? body : JSON.stringify(body);
   }
 
-  return fetch(url, options);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }

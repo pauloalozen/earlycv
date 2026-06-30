@@ -11,13 +11,18 @@ export async function POST(
   const { purchaseId } = await context.params;
   const body = await request.json().catch(() => ({}));
 
-  const response = await apiRequest("POST", `/payments/brick/${purchaseId}/pay`, body);
+  const response = await apiRequest(
+    "POST",
+    `/payments/brick/${purchaseId}/pay`,
+    body,
+  );
   const text = await response.text();
 
   return new NextResponse(text, {
     status: response.status,
     headers: {
-      "content-type": response.headers.get("content-type") ?? "application/json",
+      "content-type":
+        response.headers.get("content-type") ?? "application/json",
     },
   });
 }
