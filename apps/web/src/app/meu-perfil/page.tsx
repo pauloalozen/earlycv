@@ -436,7 +436,7 @@ export default async function MeuPerfilPage() {
                 </p>
                 <div className="h-px flex-1 bg-[rgba(154,61,40,0.18)]" />
               </div>
-              <DeleteAccountSection creditsRemaining={availableCredits ?? 0} />
+              <DeleteAccountSection creditsRemaining={plan?.creditsRemaining ?? 0} />
             </div>
           </div>
         </div>
