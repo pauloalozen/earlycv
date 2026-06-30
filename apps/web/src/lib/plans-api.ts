@@ -58,9 +58,7 @@ export async function createPlanCheckout(
   const response = await apiRequest("POST", "/plans/checkout", {
     planId,
     ...(adaptationId ? { adaptationId } : {}),
-    ...(selectedMissingKeywords.length > 0
-      ? { selectedMissingKeywords }
-      : {}),
+    ...(selectedMissingKeywords.length > 0 ? { selectedMissingKeywords } : {}),
     ...(gaClientId ? { gaClientId } : {}),
   });
   if (!response.ok) {

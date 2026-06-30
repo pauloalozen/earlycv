@@ -8,6 +8,7 @@ import {
   Inject,
   Logger,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -35,6 +36,7 @@ import {
   type FileUpload,
 } from "./dto/create-cv-adaptation.dto";
 import { RedeemCreditDto } from "./dto/redeem-credit.dto";
+import { SaveApplicationIdentityDto } from "./dto/save-application-identity.dto";
 import { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
 
 const claimGuestValidationPipe = new ValidationPipe({
@@ -228,6 +230,26 @@ export class CvAdaptationController {
     return this.cvAdaptationService.redeemWithCredit(user.id, id, dto);
   }
 
+  @Patch(":adaptationId/application-identity")
+  saveApplicationIdentity(
+    @AuthenticatedUser() user: { id: string },
+    @Param("adaptationId") adaptationId: string,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        expectedType: SaveApplicationIdentityDto,
+      }),
+    )
+    dto: SaveApplicationIdentityDto,
+  ) {
+    return this.cvAdaptationService.persistApplicationIdentity(
+      user.id,
+      adaptationId,
+      dto,
+    );
+  }
+
   @Get(":id/download")
   async download(
     @AuthenticatedUser() user: { id: string },
@@ -256,6 +278,39 @@ export class CvAdaptationController {
     @Param("id") id: string,
   ) {
     return this.cvAdaptationService.getContent(user.id, id);
+  }
+
+  @Delete(":id/cv-content")
+  resetCvContent(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+  ) {
+    return this.cvAdaptationService.resetCvContent(user.id, id);
+  }
+
+  @Patch(":id/reanalysis-result")
+  saveReanalysisResult(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+    @Body() body: { adaptationId: string; score: number },
+  ) {
+    return this.cvAdaptationService.saveReanalysisResult(user.id, id, body);
+  }
+
+  @Patch(":id/cv-content")
+  updateCvContent(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+    @Body() body: { sections: unknown[]; summary?: string },
+  ) {
+    return this.cvAdaptationService.updateCvContent(
+      user.id,
+      id,
+      body.sections as Parameters<
+        typeof this.cvAdaptationService.updateCvContent
+      >[2],
+      body.summary,
+    );
   }
 
   @SkipThrottle()

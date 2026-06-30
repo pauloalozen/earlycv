@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { id: "liberacoes", label: "Liberações", href: "/admin/liberacoes-cv" },
   { id: "ingestao", label: "Ingestão", href: "/admin/ingestion" },
   { id: "templates", label: "Templates", href: "/admin/templates" },
+  { id: "cv-benchmark", label: "CV Benchmark", href: "/admin/cv-benchmark" },
   {
     id: "configuracoes",
     label: "Configurações",
@@ -50,8 +51,19 @@ export function AdminTopbar({
         zIndex: 5,
       }}
     >
+      <style>{`
+        @media (max-width: 639px) {
+          .admin-topbar-row1 { padding: 10px 14px 8px !important; }
+          .admin-topbar-badge { display: none !important; }
+          .admin-topbar-back-text { display: none !important; }
+          .admin-topbar-username { display: none !important; }
+          .admin-topbar-tabs { padding: 0 8px !important; scrollbar-width: none !important; }
+          .admin-topbar-tabs::-webkit-scrollbar { display: none !important; }
+        }
+      `}</style>
       {/* Linha 1: brand + voltar + avatar */}
       <div
+        className="admin-topbar-row1"
         style={{
           display: "flex",
           alignItems: "center",
@@ -63,6 +75,7 @@ export function AdminTopbar({
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <AdminLogoMark />
           <div
+            className="admin-topbar-badge"
             style={{
               fontFamily: '"Geist Mono", monospace',
               fontSize: 10,
@@ -93,7 +106,7 @@ export function AdminTopbar({
             }}
           >
             <span style={{ fontSize: 14, lineHeight: 1 }}>←</span>
-            Voltar ao app
+            <span className="admin-topbar-back-text">Voltar ao app</span>
           </Link>
           <div
             style={{ height: 18, width: 1, background: "rgba(10,10,10,0.08)" }}
@@ -133,11 +146,13 @@ export function AdminTopbar({
                 {userInitial.toUpperCase()}
               </div>
               <span
+                className="admin-topbar-username"
                 style={{ fontSize: 12.5, color: "#0a0a0a", fontWeight: 500 }}
               >
                 {userName}
               </span>
               <span
+                className="admin-topbar-username"
                 style={{
                   fontSize: 10,
                   color: "#8a8580",
@@ -193,6 +208,7 @@ export function AdminTopbar({
 
       {/* Linha 2: tabs */}
       <div
+        className="admin-topbar-tabs"
         style={{
           display: "flex",
           gap: 2,
@@ -235,73 +251,26 @@ function AdminLogoMark() {
       <svg
         aria-label="EarlyCV"
         width="22"
-        height="18"
-        viewBox="0 0 40 32"
+        height="22"
+        viewBox="0 0 40 40"
         fill="none"
       >
+        <rect x="0" y="0" width="12" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="16" y="0" width="12" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="0" y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="20" y="11.2" width="18" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="0" y="22.4" width="7" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="11" y="22.4" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="30" y="22.4" width="8" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="0" y="33.5" width="22" height="6.5" rx="2" fill="#0a0a0a" />
         <rect
-          x="0"
-          y="0"
-          width="13"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.5)"
-        />
-        <rect
-          x="17"
-          y="0"
-          width="10"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.5)"
-        />
-        <rect
-          x="31"
-          y="0"
+          x="26"
+          y="33.5"
           width="9"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.85)"
-        />
-        <rect
-          x="0"
-          y="14"
-          width="15"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.85)"
-        />
-        <rect
-          x="19"
-          y="14"
-          width="21"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.5)"
-        />
-        <rect
-          x="0"
-          y="28"
-          width="8"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.5)"
-        />
-        <rect
-          x="12"
-          y="28"
-          width="15"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.85)"
-        />
-        <rect
-          x="31"
-          y="28"
-          width="9"
-          height="4"
-          rx="1.5"
-          fill="rgba(10,10,10,0.2)"
+          height="6.5"
+          rx="2"
+          fill="rgba(10,10,10,0.14)"
         />
       </svg>
       <div style={{ display: "flex", alignItems: "baseline", gap: 0 }}>

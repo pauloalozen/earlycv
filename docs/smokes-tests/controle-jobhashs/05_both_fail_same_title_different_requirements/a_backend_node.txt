@@ -1,0 +1,18 @@
+Backend Developer Pleno
+
+Empresa: Acme
+Local: Remoto
+Tipo: Tempo integral
+
+Responsabilidades:
+- Desenvolver APIs REST com Node.js.
+- Trabalhar com PostgreSQL.
+- Implementar testes automatizados.
+- Participar de decisões técnicas do backend.
+
+Requisitos:
+- Node.js.
+- TypeScript.
+- PostgreSQL.
+- APIs REST.
+- Testes automatizados.

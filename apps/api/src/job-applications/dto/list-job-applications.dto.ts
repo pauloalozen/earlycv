@@ -1,6 +1,13 @@
 import type { JobApplicationStatus } from "@prisma/client";
-import { Type } from "class-transformer";
-import { IsEnum, IsInt, IsOptional, Max, Min } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  Max,
+  Min,
+} from "class-validator";
 
 export class ListJobApplicationsDto {
   @IsOptional()
@@ -31,4 +38,9 @@ export class ListJobApplicationsDto {
     "WITHDRAWN",
   ])
   status?: JobApplicationStatus;
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
+  @IsBoolean()
+  archived?: boolean = false;
 }

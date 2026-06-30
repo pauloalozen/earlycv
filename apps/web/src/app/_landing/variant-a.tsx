@@ -79,7 +79,7 @@ export function LandingVariantA() {
               fontWeight: 500,
             }}
           >
-            v1.2
+            v2.1
           </span>
         </Link>
 

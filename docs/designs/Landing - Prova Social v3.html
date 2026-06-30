@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<title>earlyCV — Prova Social v3</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0a0a0a;
+    --ink-soft: #2a2620;
+    --sub: #45443e;
+    --mono-mute: #8a8a85;
+    --paper: #fafaf6;
+    --line: rgba(10,10,10,0.08);
+    --line-soft: rgba(10,10,10,0.06);
+    --accent: #c6ff3a;
+    --sans: "Geist", -apple-system, system-ui, sans-serif;
+    --mono: "Geist Mono", ui-monospace, monospace;
+    --serif: "Instrument Serif", serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans); color: var(--ink);
+    background: radial-gradient(ellipse 90% 70% at 50% 0%, #f9f8f4 0%, #ecebe5 100%);
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+  }
+
+  .grain {
+    position: fixed; inset: 0; pointer-events: none; opacity: 0.5; z-index: 0;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  /* ───────── Seção ───────── */
+  .social-proof { position: relative; z-index: 1; padding: 96px 80px 104px; max-width: 1360px; margin: 0 auto; }
+
+  .sp-head { text-align: center; max-width: 800px; margin: 0 auto 52px; display: flex; flex-direction: column; align-items: center; }
+  .sp-seal {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.2px; font-weight: 500; color: #555;
+    background: rgba(10,10,10,0.04); border: 1px solid var(--line-soft);
+    padding: 6px 11px; border-radius: 999px; margin-bottom: 24px; text-transform: uppercase;
+  }
+  .sp-seal .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .sp-title { font-size: 47px; font-weight: 500; letter-spacing: -1.9px; line-height: 1.05; margin: 0 0 18px; color: var(--ink); text-wrap: balance; }
+  .sp-title em { font-family: var(--serif); font-style: italic; font-weight: 400; letter-spacing: -0.6px; }
+  .sp-sub { font-size: 16.5px; line-height: 1.55; color: var(--sub); margin: 0; max-width: 560px; }
+
+  /* ───────── Palco (spotlight + roster) ───────── */
+  .sp-stage { display: grid; grid-template-columns: 1.32fr 1fr; gap: 16px; align-items: stretch; }
+
+  /* Entrada escalonada — estado "escondido" só vale quando o JS marcou reveal-ready */
+  .social-proof.reveal-ready .sp-feature,
+  .social-proof.reveal-ready .sp-roster,
+  .social-proof.reveal-ready .sp-chip { opacity: 0; transform: translateY(16px); }
+  .social-proof.in .sp-feature { opacity: 1; transform: none; transition: opacity .6s ease, transform .6s cubic-bezier(.2,.8,.3,1); }
+  .social-proof.in .sp-roster { opacity: 1; transform: none; transition: opacity .6s ease .08s, transform .6s cubic-bezier(.2,.8,.3,1) .08s; }
+  .social-proof.in .sp-chip { opacity: 1; transform: none; transition: opacity .5s ease, transform .5s cubic-bezier(.2,.8,.3,1), background .35s ease, color .35s ease, border-color .35s ease, box-shadow .35s ease; }
+
+  /* Card em destaque (escuro, rotativo) */
+  .sp-feature {
+    background: #0a0a0a; border-radius: 18px; padding: 40px 40px 30px;
+    box-shadow: 0 30px 64px -26px rgba(10,10,10,0.46);
+    position: relative; overflow: hidden;
+    display: flex; flex-direction: column; min-height: 360px;
+  }
+  .sp-feature::after {
+    content: ""; position: absolute; right: -90px; top: -90px;
+    width: 300px; height: 300px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(198,255,58,0.16) 0%, rgba(198,255,58,0) 70%);
+    pointer-events: none; transition: transform .8s ease;
+  }
+  .sp-feature-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; position: relative; z-index: 1; }
+  .sp-stars { display: inline-flex; gap: 4px; }
+  .sp-stars svg { width: 15px; height: 15px; display: block; fill: var(--accent); }
+  .sp-stars.reveal { animation: starReveal .55s .05s both; }
+  @keyframes starReveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+  .sp-index { font-family: var(--mono); font-size: 11px; letter-spacing: 1px; color: #6f6f68; font-variant-numeric: tabular-nums; }
+  .sp-index b { color: var(--accent); font-weight: 500; }
+
+  .sp-feature-inner { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; transition: opacity .34s ease, transform .34s cubic-bezier(.3,.9,.4,1); }
+  .sp-feature-inner.is-leaving { opacity: 0; transform: translateY(-12px); }
+  .sp-quote { font-size: 26px; line-height: 1.4; letter-spacing: -0.7px; color: #fafaf6; font-weight: 400; margin: 0 0 30px; max-width: 580px; }
+  .sp-quote em { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--accent); letter-spacing: -0.2px; }
+
+  .sp-id { display: flex; align-items: center; gap: 13px; margin-top: auto; }
+  .sp-avatar {
+    width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--sans); font-size: 14px; font-weight: 600; letter-spacing: -0.3px;
+    background: rgba(198,255,58,0.14); color: var(--accent); border: 1px solid rgba(198,255,58,0.35);
+  }
+  .sp-name { font-size: 14.5px; font-weight: 500; letter-spacing: -0.2px; color: #fafaf6; line-height: 1.3; }
+  .sp-meta { font-family: var(--mono); font-size: 10px; letter-spacing: 0.6px; color: #7d7d76; text-transform: uppercase; margin-top: 2px; }
+
+  /* Barra de progresso */
+  .sp-progress { position: relative; z-index: 1; height: 3px; border-radius: 99px; background: rgba(250,250,246,0.12); overflow: hidden; margin-top: 26px; }
+  .sp-progress-bar { height: 100%; width: 0; background: var(--accent); border-radius: 99px; }
+
+  /* ───────── Roster de chips ───────── */
+  .sp-roster { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 10px; }
+  .sp-chip {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 13px;
+    padding: 15px 16px; cursor: pointer; text-align: left;
+    display: flex; flex-direction: column; gap: 11px;
+    font-family: inherit; color: var(--ink-soft);
+    transition: background .35s ease, color .35s ease, border-color .35s ease, box-shadow .35s ease, transform .25s cubic-bezier(.3,.9,.4,1);
+  }
+  .sp-chip:hover { transform: translateY(-2px); box-shadow: 0 12px 26px -14px rgba(10,10,10,0.22); }
+  .sp-chip-top { display: flex; align-items: center; justify-content: space-between; }
+  .sp-chip-stars { display: inline-flex; gap: 2.5px; }
+  .sp-chip-stars svg { width: 10px; height: 10px; display: block; fill: #1f1c17; opacity: 0.32; transition: fill .35s ease, opacity .35s ease; }
+  .sp-chip-av {
+    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; letter-spacing: -0.3px;
+    background: rgba(10,10,10,0.05); color: var(--ink-soft); border: 1px solid var(--line);
+    transition: background .35s ease, color .35s ease, border-color .35s ease;
+  }
+  .sp-chip-role { font-size: 12.5px; font-weight: 500; line-height: 1.35; letter-spacing: -0.1px; }
+
+  /* Chip ativo → inverte para escuro */
+  .sp-chip.is-active {
+    background: #0a0a0a; border-color: #0a0a0a; color: #fafaf6;
+    box-shadow: 0 16px 34px -16px rgba(10,10,10,0.4);
+  }
+  .sp-chip.is-active .sp-chip-av { background: rgba(198,255,58,0.16); color: var(--accent); border-color: rgba(198,255,58,0.35); }
+  .sp-chip.is-active .sp-chip-stars svg { fill: var(--accent); opacity: 1; }
+
+  /* ───────── CTA ───────── */
+  .sp-cta { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 60px; }
+  .sp-cta-hint { font-family: var(--mono); font-size: 11px; letter-spacing: 0.4px; color: var(--mono-mute); text-transform: uppercase; }
+  .sp-btn {
+    background: var(--ink); color: #fff; border: none; border-radius: 10px;
+    padding: 15px 24px; font-family: var(--sans); font-size: 14.5px; font-weight: 500;
+    letter-spacing: -0.1px; cursor: pointer; display: inline-flex; align-items: center; gap: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08);
+    transition: transform 180ms, box-shadow 180ms;
+  }
+  .sp-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08); }
+  .sp-btn .arrow { transition: transform 240ms cubic-bezier(.3,.9,.4,1); display: inline-block; }
+  .sp-btn:hover .arrow { transform: translateX(4px); }
+
+  /* ───────── Tablet ───────── */
+  @media (max-width: 1040px) {
+    .social-proof { padding: 80px 48px 88px; }
+    .sp-stage { grid-template-columns: 1fr; }
+    .sp-roster { grid-template-columns: repeat(3, 1fr); }
+    .sp-quote { font-size: 24px; }
+    .sp-title { font-size: 40px; letter-spacing: -1.4px; }
+  }
+
+  /* ───────── Mobile ───────── */
+  @media (max-width: 680px) {
+    .social-proof { padding: 60px 20px 72px; }
+    .sp-head { margin-bottom: 36px; }
+    .sp-title { font-size: 31px; letter-spacing: -1px; }
+    .sp-sub { font-size: 15.5px; }
+    .sp-feature { padding: 30px 26px 24px; min-height: 320px; }
+    .sp-quote { font-size: 21px; line-height: 1.42; }
+    .sp-roster { grid-template-columns: 1fr 1fr; }
+    .sp-cta { margin-top: 44px; }
+    .sp-btn { width: 100%; justify-content: center; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sp-feature-inner, .sp-chip, .sp-stage > *, .sp-stars.reveal { transition: none !important; animation: none !important; }
+    .sp-stage > *, .sp-chip { opacity: 1 !important; transform: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<!--
+  SEÇÃO DE PROVA SOCIAL — inserir após "Como funciona" e antes de "Preços".
+  Tracking: o botão dispara o MESMO evento do CTA principal da página,
+  com a propriedade adicional cta_location = "social_proof_section".
+-->
+<section class="social-proof" id="prova-social" data-screen-label="Prova Social" aria-labelledby="sp-title">
+  <header class="sp-head">
+    <span class="sp-seal"><span class="dot"></span>Feedbacks reais · anonimizados</span>
+    <h2 class="sp-title" id="sp-title">
+      O currículo não estava ruim.<br />
+      Estava <em>desalinhado</em> para a vaga.
+    </h2>
+    <p class="sp-sub">Esses são feedbacks reais de quem usou. Nenhum dado pessoal foi exibido.</p>
+  </header>
+
+  <div class="sp-stage">
+    <!-- Spotlight escuro rotativo -->
+    <article class="sp-feature" aria-live="polite">
+      <div class="sp-feature-top">
+        <span class="sp-stars" id="featStars" aria-label="5 de 5"></span>
+        <span class="sp-index"><b id="featIdx">01</b> / <span id="featTotal">06</span></span>
+      </div>
+      <div class="sp-feature-inner" id="featInner">
+        <p class="sp-quote" id="featQuote"></p>
+        <div class="sp-id">
+          <div class="sp-avatar" id="featAv" aria-hidden="true"></div>
+          <div>
+            <div class="sp-name" id="featName"></div>
+            <div class="sp-meta">Feedback anonimizado</div>
+          </div>
+        </div>
+      </div>
+      <div class="sp-progress"><div class="sp-progress-bar" id="featBar"></div></div>
+    </article>
+
+    <!-- Roster -->
+    <div class="sp-roster" id="roster" role="tablist" aria-label="Feedbacks">
+      <button class="sp-chip" data-i="0" role="tab">
+        <div class="sp-chip-top"><span class="sp-chip-av" aria-hidden="true">RC</span><span class="sp-chip-stars"></span></div>
+        <span class="sp-chip-role">Em busca de recolocação</span>
+      </button>
+      <button class="sp-chip" data-i="1" role="tab">
+        <div class="sp-chip-top"><span class="sp-chip-av" aria-hidden="true">TC</span><span class="sp-chip-stars"></span></div>
+        <span class="sp-chip-role">Em transição de carreira</span>
+      </button>
+      <button class="sp-chip" data-i="2" role="tab">
+        <div class="sp-chip-top"><span class="sp-chip-av" aria-hidden="true">AP</span><span class="sp-chip-stars"></span></div>
+        <span class="sp-chip-role">Tecnologia · recolocação</span>
+      </button>
+      <button class="sp-chip" data-i="3" role="tab">
+        <div class="sp-chip-top"><span class="sp-chip-av" aria-hidden="true">MV</span><span class="sp-chip-stars"></span></div>
+        <span class="sp-chip-role">Usuária EarlyCV</span>
+      </button>
+      <button class="sp-chip" data-i="4" role="tab">
+        <div class="sp-chip-top"><span class="sp-chip-av" aria-hidden="true">JL</span><span class="sp-chip-stars"></span></div>
+        <span class="sp-chip-role">Comparou ferramentas</span>
+      </button>
+      <button class="sp-chip" data-i="5" role="tab">
+        <div class="sp-chip-top"><span class="sp-chip-av" aria-hidden="true">DF</span><span class="sp-chip-stars"></span></div>
+        <span class="sp-chip-role">Testou a ferramenta</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="sp-cta">
+    <span class="sp-cta-hint">Teste com uma vaga real</span>
+    <button type="button" class="sp-btn" data-cta="primary" data-cta-location="social_proof_section">
+      <span>Analisar meu CV grátis</span>
+      <span class="arrow">→</span>
+    </button>
+  </div>
+</section>
+
+<script>
+(function () {
+  var STAR = 'M12 .587l3.668 7.431 8.2 1.192-5.934 5.785 1.401 8.169L12 18.896l-7.335 3.868 1.401-8.169L.132 9.21l8.2-1.192z';
+  function stars(n){ var s=''; for(var i=0;i<n;i++){ s+='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+STAR+'"/></svg>'; } return s; }
+
+  // Texto verbatim dos feedbacks (ênfase apenas estilística via <em>)
+  var DATA = [
+    { q: 'Eu achava que meu currículo estava condizente com a vaga, mas a análise encontrou <em>sugestões que eu não tinha percebido</em>.', name: 'Em busca de recolocação', av: 'RC' },
+    { q: 'Achei a plataforma <em>simples de usar</em>. No final, já saí com o currículo pronto para me candidatar.', name: 'Em transição de carreira', av: 'TC' },
+    { q: 'Achava que meu currículo estava ótimo. Saí com uma lista de pontos que eu <em>nunca teria percebido sozinha</em>.', name: 'Tecnologia · recolocação', av: 'AP' },
+    { q: 'É muito mais prático do que <em>tentar adaptar tudo manualmente</em> para cada vaga.', name: 'Usuária EarlyCV', av: 'MV' },
+    { q: 'Já tinha tentado com outras ferramentas de IA. O EarlyCV <em>encontrou pontos que elas não tinham identificado</em>.', name: 'Comparou ferramentas', av: 'JL' },
+    { q: 'Não é um retorno genérico. Cada ponto era <em>específico para a vaga</em> que eu tinha escolhido.', name: 'Testou a ferramenta', av: 'DF' }
+  ];
+
+  var INTERVAL = 5200;
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var idx = 0, timer = null, paused = false, started = false;
+
+  var inner = document.getElementById('featInner');
+  var quoteEl = document.getElementById('featQuote');
+  var nameEl = document.getElementById('featName');
+  var avEl = document.getElementById('featAv');
+  var idxEl = document.getElementById('featIdx');
+  var featStars = document.getElementById('featStars');
+  var bar = document.getElementById('featBar');
+  var chips = Array.prototype.slice.call(document.querySelectorAll('.sp-chip'));
+
+  document.getElementById('featTotal').textContent = String(DATA.length).padStart(2,'0');
+  featStars.innerHTML = stars(5);
+  chips.forEach(function(c){ c.querySelector('.sp-chip-stars').innerHTML = stars(5); });
+
+  function paint(i){
+    var d = DATA[i];
+    quoteEl.innerHTML = d.q;
+    nameEl.textContent = d.name;
+    avEl.textContent = d.av;
+    idxEl.textContent = String(i+1).padStart(2,'0');
+    chips.forEach(function(c){
+      var on = (+c.getAttribute('data-i') === i);
+      c.classList.toggle('is-active', on);
+      c.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    featStars.classList.remove('reveal'); void featStars.offsetWidth; featStars.classList.add('reveal');
+  }
+
+  function restartBar(){
+    if (reduce) { bar.style.width = '0'; return; }
+    bar.style.transition = 'none'; bar.style.width = '0';
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){
+      if (paused) return;
+      bar.style.transition = 'width ' + INTERVAL + 'ms linear';
+      bar.style.width = '100%';
+    }); });
+  }
+  function pauseBar(){
+    var w = getComputedStyle(bar).width;
+    bar.style.transition = 'none'; bar.style.width = w;
+  }
+  function schedule(){ clearTimeout(timer); if (reduce || paused) return; timer = setTimeout(function(){ go(idx+1, false); }, INTERVAL); }
+
+  function go(i, user){
+    var next = (i % DATA.length + DATA.length) % DATA.length;
+    if (next === idx && user) { schedule(); restartBar(); return; }
+    idx = next;
+    if (reduce) { paint(idx); restartBar(); schedule(); return; }
+    inner.classList.add('is-leaving');
+    setTimeout(function(){
+      paint(idx);
+      inner.classList.remove('is-leaving');
+    }, 300);
+    restartBar();
+    schedule();
+  }
+
+  // Controles
+  chips.forEach(function(c){
+    c.addEventListener('click', function(){ paused = false; go(+c.getAttribute('data-i'), true); });
+  });
+  var section = document.getElementById('prova-social');
+  section.addEventListener('mouseenter', function(){ paused = true; clearTimeout(timer); pauseBar(); });
+  section.addEventListener('mouseleave', function(){ paused = false; restartBar(); schedule(); });
+
+  // Início ao entrar na viewport — com garantias contra observer que não dispara
+  function start(){ if (started) return; started = true; section.classList.add('in'); restartBar(); schedule(); }
+  function maybeStartIfVisible(){
+    var r = section.getBoundingClientRect();
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    if (r.top < vh && r.bottom > 0) start();
+  }
+  section.classList.add('reveal-ready'); // só aplica o estado "escondido" agora que o JS roda
+  paint(0); // estado inicial visível mesmo sem observer
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function(es){
+      es.forEach(function(e){ if (e.isIntersecting) { start(); io.disconnect(); } });
+    }, { threshold: 0.15 });
+    io.observe(section);
+  }
+  maybeStartIfVisible();                 // imediato se já estiver visível
+  setTimeout(start, 600);                // fallback garantido
+
+  // CTA: mesmo evento do CTA principal + cta_location
+  document.querySelector('.sp-btn').addEventListener('click', function(){
+    var location = this.getAttribute('data-cta-location'); // "social_proof_section"
+    if (window.track) { window.track('cta_click', { cta_location: location }); }
+    // Em produção: mesmo destino do CTA principal.
+    // window.location.href = '/analisar';
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+Backend Developer
+
+Company: Acme
+Location: Remote
+Employment type: Full-time
+
+Responsibilities:
+- Develop microservices with Java and Spring Boot.
+- Work with Kafka.
+- Contribute to distributed architecture.
+- Monitor applications in production.
+
+Requirements:
+- Java.
+- Spring Boot.
+- Kafka.
+- Microservices.
+- Observability.

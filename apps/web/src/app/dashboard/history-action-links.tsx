@@ -43,6 +43,7 @@ type Props = {
   };
   hasCredits: boolean | null;
   jobApplicationId?: string | null;
+  adaptationId?: string | null;
   hideBaseCvAction?: boolean;
   removeTopMargin?: boolean;
 };
@@ -150,6 +151,7 @@ export function HistoryActionLinks({
   analysisContext,
   hasCredits,
   jobApplicationId,
+  adaptationId,
   hideBaseCvAction = false,
   removeTopMargin = false,
 }: Props) {
@@ -410,7 +412,7 @@ export function HistoryActionLinks({
 
       {jobApplicationId && (
         <a
-          href={`/dashboard/candidaturas/${jobApplicationId}`}
+          href={`/candidaturas/${jobApplicationId}`}
           style={{ color: "#405410", ...sharedChipTextStyle }}
           className="inline-flex h-8 w-full appearance-none items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border border-[rgba(110,150,20,0.3)] bg-[rgba(198,255,58,0.12)] px-3 text-xs leading-none font-semibold transition-colors hover:bg-[rgba(198,255,58,0.2)] sm:w-auto"
           data-testid="ver-candidatura-link"
@@ -525,17 +527,30 @@ export function HistoryActionLinks({
               REDEEM_REQUEST_TIMEOUT_MS,
             );
 
+            let storedKeywords: string[] = [];
+            if (adaptationId) {
+              try {
+                const raw = sessionStorage.getItem(`kw_sel_${adaptationId}`);
+                if (raw) storedKeywords = JSON.parse(raw) as string[];
+              } catch {
+                // unavailable or malformed
+              }
+            }
+            const effectiveKeywords =
+              (actions.selectedMissingKeywords ?? []).length > 0
+                ? (actions.selectedMissingKeywords ?? [])
+                : storedKeywords;
+
             try {
               const redeemRequest = fetch(actions.redeemHref, {
                 method: "POST",
                 cache: "no-store",
                 signal: controller.signal,
-                ...(actions.selectedMissingKeywords?.length
+                ...(effectiveKeywords.length > 0
                   ? {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        selectedMissingKeywords:
-                          actions.selectedMissingKeywords,
+                        selectedMissingKeywords: effectiveKeywords,
                       }),
                     }
                   : {}),

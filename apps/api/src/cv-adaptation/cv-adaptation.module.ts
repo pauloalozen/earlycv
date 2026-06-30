@@ -1,9 +1,9 @@
 import { Module } from "@nestjs/common";
-import OpenAI from "openai";
-
 import { AnalysisProtectionModule } from "../analysis-protection/analysis-protection.module";
+import { createAiClientFromEnv } from "../common/ai-client-factory";
 import { DatabaseModule } from "../database/database.module";
 import { JobApplicationsModule } from "../job-applications/job-applications.module";
+import { ProfilesModule } from "../profiles/profiles.module";
 import { ResumeTemplatesModule } from "../resume-templates/resume-templates.module";
 import { CvAdaptationController } from "./cv-adaptation.controller";
 import { CvAdaptationService } from "./cv-adaptation.service";
@@ -14,6 +14,8 @@ import { CvAdaptationPdfService } from "./cv-adaptation-pdf.service";
 import { CvAdaptationProtectedAnalyzeService } from "./cv-adaptation-protected-analyze.service";
 import { CvAdaptationPublicController } from "./cv-adaptation-public.controller";
 import { CvAdaptationSnapshotCleanupScheduler } from "./cv-adaptation-snapshot-cleanup.scheduler";
+import { JobCanonicalizationService } from "./job-canonicalization.service";
+import { JobRequirementSetsService } from "./job-requirement-sets.service";
 
 @Module({
   imports: [
@@ -21,9 +23,10 @@ import { CvAdaptationSnapshotCleanupScheduler } from "./cv-adaptation-snapshot-c
     ResumeTemplatesModule,
     AnalysisProtectionModule,
     JobApplicationsModule,
+    ProfilesModule,
   ],
   controllers: [CvAdaptationController, CvAdaptationPublicController],
-  exports: [CvAdaptationService],
+  exports: [CvAdaptationService, CvAdaptationAiService],
   providers: [
     CvAdaptationService,
     CvAdaptationAiService,
@@ -32,12 +35,11 @@ import { CvAdaptationSnapshotCleanupScheduler } from "./cv-adaptation-snapshot-c
     CvAdaptationDocxService,
     CvAdaptationProtectedAnalyzeService,
     CvAdaptationSnapshotCleanupScheduler,
+    JobCanonicalizationService,
+    JobRequirementSetsService,
     {
       provide: "OPENAI_CLIENT",
-      useFactory: () =>
-        new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY,
-        }),
+      useFactory: () => createAiClientFromEnv(),
     },
   ],
 })

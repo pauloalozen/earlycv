@@ -15,12 +15,12 @@ import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { DatabaseService } from "../database/database.service";
+import { Ga4MeasurementService } from "../ga4/ga4-measurement.service";
 import {
   buildMercadoPagoItemMetadata,
   buildMercadoPagoReturnConfig,
 } from "../payments/mercado-pago-return-config";
 import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
-import { Ga4MeasurementService } from "../ga4/ga4-measurement.service";
 
 type PlanId = "starter" | "pro" | "turbo";
 
@@ -850,10 +850,14 @@ export class PlansService {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`[ga4] payment_approved purchase sync failed: ${message}`);
+        this.logger.warn(
+          `[ga4] payment_approved purchase sync failed: ${message}`,
+        );
       }
     } catch (error) {
-      this.logger.warn(`Failed to record payment_approved funnel event: ${error}`);
+      this.logger.warn(
+        `Failed to record payment_approved funnel event: ${error}`,
+      );
     }
   }
 

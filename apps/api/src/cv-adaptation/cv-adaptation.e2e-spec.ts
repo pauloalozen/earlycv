@@ -1,7 +1,7 @@
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterEach, test } from "node:test";
 
 import { type INestApplication, ValidationPipe } from "@nestjs/common";
@@ -13,6 +13,11 @@ import { AppModule } from "../app.module";
 import { DatabaseService } from "../database/database.service";
 import { PlansService } from "../plans/plans.service";
 import { StorageService } from "../storage/storage.service";
+import {
+  buildCanonicalJobHash,
+  buildRequirementSourceHash,
+  normalizeRawJobText,
+} from "./job-canonicalization";
 
 const VALID_JOB_DESCRIPTION_TEXT =
   "Descricao da vaga para atuar com analytics e produto, incluindo responsabilidades diarias, requisitos tecnicos, colaboracao com times multidisciplinares e foco em resultados de negocio.";
@@ -423,6 +428,11 @@ test("POST /cv-adaptation/save-guest-preview without saveAsMaster does not creat
         textStorageKey: "analysis-cv-snapshots/test-save-no-master.md",
         textSha256: "hash-save-no-master",
         textSizeBytes: 123,
+        professionalProfileFingerprint: "profile-hash-save-no-master",
+        professionalProfileJson: {
+          version: "test",
+          highlights: ["CV original enviado pelo usuario"],
+        },
       },
     });
 
@@ -499,6 +509,11 @@ test("POST /cv-adaptation/save-guest-preview with saveAsMaster promotes uploaded
         textStorageKey: "analysis-cv-snapshots/test-save-master.md",
         textSha256: "hash-save-master",
         textSizeBytes: 123,
+        professionalProfileFingerprint: "profile-hash-save-master",
+        professionalProfileJson: {
+          version: "test",
+          highlights: ["CV enviado pelo usuario"],
+        },
       },
     });
 
@@ -609,6 +624,14 @@ test("claimed guest analysis can be downloaded as PDF and DOCX", async () => {
             textStorageKey: "analysis-cv-snapshots/test-claim-download.md",
             textSha256: "hash-claim-download",
             textSizeBytes: 123,
+            professionalProfileFingerprint: "profile-hash-claim-download",
+            professionalProfileJson: {
+              version: "test",
+              highlights: [
+                "Resumo profissional",
+                "Experiencia com produto e dados",
+              ],
+            },
           },
         })
       ).id,
@@ -710,6 +733,11 @@ test("superadmin can claim guest analysis even with zero credits", async () => {
             textStorageKey: "analysis-cv-snapshots/test-superadmin-claim.md",
             textSha256: "hash-superadmin-claim",
             textSizeBytes: 123,
+            professionalProfileFingerprint: "profile-hash-superadmin-claim",
+            professionalProfileJson: {
+              version: "test",
+              highlights: ["Resumo profissional com experiencia em dados"],
+            },
           },
         })
       ).id,
@@ -1004,6 +1032,7 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
       .post("/api/cv-adaptation/analyze")
       .set("Authorization", `Bearer ${user.accessToken}`)
       .send({
+        inputMode: "profile",
         masterResumeId: masterResume.id,
         jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
         turnstileToken: "token-test",
@@ -1037,6 +1066,155 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
 
   await deleteUserByEmail(database, user.email);
   await app.close();
+});
+
+test("analysis reuses the persisted requirement rule by requirementSourceHash", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-requirement-rule");
+  const previousSkipTurnstile = process.env.SKIP_TURNSTILE_VERIFICATION;
+  process.env.SKIP_TURNSTILE_VERIFICATION = "true";
+  const canonicalJobJson = {
+    title: "Analista de Dados",
+    companyName: "EarlyCV",
+    location: null,
+    workModel: null,
+    employmentType: null,
+    seniority: "mid",
+    languages: ["pt-BR"],
+    salaryInfo: null,
+    description:
+      "Atuar com analytics e produto, incluindo responsabilidades diarias, requisitos tecnicos, colaboracao com times multidisciplinares e foco em resultados de negocio.",
+    responsibilities: ["Analise de dados", "Dashboards", "Stakeholders"],
+    requirements: ["SQL", "Power BI", "Comunicacao com stakeholders"],
+    preferredQualifications: [],
+    benefits: [],
+    technologies: ["SQL", "Power BI"],
+    domains: ["analytics", "produto"],
+    metadata: {},
+  };
+  const canonicalJobHash = buildCanonicalJobHash(canonicalJobJson);
+  const requirementSourceHash = buildRequirementSourceHash(canonicalJobJson);
+  const normalizedRawJobText = normalizeRawJobText(VALID_JOB_DESCRIPTION_TEXT);
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      rawText:
+        "Experiencia com analise de dados, SQL, dashboards e comunicacao com stakeholders.",
+    },
+  });
+
+  const rawJobHash = createHash("sha256")
+    .update(normalizedRawJobText)
+    .digest("hex");
+
+  try {
+    const canonicalJob = await database.canonicalJob.upsert({
+      where: { canonicalJobHash },
+      create: {
+        canonicalJobHash,
+        requirementSourceHash,
+        canonicalJobJson: canonicalJobJson as Prisma.InputJsonValue,
+        canonicalizationModel: "seed",
+        canonicalizationPromptVersion: "seed",
+      },
+      update: {},
+    });
+
+    await database.jobRawInput.upsert({
+      where: { rawJobHash },
+      create: {
+        rawJobHash,
+        rawText: VALID_JOB_DESCRIPTION_TEXT,
+        normalizedRawText: normalizedRawJobText,
+        canonicalJobId: canonicalJob.id,
+      },
+      update: {},
+    });
+
+    await database.jobRequirementSet.deleteMany({
+      where: { requirementSourceHash },
+    });
+    const existingRule = await database.jobRequirementSet.create({
+      data: {
+        requirementSourceHash,
+        canonicalJobId: canonicalJob.id,
+        requirementsJson: [
+          {
+            requirementKey: "sql-analytics",
+            requirementText: "Experiencia com SQL para analise de dados",
+            importance: "high",
+          },
+        ] as Prisma.InputJsonValue,
+        analysisModel: "seed",
+        analysisPromptVersion: "seed",
+      },
+    });
+
+    const firstResponse = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send({
+        inputMode: "profile",
+        masterResumeId: masterResume.id,
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
+        turnstileToken: "token-test",
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send({
+        inputMode: "profile",
+        masterResumeId: masterResume.id,
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
+        turnstileToken: "token-test",
+      })
+      .expect(201);
+
+    const ruleCount = await database.jobRequirementSet.count({
+      where: { requirementSourceHash },
+    });
+    assert.equal(ruleCount, 1);
+
+    const saveResponse = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/save-guest-preview")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .field(
+        "adaptedContentJson",
+        JSON.stringify(firstResponse.body.adaptedContentJson),
+      )
+      .field("jobDescriptionText", VALID_JOB_DESCRIPTION_TEXT)
+      .field("masterCvText", firstResponse.body.masterCvText)
+      .field("analysisCvSnapshotId", firstResponse.body.analysisCvSnapshotId)
+      .field("jobTitle", "Analista de Dados")
+      .field("companyName", "EarlyCV")
+      .field("previewText", firstResponse.body.previewText)
+      .expect(201);
+
+    const savedAdaptation = await database.cvAdaptation.findUnique({
+      where: { id: saveResponse.body.id as string },
+      select: {
+        canonicalJobId: true,
+        jobRequirementSetId: true,
+      },
+    });
+
+    assert.equal(savedAdaptation?.jobRequirementSetId, existingRule.id);
+    assert.equal(savedAdaptation?.canonicalJobId, canonicalJob.id);
+  } finally {
+    if (previousSkipTurnstile === undefined) {
+      delete process.env.SKIP_TURNSTILE_VERIFICATION;
+    } else {
+      process.env.SKIP_TURNSTILE_VERIFICATION = previousSkipTurnstile;
+    }
+    await deleteUserByEmail(database, user.email);
+    await app.close();
+  }
 });
 
 test("POST /cv-adaptation/analyze-guest blocks missing turnstile token", async () => {

@@ -1,0 +1,18 @@
+Senior Data Analyst
+
+Company: Data & Co
+Location: Chicago
+Work mode: Hybrid
+
+Responsibilities:
+- Lead KPI definition.
+- Create data models.
+- Build executive dashboards.
+- Mentor less experienced analysts.
+- Influence strategic decisions.
+
+Requirements:
+- Advanced SQL experience.
+- Advanced Power BI experience.
+- Data modeling.
+- Communication with executive leadership.

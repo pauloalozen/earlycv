@@ -22,53 +22,27 @@ function LogoMark() {
       aria-hidden
       className="shrink-0"
       width="20"
-      height="16"
-      viewBox="0 0 40 32"
+      height="20"
+      viewBox="0 0 40 40"
       fill="none"
     >
       <title>earlyCV</title>
+      <rect x="0" y="0" width="12" height="6.5" rx="2" fill="#0a0a0a" />
+      <rect x="16" y="0" width="12" height="6.5" rx="2" fill="#0a0a0a" />
+      <rect x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
+      <rect x="0" y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+      <rect x="20" y="11.2" width="18" height="6.5" rx="2" fill="#0a0a0a" />
+      <rect x="0" y="22.4" width="7" height="6.5" rx="2" fill="#0a0a0a" />
+      <rect x="11" y="22.4" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+      <rect x="30" y="22.4" width="8" height="6.5" rx="2" fill="#0a0a0a" />
+      <rect x="0" y="33.5" width="22" height="6.5" rx="2" fill="#0a0a0a" />
       <rect
-        x="0"
-        y="0"
-        width="13"
-        height="4"
-        rx="1.5"
-        fill="rgba(10,10,10,0.45)"
-      />
-      <rect
-        x="17"
-        y="0"
-        width="10"
-        height="4"
-        rx="1.5"
-        fill="rgba(10,10,10,0.45)"
-      />
-      <rect x="31" y="0" width="9" height="4" rx="1.5" fill="#c6ff3a" />
-      <rect x="0" y="14" width="15" height="4" rx="1.5" fill="#c6ff3a" />
-      <rect
-        x="19"
-        y="14"
-        width="21"
-        height="4"
-        rx="1.5"
-        fill="rgba(10,10,10,0.45)"
-      />
-      <rect
-        x="0"
-        y="28"
-        width="8"
-        height="4"
-        rx="1.5"
-        fill="rgba(10,10,10,0.45)"
-      />
-      <rect x="12" y="28" width="15" height="4" rx="1.5" fill="#c6ff3a" />
-      <rect
-        x="31"
-        y="28"
+        x="26"
+        y="33.5"
         width="9"
-        height="4"
-        rx="1.5"
-        fill="rgba(10,10,10,0.18)"
+        height="6.5"
+        rx="2"
+        fill="rgba(10,10,10,0.14)"
       />
     </svg>
   );
@@ -105,7 +79,7 @@ export default function NotFound() {
               </span>
             </div>
             <span className="ml-0.5 rounded-[3px] border border-[#d8d6ce] px-[5px] py-px font-mono text-[10px] font-medium text-[#8a8a85]">
-              v1.2
+              v2.1
             </span>
           </Link>
 

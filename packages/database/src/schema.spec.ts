@@ -505,3 +505,98 @@ test("enum values use lowercase API-aligned identifiers", () => {
     );
   }
 });
+
+test("MasterCvCanonicalExtraction schema exists with status enum, payload fields, and indexes", () => {
+  const statusEnum = getBlock("enum", "MasterCvCanonicalExtractionStatus");
+  const extraction = getBlock("model", "MasterCvCanonicalExtraction");
+
+  for (const expectedValue of [
+    "pending",
+    "processing",
+    "succeeded",
+    "failed",
+  ]) {
+    assertContains(
+      statusEnum,
+      expectedValue,
+      `MasterCvCanonicalExtractionStatus should include ${expectedValue}`,
+    );
+  }
+
+  assert.match(extraction, /^\s*resumeId\s+String$/m);
+  assert.match(extraction, /^\s*inputHash\s+String$/m);
+  assert.match(
+    extraction,
+    /^\s*status\s+MasterCvCanonicalExtractionStatus\s+@default\(pending\)$/m,
+  );
+  assert.match(extraction, /^\s*coverageJson\s+Json\?$/m);
+  assert.match(extraction, /^\s*canonicalJson\s+Json\?$/m);
+  assert.match(extraction, /^\s*confidenceJson\s+Json\?$/m);
+  assert.match(extraction, /^\s*evidenceJson\s+Json\?$/m);
+  assertContains(
+    extraction,
+    "@@unique([resumeId, inputHash])",
+    "MasterCvCanonicalExtraction should enforce idempotency by resumeId+inputHash",
+  );
+  assertContains(
+    extraction,
+    "@@index([userId, createdAt(sort: Desc)])",
+    "MasterCvCanonicalExtraction should index userId+createdAt desc for latest lookup",
+  );
+  assertContains(
+    extraction,
+    "@@index([status, updatedAt])",
+    "MasterCvCanonicalExtraction should index status+updatedAt for monitoring",
+  );
+});
+
+test("canonical job cache models exist with stable hash fields", () => {
+  const canonicalJob = getBlock("model", "CanonicalJob");
+  const jobRequirementSet = getBlock("model", "JobRequirementSet");
+  const jobRawInput = getBlock("model", "JobRawInput");
+  const cvAdaptation = getBlock("model", "CvAdaptation");
+
+  assert.match(canonicalJob, /^\s*canonicalJobHash\s+String\s+@unique$/m);
+  assert.match(canonicalJob, /^\s*requirementSourceHash\s+String$/m);
+  assert.match(canonicalJob, /^\s*canonicalJobJson\s+Json$/m);
+  assert.match(canonicalJob, /^\s*canonicalizationModel\s+String$/m);
+  assert.match(canonicalJob, /^\s*canonicalizationPromptVersion\s+String$/m);
+  assert.match(canonicalJob, /^\s*rawInputs\s+JobRawInput\[\]$/m);
+  assert.match(
+    canonicalJob,
+    /^\s*jobRequirementSets\s+JobRequirementSet\[\]$/m,
+  );
+
+  assert.match(
+    jobRequirementSet,
+    /^\s*requirementSourceHash\s+String\s+@unique$/m,
+  );
+  assert.match(jobRequirementSet, /^\s*canonicalJobId\s+String$/m);
+  assert.match(jobRequirementSet, /^\s*requirementsJson\s+Json$/m);
+  assert.match(jobRequirementSet, /^\s*analysisModel\s+String$/m);
+  assert.match(jobRequirementSet, /^\s*analysisPromptVersion\s+String$/m);
+  assert.match(
+    jobRequirementSet,
+    /^\s*canonicalJob\s+CanonicalJob\s+@relation\(fields: \[canonicalJobId\], references: \[id\], onDelete: Cascade\)$/m,
+  );
+
+  assert.match(jobRawInput, /^\s*rawJobHash\s+String\s+@unique$/m);
+  assert.match(jobRawInput, /^\s*rawText\s+String\s+@db\.Text$/m);
+  assert.match(jobRawInput, /^\s*normalizedRawText\s+String\s+@db\.Text$/m);
+  assert.match(jobRawInput, /^\s*canonicalJobId\s+String$/m);
+  assert.match(
+    jobRawInput,
+    /^\s*canonicalJob\s+CanonicalJob\s+@relation\(fields: \[canonicalJobId\], references: \[id\], onDelete: Cascade\)$/m,
+  );
+
+  assert.match(cvAdaptation, /^\s*canonicalJobId\s+String\?$/m);
+  assert.match(cvAdaptation, /^\s*jobRequirementSetId\s+String\?$/m);
+  assert.match(
+    cvAdaptation,
+    /^\s*canonicalJob\s+CanonicalJob\?\s+@relation\(fields: \[canonicalJobId\], references: \[id\], onDelete: SetNull\)$/m,
+  );
+  assert.match(
+    cvAdaptation,
+    /^\s*jobRequirementSet\s+JobRequirementSet\?\s+@relation\(fields: \[jobRequirementSetId\], references: \[id\], onDelete: SetNull\)$/m,
+  );
+});

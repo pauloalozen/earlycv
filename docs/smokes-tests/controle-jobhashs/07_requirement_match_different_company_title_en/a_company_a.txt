@@ -1,0 +1,20 @@
+Machine Learning Engineer
+
+Company: Northstar Labs
+Location: Remote
+Employment type: Full-time
+
+We are hiring an engineer to build and maintain machine learning systems for production use.
+
+Responsibilities:
+- Build machine learning pipelines.
+- Deploy models to production.
+- Monitor model performance.
+- Collaborate with data engineers and product teams.
+
+Requirements:
+- Python.
+- Machine learning.
+- MLOps.
+- Cloud platforms.
+- Experience deploying production models.

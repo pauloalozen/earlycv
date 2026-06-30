@@ -11,14 +11,11 @@ test("route loading blocks keep spinners vertically centered", () => {
     currentDir,
     "../app/adaptar/resultado/page.tsx",
   );
-  const meusCvsPagePath = resolve(currentDir, "../app/cv-base/page.tsx");
 
   const resultadoPage = readFileSync(resultadoPagePath, "utf8");
-  const meusCvsPage = readFileSync(meusCvsPagePath, "utf8");
 
   assert.match(
     resultadoPage,
     /if \(!rawData\)[\s\S]*position:\s*"fixed"[\s\S]*alignItems:\s*"center"[\s\S]*justifyContent:\s*"center"/,
   );
-  assert.match(meusCvsPage, /min-h-\[200px\] items-center justify-center/);
 });

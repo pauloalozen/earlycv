@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
-import { AdminPageWrap } from "@/app/admin/_components/admin-primitives";
+import { AdminPageWrap, AT } from "@/app/admin/_components/admin-primitives";
 import { EmptyState } from "@/components/ui";
 import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
@@ -18,8 +19,11 @@ import { deleteUserAction } from "./[id]/actions";
 
 export const metadata = buildAdminMetadata("Usuarios");
 
+const PAGE_SIZE = 50;
+
 type AdminUsersPageProps = {
   searchParams: Promise<{
+    page?: string;
     planType?: string;
     query?: string;
     status?: string;
@@ -30,7 +34,8 @@ type AdminUsersPageProps = {
 export default async function AdminUsersPage({
   searchParams,
 }: AdminUsersPageProps) {
-  const { planType, query, status } = await searchParams;
+  const { page, planType, query, status } = await searchParams;
+  const pageNum = Math.max(1, parseInt(page ?? "1", 10) || 1);
   const token = await getBackofficeSessionToken();
 
   if (!token) {
@@ -62,8 +67,14 @@ export default async function AdminUsersPage({
     query,
     status,
   });
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const safePageNum = Math.min(pageNum, totalPages);
+  const paginatedUsers = filteredUsers.slice(
+    (safePageNum - 1) * PAGE_SIZE,
+    safePageNum * PAGE_SIZE,
+  );
 
-  const userRows = filteredUsers.map((user) => ({
+  const userRows = paginatedUsers.map((user) => ({
     id: user.id,
     name: user.name,
     email: user.email,
@@ -140,8 +151,69 @@ export default async function AdminUsersPage({
           title="Nenhum resultado"
         />
       ) : (
-        <UsersList deleteAction={deleteUserAction} users={userRows} />
+        <>
+          <UsersList deleteAction={deleteUserAction} users={userRows} />
+          {totalPages > 1 && (
+            <div
+              className="flex items-center justify-between text-sm"
+              style={{ color: AT.muted, marginTop: 8 }}
+            >
+              <span>
+                Página {safePageNum} de {totalPages} · {filteredUsers.length}{" "}
+                usuários
+              </span>
+              <div className="flex gap-2">
+                {safePageNum > 1 && (
+                  <Link
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                    })}
+                    href={buildPageHref({
+                      page: safePageNum - 1,
+                      planType,
+                      query,
+                      status,
+                    })}
+                  >
+                    ← Anterior
+                  </Link>
+                )}
+                {safePageNum < totalPages && (
+                  <Link
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                    })}
+                    href={buildPageHref({
+                      page: safePageNum + 1,
+                      planType,
+                      query,
+                      status,
+                    })}
+                  >
+                    Próxima →
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </AdminPageWrap>
   );
+}
+
+function buildPageHref(params: {
+  page: number;
+  planType?: string;
+  query?: string;
+  status?: string;
+}) {
+  const qs = new URLSearchParams();
+  qs.set("page", String(params.page));
+  if (params.planType) qs.set("planType", params.planType);
+  if (params.query) qs.set("query", params.query);
+  if (params.status) qs.set("status", params.status);
+  return `/admin/usuarios?${qs}`;
 }

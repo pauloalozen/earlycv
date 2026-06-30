@@ -7,11 +7,11 @@ describe("buildCvUnlockPlansHref", () => {
     const href = buildCvUnlockPlansHref({
       adaptationId: "adp_123",
       source: "dashboard-candidatura-unlock",
-      nextPath: "/dashboard/candidaturas/cmp_1",
+      nextPath: "/candidaturas/cmp_1",
     });
 
     expect(href).toBe(
-      "/planos?aid=adp_123&source=dashboard-candidatura-unlock&next=%2Fdashboard%2Fcandidaturas%2Fcmp_1",
+      "/planos?aid=adp_123&source=dashboard-candidatura-unlock&next=%2Fcandidaturas%2Fcmp_1",
     );
   });
 
@@ -19,7 +19,7 @@ describe("buildCvUnlockPlansHref", () => {
     const href = buildCvUnlockPlansHref({
       adaptationId: "adp_123",
       source: "resultado-buy-credits",
-      nextPath: "/dashboard/candidaturas/cmp_1",
+      nextPath: "/candidaturas/cmp_1",
       keywords: [" sql ", "", "python"],
     });
 
@@ -32,7 +32,7 @@ describe("buildCvUnlockPlansHref", () => {
     const href = buildCvUnlockPlansHref({
       adaptationId: "",
       source: "dashboard-candidatura-unlock",
-      nextPath: "/dashboard/candidaturas/cmp_1",
+      nextPath: "/candidaturas/cmp_1",
     });
 
     expect(href).toBe("/planos");

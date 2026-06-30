@@ -2,7 +2,7 @@
   "name": "@earlycv/config",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
+  "type": "commonjs",
   "files": [
     "biome",
     "dist",
@@ -15,6 +15,16 @@
       "development": "./src/analytics-env.ts",
       "types": "./src/analytics-env.ts",
       "default": "./dist/analytics-env.js"
+    },
+    "./cv-analysis-normalize": {
+      "development": "./src/cv-analysis-normalize.ts",
+      "types": "./src/cv-analysis-normalize.ts",
+      "default": "./dist/cv-analysis-normalize.js"
+    },
+    "./cv-analysis-score": {
+      "development": "./src/cv-analysis-score.ts",
+      "types": "./src/cv-analysis-score.ts",
+      "default": "./dist/cv-analysis-score.js"
     },
     "./env": {
       "development": "./src/env.ts",

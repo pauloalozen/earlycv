@@ -404,7 +404,12 @@ export class ResumeTemplateDocxService implements OnModuleInit {
     const bucket = process.env.S3_BUCKET ?? "earlycv-local";
     const marker = `/${bucket}/`;
     const idx = url.indexOf(marker);
-    if (idx < 0) throw new Error(`Cannot extract MinIO key from URL: ${url}`);
+    if (idx < 0) {
+      throw new Error(
+        `Cannot extract storage key from URL: bucket configurado é "${bucket}" mas a URL não contém "/${bucket}/". ` +
+          `Verifique se S3_BUCKET no .env bate com o bucket da URL do template. URL: ${url}`,
+      );
+    }
     return url.slice(idx + marker.length);
   }
 

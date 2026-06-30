@@ -1,10 +1,18 @@
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 
+import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { DatabaseService } from "../database/database.service";
 import type {
   InterviewPrepContent,
   InterviewPrepContext,
+  PastProcessReflection,
 } from "./interview-prep-ai.service";
 import { InterviewPrepAiService } from "./interview-prep-ai.service";
 
@@ -14,6 +22,13 @@ type AdaptedContentJson = {
   melhorias_aplicadas?: string[];
   fit?: { headline?: string };
 };
+
+function isAdaptationUnlocked(adaptation: {
+  status?: string | null;
+  isUnlocked?: boolean | null;
+}): boolean {
+  return adaptation.isUnlocked === true || adaptation.status === "delivered";
+}
 
 function extractStructuredAnalysis(
   raw: Prisma.JsonValue | null | undefined,
@@ -51,9 +66,15 @@ export class JobApplicationInterviewPrepService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(InterviewPrepAiService)
     private readonly aiService: InterviewPrepAiService,
+    @Inject(BusinessFunnelEventService)
+    private readonly funnelEvents: BusinessFunnelEventService,
   ) {}
 
-  async generateOrGet(userId: string, applicationId: string) {
+  async generateOrGet(
+    userId: string,
+    applicationId: string,
+    adaptationId?: string,
+  ) {
     const application = await this.database.jobApplication.findFirst({
       where: { id: applicationId, userId },
       include: {
@@ -62,11 +83,11 @@ export class JobApplicationInterviewPrepService {
           where: { id: { not: undefined } },
           select: {
             id: true,
+            status: true,
+            isUnlocked: true,
             jobDescriptionText: true,
             adaptedContentJson: true,
           },
-          orderBy: { createdAt: "desc" },
-          take: 1,
         },
       },
     });
@@ -82,11 +103,30 @@ export class JobApplicationInterviewPrepService {
       return application.interviewPrep;
     }
 
-    const currentAdaptation = application.currentCvAdaptationId
-      ? (application.cvAdaptations.find(
-          (cv) => cv.id === application.currentCvAdaptationId,
-        ) ?? application.cvAdaptations[0])
-      : application.cvAdaptations[0];
+    const resolvedAdaptationId =
+      adaptationId ?? application.currentCvAdaptationId;
+
+    if (!resolvedAdaptationId) {
+      throw new ConflictException(
+        "Defina o CV desta candidatura antes de preparar sua entrevista.",
+      );
+    }
+
+    const currentAdaptation =
+      application.cvAdaptations.find((cv) => cv.id === resolvedAdaptationId) ??
+      null;
+
+    if (!currentAdaptation) {
+      throw new ConflictException(
+        "Defina o CV desta candidatura antes de preparar sua entrevista.",
+      );
+    }
+
+    if (!isAdaptationUnlocked(currentAdaptation)) {
+      throw new ConflictException(
+        "Libere o CV desta vaga para preparar sua entrevista.",
+      );
+    }
 
     const jobDescriptionText =
       application.jobDescriptionText ??
@@ -97,11 +137,38 @@ export class JobApplicationInterviewPrepService {
       ? extractStructuredAnalysis(currentAdaptation.adaptedContentJson)
       : null;
 
+    const pastRejected = await this.database.jobApplication.findMany({
+      where: {
+        userId,
+        status: "REJECTED",
+        OR: [
+          { rejectionStrengths: { not: null } },
+          { rejectionImprovements: { not: null } },
+        ],
+      },
+      select: {
+        jobTitle: true,
+        companyName: true,
+        rejectionStrengths: true,
+        rejectionImprovements: true,
+      },
+    });
+
+    const pastProcessesReflections: PastProcessReflection[] = pastRejected.map(
+      (r) => ({
+        jobTitle: r.jobTitle,
+        companyName: r.companyName,
+        strengths: r.rejectionStrengths,
+        improvements: r.rejectionImprovements,
+      }),
+    );
+
     const usedJobDescription = Boolean(jobDescriptionText);
     const usedStructuredData = Boolean(structuredAnalysis);
+    const usedPastReflections = pastProcessesReflections.length > 0;
 
     this.logger.log(
-      `[interview-prep] generating — jobApplicationId=${applicationId} userId=${userId} hasJobDescription=${usedJobDescription} hasStructuredData=${usedStructuredData}`,
+      `[interview-prep] generating — jobApplicationId=${applicationId} userId=${userId} hasJobDescription=${usedJobDescription} hasStructuredData=${usedStructuredData} pastReflections=${pastProcessesReflections.length}`,
     );
 
     const context: InterviewPrepContext = {
@@ -112,6 +179,9 @@ export class JobApplicationInterviewPrepService {
       scoreBefore: application.scoreBefore,
       scoreAfter: application.scoreAfter,
       structuredAnalysis,
+      pastProcessesReflections: usedPastReflections
+        ? pastProcessesReflections
+        : null,
     };
 
     let content: InterviewPrepContent;
@@ -133,6 +203,14 @@ export class JobApplicationInterviewPrepService {
         },
       });
 
+      // Persist the selected adaptation so interviewPrepLocked resolves correctly.
+      if (adaptationId && adaptationId !== application.currentCvAdaptationId) {
+        await tx.jobApplication.update({
+          where: { id: applicationId },
+          data: { currentCvAdaptationId: adaptationId },
+        });
+      }
+
       await tx.jobApplicationEvent.create({
         data: {
           jobApplicationId: applicationId,
@@ -140,6 +218,7 @@ export class JobApplicationInterviewPrepService {
           metadata: {
             usedJobDescription,
             usedStructuredData,
+            usedPastReflections,
           },
         },
       });
@@ -150,6 +229,45 @@ export class JobApplicationInterviewPrepService {
     this.logger.log(
       `[interview-prep] generated — jobApplicationId=${applicationId} prepId=${result.id}`,
     );
+
+    const prepContent = content as {
+      questionsTheyMayAsk?: unknown[];
+    };
+    if (!this.funnelEvents) {
+      return result;
+    }
+    await this.funnelEvents
+      .record(
+        {
+          eventName: "interview_prep_generated",
+          eventVersion: 1,
+          idempotencyKey: `interview_prep_generated:${result.id}`,
+          metadata: {
+            has_previous_rejection_context: usedPastReflections,
+            used_job_description: usedJobDescription,
+            used_structured_data: usedStructuredData,
+            questions_count: Array.isArray(prepContent.questionsTheyMayAsk)
+              ? prepContent.questionsTheyMayAsk.length
+              : 0,
+          },
+        },
+        {
+          correlationId: `interview-prep:${applicationId}`,
+          ip: null,
+          requestId: `interview-prep:${result.id}`,
+          routePath: "/api/job-applications/:id/interview-prep",
+          sessionInternalId: null,
+          sessionPublicToken: null,
+          userAgentHash: null,
+          userId,
+        },
+        "backend",
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `[interview-prep] failed to record interview_prep_generated: ${err}`,
+        );
+      });
 
     return result;
   }

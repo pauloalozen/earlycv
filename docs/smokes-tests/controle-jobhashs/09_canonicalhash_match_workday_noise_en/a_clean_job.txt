@@ -1,0 +1,20 @@
+Product Data Analyst
+
+Company: Nova Commerce
+Location: London, United Kingdom
+Work mode: Remote
+Employment type: Full-time
+
+Nova Commerce is hiring a Product Data Analyst to support experimentation, product analytics, and executive reporting.
+
+Responsibilities:
+- Build recurring product KPI reports.
+- Analyze experiment results and feature performance.
+- Work with product managers to define event tracking.
+- Create dashboards for leadership reviews.
+
+Requirements:
+- Advanced SQL.
+- Experience with product analytics.
+- Experience with dashboarding tools.
+- Ability to communicate findings clearly.

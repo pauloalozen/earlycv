@@ -7,6 +7,7 @@ const InterviewPrepServiceCtor =
   JobApplicationInterviewPrepService as unknown as new (
     db: unknown,
     ai: unknown,
+    funnelEvents: unknown,
   ) => JobApplicationInterviewPrepService;
 
 const STUB_CONTENT = {
@@ -34,6 +35,12 @@ function makeAiMock(calls: unknown[] = []) {
   };
 }
 
+function makeFunnelEventsMock() {
+  return {
+    record: async () => undefined,
+  };
+}
+
 function makeApp(overrides: Record<string, unknown> = {}) {
   return {
     id: "app-1",
@@ -46,9 +53,17 @@ function makeApp(overrides: Record<string, unknown> = {}) {
     status: "INTERVIEW",
     scoreBefore: 60,
     scoreAfter: 82,
-    currentCvAdaptationId: null,
+    currentCvAdaptationId: "cv-1",
     interviewPrep: null,
-    cvAdaptations: [],
+    cvAdaptations: [
+      {
+        id: "cv-1",
+        status: "delivered",
+        isUnlocked: true,
+        jobDescriptionText: "Vaga para dev backend com Node.js.",
+        adaptedContentJson: null,
+      },
+    ],
     ...overrides,
   };
 }
@@ -60,6 +75,7 @@ function makeDb(app: ReturnType<typeof makeApp> | null = makeApp()) {
   const db = {
     jobApplication: {
       findFirst: async () => app,
+      findMany: async () => [],
     },
     jobApplicationInterviewPrep: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
@@ -95,7 +111,11 @@ function makeDb(app: ReturnType<typeof makeApp> | null = makeApp()) {
 test("throws NotFoundException when application not found for userId", async () => {
   const db = makeDb(null);
   const aiCalls: unknown[] = [];
-  const service = new InterviewPrepServiceCtor(db, makeAiMock(aiCalls));
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
 
   await assert.rejects(
     () => service.generateOrGet("wrong-user", "app-1"),
@@ -121,7 +141,11 @@ test("returns existing interviewPrep without calling AI", async () => {
 
   const db = makeDb(makeApp({ interviewPrep: existingPrep }));
   const aiCalls: unknown[] = [];
-  const service = new InterviewPrepServiceCtor(db, makeAiMock(aiCalls));
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
 
   const result = await service.generateOrGet("user-1", "app-1");
 
@@ -129,12 +153,70 @@ test("returns existing interviewPrep without calling AI", async () => {
   assert.equal((result as typeof existingPrep).id, "prep-existing");
 });
 
+test("rejects when application has no selected CV", async () => {
+  const db = makeDb(makeApp({ currentCvAdaptationId: null }));
+  const aiCalls: unknown[] = [];
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
+
+  await assert.rejects(
+    () => service.generateOrGet("user-1", "app-1"),
+    /Defina o CV desta candidatura antes de preparar sua entrevista/i,
+  );
+  assert.equal(aiCalls.length, 0);
+});
+
+test("rejects when selected CV is not unlocked", async () => {
+  const db = makeDb(
+    makeApp({
+      currentCvAdaptationId: "cv-1",
+      cvAdaptations: [
+        {
+          id: "cv-1",
+          status: "awaiting_payment",
+          isUnlocked: false,
+          jobDescriptionText: "Vaga para dev backend com Node.js.",
+          adaptedContentJson: {},
+        },
+        {
+          id: "cv-2",
+          status: "delivered",
+          isUnlocked: true,
+          jobDescriptionText: "Outra vaga",
+          adaptedContentJson: {
+            pontos_fortes: ["Experiência com APIs"],
+          },
+        },
+      ],
+    }),
+  );
+  const aiCalls: unknown[] = [];
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
+
+  await assert.rejects(
+    () => service.generateOrGet("user-1", "app-1"),
+    /Libere o CV desta vaga para preparar sua entrevista/i,
+  );
+  assert.equal(aiCalls.length, 0);
+});
+
 // ─── generation ───────────────────────────────────────────────────────────────
 
 test("generates and persists interviewPrep when none exists", async () => {
   const db = makeDb(makeApp());
   const aiCalls: unknown[] = [];
-  const service = new InterviewPrepServiceCtor(db, makeAiMock(aiCalls));
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
 
   const result = await service.generateOrGet("user-1", "app-1");
 
@@ -145,7 +227,11 @@ test("generates and persists interviewPrep when none exists", async () => {
 
 test("creates INTERVIEW_PREP_GENERATED event after generation", async () => {
   const db = makeDb(makeApp());
-  const service = new InterviewPrepServiceCtor(db, makeAiMock());
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(),
+    makeFunnelEventsMock(),
+  );
 
   await service.generateOrGet("user-1", "app-1");
 
@@ -159,7 +245,11 @@ test("creates INTERVIEW_PREP_GENERATED event after generation", async () => {
 
 test("persists generatedContentJson in the created record", async () => {
   const db = makeDb(makeApp());
-  const service = new InterviewPrepServiceCtor(db, makeAiMock());
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(),
+    makeFunnelEventsMock(),
+  );
 
   await service.generateOrGet("user-1", "app-1");
 
@@ -175,7 +265,11 @@ test("passes jobDescriptionText to AI when available on application", async () =
     makeApp({ jobDescriptionText: "Descrição completa da vaga." }),
   );
   const aiCalls: Array<Record<string, unknown>> = [];
-  const service = new InterviewPrepServiceCtor(db, makeAiMock(aiCalls));
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
 
   await service.generateOrGet("user-1", "app-1");
 
@@ -194,9 +288,26 @@ test("passes jobDescriptionText to AI when available on application", async () =
 });
 
 test("generates without jobDescriptionText using fallback", async () => {
-  const db = makeDb(makeApp({ jobDescriptionText: null }));
+  const db = makeDb(
+    makeApp({
+      jobDescriptionText: null,
+      cvAdaptations: [
+        {
+          id: "cv-1",
+          status: "delivered",
+          isUnlocked: true,
+          jobDescriptionText: null,
+          adaptedContentJson: null,
+        },
+      ],
+    }),
+  );
   const aiCalls: Array<Record<string, unknown>> = [];
-  const service = new InterviewPrepServiceCtor(db, makeAiMock(aiCalls));
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
 
   await service.generateOrGet("user-1", "app-1");
 
@@ -224,6 +335,8 @@ test("uses adaptedContentJson from CvAdaptation as structured context", async ()
     cvAdaptations: [
       {
         id: "cv-1",
+        status: "delivered",
+        isUnlocked: true,
         jobDescriptionText: "Vaga para dev com Go e Node.",
         adaptedContentJson,
       },
@@ -232,7 +345,11 @@ test("uses adaptedContentJson from CvAdaptation as structured context", async ()
 
   const db = makeDb(app);
   const aiCalls: Array<Record<string, unknown>> = [];
-  const service = new InterviewPrepServiceCtor(db, makeAiMock(aiCalls));
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
 
   await service.generateOrGet("user-1", "app-1");
 
@@ -253,6 +370,54 @@ test("uses adaptedContentJson from CvAdaptation as structured context", async ()
     (event?.metadata as Record<string, unknown>).usedStructuredData,
     true,
   );
+});
+
+test("uses the selected CV even when another unlocked adaptation is more recent", async () => {
+  const selectedAdaptedContentJson = {
+    pontos_fortes: ["Foco em TypeScript"],
+  };
+  const latestAdaptedContentJson = {
+    pontos_fortes: ["Foco em Python"],
+  };
+
+  const db = makeDb(
+    makeApp({
+      currentCvAdaptationId: "cv-selected",
+      jobDescriptionText: null,
+      cvAdaptations: [
+        {
+          id: "cv-latest",
+          status: "delivered",
+          isUnlocked: true,
+          jobDescriptionText: "Vaga recente",
+          adaptedContentJson: latestAdaptedContentJson,
+        },
+        {
+          id: "cv-selected",
+          status: "delivered",
+          isUnlocked: true,
+          jobDescriptionText: "Vaga escolhida",
+          adaptedContentJson: selectedAdaptedContentJson,
+        },
+      ],
+    }),
+  );
+  const aiCalls: Array<Record<string, unknown>> = [];
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
+
+  await service.generateOrGet("user-1", "app-1");
+
+  assert.equal(aiCalls[0].jobDescriptionText, "Vaga escolhida");
+  assert.deepEqual(aiCalls[0].structuredAnalysis, {
+    pontosFortes: ["Foco em TypeScript"],
+    lacunas: [],
+    melhoriasAplicadas: [],
+    fitHeadline: "",
+  });
 });
 
 test("does not pass jobUrl to AI context (no scraping)", async () => {
@@ -278,7 +443,11 @@ test("propagates AI error without leaving partial state", async () => {
     },
   };
 
-  const service = new InterviewPrepServiceCtor(db, failingAi);
+  const service = new InterviewPrepServiceCtor(
+    db,
+    failingAi,
+    makeFunnelEventsMock(),
+  );
 
   await assert.rejects(
     () => service.generateOrGet("user-1", "app-1"),
@@ -308,7 +477,11 @@ test("propagates validation error without leaving partial state", async () => {
     },
   };
 
-  const service = new InterviewPrepServiceCtor(db, emptyAi);
+  const service = new InterviewPrepServiceCtor(
+    db,
+    emptyAi,
+    makeFunnelEventsMock(),
+  );
 
   await assert.rejects(
     () => service.generateOrGet("user-1", "app-1"),
@@ -337,7 +510,11 @@ test("existing CvAdaptationAiService methods are not called by InterviewPrepServ
   const aiCalls: unknown[] = [];
 
   // The AI service passed only has `generate` — no analyzeAndAdapt or buildPaidCvOutputFromGuest
-  const service = new InterviewPrepServiceCtor(db, makeAiMock(aiCalls));
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
 
   await service.generateOrGet("user-1", "app-1");
 

@@ -10,8 +10,12 @@ import { CvAdaptationProtectedAnalyzeService } from "./cv-adaptation-protected-a
 
 test("does not invoke AI provider when protected analysis is blocked", async () => {
   let runProviderCalls = 0;
-  const aiCalls: Array<{ jobDescriptionText: string; masterCvText: string }> =
-    [];
+  const aiCalls: Array<{
+    canonicalJobJson: unknown;
+    existingRequirements?: unknown[];
+    jobDescriptionText: string;
+    masterCvText: string;
+  }> = [];
   const protectionFacadeMock: Pick<
     AnalysisProtectionFacade,
     "executeProtectedAnalysis"
@@ -25,13 +29,16 @@ test("does not invoke AI provider when protected analysis is blocked", async () 
     },
   };
   const aiServiceMock: Pick<CvAdaptationAiService, "analyzeAndAdaptDirect"> = {
-    analyzeAndAdaptDirect: async (
-      masterCvText: string,
-      jobDescriptionText: string,
-    ) => {
+    analyzeAndAdaptDirect: async (input) => {
       runProviderCalls += 1;
-      aiCalls.push({ jobDescriptionText, masterCvText });
-      return { adaptedContentJson: { ok: true }, previewText: "preview" };
+      aiCalls.push(input);
+      return {
+        adaptedContentJson: { ok: true },
+        previewText: "preview",
+        structuredRequirements: [],
+        analysisModel: "gpt-test",
+        analysisPromptVersion: "2026-06-09.v1",
+      };
     },
   };
 
@@ -50,6 +57,7 @@ test("does not invoke AI provider when protected analysis is blocked", async () 
       sessionPublicToken: null,
       userId: "user-1",
     },
+    canonicalJobJson: { title: "Engineer" },
     jobDescriptionText: "JD",
     loadMasterCvText: async () => "CV",
     payload: { route: "cv-adaptation/analyze" },

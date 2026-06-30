@@ -210,9 +210,34 @@ Mergear o hotfix em `develop` imediatamente apos o deploy em `main` e obrigatori
 - Freemium consolidado com claim por credito sem redirect forcado, popup de liberacao com fade, padronizacao de CTAs e correcoes de PT-BR nas telas principais.
 - Paginas publicas de `Privacidade` e `Termos de Uso` criadas com metadata completa + links discretos no rodape da landing.
 - Painel de planos atualizado com plano free e contadores de analise.
-- Bug de travamento no back/forward com spinner de transicao permanece pendente e em investigacao.
+- Bug de travamento no back/forward com spinner de transicao: **RESOLVIDO** — ver seção abaixo.
 - Slice `analysis-protection + analysis-observability` implementado (facade protegida, turnstile, rate-limit/dedupe/usage policy, telemetry e funnel idempotente) e integrado no `cv-adaptation` sem mudar UX visivel.
 - Referencia operacional oficial do slice: `docs/analysis-protection-operational-runbook.md`.
+
+---
+
+## Bugs conhecidos e solucoes — nao regredir
+
+### Loading travado na navegacao de volta (browser back/forward)
+
+**Sintoma:** Ao navegar para qualquer rota e clicar em voltar pelo browser para uma pagina com `PageShell`, a tela trava no spinner de loading e nao libera. Necessario recarregar a pagina.
+
+**Causa raiz:** O Next.js App Router usa um BF cache proprio no nivel do React (sem remount real do componente). Quando o usuario navega para fora, o React executa o cleanup do `useEffect` do `PageShell` (que limpa o `setTimeout` de 100ms). Ao voltar, o componente e restaurado do cache com `ready=false` — sem remount, o `useEffect` nao re-executa, e nao existe timeout pendente para liberar o estado. Resultado: spinner permanente.
+
+**Solucao (implementada em `apps/web/src/components/page-shell.tsx`):**
+Adicionar listener `popstate` no `PageShell` que detecta back/forward navigation e reinicia o ciclo de reveal:
+
+```ts
+const handlePopState = () => {
+  setReady(false);
+  reveal(); // setTimeout 100ms → setReady(true)
+};
+window.addEventListener("popstate", handlePopState);
+```
+
+**Regra:** Toda tela que usa `PageShell` esta coberta automaticamente. Nao remover o listener `popstate` do `PageShell`. Se criar uma nova variante de shell de pagina, replicar esse padrao.
+
+**Spec de regressao:** `apps/web/src/lib/page-shell-navigation.spec.ts` — verifica presenca do listener `popstate` e do `setReady(false)`.
 
 ---
 

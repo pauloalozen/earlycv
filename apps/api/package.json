@@ -5,7 +5,7 @@
   "scripts": {
     "build:shared": "npm run build --workspace @earlycv/config --workspace @earlycv/database --workspace @earlycv/queue --workspace @earlycv/storage --workspace @earlycv/ai",
     "predev": "npm run build:shared",
-    "dev": "nest start --watch",
+    "dev": "sh -c 'if [ -f ../../.env ]; then set -a && . ../../.env && set +a; fi && nest start --watch'",
     "build": "NODE_OPTIONS='--conditions=development' nest build",
     "prestart": "npm run build:shared",
     "start": "npm run deploy --workspace @earlycv/database && node dist/main.js",

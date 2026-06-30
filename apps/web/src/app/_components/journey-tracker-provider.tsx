@@ -277,6 +277,8 @@ function isPrivateAuthenticatedRoute(pathname: string): boolean {
   return (
     pathname === "/dashboard" ||
     pathname.startsWith("/dashboard/") ||
+    pathname === "/meu-perfil" ||
+    pathname.startsWith("/meu-perfil/") ||
     pathname === "/compras" ||
     pathname.startsWith("/compras/")
   );
@@ -599,7 +601,7 @@ export function JourneyTrackerProvider({
             : "signin"
           : "unknown";
       const isGoogleOauthLink =
-        nextUrl.pathname.includes("/auth/google/start") ||
+        nextUrl.pathname.includes("/api/auth/google/start") ||
         nextUrl.pathname.includes("/oauth/google");
 
       if (isGoogleOauthLink) {

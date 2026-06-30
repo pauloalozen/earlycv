@@ -47,6 +47,22 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   plan_selected: "plan_selected",
   site_exit_candidate: "site_exit_candidate",
   dashboard_viewed: "dashboard_viewed",
+  // Candidaturas
+  candidaturas_page_viewed: "candidaturas_page_viewed",
+  candidatura_created: "candidatura_created",
+  candidatura_detail_viewed: "candidatura_detail_viewed",
+  candidatura_status_changed: "candidatura_status_changed",
+  candidatura_marked_as_applied: "candidatura_marked_as_applied",
+  candidatura_archived: "candidatura_archived",
+  candidatura_deleted: "candidatura_deleted",
+  candidatura_note_added: "candidatura_note_added",
+  candidatura_rejection_feedback_submitted:
+    "candidatura_rejection_feedback_submitted",
+  // Interview Prep
+  interview_prep_drawer_opened: "interview_prep_drawer_opened",
+  interview_prep_generated: "interview_prep_generated",
+  interview_prep_viewed: "interview_prep_viewed",
+  interview_prep_printed: "interview_prep_printed",
 };
 
 const PROTECTION_EVENT_MAPPING: Record<AnalysisProtectionEventName, string> = {

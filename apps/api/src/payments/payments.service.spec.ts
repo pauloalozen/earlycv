@@ -879,12 +879,14 @@ test("brick client token prefers MERCADOPAGO_BRICK_ACCESS_TOKEN over legacy toke
 test("brick client token uses MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST in non-production", () => {
   const originalMode = process.env.MERCADOPAGO_MODE;
   const originalNodeEnv = process.env.NODE_ENV;
+  const originalBrickToken = process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN;
   const originalBrickTestToken =
     process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST;
   const originalLegacyTestToken = process.env.MERCADOPAGO_ACCESS_TOKEN_TEST;
 
   process.env.MERCADOPAGO_MODE = "sandbox";
   process.env.NODE_ENV = "development";
+  delete process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN;
   process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST = "brick-test-token";
   process.env.MERCADOPAGO_ACCESS_TOKEN_TEST = "legacy-test-token";
 
@@ -899,6 +901,9 @@ test("brick client token uses MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST in non-product
   else process.env.MERCADOPAGO_MODE = originalMode;
   if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = originalNodeEnv;
+  if (originalBrickToken === undefined)
+    delete process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN;
+  else process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN = originalBrickToken;
   if (originalBrickTestToken === undefined)
     delete process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST;
   else process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST = originalBrickTestToken;

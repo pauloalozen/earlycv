@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -378,7 +379,7 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                 fontWeight: 500,
               }}
             >
-              v1.2
+              v2.1
             </span>
           </a>
 
@@ -889,9 +890,12 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                       redirecionado automaticamente após a confirmação.
                     </p>
                     {pixPending.qrCodeBase64 && (
-                      <img
+                      <Image
                         src={toImageDataUrl(pixPending.qrCodeBase64)}
                         alt="QR Code PIX"
+                        width={180}
+                        height={180}
+                        unoptimized
                         style={{
                           width: 180,
                           height: 180,

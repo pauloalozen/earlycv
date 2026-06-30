@@ -145,6 +145,30 @@ enum CvAdaptationStatus {
   failed
 }
 
+enum CvAdaptationSource {
+  uploaded_content
+  user_profile
+}
+
+enum CvAdaptationInputMode {
+  file_upload
+  text_paste
+  profile
+}
+
+enum ProfileReadinessStatus {
+  empty
+  partial
+  ready
+}
+
+enum MasterCvCanonicalExtractionStatus {
+  pending
+  processing
+  succeeded
+  failed
+}
+
 enum PaymentStatus {
   none
   pending
@@ -281,6 +305,7 @@ model User {
   claimedAnalysisCvSnapshots AnalysisCvSnapshot[]          @relation("AnalysisCvSnapshotClaimedBy")
   requestedIngestionBatchRuns IngestionBatchRun[]          @relation("IngestionBatchRunRequestedByUser")
   jobApplications           JobApplication[]
+  masterCvCanonicalExtractions MasterCvCanonicalExtraction[]
 }
 
 model UserDailyAnalysisUsage {
@@ -446,6 +471,11 @@ model EmailVerificationChallenge {
 model UserProfile {
   id                    String            @id @default(cuid())
   userId                String            @unique
+  fullName              String?
+  contactEmail          String?
+  phone                 String?
+  linkedinUrl           String?
+  professionalSummary   String?
   headline              String?
   currentTitle          String?
   summary               String?
@@ -458,6 +488,14 @@ model UserProfile {
   targetSalaryMin       Int?
   targetSalaryMax       Int?
   preferredLanguage     String?
+  experiencesJson       Json?
+  educationJson         Json?
+  skillsJson            Json?
+  languagesJson         Json?
+  certificationsJson    Json?
+  profileFieldMetaJson  Json?
+  profileSuggestionsJson Json?
+  profileReadinessStatus ProfileReadinessStatus @default(empty)
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
   user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -510,7 +548,7 @@ model Resume {
   kind                    ResumeKind       @default(master)
   isMaster                Boolean          @default(true)
   basedOnResumeId         String?
-  templateId              String?
+  templateId           String?
   targetJobId             String?
   targetJobTitle          String?
   createdAt               DateTime         @default(now())
@@ -522,11 +560,82 @@ model Resume {
   targetJob               Job?             @relation(fields: [targetJobId], references: [id], onDelete: SetNull)
   cvAdaptationsAsMaster   CvAdaptation[]   @relation("CvAdaptationMaster")
   cvAdaptationAsResult    CvAdaptation?    @relation("CvAdaptationResult")
+  masterCvCanonicalExtractions MasterCvCanonicalExtraction[]
 
   @@index([userId])
   @@index([basedOnResumeId])
   @@index([templateId])
   @@index([targetJobId])
+}
+
+model CanonicalJob {
+  id                            String      @id @default(cuid())
+  canonicalJobHash              String      @unique
+  requirementSourceHash         String
+  canonicalJobJson              Json
+  canonicalizationModel         String
+  canonicalizationPromptVersion String
+  createdAt                     DateTime    @default(now())
+  updatedAt                     DateTime    @updatedAt
+  rawInputs                     JobRawInput[]
+  cvAdaptations                 CvAdaptation[]
+  jobRequirementSets            JobRequirementSet[]
+
+  @@index([requirementSourceHash])
+}
+
+model JobRequirementSet {
+  id                    String         @id @default(cuid())
+  requirementSourceHash String         @unique
+  canonicalJobId        String
+  requirementsJson      Json
+  analysisModel         String
+  analysisPromptVersion String
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  canonicalJob          CanonicalJob   @relation(fields: [canonicalJobId], references: [id], onDelete: Cascade)
+  cvAdaptations         CvAdaptation[]
+
+  @@index([canonicalJobId])
+}
+
+model JobRawInput {
+  id                String       @id @default(cuid())
+  rawJobHash        String       @unique
+  rawText           String       @db.Text
+  normalizedRawText String       @db.Text
+  canonicalJobId    String
+  createdAt         DateTime     @default(now())
+
+  canonicalJob      CanonicalJob @relation(fields: [canonicalJobId], references: [id], onDelete: Cascade)
+
+  @@index([canonicalJobId, createdAt])
+}
+
+model MasterCvCanonicalExtraction {
+  id             String                           @id @default(cuid())
+  userId         String
+  resumeId       String
+  inputHash      String
+  status         MasterCvCanonicalExtractionStatus @default(pending)
+  attempts       Int                              @default(0)
+  lastError      String?
+  canonicalJson  Json?
+  coverageJson   Json?
+  confidenceJson Json?
+  evidenceJson   Json?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime                         @default(now())
+  updatedAt      DateTime                         @updatedAt
+
+  user           User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume         Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@unique([resumeId, inputHash])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, updatedAt])
 }
 
 model ResumeTemplate {
@@ -567,6 +676,10 @@ model CvAdaptation {
   userId               String
   masterResumeId       String
   templateId           String?
+  canonicalJobId       String?
+  jobRequirementSetId  String?
+  adaptationSource     CvAdaptationSource  @default(uploaded_content)
+  inputMode            CvAdaptationInputMode @default(file_upload)
   jobDescriptionText   String
   jobTitle             String?
   companyName          String?
@@ -575,6 +688,7 @@ model CvAdaptation {
   previewText          String?
   adaptedResumeId      String?             @unique
   aiAuditJson          Json?
+  editedCvJson         Json?
   paymentStatus        PaymentStatus       @default(none)
   paymentProvider      PaymentProvider?
   paymentReference     String?             @unique
@@ -588,6 +702,10 @@ model CvAdaptation {
   isUnlocked           Boolean             @default(false)
   unlockedAt           DateTime?
   analysisCvSnapshotId String?             @unique
+  userProfileSnapshotJson Json?
+  uploadedContentSnapshotJson Json?
+  analysisInputSnapshotJson Json?
+  generationInputSnapshotJson Json?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
@@ -596,6 +714,8 @@ model CvAdaptation {
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   masterResume  Resume          @relation("CvAdaptationMaster", fields: [masterResumeId], references: [id], onDelete: Cascade)
   template      ResumeTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  canonicalJob  CanonicalJob?   @relation(fields: [canonicalJobId], references: [id], onDelete: SetNull)
+  jobRequirementSet JobRequirementSet? @relation(fields: [jobRequirementSetId], references: [id], onDelete: SetNull)
   adaptedResume Resume?         @relation("CvAdaptationResult", fields: [adaptedResumeId], references: [id], onDelete: SetNull)
   analysisCvSnapshot AnalysisCvSnapshot? @relation(fields: [analysisCvSnapshotId], references: [id], onDelete: SetNull)
   cvUnlock     CvUnlock?
@@ -607,6 +727,7 @@ model CvAdaptation {
   @@index([mpPaymentId])
   @@index([analysisCvSnapshotId])
   @@index([jobApplicationId])
+  @@index([canonicalJobId])
 }
 
 model CvUnlock {
@@ -643,6 +764,8 @@ model AnalysisCvSnapshot {
   originalFileName      String?
   originalMimeType      String?
   originalFileSizeBytes Int?
+  professionalProfileFingerprint String
+  professionalProfileJson Json
   capturedAt            DateTime             @default(now())
   expiresAt             DateTime?
   claimedAt             DateTime?
@@ -658,6 +781,7 @@ model AnalysisCvSnapshot {
   @@index([guestSessionHash])
   @@index([expiresAt])
   @@index([textSha256])
+  @@index([professionalProfileFingerprint])
 }
 
 model JobSource {
@@ -1082,6 +1206,14 @@ model JobApplication {
   notes                  String?
   appliedAt              DateTime?
   nextActionAt           DateTime?
+  interviewTitle         String?
+  interviewerName        String?
+  interviewMeetingUrl    String?
+  interviewLocation      String?
+  rejectionStrengths     String?
+  rejectionImprovements  String?
+  archivedAt             DateTime?
+  deletedAt              DateTime?
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
 

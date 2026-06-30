@@ -1,0 +1,23 @@
+SENIOR DATA SCIENTIST - AI ENGINEER
+
+
+FINBANK
+New York, NY, United States · Hybrid
+Full-time
+
+
+About the job:
+We are looking for a Senior Data Scientist - AI Engineer to develop artificial intelligence solutions, machine learning models, and analytical automation initiatives.
+
+Responsibilities:
+- Develop machine learning models and AI solutions.
+- Work with Python, SQL, and cloud platforms.
+- Build data pipelines.
+- Communicate results to business stakeholders.
+
+Requirements:
+- Experience with Python.
+- Experience with SQL.
+- Knowledge of machine learning.
+- Experience with cloud platforms.
+- Strong communication with stakeholders.

@@ -1,0 +1,16 @@
+Junior Data Analyst
+
+Company: Data & Co
+Location: Chicago
+Work mode: Hybrid
+
+Responsibilities:
+- Support dashboard creation.
+- Run simple SQL queries.
+- Update recurring reports.
+- Support indicator analysis.
+
+Requirements:
+- Basic knowledge of SQL.
+- Basic knowledge of Power BI.
+- Willingness to learn.

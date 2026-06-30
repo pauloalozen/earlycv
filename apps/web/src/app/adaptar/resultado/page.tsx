@@ -8,7 +8,9 @@ import {
   type CvReleaseModalStatus,
 } from "@/components/cv-release-modal";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
+import { EcvBuildLoader } from "@/components/ecv-loader";
 import { PageShell } from "@/components/page-shell";
+import { PublicFooter } from "@/components/public-footer";
 import { trackEvent } from "@/lib/analytics-tracking";
 import {
   type DownloadProgressStage,
@@ -17,6 +19,7 @@ import {
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
 import { saveGuestPreview } from "@/lib/cv-adaptation-api";
 import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
+import { DEMO_CV_ANALYSIS_MOCK } from "@/lib/demo-cv-analysis-mock";
 import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
 import {
   clearGuestAnalysisRaw,
@@ -34,6 +37,13 @@ import { normalizeData } from "./normalize-data";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 const SERIF_ITALIC = "var(--font-instrument-serif), serif";
+
+// Section color tokens
+const AMBER = "#d4854a";
+const AMBER_SOFT = "rgba(212,133,74,0.12)";
+const AMBER_BORDER = "rgba(212,133,74,0.28)";
+const AMBER_TEXT = "#7a3d10";
+const BLUE = "#5da0e8";
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -100,6 +110,45 @@ const GUEST_MOCK_KW: Array<{ kw: string; pontos: number }> = [
   { kw: "competência-chave", pontos: 4 },
   { kw: "experiência-necessária", pontos: 3 },
   { kw: "certificação-relevante", pontos: 2 },
+];
+
+const GUEST_MOCK_HARD_GATES: Array<{ text: string; met: boolean }> = [
+  { text: "Requisito técnico obrigatório não avaliado", met: false },
+  { text: "Qualificação eliminatória da vaga", met: false },
+  { text: "Critério inegociável do recrutador", met: false },
+];
+
+const GUEST_MOCK_MISSING: Array<{
+  id: string;
+  titulo: string;
+  descricao: string;
+  pontos: number;
+}> = [
+  {
+    id: "gm0",
+    titulo: "Evidência técnica ausente",
+    descricao: "Exigida pela vaga mas não encontrada no CV",
+    pontos: 6,
+  },
+  {
+    id: "gm1",
+    titulo: "Qualificação não comprovada",
+    descricao: "Recrutador vai notar a ausência",
+    pontos: 4,
+  },
+  {
+    id: "gm2",
+    titulo: "Experiência setorial não evidenciada",
+    descricao: "Reduz aderência ao perfil exigido",
+    pontos: 3,
+  },
+];
+
+const GUEST_MOCK_SINAIS: string[] = [
+  "Sinal de candidato forte não revelado",
+  "Diferencial identificado em CVs aprovados",
+  "Padrão recorrente em perfis selecionados",
+  "Elemento-chave do perfil ideal da vaga",
 ];
 
 const GUEST_MOCK_PROBLEMAS: Array<{
@@ -224,25 +273,30 @@ function SectionHeader({
   description,
   score,
   maxScore,
+  sectionBadge,
+  sectionColor,
 }: {
   label: string;
   title: string;
   description?: string;
   score?: number;
   maxScore?: number;
+  sectionBadge?: string;
+  sectionColor?: string;
 }) {
   const pct =
     score !== undefined && maxScore !== undefined
       ? score / maxScore
       : undefined;
   const barColor =
-    pct === undefined
+    sectionColor ??
+    (pct === undefined
       ? "#c6ff3a"
       : pct >= 0.75
         ? "#c6ff3a"
         : pct >= 0.4
           ? "#f59e0b"
-          : "#ef4444";
+          : "#ef4444");
   const badgeBg =
     pct === undefined
       ? "rgba(198,255,58,0.2)"
@@ -270,17 +324,36 @@ function SectionHeader({
           marginBottom: 6,
         }}
       >
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 10,
-            letterSpacing: 1.2,
-            color: "#8a8a85",
-            fontWeight: 500,
-          }}
-        >
-          {label}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {sectionBadge && (
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 9.5,
+                letterSpacing: 1.2,
+                fontWeight: 600,
+                padding: "4px 8px",
+                borderRadius: 5,
+                background: sectionColor ?? "#0a0a0a",
+                color: sectionColor === "#c6ff3a" ? "#405410" : "#fff",
+                flexShrink: 0,
+              }}
+            >
+              {sectionBadge}
+            </span>
+          )}
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              letterSpacing: 1.2,
+              color: "#8a8a85",
+              fontWeight: 500,
+            }}
+          >
+            {label}
+          </span>
+        </div>
         {score !== undefined && maxScore !== undefined && (
           <span
             style={{
@@ -376,6 +449,644 @@ function IssueIcon({ tipo }: { tipo: "critico" | "atencao" | "ok" }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// New atomic components (design reference)
+// ─────────────────────────────────────────────────────────────
+
+const LIME_SOFT = "rgba(198,255,58,0.18)";
+const LIME_BORDER = "rgba(198,255,58,0.35)";
+const LIME_DEEP = "#405410";
+const WARN_SOFT = "rgba(232,168,56,0.08)";
+const WARN_BORDER = "rgba(232,168,56,0.22)";
+const WARN_TEXT = "#7a5010";
+const BORDER_MED = "rgba(10,10,10,0.12)";
+const MUTED = "#8a8a85";
+const FAINT = "rgba(10,10,10,0.04)";
+const BORDER_BASE = "rgba(10,10,10,0.08)";
+const _BLUE_SOFT = "rgba(93,160,232,0.12)";
+const _BLUE_BORDER = "rgba(93,160,232,0.28)";
+
+function SubLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontFamily: MONO,
+        fontSize: 9.5,
+        letterSpacing: 1,
+        color: MUTED,
+        marginBottom: 10,
+        paddingBottom: 8,
+        borderBottom: `1px solid ${BORDER_BASE}`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+type ItemCardType = "positive" | "action" | "missing" | "neutral";
+
+function ItemCard({
+  text,
+  pts,
+  type,
+}: {
+  text: string;
+  pts?: string;
+  type: ItemCardType;
+}) {
+  const cfg: Record<
+    ItemCardType,
+    { bg: string; bd: string; bb: string | null; bc: string | null }
+  > = {
+    positive: { bg: LIME_SOFT, bd: LIME_BORDER, bb: "#c6ff3a", bc: LIME_DEEP },
+    action: {
+      bg: AMBER_SOFT,
+      bd: AMBER_BORDER,
+      bb: AMBER,
+      bc: "#fff",
+    },
+    missing: { bg: FAINT, bd: BORDER_BASE, bb: null, bc: null },
+    neutral: { bg: "#fff", bd: BORDER_BASE, bb: null, bc: null },
+  };
+  const c = cfg[type];
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: 10,
+        padding: "10px 12px",
+        marginBottom: 6,
+        background: c.bg,
+        border: `1px solid ${c.bd}`,
+        borderRadius: 8,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          lineHeight: 1.5,
+          flex: 1,
+          color: type === "missing" ? MUTED : "#0a0a0a",
+          fontStyle: type === "missing" ? "italic" : "normal",
+        }}
+      >
+        {text}
+      </div>
+      {pts && c.bb && (
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: 0.5,
+            flexShrink: 0,
+            padding: "3px 7px",
+            borderRadius: 4,
+            background: c.bb,
+            color: c.bc ?? undefined,
+          }}
+        >
+          {pts}
+        </div>
+      )}
+      {type === "missing" && (
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            color: MUTED,
+            flexShrink: 0,
+            borderRadius: 4,
+            padding: "3px 7px",
+            border: `1px solid ${BORDER_BASE}`,
+          }}
+        >
+          {pts ?? "sem evidência"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReqRow({ text, met }: { text: string; met: boolean }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 9,
+        padding: "7px 0",
+        borderBottom: "1px solid rgba(10,10,10,0.04)",
+      }}
+    >
+      <div
+        style={{
+          width: 16,
+          height: 16,
+          borderRadius: "50%",
+          flexShrink: 0,
+          marginTop: 2,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: met ? LIME_SOFT : "rgba(10,10,10,0.05)",
+          border: `1.5px solid ${met ? "#c6ff3a" : "rgba(10,10,10,0.1)"}`,
+        }}
+      >
+        {met && (
+          <div
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: "50%",
+              background: LIME_DEEP,
+            }}
+          />
+        )}
+      </div>
+      <div
+        style={{
+          fontSize: 12.5,
+          lineHeight: 1.4,
+          color: met ? "#0a0a0a" : MUTED,
+        }}
+      >
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function KwChip({
+  label,
+  type,
+  pontos,
+}: {
+  label: string;
+  type: "present" | "absent";
+  pontos?: number;
+}) {
+  const st =
+    type === "present"
+      ? { bg: LIME_SOFT, bd: LIME_BORDER, color: LIME_DEEP }
+      : { bg: "#fff", bd: BORDER_MED, color: "#0a0a0a" };
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        fontFamily: MONO,
+        fontSize: 11,
+        fontWeight: 500,
+        letterSpacing: 0.2,
+        padding: "5px 10px",
+        borderRadius: 6,
+        background: st.bg,
+        border: `1px solid ${st.bd}`,
+        color: st.color,
+      }}
+    >
+      {type === "absent" && (
+        <span
+          style={{
+            display: "inline-block",
+            width: 11,
+            height: 11,
+            border: `1.5px solid ${BORDER_MED}`,
+            borderRadius: 3,
+            flexShrink: 0,
+          }}
+        />
+      )}
+      {type === "present" && (
+        <span style={{ fontSize: 9, opacity: 0.8 }}>✓</span>
+      )}
+      {label}
+      {pontos !== undefined && (
+        <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 2 }}>
+          +{pontos}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function FormatItem({
+  label,
+  note,
+  ok,
+}: {
+  label: string;
+  note?: string;
+  ok: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 10,
+        padding: "10px 12px",
+        background: ok ? LIME_SOFT : FAINT,
+        border: `1px solid ${ok ? LIME_BORDER : BORDER_BASE}`,
+        borderRadius: 8,
+      }}
+    >
+      <div
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: "50%",
+          flexShrink: 0,
+          marginTop: 1,
+          background: ok ? "#c6ff3a" : "rgba(10,10,10,0.1)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 10,
+        }}
+      >
+        {ok ? "✓" : "!"}
+      </div>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>
+          {label}
+        </div>
+        {note && (
+          <div style={{ fontSize: 11.5, color: "#6a6a65", lineHeight: 1.4 }}>
+            {note}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WarnCard({ title, body }: { title: string; body: string }) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        padding: "14px 16px",
+        background: WARN_SOFT,
+        border: `1px solid ${WARN_BORDER}`,
+        borderRadius: 10,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 9.5,
+          letterSpacing: 1,
+          fontWeight: 500,
+          color: WARN_TEXT,
+          marginBottom: 6,
+        }}
+      >
+        ⚠ ATENÇÃO
+      </div>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 500,
+          marginBottom: 5,
+          letterSpacing: -0.2,
+        }}
+      >
+        {title}
+      </div>
+      <div style={{ fontSize: 12, color: "#5a5050", lineHeight: 1.5 }}>
+        {body}
+      </div>
+    </div>
+  );
+}
+
+function ReferenceCard({ text, sub }: { text: string; sub?: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 10,
+        padding: "11px 13px",
+        background: "rgba(10,10,10,0.02)",
+        border: `1px solid ${BORDER_BASE}`,
+        borderRadius: 9,
+      }}
+    >
+      <div
+        style={{
+          width: 5,
+          height: 5,
+          borderRadius: "50%",
+          background: "rgba(10,10,10,0.25)",
+          flexShrink: 0,
+          marginTop: 6,
+        }}
+      />
+      <div>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            marginBottom: 2,
+            letterSpacing: -0.2,
+          }}
+        >
+          {text}
+        </div>
+        {sub && (
+          <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.4 }}>
+            {sub}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SecCard({
+  num,
+  title,
+  score,
+  max,
+  color,
+  warn,
+  children,
+}: {
+  num: string;
+  title: string;
+  score?: number;
+  max?: number;
+  color?: string;
+  warn?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+  const hasPts = score !== undefined && max !== undefined;
+  return (
+    <div
+      style={{
+        marginBottom: 22,
+        background: warn ? WARN_SOFT : "#fafaf6",
+        border: `1px solid ${warn ? WARN_BORDER : BORDER_BASE}`,
+        borderRadius: 14,
+        overflow: "hidden",
+      }}
+    >
+      {/* header — clicável */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: "100%",
+          padding: "15px 22px",
+          borderBottom: open
+            ? `1px solid ${warn ? WARN_BORDER : BORDER_BASE}`
+            : "1px solid transparent",
+          background: warn ? "rgba(232,168,56,0.06)" : "rgba(10,10,10,0.015)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          cursor: "pointer",
+          userSelect: "none",
+          transition: "border-color 0.25s",
+          textAlign: "left",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 9.5,
+              letterSpacing: 1.2,
+              fontWeight: 500,
+              padding: "4px 8px",
+              borderRadius: 5,
+              background: warn ? "rgba(232,168,56,0.2)" : (color ?? "#0a0a0a"),
+              color: warn
+                ? WARN_TEXT
+                : color === "#c6ff3a"
+                  ? LIME_DEEP
+                  : "#fff",
+              border: warn ? `1px solid ${WARN_BORDER}` : "none",
+            }}
+          >
+            {num}
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: -0.4 }}>
+            {title}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {hasPts ? (
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 11,
+                fontWeight: 500,
+                color: LIME_DEEP,
+                background: LIME_SOFT,
+                border: `1px solid ${LIME_BORDER}`,
+                borderRadius: 5,
+                padding: "3px 10px",
+              }}
+            >
+              {score} / {max} pts
+            </div>
+          ) : (
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                color: warn ? WARN_TEXT : MUTED,
+                background: warn ? "rgba(232,168,56,0.12)" : FAINT,
+                border: `1px solid ${warn ? WARN_BORDER : BORDER_BASE}`,
+                borderRadius: 5,
+                padding: "3px 10px",
+              }}
+            >
+              {warn ? "não entra na pontuação" : "referência · não pontua"}
+            </div>
+          )}
+          {/* chevron */}
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="none"
+            style={{
+              flexShrink: 0,
+              transition: "transform 0.3s ease",
+              transform: open ? "rotate(0deg)" : "rotate(-90deg)",
+              color: MUTED,
+            }}
+            aria-hidden
+          >
+            <title>Alternar seção</title>
+            <path
+              d="M2.5 5L7 9.5L11.5 5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+      </button>
+      {/* body com animação sanfona */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateRows: open ? "1fr" : "0fr",
+          transition: "grid-template-rows 0.3s ease",
+        }}
+      >
+        <div style={{ overflow: "hidden" }}>
+          <div style={{ padding: "18px 22px" }}>{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreBreakdownBar({
+  sections,
+}: {
+  sections: Array<{
+    label: string;
+    current: number;
+    max: number;
+    color: string;
+  }>;
+}) {
+  const totalMax = sections.reduce((s, sec) => s + sec.max, 0);
+
+  // Give the last (narrowest) section a minimum visual width of 20%,
+  // taking the extra equally from all other sections.
+  const MIN_LAST = 0.2;
+  const rawPcts = sections.map((s) => s.max / totalMax);
+  const lastRaw = rawPcts[rawPcts.length - 1];
+  const displayPcts =
+    lastRaw < MIN_LAST
+      ? (() => {
+          const deficit = MIN_LAST - lastRaw;
+          const perOther = deficit / (sections.length - 1);
+          return rawPcts.map((p, i) =>
+            i === rawPcts.length - 1 ? MIN_LAST : p - perOther,
+          );
+        })()
+      : rawPcts;
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: 10,
+          letterSpacing: 1.2,
+          color: "#8a8a85",
+          fontWeight: 500,
+          display: "block",
+          marginBottom: 8,
+        }}
+      >
+        DISTRIBUIÇÃO DO SCORE POR SEÇÃO
+      </span>
+      <div
+        style={{
+          display: "flex",
+          height: 30,
+          borderRadius: 8,
+          overflow: "hidden",
+          gap: 3,
+        }}
+      >
+        {sections.map((sec, i) => (
+          <div
+            key={sec.label}
+            style={{
+              flex: `0 0 calc(${displayPcts[i] * 100}% - 2px)`,
+              position: "relative",
+              background: "rgba(10,10,10,0.07)",
+              borderRadius: 5,
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: `${(sec.current / sec.max) * 100}%`,
+                background: sec.color,
+                borderRadius: 5,
+              }}
+            />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 3, marginTop: 7 }}>
+        {sections.map((sec, i) => {
+          const isLast = i === sections.length - 1;
+          return (
+            <div
+              key={sec.label}
+              style={{
+                flex: `0 0 calc(${displayPcts[i] * 100}% - 2px)`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingLeft: 6,
+                paddingRight: 6,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <div
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: 2,
+                    background: sec.color,
+                    flexShrink: 0,
+                  }}
+                />
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#5a5a54",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {sec.label}
+                </span>
+              </div>
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#8a8a85",
+                  whiteSpace: "nowrap",
+                  paddingLeft: isLast ? 8 : 0,
+                  paddingRight: isLast ? 0 : 6,
+                }}
+              >
+                {sec.current}/{sec.max}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Types + constants
 // ─────────────────────────────────────────────────────────────
 
@@ -454,7 +1165,7 @@ function hasFinalGeneratedCv(output: FinalCvOutput | null): boolean {
   return sections.some((s) => s.sectionType && s.sectionType !== "other");
 }
 
-const CARD: React.CSSProperties = {
+const _CARD: React.CSSProperties = {
   background: "#fafaf6",
   border: "1px solid rgba(10,10,10,0.08)",
   borderRadius: 14,
@@ -506,8 +1217,12 @@ export default function ResultadoPage() {
   const autoSaveStatusTimeoutRef = useRef<number | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setIsDemo(params.get("demo") === "1");
+    const demo = params.get("demo") === "1";
+    setIsDemo(demo);
     setAutoSave(params.get("autoSave") === "1");
+    if (demo) {
+      setRawData(DEMO_CV_ANALYSIS_MOCK);
+    }
   }, []);
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -736,6 +1451,19 @@ export default function ResultadoPage() {
       else next.add(kw);
       return next;
     });
+    if (reviewAdaptationId) {
+      const next = new Set(selecionadas);
+      if (next.has(kw)) next.delete(kw);
+      else next.add(kw);
+      try {
+        sessionStorage.setItem(
+          `kw_sel_${reviewAdaptationId}`,
+          JSON.stringify(Array.from(next)),
+        );
+      } catch {
+        // quota or unavailable
+      }
+    }
   };
 
   const waitForMinimumDuration = async (startedAt: number, minMs: number) => {
@@ -857,6 +1585,10 @@ export default function ResultadoPage() {
         remainingCredits: 0,
       });
       clearGuestAnalysisRaw();
+      const unlockedId = payload.id ?? reviewAdaptationId;
+      if (unlockedId) {
+        router.push(`/adaptacao-cv/${unlockedId}`);
+      }
     } catch (err) {
       const message =
         err instanceof Error && err.message.trim()
@@ -929,6 +1661,7 @@ export default function ResultadoPage() {
         setReviewPaymentStatus(
           result.isUnlocked ? "completed" : (result.paymentStatus ?? "none"),
         );
+        setJobApplicationId(result.jobApplicationId ?? null);
         const normalized = normalizeData(parsed.adaptedContentJson);
         const score = normalized.score.scoreAtualBase;
         if (typeof score === "number") {
@@ -1019,6 +1752,9 @@ export default function ResultadoPage() {
         unlockMethod: "review_redeem",
         remainingCredits: 0,
       });
+      if (reviewAdaptationId) {
+        router.push(`/adaptacao-cv/${reviewAdaptationId}`);
+      }
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
@@ -1150,17 +1886,7 @@ export default function ResultadoPage() {
             "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
         }}
       >
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            border: "2px solid rgba(10,10,10,0.1)",
-            borderTopColor: "#0a0a0a",
-            animation: "res-spin 0.7s linear infinite",
-          }}
-        />
-        <style>{`@keyframes res-spin { to { transform: rotate(360deg); } }`}</style>
+        <EcvBuildLoader size={48} />
       </div>
     );
   }
@@ -1188,44 +1914,56 @@ export default function ResultadoPage() {
   const mediaScore = seededInt(vagaSeed, 78, 85);
   const scoreMinimo = 80;
 
-  const delta = data.score.scoreAtualBase - mediaScore;
+  const _delta = data.score.scoreAtualBase - mediaScore;
   const ptsKwSelecionadas = data.keywords.ausentes
     .filter((k) => effectiveSelected.has(k.kw))
     .reduce((s, k) => s + k.pontos, 0);
+  const ptsKwPossiveis = (data.keywords.possiveis ?? []).reduce(
+    (s, k) => s + k.pontos,
+    0,
+  );
   const totalAjustesConteudo = data.ajustes_conteudo.reduce(
+    (s, a) => s + a.pontos,
+    0,
+  );
+  const _totalAjustesIndisponiveis = data.ajustes_indisponiveis.reduce(
     (s, a) => s + a.pontos,
     0,
   );
   const _totalAjustes =
     data.ajustes_conteudo.length + data.keywords.ausentes.length;
 
-  const scoreProjetado = Math.min(
-    100,
-    data.score.scoreAposLiberarBase + ptsKwSelecionadas,
-  );
+  const _scoreProjetado = data.score.scoreAposLiberarBase;
   const scoreMaxPossivel = data.score.scoreAposLiberarBase;
+  const ptsAjustesTotal = totalAjustesConteudo + ptsKwPossiveis;
+  const scoreProjetadoDinamico = Math.min(
+    100,
+    data.score.scoreAtualBase + ptsAjustesTotal + ptsKwSelecionadas,
+  );
 
   const criticos =
     data.formato_cv?.problemas.filter((p) => p.tipo === "critico") ?? [];
   const atencoes =
     data.formato_cv?.problemas.filter((p) => p.tipo === "atencao") ?? [];
   const oks = data.formato_cv?.problemas.filter((p) => p.tipo === "ok") ?? [];
-  const problemasPontuacao = [...criticos, ...atencoes];
+  const pontosAtencao = [...criticos, ...atencoes];
   const totalAjustesAplicados =
     data.ajustes_conteudo.length +
     data.keywords.ausentes.length +
-    problemasPontuacao.length;
-  const pontosPerdidosApresentacao = problemasPontuacao.reduce(
-    (total, problema) => total + Math.abs(problema.impacto),
-    0,
-  );
+    pontosAtencao.length;
   const camposPresentes =
     data.formato_cv?.campos.filter((c) => c.presente).length ?? 0;
   const ptsFaltando =
     data.formato_cv?.campos
       .filter((c) => !c.presente)
-      .reduce((s, c) => s + (CAMPO_PTS_MAP[c.nome] ?? 1), 0) ?? 0;
-
+      .reduce(
+        (s, c) =>
+          s +
+          (rawData.analysisVersion === "requirements_v2"
+            ? 1
+            : (CAMPO_PTS_MAP[c.nome] ?? 1)),
+        0,
+      ) ?? 0;
   const isDownloadReady =
     reviewAdaptationId !== null && reviewPaymentStatus === "completed";
   const isKeywordSelectionLocked =
@@ -1233,6 +1971,26 @@ export default function ResultadoPage() {
   const unlockedProfessionalSummary = isDownloadReady
     ? extractProfessionalSummaryFromFinalOutput(finalCvOutput)
     : "";
+  const hardGates =
+    Array.isArray(rawData.hard_gates) && rawData.hard_gates.length > 0
+      ? rawData.hard_gates
+      : (rawData.requirements ?? [])
+          .filter((requirement) => requirement.gateLevel === "hard")
+          .map((requirement) => ({
+            requirementKey: requirement.requirementKey,
+            requirementText: requirement.requirementText,
+            status: requirement.coverageStatus,
+            importance: requirement.importance,
+          }));
+  const _hardGateCovered = hardGates.filter(
+    (gate) => gate.status === "covered",
+  ).length;
+  const _hardGatePartial = hardGates.filter(
+    (gate) => gate.status === "partial",
+  ).length;
+  const _hardGateMissing = hardGates.filter(
+    (gate) => gate.status === "missing",
+  ).length;
   const previewAntesText = data.preview?.antes ?? "";
   const previewDepoisText =
     isDownloadReady && hasFinalGeneratedCv(finalCvOutput)
@@ -1251,7 +2009,9 @@ export default function ResultadoPage() {
   const dashScore = C_GAUGE * (data.score.scoreAtualBase / 100);
   const dashProjected = C_GAUGE * (scoreMaxPossivel / 100);
   const gaugeColors = getAtsScoreColors(data.score.scoreAtualBase);
-  const ptsPositivos = data.positivos.reduce((s, p) => s + p.pontos, 0);
+  const _ptsPositivos = data.positivos.reduce((s, p) => s + p.pontos, 0);
+  const _formatCoveragePercent = (coveragePercent?: number) =>
+    typeof coveragePercent === "number" ? `${coveragePercent}% da régua` : null;
 
   return (
     <PageShell>
@@ -1471,27 +2231,14 @@ export default function ResultadoPage() {
               {/* Label */}
               <div
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
                   fontFamily: MONO,
-                  fontSize: 10,
+                  fontSize: 9.5,
                   letterSpacing: 1.2,
-                  color: "#a0a098",
+                  color: "#6a6a64",
                   fontWeight: 500,
-                  marginBottom: 12,
+                  marginBottom: 10,
                 }}
               >
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    background: gaugeColors.primary,
-                    display: "inline-block",
-                    animation: "res-pulse 1.4s infinite",
-                  }}
-                />
                 ATS SCORE · ATUAL
               </div>
 
@@ -1595,1058 +2342,697 @@ export default function ResultadoPage() {
                   alignItems: "baseline",
                   gap: 8,
                   paddingTop: 12,
-                  borderTop: "1px solid rgba(250,250,246,0.1)",
+                  borderTop: "1px solid rgba(250,250,246,0.08)",
                   width: "100%",
                   justifyContent: "center",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 22,
-                    fontWeight: 500,
-                    color: "#c6ff3a",
-                    letterSpacing: -0.8,
-                  }}
-                >
-                  +{scoreMaxPossivel - data.score.scoreAtualBase} pts
-                </span>
-                <span
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 10.5,
-                    color: "#8a8a85",
-                    letterSpacing: 0.3,
-                  }}
-                >
-                  disponíveis com ajustes
-                </span>
-              </div>
-
-              {/* vs media */}
-              <div
-                className="res-gauge-vs"
-                style={{
-                  marginTop: 10,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background:
-                    delta < 0 ? "rgba(239,68,68,0.15)" : "rgba(198,255,58,0.1)",
-                  borderRadius: 10,
-                  padding: "8px 14px",
-                  width: "100%",
-                  justifyContent: "center",
+                  marginTop: 8,
                 }}
               >
                 <span
                   style={{
                     fontSize: 16,
-                    fontWeight: 700,
-                    color: delta < 0 ? "#f87171" : "#c6ff3a",
-                    fontVariantNumeric: "tabular-nums",
+                    fontWeight: 500,
+                    color: "#c6ff3a",
+                    letterSpacing: -0.5,
                   }}
                 >
-                  {delta < 0 ? "" : "+"}
-                  {delta} pts
-                </span>
-                <span
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 10,
-                    color:
-                      delta < 0
-                        ? "rgba(248,113,113,0.7)"
-                        : "rgba(198,255,58,0.7)",
-                  }}
-                >
-                  vs média da vaga ({mediaScore})
+                  +{scoreMaxPossivel - data.score.scoreAtualBase} pts possíveis
                 </span>
               </div>
             </div>
           </div>
+
+          {/* ── Score Breakdown Bar ── */}
+          <ScoreBreakdownBar
+            sections={[
+              {
+                label: "S1 · Experiência",
+                current: data.secoes.experiencia.score,
+                max: data.secoes.experiencia.max,
+                color: AMBER,
+              },
+              {
+                label: "S2 · Keywords",
+                current: data.secoes.competencias.score,
+                max: data.secoes.competencias.max,
+                color: "#c6ff3a",
+              },
+              {
+                label: "S3 · Formatação",
+                current: data.secoes.formatacao.score,
+                max: data.secoes.formatacao.max,
+                color: BLUE,
+              },
+            ]}
+          />
 
           {/* ════════════════════════════════════════════════════
               SEÇÃO 1 — Experiência Profissional
           ════════════════════════════════════════════════════ */}
-          <SectionHeader
-            label="SEÇÃO 1 — EXPERIÊNCIA PROFISSIONAL"
-            title="O que já está a seu favor"
-            description="Pontos do seu perfil que contribuem positivamente para esta vaga."
+          <SecCard
+            num="S1"
+            title="Experiência Profissional"
             score={data.secoes.experiencia.score}
-            maxScore={data.secoes.experiencia.max}
-          />
-
-          {/* Pontos fortes */}
-          <div style={{ ...CARD, marginBottom: 10 }}>
-            {/* Card header */}
+            max={data.secoes.experiencia.max}
+            color={AMBER}
+          >
             <div
+              className="res-s1-grid"
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                marginBottom: 16,
-                paddingBottom: 14,
-                borderBottom: "1px solid rgba(10,10,10,0.06)",
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 22,
               }}
             >
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: "rgba(198,255,58,0.2)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <span style={{ fontSize: 14, color: "#405410" }}>✓</span>
-              </div>
+              {/* Left column */}
               <div>
-                <p
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: "#0a0a0a",
-                    margin: 0,
-                  }}
-                >
-                  Pontos fortes identificados
-                </p>
-                <p
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 10,
-                    color: "#8a8a85",
-                    margin: "2px 0 0",
-                  }}
-                >
-                  contribuem positivamente para o score
-                </p>
-              </div>
-              <span
-                style={{
-                  marginLeft: "auto",
-                  background: "rgba(198,255,58,0.2)",
-                  color: "#405410",
-                  fontFamily: MONO,
-                  fontSize: 11,
-                  fontWeight: 500,
-                  padding: "3px 8px",
-                  borderRadius: 6,
-                  flexShrink: 0,
-                }}
-              >
-                +{ptsPositivos} pts
-              </span>
-            </div>
-
-            {/* Items */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {(isGuestView
-                ? data.positivos.slice(0, GUEST_VISIBLE)
-                : data.positivos
-              ).map((item, i) => (
-                <div
-                  key={item.texto}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "28px 1fr auto",
-                    gap: 12,
-                    alignItems: "start",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 11,
-                      fontWeight: 500,
-                      color: "#8a8a85",
-                      paddingTop: 2,
-                    }}
-                  >
-                    {String(i + 1).padStart(2, "0")}
-                  </div>
-                  <div>
-                    <p
-                      style={{
-                        fontSize: 13.5,
-                        color: "#2a2a28",
-                        lineHeight: 1.5,
-                        margin: 0,
-                      }}
-                    >
-                      {item.texto}
-                    </p>
-                    <div
-                      style={{
-                        marginTop: 6,
-                        height: 3,
-                        background: "rgba(10,10,10,0.06)",
-                        borderRadius: 99,
-                        overflow: "hidden",
-                      }}
-                    >
-                      <div
-                        style={{
-                          height: "100%",
-                          background: "#c6ff3a",
-                          borderRadius: 99,
-                          width: `${Math.round((item.pontos / Math.max(...data.positivos.map((p) => p.pontos), 1)) * 100)}%`,
-                        }}
+                {hardGates.length > 0 && (
+                  <div style={{ marginBottom: 18 }}>
+                    <SubLabel>PONTOS INEGOCIÁVEIS DA VAGA</SubLabel>
+                    {(isGuestView
+                      ? hardGates.slice(0, GUEST_VISIBLE)
+                      : hardGates
+                    ).map((gate, index) => (
+                      <ReqRow
+                        key={
+                          gate.requirementKey ??
+                          `${gate.requirementText}-${index}`
+                        }
+                        text={gate.requirementText}
+                        met={
+                          gate.status === "covered" || gate.status === "partial"
+                        }
                       />
-                    </div>
+                    ))}
+                    {isGuestView && hardGates.length > GUEST_VISIBLE && (
+                      <GuestBlurOverlay
+                        count={Math.min(
+                          hardGates.length - GUEST_VISIBLE,
+                          GUEST_MOCK_HARD_GATES.length,
+                        )}
+                      >
+                        <div>
+                          {GUEST_MOCK_HARD_GATES.slice(
+                            0,
+                            Math.min(
+                              hardGates.length - GUEST_VISIBLE,
+                              GUEST_MOCK_HARD_GATES.length,
+                            ),
+                          ).map((g) => (
+                            <ReqRow key={g.text} text={g.text} met={g.met} />
+                          ))}
+                        </div>
+                      </GuestBlurOverlay>
+                    )}
                   </div>
-                  <span
-                    style={{
-                      background: "rgba(198,255,58,0.2)",
-                      color: "#405410",
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      fontWeight: 500,
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    +{item.pontos}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {isGuestView && data.positivos.length > GUEST_VISIBLE && (
-              <GuestBlurOverlay
-                count={Math.min(
-                  data.positivos.length - GUEST_VISIBLE,
-                  GUEST_MOCK_POSITIVOS.length,
                 )}
-              >
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 12 }}
-                >
-                  {GUEST_MOCK_POSITIVOS.slice(
-                    0,
-                    Math.min(
-                      data.positivos.length - GUEST_VISIBLE,
-                      GUEST_MOCK_POSITIVOS.length,
-                    ),
-                  ).map((item, i) => (
-                    <div
+                <div>
+                  <SubLabel>PONTOS FORTES</SubLabel>
+                  {(isGuestView
+                    ? data.positivos.slice(0, GUEST_VISIBLE)
+                    : data.positivos
+                  ).map((item) => (
+                    <ItemCard
                       key={item.texto}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "28px 1fr auto",
-                        gap: 12,
-                        alignItems: "start",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 11,
-                          fontWeight: 500,
-                          color: "#8a8a85",
-                          paddingTop: 2,
-                        }}
-                      >
-                        {String(GUEST_VISIBLE + i + 1).padStart(2, "0")}
-                      </div>
-                      <p
-                        style={{
-                          fontSize: 13.5,
-                          color: "#2a2a28",
-                          lineHeight: 1.5,
-                          margin: 0,
-                        }}
-                      >
-                        {item.texto}
-                      </p>
-                      <span
-                        style={{
-                          background: "rgba(198,255,58,0.2)",
-                          color: "#405410",
-                          fontFamily: MONO,
-                          fontSize: 10,
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        +{item.pontos}
-                      </span>
-                    </div>
+                      type="positive"
+                      text={item.texto}
+                      pts={`+${item.pontos} pts`}
+                    />
                   ))}
-                </div>
-              </GuestBlurOverlay>
-            )}
-          </div>
-
-          {/* Ajustes de conteúdo */}
-          <div style={{ ...CARD, marginBottom: 0 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                marginBottom: 16,
-                paddingBottom: 14,
-                borderBottom: "1px solid rgba(10,10,10,0.06)",
-              }}
-            >
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: "rgba(245,158,11,0.12)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <span style={{ fontSize: 14 }}>🎯</span>
-              </div>
-              <div>
-                <p
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: "#0a0a0a",
-                    margin: 0,
-                  }}
-                >
-                  Ajustes de conteúdo
-                </p>
-                <p
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 10,
-                    color: "#8a8a85",
-                    margin: "2px 0 0",
-                  }}
-                >
-                  lacunas que o EarlyCV corrige no CV otimizado
-                </p>
-              </div>
-              <span
-                style={{
-                  marginLeft: "auto",
-                  background: "rgba(245,158,11,0.12)",
-                  color: "#92400e",
-                  fontFamily: MONO,
-                  fontSize: 11,
-                  fontWeight: 500,
-                  padding: "3px 8px",
-                  borderRadius: 6,
-                  flexShrink: 0,
-                }}
-              >
-                +{totalAjustesConteudo} pts
-              </span>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {(isGuestView
-                ? data.ajustes_conteudo.slice(0, GUEST_VISIBLE)
-                : data.ajustes_conteudo
-              ).map((a, i) => (
-                <div
-                  key={a.id}
-                  style={{
-                    background: "#fff",
-                    border: "1px solid rgba(10,10,10,0.06)",
-                    borderRadius: 12,
-                    padding: "14px 16px",
-                    display: "grid",
-                    gridTemplateColumns: "28px 1fr auto",
-                    gap: 12,
-                    alignItems: "start",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 11,
-                      fontWeight: 500,
-                      color: "#8a8a85",
-                      paddingTop: 2,
-                    }}
-                  >
-                    {String(i + 1).padStart(2, "0")}
-                  </div>
-                  <div>
-                    <p
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 500,
-                        letterSpacing: -0.2,
-                        color: "#0a0a0a",
-                        margin: "0 0 4px",
-                      }}
+                  {isGuestView && data.positivos.length > GUEST_VISIBLE && (
+                    <GuestBlurOverlay
+                      count={Math.min(
+                        data.positivos.length - GUEST_VISIBLE,
+                        GUEST_MOCK_POSITIVOS.length,
+                      )}
                     >
-                      {a.titulo}
-                    </p>
-                    {a.descricao && (
-                      <p
-                        style={{
-                          fontSize: 12.5,
-                          color: "#5a5a55",
-                          lineHeight: 1.5,
-                          margin: 0,
-                        }}
-                      >
-                        {a.descricao}
-                      </p>
-                    )}
-                    {a.dica && (
-                      <p
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 10.5,
-                          color: "#8a8a85",
-                          marginTop: 6,
-                          fontStyle: "italic",
-                        }}
-                      >
-                        {a.dica}
-                      </p>
-                    )}
-                  </div>
-                  <span
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 9.5,
-                      fontWeight: 500,
-                      letterSpacing: 1,
-                      padding: "3px 7px",
-                      borderRadius: 4,
-                      background: "#0a0a0a",
-                      color: "#fff",
-                      marginTop: 2,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    +{a.pontos} pts
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {isGuestView && data.ajustes_conteudo.length > GUEST_VISIBLE && (
-              <GuestBlurOverlay
-                count={Math.min(
-                  data.ajustes_conteudo.length - GUEST_VISIBLE,
-                  GUEST_MOCK_AJUSTES.length,
-                )}
-              >
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                >
-                  {GUEST_MOCK_AJUSTES.slice(
-                    0,
-                    Math.min(
-                      data.ajustes_conteudo.length - GUEST_VISIBLE,
-                      GUEST_MOCK_AJUSTES.length,
-                    ),
-                  ).map((a, i) => (
-                    <div
-                      key={a.id}
-                      style={{
-                        background: "#fff",
-                        border: "1px solid rgba(10,10,10,0.06)",
-                        borderRadius: 12,
-                        padding: "14px 16px",
-                        display: "grid",
-                        gridTemplateColumns: "28px 1fr auto",
-                        gap: 12,
-                        alignItems: "start",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 11,
-                          fontWeight: 500,
-                          color: "#8a8a85",
-                          paddingTop: 2,
-                        }}
-                      >
-                        {String(GUEST_VISIBLE + i + 1).padStart(2, "0")}
-                      </div>
                       <div>
-                        <p
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 500,
-                            color: "#0a0a0a",
-                            margin: "0 0 4px",
-                          }}
-                        >
-                          {a.titulo}
-                        </p>
-                        <p
-                          style={{
-                            fontSize: 12.5,
-                            color: "#5a5a55",
-                            lineHeight: 1.5,
-                            margin: 0,
-                          }}
-                        >
-                          {a.descricao}
-                        </p>
+                        {GUEST_MOCK_POSITIVOS.slice(
+                          0,
+                          Math.min(
+                            data.positivos.length - GUEST_VISIBLE,
+                            GUEST_MOCK_POSITIVOS.length,
+                          ),
+                        ).map((item) => (
+                          <ItemCard
+                            key={item.texto}
+                            type="positive"
+                            text={item.texto}
+                            pts={`+${item.pontos} pts`}
+                          />
+                        ))}
                       </div>
-                      <span
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 9.5,
-                          fontWeight: 500,
-                          padding: "3px 7px",
-                          borderRadius: 4,
-                          background: "#0a0a0a",
-                          color: "#fff",
-                          marginTop: 2,
-                        }}
-                      >
-                        +{a.pontos} pts
-                      </span>
-                    </div>
-                  ))}
+                    </GuestBlurOverlay>
+                  )}
                 </div>
-              </GuestBlurOverlay>
-            )}
+              </div>
 
-            <div
-              style={{
-                marginTop: 14,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                background: "rgba(245,158,11,0.06)",
-                border: "1px solid rgba(245,158,11,0.15)",
-                borderRadius: 10,
-                padding: "10px 14px",
-              }}
-            >
-              <span style={{ fontSize: 13, flexShrink: 0 }}>🔒</span>
-              <p
-                style={{
-                  fontSize: 12,
-                  fontWeight: 500,
-                  color: "#92400e",
-                  margin: 0,
-                }}
-              >
-                Libere seu CV otimizado para aplicar todos os{" "}
-                {data.ajustes_conteudo.length} ajustes de conteúdo
-                automaticamente.
-              </p>
+              {/* Right column */}
+              <div>
+                <div style={{ marginBottom: 18 }}>
+                  <SubLabel>AJUSTES DE CONTEÚDO</SubLabel>
+                  {(isGuestView
+                    ? data.ajustes_conteudo.slice(0, GUEST_VISIBLE)
+                    : data.ajustes_conteudo
+                  ).map((a) => (
+                    <ItemCard
+                      key={a.id}
+                      type="action"
+                      text={`${a.titulo}${a.descricao ? ` — ${a.descricao}` : ""}`}
+                      pts={`+${a.pontos} pts`}
+                    />
+                  ))}
+                  {isGuestView &&
+                    data.ajustes_conteudo.length > GUEST_VISIBLE && (
+                      <GuestBlurOverlay
+                        count={Math.min(
+                          data.ajustes_conteudo.length - GUEST_VISIBLE,
+                          GUEST_MOCK_AJUSTES.length,
+                        )}
+                      >
+                        <div>
+                          {GUEST_MOCK_AJUSTES.slice(
+                            0,
+                            Math.min(
+                              data.ajustes_conteudo.length - GUEST_VISIBLE,
+                              GUEST_MOCK_AJUSTES.length,
+                            ),
+                          ).map((a) => (
+                            <ItemCard
+                              key={a.id}
+                              type="action"
+                              text={a.titulo}
+                              pts={`+${a.pontos} pts`}
+                            />
+                          ))}
+                        </div>
+                      </GuestBlurOverlay>
+                    )}
+                </div>
+                {data.ajustes_indisponiveis.length > 0 && (
+                  <div>
+                    <SubLabel>SEM EVIDÊNCIAS NO SEU CV</SubLabel>
+                    {(isGuestView
+                      ? data.ajustes_indisponiveis.slice(0, GUEST_VISIBLE)
+                      : data.ajustes_indisponiveis
+                    ).map((a) => (
+                      <ItemCard
+                        key={a.id}
+                        type="missing"
+                        text={`${a.titulo}${a.descricao ? ` — ${a.descricao}` : ""}`}
+                        pts={`-${a.pontos} pts`}
+                      />
+                    ))}
+                    {isGuestView &&
+                      data.ajustes_indisponiveis.length > GUEST_VISIBLE && (
+                        <GuestBlurOverlay
+                          count={Math.min(
+                            data.ajustes_indisponiveis.length - GUEST_VISIBLE,
+                            GUEST_MOCK_MISSING.length,
+                          )}
+                        >
+                          <div>
+                            {GUEST_MOCK_MISSING.slice(
+                              0,
+                              Math.min(
+                                data.ajustes_indisponiveis.length -
+                                  GUEST_VISIBLE,
+                                GUEST_MOCK_MISSING.length,
+                              ),
+                            ).map((a) => (
+                              <ItemCard
+                                key={a.id}
+                                type="missing"
+                                text={`${a.titulo} — ${a.descricao}`}
+                                pts={`-${a.pontos} pts`}
+                              />
+                            ))}
+                          </div>
+                        </GuestBlurOverlay>
+                      )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </SecCard>
 
           {/* ════════════════════════════════════════════════════
               SEÇÃO 2 — Competências Técnicas
           ════════════════════════════════════════════════════ */}
-          <SectionHeader
-            label="SEÇÃO 2 — COMPETÊNCIAS TÉCNICAS"
-            title="Palavras-chave da vaga"
-            description="Termos que o ATS desta vaga busca no seu CV — presentes e ausentes."
+          <SecCard
+            num="S2"
+            title="Competências Técnicas — Keywords"
             score={data.secoes.competencias.score}
-            maxScore={data.secoes.competencias.max}
-          />
-
-          {/* Keywords banner */}
-          <div
-            style={{
-              background: "#0a0a0a",
-              color: "#fff",
-              borderRadius: 14,
-              padding: "16px 20px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 16,
-              marginBottom: 10,
-            }}
+            max={data.secoes.competencias.max}
+            color="#c6ff3a"
           >
-            <div>
-              <p style={{ fontSize: 13.5, fontWeight: 500, margin: "0 0 3px" }}>
-                {data.keywords.presentes.length + data.keywords.ausentes.length}{" "}
-                keywords identificadas para esta vaga
-              </p>
-              <p
+            {/* Presentes */}
+            <div style={{ marginBottom: 16 }}>
+              <SubLabel>
+                KEYWORDS PRESENTES NO CV ({data.keywords.presentes.length})
+              </SubLabel>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {(isGuestView
+                  ? data.keywords.presentes.slice(0, GUEST_VISIBLE)
+                  : data.keywords.presentes
+                ).map((k) => (
+                  <KwChip
+                    key={k.kw}
+                    label={k.kw}
+                    type="present"
+                    pontos={k.pontos}
+                  />
+                ))}
+              </div>
+              {isGuestView &&
+                data.keywords.presentes.length > GUEST_VISIBLE && (
+                  <GuestBlurOverlay
+                    count={Math.min(
+                      data.keywords.presentes.length - GUEST_VISIBLE,
+                      GUEST_MOCK_KW.length,
+                    )}
+                  >
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {GUEST_MOCK_KW.slice(
+                        0,
+                        Math.min(
+                          data.keywords.presentes.length - GUEST_VISIBLE,
+                          GUEST_MOCK_KW.length,
+                        ),
+                      ).map((k) => (
+                        <KwChip
+                          key={k.kw}
+                          label={k.kw}
+                          type="present"
+                          pontos={k.pontos}
+                        />
+                      ))}
+                    </div>
+                  </GuestBlurOverlay>
+                )}
+            </div>
+
+            {/* Possíveis */}
+            {(data.keywords.possiveis?.length ?? 0) > 0 && (
+              <div
                 style={{
-                  fontFamily: MONO,
-                  fontSize: 11,
-                  color: "rgba(255,255,255,0.5)",
-                  margin: 0,
+                  borderTop: `1px solid ${BORDER_BASE}`,
+                  paddingTop: 16,
+                  marginBottom: 16,
                 }}
               >
-                Libere o CV para inserir as{" "}
-                <span style={{ color: "#c6ff3a", fontWeight: 600 }}>
-                  {data.keywords.ausentes.length} que faltam
-                </span>
-              </p>
-            </div>
-          </div>
-
-          {/* Keywords card */}
-          <div style={{ ...CARD, marginBottom: 0 }}>
-            {/* Presentes */}
-            <p
-              style={{
-                fontFamily: MONO,
-                fontSize: 10,
-                letterSpacing: 1.2,
-                color: "#405410",
-                fontWeight: 500,
-                marginBottom: 10,
-              }}
-            >
-              JÁ NO SEU CV ({data.keywords.presentes.length})
-            </p>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 7,
-                marginBottom: 20,
-              }}
-            >
-              {(isGuestView
-                ? data.keywords.presentes.slice(0, GUEST_VISIBLE)
-                : data.keywords.presentes
-              ).map((k) => (
-                <span
-                  key={k.kw}
+                <p
                   style={{
-                    background: "rgba(198,255,58,0.2)",
-                    border: "1px solid rgba(110,150,20,0.2)",
-                    color: "#405410",
                     fontFamily: MONO,
-                    fontSize: 11.5,
+                    fontSize: 10,
+                    letterSpacing: 1.2,
+                    color: "#8a6500",
                     fontWeight: 500,
-                    padding: "5px 11px",
-                    borderRadius: 999,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
+                    marginBottom: 6,
                   }}
                 >
-                  ✓ {k.kw}
-                  <span style={{ fontSize: 10, opacity: 0.6 }}>
-                    +{k.pontos}
-                  </span>
-                </span>
-              ))}
-            </div>
-            {isGuestView && data.keywords.presentes.length > GUEST_VISIBLE && (
-              <GuestBlurOverlay
-                count={Math.min(
-                  data.keywords.presentes.length - GUEST_VISIBLE,
-                  GUEST_MOCK_KW.length,
-                )}
-              >
+                  POSSÍVEIS COM BASE REAL (
+                  {data.keywords.possiveis?.length ?? 0})
+                </p>
+                <p
+                  style={{
+                    fontSize: 12.5,
+                    color: "#8a8a85",
+                    marginBottom: 12,
+                  }}
+                >
+                  O EarlyCV consegue reforçar estes termos por contexto,
+                  analogia e reformulação sem inventar fatos.
+                </p>
                 <div
                   style={{
                     display: "flex",
                     flexWrap: "wrap",
                     gap: 7,
-                    marginBottom: 20,
+                    marginBottom: 12,
                   }}
                 >
-                  {GUEST_MOCK_KW.slice(
-                    0,
-                    Math.min(
-                      data.keywords.presentes.length - GUEST_VISIBLE,
-                      GUEST_MOCK_KW.length,
-                    ),
+                  {(isGuestView
+                    ? (data.keywords.possiveis ?? []).slice(0, GUEST_VISIBLE)
+                    : (data.keywords.possiveis ?? [])
                   ).map((k) => (
                     <span
                       key={k.kw}
                       style={{
-                        background: "rgba(198,255,58,0.2)",
-                        border: "1px solid rgba(110,150,20,0.2)",
-                        color: "#405410",
+                        background: "rgba(250,204,21,0.12)",
+                        border: "1px solid rgba(250,204,21,0.24)",
+                        color: "#8a6500",
                         fontFamily: MONO,
                         fontSize: 11.5,
                         fontWeight: 500,
                         padding: "5px 11px",
                         borderRadius: 999,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
                       }}
                     >
-                      ✓ {k.kw}
+                      ≈ {k.kw}
+                      <span style={{ fontSize: 10, opacity: 0.7 }}>
+                        +{k.pontos}
+                      </span>
                     </span>
                   ))}
                 </div>
-              </GuestBlurOverlay>
-            )}
-
-            {/* Divisor */}
-            <div
-              style={{
-                borderTop: "1px solid rgba(10,10,10,0.06)",
-                marginBottom: 14,
-              }}
-            />
-
-            {/* Faltando */}
-            <p
-              style={{
-                fontFamily: MONO,
-                fontSize: 10,
-                letterSpacing: 1.2,
-                color: "#92400e",
-                fontWeight: 500,
-                marginBottom: 6,
-              }}
-            >
-              FALTANDO NO SEU CV ({data.keywords.ausentes.length})
-            </p>
-            <p style={{ fontSize: 12.5, color: "#8a8a85", marginBottom: 12 }}>
-              {isDownloadReady
-                ? "Seção bloqueada após liberação do CV"
-                : "Selecione quais você deseja incluir. Seu CV otimizado só adicionará as que você aprovar."}
-            </p>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {(isGuestView
-                ? data.keywords.ausentes.slice(0, GUEST_VISIBLE)
-                : data.keywords.ausentes
-              ).map((k) => {
-                const sel = effectiveSelected.has(k.kw);
-                return (
-                  <label
-                    key={k.kw}
-                    title={
-                      isKeywordSelectionLocked
-                        ? "Seleção bloqueada: CV já liberado"
-                        : undefined
-                    }
-                    aria-label={
-                      isKeywordSelectionLocked
-                        ? `Keyword ${k.kw} bloqueada: CV já liberado`
-                        : undefined
-                    }
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      background: sel
-                        ? "rgba(198,255,58,0.08)"
-                        : "rgba(245,158,11,0.06)",
-                      border: `1px solid ${sel ? "rgba(110,150,20,0.25)" : "rgba(245,158,11,0.2)"}`,
-                      borderRadius: 10,
-                      padding: "11px 14px",
-                      cursor: isKeywordSelectionLocked ? "default" : "pointer",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 18,
-                        height: 18,
-                        borderRadius: 5,
-                        border: `2px solid ${sel ? "#c6ff3a" : "rgba(245,158,11,0.4)"}`,
-                        background: sel ? "#c6ff3a" : "transparent",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                        transition: "all 150ms",
-                      }}
-                    >
-                      {sel && (
-                        // biome-ignore lint/a11y/noSvgWithoutTitle: decorative
-                        <svg
-                          width="9"
-                          height="7"
-                          viewBox="0 0 10 8"
-                          fill="none"
-                          aria-hidden
-                        >
-                          <path
-                            d="M1 4l3 3 5-6"
-                            stroke="#0a0a0a"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      )}
-                    </div>
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={sel}
-                      disabled={isKeywordSelectionLocked}
-                      onChange={() => toggleKw(k.kw)}
-                    />
-                    <span
-                      style={{
-                        flex: 1,
-                        fontSize: 13.5,
-                        fontWeight: 500,
-                        color: sel ? "#2a3a08" : "#92400e",
-                      }}
-                    >
-                      {k.kw}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 10,
-                        fontWeight: 600,
-                        padding: "2px 7px",
-                        borderRadius: 4,
-                        background: sel
-                          ? "rgba(198,255,58,0.25)"
-                          : "rgba(245,158,11,0.15)",
-                        color: sel ? "#405410" : "#92400e",
-                        flexShrink: 0,
-                      }}
-                    >
-                      +{k.pontos} pts
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-
-            {isGuestView && data.keywords.ausentes.length > GUEST_VISIBLE && (
-              <GuestBlurOverlay
-                count={Math.min(
-                  data.keywords.ausentes.length - GUEST_VISIBLE,
-                  GUEST_MOCK_KW.length,
-                )}
-              >
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                >
-                  {GUEST_MOCK_KW.slice(
-                    0,
-                    Math.min(
-                      data.keywords.ausentes.length - GUEST_VISIBLE,
-                      GUEST_MOCK_KW.length,
-                    ),
-                  ).map((k) => (
-                    <div
-                      key={k.kw}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        background: "rgba(245,158,11,0.06)",
-                        border: "1px solid rgba(245,158,11,0.2)",
-                        borderRadius: 10,
-                        padding: "11px 14px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 18,
-                          height: 18,
-                          borderRadius: 5,
-                          border: "2px solid rgba(245,158,11,0.4)",
-                          flexShrink: 0,
-                        }}
-                      />
-                      <span
-                        style={{
-                          flex: 1,
-                          fontSize: 13.5,
-                          fontWeight: 500,
-                          color: "#92400e",
-                        }}
-                      >
-                        {k.kw}
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 10,
-                          padding: "2px 7px",
-                          borderRadius: 4,
-                          background: "rgba(245,158,11,0.15)",
-                          color: "#92400e",
-                        }}
-                      >
-                        +{k.pontos} pts
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </GuestBlurOverlay>
-            )}
-
-            {effectiveSelected.size > 0 && (
-              <div
-                style={{
-                  marginTop: 12,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  background: "rgba(198,255,58,0.1)",
-                  border: "1px solid rgba(110,150,20,0.2)",
-                  borderRadius: 10,
-                  padding: "10px 14px",
-                }}
-              >
-                <div>
-                  <p
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: "#2a3a08",
-                      margin: "0 0 2px",
-                    }}
-                  >
-                    {effectiveSelected.size} palavra
-                    {effectiveSelected.size > 1 ? "s" : ""}-chave selecionada
-                    {effectiveSelected.size > 1 ? "s" : ""}
-                  </p>
-                  <p
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 10.5,
-                      color: "#405410",
-                      margin: 0,
-                    }}
-                  >
-                    Serão incluídas no CV otimizado ao liberar
-                  </p>
-                </div>
-                <span
-                  style={{
-                    background: "rgba(198,255,58,0.3)",
-                    color: "#2a3a08",
-                    fontFamily: MONO,
-                    fontSize: 13,
-                    fontWeight: 700,
-                    padding: "5px 12px",
-                    borderRadius: 8,
-                    flexShrink: 0,
-                  }}
-                >
-                  +{ptsKwSelecionadas} pts
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* ════════════════════════════════════════════════════
-              SEÇÃO 3 — Formatação e Campos
-          ════════════════════════════════════════════════════ */}
-          <SectionHeader
-            label="SEÇÃO 3 — FORMATAÇÃO E CAMPOS"
-            title="Análise do formato do seu CV"
-            description="Como os sistemas de triagem automática (ATS) leem e interpretam o seu arquivo."
-            score={data.secoes.formatacao.score}
-            maxScore={data.secoes.formatacao.max}
-          />
-
-          {data.formato_cv ? (
-            <>
-              {/* ATS compat summary */}
-              <div style={{ ...CARD, marginBottom: 10 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 12,
-                    background:
-                      data.secoes.formatacao.score >= 14
-                        ? "rgba(198,255,58,0.1)"
-                        : data.secoes.formatacao.score >= 8
-                          ? "rgba(245,158,11,0.08)"
-                          : "rgba(239,68,68,0.08)",
-                    border: `1px solid ${data.secoes.formatacao.score >= 14 ? "rgba(110,150,20,0.2)" : data.secoes.formatacao.score >= 8 ? "rgba(245,158,11,0.2)" : "rgba(239,68,68,0.2)"}`,
-                    borderRadius: 12,
-                    padding: "14px 16px",
-                  }}
-                >
-                  <IssueIcon
-                    tipo={
-                      data.secoes.formatacao.score >= 14
-                        ? "ok"
-                        : data.secoes.formatacao.score >= 8
-                          ? "atencao"
-                          : "critico"
-                    }
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                      }}
-                    >
-                      <p
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 500,
-                          color: "#0a0a0a",
-                          margin: 0,
-                        }}
-                      >
-                        Formatação e compatibilidade ATS
-                      </p>
-                    </div>
-                    <p
-                      style={{
-                        fontSize: 12.5,
-                        color: "#5a5a55",
-                        lineHeight: 1.5,
-                        margin: "4px 0 0",
-                      }}
-                    >
-                      {ptsFaltando === 0
-                        ? "Você tem todos os campos essenciais, mas perde pontos por estrutura e linguagem pouco orientadas à vaga."
-                        : "Seu CV perde pontos por campos ausentes e problemas de estrutura."}
-                    </p>
-                    <p
-                      style={{
-                        fontSize: 12.5,
-                        color: "#5a5a55",
-                        lineHeight: 1.5,
-                        margin: "6px 0 0",
-                      }}
-                    >
-                      {problemasPontuacao.length === 0
-                        ? "Nenhuma perda por problemas de apresentação."
-                        : `Você perdeu ${pontosPerdidosApresentacao} pontos nesta seção por ${problemasPontuacao.length} ${problemasPontuacao.length === 1 ? "problema" : "problemas"} de apresentação.`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Campos */}
-              <div style={{ ...CARD, marginBottom: 10 }}>
                 <div
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: 14,
+                    gap: 8,
+                    background: "rgba(250,204,21,0.08)",
+                    border: "1px solid rgba(250,204,21,0.18)",
+                    borderRadius: 10,
+                    padding: "10px 14px",
                   }}
                 >
+                  <span style={{ fontSize: 13, flexShrink: 0 }}>✨</span>
                   <p
                     style={{
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: "#8a6500",
+                      margin: 0,
+                    }}
+                  >
+                    Ao liberar, o EarlyCV tenta capturar +{ptsKwPossiveis} pts
+                    desta seção reforçando essas keywords por analogia
+                    verdadeira com o que já existe no seu histórico.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Ausentes */}
+            <div
+              style={{
+                borderTop: `1px solid ${BORDER_BASE}`,
+                paddingTop: 16,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 10,
+                }}
+              >
+                <SubLabel>
+                  KEYWORDS AUSENTES — clique para incluir no CV
+                </SubLabel>
+                {ptsKwSelecionadas > 0 && (
+                  <div
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      color: AMBER,
+                      flexShrink: 0,
+                      marginLeft: 8,
+                    }}
+                  >
+                    +{ptsKwSelecionadas} pts selecionados
+                  </div>
+                )}
+              </div>
+              <p style={{ fontSize: 12.5, color: "#8a8a85", marginBottom: 12 }}>
+                {isDownloadReady
+                  ? "Seção bloqueada após liberação do CV"
+                  : "Selecione quais você deseja incluir. Seu CV otimizado só adicionará as que você aprovar."}
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 6,
+                  marginBottom: 10,
+                }}
+              >
+                {(isGuestView
+                  ? data.keywords.ausentes.slice(0, GUEST_VISIBLE)
+                  : data.keywords.ausentes
+                ).map((k) => {
+                  const sel = effectiveSelected.has(k.kw);
+                  return (
+                    <label
+                      key={k.kw}
+                      title={
+                        isKeywordSelectionLocked
+                          ? "Seleção bloqueada: CV já liberado"
+                          : undefined
+                      }
+                      aria-label={
+                        isKeywordSelectionLocked
+                          ? `Keyword ${k.kw} bloqueada: CV já liberado`
+                          : undefined
+                      }
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        fontFamily: MONO,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        letterSpacing: 0.2,
+                        padding: "5px 10px",
+                        borderRadius: 6,
+                        background: sel ? LIME_SOFT : "#fff",
+                        border: `1px solid ${sel ? LIME_BORDER : BORDER_MED}`,
+                        color: sel ? LIME_DEEP : "#0a0a0a",
+                        cursor: isKeywordSelectionLocked
+                          ? "default"
+                          : "pointer",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 11,
+                          height: 11,
+                          border: sel
+                            ? `1.5px solid ${LIME_BORDER}`
+                            : `1.5px solid ${BORDER_MED}`,
+                          borderRadius: 3,
+                          flexShrink: 0,
+                          background: sel ? "#c6ff3a" : "transparent",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        {sel && (
+                          // biome-ignore lint/a11y/noSvgWithoutTitle: decorative
+                          <svg
+                            width="7"
+                            height="5"
+                            viewBox="0 0 10 8"
+                            fill="none"
+                            aria-hidden
+                          >
+                            <path
+                              d="M1 4l3 3 5-6"
+                              stroke="#405410"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={sel}
+                        disabled={isKeywordSelectionLocked}
+                        onChange={() => toggleKw(k.kw)}
+                      />
+                      {k.kw}
+                      <span
+                        style={{ fontSize: 10, opacity: 0.55, marginLeft: 2 }}
+                      >
+                        +{k.pontos}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {isGuestView && data.keywords.ausentes.length > GUEST_VISIBLE && (
+                <GuestBlurOverlay
+                  count={Math.min(
+                    data.keywords.ausentes.length - GUEST_VISIBLE,
+                    GUEST_MOCK_KW.length,
+                  )}
+                >
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {GUEST_MOCK_KW.slice(
+                      0,
+                      Math.min(
+                        data.keywords.ausentes.length - GUEST_VISIBLE,
+                        GUEST_MOCK_KW.length,
+                      ),
+                    ).map((k) => (
+                      <KwChip
+                        key={k.kw}
+                        label={k.kw}
+                        type="absent"
+                        pontos={k.pontos}
+                      />
+                    ))}
+                  </div>
+                </GuestBlurOverlay>
+              )}
+              <p
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: MUTED,
+                  lineHeight: 1.5,
+                  marginTop: 10,
+                }}
+              >
+                Selecione apenas keywords que fazem sentido para sua experiência
+                real. O EarlyCV ajusta o texto naturalmente.
+              </p>
+              {effectiveSelected.size > 0 && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    background: "rgba(198,255,58,0.1)",
+                    border: "1px solid rgba(110,150,20,0.2)",
+                    borderRadius: 10,
+                    padding: "10px 14px",
+                  }}
+                >
+                  <div>
+                    <p
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: "#2a3a08",
+                        margin: "0 0 2px",
+                      }}
+                    >
+                      {effectiveSelected.size} palavra
+                      {effectiveSelected.size > 1 ? "s" : ""}-chave selecionada
+                      {effectiveSelected.size > 1 ? "s" : ""}
+                    </p>
+                    <p
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10.5,
+                        color: "#405410",
+                        margin: 0,
+                      }}
+                    >
+                      Serão incluídas no CV otimizado ao liberar
+                    </p>
+                  </div>
+                  <span
+                    style={{
+                      background: "rgba(198,255,58,0.3)",
+                      color: "#2a3a08",
+                      fontFamily: MONO,
                       fontSize: 13,
+                      fontWeight: 700,
+                      padding: "5px 12px",
+                      borderRadius: 8,
+                      flexShrink: 0,
+                    }}
+                  >
+                    +{ptsKwSelecionadas} pts
+                  </span>
+                </div>
+              )}
+            </div>
+          </SecCard>
+
+          {/* ════════════════════════════════════════════════════
+              SEÇÃO 3 — Formatação e Campos
+          ════════════════════════════════════════════════════ */}
+          {data.formato_cv ? (
+            <SecCard
+              num="S3"
+              title="Formatação e Campos"
+              score={data.secoes.formatacao.score}
+              max={data.secoes.formatacao.max}
+              color={BLUE}
+            >
+              {/* ATS compat summary */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 12,
+                  background:
+                    data.secoes.formatacao.score >= 14
+                      ? "rgba(198,255,58,0.1)"
+                      : data.secoes.formatacao.score >= 8
+                        ? "rgba(245,158,11,0.08)"
+                        : "rgba(239,68,68,0.08)",
+                  border: `1px solid ${data.secoes.formatacao.score >= 14 ? "rgba(110,150,20,0.2)" : data.secoes.formatacao.score >= 8 ? "rgba(245,158,11,0.2)" : "rgba(239,68,68,0.2)"}`,
+                  borderRadius: 12,
+                  padding: "14px 16px",
+                  marginBottom: 16,
+                }}
+              >
+                <IssueIcon
+                  tipo={
+                    data.secoes.formatacao.score >= 14
+                      ? "ok"
+                      : data.secoes.formatacao.score >= 8
+                        ? "atencao"
+                        : "critico"
+                  }
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p
+                    style={{
+                      fontSize: 14,
                       fontWeight: 500,
                       color: "#0a0a0a",
                       margin: 0,
                     }}
                   >
-                    Campos do currículo
+                    Formatação e compatibilidade ATS
                   </p>
+                  <p
+                    style={{
+                      fontSize: 12.5,
+                      color: "#5a5a55",
+                      lineHeight: 1.5,
+                      margin: "4px 0 0",
+                    }}
+                  >
+                    {ptsFaltando === 0
+                      ? "Você tem todos os campos essenciais."
+                      : "Sua nota aqui depende dos campos essenciais. Os itens abaixo são observações qualitativas para melhorar leitura e clareza."}
+                  </p>
+                </div>
+              </div>
+
+              {/* Campos grid using FormatItem */}
+              <div style={{ marginBottom: 16 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 10,
+                  }}
+                >
+                  <SubLabel>CAMPOS DO CURRÍCULO</SubLabel>
                   <span
                     style={{
                       fontFamily: MONO,
                       fontSize: 11,
-                      color: "#8a8a85",
+                      color: MUTED,
+                      marginLeft: 8,
                     }}
                   >
                     {camposPresentes}/{data.formato_cv.campos.length}{" "}
@@ -2661,58 +3047,13 @@ export default function ResultadoPage() {
                   }}
                   className="res-campos-grid"
                 >
-                  {data.formato_cv.campos.map((campo) => {
-                    const visualPenaltyPerMissingField = 1;
-                    return (
-                      <div
-                        key={campo.nome}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          background: campo.presente
-                            ? "rgba(198,255,58,0.1)"
-                            : "rgba(239,68,68,0.05)",
-                          border: `1px solid ${campo.presente ? "rgba(110,150,20,0.15)" : "rgba(239,68,68,0.12)"}`,
-                          borderRadius: 8,
-                          padding: "8px 11px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 700,
-                            color: campo.presente ? "#405410" : "#ef4444",
-                            flexShrink: 0,
-                          }}
-                        >
-                          {campo.presente ? "✓" : "✕"}
-                        </span>
-                        <span
-                          style={{
-                            flex: 1,
-                            fontSize: 12,
-                            color: campo.presente ? "#2a2a28" : "#991b1b",
-                          }}
-                        >
-                          {campo.nome}
-                        </span>
-                        {!campo.presente && (
-                          <span
-                            style={{
-                              fontFamily: MONO,
-                              fontSize: 10,
-                              fontWeight: 700,
-                              color: "#ef4444",
-                              flexShrink: 0,
-                            }}
-                          >
-                            -{visualPenaltyPerMissingField}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {data.formato_cv.campos.map((campo) => (
+                    <FormatItem
+                      key={campo.nome}
+                      label={campo.nome}
+                      ok={campo.presente}
+                    />
+                  ))}
                 </div>
                 <p
                   style={{
@@ -2742,346 +3083,237 @@ export default function ResultadoPage() {
               </div>
 
               {/* O que está correto */}
-              <div style={{ ...CARD, marginBottom: 10 }}>
+              {oks.length > 0 && (
                 <div
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 14,
+                    borderTop: `1px solid ${BORDER_BASE}`,
+                    paddingTop: 16,
+                    marginBottom: 0,
                   }}
                 >
-                  <p
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: "#0a0a0a",
-                      margin: 0,
-                    }}
+                  <SubLabel>O QUE ESTÁ CORRETO</SubLabel>
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
                   >
-                    O que está correto
-                  </p>
-                </div>
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                >
-                  {oks.length === 0 && (
-                    <span
-                      style={{
-                        fontSize: 12.5,
-                        color: "#8a8a85",
-                      }}
-                    >
-                      Nenhum item positivo de formatação identificado.
-                    </span>
-                  )}
-                  {(isGuestView ? oks.slice(0, GUEST_VISIBLE) : oks).map(
-                    (p) => (
-                      <div
-                        key={p.titulo}
-                        style={{
-                          display: "flex",
-                          alignItems: "flex-start",
-                          gap: 12,
-                          background: "rgba(198,255,58,0.07)",
-                          border: "1px solid rgba(110,150,20,0.15)",
-                          borderRadius: 10,
-                          padding: "12px 14px",
-                        }}
-                      >
-                        <IssueIcon tipo="ok" />
-                        <div style={{ flex: 1 }}>
-                          <p
-                            style={{
-                              fontSize: 13.5,
-                              fontWeight: 500,
-                              color: "#0a0a0a",
-                              margin: 0,
-                            }}
-                          >
-                            {p.titulo}
-                          </p>
-                          <p
-                            style={{
-                              fontSize: 12.5,
-                              color: "#5a5a55",
-                              lineHeight: 1.5,
-                              margin: "4px 0 0",
-                            }}
-                          >
-                            {p.descricao}
-                          </p>
-                        </div>
-                      </div>
-                    ),
-                  )}
-                </div>
-              </div>
-
-              {/* Problemas */}
-              <div style={{ ...CARD, marginBottom: 0 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: 8,
-                    marginBottom: 14,
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: "#0a0a0a",
-                      margin: 0,
-                    }}
-                  >
-                    Problemas que reduzem sua pontuação
-                  </p>
-                  {criticos.length > 0 && (
-                    <span
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 10,
-                        fontWeight: 600,
-                        padding: "2px 7px",
-                        borderRadius: 99,
-                        background: "rgba(239,68,68,0.1)",
-                        color: "#991b1b",
-                      }}
-                    >
-                      {criticos.length} crítico{criticos.length > 1 ? "s" : ""}
-                    </span>
-                  )}
-                  {atencoes.length > 0 && (
-                    <span
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 10,
-                        fontWeight: 600,
-                        padding: "2px 7px",
-                        borderRadius: 99,
-                        background: "rgba(245,158,11,0.12)",
-                        color: "#92400e",
-                      }}
-                    >
-                      {atencoes.length} atenção
-                    </span>
-                  )}
-                </div>
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                >
-                  {[...criticos, ...atencoes].length === 0 && (
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        background: "rgba(198,255,58,0.1)",
-                        border: "1px solid rgba(110,150,20,0.15)",
-                        borderRadius: 10,
-                        padding: "12px 14px",
-                      }}
-                    >
-                      <IssueIcon tipo="ok" />
-                      <p
-                        style={{
-                          fontSize: 13.5,
-                          fontWeight: 500,
-                          color: "#2a3a08",
-                          margin: 0,
-                        }}
-                      >
-                        Tudo ok — nenhum problema de formato encontrado
-                      </p>
-                    </div>
-                  )}
-                  {(isGuestView
-                    ? [...criticos, ...atencoes].slice(0, GUEST_VISIBLE)
-                    : [...criticos, ...atencoes]
-                  ).map((p) => (
-                    <div
-                      key={p.titulo}
-                      style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 12,
-                        background:
-                          p.tipo === "critico"
-                            ? "rgba(239,68,68,0.05)"
-                            : p.tipo === "atencao"
-                              ? "rgba(245,158,11,0.05)"
-                              : "rgba(198,255,58,0.05)",
-                        border: `1px solid ${p.tipo === "critico" ? "rgba(239,68,68,0.15)" : p.tipo === "atencao" ? "rgba(245,158,11,0.15)" : "rgba(110,150,20,0.15)"}`,
-                        borderRadius: 10,
-                        padding: "12px 14px",
-                      }}
-                    >
-                      <IssueIcon tipo={p.tipo} />
-                      <div style={{ flex: 1 }}>
+                    {(isGuestView ? oks.slice(0, GUEST_VISIBLE) : oks).map(
+                      (p) => (
                         <div
+                          key={p.titulo}
                           style={{
                             display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 8,
+                            alignItems: "flex-start",
+                            gap: 12,
+                            background: "rgba(198,255,58,0.07)",
+                            border: "1px solid rgba(110,150,20,0.15)",
+                            borderRadius: 10,
+                            padding: "12px 14px",
                           }}
                         >
-                          <p
-                            style={{
-                              fontSize: 13.5,
-                              fontWeight: 500,
-                              color: "#0a0a0a",
-                              margin: 0,
-                            }}
-                          >
-                            {p.titulo}
-                          </p>
-                          {p.impacto !== 0 && (
-                            <span
+                          <IssueIcon tipo="ok" />
+                          <div style={{ flex: 1 }}>
+                            <p
                               style={{
-                                fontFamily: MONO,
-                                fontSize: 11,
-                                fontWeight: 600,
-                                color:
-                                  p.tipo === "atencao" ? "#92400e" : "#991b1b",
-                                flexShrink: 0,
+                                fontSize: 13.5,
+                                fontWeight: 500,
+                                color: "#0a0a0a",
+                                margin: 0,
                               }}
                             >
-                              -{Math.abs(p.impacto)} pts
-                            </span>
-                          )}
-                        </div>
-                        <p
-                          style={{
-                            fontSize: 12.5,
-                            color: "#5a5a55",
-                            lineHeight: 1.5,
-                            margin: "4px 0 0",
-                          }}
-                        >
-                          {p.descricao}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  {isGuestView &&
-                    [...criticos, ...atencoes].length > GUEST_VISIBLE && (
-                      <GuestBlurOverlay
-                        count={Math.min(
-                          [...criticos, ...atencoes].length - GUEST_VISIBLE,
-                          GUEST_MOCK_PROBLEMAS.length,
-                        )}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 8,
-                          }}
-                        >
-                          {GUEST_MOCK_PROBLEMAS.slice(
-                            0,
-                            Math.min(
-                              [...criticos, ...atencoes].length - GUEST_VISIBLE,
-                              GUEST_MOCK_PROBLEMAS.length,
-                            ),
-                          ).map((p) => (
-                            <div
-                              key={p.titulo}
+                              {p.titulo}
+                            </p>
+                            <p
                               style={{
-                                display: "flex",
-                                alignItems: "flex-start",
-                                gap: 12,
-                                background:
-                                  p.tipo === "critico"
-                                    ? "rgba(239,68,68,0.05)"
-                                    : "rgba(245,158,11,0.05)",
-                                border: "1px solid rgba(10,10,10,0.06)",
-                                borderRadius: 10,
-                                padding: "12px 14px",
+                                fontSize: 12.5,
+                                color: "#5a5a55",
+                                lineHeight: 1.5,
+                                margin: "4px 0 0",
                               }}
                             >
-                              <IssueIcon tipo={p.tipo} />
-                              <div style={{ flex: 1 }}>
-                                <p
-                                  style={{
-                                    fontSize: 13.5,
-                                    fontWeight: 500,
-                                    color: "#0a0a0a",
-                                    margin: "0 0 4px",
-                                  }}
-                                >
-                                  {p.titulo}
-                                </p>
-                                <p
-                                  style={{
-                                    fontSize: 12.5,
-                                    color: "#5a5a55",
-                                    lineHeight: 1.5,
-                                    margin: 0,
-                                  }}
-                                >
-                                  {p.descricao}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
+                              {p.descricao}
+                            </p>
+                          </div>
                         </div>
-                      </GuestBlurOverlay>
+                      ),
                     )}
+                  </div>
                 </div>
-              </div>
-            </>
+              )}
+            </SecCard>
           ) : (
-            <div style={{ ...CARD, textAlign: "center", padding: "32px 24px" }}>
+            <SecCard num="S3" title="Formatação e Campos" color={BLUE}>
+              <div style={{ textAlign: "center", padding: "16px 0" }}>
+                <p
+                  style={{
+                    fontSize: 13.5,
+                    fontWeight: 500,
+                    color: "#2a2a28",
+                    margin: "0 0 6px",
+                  }}
+                >
+                  Análise de formato não incluída nesta análise
+                </p>
+                <p
+                  style={{
+                    fontSize: 12.5,
+                    color: "#8a8a85",
+                    margin: "0 0 20px",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Refaça a análise para obter a avaliação completa de ATS e
+                  compatibilidade de formato.
+                </p>
+                <a
+                  href="/adaptar"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    background: "#0a0a0a",
+                    color: "#fff",
+                    borderRadius: 10,
+                    padding: "10px 18px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    textDecoration: "none",
+                  }}
+                >
+                  Refazer análise
+                </a>
+              </div>
+            </SecCard>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+              SEÇÃO 4 — Pontos de Atenção
+          ════════════════════════════════════════════════════ */}
+          {pontosAtencao.length > 0 && (
+            <SecCard num="S4" title="Pontos de Atenção" warn={true}>
               <p
                 style={{
                   fontSize: 13.5,
-                  fontWeight: 500,
-                  color: "#2a2a28",
-                  margin: "0 0 6px",
+                  color: "#5a4a30",
+                  lineHeight: 1.55,
+                  margin: "0 0 14px",
+                  maxWidth: 680,
                 }}
               >
-                Análise de formato não incluída nesta análise
+                Sinais detectados que podem influenciar a percepção do
+                recrutador. Os itens críticos e de atenção estão listados
+                abaixo.
               </p>
-              <p
-                style={{
-                  fontSize: 12.5,
-                  color: "#8a8a85",
-                  margin: "0 0 20px",
-                  lineHeight: 1.5,
-                }}
-              >
-                Refaça a análise para obter a avaliação completa de ATS e
-                compatibilidade de formato.
-              </p>
-              <a
-                href="/adaptar"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  background: "#0a0a0a",
-                  color: "#fff",
-                  borderRadius: 10,
-                  padding: "10px 18px",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  textDecoration: "none",
-                }}
-              >
-                Refazer análise
-              </a>
-            </div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                {(isGuestView
+                  ? pontosAtencao.slice(0, GUEST_VISIBLE)
+                  : pontosAtencao
+                ).map((p) => (
+                  <WarnCard
+                    key={p.titulo}
+                    title={p.titulo}
+                    body={p.descricao}
+                  />
+                ))}
+              </div>
+              {isGuestView && pontosAtencao.length > GUEST_VISIBLE && (
+                <GuestBlurOverlay
+                  count={Math.min(
+                    pontosAtencao.length - GUEST_VISIBLE,
+                    GUEST_MOCK_PROBLEMAS.length,
+                  )}
+                >
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    {GUEST_MOCK_PROBLEMAS.slice(
+                      0,
+                      Math.min(
+                        pontosAtencao.length - GUEST_VISIBLE,
+                        GUEST_MOCK_PROBLEMAS.length,
+                      ),
+                    ).map((p) => (
+                      <WarnCard
+                        key={p.titulo}
+                        title={p.titulo}
+                        body={p.descricao}
+                      />
+                    ))}
+                  </div>
+                </GuestBlurOverlay>
+              )}
+            </SecCard>
           )}
+
+          {/* ════════════════════════════════════════════════════
+              SEÇÃO 5 — Candidatos Fortes
+          ════════════════════════════════════════════════════ */}
+          {Array.isArray(data.sinais_referencia) &&
+            data.sinais_referencia.length > 0 && (
+              <SecCard
+                num="S5"
+                title="Itens de Candidatos Fortes para esta Vaga"
+              >
+                <p
+                  style={{
+                    fontSize: 13.5,
+                    color: "#5a5a55",
+                    lineHeight: 1.55,
+                    margin: "0 0 16px",
+                    maxWidth: 680,
+                  }}
+                >
+                  Sinais que aparecem consistentemente em CVs aprovados para{" "}
+                  <strong>{data.vaga.cargo}</strong>. Não entram no score — mas
+                  podem ser o diferencial em candidaturas competitivas.
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 10,
+                  }}
+                  className="res-s5-grid"
+                >
+                  {(isGuestView
+                    ? data.sinais_referencia.slice(0, GUEST_VISIBLE)
+                    : data.sinais_referencia
+                  ).map((item) => (
+                    <ReferenceCard key={item} text={item} />
+                  ))}
+                </div>
+                {isGuestView &&
+                  data.sinais_referencia.length > GUEST_VISIBLE && (
+                    <GuestBlurOverlay
+                      count={Math.min(
+                        data.sinais_referencia.length - GUEST_VISIBLE,
+                        GUEST_MOCK_SINAIS.length,
+                      )}
+                    >
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: 10,
+                          marginTop: 8,
+                        }}
+                      >
+                        {GUEST_MOCK_SINAIS.slice(
+                          0,
+                          Math.min(
+                            data.sinais_referencia.length - GUEST_VISIBLE,
+                            GUEST_MOCK_SINAIS.length,
+                          ),
+                        ).map((item) => (
+                          <ReferenceCard key={item} text={item} />
+                        ))}
+                      </div>
+                    </GuestBlurOverlay>
+                  )}
+              </SecCard>
+            )}
 
           {/* ── Preview ── */}
           {hasPreviewSection && (
             <>
               <SectionHeader
                 label="PRÉVIA DA OTIMIZAÇÃO"
+                sectionBadge="S6"
                 title="Veja como seu currículo pode ficar mais aderente à vaga"
                 description="Este é um exemplo gerado pela análise. Após liberar o CV, criamos a versão final pronta para download."
               />
@@ -3283,12 +3515,57 @@ export default function ResultadoPage() {
           )}
 
           {/* ── CTA ── */}
+          {!isDemo && !isDownloadReady && data.score.scoreAtualBase < 65 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 10,
+                background: AMBER_SOFT,
+                border: `1px solid ${AMBER_BORDER}`,
+                borderRadius: 10,
+                padding: "12px 18px",
+                marginTop: 32,
+                marginBottom: 14,
+              }}
+            >
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: AMBER,
+                  flexShrink: 0,
+                  marginTop: 5,
+                }}
+              />
+              <p
+                style={{
+                  fontSize: 13,
+                  color: AMBER_TEXT,
+                  lineHeight: 1.55,
+                  margin: 0,
+                }}
+              >
+                Vagas como esta costumam receber CVs com score acima de 65. Com
+                os ajustes disponíveis, você pode ir de{" "}
+                <strong>{data.score.scoreAtualBase}</strong> →{" "}
+                <strong style={{ color: AMBER_TEXT }}>
+                  {scoreProjetadoDinamico}
+                </strong>{" "}
+                — dentro da faixa competitiva.
+              </p>
+            </div>
+          )}
           <div
             style={{
               background: "#0a0a0a",
               borderRadius: 20,
               overflow: "hidden",
-              marginTop: 32,
+              marginTop:
+                isDemo || isDownloadReady || data.score.scoreAtualBase >= 65
+                  ? 32
+                  : 0,
             }}
           >
             {/* Urgency bar */}
@@ -3557,8 +3834,13 @@ export default function ResultadoPage() {
                     {[
                       {
                         key: "content-adjustments",
-                        text: `${data.ajustes_conteudo.length} ajustes de conteúdo prontos para aplicar`,
+                        text: `${data.ajustes_conteudo.length} ajustes de conteúdo com ganho estimado de +${totalAjustesConteudo} pts`,
                         visible: true,
+                      },
+                      {
+                        key: "possible-keywords",
+                        text: `${data.keywords.possiveis?.length ?? 0} keyword${(data.keywords.possiveis?.length ?? 0) > 1 ? "s possíveis" : " possível"} com ganho estimado de +${ptsKwPossiveis} pts`,
+                        visible: (data.keywords.possiveis?.length ?? 0) > 0,
                       },
                       {
                         key: "selected-keywords",
@@ -3625,7 +3907,7 @@ export default function ResultadoPage() {
                         marginBottom: 6,
                       }}
                     >
-                      SEU SCORE APÓS LIBERAR
+                      SEU SCORE PODE CHEGAR
                     </p>
                     <p
                       style={{
@@ -3637,7 +3919,7 @@ export default function ResultadoPage() {
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
-                      {scoreProjetado}
+                      {scoreProjetadoDinamico}
                     </p>
                     <div
                       style={{
@@ -3651,15 +3933,17 @@ export default function ResultadoPage() {
                         color: "rgba(255,255,255,0.3)",
                       }}
                     >
-                      <span>{data.score.scoreAtualBase}</span>
-                      <span>
-                        + {data.score.pontosDisponiveisBase} pts disponíveis
-                      </span>
+                      <span>{data.score.scoreAtualBase} pts atuais</span>
+                      {ptsAjustesTotal > 0 && (
+                        <span>+ {ptsAjustesTotal} pts de ajustes</span>
+                      )}
                       {ptsKwSelecionadas > 0 && (
-                        <span>+ {ptsKwSelecionadas} pts keywords ausentes</span>
+                        <span>
+                          + {ptsKwSelecionadas} pts de kw selecionadas
+                        </span>
                       )}
                       <span style={{ color: "rgba(255,255,255,0.5)" }}>
-                        = {scoreProjetado}/100
+                        = {scoreProjetadoDinamico}/100
                       </span>
                     </div>
                   </div>
@@ -4123,6 +4407,7 @@ export default function ResultadoPage() {
             reviewAdaptationId &&
             jobApplicationId && (
               <div
+                className="res-cand-criada"
                 style={{
                   marginTop: 32,
                   display: "grid",
@@ -4210,7 +4495,7 @@ export default function ResultadoPage() {
                   }}
                 >
                   <a
-                    href={`/dashboard/candidaturas/${jobApplicationId}`}
+                    href={`/candidaturas/${jobApplicationId}`}
                     data-testid="resultado-ver-candidatura"
                     style={{
                       display: "inline-flex",
@@ -4236,6 +4521,8 @@ export default function ResultadoPage() {
             )}
         </div>
       </main>
+
+      <PublicFooter />
 
       <CvReleaseModal
         open={releaseModalOpen}
@@ -4266,6 +4553,8 @@ export default function ResultadoPage() {
           .res-cta-grid { grid-template-columns: 1fr !important; }
           .res-diff-grid { grid-template-columns: 1fr !important; }
           .res-campos-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .res-s1-grid { grid-template-columns: 1fr !important; }
+          .res-s5-grid { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 768px) {
           .resultado-content { padding: 12px 16px 60px !important; }
@@ -4284,6 +4573,7 @@ export default function ResultadoPage() {
           .res-campos-grid { grid-template-columns: 1fr !important; }
           .res-preview-chrome { justify-content: flex-start !important; flex-wrap: wrap !important; row-gap: 6px !important; }
           .res-preview-title { position: static !important; width: 100% !important; text-align: left !important; margin-top: 2px !important; display: block !important; }
+          .res-cand-criada { grid-template-columns: 1fr !important; gap: 16px !important; }
         }
       `}</style>
     </PageShell>

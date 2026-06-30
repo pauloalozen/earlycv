@@ -1,5 +1,5 @@
 import type { JobApplicationStatus } from "@prisma/client";
-import { IsEnum } from "class-validator";
+import { IsEnum, IsOptional, IsString } from "class-validator";
 
 export class UpdateJobApplicationStatusDto {
   @IsEnum([
@@ -16,4 +16,8 @@ export class UpdateJobApplicationStatusDto {
     "WITHDRAWN",
   ])
   status!: JobApplicationStatus;
+
+  @IsOptional()
+  @IsString()
+  currentCvAdaptationId?: string;
 }

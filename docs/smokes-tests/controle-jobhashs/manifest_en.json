@@ -1,0 +1,63 @@
+{
+  "purpose": "English fixtures to test rawJobHash, canonicalJobHash and requirementSourceHash in EarlyCV.",
+  "rules": {
+    "MATCH": "compared hashes must be equal",
+    "DIFFERENT": "compared hashes must be different"
+  },
+  "cases": {
+    "01_rawhash_match": {
+      "rawHash": "MATCH",
+      "canonicalHash": "MATCH",
+      "requirementSourceHash": "MATCH",
+      "reason": "Same content, only casing, spacing and line breaks differ."
+    },
+    "02_canonicalhash_match_linkedin_noise": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "MATCH",
+      "requirementSourceHash": "MATCH",
+      "reason": "Same job content, but one version includes LinkedIn/interface noise."
+    },
+    "03_canonicalhash_match_greenhouse_noise": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "MATCH",
+      "requirementSourceHash": "MATCH",
+      "reason": "Same job content, but one version includes common ATS/careers-site section noise."
+    },
+    "04_both_fail_different_role": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "DIFFERENT",
+      "requirementSourceHash": "DIFFERENT",
+      "reason": "Actually different jobs: Data Scientist vs Frontend Engineer."
+    },
+    "05_both_fail_same_title_different_requirements": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "DIFFERENT",
+      "requirementSourceHash": "DIFFERENT",
+      "reason": "Same title and company, but stack/requirements differ significantly. Must not reuse blindly."
+    },
+    "06_canonicalhash_should_not_match_if_seniority_changes": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "DIFFERENT",
+      "requirementSourceHash": "DIFFERENT",
+      "reason": "Similar role family, but seniority changes from Junior to Senior. Must not reuse blindly."
+    },
+    "07_requirement_match_different_company_title": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "DIFFERENT",
+      "requirementSourceHash": "MATCH",
+      "reason": "Different company/title metadata, but same cleaned description. Requirement source should match."
+    },
+    "08_canonicalhash_match_indeed_noise": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "MATCH",
+      "requirementSourceHash": "MATCH",
+      "reason": "Same job content, but one version includes Indeed page chrome and salary-guide noise."
+    },
+    "09_canonicalhash_match_workday_noise": {
+      "rawHash": "DIFFERENT",
+      "canonicalHash": "MATCH",
+      "requirementSourceHash": "MATCH",
+      "reason": "Same job content, but one version includes Workday page chrome and metadata noise."
+    }
+  }
+}

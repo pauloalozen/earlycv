@@ -53,6 +53,10 @@ export type InterviewPrepContent = {
   questionsCandidateShouldAsk: string[];
   recommendedPosture: string[];
   finalChecklist: string[];
+  lessonsFromPastProcesses?: {
+    keyInsight: string;
+    watchOuts: string[];
+  } | null;
 };
 
 export type InterviewPrepDto = {
@@ -75,18 +79,60 @@ export type JobApplicationDto = {
   currentCvAdaptationId: string | null;
   scoreBefore: number | null;
   scoreAfter: number | null;
+  bestScore: number | null;
+  bestCvAdaptationId: string | null;
+  bestCvState: "ready" | "locked" | "unlocked" | "missing";
+  scorePresentation: "scored" | "not_analyzed";
+  interviewPrepLocked?: boolean;
+  interviewPrepLockReason?: "missing_selected_cv" | "selected_cv_locked" | null;
+  selectedCvAdaptationId?: string | null;
+  selectedCvUnlocked?: boolean;
   notes: string | null;
   appliedAt: string | null;
   nextActionAt: string | null;
+  interviewTitle: string | null;
+  interviewerName: string | null;
+  interviewMeetingUrl: string | null;
+  interviewLocation: string | null;
+  rejectionStrengths: string | null;
+  rejectionImprovements: string | null;
+  archivedAt: string | null;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
   events: JobApplicationEvent[];
+  cvAdaptations?: Array<{
+    id: string;
+    status: string;
+    isUnlocked: boolean;
+    adaptedResumeId: string | null;
+    createdAt: string;
+  }>;
   interviewPrep: { id: string; generatedAt: string } | null;
+};
+
+export type JobApplicationHighlightsDto = {
+  id: string;
+  userId: string;
+  jobTitle: string;
+  companyName: string;
+  status: JobApplicationStatus;
+  bestScore: number | null;
+  currentCvAdaptationId: string | null;
+  bestCvAdaptationId: string | null;
+  bestCvState: "ready" | "locked" | "unlocked" | "missing";
+  scorePresentation: "scored" | "not_analyzed";
+};
+
+export type JobApplicationHighlightsSummaryDto = {
+  activeApplicationsCount: number;
+  analyzedCvsCount: number;
+  averageScore: number | null;
 };
 
 export type JobApplicationDetailDto = Omit<
   JobApplicationDto,
-  "interviewPrep"
+  "interviewPrep" | "cvAdaptations"
 > & {
   interviewPrep: InterviewPrepDto | null;
   cvAdaptations: Array<{
@@ -97,6 +143,10 @@ export type JobApplicationDetailDto = Omit<
     isUnlocked: boolean;
     adaptedResumeId: string | null;
     createdAt: string;
+    scoreBefore: number | null;
+    scoreAfter: number | null;
+    canDownloadBaseCv: boolean;
+    resumeUsedTitle: string | null;
   }>;
 };
 
@@ -113,10 +163,12 @@ export type CreateJobApplicationInput = {
 export async function listJobApplications(
   page = 1,
   limit = 50,
+  archived = false,
 ): Promise<{ items: JobApplicationDto[]; total: number }> {
   const qs = new URLSearchParams({
     page: String(page),
     limit: String(limit),
+    archived: String(archived),
   });
   const response = await apiRequest("GET", `/job-applications?${qs}`);
   if (!response.ok) {
@@ -141,6 +193,75 @@ export async function listJobApplications(
   }>;
 }
 
+export async function archiveJobApplication(
+  id: string,
+): Promise<JobApplicationDto> {
+  const response = await apiRequest("POST", `/job-applications/${id}/archive`);
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(
+      `Falha ao arquivar candidatura${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  return response.json() as Promise<JobApplicationDto>;
+}
+
+export async function restoreJobApplication(
+  id: string,
+): Promise<JobApplicationDto> {
+  const response = await apiRequest("POST", `/job-applications/${id}/restore`);
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(
+      `Falha ao restaurar candidatura${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  return response.json() as Promise<JobApplicationDto>;
+}
+
+export async function deleteJobApplication(
+  id: string,
+): Promise<JobApplicationDto> {
+  const response = await apiRequest("POST", `/job-applications/${id}/delete`);
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(
+      `Falha ao excluir candidatura${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  return response.json() as Promise<JobApplicationDto>;
+}
+
 export async function getJobApplication(
   id: string,
 ): Promise<JobApplicationDetailDto> {
@@ -156,9 +277,8 @@ export async function createJobApplication(
     jobTitle: input.jobTitle,
     companyName: input.companyName,
     ...(input.location ? { location: input.location } : {}),
-    ...(input.jobUrl
-      ? { jobUrl: input.jobUrl, origin: "imported_url" as const }
-      : { origin: input.origin ?? "manual" }),
+    ...(input.jobUrl ? { jobUrl: input.jobUrl } : {}),
+    origin: input.origin ?? "manual",
     ...(input.jobDescriptionText
       ? { jobDescriptionText: input.jobDescriptionText }
       : {}),
@@ -174,11 +294,84 @@ export async function createJobApplication(
 export async function updateJobApplicationStatus(
   id: string,
   status: JobApplicationStatus,
+  currentCvAdaptationId?: string,
 ): Promise<JobApplicationDto> {
   const response = await apiRequest("PATCH", `/job-applications/${id}/status`, {
     status,
+    ...(currentCvAdaptationId !== undefined ? { currentCvAdaptationId } : {}),
   });
   if (!response.ok) throw new Error("Falha ao atualizar status");
+  return response.json() as Promise<JobApplicationDto>;
+}
+
+export async function submitRejectionFeedback(
+  id: string,
+  data: { rejectionStrengths?: string; rejectionImprovements?: string },
+): Promise<JobApplicationDto> {
+  const response = await apiRequest(
+    "PATCH",
+    `/job-applications/${id}/rejection-feedback`,
+    data,
+  );
+  if (!response.ok) throw new Error("Falha ao salvar feedback");
+  return response.json() as Promise<JobApplicationDto>;
+}
+
+export async function scheduleInterview(
+  id: string,
+  data: {
+    scheduledAt: string;
+    interviewTitle: string;
+    interviewerName?: string;
+    interviewMeetingUrl?: string;
+    interviewLocation?: string;
+  },
+): Promise<JobApplicationDto> {
+  const response = await apiRequest(
+    "PATCH",
+    `/job-applications/${id}/interview`,
+    data,
+  );
+  if (!response.ok) {
+    let message = "Falha ao agendar entrevista";
+    try {
+      const body = (await response.json()) as {
+        message?: string | string[];
+      };
+      if (typeof body.message === "string" && body.message.trim()) {
+        message = body.message;
+      } else if (Array.isArray(body.message) && body.message.length > 0) {
+        message = body.message[0];
+      }
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(message);
+  }
+  return response.json() as Promise<JobApplicationDto>;
+}
+
+export async function updateJobApplicationUrl(
+  id: string,
+  jobUrl: string,
+): Promise<JobApplicationDto> {
+  const response = await apiRequest("PATCH", `/job-applications/${id}/url`, {
+    jobUrl,
+  });
+  if (!response.ok) throw new Error("Falha ao salvar link da vaga");
+  return response.json() as Promise<JobApplicationDto>;
+}
+
+export async function updateJobApplicationDescription(
+  id: string,
+  jobDescriptionText: string,
+): Promise<JobApplicationDto> {
+  const response = await apiRequest(
+    "PATCH",
+    `/job-applications/${id}/description`,
+    { jobDescriptionText },
+  );
+  if (!response.ok) throw new Error("Falha ao salvar descrição da vaga");
   return response.json() as Promise<JobApplicationDto>;
 }
 
@@ -195,12 +388,77 @@ export async function addJobApplicationNote(
 
 export async function generateOrGetInterviewPrep(
   id: string,
+  adaptationId?: string,
 ): Promise<InterviewPrepDto> {
   const response = await apiRequest(
     "POST",
     `/job-applications/${id}/interview-prep`,
+    adaptationId ? { adaptationId } : undefined,
+  );
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(detail || "Falha ao gerar preparação para entrevista");
+  }
+  return response.json() as Promise<InterviewPrepDto>;
+}
+
+export async function splitJobApplicationAnalysis(
+  id: string,
+  adaptationId: string,
+): Promise<{ newApplicationId: string }> {
+  const response = await apiRequest(
+    "POST",
+    `/job-applications/${id}/analyses/${adaptationId}/split`,
+  );
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(
+      `Falha ao separar análise em candidatura${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  return response.json() as Promise<{ newApplicationId: string }>;
+}
+
+export async function listJobApplicationHighlights(
+  limit = 3,
+): Promise<JobApplicationHighlightsDto[]> {
+  const qs = new URLSearchParams({ limit: String(limit) });
+  const response = await apiRequest(
+    "GET",
+    `/job-applications/highlights?${qs}`,
   );
   if (!response.ok)
-    throw new Error("Falha ao gerar preparação para entrevista");
-  return response.json() as Promise<InterviewPrepDto>;
+    throw new Error("Falha ao carregar destaques das candidaturas");
+  return response.json() as Promise<JobApplicationHighlightsDto[]>;
+}
+
+export async function getJobApplicationHighlightsSummary(): Promise<JobApplicationHighlightsSummaryDto> {
+  const response = await apiRequest(
+    "GET",
+    "/job-applications/highlights/summary",
+  );
+  if (!response.ok) {
+    throw new Error("Falha ao carregar resumo das candidaturas");
+  }
+  return response.json() as Promise<JobApplicationHighlightsSummaryDto>;
 }

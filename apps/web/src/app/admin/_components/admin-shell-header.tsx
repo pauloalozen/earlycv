@@ -15,6 +15,7 @@ export function AdminShellHeader({
 }: AdminShellHeaderProps) {
   return (
     <header
+      className="admin-shell-header"
       style={{
         display: "flex",
         alignItems: "flex-start",
@@ -81,6 +82,7 @@ export function AdminShellHeader({
 
       {actions ? (
         <div
+          className="admin-shell-header-actions"
           style={{
             display: "flex",
             gap: 8,

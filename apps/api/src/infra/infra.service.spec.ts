@@ -18,7 +18,7 @@ test("InfraService exposes workspace infrastructure diagnostics", async () => {
   assert.deepEqual(await infraService.getDiagnostics(), {
     ai: {
       defaultProvider: "openai",
-      supportedProviders: ["openai"],
+      supportedProviders: ["openai", "xai", "anthropic"],
     },
     database: {
       stage: "bootstrap",

@@ -1207,11 +1207,13 @@ test("getProAccessToken prefers MERCADOPAGO_PRO_ACCESS_TOKEN over legacy token",
 test("getProAccessToken uses MERCADOPAGO_PRO_ACCESS_TOKEN_TEST in non-production", async () => {
   const originalMode = process.env.MERCADOPAGO_MODE;
   const originalNodeEnv = process.env.NODE_ENV;
+  const originalProToken = process.env.MERCADOPAGO_PRO_ACCESS_TOKEN;
   const originalProTestToken = process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST;
   const originalLegacyTestToken = process.env.MERCADOPAGO_ACCESS_TOKEN_TEST;
 
   process.env.MERCADOPAGO_MODE = "sandbox";
   process.env.NODE_ENV = "development";
+  delete process.env.MERCADOPAGO_PRO_ACCESS_TOKEN;
   process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST = "pro-test-token";
   process.env.MERCADOPAGO_ACCESS_TOKEN_TEST = "legacy-test-token";
 
@@ -1226,6 +1228,9 @@ test("getProAccessToken uses MERCADOPAGO_PRO_ACCESS_TOKEN_TEST in non-production
   else process.env.MERCADOPAGO_MODE = originalMode;
   if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = originalNodeEnv;
+  if (originalProToken === undefined)
+    delete process.env.MERCADOPAGO_PRO_ACCESS_TOKEN;
+  else process.env.MERCADOPAGO_PRO_ACCESS_TOKEN = originalProToken;
   if (originalProTestToken === undefined)
     delete process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST;
   else process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST = originalProTestToken;
@@ -1682,7 +1687,10 @@ test("ga4 failure does not break approved purchase flow", async () => {
       },
     } as never,
     {
-      record: async () => ({ event: { id: "evt-ga4-failure-1" }, ingested: true }),
+      record: async () => ({
+        event: { id: "evt-ga4-failure-1" },
+        ingested: true,
+      }),
     } as never,
     {
       sendPurchaseEvent: async () => {

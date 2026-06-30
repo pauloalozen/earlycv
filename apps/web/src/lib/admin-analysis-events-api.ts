@@ -28,13 +28,22 @@ type EmitAdminAnalysisEventsGroupPayload = {
 type EmitAdminAnalysisEventsAllPayload = {
   eventName?: never;
   group?: never;
+  eventNames?: never;
   mode: "all";
+};
+
+type EmitAdminAnalysisEventsListPayload = {
+  eventName?: never;
+  group?: never;
+  eventNames: string[];
+  mode: "list";
 };
 
 export type EmitAdminAnalysisEventsPayload =
   | EmitAdminAnalysisEventsSinglePayload
   | EmitAdminAnalysisEventsGroupPayload
-  | EmitAdminAnalysisEventsAllPayload;
+  | EmitAdminAnalysisEventsAllPayload
+  | EmitAdminAnalysisEventsListPayload;
 
 export type EmitAdminAnalysisEventsResult = {
   domain: AdminAnalysisEventDomain;

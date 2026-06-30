@@ -15,12 +15,13 @@ import type {
 import { BusinessFunnelEventService } from "./business-funnel-event.service";
 import { FUNNEL_EVENT_OWNERSHIP } from "./business-funnel-event-ownership";
 
-export type AdminEventsEmitMode = "single" | "group" | "all";
+export type AdminEventsEmitMode = "single" | "group" | "all" | "list";
 
 export type EmitAdminEventsInput = {
   mode: AdminEventsEmitMode;
   eventName?: string;
   group?: AdminEventDomain;
+  eventNames?: string[];
 };
 
 export type AdminEventsEmitResult = {
@@ -171,6 +172,33 @@ export class AdminEventsEmitterService {
       throw new BadRequestException(
         `group must be one of: protection, business. received: ${String(input.group)}`,
       );
+    }
+
+    if (input.mode === "list") {
+      if (!input.eventNames || input.eventNames.length === 0) {
+        throw new BadRequestException("eventNames is required for list mode");
+      }
+
+      const allEvents = [
+        ...catalog.protection.map((event) => ({
+          ...event,
+          domain: "protection" as const,
+        })),
+        ...catalog.business.map((event) => ({
+          ...event,
+          domain: "business" as const,
+        })),
+      ];
+
+      return input.eventNames.map((name) => {
+        const found = allEvents.find((event) => event.eventName === name);
+        if (!found) {
+          throw new BadRequestException(
+            `eventName is not present in registries: ${name}`,
+          );
+        }
+        return found;
+      });
     }
 
     if (input.mode === "all") {

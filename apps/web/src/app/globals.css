@@ -68,19 +68,35 @@ button:disabled,
   cursor: not-allowed;
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
+@layer base {
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
 }
 
 .page-transition {
   animation: page-fade-in 480ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-html {
-  scrollbar-width: auto;
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(10, 10, 10, 0.18) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(10, 10, 10, 0.18);
+  border-radius: 3px;
 }
 
 @keyframes lp-pulse {
@@ -163,6 +179,47 @@ html {
 .route-transition-content--ready {
   opacity: 1;
   transform: none;
+}
+
+/* PageShell cover — segura a tela enquanto ela monta (UX: nunca montar na cara
+   do usuário). O JS adiciona --ready quando a montagem conclui. O failsafe em
+   CSS dissolve o cover sozinho caso o JS nunca rode (restore de bfcache sem
+   hidratação), evitando o spinner infinito. */
+.page-shell-cover {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-alt);
+  opacity: 1;
+  animation: page-shell-cover-failsafe 360ms ease 2000ms forwards;
+}
+
+.page-shell-cover--ready {
+  opacity: 0;
+  visibility: hidden;
+  animation: none;
+  transition:
+    opacity 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 360ms;
+}
+
+.page-shell-cover-spinner {
+  height: 2rem;
+  width: 2rem;
+  border-radius: 9999px;
+  border: 2px solid var(--surface-border);
+  border-top-color: var(--foreground);
+  animation: route-spinner 700ms linear infinite;
+}
+
+@keyframes page-shell-cover-failsafe {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
 }
 
 .blog-content {
@@ -253,6 +310,135 @@ html {
   }
 }
 
+/* ══ EarlyCV Loaders ══════════════════════════════════════════════════════ */
+.ecv-loader rect {
+  transform-box: fill-box;
+}
+
+/* A · SCAN — faixa verde varre o logo de cima a baixo */
+/* transform-box: view-box makes % values relative to the SVG viewport (size-independent).
+   -25% = -10 SVG units, 105% = 42 SVG units (viewBox height = 40). */
+@keyframes ecv-scan-move {
+  0% {
+    transform: translateY(-25%);
+  }
+  100% {
+    transform: translateY(105%);
+  }
+}
+.ld-scan .scanband {
+  transform-box: view-box;
+  animation: ecv-scan-move 1.5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ld-scan .scanband {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* B · BUILD — barras digitam da esquerda, linha a linha */
+@keyframes ecv-grow {
+  0%,
+  8% {
+    transform: scaleX(0);
+  }
+  24% {
+    transform: scaleX(1);
+  }
+  88% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(0);
+  }
+}
+.ld-build rect {
+  transform-origin: left center;
+  animation: ecv-grow 2s ease infinite;
+}
+.ld-build rect:nth-child(1) {
+  animation-delay: 0s;
+}
+.ld-build rect:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.ld-build rect:nth-child(3) {
+  animation-delay: 0.16s;
+}
+.ld-build rect:nth-child(4) {
+  animation-delay: 0.3s;
+}
+.ld-build rect:nth-child(5) {
+  animation-delay: 0.38s;
+}
+.ld-build rect:nth-child(6) {
+  animation-delay: 0.52s;
+}
+.ld-build rect:nth-child(7) {
+  animation-delay: 0.6s;
+}
+.ld-build rect:nth-child(8) {
+  animation-delay: 0.68s;
+}
+.ld-build rect:nth-child(9) {
+  animation-delay: 0.82s;
+}
+.ld-build rect:nth-child(10) {
+  animation-delay: 0.9s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ld-build rect {
+    animation: none;
+    transform: scaleX(1);
+  }
+}
+
+/* C · PULSE — keywords verdes respiram, gap pisca */
+@keyframes ecv-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scaleX(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+@keyframes ecv-blink {
+  0%,
+  100% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.ld-pulse rect {
+  transform-origin: left center;
+}
+.ld-pulse .kw {
+  animation: ecv-breathe 1.8s ease-in-out infinite;
+}
+.ld-pulse .kw.k2 {
+  animation-delay: 0.22s;
+}
+.ld-pulse .kw.k3 {
+  animation-delay: 0.44s;
+}
+.ld-pulse .gap {
+  animation: ecv-blink 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ld-pulse .kw,
+  .ld-pulse .gap {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes route-overlay-exit {
   from {
     opacity: 1;
@@ -293,4 +479,53 @@ html {
   .route-transition-spinner {
     animation: none;
   }
+
+  /* Sem cover/spinner: revela imediatamente (consistente com a overlay acima).
+     Mantém a garantia de nunca travar. */
+  .page-shell-cover {
+    animation: none;
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .page-shell-cover-spinner {
+    animation: none;
+  }
+}
+
+/* ── CV Master block animation ── */
+@keyframes cv-block-open {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cv-block-panel {
+  animation: cv-block-open 0.22s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-block-panel {
+    animation: none;
+  }
+}
+
+@keyframes cv-block-close {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.cv-block-panel-close {
+  animation: cv-block-close 220ms ease-in both;
 }

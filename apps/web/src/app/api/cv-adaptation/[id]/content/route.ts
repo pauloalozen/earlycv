@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { getCurrentAppSession } from "@/lib/app-session.server";
+import { getAppSessionTokens } from "@/lib/app-session.server";
 
 function getApiBaseUrl() {
   const base =
@@ -16,8 +16,7 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  const session = await getCurrentAppSession();
-  const token = session?.accessToken;
+  const { accessToken: token } = await getAppSessionTokens();
 
   if (!token) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

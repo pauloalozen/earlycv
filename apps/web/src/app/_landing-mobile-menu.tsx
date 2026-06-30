@@ -166,7 +166,7 @@ export function LandingMobileMenu({ authState }: Props) {
               </div>
             ) : authState === "authenticated" ? (
               <a
-                href="/dashboard"
+                href="/meu-perfil"
                 className="lp-mob-nav-item lp-mob-nav-item--cta"
                 onClick={() => setOpen(false)}
               >

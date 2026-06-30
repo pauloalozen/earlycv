@@ -9,6 +9,16 @@ export type StatusConfig = {
   dotGlow?: boolean;
 };
 
+export type UserVisibleStatusKey =
+  | "SAVED"
+  | "ANALYZED"
+  | "CV_READY"
+  | "APPLIED"
+  | "INTERVIEW"
+  | "HIRED"
+  | "REJECTED"
+  | "WITHDRAWN";
+
 export const STATUS_CONFIG: Record<JobApplicationStatus, StatusConfig> = {
   SAVED: {
     label: "Salva",
@@ -25,7 +35,7 @@ export const STATUS_CONFIG: Record<JobApplicationStatus, StatusConfig> = {
     dot: "#a8a6a0",
   },
   CV_READY: {
-    label: "CV pronto",
+    label: "CV Liberado",
     bg: "rgba(198,255,58,0.28)",
     color: "#3a5008",
     border: "rgba(110,150,20,0.30)",
@@ -33,7 +43,7 @@ export const STATUS_CONFIG: Record<JobApplicationStatus, StatusConfig> = {
     dotGlow: true,
   },
   APPLIED: {
-    label: "Enviada",
+    label: "Candidatado",
     bg: "#0a0a0a",
     color: "#fafaf6",
     border: "#0a0a0a",
@@ -48,7 +58,7 @@ export const STATUS_CONFIG: Record<JobApplicationStatus, StatusConfig> = {
     dot: "#f5c518",
   },
   INTERVIEW: {
-    label: "Entrevista",
+    label: "Em entrevista",
     bg: "rgba(245,197,24,0.18)",
     color: "#7a5a04",
     border: "rgba(180,140,10,0.25)",
@@ -78,14 +88,14 @@ export const STATUS_CONFIG: Record<JobApplicationStatus, StatusConfig> = {
     dotGlow: true,
   },
   REJECTED: {
-    label: "Recusada",
+    label: "Recusado",
     bg: "rgba(10,10,10,0.04)",
     color: "#8a8a85",
     border: "rgba(10,10,10,0.08)",
     dot: "#c0beb4",
   },
   WITHDRAWN: {
-    label: "Desisti",
+    label: "Desistência",
     bg: "rgba(10,10,10,0.04)",
     color: "#8a8a85",
     border: "rgba(10,10,10,0.08)",
@@ -127,9 +137,24 @@ export const CLOSED_STATUSES: JobApplicationStatus[] = [
   "WITHDRAWN",
 ];
 
+export function getUserVisibleStatus(
+  status: JobApplicationStatus,
+): UserVisibleStatusKey {
+  if (
+    status === "IN_PROCESS" ||
+    status === "ASSESSMENT" ||
+    status === "OFFER"
+  ) {
+    return "INTERVIEW";
+  }
+
+  return status;
+}
+
 export function getStatusConfig(status: string): StatusConfig {
+  const visibleStatus = getUserVisibleStatus(status as JobApplicationStatus);
   return (
-    STATUS_CONFIG[status as JobApplicationStatus] ?? {
+    STATUS_CONFIG[visibleStatus] ?? {
       label: status,
       bg: "#fff",
       color: "#3a3a36",

@@ -1,11 +1,29 @@
 import { Inject, Injectable } from "@nestjs/common";
 import PizZip from "pizzip";
-
 import { ResumeTemplateDocxService } from "../resume-templates/resume-template-docx.service";
 import type {
   CvAdaptationOutput,
   CvSection,
 } from "./dto/cv-adaptation-output.types";
+
+const SECTION_LABELS = {
+  pt: {
+    summary: "RESUMO PROFISSIONAL",
+    experience: "EXPERIÊNCIA PROFISSIONAL",
+    skills: "COMPETÊNCIAS",
+    education: "EDUCAÇÃO",
+    certifications: "CERTIFICAÇÕES",
+    languages: "IDIOMAS",
+  },
+  en: {
+    summary: "PROFESSIONAL SUMMARY",
+    experience: "WORK EXPERIENCE",
+    skills: "SKILLS",
+    education: "EDUCATION",
+    certifications: "CERTIFICATIONS",
+    languages: "LANGUAGES",
+  },
+} as const;
 
 @Injectable()
 export class CvAdaptationDocxService {
@@ -94,7 +112,30 @@ export class CvAdaptationDocxService {
     return zip.generate({ type: "nodebuffer" }) as Buffer;
   }
 
+  private detectLanguage(output: CvAdaptationOutput): "pt" | "en" {
+    const text = [
+      output.summary ?? "",
+      ...(output.sections ?? []).map((s) => s.title),
+    ]
+      .join(" ")
+      .toLowerCase();
+    const ptScore = (
+      text.match(
+        /\b(de|para|com|em|uma|não|por|do|da|experiência|formação|idiomas|competências)\b/g,
+      ) ?? []
+    ).length;
+    const enScore = (
+      text.match(
+        /\b(the|and|with|for|experience|education|skills|languages|certifications|summary)\b/g,
+      ) ?? []
+    ).length;
+    return enScore > ptScore ? "en" : "pt";
+  }
+
   private mapOutputToTemplateData(output: CvAdaptationOutput) {
+    const lang = this.detectLanguage(output);
+    const labels = SECTION_LABELS[lang];
+
     const headerSection = output.sections?.find(
       (s) => s.sectionType === "header",
     );
@@ -121,7 +162,6 @@ export class CvAdaptationDocxService {
     const { candidateName, phone, email, location } =
       this.extractHeader(headerSection);
 
-    // mainGoal: use AI-generated field when available, fallback to first sentence of summary
     const summaryText = output.summary ?? "";
     let mainGoal = output.mainGoal ?? "";
     if (!mainGoal) {
@@ -134,6 +174,20 @@ export class CvAdaptationDocxService {
 
     const certItems = this.mapCourseItems(certSection);
     const langItems = this.mapLanguages(langSection);
+    const extraSections = (output.sections ?? [])
+      .filter((s) => s.sectionType === "other")
+      .map((s) => ({
+        sectionTitle: s.title.toUpperCase(),
+        sectionItems: s.items
+          .map((item) => ({
+            itemHeading: item.heading ?? "",
+            itemBullets: (item.bullets ?? [])
+              .filter((b) => b.trim())
+              .map((b) => ({ bulletText: b })),
+          }))
+          .filter((i) => i.itemHeading || i.itemBullets.length > 0),
+      }))
+      .filter((s) => s.sectionItems.length > 0);
 
     return {
       candidateName,
@@ -143,6 +197,12 @@ export class CvAdaptationDocxService {
       mainGoal,
       hasMainGoal: mainGoal.trim().length > 0,
       summary: summaryText,
+      sectionTitleSummary: labels.summary,
+      sectionTitleExperience: labels.experience,
+      sectionTitleSkills: labels.skills,
+      sectionTitleEducation: labels.education,
+      sectionTitleCertifications: labels.certifications,
+      sectionTitleLanguages: labels.languages,
       items: this.mapExperience(experienceSection),
       competencias: this.mapSkills(skillsSection),
       educacao: this.mapCourseItems(educationSection),
@@ -150,6 +210,7 @@ export class CvAdaptationDocxService {
       hasIdiomas: langItems.length > 0,
       certificacoes: certItems,
       idiomas: langItems,
+      extraSections,
     };
   }
 

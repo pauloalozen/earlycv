@@ -221,10 +221,11 @@ async function resolveToken(token?: string) {
 
 async function apiRequest<T>(path: string, token?: string, init?: RequestInit) {
   const bearerToken = await resolveToken(token);
+  const isRead = !init?.method || init.method === "GET";
 
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
-    cache: "no-store",
+    ...(isRead ? { next: { revalidate: 60 } } : { cache: "no-store" as const }),
     headers: {
       Authorization: `Bearer ${bearerToken}`,
       ...(init?.headers ?? {}),

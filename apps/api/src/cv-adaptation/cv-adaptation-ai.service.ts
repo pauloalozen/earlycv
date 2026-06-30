@@ -2,8 +2,33 @@ import { Inject, Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 
+import { getAiModel } from "../common/ai-client-factory";
 import { DatabaseService } from "../database/database.service";
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
+import type {
+  JobRequirementCoverage,
+  StructuredJobRequirement,
+} from "./dto/job-requirement.types";
+
+type AnalyzeJobFitInput = {
+  masterCvText: string;
+  jobDescriptionText: string;
+  canonicalJobJson: unknown;
+  existingRequirements?: StructuredJobRequirement[];
+  existingKeywordRule?: {
+    presentes: Array<{ kw: string; pontos: number }>;
+    possiveis: Array<{ kw: string; pontos: number }>;
+    ausentes: Array<{ kw: string; pontos: number }>;
+  };
+};
+
+type AnalyzeJobFitResult = {
+  adaptedContentJson: unknown;
+  previewText: string;
+  structuredRequirements: StructuredJobRequirement[];
+  analysisModel: string;
+  analysisPromptVersion: string;
+};
 
 @Injectable()
 export class CvAdaptationAiService {
@@ -13,15 +38,29 @@ export class CvAdaptationAiService {
   ) {}
 
   async analyzeAndAdaptDirect(
-    masterCvText: string,
-    jobDescriptionText: string,
-  ): Promise<{ adaptedContentJson: unknown; previewText: string }> {
+    input: AnalyzeJobFitInput,
+  ): Promise<AnalyzeJobFitResult> {
     if (process.env.SKIP_AI === "true") {
       const stubOutput = {
         vaga: {
           cargo: "Cargo não identificado (stub)",
           empresa: "Empresa não identificada (stub)",
         },
+        requirements: [
+          {
+            requirementKey: "experiencia-analise-dados",
+            requirementText:
+              "Experiência com análise de dados aplicada ao contexto da vaga",
+            importance: "high",
+            coverageStatus: "partial",
+            evidence: ["Resumo profissional com foco em análise de dados"],
+            gapExplanation:
+              "A experiência aparece, mas com pouca profundidade.",
+            recommendation:
+              "Destacar melhor entregas reais com análise de dados se isso for verdadeiro.",
+            impactScore: 18,
+          },
+        ],
         fit: {
           score: 72,
           categoria: "medio",
@@ -37,8 +76,8 @@ export class CvAdaptationAiService {
         melhorias_aplicadas: ["Nenhuma melhoria aplicada no modo stub"],
         ats_keywords: { presentes: [], ausentes: [] },
         preview: {
-          antes: masterCvText.slice(0, 200),
-          depois: masterCvText.slice(0, 200),
+          antes: input.masterCvText.slice(0, 200),
+          depois: input.masterCvText.slice(0, 200),
         },
         projecao_melhoria: {
           score_atual: 72,
@@ -53,21 +92,83 @@ export class CvAdaptationAiService {
       return {
         adaptedContentJson: stubOutput,
         previewText: stubOutput.fit.headline,
+        structuredRequirements: stubOutput.requirements.map((requirement) => ({
+          requirementKey: requirement.requirementKey,
+          requirementText: requirement.requirementText,
+          importance:
+            requirement.importance as StructuredJobRequirement["importance"],
+        })),
+        analysisModel: "stub",
+        analysisPromptVersion: "stub",
       };
     }
 
-    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-    const { analyzeAndAdaptCv } = await import("@earlycv/ai");
+    const model = getAiModel();
+    const { analyzeAndAdaptCv, CV_ANALYSIS_PROMPT_VERSION } = await import(
+      "@earlycv/ai"
+    );
     // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
     const output = await analyzeAndAdaptCv(this.aiClient as any, model, {
-      masterCvText,
-      jobDescriptionText,
+      masterCvText: input.masterCvText,
+      jobDescriptionText: input.jobDescriptionText,
+      canonicalJobJson: input.canonicalJobJson,
+      existingRequirements: input.existingRequirements,
+      existingKeywordRule: input.existingKeywordRule,
     });
 
     return {
       adaptedContentJson: output,
       previewText: output.fit.headline,
+      structuredRequirements: output.requirements.map((requirement) => ({
+        requirementKey: requirement.requirementKey,
+        requirementText: requirement.requirementText,
+        importance: requirement.importance,
+        dimension: requirement.dimension,
+        gateLevel: requirement.gateLevel,
+      })),
+      analysisModel: model,
+      analysisPromptVersion: CV_ANALYSIS_PROMPT_VERSION,
     };
+  }
+
+  async adaptWithAudit(input: {
+    masterCvText: string;
+    jobDescriptionText: string;
+    selectedKeywords?: string[];
+    jobTitle?: string;
+    companyName?: string;
+    requirementCoverage?: JobRequirementCoverage[];
+    ajustesConteudo?: Array<{
+      id: string;
+      titulo: string;
+      categoria: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
+    }>;
+  }): Promise<{ output: CvAdaptationOutput; audit: unknown }> {
+    if (process.env.SKIP_AI === "true") {
+      const stub: CvAdaptationOutput = {
+        summary: input.masterCvText.slice(0, 300),
+        sections: [],
+        highlightedSkills: [],
+        removedSections: [],
+        adaptationNotes: "SKIP_AI mode active",
+      };
+      return { output: stub, audit: { stub: true } };
+    }
+
+    const model = getAiModel();
+    const { adaptCv } = await import("@earlycv/ai");
+    // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
+    const { output, audit } = await adaptCv(this.aiClient as any, model, {
+      masterCvText: input.masterCvText,
+      jobDescriptionText: input.jobDescriptionText,
+      selectedKeywords: input.selectedKeywords,
+      jobTitle: input.jobTitle,
+      companyName: input.companyName,
+      requirementCoverage: input.requirementCoverage,
+      ajustesConteudo: input.ajustesConteudo,
+    });
+
+    return { output: output as CvAdaptationOutput, audit };
   }
 
   async buildPaidCvOutputFromGuest(input: {
@@ -76,6 +177,12 @@ export class CvAdaptationAiService {
     selectedMissingKeywords?: string[];
     jobTitle?: string;
     companyName?: string;
+    requirementCoverage?: JobRequirementCoverage[];
+    ajustesConteudo?: Array<{
+      id: string;
+      titulo: string;
+      categoria: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
+    }>;
   }): Promise<CvAdaptationOutput> {
     if (process.env.SKIP_AI === "true") {
       return {
@@ -98,10 +205,18 @@ export class CvAdaptationAiService {
         ],
         highlightedSkills: [],
         removedSections: [],
+        requirementAdaptationActions:
+          input.requirementCoverage?.map((r) => ({
+            requirementKey: r.requirementKey,
+            action: "not_addressed" as const,
+            whereChanged: [],
+            reason: "SKIP_AI mode active — no real adaptation performed.",
+            truthfulnessRisk: "low" as const,
+          })) ?? [],
       };
     }
 
-    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const model = getAiModel();
     const { adaptCv } = await import("@earlycv/ai");
     // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
     const { output } = await adaptCv(this.aiClient as any, model, {
@@ -110,6 +225,8 @@ export class CvAdaptationAiService {
       selectedKeywords: input.selectedMissingKeywords,
       jobTitle: input.jobTitle,
       companyName: input.companyName,
+      requirementCoverage: input.requirementCoverage,
+      ajustesConteudo: input.ajustesConteudo,
     });
 
     return output as CvAdaptationOutput;
@@ -161,7 +278,7 @@ export class CvAdaptationAiService {
     }
 
     try {
-      const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+      const model = getAiModel();
       const { adaptCv } = await import("@earlycv/ai");
 
       // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions

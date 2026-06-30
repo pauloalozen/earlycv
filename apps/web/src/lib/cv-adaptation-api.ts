@@ -124,25 +124,118 @@ export async function deleteCvAdaptation(id: string): Promise<void> {
   }
 }
 
-export async function getCvAdaptationContent(id: string): Promise<{
-  adaptedContentJson: Record<string, unknown>;
+export type CvSectionItemChange = {
+  ajuste_id: string;
+  highlight_text?: string;
+  bullet_index?: number;
+};
+
+export type CvSection = {
+  sectionType:
+    | "header"
+    | "experience"
+    | "education"
+    | "skills"
+    | "projects"
+    | "certifications"
+    | "languages"
+    | "other";
+  title: string;
+  items: Array<{
+    heading?: string;
+    subheading?: string;
+    dateRange?: string;
+    bullets: string[];
+    changes?: CvSectionItemChange[];
+  }>;
+};
+
+export type CvReanalysisResult = {
+  adaptationId: string;
+  score: number;
+  analyzedAt: string;
+};
+
+export type FinalCvOutput = {
+  summary?: string;
+  sections?: CvSection[];
+  highlightedSkills?: string[];
+  removedSections?: string[];
+  adaptationNotes?: string;
+  reanalysisResult?: CvReanalysisResult;
+};
+
+export type CvAdaptationContentResponse = {
+  adaptedContentJson: CvAnalysisData;
+  finalCvOutput?: FinalCvOutput | null;
+  editedCvJson?: FinalCvOutput | null;
+  sectionMapping?: Record<string, string>;
   paymentStatus?: PaymentStatus;
   isUnlocked?: boolean;
+  status?: string;
+  jobTitle?: string | null;
+  companyName?: string | null;
+  jobDescriptionText?: string | null;
+  adaptationNotes?: string | null;
   jobApplicationId?: string | null;
-}> {
+  jobAnalysisCount?: number | null;
+};
+
+export async function getCvAdaptationContent(
+  id: string,
+): Promise<CvAdaptationContentResponse> {
   const response = await apiRequest("GET", `/cv-adaptation/${id}/content`);
   if (!response.ok) {
     throw new Error("Failed to fetch adaptation content");
   }
-  return response.json() as Promise<{
-    adaptedContentJson: Record<string, unknown>;
-    paymentStatus?: PaymentStatus;
-    isUnlocked?: boolean;
-    jobApplicationId?: string | null;
-  }>;
+  return response.json() as Promise<CvAdaptationContentResponse>;
+}
+
+export async function saveReanalysisResult(
+  id: string,
+  adaptationId: string,
+  score: number,
+): Promise<void> {
+  const response = await apiRequest(
+    "PATCH",
+    `/cv-adaptation/${id}/reanalysis-result`,
+    { adaptationId, score },
+  );
+  if (!response.ok) {
+    throw new Error("Failed to save reanalysis result");
+  }
+}
+
+export async function resetCvAdaptationContent(id: string): Promise<void> {
+  const response = await apiRequest(
+    "DELETE",
+    `/cv-adaptation/${id}/cv-content`,
+  );
+  if (!response.ok) {
+    throw new Error("Failed to reset CV edits");
+  }
+}
+
+export async function updateCvAdaptationContent(
+  id: string,
+  sections: CvSection[],
+  summary?: string,
+): Promise<void> {
+  const response = await apiRequest(
+    "PATCH",
+    `/cv-adaptation/${id}/cv-content`,
+    {
+      sections,
+      ...(summary !== undefined && { summary }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error("Failed to save CV edits");
+  }
 }
 
 export type CvAnalysisData = {
+  analysisVersion?: "legacy_v1" | "requirements_v2";
   vaga: {
     cargo: string;
     empresa: string;
@@ -155,14 +248,18 @@ export type CvAnalysisData = {
     headline: string;
     subheadline: string;
   };
-  /** Presente em análises novas — scores por seção (experiência 0-40 + competências 0-40 + formatação 0-20 = fit.score) */
+  /** Presente em análises novas — scores por seção (experiência 0-50 + competências 0-40 + formatação 0-10 = fit.score) */
   secoes?: {
     experiencia: { score: number; max: number };
     competencias: { score: number; max: number };
     formatacao: { score: number; max: number };
   };
   /** Presente em análises novas — pontos fortes com peso relativo */
-  positivos?: Array<{ texto: string; pontos: number }>;
+  positivos?: Array<{
+    texto: string;
+    pontos: number;
+    coveragePercent?: 0 | 25 | 50 | 75 | 100;
+  }>;
   /** Presente em análises novas — ajustes de conteúdo com ganho estimado */
   ajustes_conteudo?: Array<{
     id?: string;
@@ -170,10 +267,21 @@ export type CvAnalysisData = {
     descricao: string;
     pontos: number;
     dica: string;
+    categoria?: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
+    coveragePercent?: 0 | 25 | 50 | 75 | 100;
+  }>;
+  ajustes_indisponiveis?: Array<{
+    id?: string;
+    titulo: string;
+    descricao?: string;
+    pontos: number;
+    dica?: string;
+    coveragePercent?: 0 | 25 | 50 | 75 | 100;
   }>;
   /** Presente em análises novas — keywords com impacto por item */
   keywords?: {
     presentes: Array<{ kw: string; pontos: number }>;
+    possiveis?: Array<{ kw: string; pontos: number }>;
     ausentes: Array<{ kw: string; pontos: number }>;
   };
   /** Presente em análises novas — análise de formato ATS */
@@ -214,6 +322,47 @@ export type CvAnalysisData = {
     subtexto: string;
   };
   adaptation_notes?: string;
+  sinais_referencia?: string[];
+  requirements?: Array<{
+    requirementKey?: string;
+    requirementText: string;
+    importance: "high" | "medium" | "low";
+    gateLevel?: "hard" | "soft";
+    coverageStatus: "covered" | "partial" | "missing";
+    coveragePercent?: 0 | 25 | 50 | 75 | 100;
+    evidence?: string[];
+    gapExplanation?: string;
+    recommendation?: string;
+    impactScore?: number;
+  }>;
+  scoring?: {
+    kind: "requirements_v2";
+    gates?: {
+      hardTotal: number;
+      hardCovered: number;
+      hardPartial: number;
+      hardMissing: number;
+    };
+    sections: {
+      experiencia: { score: number; max: number };
+      competencias: { score: number; max: number };
+      formatacao: { score: number; max: number };
+    };
+    totals: {
+      scoreAtualBase: number;
+      scoreAposLiberarBase: number;
+      scoreDelta: number;
+    };
+  };
+  hard_gates?: Array<{
+    requirementKey?: string;
+    requirementText: string;
+    status: "covered" | "partial" | "missing";
+    importance: "high" | "medium" | "low";
+  }>;
+  scoreBefore?: number;
+  scoreAfter?: number;
+  scoreDelta?: number;
 };
 
 export type GuestAnalysisResult = {
@@ -270,6 +419,7 @@ export async function analyzeGuestCv(
     "POST",
     "/cv-adaptation/analyze-guest",
     formData,
+    180_000,
   );
   if (!response.ok) {
     const raw = await response.text();
@@ -298,6 +448,7 @@ export async function claimGuestAnalysis(payload: {
     "POST",
     "/cv-adaptation/claim-guest",
     payload,
+    180_000,
   );
   if (!response.ok) {
     const error = await response.text();
@@ -317,6 +468,7 @@ export async function saveGuestPreview(payload: {
   saveAsMaster?: boolean;
   file?: File;
   guestSessionPublicToken?: string;
+  jobApplicationId?: string;
 }): Promise<CvAdaptationDto> {
   const body = (() => {
     const formData = new FormData();
@@ -340,6 +492,8 @@ export async function saveGuestPreview(payload: {
       );
     if (payload.saveAsMaster)
       formData.append("saveAsMaster", String(payload.saveAsMaster));
+    if (payload.jobApplicationId)
+      formData.append("jobApplicationId", payload.jobApplicationId);
     return formData;
   })();
 
@@ -347,6 +501,7 @@ export async function saveGuestPreview(payload: {
     "POST",
     "/cv-adaptation/save-guest-preview",
     body,
+    180_000,
   );
   if (!response.ok) {
     const error = await response.text();
@@ -357,8 +512,17 @@ export async function saveGuestPreview(payload: {
 
 export async function analyzeAuthenticatedCv(
   formData: FormData,
+  inputMode?: "file_upload" | "text_paste" | "profile",
 ): Promise<AnalyzeResult> {
-  const response = await apiRequest("POST", "/cv-adaptation/analyze", formData);
+  if (inputMode) {
+    formData.set("inputMode", inputMode);
+  }
+  const response = await apiRequest(
+    "POST",
+    "/cv-adaptation/analyze",
+    formData,
+    180_000,
+  );
   if (!response.ok) {
     const raw = await response.text();
     return {
@@ -373,7 +537,12 @@ export async function analyzeAuthenticatedCv(
 }
 
 export async function downloadCvAdaptationPdf(id: string): Promise<Blob> {
-  const response = await apiRequest("GET", `/cv-adaptation/${id}/download`);
+  const response = await apiRequest(
+    "GET",
+    `/cv-adaptation/${id}/download`,
+    undefined,
+    180_000,
+  );
   if (!response.ok) {
     throw new Error("Failed to download PDF");
   }
