@@ -33,7 +33,9 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
   const next = params.next ?? "";
 
   const isLogin = tab === "entrar";
-  const googleUrl = `${process.env.NEXT_PUBLIC_API_URL?.trim()}/api/auth/google/start${next ? `?next=${encodeURIComponent(next)}` : ""}`;
+  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim() ?? "";
+  const apiBase = rawApiUrl.endsWith("/api") ? rawApiUrl : `${rawApiUrl}/api`;
+  const googleUrl = `${apiBase}/auth/google/start${next ? `?next=${encodeURIComponent(next)}` : ""}`;
 
   return (
     <PageShell>
