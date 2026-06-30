@@ -20,7 +20,7 @@ export class ScheduleInterviewDto {
   interviewerName?: string;
 
   @IsOptional()
-  @IsUrl({}, { message: "interviewMeetingUrl deve ser uma URL válida" })
+  @IsUrl({}, { message: "Link da reunião deve ser uma URL válida" })
   interviewMeetingUrl?: string;
 
   @IsOptional()

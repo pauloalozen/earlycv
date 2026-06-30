@@ -331,12 +331,12 @@ export class JobApplicationsService {
   }
 
   async getHighlightsSummary(userId: string) {
-    const [items, orphanAdaptations] = await Promise.all([
+    const [items, orphanAdaptations, analyzedCvsCount] = await Promise.all([
       this.database.jobApplication.findMany({
-        where: { userId, archivedAt: null, deletedAt: null },
+        where: { userId, deletedAt: null },
         select: {
           status: true,
-          scoreAfter: true,
+          archivedAt: true,
           cvAdaptations: {
             select: {
               id: true,
@@ -361,32 +361,25 @@ export class JobApplicationsService {
         },
         select: { adaptedContentJson: true },
       }),
+      this.database.cvAdaptation.count({ where: { userId } }),
     ]);
 
     let activeApplicationsCount = 0;
-    let analyzedCvsCount = 0;
     let scoredCount = 0;
     let totalScore = 0;
 
     for (const item of items) {
-      if (ACTIVE_SUMMARY_STATUSES.has(item.status)) {
+      if (
+        item.archivedAt === null &&
+        ACTIVE_SUMMARY_STATUSES.has(item.status)
+      ) {
         activeApplicationsCount += 1;
-      }
-
-      if (item.cvAdaptations.length > 0) {
-        analyzedCvsCount += item.cvAdaptations.length;
-      } else if (typeof item.scoreAfter === "number") {
-        analyzedCvsCount += 1;
       }
 
       const summary = deriveSummaryFromAdaptations(
         item.cvAdaptations as AdaptationSummaryView[],
       );
-      const resolvedScore =
-        summary.bestScore ??
-        (item.cvAdaptations.length === 0 && typeof item.scoreAfter === "number"
-          ? item.scoreAfter
-          : null);
+      const resolvedScore = summary.bestScore ?? null;
 
       if (resolvedScore !== null) {
         scoredCount += 1;
@@ -395,7 +388,6 @@ export class JobApplicationsService {
     }
 
     for (const adaptation of orphanAdaptations) {
-      analyzedCvsCount += 1;
       const scoreAfter = extractScoreAfterFromContent(
         adaptation.adaptedContentJson,
       );

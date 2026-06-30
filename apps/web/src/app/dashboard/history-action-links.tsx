@@ -43,6 +43,7 @@ type Props = {
   };
   hasCredits: boolean | null;
   jobApplicationId?: string | null;
+  adaptationId?: string | null;
   hideBaseCvAction?: boolean;
   removeTopMargin?: boolean;
 };
@@ -150,6 +151,7 @@ export function HistoryActionLinks({
   analysisContext,
   hasCredits,
   jobApplicationId,
+  adaptationId,
   hideBaseCvAction = false,
   removeTopMargin = false,
 }: Props) {
@@ -525,17 +527,30 @@ export function HistoryActionLinks({
               REDEEM_REQUEST_TIMEOUT_MS,
             );
 
+            let storedKeywords: string[] = [];
+            if (adaptationId) {
+              try {
+                const raw = sessionStorage.getItem(`kw_sel_${adaptationId}`);
+                if (raw) storedKeywords = JSON.parse(raw) as string[];
+              } catch {
+                // unavailable or malformed
+              }
+            }
+            const effectiveKeywords =
+              (actions.selectedMissingKeywords ?? []).length > 0
+                ? (actions.selectedMissingKeywords ?? [])
+                : storedKeywords;
+
             try {
               const redeemRequest = fetch(actions.redeemHref, {
                 method: "POST",
                 cache: "no-store",
                 signal: controller.signal,
-                ...(actions.selectedMissingKeywords?.length
+                ...(effectiveKeywords.length > 0
                   ? {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        selectedMissingKeywords:
-                          actions.selectedMissingKeywords,
+                        selectedMissingKeywords: effectiveKeywords,
                       }),
                     }
                   : {}),

@@ -949,11 +949,27 @@ function AnaliseRow({
       REDEEM_REQUEST_TIMEOUT_MS,
     );
 
+    let storedKeywords: string[] = [];
+    try {
+      const raw = sessionStorage.getItem(`kw_sel_${adaptation.id}`);
+      if (raw) storedKeywords = JSON.parse(raw) as string[];
+    } catch {
+      // unavailable or malformed
+    }
+
     try {
       const response = await fetch(redeemHref, {
         method: "POST",
         cache: "no-store",
         signal: controller.signal,
+        ...(storedKeywords.length > 0
+          ? {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                selectedMissingKeywords: storedKeywords,
+              }),
+            }
+          : {}),
       });
       if (!response.ok) {
         let msg = "Falha ao liberar CV";
@@ -3346,18 +3362,22 @@ function RejectionFeedbackModal({
   jobTitle,
   onClose,
   onUpdated,
+  initialStrengths,
+  initialImprovements,
 }: {
   applicationId: string;
   companyName: string;
   jobTitle: string;
   onClose: () => void;
   onUpdated: () => void;
+  initialStrengths?: string | null;
+  initialImprovements?: string | null;
 }) {
   const { visible, close } = useModalFade(onClose);
   const strengthsId = useId();
   const improvementsId = useId();
-  const [strengths, setStrengths] = useState("");
-  const [improvements, setImprovements] = useState("");
+  const [strengths, setStrengths] = useState(initialStrengths ?? "");
+  const [improvements, setImprovements] = useState(initialImprovements ?? "");
   const [pending, startTransition] = useTransition();
   const [showSkipNudge, setShowSkipNudge] = useState(false);
 
@@ -4048,8 +4068,12 @@ function InterviewScheduleModal({
         });
         close();
         onUpdated();
-      } catch {
-        setError("Falha ao salvar. Tente novamente.");
+      } catch (err) {
+        setError(
+          err instanceof Error && err.message.trim()
+            ? err.message
+            : "Falha ao salvar. Tente novamente.",
+        );
       }
     });
   }
@@ -5721,6 +5745,114 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
                 events={application.events}
                 onUpdated={handleUpdated}
               />
+              {application.status === "REJECTED" && (
+                <div
+                  style={{
+                    background: "#fafaf6",
+                    border: "1px solid rgba(10,10,10,0.08)",
+                    borderRadius: 14,
+                    padding: "18px 20px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom:
+                        application.rejectionStrengths ||
+                        application.rejectionImprovements
+                          ? 14
+                          : 0,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 9.5,
+                        letterSpacing: "0.1em",
+                        fontWeight: 500,
+                        color: "#8a8a85",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Reflexão do processo
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowRejectionModal(true)}
+                      style={{
+                        fontFamily: GEIST,
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color: "#3a3a36",
+                        background: "rgba(10,10,10,0.04)",
+                        border: "1px solid rgba(10,10,10,0.1)",
+                        borderRadius: 7,
+                        padding: "5px 10px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {application.rejectionStrengths ||
+                      application.rejectionImprovements
+                        ? "Editar"
+                        : "Preencher"}
+                    </button>
+                  </div>
+                  {application.rejectionStrengths && (
+                    <div style={{ marginBottom: 10 }}>
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 9,
+                          letterSpacing: "0.08em",
+                          color: "#8a8a85",
+                          marginBottom: 4,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        O que foi bem
+                      </div>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 13,
+                          color: "#3a3a36",
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        {application.rejectionStrengths}
+                      </p>
+                    </div>
+                  )}
+                  {application.rejectionImprovements && (
+                    <div>
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 9,
+                          letterSpacing: "0.08em",
+                          color: "#8a8a85",
+                          marginBottom: 4,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        O que poderia ter ido melhor
+                      </div>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 13,
+                          color: "#3a3a36",
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        {application.rejectionImprovements}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Right column */}
@@ -5756,6 +5888,8 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
             jobTitle={application.jobTitle}
             onClose={() => setShowRejectionModal(false)}
             onUpdated={handleUpdated}
+            initialStrengths={application.rejectionStrengths}
+            initialImprovements={application.rejectionImprovements}
           />
         )}
 

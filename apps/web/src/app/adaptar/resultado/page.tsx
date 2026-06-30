@@ -112,6 +112,45 @@ const GUEST_MOCK_KW: Array<{ kw: string; pontos: number }> = [
   { kw: "certificação-relevante", pontos: 2 },
 ];
 
+const GUEST_MOCK_HARD_GATES: Array<{ text: string; met: boolean }> = [
+  { text: "Requisito técnico obrigatório não avaliado", met: false },
+  { text: "Qualificação eliminatória da vaga", met: false },
+  { text: "Critério inegociável do recrutador", met: false },
+];
+
+const GUEST_MOCK_MISSING: Array<{
+  id: string;
+  titulo: string;
+  descricao: string;
+  pontos: number;
+}> = [
+  {
+    id: "gm0",
+    titulo: "Evidência técnica ausente",
+    descricao: "Exigida pela vaga mas não encontrada no CV",
+    pontos: 6,
+  },
+  {
+    id: "gm1",
+    titulo: "Qualificação não comprovada",
+    descricao: "Recrutador vai notar a ausência",
+    pontos: 4,
+  },
+  {
+    id: "gm2",
+    titulo: "Experiência setorial não evidenciada",
+    descricao: "Reduz aderência ao perfil exigido",
+    pontos: 3,
+  },
+];
+
+const GUEST_MOCK_SINAIS: string[] = [
+  "Sinal de candidato forte não revelado",
+  "Diferencial identificado em CVs aprovados",
+  "Padrão recorrente em perfis selecionados",
+  "Elemento-chave do perfil ideal da vaga",
+];
+
 const GUEST_MOCK_PROBLEMAS: Array<{
   tipo: "critico" | "atencao" | "ok";
   titulo: string;
@@ -1412,6 +1451,19 @@ export default function ResultadoPage() {
       else next.add(kw);
       return next;
     });
+    if (reviewAdaptationId) {
+      const next = new Set(selecionadas);
+      if (next.has(kw)) next.delete(kw);
+      else next.add(kw);
+      try {
+        sessionStorage.setItem(
+          `kw_sel_${reviewAdaptationId}`,
+          JSON.stringify(Array.from(next)),
+        );
+      } catch {
+        // quota or unavailable
+      }
+    }
   };
 
   const waitForMinimumDuration = async (startedAt: number, minMs: number) => {
@@ -2357,7 +2409,10 @@ export default function ResultadoPage() {
                 {hardGates.length > 0 && (
                   <div style={{ marginBottom: 18 }}>
                     <SubLabel>PONTOS INEGOCIÁVEIS DA VAGA</SubLabel>
-                    {hardGates.map((gate, index) => (
+                    {(isGuestView
+                      ? hardGates.slice(0, GUEST_VISIBLE)
+                      : hardGates
+                    ).map((gate, index) => (
                       <ReqRow
                         key={
                           gate.requirementKey ??
@@ -2369,6 +2424,26 @@ export default function ResultadoPage() {
                         }
                       />
                     ))}
+                    {isGuestView && hardGates.length > GUEST_VISIBLE && (
+                      <GuestBlurOverlay
+                        count={Math.min(
+                          hardGates.length - GUEST_VISIBLE,
+                          GUEST_MOCK_HARD_GATES.length,
+                        )}
+                      >
+                        <div>
+                          {GUEST_MOCK_HARD_GATES.slice(
+                            0,
+                            Math.min(
+                              hardGates.length - GUEST_VISIBLE,
+                              GUEST_MOCK_HARD_GATES.length,
+                            ),
+                          ).map((g) => (
+                            <ReqRow key={g.text} text={g.text} met={g.met} />
+                          ))}
+                        </div>
+                      </GuestBlurOverlay>
+                    )}
                   </div>
                 )}
                 <div>
@@ -2457,7 +2532,10 @@ export default function ResultadoPage() {
                 {data.ajustes_indisponiveis.length > 0 && (
                   <div>
                     <SubLabel>SEM EVIDÊNCIAS NO SEU CV</SubLabel>
-                    {data.ajustes_indisponiveis.map((a) => (
+                    {(isGuestView
+                      ? data.ajustes_indisponiveis.slice(0, GUEST_VISIBLE)
+                      : data.ajustes_indisponiveis
+                    ).map((a) => (
                       <ItemCard
                         key={a.id}
                         type="missing"
@@ -2465,6 +2543,33 @@ export default function ResultadoPage() {
                         pts={`-${a.pontos} pts`}
                       />
                     ))}
+                    {isGuestView &&
+                      data.ajustes_indisponiveis.length > GUEST_VISIBLE && (
+                        <GuestBlurOverlay
+                          count={Math.min(
+                            data.ajustes_indisponiveis.length - GUEST_VISIBLE,
+                            GUEST_MOCK_MISSING.length,
+                          )}
+                        >
+                          <div>
+                            {GUEST_MOCK_MISSING.slice(
+                              0,
+                              Math.min(
+                                data.ajustes_indisponiveis.length -
+                                  GUEST_VISIBLE,
+                                GUEST_MOCK_MISSING.length,
+                              ),
+                            ).map((a) => (
+                              <ItemCard
+                                key={a.id}
+                                type="missing"
+                                text={`${a.titulo} — ${a.descricao}`}
+                                pts={`-${a.pontos} pts`}
+                              />
+                            ))}
+                          </div>
+                        </GuestBlurOverlay>
+                      )}
                   </div>
                 )}
               </div>
@@ -3165,10 +3270,41 @@ export default function ResultadoPage() {
                   }}
                   className="res-s5-grid"
                 >
-                  {data.sinais_referencia.map((item) => (
+                  {(isGuestView
+                    ? data.sinais_referencia.slice(0, GUEST_VISIBLE)
+                    : data.sinais_referencia
+                  ).map((item) => (
                     <ReferenceCard key={item} text={item} />
                   ))}
                 </div>
+                {isGuestView &&
+                  data.sinais_referencia.length > GUEST_VISIBLE && (
+                    <GuestBlurOverlay
+                      count={Math.min(
+                        data.sinais_referencia.length - GUEST_VISIBLE,
+                        GUEST_MOCK_SINAIS.length,
+                      )}
+                    >
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: 10,
+                          marginTop: 8,
+                        }}
+                      >
+                        {GUEST_MOCK_SINAIS.slice(
+                          0,
+                          Math.min(
+                            data.sinais_referencia.length - GUEST_VISIBLE,
+                            GUEST_MOCK_SINAIS.length,
+                          ),
+                        ).map((item) => (
+                          <ReferenceCard key={item} text={item} />
+                        ))}
+                      </div>
+                    </GuestBlurOverlay>
+                  )}
               </SecCard>
             )}
 
@@ -3771,7 +3907,7 @@ export default function ResultadoPage() {
                         marginBottom: 6,
                       }}
                     >
-                      SEU SCORE APÓS LIBERAR
+                      SEU SCORE PODE CHEGAR
                     </p>
                     <p
                       style={{

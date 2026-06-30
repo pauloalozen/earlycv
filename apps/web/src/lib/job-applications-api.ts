@@ -332,7 +332,22 @@ export async function scheduleInterview(
     `/job-applications/${id}/interview`,
     data,
   );
-  if (!response.ok) throw new Error("Falha ao agendar entrevista");
+  if (!response.ok) {
+    let message = "Falha ao agendar entrevista";
+    try {
+      const body = (await response.json()) as {
+        message?: string | string[];
+      };
+      if (typeof body.message === "string" && body.message.trim()) {
+        message = body.message;
+      } else if (Array.isArray(body.message) && body.message.length > 0) {
+        message = body.message[0];
+      }
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(message);
+  }
   return response.json() as Promise<JobApplicationDto>;
 }
 

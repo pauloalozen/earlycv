@@ -802,12 +802,29 @@ function CandRow({
     if (!cvAdaptationIdForActions || redeeming) return;
     setRedeeming(true);
     setRedeemError(null);
+
+    let storedKeywords: string[] = [];
+    try {
+      const raw = sessionStorage.getItem(`kw_sel_${cvAdaptationIdForActions}`);
+      if (raw) storedKeywords = JSON.parse(raw) as string[];
+    } catch {
+      // unavailable or malformed
+    }
+
     try {
       const response = await fetch(
         `/api/cv-adaptation/${cvAdaptationIdForActions}/redeem-credit`,
         {
           method: "POST",
           cache: "no-store",
+          ...(storedKeywords.length > 0
+            ? {
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  selectedMissingKeywords: storedKeywords,
+                }),
+              }
+            : {}),
         },
       );
       if (!response.ok) {
