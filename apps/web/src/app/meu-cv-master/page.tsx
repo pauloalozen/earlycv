@@ -186,7 +186,7 @@ export default async function MeuCvMasterPage({
             </Link>
 
             {/* Cabeçalho */}
-            <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-6">
               <div className="flex-1">
                 <h1 className="text-[clamp(28px,3.5vw,36px)] font-medium leading-tight tracking-[-0.04em]">
                   Meu{" "}
