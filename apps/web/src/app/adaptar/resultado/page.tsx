@@ -1063,7 +1063,12 @@ function ScoreBreakdownBar({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {sec.label}
+                  {sec.label.split(" · ")[0]}
+                  <span className="score-bar-label-desc">
+                    {sec.label.includes(" · ")
+                      ? ` · ${sec.label.split(" · ")[1]}`
+                      : ""}
+                  </span>
                 </span>
               </div>
               <span
@@ -4558,6 +4563,7 @@ export default function ResultadoPage() {
         }
         @media (max-width: 768px) {
           .resultado-content { padding: 12px 16px 60px !important; }
+          .score-bar-label-desc { display: none; }
         }
         @media (max-width: 540px) {
           .res-meta-row { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; align-items: start !important; column-gap: 10px !important; row-gap: 8px !important; padding-top: 14px !important; }
