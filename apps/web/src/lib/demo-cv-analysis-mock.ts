@@ -15,9 +15,9 @@ export const DEMO_CV_ANALYSIS_MOCK: CvAnalysisData = {
       "Com os ajustes identificados, sua compatibilidade sobe de 42 para 87 pontos.",
   },
   secoes: {
-    experiencia: { score: 14, max: 40 },
+    experiencia: { score: 18, max: 50 },
     competencias: { score: 12, max: 40 },
-    formatacao: { score: 8, max: 20 },
+    formatacao: { score: 4, max: 10 },
   },
   positivos: [
     {
