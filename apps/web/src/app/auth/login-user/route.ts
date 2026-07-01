@@ -6,7 +6,7 @@ import { createPostRedirectResponse } from "@/lib/route-response";
 function sanitizeNext(next: string | undefined): string {
   const raw = next?.trim();
   if (!raw) {
-    return "/dashboard";
+    return "/meu-perfil";
   }
 
   const normalized = raw.startsWith("%")
@@ -20,7 +20,7 @@ function sanitizeNext(next: string | undefined): string {
     : raw;
 
   if (!normalized.startsWith("/") || normalized.startsWith("//")) {
-    return "/dashboard";
+    return "/meu-perfil";
   }
   return normalized;
 }

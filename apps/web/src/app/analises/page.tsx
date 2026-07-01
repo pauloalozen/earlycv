@@ -21,7 +21,7 @@ import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMasterResumeFromList, listMyResumes } from "@/lib/resumes-api";
-import { HistoryActionLinks } from "../dashboard_old/history-action-links";
+import { HistoryActionLinks } from "../dashboard/history-action-links";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },

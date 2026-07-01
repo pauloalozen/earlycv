@@ -27,8 +27,8 @@ test("getDefaultAppRedirectPath sends unverified users to email verification", (
   );
 });
 
-test("getDefaultAppRedirectPath sends verified staff to admin and common users to dashboard", () => {
-  assert.equal(getDefaultAppRedirectPath(buildUser()), "/dashboard");
+test("getDefaultAppRedirectPath sends verified staff to admin and common users to meu-perfil", () => {
+  assert.equal(getDefaultAppRedirectPath(buildUser()), "/meu-perfil");
   assert.equal(
     getDefaultAppRedirectPath(
       buildUser({ internalRole: "admin", isStaff: true }),
@@ -54,7 +54,7 @@ test("getRouteAccessRedirectPath protects admin and superadmin routes by verific
   );
   assert.equal(
     getRouteAccessRedirectPath("/superadmin", buildUser()),
-    "/dashboard",
+    "/meu-perfil",
   );
   assert.equal(
     getRouteAccessRedirectPath(

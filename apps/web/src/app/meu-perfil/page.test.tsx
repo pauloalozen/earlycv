@@ -22,6 +22,10 @@ vi.mock("@/components/page-shell", () => ({
   PageShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+vi.mock("../dashboard/guest-analysis-claimer", () => ({
+  GuestAnalysisClaimer: () => <div data-testid="guest-analysis-claimer" />,
+}));
+
 vi.mock("@/lib/app-session.server", () => ({
   getCurrentAppUserFromCookies: getCurrentAppUserFromCookiesMock,
 }));
@@ -127,6 +131,7 @@ describe("/meu-perfil", () => {
   it("renders the hub with the reference composition", async () => {
     render(await MeuPerfilPage());
 
+    expect(screen.getByTestId("guest-analysis-claimer")).toBeTruthy();
     expect(screen.getByRole("heading", { name: /olá, ana/i })).toBeTruthy();
     expect(
       screen
@@ -271,19 +276,9 @@ describe("/meu-perfil", () => {
 
     render(await MeuPerfilPage());
 
-    const activeKpi = screen.getByText(/candidaturas ativas/i).closest("div");
-    const analyzedKpi = screen.getByText(/cvs analisados/i).closest("div");
-    const averageKpi = screen.getByText(/score médio/i).closest("div");
+    const errorValues = screen.getAllByText("Erro ao carregar");
 
-    expect(
-      within(activeKpi as HTMLElement).getByText("Erro ao carregar"),
-    ).toBeTruthy();
-    expect(
-      within(analyzedKpi as HTMLElement).getByText("Erro ao carregar"),
-    ).toBeTruthy();
-    expect(
-      within(averageKpi as HTMLElement).getByText("Erro ao carregar"),
-    ).toBeTruthy();
+    expect(errorValues).toHaveLength(3);
     expect(
       screen.getByRole("link", { name: /analista de dados/i }),
     ).toBeTruthy();

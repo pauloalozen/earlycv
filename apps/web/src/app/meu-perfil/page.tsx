@@ -18,6 +18,7 @@ import {
 } from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
+import { GuestAnalysisClaimer } from "../dashboard/guest-analysis-claimer";
 import {
   buildProfileBlockStates,
   type UserProfileRecord,
@@ -142,6 +143,8 @@ export default async function MeuPerfilPage() {
         />
 
         <div className="mx-auto max-w-[1100px] px-6 pb-20 pt-[88px] md:px-8 lg:px-10">
+          <GuestAnalysisClaimer />
+
           <div className="space-y-4">
             {/* 1 · Saudação */}
             <h1 className="text-[clamp(36px,4vw,44px)] font-medium leading-none tracking-[-0.04em]">
@@ -436,7 +439,9 @@ export default async function MeuPerfilPage() {
                 </p>
                 <div className="h-px flex-1 bg-[rgba(154,61,40,0.18)]" />
               </div>
-              <DeleteAccountSection creditsRemaining={plan?.creditsRemaining ?? 0} />
+              <DeleteAccountSection
+                creditsRemaining={plan?.creditsRemaining ?? 0}
+              />
             </div>
           </div>
         </div>

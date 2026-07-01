@@ -31,7 +31,7 @@ export function getDefaultAppRedirectPath(user: AppSessionUser | null) {
     return "/admin";
   }
 
-  return "/dashboard";
+  return "/meu-perfil";
 }
 
 export function getRouteAccessRedirectPath(

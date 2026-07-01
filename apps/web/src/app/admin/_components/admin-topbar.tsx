@@ -94,7 +94,7 @@ export function AdminTopbar({
 
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <Link
-            href="/dashboard"
+            href="/meu-perfil"
             style={{
               fontSize: 12.5,
               color: "#6a6560",

@@ -275,8 +275,6 @@ function getAuthContext() {
 
 function isPrivateAuthenticatedRoute(pathname: string): boolean {
   return (
-    pathname === "/dashboard" ||
-    pathname.startsWith("/dashboard/") ||
     pathname === "/meu-perfil" ||
     pathname.startsWith("/meu-perfil/") ||
     pathname === "/compras" ||

@@ -443,11 +443,11 @@ describe("Template journey tracking", () => {
     });
 
     first.unmount();
-    usePathnameMock.mockReturnValue("/dashboard");
+    usePathnameMock.mockReturnValue("/meu-perfil");
 
     render(
       <Template>
-        <div>dashboard</div>
+        <div>meu-perfil</div>
       </Template>,
     );
 
@@ -461,8 +461,8 @@ describe("Template journey tracking", () => {
     });
   });
 
-  it("waits auth loading before emitting private dashboard page_view", async () => {
-    usePathnameMock.mockReturnValue("/dashboard");
+  it("waits auth loading before emitting private meu-perfil page_view", async () => {
+    usePathnameMock.mockReturnValue("/meu-perfil");
     vi.stubGlobal(
       "fetch",
       vi.fn(() => new Promise(() => {})),
@@ -478,7 +478,7 @@ describe("Template journey tracking", () => {
 
     render(
       <Template>
-        <div>dashboard</div>
+        <div>meu-perfil</div>
       </Template>,
     );
 

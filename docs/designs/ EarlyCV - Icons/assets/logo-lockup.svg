@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 40" fill="none">
+  <g>
+    <rect x="0.00" y="5.00" width="9.00" height="4.88" rx="1.50" fill="#0a0a0a"></rect>
+    <rect x="12.00" y="5.00" width="9.00" height="4.88" rx="1.50" fill="#0a0a0a"></rect>
+    <rect x="24.00" y="5.00" width="6.00" height="4.88" rx="1.50" fill="#c6ff3a"></rect>
+    <rect x="0.00" y="13.40" width="12.00" height="4.88" rx="1.50" fill="#c6ff3a"></rect>
+    <rect x="15.00" y="13.40" width="13.50" height="4.88" rx="1.50" fill="#0a0a0a"></rect>
+    <rect x="0.00" y="21.80" width="5.25" height="4.88" rx="1.50" fill="#0a0a0a"></rect>
+    <rect x="8.25" y="21.80" width="12.00" height="4.88" rx="1.50" fill="#c6ff3a"></rect>
+    <rect x="22.50" y="21.80" width="6.00" height="4.88" rx="1.50" fill="#0a0a0a"></rect>
+    <rect x="0.00" y="30.13" width="16.50" height="4.88" rx="1.50" fill="#0a0a0a"></rect>
+    <rect x="19.50" y="30.13" width="6.75" height="4.88" rx="1.50" fill="rgba(10,10,10,0.16)"></rect>
+  </g>
+  <text x="44" y="28" font-family="Geist, -apple-system, sans-serif" font-size="27" letter-spacing="-1.4"><tspan font-weight="300" fill="#0a0a0a">early</tspan><tspan font-weight="700" fill="#0a0a0a">CV</tspan></text>
+</svg>

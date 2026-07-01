@@ -47,7 +47,7 @@ export default function PagamentoFalhou() {
           </Link>
 
           <Link
-            href="/dashboard"
+            href="/meu-perfil"
             className="text-sm text-gray-500 hover:text-gray-700"
           >
             Voltar para análise e tentar depois

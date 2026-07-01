@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <rect width="40" height="40" rx="9" fill="#0a0a0a"></rect>
+  <g transform="translate(6,6.7)">
+    <rect x="0.00" y="0.00" width="8.40" height="4.55" rx="1.40" fill="rgba(250,250,246,0.93)"></rect>
+    <rect x="11.20" y="0.00" width="8.40" height="4.55" rx="1.40" fill="rgba(250,250,246,0.93)"></rect>
+    <rect x="22.40" y="0.00" width="5.60" height="4.55" rx="1.40" fill="#c6ff3a"></rect>
+    <rect x="0.00" y="7.84" width="11.20" height="4.55" rx="1.40" fill="#c6ff3a"></rect>
+    <rect x="14.00" y="7.84" width="12.60" height="4.55" rx="1.40" fill="rgba(250,250,246,0.93)"></rect>
+    <rect x="0.00" y="15.68" width="4.90" height="4.55" rx="1.40" fill="rgba(250,250,246,0.93)"></rect>
+    <rect x="7.70" y="15.68" width="11.20" height="4.55" rx="1.40" fill="#c6ff3a"></rect>
+    <rect x="21.00" y="15.68" width="5.60" height="4.55" rx="1.40" fill="rgba(250,250,246,0.93)"></rect>
+    <rect x="0.00" y="23.45" width="15.40" height="4.55" rx="1.40" fill="rgba(250,250,246,0.93)"></rect>
+    <rect x="18.20" y="23.45" width="6.30" height="4.55" rx="1.40" fill="rgba(250,250,246,0.14)"></rect>
+  </g>
+</svg>

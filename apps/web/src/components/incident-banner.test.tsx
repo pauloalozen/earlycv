@@ -7,9 +7,7 @@ describe("shouldShowIncidentBannerOnPathname", () => {
     expect(shouldShowIncidentBannerOnPathname("/entrar")).toBe(true);
     expect(shouldShowIncidentBannerOnPathname("/esqueceu-senha")).toBe(true);
     expect(shouldShowIncidentBannerOnPathname("/adaptar")).toBe(true);
-    expect(shouldShowIncidentBannerOnPathname("/dashboard/historico")).toBe(
-      true,
-    );
+    expect(shouldShowIncidentBannerOnPathname("/meu-perfil")).toBe(true);
     expect(shouldShowIncidentBannerOnPathname("/compras")).toBe(true);
     expect(shouldShowIncidentBannerOnPathname("/pagamento/checkout/abc")).toBe(
       true,

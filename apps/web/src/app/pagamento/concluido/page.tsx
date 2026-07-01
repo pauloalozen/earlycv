@@ -747,7 +747,7 @@ function ConcluidoContent() {
                 }}
               >
                 <Link
-                  href="/dashboard"
+                  href="/meu-perfil"
                   style={{
                     color: "#3a3a38",
                     textDecoration: "underline",
@@ -1034,7 +1034,7 @@ function ConcluidoContent() {
             Não foi possível verificar o status do pagamento.
           </p>
           <Link
-            href="/dashboard"
+            href="/meu-perfil"
             style={{
               fontSize: 13,
               color: "#3a3a38",

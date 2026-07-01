@@ -11,6 +11,7 @@ const API_DEPENDENT_ROUTE_PREFIXES = [
   "/compras",
   "/dashboard",
   "/entrar",
+  "/meu-perfil",
   "/esqueceu-senha",
   "/pagamento",
   "/registrar",
