@@ -201,6 +201,7 @@ export function LandingVariantE() {
                   marginBottom: 28,
                   textDecoration: "none",
                 }}
+                className="e-hero-kicker"
               >
                 <span
                   style={{
@@ -253,6 +254,7 @@ export function LandingVariantE() {
                   fontFamily: SERIF_ITALIC,
                   fontStyle: "italic",
                 }}
+                className="e-hero-subtitle"
               >
                 Uma candidatura organizada
                 <br />
@@ -268,6 +270,7 @@ export function LandingVariantE() {
                   maxWidth: 480,
                   fontWeight: 400,
                 }}
+                className="e-hero-body"
               >
                 Cole seu CV e a vaga. O EarlyCV mostra o que falta, gera uma
                 versão mais alinhada, organiza sua candidatura e ajuda você a se
@@ -281,6 +284,7 @@ export function LandingVariantE() {
                   alignItems: "center",
                   marginBottom: 52,
                 }}
+                className="e-hero-cta-row"
               >
                 <Link
                   href="/adaptar"
@@ -333,6 +337,7 @@ export function LandingVariantE() {
                   paddingTop: 28,
                   borderTop: "1px solid rgba(10,10,10,0.08)",
                 }}
+                className="e-hero-stats"
               >
                 {[
                   { num: "≈90s", label: "ANÁLISE\nCOMPLETA" },
@@ -365,6 +370,7 @@ export function LandingVariantE() {
                           color: "#0a0a0a",
                           lineHeight: 1,
                         }}
+                        className="e-hero-stat-num"
                       >
                         {item.num}
                       </span>
@@ -1941,6 +1947,16 @@ export function LandingVariantE() {
           .e-nav { padding: 0 20px !important; }
           .e-nav-links { display: none !important; }
           .e-hero-widget { display: none !important; }
+
+          /* Hero mobile — base (telas pequenas / com chrome do browser) */
+          .e-hero-grid { padding: 20px 20px !important; }
+          .e-hero-kicker { margin-bottom: 12px !important; }
+          .e-hero-h1 { font-size: 34px !important; letter-spacing: -1.8px !important; margin-bottom: 8px !important; }
+          .e-hero-subtitle { font-size: 24px !important; margin-bottom: 12px !important; }
+          .e-hero-body { font-size: 15px !important; line-height: 1.5 !important; margin-bottom: 14px !important; }
+          .e-hero-cta-row { margin-bottom: 16px !important; }
+          .e-hero-stats { padding-top: 10px !important; align-items: flex-start !important; gap: 16px !important; }
+          .e-hero-stat-num { font-size: 22px !important; }
           .e-candidaturas-visual { order: 2 !important; }
           .e-candidaturas-text { order: 1 !important; }
           .e-prep-visual { display: none !important; }
@@ -1968,6 +1984,28 @@ export function LandingVariantE() {
         @media (max-width: 580px) {
           .e-pricing-grid { grid-template-columns: 1fr !important; }
           .e-footer-strip { flex-direction: column !important; }
+        }
+
+        /* Hero mobile — telas médias (700–800px, ex: iPhone SE sem chrome, Pixel 6a) */
+        @media (max-width: 768px) and (min-height: 700px) {
+          .e-hero-grid { padding: 36px 20px !important; }
+          .e-hero-kicker { margin-bottom: 30px !important; }
+          .e-hero-h1 { margin-bottom: 16px !important; }
+          .e-hero-subtitle { margin-bottom: 26px !important; }
+          .e-hero-body { margin-bottom: 30px !important; }
+          .e-hero-cta-row { margin-bottom: 40px !important; }
+          .e-hero-stats { padding-top: 24px !important; }
+        }
+
+        /* Hero mobile — telas grandes (800px+, ex: Galaxy S24, iPhone 12/13/14) */
+        @media (max-width: 768px) and (min-height: 800px) {
+          .e-hero-grid { padding: 48px 20px !important; }
+          .e-hero-kicker { margin-bottom: 40px !important; }
+          .e-hero-h1 { margin-bottom: 20px !important; }
+          .e-hero-subtitle { margin-bottom: 32px !important; }
+          .e-hero-body { margin-bottom: 44px !important; }
+          .e-hero-cta-row { margin-bottom: 56px !important; }
+          .e-hero-stats { padding-top: 32px !important; }
         }
       `}</style>
 
