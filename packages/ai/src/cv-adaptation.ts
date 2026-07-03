@@ -1232,6 +1232,11 @@ ${JSON.stringify(input.existingRequirements ?? [])}
 </REQUISITOS_EXISTENTES>`;
 }
 
+// Fixed seed + temperature=0/0.3 on the calls below: keeps requirement
+// classification (and therefore the score) consistent across repeated
+// analyses of the same CV+job, instead of drifting run to run.
+const DETERMINISTIC_SEED = 42;
+
 const ANALYSIS_SYSTEM_PROMPT = `Você é um especialista em análise de currículo com foco em aumentar chances reais de entrevista.
 
 IMPORTANTE:
@@ -2464,7 +2469,7 @@ function deriveProjectedCoveragePercent(
 
   return Math.min(
     100,
-    requirement.coveragePercent + 25,
+    requirement.coveragePercent + 50,
   ) as RequirementCoveragePercent;
 }
 
@@ -2534,6 +2539,17 @@ function buildRequirementScoringSummary(
     (sum, item) => sum + item.currentContribution,
     0,
   );
+  // Partial/weak-evidence items already carry real (if incomplete) credit —
+  // counting only fully "covered" items here created a cliff-edge: the
+  // promised score assumed adaptation flips them to 100% covered, but a
+  // reanalysis that only manages to strengthen (not fully flip) an item's
+  // evidence would score it as if nothing improved. Crediting the actual
+  // current coverage of every item keeps atual/prometido/entregue consistent
+  // even when adaptation only partially closes a gap.
+  const totalCurrentWeight = weighted.reduce(
+    (sum, item) => sum + item.currentContribution,
+    0,
+  );
   const adjustableWeight = adjustableItems.reduce(
     (sum, item) => sum + item.upgradeContribution,
     0,
@@ -2544,10 +2560,12 @@ function buildRequirementScoringSummary(
   );
 
   const experienceCurrentBudget =
-    totalWeight > 0 ? Math.round((coveredWeight / totalWeight) * 50) : 0;
+    totalWeight > 0 ? Math.round((totalCurrentWeight / totalWeight) * 50) : 0;
   const experienceProjectedBudget =
     totalWeight > 0
-      ? Math.round(((coveredWeight + adjustableWeight) / totalWeight) * 50)
+      ? Math.round(
+          ((totalCurrentWeight + adjustableWeight) / totalWeight) * 50,
+        )
       : 0;
   const adjustmentBudget = clamp(
     experienceProjectedBudget - experienceCurrentBudget,
@@ -2556,6 +2574,11 @@ function buildRequirementScoringSummary(
   );
   const unavailableBudget = clamp(50 - experienceProjectedBudget, 0, 50);
 
+  // "positivos" only lists fully-covered items, so its own budget must stay
+  // scoped to coveredWeight — not experienceCurrentBudget, which now also
+  // carries partial-evidence credit that belongs to the "ajustes" items.
+  const coveredOnlyBudget =
+    totalWeight > 0 ? Math.round((coveredWeight / totalWeight) * 50) : 0;
   const positivos = applyBudget(
     coveredItems
       .slice()
@@ -2570,7 +2593,7 @@ function buildRequirementScoringSummary(
         pontos: Math.max(1, Math.round(requirement.currentContribution * 4)),
         coveragePercent: requirement.coveragePercent,
       })),
-    clamp(experienceCurrentBudget, 0, 50),
+    clamp(coveredOnlyBudget, 0, 50),
   );
 
   const ajustes = applyBudget(
@@ -2640,7 +2663,9 @@ function buildRequirementScoringSummary(
       ? (keywordSource?.possiveis ?? [])
       : keywordSource?.possiveis?.length
         ? keywordSource.possiveis
-        : []) as Array<{
+        : buildKeywordFallbackFromRequirements(weighted, "possible").map(
+            (kw) => ({ kw, pontos: 1 }),
+          )) as Array<{
       kw: string;
       pontos: number;
     }>,
@@ -2659,7 +2684,7 @@ function buildRequirementScoringSummary(
     }>,
   );
   const keywordPresentBudget =
-    totalWeight > 0 ? Math.round((coveredWeight / totalWeight) * 40) : 0;
+    totalWeight > 0 ? Math.round((totalCurrentWeight / totalWeight) * 40) : 0;
   const possibleKeywordWeight = weighted
     .filter(
       (item) =>
@@ -2684,7 +2709,12 @@ function buildRequirementScoringSummary(
     : applyBudget(keywordPossibleSeed, keywordPossibleBudget);
   const keywordAusentes = options?.preserveKeywordWeights
     ? keywordAbsentSeed
-    : applyBudget(keywordAbsentSeed, keywordAbsentBudget);
+    : keywordAbsentBudget > 0
+      ? applyBudget(keywordAbsentSeed, keywordAbsentBudget)
+      : // "ausentes" is an informational list (what's still missing), not a
+        // captured-value list — keep the labels even when presentes/possiveis
+        // legitimately consume the entire competencias budget.
+        keywordAbsentSeed.map((item) => ({ ...item, pontos: 0 }));
 
   const formatFields = Array.isArray(formatoCv?.campos) ? formatoCv.campos : [];
   const penalidadesCamposAusentes = formatFields.filter(
@@ -2866,7 +2896,8 @@ export async function analyzeAndAdaptCv(
       { role: "user", content: userMessage },
     ],
     response_format: { type: "json_object" },
-    // temperature: 0.3,
+    temperature: 0,
+    seed: DETERMINISTIC_SEED,
   });
 
   const content = response.choices[0]?.message.content;
@@ -2937,7 +2968,8 @@ export async function adaptCv(
         },
       ],
       response_format: { type: "json_object" },
-      // temperature: 0.3,
+      temperature: 0.3,
+      seed: DETERMINISTIC_SEED,
     });
 
     const content = response.choices[0]?.message.content;
