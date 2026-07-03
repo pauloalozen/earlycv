@@ -179,6 +179,7 @@ type RequirementScoringSummary = {
     titulo: string;
     descricao: string;
     pontos: number;
+    pontosAtuais: number;
     dica: string;
     coveragePercent: RequirementCoveragePercent;
   }>;
@@ -190,9 +191,9 @@ type RequirementScoringSummary = {
     coveragePercent: RequirementCoveragePercent;
   }>;
   keywords: {
-    presentes: Array<{ kw: string; pontos: number }>;
-    possiveis: Array<{ kw: string; pontos: number }>;
-    ausentes: Array<{ kw: string; pontos: number }>;
+    presentes: Array<{ kw: string; pontos: number; importance?: JobRequirementImportance }>;
+    possiveis: Array<{ kw: string; pontos: number; importance?: JobRequirementImportance }>;
+    ausentes: Array<{ kw: string; pontos: number; importance?: JobRequirementImportance }>;
   };
   lacunas: string[];
   atsKeywords: CvAnalysisOutput["ats_keywords"];
@@ -1125,6 +1126,8 @@ export type CvAnalysisOutput = {
     titulo: string;
     descricao: string;
     pontos: number;
+    /** Pontos que o item já contribui hoje no score atual (evidência parcial), separado do ganho adicional em `pontos` */
+    pontosAtuais?: number;
     dica: string;
     categoria?: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
     coveragePercent?: RequirementCoveragePercent;
@@ -1138,9 +1141,9 @@ export type CvAnalysisOutput = {
   }>;
   /** Palavras-chave da vaga com impacto por keyword */
   keywords: {
-    presentes: Array<{ kw: string; pontos: number }>;
-    possiveis?: Array<{ kw: string; pontos: number }>;
-    ausentes: Array<{ kw: string; pontos: number }>;
+    presentes: Array<{ kw: string; pontos: number; importance?: JobRequirementImportance }>;
+    possiveis?: Array<{ kw: string; pontos: number; importance?: JobRequirementImportance }>;
+    ausentes: Array<{ kw: string; pontos: number; importance?: JobRequirementImportance }>;
   };
   /** Análise do formato do CV para sistemas ATS */
   formato_cv: {
@@ -1584,19 +1587,22 @@ SAÍDA — JSON VÁLIDO, SEM MARKDOWN
     "presentes": [
       {
         "kw": "keyword presente no CV",
-        "pontos": number
+        "pontos": number,
+        "importance": "high" | "medium" | "low"
       }
     ],
     "possiveis": [
       {
         "kw": "keyword com base parcial no CV e que pode ser reforçada sem inventar fatos",
-        "pontos": number
+        "pontos": number,
+        "importance": "high" | "medium" | "low"
       }
     ],
     "ausentes": [
       {
         "kw": "termo selecionável de CV ausente, curto e relevante para triagem",
-        "pontos": number
+        "pontos": number,
+        "importance": "high" | "medium" | "low"
       }
     ]
   },
@@ -1713,7 +1719,8 @@ sum(keywords.presentes[].pontos)
 + sum(keywords.ausentes[].pontos)
 
 Regras:
-- A soma deve ser exatamente 40.
+- O sistema recalcula os pontos de cada keyword a partir do campo "importance" — preencha "pontos" com sua melhor estimativa, mas "importance" é o campo que decide o peso real.
+- "importance" deve refletir o quão central a keyword é para a vaga: "high" para requisitos centrais/inegociáveis, "medium" para relevantes mas não decisivos, "low" para complementares/nice-to-have.
 - Priorize keywords realmente importantes para a vaga.
 - Não liste keywords irrelevantes só para preencher espaço.
 - Não marque como presente competência que não aparece ou não fica evidente no CV.
@@ -2186,10 +2193,18 @@ function deriveKeywordMatchesFromEvidence(
 }
 
 function dedupeKeywordItems(
-  items: Array<{ kw: string; pontos: number }>,
-): Array<{ kw: string; pontos: number }> {
+  items: Array<{
+    kw: string;
+    pontos: number;
+    importance?: JobRequirementImportance;
+  }>,
+): Array<{ kw: string; pontos: number; importance?: JobRequirementImportance }> {
   const seen = new Set<string>();
-  const deduped: Array<{ kw: string; pontos: number }> = [];
+  const deduped: Array<{
+    kw: string;
+    pontos: number;
+    importance?: JobRequirementImportance;
+  }> = [];
   for (const item of items) {
     const kw = sanitizeKeywordLabel(item.kw);
     if (!kw) continue;
@@ -2202,9 +2217,22 @@ function dedupeKeywordItems(
         typeof item.pontos === "number" && Number.isFinite(item.pontos)
           ? Math.max(1, item.pontos)
           : 1,
+      importance: (["high", "medium", "low"] as const).includes(
+        item.importance as JobRequirementImportance,
+      )
+        ? item.importance
+        : undefined,
     });
   }
   return deduped;
+}
+
+// Mirrors getRequirementWeight's tiering, so a keyword's share of the
+// competências budget reflects how relevant it is to the vaga instead of
+// how many other keywords happen to share its bucket (presente/possível/
+// ausente). Ratios: medium = 1.25x low, high = 1.5x medium.
+function getKeywordWeight(importance?: JobRequirementImportance): number {
+  return importance === "high" ? 15 : importance === "low" ? 8 : 10;
 }
 
 function remapExistingKeywordRule(
@@ -2596,33 +2624,55 @@ function buildRequirementScoringSummary(
     clamp(coveredOnlyBudget, 0, 50),
   );
 
-  const ajustes = applyBudget(
-    adjustableItems
-      .slice()
-      .sort(
-        (a, b) =>
-          b.coveragePercent - a.coveragePercent ||
-          b.upgradeContribution - a.upgradeContribution ||
-          b.impactScore - a.impactScore,
-      )
-      .map((requirement) => ({
-        id:
-          requirement.requirementKey ??
-          slugifyRequirement(requirement.requirementText),
-        titulo: requirement.requirementText,
-        descricao:
-          requirement.gapExplanation ||
-          requirement.recommendation ||
-          "Cobertura parcial do requisito.",
-        pontos: Math.max(1, Math.round(requirement.upgradeContribution * 4)),
-        dica:
-          requirement.recommendation ||
-          "Evidencie esse requisito apenas se for verdadeiro no seu CV.",
-        coveragePercent: requirement.coveragePercent,
-        categoria: "ajuste_conteudo" as const,
-      })),
-    adjustmentBudget,
+  const adjustableItemsSorted = adjustableItems
+    .slice()
+    .sort(
+      (a, b) =>
+        b.coveragePercent - a.coveragePercent ||
+        b.upgradeContribution - a.upgradeContribution ||
+        b.impactScore - a.impactScore,
+    );
+
+  // Adjustable items already carry real (partial) credit inside
+  // experienceCurrentBudget — credit that "positivos" deliberately excludes
+  // (it only lists fully-covered items). Without a visible line for it, that
+  // credit is invisible to the user even though it's already counted in the
+  // section's current score. Distribute it explicitly as "pontosAtuais" per
+  // item, using the same budget-normalization as every other bucket here.
+  const adjustableCurrentBudget = clamp(
+    experienceCurrentBudget - coveredOnlyBudget,
+    0,
+    50,
   );
+  const ajustesCurrentValues = applyBudget(
+    adjustableItemsSorted.map((requirement) => ({
+      pontos: Math.max(1, Math.round(requirement.currentContribution * 4)),
+    })),
+    adjustableCurrentBudget,
+  );
+
+  const ajustes = applyBudget(
+    adjustableItemsSorted.map((requirement) => ({
+      id:
+        requirement.requirementKey ??
+        slugifyRequirement(requirement.requirementText),
+      titulo: requirement.requirementText,
+      descricao:
+        requirement.gapExplanation ||
+        requirement.recommendation ||
+        "Cobertura parcial do requisito.",
+      pontos: Math.max(1, Math.round(requirement.upgradeContribution * 4)),
+      dica:
+        requirement.recommendation ||
+        "Evidencie esse requisito apenas se for verdadeiro no seu CV.",
+      coveragePercent: requirement.coveragePercent,
+      categoria: "ajuste_conteudo" as const,
+    })),
+    adjustmentBudget,
+  ).map((item, index) => ({
+    ...item,
+    pontosAtuais: ajustesCurrentValues[index]?.pontos ?? 0,
+  }));
 
   const indisponiveis = applyBudget(
     unavailableItems
@@ -2683,34 +2733,56 @@ function buildRequirementScoringSummary(
       pontos: number;
     }>,
   );
+  // Keyword budgets used to scale with `requirements`' own weight system,
+  // which has nothing to do with how important a given keyword actually is —
+  // a bucket's share could land on a single keyword just because the other
+  // buckets happened to be small. Instead, weigh each keyword by its own
+  // importance tier (getKeywordWeight) and split the 40-pt budget by each
+  // bucket's share of the *total keyword weight*, same way Section 1 splits
+  // its budget by requirement weight. "ausentes" stays the remainder of the
+  // other two so presentes+possiveis+ausentes always sum to exactly 40.
+  const presentKeywordWeight = keywordPresentSeed.reduce(
+    (sum, item) => sum + getKeywordWeight(item.importance),
+    0,
+  );
+  const possibleKeywordWeight = keywordPossibleSeed.reduce(
+    (sum, item) => sum + getKeywordWeight(item.importance),
+    0,
+  );
+  const absentKeywordWeight = keywordAbsentSeed.reduce(
+    (sum, item) => sum + getKeywordWeight(item.importance),
+    0,
+  );
+  const totalKeywordWeight =
+    presentKeywordWeight + possibleKeywordWeight + absentKeywordWeight;
   const keywordPresentBudget =
-    totalWeight > 0 ? Math.round((totalCurrentWeight / totalWeight) * 40) : 0;
-  const possibleKeywordWeight = weighted
-    .filter(
-      (item) =>
-        item.coverageStatus === "partial" ||
-        (item.coverageStatus === "missing" && item.evidence.length > 0),
-    )
-    .reduce((sum, item) => sum + item.upgradeContribution, 0);
+    totalKeywordWeight > 0
+      ? Math.round((presentKeywordWeight / totalKeywordWeight) * 40)
+      : 0;
   const keywordPossibleBudget =
-    totalWeight > 0
-      ? Math.round((possibleKeywordWeight / totalWeight) * 40)
+    totalKeywordWeight > 0
+      ? Math.round((possibleKeywordWeight / totalKeywordWeight) * 40)
       : 0;
   const keywordAbsentBudget = clamp(
     40 - keywordPresentBudget - keywordPossibleBudget,
     0,
     40,
   );
+  const weightedKeywordSeed = <
+    T extends { kw: string; pontos: number; importance?: JobRequirementImportance },
+  >(
+    items: T[],
+  ) => items.map((item) => ({ ...item, pontos: getKeywordWeight(item.importance) }));
   const keywordPresentes = options?.preserveKeywordWeights
     ? keywordPresentSeed
-    : applyBudget(keywordPresentSeed, keywordPresentBudget);
+    : applyBudget(weightedKeywordSeed(keywordPresentSeed), keywordPresentBudget);
   const keywordPossiveis = options?.preserveKeywordWeights
     ? keywordPossibleSeed
-    : applyBudget(keywordPossibleSeed, keywordPossibleBudget);
+    : applyBudget(weightedKeywordSeed(keywordPossibleSeed), keywordPossibleBudget);
   const keywordAusentes = options?.preserveKeywordWeights
     ? keywordAbsentSeed
     : keywordAbsentBudget > 0
-      ? applyBudget(keywordAbsentSeed, keywordAbsentBudget)
+      ? applyBudget(weightedKeywordSeed(keywordAbsentSeed), keywordAbsentBudget)
       : // "ausentes" is an informational list (what's still missing), not a
         // captured-value list — keep the labels even when presentes/possiveis
         // legitimately consume the entire competencias budget.
@@ -2813,6 +2885,7 @@ function applyRequirementDrivenOverlay(
     descricao:
       "O parágrafo de apresentação será reescrito para destacar aderência à vaga.",
     pontos: 0,
+    pontosAtuais: 0,
     dica: "O perfil será adaptado automaticamente — revise e ajuste se necessário.",
     categoria: "texto_reescrito" as const,
     coveragePercent: 75 as const,

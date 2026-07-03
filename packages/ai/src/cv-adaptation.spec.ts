@@ -212,9 +212,9 @@ describe("analyzeAndAdaptCv", () => {
 
     assert.equal(output.analysisVersion, "requirements_v2");
     assert.equal(output.fit.score, 35);
-    assert.equal(output.fit.score_pos_ajustes, 80);
+    assert.equal(output.fit.score_pos_ajustes, 100);
     assert.equal(output.scoreBefore, 35);
-    assert.equal(output.scoreAfter, 80);
+    assert.equal(output.scoreAfter, 100);
     assert.equal(output.requirements.length, 1);
     assert.match(output.requirements[0]?.requirementKey ?? "", /sql/i);
     assert.equal(output.requirements[0]?.coveragePercent, 50);
