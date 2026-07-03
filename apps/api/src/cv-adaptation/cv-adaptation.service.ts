@@ -4061,7 +4061,7 @@ export class CvAdaptationService {
 
     const expiresAt = input.userId
       ? null
-      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     return this.database.analysisCvSnapshot.create({
       data: {
