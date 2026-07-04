@@ -231,6 +231,7 @@ function deriveVersionedRequirementBuckets(raw: CvAnalysisLike): null | {
     pontos: number;
     pontosAtuais?: number;
     dica: string;
+    categoria?: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
     coveragePercent: 0 | 25 | 50 | 75 | 100;
   }>;
   ajustesIndisponiveisRaw: Array<{
@@ -521,6 +522,11 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
             pontos: [11, 9, 7, 6, 5][index] ?? 5,
             pontosAtuais: undefined as number | undefined,
             dica: "",
+            categoria: undefined as
+              | "keywords_incluidas"
+              | "texto_reescrito"
+              | "ajuste_conteudo"
+              | undefined,
           })));
 
   const ajustesIndisponiveisRaw =
