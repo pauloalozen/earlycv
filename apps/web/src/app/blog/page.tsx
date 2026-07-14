@@ -3,7 +3,10 @@ import Link from "next/link";
 
 import { BlogAnalysisCta } from "@/components/blog/blog-analysis-cta";
 import { BlogCard } from "@/components/blog/blog-card";
-import { BlogCategoryFilter } from "@/components/blog/blog-category-filter";
+import {
+  type BlogPostOrder,
+  BlogCategoryFilter,
+} from "@/components/blog/blog-category-filter";
 import { BlogIndexViewTracker } from "@/components/blog/blog-view-trackers";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
@@ -42,13 +45,13 @@ const MONO = "var(--font-geist-mono), monospace";
 const GRAIN = `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`;
 
 type BlogIndexPageProps = {
-  searchParams: Promise<{ category?: string }>;
+  searchParams: Promise<{ category?: string; order?: string }>;
 };
 
 export default async function BlogIndexPage({
   searchParams,
 }: BlogIndexPageProps) {
-  const { category } = await searchParams;
+  const { category, order } = await searchParams;
   const posts = getAllPublishedBlogPosts();
   const categories = getBlogPostCategories(posts);
   const featured = getFeaturedBlogPost();
@@ -56,10 +59,15 @@ export default async function BlogIndexPage({
     typeof category === "string" && categories.includes(category)
       ? category
       : "Todos";
-  const filteredPosts =
+  const activeOrder: BlogPostOrder = order === "asc" ? "asc" : "desc";
+  const categoryFilteredPosts =
     activeCategory === "Todos"
       ? posts
       : posts.filter((post) => post.category === activeCategory);
+  const filteredPosts =
+    activeOrder === "asc"
+      ? [...categoryFilteredPosts].reverse()
+      : categoryFilteredPosts;
 
   return (
     <main
@@ -91,7 +99,7 @@ export default async function BlogIndexPage({
 
       <div
         style={{
-          maxWidth: 860,
+          maxWidth: 1100,
           margin: "0 auto",
           padding: "124px clamp(16px, 4vw, 40px) 0",
           position: "relative",
@@ -229,6 +237,7 @@ export default async function BlogIndexPage({
         <BlogCategoryFilter
           activeCategory={activeCategory}
           categories={categories}
+          order={activeOrder}
         />
 
         <section

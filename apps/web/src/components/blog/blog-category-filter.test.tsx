@@ -30,6 +30,7 @@ describe("BlogCategoryFilter", () => {
       <BlogCategoryFilter
         activeCategory="Todos"
         categories={["Curriculo", "Carreira"]}
+        order="desc"
       />,
     );
 
@@ -38,6 +39,7 @@ describe("BlogCategoryFilter", () => {
       "Todos",
       "Curriculo",
       "Carreira",
+      "DATA ↓",
     ]);
     expect(links[0]?.getAttribute("href")).toBe("/blog");
     expect(links[1]?.getAttribute("href")).toBe("/blog?category=Curriculo");
@@ -49,6 +51,7 @@ describe("BlogCategoryFilter", () => {
       <BlogCategoryFilter
         activeCategory="Curriculo"
         categories={["Curriculo", "Carreira"]}
+        order="desc"
       />,
     );
 
@@ -60,5 +63,22 @@ describe("BlogCategoryFilter", () => {
     expect(
       screen.getByRole("link", { name: "Todos" }).getAttribute("aria-current"),
     ).toBeNull();
+  });
+
+  it("toggles the date order and preserves the active category in the link", () => {
+    render(
+      <BlogCategoryFilter
+        activeCategory="Carreira"
+        categories={["Curriculo", "Carreira"]}
+        order="desc"
+      />,
+    );
+
+    const sortLink = screen.getByRole("link", {
+      name: "Ordenar por data crescente",
+    });
+    expect(sortLink.getAttribute("href")).toBe(
+      "/blog?category=Carreira&order=asc",
+    );
   });
 });
