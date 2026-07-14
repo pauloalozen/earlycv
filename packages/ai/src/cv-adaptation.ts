@@ -2798,9 +2798,15 @@ function buildRequirementScoringSummary(
     (sum, item) => sum + item.pontos,
     0,
   );
+  // "ausentes" keywords are selectable by the user to include in the
+  // optimized CV (see the results page's competências section), so their
+  // value is real captureable upside — the promised score must count it,
+  // same as the legacy (non-requirements_v2) pontosDisponiveisBase already
+  // does with keywordsAusentesTotal.
   const competenciasProjetadas =
     competenciasScore +
-    keywordPossiveis.reduce((sum, item) => sum + item.pontos, 0);
+    keywordPossiveis.reduce((sum, item) => sum + item.pontos, 0) +
+    keywordAusentes.reduce((sum, item) => sum + item.pontos, 0);
   const scoreAtualBase = clamp(
     experienceCurrentBudget + competenciasScore + formatacaoAtual,
     0,
