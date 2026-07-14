@@ -132,6 +132,7 @@ function makeDb(overrides: Partial<DbMock> = {}): DbMock {
         cvAdaptations.set(where.id as string, updated);
         return updated;
       },
+      count: async () => cvAdaptations.size,
     },
     $transaction: async <T>(fn: (tx: DbMock) => Promise<T>): Promise<T> => {
       return fn(defaultDb as unknown as DbMock);
@@ -848,12 +849,14 @@ test("getHighlightsSummary returns full KPI totals for the user", async () => {
             id: "app-saved",
             userId: "user-1",
             status: "SAVED",
+            archivedAt: null,
             cvAdaptations: [],
           },
           {
             id: "app-analyzed",
             userId: "user-1",
             status: "ANALYZED",
+            archivedAt: null,
             cvAdaptations: [
               {
                 id: "adapt-1",
@@ -869,6 +872,7 @@ test("getHighlightsSummary returns full KPI totals for the user", async () => {
             id: "app-applied",
             userId: "user-1",
             status: "APPLIED",
+            archivedAt: null,
             cvAdaptations: [
               {
                 id: "adapt-2",
@@ -884,6 +888,7 @@ test("getHighlightsSummary returns full KPI totals for the user", async () => {
             id: "app-interview",
             userId: "user-1",
             status: "INTERVIEW",
+            archivedAt: null,
             cvAdaptations: [
               {
                 id: "adapt-3",
@@ -899,10 +904,15 @@ test("getHighlightsSummary returns full KPI totals for the user", async () => {
             id: "app-rejected",
             userId: "user-1",
             status: "REJECTED",
+            archivedAt: null,
             cvAdaptations: [],
           },
         ];
       },
+    },
+    cvAdaptation: {
+      ...(makeDb().cvAdaptation as Record<string, unknown>),
+      count: async () => 3,
     },
   });
 
@@ -911,7 +921,6 @@ test("getHighlightsSummary returns full KPI totals for the user", async () => {
 
   assert.deepEqual(capturedWhere, {
     userId: "user-1",
-    archivedAt: null,
     deletedAt: null,
   });
   assert.equal(summary.activeApplicationsCount, 4);
@@ -928,18 +937,21 @@ test("getHighlightsSummary active count does not depend on relevance ranking", a
           id: "app-saved",
           userId: "user-1",
           status: "SAVED",
+          archivedAt: null,
           cvAdaptations: [],
         },
         {
           id: "app-in-process",
           userId: "user-1",
           status: "IN_PROCESS",
+          archivedAt: null,
           cvAdaptations: [],
         },
         {
           id: "app-rejected",
           userId: "user-1",
           status: "REJECTED",
+          archivedAt: null,
           cvAdaptations: [],
         },
       ],
@@ -958,7 +970,12 @@ test("getHighlightsSummary active count does not depend on relevance ranking", a
   assert.equal(summary.activeApplicationsCount, 2);
 });
 
-test("getHighlightsSummary counts persisted scoreAfter only for legacy applications without adaptations", async () => {
+test("getHighlightsSummary does not fall back to legacy scoreAfter when an application has no adaptations", async () => {
+  // getHighlightsSummary derives averageScore strictly from CvAdaptation
+  // content (deriveSummaryFromAdaptations / orphan adaptations) — the
+  // legacy JobApplication.scoreAfter field is no longer read as a
+  // fallback (removed in e6b936a), so a persisted scoreAfter alone must
+  // not count toward the average.
   const db = makeDb({
     jobApplication: {
       ...(makeDb().jobApplication as Record<string, unknown>),
@@ -967,6 +984,7 @@ test("getHighlightsSummary counts persisted scoreAfter only for legacy applicati
           id: "app-empty-adaptations",
           userId: "user-1",
           status: "ANALYZED",
+          archivedAt: null,
           scoreAfter: 84,
           cvAdaptations: [],
         },
@@ -974,6 +992,7 @@ test("getHighlightsSummary counts persisted scoreAfter only for legacy applicati
           id: "app-unresolved-adaptation",
           userId: "user-1",
           status: "CV_READY",
+          archivedAt: null,
           scoreAfter: 76,
           cvAdaptations: [
             {
@@ -988,14 +1007,18 @@ test("getHighlightsSummary counts persisted scoreAfter only for legacy applicati
         },
       ],
     },
+    cvAdaptation: {
+      ...(makeDb().cvAdaptation as Record<string, unknown>),
+      count: async () => 1,
+    },
   });
 
   const service = new JobApplicationsServiceCtor(db);
   const summary = await service.getHighlightsSummary("user-1");
 
   assert.equal(summary.activeApplicationsCount, 2);
-  assert.equal(summary.analyzedCvsCount, 2);
-  assert.equal(summary.averageScore, 84);
+  assert.equal(summary.analyzedCvsCount, 1);
+  assert.equal(summary.averageScore, null);
 });
 
 test("getHighlightsSummary does not trust persisted scoreAfter when adaptations exist but cannot resolve a score", async () => {
@@ -1007,6 +1030,7 @@ test("getHighlightsSummary does not trust persisted scoreAfter when adaptations 
           id: "app-stale-score",
           userId: "user-1",
           status: "CV_READY",
+          archivedAt: null,
           scoreAfter: 91,
           cvAdaptations: [
             {
@@ -1020,6 +1044,10 @@ test("getHighlightsSummary does not trust persisted scoreAfter when adaptations 
           ],
         },
       ],
+    },
+    cvAdaptation: {
+      ...(makeDb().cvAdaptation as Record<string, unknown>),
+      count: async () => 1,
     },
   });
 
@@ -1040,6 +1068,7 @@ test("getHighlightsSummary counts historical normalized-analysis payloads that w
           id: "app-historical-normalized-shape",
           userId: "user-1",
           status: "CV_READY",
+          archivedAt: null,
           cvAdaptations: [
             {
               id: "adapt-historical-normalized-shape",
@@ -1110,6 +1139,10 @@ test("getHighlightsSummary counts historical normalized-analysis payloads that w
           ],
         },
       ],
+    },
+    cvAdaptation: {
+      ...(makeDb().cvAdaptation as Record<string, unknown>),
+      count: async () => 1,
     },
   });
 
