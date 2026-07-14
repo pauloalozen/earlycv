@@ -178,6 +178,24 @@ test("job-source endpoints create, update, list, and delete sources linked to an
     });
 
   await request(server)
+    .get("/api/job-sources/paginated")
+    .query({ page: 1, pageSize: 10, search: "Workday" })
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(body.page, 1);
+      assert.equal(body.pageSize, 10);
+      assert.equal(Array.isArray(body.rows), true);
+      assert.equal(
+        body.rows.some(
+          (row: { id: string }) =>
+            row.id === (createResponse.body.id as string),
+        ),
+        true,
+      );
+    });
+
+  await request(server)
     .delete(`/api/job-sources/${createResponse.body.id as string}`)
     .set("Authorization", `Bearer ${user.accessToken}`)
     .expect(200)

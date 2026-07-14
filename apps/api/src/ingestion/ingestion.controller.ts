@@ -26,7 +26,8 @@ import { AdminIngestionImportService } from "./admin-ingestion-import.service";
 import { ListManualRunItemsDto } from "./dto/list-manual-run-items.dto";
 import { ListManualRunsDto } from "./dto/list-manual-runs.dto";
 import { StartManualAdapterRunDto } from "./dto/start-manual-adapter-run.dto";
-import type { UpdateGlobalSchedulerDto } from "./dto/update-global-scheduler.dto";
+// biome-ignore lint/style/useImportType: DTO precisa de import em runtime para reflection do NestJS ValidationPipe
+import { UpdateGlobalSchedulerDto } from "./dto/update-global-scheduler.dto";
 import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
 import { IngestionService } from "./ingestion.service";
 import { IngestionSchedulerService } from "./ingestion-scheduler.service";

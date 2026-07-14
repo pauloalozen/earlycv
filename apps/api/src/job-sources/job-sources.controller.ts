@@ -17,7 +17,8 @@ import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import { IngestionService } from "../ingestion/ingestion.service";
 import { CreateJobSourceDto } from "./dto/create-job-source.dto";
-import type { ListJobSourcesDto } from "./dto/list-job-sources.dto";
+// biome-ignore lint/style/useImportType: DTO precisa de import em runtime para reflection do NestJS ValidationPipe
+import { ListJobSourcesDto } from "./dto/list-job-sources.dto";
 import { UpdateJobSourceDto } from "./dto/update-job-source.dto";
 import { JobSourcesService } from "./job-sources.service";
 

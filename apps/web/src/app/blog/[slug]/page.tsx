@@ -147,7 +147,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
       <div
         style={{
-          maxWidth: 660,
+          maxWidth: 760,
           margin: "0 auto",
           padding: "124px 40px 0",
           position: "relative",

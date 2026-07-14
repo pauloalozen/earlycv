@@ -34,7 +34,9 @@ type CvAnalysisLike = {
     titulo: string;
     descricao: string;
     pontos: number;
+    pontosAtuais?: number;
     dica: string;
+    categoria?: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
     coveragePercent?: 0 | 25 | 50 | 75 | 100;
   }>;
   ajustes_indisponiveis?: Array<{
@@ -227,7 +229,9 @@ function deriveVersionedRequirementBuckets(raw: CvAnalysisLike): null | {
     titulo: string;
     descricao: string;
     pontos: number;
+    pontosAtuais?: number;
     dica: string;
+    categoria?: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
     coveragePercent: 0 | 25 | 50 | 75 | 100;
   }>;
   ajustesIndisponiveisRaw: Array<{
@@ -245,6 +249,17 @@ function deriveVersionedRequirementBuckets(raw: CvAnalysisLike): null | {
   section2Override: number;
 } {
   if (raw.analysisVersion !== "requirements_v2" || !raw.requirements?.length) {
+    return null;
+  }
+
+  // The backend already computes positivos/ajustes_conteudo/ajustes_indisponiveis
+  // and keyword buckets directly (with its own budget/partial-credit logic).
+  // Recomputing them here from raw.requirements duplicates that pipeline and
+  // silently drifts out of sync with backend fixes (this copy kept using a
+  // stale +25pp projection ceiling after the backend moved to +50pp). Trust
+  // the backend's own breakdown whenever it's present; only fall back to this
+  // local recompute for old saved analyses that predate ajustes_conteudo.
+  if (raw.ajustes_conteudo?.length) {
     return null;
   }
 
@@ -460,29 +475,59 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
   const versionedKeywords = resolveVersionedKeywordBuckets(raw, versioned);
   const section1Budget = raw.scoring?.kind === "requirements_v2" ? 50 : 40;
 
+  // Gates whether to trust the backend's own pontos values as-is (below) vs.
+  // rescale everything locally with the legacy applyBudget pass. `versioned`
+  // is null whenever backend data is present (see the early-return guard in
+  // deriveVersionedRequirementBuckets above) — using it here would silently
+  // re-run the legacy rescale over backend-computed pontos, discarding them.
+  const trustBackendData = Boolean(raw.ajustes_conteudo?.length);
+
+  // pontos_fortes is a short, free-text summary field unrelated to the
+  // requirements weight system — its hardcoded [12,9,8,7,5] scale only makes
+  // sense as a legacy (non-requirements_v2) fallback. When backend data is
+  // present, an empty `positivos` array is a real signal (zero fully-proven
+  // requirements), not a gap to paper over with unrelated made-up points.
   const positivosRaw =
     versioned?.positivosRaw ??
     (raw.positivos?.length
       ? raw.positivos
-      : (raw.pontos_fortes ?? []).map((texto, index) => ({
-          texto,
-          pontos: [12, 9, 8, 7, 5][index] ?? 5,
-        })));
+      : trustBackendData
+        ? []
+        : (raw.pontos_fortes ?? []).map((texto, index) => ({
+            texto,
+            pontos: [12, 9, 8, 7, 5][index] ?? 5,
+          })));
+
+  // "keywords_incluidas" items get merged into ajustes_conteudo post-unlock
+  // (see enrichAjustesWithSelectedKeywords on the API) to document keywords
+  // added to the delivered CV — that belongs to the keywords/competências
+  // breakdown (already rendered separately), not to Section 1 (Experiência).
+  const ajustesConteudoSecao1Only = raw.ajustes_conteudo?.filter(
+    (item) => item.categoria !== "keywords_incluidas",
+  );
 
   const ajustesConteudoRaw =
     versioned?.ajustesConteudoRaw ??
-    (raw.ajustes_conteudo?.length
-      ? raw.ajustes_conteudo.map((item, index) => ({
+    (ajustesConteudoSecao1Only?.length
+      ? ajustesConteudoSecao1Only.map((item, index) => ({
           ...item,
           id: item.id ?? `a${index}`,
         }))
-      : (raw.lacunas ?? []).map((titulo, index) => ({
-          id: `a${index}`,
-          titulo,
-          descricao: "",
-          pontos: [11, 9, 7, 6, 5][index] ?? 5,
-          dica: "",
-        })));
+      : trustBackendData
+        ? []
+        : (raw.lacunas ?? []).map((titulo, index) => ({
+            id: `a${index}`,
+            titulo,
+            descricao: "",
+            pontos: [11, 9, 7, 6, 5][index] ?? 5,
+            pontosAtuais: undefined as number | undefined,
+            dica: "",
+            categoria: undefined as
+              | "keywords_incluidas"
+              | "texto_reescrito"
+              | "ajuste_conteudo"
+              | undefined,
+          })));
 
   const ajustesIndisponiveisRaw =
     versioned?.ajustesIndisponiveisRaw ??
@@ -500,7 +545,9 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
     versionedKeywords?.kwPresentesRaw ??
     (raw.keywords?.presentes?.length
       ? raw.keywords.presentes
-      : (raw.ats_keywords?.presentes ?? []).map((kw) => ({ kw, pontos: 3 })));
+      : trustBackendData
+        ? []
+        : (raw.ats_keywords?.presentes ?? []).map((kw) => ({ kw, pontos: 3 })));
   const kwPossiveisRaw =
     versionedKeywords?.kwPossiveisRaw ?? raw.keywords?.possiveis ?? [];
 
@@ -508,10 +555,12 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
     versionedKeywords?.kwAusentesRaw ??
     (raw.keywords?.ausentes?.length
       ? raw.keywords.ausentes
-      : (raw.ats_keywords?.ausentes ?? []).map((kw) => ({ kw, pontos: 4 })));
+      : trustBackendData
+        ? []
+        : (raw.ats_keywords?.ausentes ?? []).map((kw) => ({ kw, pontos: 4 })));
 
   const positivos = (
-    versioned
+    versioned || trustBackendData
       ? positivosRaw
       : (applyBudget(
           [...positivosRaw, ...ajustesConteudoRaw, ...ajustesIndisponiveisRaw],
@@ -521,7 +570,7 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
     .slice()
     .sort((a: PointsItem, b: PointsItem) => b.pontos - a.pontos);
   const ajustesConteudo = (
-    versioned
+    versioned || trustBackendData
       ? ajustesConteudoRaw
       : (applyBudget(
           [...positivosRaw, ...ajustesConteudoRaw, ...ajustesIndisponiveisRaw],
@@ -534,7 +583,7 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
     .slice()
     .sort((a: PointsItem, b: PointsItem) => b.pontos - a.pontos);
   const ajustesIndisponiveis = (
-    versioned
+    versioned || trustBackendData
       ? ajustesIndisponiveisRaw
       : (applyBudget(
           [...positivosRaw, ...ajustesConteudoRaw, ...ajustesIndisponiveisRaw],
@@ -546,9 +595,10 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
     .slice()
     .sort((a: PointsItem, b: PointsItem) => b.pontos - a.pontos);
 
-  const s2All = versioned
-    ? [...kwPresentesRaw, ...kwPossiveisRaw, ...kwAusentesRaw]
-    : applyBudget([...kwPresentesRaw, ...kwPossiveisRaw, ...kwAusentesRaw], 40);
+  const s2All =
+    versioned || trustBackendData
+      ? [...kwPresentesRaw, ...kwPossiveisRaw, ...kwAusentesRaw]
+      : applyBudget([...kwPresentesRaw, ...kwPossiveisRaw, ...kwAusentesRaw], 40);
   const kwPresentes = (
     s2All.slice(0, kwPresentesRaw.length) as typeof kwPresentesRaw
   )
@@ -663,8 +713,24 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
   const pontosFortesSecao1Resolved =
     versioned?.section1Override ?? pontosFortesSecao1;
   const jaNoCvSecao2Resolved = versioned?.section2Override ?? jaNoCvSecao2;
+
+  // "positivos"/"kwPresentes" only list fully-covered items — since the
+  // scoring fix that credits partial evidence in the current score, their
+  // sum no longer equals the section's true current score (the gap is the
+  // ajustável items' own partial credit, shown separately via pontosAtuais).
+  // Use the backend's authoritative section score directly instead of
+  // re-summing the display lists, same as formatação already does.
+  const experienciaScoreResolved =
+    raw.scoring?.kind === "requirements_v2"
+      ? raw.scoring.sections.experiencia.score
+      : pontosFortesSecao1Resolved;
+  const competenciasScoreResolved =
+    raw.scoring?.kind === "requirements_v2"
+      ? raw.scoring.sections.competencias.score
+      : jaNoCvSecao2Resolved;
+
   const scoreAtualBase = clamp(
-    pontosFortesSecao1Resolved + jaNoCvSecao2Resolved + totalSecao3Atual,
+    experienciaScoreResolved + competenciasScoreResolved + totalSecao3Atual,
     0,
     100,
   );
@@ -676,11 +742,10 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
     0,
     100,
   );
-  const scoreAposLiberarBase = clamp(
-    scoreAtualBase + pontosDisponiveisBase,
-    0,
-    100,
-  );
+  const scoreAposLiberarBase =
+    raw.scoring?.kind === "requirements_v2"
+      ? clamp(raw.scoring.totals.scoreAposLiberarBase, 0, 100)
+      : clamp(scoreAtualBase + pontosDisponiveisBase, 0, 100);
 
   return {
     vaga: raw.vaga,
@@ -701,10 +766,10 @@ export function normalizeData<T extends CvAnalysisLike>(raw: T) {
       : [],
     secoes: {
       experiencia: {
-        score: pontosFortesSecao1Resolved,
+        score: experienciaScoreResolved,
         max: raw.scoring?.kind === "requirements_v2" ? 50 : 40,
       },
-      competencias: { score: jaNoCvSecao2Resolved, max: 40 },
+      competencias: { score: competenciasScoreResolved, max: 40 },
       formatacao: {
         score: totalSecao3Atual,
         max: raw.scoring?.kind === "requirements_v2" ? 10 : 20,

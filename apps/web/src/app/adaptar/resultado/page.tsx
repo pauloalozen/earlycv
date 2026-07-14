@@ -483,15 +483,44 @@ function SubLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+function EmptySectionNote({
+  text = "Não encontramos itens nessa seção.",
+}: {
+  text?: string;
+}) {
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        marginBottom: 6,
+        background: FAINT,
+        border: `1px solid ${BORDER_BASE}`,
+        borderRadius: 8,
+        fontSize: 12.5,
+        color: MUTED,
+        fontStyle: "italic",
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
 type ItemCardType = "positive" | "action" | "missing" | "neutral";
 
 function ItemCard({
   text,
+  titulo,
+  descricao,
   pts,
+  subPts,
   type,
 }: {
-  text: string;
+  text?: string;
+  titulo?: string;
+  descricao?: string;
   pts?: string;
+  subPts?: string;
   type: ItemCardType;
 }) {
   const cfg: Record<
@@ -532,23 +561,58 @@ function ItemCard({
           fontStyle: type === "missing" ? "italic" : "normal",
         }}
       >
-        {text}
+        {titulo ? (
+          <>
+            <span
+              style={{
+                fontWeight: 500,
+                color: type === "missing" ? "#57544e" : undefined,
+              }}
+            >
+              {titulo}
+            </span>
+            {descricao && ` — ${descricao}`}
+          </>
+        ) : (
+          text
+        )}
       </div>
       {pts && c.bb && (
         <div
           style={{
-            fontFamily: MONO,
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: 0.5,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            gap: 3,
             flexShrink: 0,
-            padding: "3px 7px",
-            borderRadius: 4,
-            background: c.bb,
-            color: c.bc ?? undefined,
           }}
         >
-          {pts}
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: 0.5,
+              padding: "3px 7px",
+              borderRadius: 4,
+              background: c.bb,
+              color: c.bc ?? undefined,
+            }}
+          >
+            {pts}
+          </div>
+          {subPts && (
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 9,
+                color: MUTED,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {subPts}
+            </div>
+          )}
         </div>
       )}
       {type === "missing" && (
@@ -566,6 +630,128 @@ function ItemCard({
           {pts ?? "sem evidência"}
         </div>
       )}
+    </div>
+  );
+}
+
+function MelhoriaCard({
+  titulo,
+  descricao,
+  pontos,
+  pontosAtuais,
+  isQualidade,
+}: {
+  titulo: string;
+  descricao?: string;
+  pontos: number;
+  pontosAtuais?: number;
+  isQualidade?: boolean;
+}) {
+  const antes = pontosAtuais ?? 0;
+  const depois = antes + pontos;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: 12,
+        padding: "10px 12px",
+        marginBottom: 6,
+        background: "#fff",
+        border: `1px solid ${BORDER_BASE}`,
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ fontSize: 13, lineHeight: 1.5, flex: 1, color: "#0a0a0a" }}>
+        <span style={{ fontWeight: 450 }}>{titulo}</span>
+        {descricao && <span style={{ color: MUTED }}> — {descricao}</span>}
+      </div>
+      <div
+        style={{
+          alignSelf: "stretch",
+          width: 1,
+          background: BORDER_BASE,
+          flexShrink: 0,
+        }}
+      />
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 3,
+          flexShrink: 0,
+        }}
+      >
+        {isQualidade ? (
+          <>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: 0.5,
+                color: "#0a0a0a",
+                whiteSpace: "nowrap",
+              }}
+            >
+              QUALIDADE
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 9,
+                color: MUTED,
+                whiteSpace: "nowrap",
+              }}
+            >
+              sem pts
+            </div>
+          </>
+        ) : (
+          <>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 8,
+                letterSpacing: 0.4,
+                color: MUTED,
+                textTransform: "uppercase",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Agora · Meta
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 14,
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span style={{ color: LIME_DEEP }}>{antes}</span>
+              <span style={{ color: "#0a0a0a" }}> → {depois}</span>
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: 0.5,
+                padding: "2px 6px",
+                borderRadius: 4,
+                background: AMBER,
+                color: "#fff",
+                whiteSpace: "nowrap",
+              }}
+            >
+              +{pontos} pts
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -2453,6 +2639,7 @@ export default function ResultadoPage() {
                 )}
                 <div>
                   <SubLabel>PONTOS FORTES</SubLabel>
+                  {data.positivos.length === 0 && <EmptySectionNote />}
                   {(isGuestView
                     ? data.positivos.slice(0, GUEST_VISIBLE)
                     : data.positivos
@@ -2495,16 +2682,21 @@ export default function ResultadoPage() {
               {/* Right column */}
               <div>
                 <div style={{ marginBottom: 18 }}>
-                  <SubLabel>AJUSTES DE CONTEÚDO</SubLabel>
+                  <SubLabel>
+                    O QUE O EARLYCV PODE MELHORAR AO LIBERAR CV
+                  </SubLabel>
+                  {data.ajustes_conteudo.length === 0 && <EmptySectionNote />}
                   {(isGuestView
                     ? data.ajustes_conteudo.slice(0, GUEST_VISIBLE)
                     : data.ajustes_conteudo
                   ).map((a) => (
-                    <ItemCard
+                    <MelhoriaCard
                       key={a.id}
-                      type="action"
-                      text={`${a.titulo}${a.descricao ? ` — ${a.descricao}` : ""}`}
-                      pts={`+${a.pontos} pts`}
+                      titulo={a.titulo}
+                      descricao={a.descricao}
+                      pontos={a.pontos}
+                      pontosAtuais={a.pontosAtuais}
+                      isQualidade={a.categoria === "texto_reescrito"}
                     />
                   ))}
                   {isGuestView &&
@@ -2523,60 +2715,61 @@ export default function ResultadoPage() {
                               GUEST_MOCK_AJUSTES.length,
                             ),
                           ).map((a) => (
-                            <ItemCard
+                            <MelhoriaCard
                               key={a.id}
-                              type="action"
-                              text={a.titulo}
-                              pts={`+${a.pontos} pts`}
+                              titulo={a.titulo}
+                              pontos={a.pontos}
                             />
                           ))}
                         </div>
                       </GuestBlurOverlay>
                     )}
                 </div>
-                {data.ajustes_indisponiveis.length > 0 && (
-                  <div>
-                    <SubLabel>SEM EVIDÊNCIAS NO SEU CV</SubLabel>
-                    {(isGuestView
-                      ? data.ajustes_indisponiveis.slice(0, GUEST_VISIBLE)
-                      : data.ajustes_indisponiveis
-                    ).map((a) => (
-                      <ItemCard
-                        key={a.id}
-                        type="missing"
-                        text={`${a.titulo}${a.descricao ? ` — ${a.descricao}` : ""}`}
-                        pts={`-${a.pontos} pts`}
-                      />
-                    ))}
-                    {isGuestView &&
-                      data.ajustes_indisponiveis.length > GUEST_VISIBLE && (
-                        <GuestBlurOverlay
-                          count={Math.min(
-                            data.ajustes_indisponiveis.length - GUEST_VISIBLE,
-                            GUEST_MOCK_MISSING.length,
-                          )}
-                        >
-                          <div>
-                            {GUEST_MOCK_MISSING.slice(
-                              0,
-                              Math.min(
-                                data.ajustes_indisponiveis.length -
-                                  GUEST_VISIBLE,
-                                GUEST_MOCK_MISSING.length,
-                              ),
-                            ).map((a) => (
-                              <ItemCard
-                                key={a.id}
-                                type="missing"
-                                text={`${a.titulo} — ${a.descricao}`}
-                                pts={`-${a.pontos} pts`}
-                              />
-                            ))}
-                          </div>
-                        </GuestBlurOverlay>
-                      )}
-                  </div>
-                )}
+                <div>
+                  <SubLabel>SEM EVIDÊNCIAS NO SEU CV</SubLabel>
+                  {data.ajustes_indisponiveis.length === 0 && (
+                    <EmptySectionNote text="Não encontramos itens sem evidência — nada travado nessa seção." />
+                  )}
+                  {(isGuestView
+                    ? data.ajustes_indisponiveis.slice(0, GUEST_VISIBLE)
+                    : data.ajustes_indisponiveis
+                  ).map((a) => (
+                    <ItemCard
+                      key={a.id}
+                      type="missing"
+                      titulo={a.titulo}
+                      descricao={a.descricao}
+                      pts={`-${a.pontos} pts`}
+                    />
+                  ))}
+                  {isGuestView &&
+                    data.ajustes_indisponiveis.length > GUEST_VISIBLE && (
+                      <GuestBlurOverlay
+                        count={Math.min(
+                          data.ajustes_indisponiveis.length - GUEST_VISIBLE,
+                          GUEST_MOCK_MISSING.length,
+                        )}
+                      >
+                        <div>
+                          {GUEST_MOCK_MISSING.slice(
+                            0,
+                            Math.min(
+                              data.ajustes_indisponiveis.length - GUEST_VISIBLE,
+                              GUEST_MOCK_MISSING.length,
+                            ),
+                          ).map((a) => (
+                            <ItemCard
+                              key={a.id}
+                              type="missing"
+                              titulo={a.titulo}
+                              descricao={a.descricao}
+                              pts={`-${a.pontos} pts`}
+                            />
+                          ))}
+                        </div>
+                      </GuestBlurOverlay>
+                    )}
+                </div>
               </div>
             </div>
           </SecCard>
@@ -2596,6 +2789,7 @@ export default function ResultadoPage() {
               <SubLabel>
                 KEYWORDS PRESENTES NO CV ({data.keywords.presentes.length})
               </SubLabel>
+              {data.keywords.presentes.length === 0 && <EmptySectionNote />}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {(isGuestView
                   ? data.keywords.presentes.slice(0, GUEST_VISIBLE)
@@ -2769,6 +2963,7 @@ export default function ResultadoPage() {
                   ? "Seção bloqueada após liberação do CV"
                   : "Selecione quais você deseja incluir. Seu CV otimizado só adicionará as que você aprovar."}
               </p>
+              {data.keywords.ausentes.length === 0 && <EmptySectionNote />}
               <div
                 style={{
                   display: "flex",
