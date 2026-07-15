@@ -64,8 +64,42 @@ function createValidOutput(): MasterCvCanonicalExtractionOutput {
   };
 }
 
+// Gera um PDF minimo, mas com texto suficiente para passar pelo pdf-parse real
+// (extractTextFromPdf exige >= 100 caracteres extraidos). pdf.js (usado pelo
+// pdf-parse) recupera o documento por varredura de objetos mesmo sem xref table.
+function createTestPdfBuffer(text: string): Buffer {
+  const escaped = text.replace(/([()\\])/g, "\\$1");
+  const content = `BT /F1 12 Tf 100 700 Td (${escaped}) Tj ET`;
+  const pdf = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 612 792] /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length ${content.length} >>
+stream
+${content}
+endstream
+endobj
+trailer
+<< /Size 6 /Root 1 0 R >>
+%%EOF`;
+  return Buffer.from(pdf);
+}
+
+const SAMPLE_CV_TEXT =
+  "Ana Silva - Senior Data Analyst - ana@example.com - Experiencia profissional em analytics, dashboards e stakeholder management por mais de 6 anos.";
+
 function createFileInput(
-  buffer = Buffer.from("%PDF-1.7 fake cv bytes"),
+  buffer = createTestPdfBuffer(SAMPLE_CV_TEXT),
 ): NonNullable<MasterCvCanonicalExtractionInput["file"]> {
   return {
     buffer,
@@ -75,18 +109,22 @@ function createFileInput(
   };
 }
 
+function mockChatCompletion(content: string) {
+  return mock.fn(async () => ({
+    choices: [{ message: { content } }],
+  }));
+}
+
 describe("extractMasterCvCanonicalProfile", () => {
   it("returns structured canonicalProfile output from a raw file payload", async () => {
     const mockOutput = createValidOutput();
     const file = createFileInput();
-    const responsesCreate = mock.fn(async () => ({
-      output_text: JSON.stringify(mockOutput),
-    }));
+    const chatCompletionsCreate = mockChatCompletion(
+      JSON.stringify(mockOutput),
+    );
 
     const mockClient = {
-      responses: {
-        create: responsesCreate,
-      },
+      chat: { completions: { create: chatCompletionsCreate } },
     } as unknown as OpenAI;
 
     const { output } = await extractMasterCvCanonicalProfile(
@@ -97,41 +135,35 @@ describe("extractMasterCvCanonicalProfile", () => {
 
     assert.equal(output.canonicalProfile.fullName, "Ana Silva");
     assert.equal(output.extractionCoverage.fieldStatus.fullName, "filled");
-    assert.deepEqual(output.canonicalProfile.skills, ["SQL", "Stakeholder management", "Comunicacao"]);
-    assert.equal(responsesCreate.mock.calls.length, 1);
+    assert.deepEqual(output.canonicalProfile.skills, [
+      "SQL",
+      "Stakeholder management",
+      "Comunicacao",
+    ]);
+    assert.equal(chatCompletionsCreate.mock.calls.length, 1);
 
-    const request = responsesCreate.mock.calls[0]?.arguments[0] as {
-      input: Array<{
-        role: string;
-        content: Array<{
-          type: string;
-          filename?: string;
-          file_data?: string;
-          text?: string;
-        }>;
-      }>;
-      text?: { format?: { type?: string } };
+    const request = chatCompletionsCreate.mock.calls[0]?.arguments[0] as {
+      messages: Array<{ role: string; content: string }>;
+      response_format?: { type?: string };
     };
 
-    assert.equal(request.text?.format?.type, "json_object");
-    assert.equal(request.input[0]?.content[0]?.type, "input_file");
-    assert.equal(request.input[0]?.content[0]?.filename, "ana-silva.pdf");
-    assert.equal(request.input[0]?.content[1]?.type, "input_text");
+    // O PDF nao vai mais nativo pro modelo: o texto e extraido localmente
+    // (pdf-parse) e enviado como mensagem de texto, compativel com qualquer supplier.
+    assert.equal(request.response_format?.type, "json_object");
+    assert.equal(request.messages[0]?.role, "system");
+    assert.equal(request.messages[1]?.role, "user");
+    assert.match(request.messages[1]?.content ?? "", /Ana Silva/);
   });
 
   it("stores file metadata in the audit payload", async () => {
     const mockOutput = createValidOutput();
-    const file = createFileInput(
-      Buffer.from("%PDF-1.7 fake cv bytes for audit"),
+    const file = createFileInput();
+    const chatCompletionsCreate = mockChatCompletion(
+      JSON.stringify(mockOutput),
     );
-    const responsesCreate = mock.fn(async () => ({
-      output_text: JSON.stringify(mockOutput),
-    }));
 
     const mockClient = {
-      responses: {
-        create: responsesCreate,
-      },
+      chat: { completions: { create: chatCompletionsCreate } },
     } as unknown as OpenAI;
 
     const { audit } = await extractMasterCvCanonicalProfile(
@@ -147,12 +179,7 @@ describe("extractMasterCvCanonicalProfile", () => {
       };
       sentToModel: {
         locale: string;
-        file: {
-          filename: string;
-          mimetype: string;
-          size: number;
-          fileDataLength: number;
-        } | null;
+        masterCvText: string;
       };
     };
 
@@ -161,41 +188,39 @@ describe("extractMasterCvCanonicalProfile", () => {
       "ana-silva.pdf",
     );
     assert.equal(requestInput.sentToModel.locale, "pt-BR");
-    assert.equal(requestInput.sentToModel.file?.filename, "ana-silva.pdf");
-    assert.equal(
-      requestInput.sentToModel.file?.fileDataLength,
-      file.buffer.toString("base64").length,
-    );
+    assert.match(requestInput.sentToModel.masterCvText, /Ana Silva/);
   });
 
   it("accepts only filled|partial|missing fieldStatus values", async () => {
     const mockClient = {
-      responses: {
-        create: mock.fn(async () => ({
-          output_text: JSON.stringify({
-            canonicalProfile: {
-              fullName: null,
-              headline: null,
-              email: null,
-              phone: null,
-              linkedinUrl: null,
-              location: { city: null, state: null, country: null },
-              professionalSummary: null,
-              experiences: [],
-              education: [],
-              skills: { technical: [], business: [], soft: [] },
-              languages: [],
-              certifications: [],
-            },
-            extractionCoverage: {
-              identifiedFields: [],
-              missingFields: ["fullName"],
-              fieldStatus: { fullName: "unknown" },
-            },
-            confidence: {},
-            evidence: {},
-          }),
-        })),
+      chat: {
+        completions: {
+          create: mockChatCompletion(
+            JSON.stringify({
+              canonicalProfile: {
+                fullName: null,
+                headline: null,
+                email: null,
+                phone: null,
+                linkedinUrl: null,
+                location: { city: null, state: null, country: null },
+                professionalSummary: null,
+                experiences: [],
+                education: [],
+                skills: { technical: [], business: [], soft: [] },
+                languages: [],
+                certifications: [],
+              },
+              extractionCoverage: {
+                identifiedFields: [],
+                missingFields: ["fullName"],
+                fieldStatus: { fullName: "unknown" },
+              },
+              confidence: {},
+              evidence: {},
+            }),
+          ),
+        },
       },
     } as unknown as OpenAI;
 
@@ -210,10 +235,8 @@ describe("extractMasterCvCanonicalProfile", () => {
 
   it("rejects malformed JSON responses", async () => {
     const mockClient = {
-      responses: {
-        create: mock.fn(async () => ({
-          output_text: "{ invalid json",
-        })),
+      chat: {
+        completions: { create: mockChatCompletion("{ invalid json") },
       },
     } as unknown as OpenAI;
 
@@ -237,10 +260,10 @@ describe("extractMasterCvCanonicalProfile", () => {
       invalidOutput.confidence.fullName = invalidValue;
 
       const mockClient = {
-        responses: {
-          create: mock.fn(async () => ({
-            output_text: JSON.stringify(invalidOutput),
-          })),
+        chat: {
+          completions: {
+            create: mockChatCompletion(JSON.stringify(invalidOutput)),
+          },
         },
       } as unknown as OpenAI;
 
@@ -259,10 +282,10 @@ describe("extractMasterCvCanonicalProfile", () => {
     invalidOutput.extractionCoverage.fieldStatus["not.a.real.field"] = "filled";
 
     const mockClient = {
-      responses: {
-        create: mock.fn(async () => ({
-          output_text: JSON.stringify(invalidOutput),
-        })),
+      chat: {
+        completions: {
+          create: mockChatCompletion(JSON.stringify(invalidOutput)),
+        },
       },
     } as unknown as OpenAI;
 
@@ -282,10 +305,10 @@ describe("extractMasterCvCanonicalProfile", () => {
     invalidOutput.evidence.fullName = ["Ana Silva", 123];
 
     const mockClient = {
-      responses: {
-        create: mock.fn(async () => ({
-          output_text: JSON.stringify(invalidOutput),
-        })),
+      chat: {
+        completions: {
+          create: mockChatCompletion(JSON.stringify(invalidOutput)),
+        },
       },
     } as unknown as OpenAI;
 

@@ -18,15 +18,19 @@ function createOutput(): CanonicalJobJson {
   };
 }
 
+function mockChatCompletion(content: string) {
+  return mock.fn(async () => ({
+    choices: [{ message: { content } }],
+  }));
+}
+
 describe("canonicalizeJobDescription", () => {
   it("returns validated canonical job JSON", async () => {
     const output = createOutput();
-    const responsesCreate = mock.fn(async () => ({
-      output_text: JSON.stringify(output),
-    }));
+    const chatCompletionsCreate = mockChatCompletion(JSON.stringify(output));
 
     const client = {
-      responses: { create: responsesCreate },
+      chat: { completions: { create: chatCompletionsCreate } },
     } as unknown as OpenAI;
 
     const result = await canonicalizeJobDescription(
@@ -36,17 +40,15 @@ describe("canonicalizeJobDescription", () => {
     );
 
     assert.deepEqual(result, output);
-    const request = responsesCreate.mock.calls[0]?.arguments[0] as {
-      text?: { format?: { type?: string } };
+    const request = chatCompletionsCreate.mock.calls[0]?.arguments[0] as {
+      response_format?: { type?: string };
     };
-    assert.equal(request.text?.format?.type, "json_object");
+    assert.equal(request.response_format?.type, "json_object");
   });
 
   it("rejects malformed JSON", async () => {
     const client = {
-      responses: {
-        create: mock.fn(async () => ({ output_text: "{ invalid" })),
-      },
+      chat: { completions: { create: mockChatCompletion("{ invalid") } },
     } as unknown as OpenAI;
 
     await assert.rejects(
@@ -57,13 +59,12 @@ describe("canonicalizeJobDescription", () => {
 
   it("falls back to null for unrecognized workMode (e.g. 'flex', 'presencial')", async () => {
     const client = {
-      responses: {
-        create: mock.fn(async () => ({
-          output_text: JSON.stringify({
-            ...createOutput(),
-            workMode: "flex",
-          }),
-        })),
+      chat: {
+        completions: {
+          create: mockChatCompletion(
+            JSON.stringify({ ...createOutput(), workMode: "flex" }),
+          ),
+        },
       },
     } as unknown as OpenAI;
 
@@ -77,13 +78,12 @@ describe("canonicalizeJobDescription", () => {
 
   it("falls back to null for unrecognized employmentType (e.g. 'CLT', 'PJ')", async () => {
     const client = {
-      responses: {
-        create: mock.fn(async () => ({
-          output_text: JSON.stringify({
-            ...createOutput(),
-            employmentType: "CLT",
-          }),
-        })),
+      chat: {
+        completions: {
+          create: mockChatCompletion(
+            JSON.stringify({ ...createOutput(), employmentType: "CLT" }),
+          ),
+        },
       },
     } as unknown as OpenAI;
 

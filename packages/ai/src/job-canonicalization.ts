@@ -249,32 +249,17 @@ export async function canonicalizeJobDescription(
     throw new Error("jobDescriptionText is required");
   }
 
-  const response = await client.responses.create({
-    input: [
-      {
-        role: "system",
-        content: SYSTEM_PROMPT,
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: normalizedInput,
-          },
-        ],
-      },
-    ],
+  const response = await client.chat.completions.create({
     model,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: normalizedInput },
+    ],
     temperature: 0,
-    text: {
-      format: {
-        type: "json_object",
-      },
-    },
+    response_format: { type: "json_object" },
   });
 
-  const content = response.output_text;
+  const content = response.choices[0]?.message.content;
   if (!content) {
     throw new Error("Model returned empty canonical job output");
   }

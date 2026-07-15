@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 
-import { getAiModel } from "../common/ai-client-factory";
+import { getActiveAiSupplier, getAiModel } from "../common/ai-client-factory";
 import { DatabaseService } from "../database/database.service";
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 import type {
@@ -157,16 +157,21 @@ export class CvAdaptationAiService {
 
     const model = getAiModel();
     const { adaptCv } = await import("@earlycv/ai");
-    // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
-    const { output, audit } = await adaptCv(this.aiClient as any, model, {
-      masterCvText: input.masterCvText,
-      jobDescriptionText: input.jobDescriptionText,
-      selectedKeywords: input.selectedKeywords,
-      jobTitle: input.jobTitle,
-      companyName: input.companyName,
-      requirementCoverage: input.requirementCoverage,
-      ajustesConteudo: input.ajustesConteudo,
-    });
+    const { output, audit } = await adaptCv(
+      // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
+      this.aiClient as any,
+      model,
+      {
+        masterCvText: input.masterCvText,
+        jobDescriptionText: input.jobDescriptionText,
+        selectedKeywords: input.selectedKeywords,
+        jobTitle: input.jobTitle,
+        companyName: input.companyName,
+        requirementCoverage: input.requirementCoverage,
+        ajustesConteudo: input.ajustesConteudo,
+      },
+      getActiveAiSupplier(),
+    );
 
     return { output: output as CvAdaptationOutput, audit };
   }
@@ -218,16 +223,21 @@ export class CvAdaptationAiService {
 
     const model = getAiModel();
     const { adaptCv } = await import("@earlycv/ai");
-    // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
-    const { output } = await adaptCv(this.aiClient as any, model, {
-      masterCvText: input.masterCvText,
-      jobDescriptionText: input.jobDescriptionText,
-      selectedKeywords: input.selectedMissingKeywords,
-      jobTitle: input.jobTitle,
-      companyName: input.companyName,
-      requirementCoverage: input.requirementCoverage,
-      ajustesConteudo: input.ajustesConteudo,
-    });
+    const { output } = await adaptCv(
+      // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
+      this.aiClient as any,
+      model,
+      {
+        masterCvText: input.masterCvText,
+        jobDescriptionText: input.jobDescriptionText,
+        selectedKeywords: input.selectedMissingKeywords,
+        jobTitle: input.jobTitle,
+        companyName: input.companyName,
+        requirementCoverage: input.requirementCoverage,
+        ajustesConteudo: input.ajustesConteudo,
+      },
+      getActiveAiSupplier(),
+    );
 
     return output as CvAdaptationOutput;
   }
@@ -281,14 +291,19 @@ export class CvAdaptationAiService {
       const model = getAiModel();
       const { adaptCv } = await import("@earlycv/ai");
 
-      // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
-      const { output, audit } = await adaptCv(this.aiClient as any, model, {
-        masterCvText,
-        jobDescriptionText: adaptation.jobDescriptionText,
-        selectedKeywords: adaptation.selectedMissingKeywords,
-        jobTitle: adaptation.jobTitle || undefined,
-        companyName: adaptation.companyName || undefined,
-      });
+      const { output, audit } = await adaptCv(
+        // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
+        this.aiClient as any,
+        model,
+        {
+          masterCvText,
+          jobDescriptionText: adaptation.jobDescriptionText,
+          selectedKeywords: adaptation.selectedMissingKeywords,
+          jobTitle: adaptation.jobTitle || undefined,
+          companyName: adaptation.companyName || undefined,
+        },
+        getActiveAiSupplier(),
+      );
 
       const previewText = output.summary.slice(0, 200);
 

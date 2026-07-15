@@ -2,7 +2,15 @@ import OpenAI from "openai";
 
 import type { OpenAIClientConfig } from "./types.js";
 
-export const aiProviders = ["openai", "xai", "anthropic"] as const;
+export const aiProviders = [
+  "openai",
+  "xai",
+  "anthropic",
+  "gemini",
+  "kimi",
+  "glm",
+  "deepseek",
+] as const;
 export const defaultAIProvider = aiProviders[0];
 
 export function createOpenAIClient(config: OpenAIClientConfig) {

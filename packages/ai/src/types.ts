@@ -1,4 +1,11 @@
-export type AIProvider = "openai" | "xai" | "anthropic";
+export type AIProvider =
+  | "openai"
+  | "xai"
+  | "anthropic"
+  | "gemini"
+  | "kimi"
+  | "glm"
+  | "deepseek";
 
 export type AIGenerationRequest = {
   input: string;

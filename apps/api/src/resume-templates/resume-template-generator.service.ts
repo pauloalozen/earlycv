@@ -134,6 +134,15 @@ export class ResumeTemplateGeneratorService {
   ): Promise<TemplateStructureJson> {
     const base64 = pngBuffer.toString("base64");
 
+    // Modelo fixo em gpt-4o (vision), independente de AI_SUPPLIER, por design:
+    // este é o único ponto de todo o produto que usa visão computacional, e é
+    // uma ferramenta interna de admin (admin/resume-templates, role
+    // admin/superadmin) para replicar o design visual de um template de CV em
+    // HTML/CSS — não faz parte do fluxo de usuário, que processa CVs 100% via
+    // texto extraído localmente (packages/ai/src/pdf-parser.ts). Baixo volume
+    // (só roda ao cadastrar um template novo), então não precisa acompanhar a
+    // expansão multi-provider do resto do produto. Se algum dia precisar
+    // trocar de modelo de visão, ajuste aqui manualmente.
     const response = await this.aiClient.chat.completions.create({
       // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard
       model: "gpt-4o" as any,

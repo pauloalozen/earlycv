@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type OpenAI from "openai";
 
+import type { AIProvider } from "./types.js";
+
 const CV_MAX_CHARS = 12_000;
 const JOB_MAX_CHARS = 12_000;
 
@@ -3032,6 +3034,7 @@ export async function adaptCv(
   client: OpenAI,
   model: string,
   input: CvAdaptationInput,
+  provider: AIProvider = "openai",
 ): Promise<{
   output: CvAdaptationOutput;
   audit: ReturnType<typeof createAuditRecord>;
@@ -3117,18 +3120,18 @@ export async function adaptCv(
 
     const audit = createAuditRecord({
       traceId,
-      provider: "openai",
+      provider,
       model,
       request: {
         input,
         model,
-        provider: "openai",
+        provider,
         systemPrompt: SYSTEM_PROMPT,
       },
       result: {
         content: JSON.stringify(output),
         model,
-        provider: "openai",
+        provider,
         usage: {
           promptTokens: response.usage?.prompt_tokens,
           completionTokens: response.usage?.completion_tokens,
@@ -3206,18 +3209,18 @@ function validateCvAdaptationOutput(
 
 function createAuditRecord(data: {
   traceId: string;
-  provider: "openai";
+  provider: AIProvider;
   model: string;
   request: {
     input: CvAdaptationInput;
     model: string;
-    provider: "openai";
+    provider: AIProvider;
     systemPrompt: string;
   };
   result: {
     content: string;
     model: string;
-    provider: "openai";
+    provider: AIProvider;
     usage?: {
       promptTokens?: number;
       completionTokens?: number;
