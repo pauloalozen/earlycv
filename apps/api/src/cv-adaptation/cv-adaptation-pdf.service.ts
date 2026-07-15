@@ -146,7 +146,10 @@ export class CvAdaptationPdfService {
         /\b(the|and|with|for|experience|education|skills|languages|certifications|summary)\b/g,
       ) ?? []
     ).length;
-    return enScore > ptScore ? "en" : "pt";
+    // Only fall back to "pt" when there's clear pt-specific signal; ties
+    // (e.g. short/generic content) must not force a translation pass over
+    // section titles the AI already generated correctly in another language.
+    return ptScore > enScore ? "pt" : "en";
   }
 
   // Translate common English CV section labels to Portuguese for templates

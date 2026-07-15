@@ -215,4 +215,71 @@ describe("CvAdaptationDocxService", () => {
     assert.deepEqual(data.certificacoes, []);
     assert.deepEqual(data.idiomas, []);
   });
+
+  it("uses the AI-generated section titles instead of hardcoded pt-BR labels", async () => {
+    const fillFromStorage = mock.fn(async () => Buffer.from("docx"));
+    const templateDocx = {
+      fillFromStorage,
+      docxToPdf: mock.fn(async () => Buffer.from("pdf")),
+    } as unknown as ResumeTemplateDocxService;
+
+    const service = new CvAdaptationDocxService(templateDocx);
+
+    const output: CvAdaptationOutput = {
+      summary: "Results-driven engineer with a track record of shipping.",
+      sections: [
+        {
+          sectionType: "header",
+          title: "Header",
+          items: [{ heading: "Ana", bullets: ["ana@cv.com"] }],
+        },
+        {
+          sectionType: "experience",
+          title: "Work Experience",
+          items: [{ heading: "Engineer", bullets: ["Delivered results"] }],
+        },
+        {
+          sectionType: "skills",
+          title: "Skills",
+          items: [{ heading: "", bullets: ["TypeScript"] }],
+        },
+        {
+          sectionType: "education",
+          title: "Education",
+          items: [{ heading: "BSc", bullets: [] }],
+        },
+        {
+          sectionType: "certifications",
+          title: "Certifications",
+          items: [{ heading: "AWS", bullets: [] }],
+        },
+        {
+          sectionType: "languages",
+          title: "Languages",
+          items: [{ heading: "English", subheading: "Fluent", bullets: [] }],
+        },
+      ],
+      highlightedSkills: [],
+      removedSections: [],
+    };
+
+    await service.generateDocx(output, "https://bucket/template.docx");
+
+    const calls = fillFromStorage.mock.calls as Array<{ arguments: unknown[] }>;
+    const call = calls[0];
+    assert.ok(call);
+    const data = call.arguments[1] as {
+      sectionTitleExperience: string;
+      sectionTitleSkills: string;
+      sectionTitleEducation: string;
+      sectionTitleCertifications: string;
+      sectionTitleLanguages: string;
+    };
+
+    assert.equal(data.sectionTitleExperience, "Work Experience");
+    assert.equal(data.sectionTitleSkills, "Skills");
+    assert.equal(data.sectionTitleEducation, "Education");
+    assert.equal(data.sectionTitleCertifications, "Certifications");
+    assert.equal(data.sectionTitleLanguages, "Languages");
+  });
 });

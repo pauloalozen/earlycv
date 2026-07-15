@@ -133,8 +133,10 @@ export class CvAdaptationDocxService {
   }
 
   private mapOutputToTemplateData(output: CvAdaptationOutput) {
-    const lang = this.detectLanguage(output);
-    const labels = SECTION_LABELS[lang];
+    // Fallback only: summary has no section of its own, so it has no
+    // AI-generated title to reuse. Every other section title below comes
+    // straight from `output` (already in the CV's own language).
+    const labels = SECTION_LABELS[this.detectLanguage(output)];
 
     const headerSection = output.sections?.find(
       (s) => s.sectionType === "header",
@@ -198,11 +200,11 @@ export class CvAdaptationDocxService {
       hasMainGoal: mainGoal.trim().length > 0,
       summary: summaryText,
       sectionTitleSummary: labels.summary,
-      sectionTitleExperience: labels.experience,
-      sectionTitleSkills: labels.skills,
-      sectionTitleEducation: labels.education,
-      sectionTitleCertifications: labels.certifications,
-      sectionTitleLanguages: labels.languages,
+      sectionTitleExperience: experienceSection?.title || labels.experience,
+      sectionTitleSkills: skillsSection?.title || labels.skills,
+      sectionTitleEducation: educationSection?.title || labels.education,
+      sectionTitleCertifications: certSection?.title || labels.certifications,
+      sectionTitleLanguages: langSection?.title || labels.languages,
       items: this.mapExperience(experienceSection),
       competencias: this.mapSkills(skillsSection),
       educacao: this.mapCourseItems(educationSection),
