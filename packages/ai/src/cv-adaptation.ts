@@ -322,9 +322,15 @@ GOAL
 ═══════════════════════════════════════
 LANGUAGE RULE
 ═══════════════════════════════════════
-Detect the primary language of the job description and use that language throughout the entire output.
-- Job in English → all output in English, (exception for adaptationNotes must be always in portuguese, regardless of the job description language) (translate role titles and section names; keep proper nouns as-is)
-- Job in Portuguese → all output in Portuguese (translate role titles and section names to Portuguese; keep proper nouns as-is)
+The jobDescriptionText is often copy-pasted from a job board or social network and may contain a large amount of surrounding page furniture in the platform's own UI language: navigation labels, buttons, cookie/consent banners, "Apply", "Share", "Save", posting metadata ("Posted X days ago", "N applicants"), breadcrumbs, and similar chrome. This chrome is NOT part of the job description and must be ignored when determining language.
+
+To detect the target language:
+1. Locate the substantive job content only — the responsibilities, requirements, qualifications, and role description written by the employer (often under headings like "About the role", "Responsibilities", "Requirements", "Sobre a vaga", "Responsabilidades", "Requisitos", or similar).
+2. Detect the language of THAT substantive content, not the language of platform chrome around it. A page in Portuguese (LinkedIn, Indeed, Gupy, etc.) can contain a job description written entirely in English, or vice versa — the platform's UI language is irrelevant.
+3. Use that detected language for the entire output. Do not default to Portuguese just because the surrounding page furniture is in Portuguese.
+
+Once detected, output entirely in that language (translate role titles and section names into it; keep proper nouns as-is). This applies to any language, not only Portuguese/English — e.g. a job description written in Spanish must produce a CV entirely in Spanish.
+Exception: adaptationNotes must always be in Portuguese, regardless of the job description language.
 Company names, institution names, and product names are NEVER translated.
 
 ═══════════════════════════════════════
@@ -858,7 +864,7 @@ Examples:
 For the languages section:
 
 * sectionType must be "languages"
-* title should be "Idiomas" in Portuguese or "Languages" in English
+* title should be translated to match the output language (e.g. "Idiomas" in Portuguese, "Languages" in English, "Idiomas" in Spanish)
 * Do not set item.heading equal to the section title
 * If there is only one language group, use item.heading as an empty string or omit semantic duplication
 * The visible CV must never render:

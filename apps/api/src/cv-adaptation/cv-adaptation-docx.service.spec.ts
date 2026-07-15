@@ -282,4 +282,46 @@ describe("CvAdaptationDocxService", () => {
     assert.equal(data.sectionTitleCertifications, "Certifications");
     assert.equal(data.sectionTitleLanguages, "Languages");
   });
+
+  it("splits free-text language bullets into language + level instead of leaving language blank", async () => {
+    const fillFromStorage = mock.fn(async () => Buffer.from("docx"));
+    const templateDocx = {
+      fillFromStorage,
+      docxToPdf: mock.fn(async () => Buffer.from("pdf")),
+    } as unknown as ResumeTemplateDocxService;
+
+    const service = new CvAdaptationDocxService(templateDocx);
+
+    const output: CvAdaptationOutput = {
+      summary: "Summary",
+      sections: [
+        {
+          sectionType: "languages",
+          title: "Languages",
+          items: [
+            {
+              heading: "",
+              bullets: ["English: Advanced", "Spanish: Intermediate"],
+            },
+          ],
+        },
+      ],
+      highlightedSkills: [],
+      removedSections: [],
+    };
+
+    await service.generateDocx(output, "https://bucket/template.docx");
+
+    const calls = fillFromStorage.mock.calls as Array<{ arguments: unknown[] }>;
+    const call = calls[0];
+    assert.ok(call);
+    const data = call.arguments[1] as {
+      idiomas: Array<{ language: string; languageLevel: string }>;
+    };
+
+    assert.deepEqual(data.idiomas, [
+      { language: "English", languageLevel: "Advanced" },
+      { language: "Spanish", languageLevel: "Intermediate" },
+    ]);
+  });
 });

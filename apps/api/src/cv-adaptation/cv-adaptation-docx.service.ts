@@ -23,6 +23,14 @@ const SECTION_LABELS = {
     certifications: "CERTIFICATIONS",
     languages: "LANGUAGES",
   },
+  es: {
+    summary: "RESUMEN PROFESIONAL",
+    experience: "EXPERIENCIA LABORAL",
+    skills: "COMPETENCIAS",
+    education: "EDUCACIÓN",
+    certifications: "CERTIFICACIONES",
+    languages: "IDIOMAS",
+  },
 } as const;
 
 @Injectable()
@@ -112,7 +120,7 @@ export class CvAdaptationDocxService {
     return zip.generate({ type: "nodebuffer" }) as Buffer;
   }
 
-  private detectLanguage(output: CvAdaptationOutput): "pt" | "en" {
+  private detectLanguage(output: CvAdaptationOutput): "pt" | "en" | "es" {
     const text = [
       output.summary ?? "",
       ...(output.sections ?? []).map((s) => s.title),
@@ -129,7 +137,18 @@ export class CvAdaptationDocxService {
         /\b(the|and|with|for|experience|education|skills|languages|certifications|summary)\b/g,
       ) ?? []
     ).length;
-    return enScore > ptScore ? "en" : "pt";
+    const esScore = (
+      text.match(
+        /\b(el|la|los|las|con|para|una|por|experiencia|educación|habilidades|competencias|resumen)\b/g,
+      ) ?? []
+    ).length;
+    const scores: Array<["pt" | "en" | "es", number]> = [
+      ["en", enScore],
+      ["es", esScore],
+      ["pt", ptScore],
+    ];
+    scores.sort((a, b) => b[1] - a[1]);
+    return scores[0][1] > 0 ? scores[0][0] : "pt";
   }
 
   private mapOutputToTemplateData(output: CvAdaptationOutput) {
@@ -276,15 +295,35 @@ export class CvAdaptationDocxService {
   }
 
   private mapLanguages(section?: CvSection) {
-    return (section?.items ?? [])
-      .map((item) => ({
-        language: item.heading?.trim() ?? "",
-        languageLevel:
-          item.subheading?.trim() ?? item.bullets?.[0]?.trim() ?? "",
-      }))
-      .filter((item) => {
-        return item.language.length > 0 || item.languageLevel.length > 0;
-      });
+    const pairs: Array<{ language: string; languageLevel: string }> = [];
+
+    for (const item of section?.items ?? []) {
+      const heading = item.heading?.trim() ?? "";
+      const subheading = item.subheading?.trim() ?? "";
+      if (heading) {
+        // Structured shape: one item per language (heading = language, subheading = level).
+        pairs.push({ language: heading, languageLevel: subheading });
+        continue;
+      }
+
+      // Per the AI prompt, when there's a single language group the model omits
+      // item.heading and lists each language as free text in its own bullet
+      // (e.g. "English: Advanced"). Split each bullet into language + level.
+      for (const bullet of item.bullets ?? []) {
+        const text = bullet?.trim() ?? "";
+        if (!text) continue;
+        const match = text.match(/^(.+?)\s*[:–—-]\s*(.+)$/);
+        pairs.push(
+          match
+            ? { language: match[1].trim(), languageLevel: match[2].trim() }
+            : { language: text, languageLevel: "" },
+        );
+      }
+    }
+
+    return pairs.filter(
+      (item) => item.language.length > 0 || item.languageLevel.length > 0,
+    );
   }
 
   private findSectionByTypeOrTitle(
