@@ -762,7 +762,11 @@ function AnaliseRow({
   hasCredits: boolean;
 }) {
   const MIN_RELEASE_LOADING_MS = 3000;
-  const REDEEM_REQUEST_TIMEOUT_MS = 15_000;
+  // Backend now awaits CV section generation (LLM call) before responding, so
+  // this isn't bounding the LLM call itself — it's just a safety net against
+  // a dead/hung connection. If it fires, the backend has already finished
+  // (credit debited, CV generated) — the user just needs to reload.
+  const REDEEM_REQUEST_TIMEOUT_MS = 180_000;
   const redeemHref = `/api/cv-adaptation/${adaptation.id}/redeem-credit`;
   const redeemSessionKey = `dashboard-cv-redeemed:${redeemHref}`;
   const router = useRouter();

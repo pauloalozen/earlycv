@@ -50,6 +50,7 @@ export default async function AdaptacaoCvPage({
       finalCvOutput={content.finalCvOutput ?? null}
       editedCvJson={content.editedCvJson ?? null}
       sectionMapping={content.sectionMapping ?? {}}
+      isLegacyFormat={content.isLegacyFormat ?? false}
       jobTitle={content.jobTitle ?? null}
       companyName={content.companyName ?? null}
       jobDescriptionText={content.jobDescriptionText ?? null}

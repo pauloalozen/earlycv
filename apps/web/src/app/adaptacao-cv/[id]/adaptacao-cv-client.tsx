@@ -109,6 +109,7 @@ type Props = {
   finalCvOutput: FinalCvOutput | null;
   editedCvJson: FinalCvOutput | null;
   sectionMapping: Record<string, string>;
+  isLegacyFormat?: boolean;
   jobTitle: string | null;
   companyName: string | null;
   jobDescriptionText: string | null;
@@ -1437,6 +1438,7 @@ export function AdaptacaoCvClient({
   finalCvOutput: initialFinalCvOutput,
   editedCvJson,
   sectionMapping: initialSectionMapping,
+  isLegacyFormat: initialIsLegacyFormat,
   jobTitle,
   companyName,
   jobDescriptionText,
@@ -1448,6 +1450,9 @@ export function AdaptacaoCvClient({
 }: Props) {
   const [finalCvOutput, setFinalCvOutput] = useState(initialFinalCvOutput);
   const [sectionMapping, setSectionMapping] = useState(initialSectionMapping);
+  const [isLegacyFormat, setIsLegacyFormat] = useState(
+    initialIsLegacyFormat ?? false,
+  );
   const isDelivered =
     adaptationStatus === "delivered" &&
     hasSections(editedCvJson ?? initialFinalCvOutput);
@@ -1522,7 +1527,11 @@ export function AdaptacaoCvClient({
         finalCvOutput?: { sections?: unknown[]; summary?: string } | null;
         sectionMapping?: Record<string, string>;
         status?: string;
+        isLegacyFormat?: boolean;
       };
+      if (typeof payload.isLegacyFormat === "boolean") {
+        setIsLegacyFormat(payload.isLegacyFormat);
+      }
       const isDone =
         payload.status === "delivered" &&
         payload.finalCvOutput &&
@@ -2891,9 +2900,33 @@ export function AdaptacaoCvClient({
                         lineHeight: 1.6,
                       }}
                     >
-                      Esta análise foi gerada em formato legado. Reanalise seu
-                      CV para acessar a visualização completa.
+                      {isLegacyFormat
+                        ? "Este currículo foi gerado em uma versão antiga do sistema. Faça uma nova análise para ver o resultado atualizado."
+                        : "Ainda estamos finalizando seu currículo. Isso pode levar alguns instantes — atualize a página para ver o resultado."}
                     </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isLegacyFormat) {
+                          window.location.href = "/adaptar";
+                        } else {
+                          window.location.reload();
+                        }
+                      }}
+                      style={{
+                        marginTop: 10,
+                        padding: "7px 14px",
+                        background: "transparent",
+                        color: "#7a3d10",
+                        border: `1px solid ${AMBER_BORDER}`,
+                        borderRadius: 7,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {isLegacyFormat ? "Fazer nova análise" : "Atualizar página"}
+                    </button>
                   </div>
                 )}
               </div>

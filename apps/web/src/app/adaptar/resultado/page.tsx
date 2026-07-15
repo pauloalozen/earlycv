@@ -1699,7 +1699,7 @@ export default function ResultadoPage() {
     }
     if (!parsed.masterCvText?.trim()) {
       const message =
-        "Análise em formato antigo. Reanalise seu CV para liberar o download.";
+        "Esta análise foi feita em uma versão antiga do sistema. Faça uma nova análise para liberar o download.";
       setClaimError(message);
       setReleaseError(message);
       setReleaseStatus("error");
@@ -1707,7 +1707,7 @@ export default function ResultadoPage() {
     }
     if (!parsed.analysisCvSnapshotId?.trim()) {
       const message =
-        "Análise em formato antigo. Reanalise seu CV para liberar o download.";
+        "Esta análise foi feita em uma versão antiga do sistema. Faça uma nova análise para liberar o download.";
       setClaimError(message);
       setReleaseError(message);
       setReleaseStatus("error");

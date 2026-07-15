@@ -3316,3 +3316,75 @@ test("resolveExistingKeywordRule filtra frases contaminadas e preserva apenas a 
     ausentes: [],
   });
 });
+
+test("getContent: isLegacyFormat is false when a snapshot exists, even without sections yet", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findFirst: async () => ({
+          id: "adapt-1",
+          userId: "user-1",
+          adaptedContentJson: { vaga: { cargo: "Dev" } },
+          aiAuditJson: null,
+          editedCvJson: null,
+          analysisCvSnapshotId: "snapshot-1",
+          masterResume: { rawText: null },
+          status: "delivered",
+          paymentStatus: "completed",
+          isUnlocked: true,
+          jobTitle: null,
+          companyName: null,
+          jobDescriptionText: "",
+          jobApplicationId: null,
+        }),
+        count: async () => 0,
+        update: async () => ({}),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const result = await service.getContent("user-1", "adapt-1");
+  assert.equal(result.isLegacyFormat, false);
+});
+
+test("getContent: isLegacyFormat is true only when there is no snapshot and no base CV text at all", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      cvAdaptation: {
+        findFirst: async () => ({
+          id: "adapt-1",
+          userId: "user-1",
+          adaptedContentJson: { vaga: { cargo: "Dev" } },
+          aiAuditJson: null,
+          editedCvJson: null,
+          analysisCvSnapshotId: null,
+          masterResume: { rawText: null },
+          status: "delivered",
+          paymentStatus: "completed",
+          isUnlocked: true,
+          jobTitle: null,
+          companyName: null,
+          jobDescriptionText: "",
+          jobApplicationId: null,
+        }),
+        count: async () => 0,
+        update: async () => ({}),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const result = await service.getContent("user-1", "adapt-1");
+  assert.equal(result.isLegacyFormat, true);
+});

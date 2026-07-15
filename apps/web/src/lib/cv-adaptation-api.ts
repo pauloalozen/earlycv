@@ -170,6 +170,7 @@ export type CvAdaptationContentResponse = {
   finalCvOutput?: FinalCvOutput | null;
   editedCvJson?: FinalCvOutput | null;
   sectionMapping?: Record<string, string>;
+  isLegacyFormat?: boolean;
   paymentStatus?: PaymentStatus;
   isUnlocked?: boolean;
   status?: string;

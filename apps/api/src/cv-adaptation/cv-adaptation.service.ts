@@ -611,15 +611,17 @@ export class CvAdaptationService {
       callerMethod: "claimGuest",
     });
 
-    // Generate aiAuditJson (structured CV sections) in background so
-    // /adaptacao-cv loads without polling when the user navigates there.
-    void this.ensureLegacyStructuredOutput({
+    // Generate aiAuditJson (structured CV sections) synchronously so
+    // /adaptacao-cv has real content the moment the user navigates there,
+    // instead of racing a background job against the frontend redirect.
+    await this.ensureLegacyStructuredOutput({
       ...adaptation,
       masterResume: adaptation.masterResume ?? { rawText: null },
     }).catch((err) => {
       this.logger.error(
         `[claim-guest] CV generation failed for ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
+      return null;
     });
 
     return createCvAdaptationResponseDto(adaptation);
@@ -1919,7 +1921,9 @@ export class CvAdaptationService {
       callerMethod: "redeemWithCredit",
     });
 
-    this.deliverAdaptation(adaptation.id).catch((err) => {
+    // Await so the CV sections exist before this response reaches the
+    // frontend, which redirects to /adaptacao-cv immediately on success.
+    await this.deliverAdaptation(adaptation.id).catch((err) => {
       this.logger.error(
         `[redeem-credit] delivery failed for ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -2497,6 +2501,7 @@ export class CvAdaptationService {
   async getContent(userId: string, id: string) {
     const adaptation = await this.database.cvAdaptation.findFirst({
       where: { id, userId },
+      include: { masterResume: { select: { rawText: true } } },
     });
 
     if (!adaptation) {
@@ -2506,6 +2511,18 @@ export class CvAdaptationService {
     if (!adaptation.adaptedContentJson) {
       throw new BadRequestException("Adaptation analysis is not ready yet.");
     }
+
+    // True legacy: there is no base CV text to generate sections from at all
+    // (pre-dates the snapshot pipeline and has neither a master resume nor
+    // enough guest-analysis data to synthesize one). Only this case should
+    // ever prompt the user to redo the analysis — anything else with missing
+    // sections is a transient generation issue, not a legacy record.
+    const isLegacyFormat =
+      !adaptation.analysisCvSnapshotId &&
+      !adaptation.masterResume?.rawText?.trim() &&
+      !this.synthesizeMasterCvTextFromGuestAnalysis(
+        adaptation.adaptedContentJson,
+      ).trim();
 
     // Start countByJob in background so it runs while CPU work happens below.
     const countPromise = this.countByJob(
@@ -2589,6 +2606,7 @@ export class CvAdaptationService {
       finalCvOutput,
       editedCvJson,
       sectionMapping,
+      isLegacyFormat,
       paymentStatus: adaptation.paymentStatus,
       isUnlocked: adaptation.isUnlocked,
       status: adaptation.status,
@@ -2812,14 +2830,18 @@ export class CvAdaptationService {
       callerMethod: "deliverAdaptation",
     });
 
-    // Pre-generate aiAuditJson (structured CV output) in background so
-    // adaptationNotes is available immediately when the user views results
+    // Generate aiAuditJson (structured CV output) so it's ready before
+    // deliverAdaptation resolves. Callers that await this method (the
+    // synchronous claim/redeem flows) get real content before redirecting
+    // the user; fire-and-forget callers (webhooks, reconciliation) are
+    // unaffected since they don't await this method either.
     if (!adaptation.aiAuditJson) {
-      this.ensureLegacyStructuredOutput(adaptation).catch((err) => {
+      await this.ensureLegacyStructuredOutput(adaptation).catch((err) => {
         console.error(
-          `Background CV generation failed for ${adaptationId}:`,
+          `CV generation failed for ${adaptationId}:`,
           err instanceof Error ? err.message : String(err),
         );
+        return null;
       });
     }
   }
