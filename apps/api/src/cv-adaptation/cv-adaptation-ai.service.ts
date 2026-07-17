@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 
-import { getAiModel } from "../common/ai-client-factory";
+import { getActiveAiSupplier, getAiModel } from "../common/ai-client-factory";
 import { DatabaseService } from "../database/database.service";
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 import type {
@@ -34,7 +34,9 @@ type AnalyzeJobFitResult = {
 export class CvAdaptationAiService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI,
+    @Inject("CV_ANALYSIS_AI_CLIENT") private readonly analysisClient: OpenAI,
+    @Inject("CV_GENERATION_AI_CLIENT")
+    private readonly generationClient: OpenAI,
   ) {}
 
   async analyzeAndAdaptDirect(
@@ -103,12 +105,12 @@ export class CvAdaptationAiService {
       };
     }
 
-    const model = getAiModel();
+    const model = getAiModel("ANALYSIS");
     const { analyzeAndAdaptCv, CV_ANALYSIS_PROMPT_VERSION } = await import(
       "@earlycv/ai"
     );
     // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
-    const output = await analyzeAndAdaptCv(this.aiClient as any, model, {
+    const output = await analyzeAndAdaptCv(this.analysisClient as any, model, {
       masterCvText: input.masterCvText,
       jobDescriptionText: input.jobDescriptionText,
       canonicalJobJson: input.canonicalJobJson,
@@ -155,18 +157,23 @@ export class CvAdaptationAiService {
       return { output: stub, audit: { stub: true } };
     }
 
-    const model = getAiModel();
+    const model = getAiModel("CV_GENERATION");
     const { adaptCv } = await import("@earlycv/ai");
-    // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
-    const { output, audit } = await adaptCv(this.aiClient as any, model, {
-      masterCvText: input.masterCvText,
-      jobDescriptionText: input.jobDescriptionText,
-      selectedKeywords: input.selectedKeywords,
-      jobTitle: input.jobTitle,
-      companyName: input.companyName,
-      requirementCoverage: input.requirementCoverage,
-      ajustesConteudo: input.ajustesConteudo,
-    });
+    const { output, audit } = await adaptCv(
+      // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
+      this.generationClient as any,
+      model,
+      {
+        masterCvText: input.masterCvText,
+        jobDescriptionText: input.jobDescriptionText,
+        selectedKeywords: input.selectedKeywords,
+        jobTitle: input.jobTitle,
+        companyName: input.companyName,
+        requirementCoverage: input.requirementCoverage,
+        ajustesConteudo: input.ajustesConteudo,
+      },
+      getActiveAiSupplier("CV_GENERATION"),
+    );
 
     return { output: output as CvAdaptationOutput, audit };
   }
@@ -216,18 +223,23 @@ export class CvAdaptationAiService {
       };
     }
 
-    const model = getAiModel();
+    const model = getAiModel("CV_GENERATION");
     const { adaptCv } = await import("@earlycv/ai");
-    // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
-    const { output } = await adaptCv(this.aiClient as any, model, {
-      masterCvText: input.masterCvText,
-      jobDescriptionText: input.jobDescriptionText,
-      selectedKeywords: input.selectedMissingKeywords,
-      jobTitle: input.jobTitle,
-      companyName: input.companyName,
-      requirementCoverage: input.requirementCoverage,
-      ajustesConteudo: input.ajustesConteudo,
-    });
+    const { output } = await adaptCv(
+      // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
+      this.generationClient as any,
+      model,
+      {
+        masterCvText: input.masterCvText,
+        jobDescriptionText: input.jobDescriptionText,
+        selectedKeywords: input.selectedMissingKeywords,
+        jobTitle: input.jobTitle,
+        companyName: input.companyName,
+        requirementCoverage: input.requirementCoverage,
+        ajustesConteudo: input.ajustesConteudo,
+      },
+      getActiveAiSupplier("CV_GENERATION"),
+    );
 
     return output as CvAdaptationOutput;
   }
@@ -278,17 +290,22 @@ export class CvAdaptationAiService {
     }
 
     try {
-      const model = getAiModel();
+      const model = getAiModel("CV_GENERATION");
       const { adaptCv } = await import("@earlycv/ai");
 
-      // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
-      const { output, audit } = await adaptCv(this.aiClient as any, model, {
-        masterCvText,
-        jobDescriptionText: adaptation.jobDescriptionText,
-        selectedKeywords: adaptation.selectedMissingKeywords,
-        jobTitle: adaptation.jobTitle || undefined,
-        companyName: adaptation.companyName || undefined,
-      });
+      const { output, audit } = await adaptCv(
+        // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
+        this.generationClient as any,
+        model,
+        {
+          masterCvText,
+          jobDescriptionText: adaptation.jobDescriptionText,
+          selectedKeywords: adaptation.selectedMissingKeywords,
+          jobTitle: adaptation.jobTitle || undefined,
+          companyName: adaptation.companyName || undefined,
+        },
+        getActiveAiSupplier("CV_GENERATION"),
+      );
 
       const previewText = output.summary.slice(0, 200);
 

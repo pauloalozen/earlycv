@@ -387,9 +387,18 @@ export class AnalysisProtectionFacade {
         result,
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "unknown_error";
+
+      // Diagnóstico temporário para validação de modelos/cache (OpenRouter) —
+      // sem isso, o motivo real (timeout, JSON malformado, validação de shape)
+      // só fica visível na telemetria, nunca no console. Remover quando a
+      // validação de modelos estiver concluída.
+      console.error(`[ai-provider-failed] ${errorMessage}`);
+
       await this.emitTelemetry("openai_request_failed", context, {
         metadata: {
-          message: error instanceof Error ? error.message : "unknown_error",
+          message: errorMessage,
         },
       });
 

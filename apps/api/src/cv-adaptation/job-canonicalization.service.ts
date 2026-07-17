@@ -48,7 +48,7 @@ type CanonicalizationClient = {
 export class JobCanonicalizationService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI,
+    @Inject("JOB_CANONICALIZATION_AI_CLIENT") private readonly aiClient: OpenAI,
     @Optional()
     @Inject("JOB_CANONICALIZATION_CLIENT")
     private readonly canonicalizationClient?: CanonicalizationClient,

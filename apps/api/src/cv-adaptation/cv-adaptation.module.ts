@@ -38,8 +38,16 @@ import { JobRequirementSetsService } from "./job-requirement-sets.service";
     JobCanonicalizationService,
     JobRequirementSetsService,
     {
-      provide: "OPENAI_CLIENT",
-      useFactory: () => createAiClientFromEnv(),
+      provide: "CV_ANALYSIS_AI_CLIENT",
+      useFactory: () => createAiClientFromEnv("ANALYSIS"),
+    },
+    {
+      provide: "CV_GENERATION_AI_CLIENT",
+      useFactory: () => createAiClientFromEnv("CV_GENERATION"),
+    },
+    {
+      provide: "JOB_CANONICALIZATION_AI_CLIENT",
+      useFactory: () => createAiClientFromEnv("JOB_CANONICALIZATION"),
     },
   ],
 })

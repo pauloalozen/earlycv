@@ -4,7 +4,7 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 
-import { getAiModel } from "../common/ai-client-factory";
+import { getActiveAiSupplier, getAiModel } from "../common/ai-client-factory";
 import { DatabaseService } from "../database/database.service";
 import type {
   CanonicalProfileData,
@@ -43,7 +43,7 @@ export class MasterCvCanonicalExtractionService {
       ProfileReadinessService,
       "compute"
     >,
-    @Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI,
+    @Inject("MASTERCV_AI_CLIENT") private readonly aiClient: OpenAI,
     @Optional() private readonly extractionClient?: ExtractionClient,
   ) {}
 
@@ -177,6 +177,7 @@ export class MasterCvCanonicalExtractionService {
       this.aiClient as never,
       model,
       input,
+      getActiveAiSupplier("MASTERCV"),
     );
     return output;
   }

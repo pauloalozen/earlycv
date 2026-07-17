@@ -291,10 +291,41 @@ export function CvBenchmarkClient() {
         );
         return;
       }
-      setCases(parsed);
+      // Soma aos casos já importados em vez de substituir, permitindo importar
+      // várias pastas em sequência. IDs duplicados (mesmo nome de subpasta em
+      // importações diferentes) são ignorados, mantendo a primeira ocorrência.
+      setCases((prev) => {
+        const existingIds = new Set(prev.map((c) => c.id));
+        const duplicates = parsed.filter((c) => existingIds.has(c.id));
+        const newOnes = parsed.filter((c) => !existingIds.has(c.id));
+        if (duplicates.length > 0) {
+          alert(
+            `${duplicates.length} caso(s) ignorado(s) por ID já importado: ${duplicates
+              .map((c) => c.id)
+              .join(", ")}`,
+          );
+        }
+        return [...prev, ...newOnes];
+      });
     } finally {
       setImporting(false);
+      // Reseta o value para permitir reimportar a mesma pasta/arquivos depois
+      // (o browser não dispara onChange se a seleção não mudar).
+      if (folderInputRef.current) folderInputRef.current.value = "";
+      if (filesInputRef.current) filesInputRef.current.value = "";
     }
+  }
+
+  function clearAll() {
+    if (cases.length === 0) return;
+    if (
+      !window.confirm(
+        `Remover todos os ${cases.length} caso(s) importado(s)? Os resultados de análise/adaptação não salvos serão perdidos.`,
+      )
+    ) {
+      return;
+    }
+    setCases([]);
   }
 
   // ── Analyze ───────────────────────────────────────────────────────────────
@@ -565,9 +596,12 @@ export function CvBenchmarkClient() {
           </Btn>
 
           {cases.length > 0 && (
-            <span style={{ fontSize: 12, color: AT.muted }}>
-              {cases.length} caso(s) importado(s)
-            </span>
+            <>
+              <span style={{ fontSize: 12, color: AT.muted }}>
+                {cases.length} caso(s) importado(s)
+              </span>
+              <Btn onClick={clearAll}>Limpar tudo</Btn>
+            </>
           )}
 
           {/* Folder picker */}

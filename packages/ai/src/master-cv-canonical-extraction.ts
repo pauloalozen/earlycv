@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type OpenAI from "openai";
 
+import { extractTextFromPdf } from "./pdf-parser.js";
+import {
+  buildSystemMessage,
+  logAiUsage,
+  stripJsonCodeFence,
+} from "./prompt-cache.js";
+import type { AIProvider } from "./types.js";
+
 const MASTER_CV_MAX_CHARS = 24_000;
 const ALLOWED_FIELD_STATUS = ["filled", "partial", "missing"] as const;
 const ALLOWED_CANONICAL_FIELD_PATHS = [
@@ -128,6 +136,7 @@ Return exactly this JSON shape:
 
 function createAuditRecord(params: {
   traceId: string;
+  provider: AIProvider;
   model: string;
   request: {
     originalInput: {
@@ -142,13 +151,7 @@ function createAuditRecord(params: {
     sentToModel: {
       locale: string;
       prompt: string;
-      masterCvText: string | null;
-      file: {
-        filename: string;
-        mimetype: string;
-        size: number;
-        fileDataLength: number;
-      } | null;
+      masterCvText: string;
     };
   };
   result: {
@@ -163,15 +166,15 @@ function createAuditRecord(params: {
   return {
     traceId: params.traceId,
     createdAt: new Date(),
-    provider: "openai" as const,
+    provider: params.provider,
     request: {
-      provider: "openai" as const,
+      provider: params.provider,
       model: params.model,
       input: JSON.stringify(params.request),
       systemPrompt: SYSTEM_PROMPT,
     },
     result: {
-      provider: "openai" as const,
+      provider: params.provider,
       model: params.model,
       content: params.result.content,
       usage: params.result.usage,
@@ -179,64 +182,30 @@ function createAuditRecord(params: {
   };
 }
 
-function buildPrompt(input: MasterCvCanonicalExtractionInput) {
-  const locale = input.locale ?? "pt-BR";
-  const masterCvText = input.masterCvText
-    ? input.masterCvText.slice(0, MASTER_CV_MAX_CHARS)
-    : null;
-
-  const prompt = input.file
-    ? [
-        `<LOCALE>${locale}</LOCALE>`,
-        `<TASK>Extract canonical profile data from the attached CV file and return as JSON.</TASK>`,
-        `<FILE_METADATA>`,
-        `name: ${input.file.originalname}`,
-        `mimeType: ${input.file.mimetype}`,
-        `sizeBytes: ${input.file.size}`,
-        `</FILE_METADATA>`,
-      ].join("\n")
-    : `<LOCALE>${locale}</LOCALE>\n<MASTER_CV>\n${masterCvText ?? ""}\n</MASTER_CV>\n<TASK>Extract canonical profile data and return as JSON.</TASK>`;
-
-  return { locale, masterCvText, prompt };
-}
-
-function buildResponseInput(
+// A Chat Completions API (usada por todos os supliers hoje: OpenAI, xAI,
+// Anthropic, Gemini, Kimi, GLM, DeepSeek) não tem um equivalente universal ao
+// upload nativo de PDF da Responses API da OpenAI (input_file/file_data) — nem
+// todo provedor aceita o mesmo formato de arquivo. Por isso o texto do CV é
+// sempre extraído localmente (via pdf-parse) antes de ir para o modelo; isso
+// também é mais barato e determinístico do que depender de OCR/visão nativa
+// de cada provedor.
+async function resolveMasterCvText(
   input: MasterCvCanonicalExtractionInput,
-  prompt: string,
-) {
-  if (input.file) {
-    // file_data must be a data URI: data:<mime>;base64,<data>
-    const base64 = input.file.buffer.toString("base64");
-    const dataUri = `data:${input.file.mimetype};base64,${base64}`;
-    return [
-      {
-        role: "user" as const,
-        content: [
-          {
-            type: "input_file" as const,
-            file_data: dataUri,
-            filename: input.file.originalname,
-          },
-          {
-            type: "input_text" as const,
-            text: prompt,
-          },
-        ],
-      },
-    ];
+): Promise<string> {
+  if (input.masterCvText) {
+    return input.masterCvText.slice(0, MASTER_CV_MAX_CHARS);
   }
 
-  return [
-    {
-      role: "user" as const,
-      content: [
-        {
-          type: "input_text" as const,
-          text: prompt,
-        },
-      ],
-    },
-  ];
+  if (input.file) {
+    const text = await extractTextFromPdf(input.file.buffer);
+    return text.slice(0, MASTER_CV_MAX_CHARS);
+  }
+
+  return "";
+}
+
+function buildPrompt(locale: string, masterCvText: string): string {
+  return `<LOCALE>${locale}</LOCALE>\n<MASTER_CV>\n${masterCvText}\n</MASTER_CV>\n<TASK>Extract canonical profile data and return as JSON.</TASK>`;
 }
 
 function validateString(value: unknown, path: string): string {
@@ -530,25 +499,32 @@ export async function extractMasterCvCanonicalProfile(
   client: OpenAI,
   model: string,
   input: MasterCvCanonicalExtractionInput,
+  provider: AIProvider = "openai",
 ): Promise<{
   output: MasterCvCanonicalExtractionOutput;
   audit: ReturnType<typeof createAuditRecord>;
 }> {
   const traceId = randomUUID();
-  const { locale, masterCvText, prompt } = buildPrompt(input);
-  const response = await client.responses.create({
-    model,
-    instructions: SYSTEM_PROMPT,
-    input: buildResponseInput(input, prompt),
-    text: { format: { type: "json_object" } },
-  });
+  const locale = input.locale ?? "pt-BR";
+  const masterCvText = await resolveMasterCvText(input);
+  const prompt = buildPrompt(locale, masterCvText);
 
-  const content = response.output_text;
+  const response = await client.chat.completions.create({
+    model,
+    messages: [
+      buildSystemMessage(model, SYSTEM_PROMPT),
+      { role: "user", content: prompt },
+    ],
+    response_format: { type: "json_object" },
+  });
+  logAiUsage("master-cv-extraction", model, response.usage);
+
+  const content = response.choices[0]?.message.content;
   if (!content) throw new Error("No response content from AI model");
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(content);
+    parsed = JSON.parse(stripJsonCodeFence(content));
   } catch {
     throw new Error(
       `Failed to parse AI response as JSON: ${content.slice(0, 200)}`,
@@ -559,11 +535,12 @@ export async function extractMasterCvCanonicalProfile(
 
   const audit = createAuditRecord({
     traceId,
+    provider,
     model,
     request: {
       originalInput: {
         locale,
-        masterCvText,
+        masterCvText: input.masterCvText ?? null,
         file: input.file
           ? {
               originalname: input.file.originalname,
@@ -576,21 +553,13 @@ export async function extractMasterCvCanonicalProfile(
         locale,
         prompt,
         masterCvText,
-        file: input.file
-          ? {
-              filename: input.file.originalname,
-              mimetype: input.file.mimetype,
-              size: input.file.size,
-              fileDataLength: input.file.buffer.toString("base64").length,
-            }
-          : null,
       },
     },
     result: {
       content: JSON.stringify(output),
       usage: {
-        promptTokens: response.usage?.input_tokens,
-        completionTokens: response.usage?.output_tokens,
+        promptTokens: response.usage?.prompt_tokens,
+        completionTokens: response.usage?.completion_tokens,
         totalTokens: response.usage?.total_tokens,
       },
     },

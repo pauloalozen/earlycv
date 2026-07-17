@@ -266,3 +266,37 @@ test("create succeeds when extraction service is not provided", async () => {
 
   assert.equal(created.id, "resume-3");
 });
+
+test("remove deletes dependent resumes instead of promoting a new master", async () => {
+  const deleteManyCalls: Array<Record<string, unknown>> = [];
+
+  const service = new ResumesService(
+    {
+      resume: {
+        findFirst: async () => ({ id: "resume-1", userId: "user-1" }),
+      },
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          resume: {
+            deleteMany: async (args: { where: Record<string, unknown> }) => {
+              deleteManyCalls.push(args.where);
+              return { count: 1 };
+            },
+          },
+        }),
+    } as never,
+    {} as never,
+  );
+
+  const result = await service.remove("user-1", "resume-1");
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(deleteManyCalls.length, 2);
+  // Limpa quem dependia do resume deletado antes de deletar o próprio resume —
+  // sem tentar promover outro resume a master.
+  assert.deepEqual(deleteManyCalls[0], {
+    userId: "user-1",
+    basedOnResumeId: "resume-1",
+  });
+  assert.deepEqual(deleteManyCalls[1], { id: "resume-1", userId: "user-1" });
+});

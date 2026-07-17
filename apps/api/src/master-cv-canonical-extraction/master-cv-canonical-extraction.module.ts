@@ -12,8 +12,8 @@ import { MasterCvCanonicalExtractionWorker } from "./master-cv-canonical-extract
     MasterCvCanonicalExtractionService,
     MasterCvCanonicalExtractionWorker,
     {
-      provide: "OPENAI_CLIENT",
-      useFactory: () => createAiClientFromEnv(),
+      provide: "MASTERCV_AI_CLIENT",
+      useFactory: () => createAiClientFromEnv("MASTERCV"),
     },
   ],
   exports: [MasterCvCanonicalExtractionService],

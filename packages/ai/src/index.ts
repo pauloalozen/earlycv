@@ -2,7 +2,16 @@ import OpenAI from "openai";
 
 import type { OpenAIClientConfig } from "./types.js";
 
-export const aiProviders = ["openai", "xai", "anthropic"] as const;
+export const aiProviders = [
+  "openai",
+  "xai",
+  "anthropic",
+  "gemini",
+  "kimi",
+  "glm",
+  "deepseek",
+  "openrouter",
+] as const;
 export const defaultAIProvider = aiProviders[0];
 
 export function createOpenAIClient(config: OpenAIClientConfig) {
@@ -60,3 +69,8 @@ export type {
   AIProvider,
   OpenAIClientConfig,
 } from "./types.js";
+export {
+  buildSystemMessage,
+  logAiUsage,
+  stripJsonCodeFence,
+} from "./prompt-cache.js";

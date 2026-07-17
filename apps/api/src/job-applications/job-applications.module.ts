@@ -15,8 +15,8 @@ import { JobApplicationsService } from "./job-applications.service";
     InterviewPrepAiService,
     JobApplicationInterviewPrepService,
     {
-      provide: "OPENAI_CLIENT",
-      useFactory: () => createAiClientFromEnv(),
+      provide: "INTERVIEW_PREP_AI_CLIENT",
+      useFactory: () => createAiClientFromEnv("INTERVIEW_PREP"),
     },
   ],
   exports: [JobApplicationsService],

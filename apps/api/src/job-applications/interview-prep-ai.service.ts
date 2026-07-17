@@ -191,7 +191,9 @@ function sanitizeUserReflection(text: string): string {
 export class InterviewPrepAiService {
   private readonly logger = new Logger(InterviewPrepAiService.name);
 
-  constructor(@Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI) {}
+  constructor(
+    @Inject("INTERVIEW_PREP_AI_CLIENT") private readonly aiClient: OpenAI,
+  ) {}
 
   async generate(context: InterviewPrepContext): Promise<InterviewPrepContent> {
     if (process.env.SKIP_AI === "true") {
@@ -201,23 +203,26 @@ export class InterviewPrepAiService {
       return validateAndNormalizeInterviewPrep(this.buildStub(context));
     }
 
-    const model = getAiModel();
+    const model = getAiModel("INTERVIEW_PREP");
     const userPrompt = this.buildUserPrompt(context);
+    const { buildSystemMessage, logAiUsage, stripJsonCodeFence } =
+      await import("@earlycv/ai");
 
     const response = await this.aiClient.chat.completions.create({
       model,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        buildSystemMessage(model, SYSTEM_PROMPT),
         { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },
     });
+    logAiUsage("interview-prep", model, response.usage);
 
     const raw = response.choices[0]?.message?.content ?? "{}";
 
     let parsedRaw: unknown;
     try {
-      parsedRaw = JSON.parse(raw);
+      parsedRaw = JSON.parse(stripJsonCodeFence(raw));
     } catch {
       this.logger.error("[interview-prep] Failed to parse AI response as JSON");
       throw new Error("AI returned invalid JSON for interview prep");

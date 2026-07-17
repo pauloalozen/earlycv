@@ -1,5 +1,11 @@
 import type OpenAI from "openai";
 
+import {
+  buildSystemMessage,
+  logAiUsage,
+  stripJsonCodeFence,
+} from "./prompt-cache.js";
+
 const ALLOWED_WORK_MODES = ["remote", "hybrid", "onsite", null] as const;
 const ALLOWED_EMPLOYMENT_TYPES = [
   "full_time",
@@ -249,39 +255,25 @@ export async function canonicalizeJobDescription(
     throw new Error("jobDescriptionText is required");
   }
 
-  const response = await client.responses.create({
-    input: [
-      {
-        role: "system",
-        content: SYSTEM_PROMPT,
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: normalizedInput,
-          },
-        ],
-      },
-    ],
+  const response = await client.chat.completions.create({
     model,
+    messages: [
+      buildSystemMessage(model, SYSTEM_PROMPT),
+      { role: "user", content: normalizedInput },
+    ],
     temperature: 0,
-    text: {
-      format: {
-        type: "json_object",
-      },
-    },
+    response_format: { type: "json_object" },
   });
+  logAiUsage("job-canonicalization", model, response.usage);
 
-  const content = response.output_text;
+  const content = response.choices[0]?.message.content;
   if (!content) {
     throw new Error("Model returned empty canonical job output");
   }
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(content);
+    parsed = JSON.parse(stripJsonCodeFence(content));
   } catch (error) {
     throw new Error(
       `Failed to parse canonical job JSON: ${error instanceof Error ? error.message : String(error)}`,

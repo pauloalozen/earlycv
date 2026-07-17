@@ -363,44 +363,17 @@ export class ResumesService {
   }
 
   async remove(userId: string, resumeId: string) {
-    const resume = await this.getById(userId, resumeId);
+    await this.getById(userId, resumeId);
 
     await this.database.$transaction(async (tx) => {
-      const nextResume = resume.isMaster
-        ? await tx.resume.findFirst({
-            where: {
-              userId,
-              NOT: { id: resumeId },
-            },
-            orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-          })
-        : null;
-
-      if (nextResume) {
-        await tx.resume.updateMany({
-          where: {
-            userId,
-            basedOnResumeId: resumeId,
-            NOT: { id: nextResume.id },
-          },
-          data: {
-            basedOnResumeId: nextResume.id,
-          },
-        });
-
-        const promoteResult = await tx.resume.updateMany({
-          where: { id: nextResume.id, userId },
-          data: {
-            basedOnResumeId: null,
-            kind: ResumeKind.master,
-            isMaster: true,
-          },
-        });
-
-        if (promoteResult.count !== 1) {
-          throw new NotFoundException("resume not found");
-        }
-      }
+      // Deletar um resume não "resgata"/promove outro a master — qualquer
+      // resume que dependia dele (basedOnResumeId) perde o contexto de
+      // origem e deixa de fazer sentido como dado, então é limpo junto em
+      // vez de ficar órfão (o que violaria Resume_adapted_requires_context_check
+      // quando o resume órfão não tem templateId/targetJobId/targetJobTitle).
+      await tx.resume.deleteMany({
+        where: { userId, basedOnResumeId: resumeId },
+      });
 
       const deleteResult = await tx.resume.deleteMany({
         where: { id: resumeId, userId },
@@ -408,10 +381,6 @@ export class ResumesService {
 
       if (deleteResult.count !== 1) {
         throw new NotFoundException("resume not found");
-      }
-
-      if (!nextResume) {
-        return;
       }
     });
 
