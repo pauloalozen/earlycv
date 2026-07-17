@@ -43,7 +43,7 @@ export class MasterCvCanonicalExtractionService {
       ProfileReadinessService,
       "compute"
     >,
-    @Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI,
+    @Inject("MASTERCV_AI_CLIENT") private readonly aiClient: OpenAI,
     @Optional() private readonly extractionClient?: ExtractionClient,
   ) {}
 
@@ -177,7 +177,7 @@ export class MasterCvCanonicalExtractionService {
       this.aiClient as never,
       model,
       input,
-      getActiveAiSupplier(),
+      getActiveAiSupplier("MASTERCV"),
     );
     return output;
   }

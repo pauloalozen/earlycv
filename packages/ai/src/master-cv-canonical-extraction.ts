@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import type OpenAI from "openai";
 
 import { extractTextFromPdf } from "./pdf-parser.js";
+import {
+  buildSystemMessage,
+  logAiUsage,
+  stripJsonCodeFence,
+} from "./prompt-cache.js";
 import type { AIProvider } from "./types.js";
 
 const MASTER_CV_MAX_CHARS = 24_000;
@@ -507,18 +512,19 @@ export async function extractMasterCvCanonicalProfile(
   const response = await client.chat.completions.create({
     model,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      buildSystemMessage(model, SYSTEM_PROMPT),
       { role: "user", content: prompt },
     ],
     response_format: { type: "json_object" },
   });
+  logAiUsage("master-cv-extraction", model, response.usage);
 
   const content = response.choices[0]?.message.content;
   if (!content) throw new Error("No response content from AI model");
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(content);
+    parsed = JSON.parse(stripJsonCodeFence(content));
   } catch {
     throw new Error(
       `Failed to parse AI response as JSON: ${content.slice(0, 200)}`,

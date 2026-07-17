@@ -45,5 +45,6 @@ test("ai package exposes stable provider contract metadata", () => {
     "kimi",
     "glm",
     "deepseek",
+    "openrouter",
   ]);
 });

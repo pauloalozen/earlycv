@@ -34,7 +34,9 @@ type AnalyzeJobFitResult = {
 export class CvAdaptationAiService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject("OPENAI_CLIENT") private readonly aiClient: OpenAI,
+    @Inject("CV_ANALYSIS_AI_CLIENT") private readonly analysisClient: OpenAI,
+    @Inject("CV_GENERATION_AI_CLIENT")
+    private readonly generationClient: OpenAI,
   ) {}
 
   async analyzeAndAdaptDirect(
@@ -103,12 +105,12 @@ export class CvAdaptationAiService {
       };
     }
 
-    const model = getAiModel();
+    const model = getAiModel("ANALYSIS");
     const { analyzeAndAdaptCv, CV_ANALYSIS_PROMPT_VERSION } = await import(
       "@earlycv/ai"
     );
     // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
-    const output = await analyzeAndAdaptCv(this.aiClient as any, model, {
+    const output = await analyzeAndAdaptCv(this.analysisClient as any, model, {
       masterCvText: input.masterCvText,
       jobDescriptionText: input.jobDescriptionText,
       canonicalJobJson: input.canonicalJobJson,
@@ -155,11 +157,11 @@ export class CvAdaptationAiService {
       return { output: stub, audit: { stub: true } };
     }
 
-    const model = getAiModel();
+    const model = getAiModel("CV_GENERATION");
     const { adaptCv } = await import("@earlycv/ai");
     const { output, audit } = await adaptCv(
       // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
-      this.aiClient as any,
+      this.generationClient as any,
       model,
       {
         masterCvText: input.masterCvText,
@@ -170,7 +172,7 @@ export class CvAdaptationAiService {
         requirementCoverage: input.requirementCoverage,
         ajustesConteudo: input.ajustesConteudo,
       },
-      getActiveAiSupplier(),
+      getActiveAiSupplier("CV_GENERATION"),
     );
 
     return { output: output as CvAdaptationOutput, audit };
@@ -221,11 +223,11 @@ export class CvAdaptationAiService {
       };
     }
 
-    const model = getAiModel();
+    const model = getAiModel("CV_GENERATION");
     const { adaptCv } = await import("@earlycv/ai");
     const { output } = await adaptCv(
       // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
-      this.aiClient as any,
+      this.generationClient as any,
       model,
       {
         masterCvText: input.masterCvText,
@@ -236,7 +238,7 @@ export class CvAdaptationAiService {
         requirementCoverage: input.requirementCoverage,
         ajustesConteudo: input.ajustesConteudo,
       },
-      getActiveAiSupplier(),
+      getActiveAiSupplier("CV_GENERATION"),
     );
 
     return output as CvAdaptationOutput;
@@ -288,12 +290,12 @@ export class CvAdaptationAiService {
     }
 
     try {
-      const model = getAiModel();
+      const model = getAiModel("CV_GENERATION");
       const { adaptCv } = await import("@earlycv/ai");
 
       const { output, audit } = await adaptCv(
         // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
-        this.aiClient as any,
+        this.generationClient as any,
         model,
         {
           masterCvText,
@@ -302,7 +304,7 @@ export class CvAdaptationAiService {
           jobTitle: adaptation.jobTitle || undefined,
           companyName: adaptation.companyName || undefined,
         },
-        getActiveAiSupplier(),
+        getActiveAiSupplier("CV_GENERATION"),
       );
 
       const previewText = output.summary.slice(0, 200);

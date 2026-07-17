@@ -1,5 +1,11 @@
 import type OpenAI from "openai";
 
+import {
+  buildSystemMessage,
+  logAiUsage,
+  stripJsonCodeFence,
+} from "./prompt-cache.js";
+
 const ALLOWED_WORK_MODES = ["remote", "hybrid", "onsite", null] as const;
 const ALLOWED_EMPLOYMENT_TYPES = [
   "full_time",
@@ -252,12 +258,13 @@ export async function canonicalizeJobDescription(
   const response = await client.chat.completions.create({
     model,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      buildSystemMessage(model, SYSTEM_PROMPT),
       { role: "user", content: normalizedInput },
     ],
     temperature: 0,
     response_format: { type: "json_object" },
   });
+  logAiUsage("job-canonicalization", model, response.usage);
 
   const content = response.choices[0]?.message.content;
   if (!content) {
@@ -266,7 +273,7 @@ export async function canonicalizeJobDescription(
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(content);
+    parsed = JSON.parse(stripJsonCodeFence(content));
   } catch (error) {
     throw new Error(
       `Failed to parse canonical job JSON: ${error instanceof Error ? error.message : String(error)}`,

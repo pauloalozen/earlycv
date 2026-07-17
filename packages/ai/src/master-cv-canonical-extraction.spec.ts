@@ -127,10 +127,14 @@ describe("extractMasterCvCanonicalProfile", () => {
       chat: { completions: { create: chatCompletionsCreate } },
     } as unknown as OpenAI;
 
+    // masterCvText é passado junto com file para evitar depender do parser real
+    // de PDF neste teste (já coberto por pdf-parser.spec.ts e pelos testes do
+    // worker) — resolveMasterCvText prioriza masterCvText sobre file, mas o
+    // áudito ainda registra os metadados de file normalmente.
     const { output } = await extractMasterCvCanonicalProfile(
       mockClient,
       "gpt-4.1-mini",
-      { file, locale: "pt-BR" },
+      { file, masterCvText: SAMPLE_CV_TEXT, locale: "pt-BR" },
     );
 
     assert.equal(output.canonicalProfile.fullName, "Ana Silva");
@@ -166,10 +170,12 @@ describe("extractMasterCvCanonicalProfile", () => {
       chat: { completions: { create: chatCompletionsCreate } },
     } as unknown as OpenAI;
 
+    // masterCvText junto com file pelo mesmo motivo do teste acima: evita o
+    // parser real de PDF, mantendo a cobertura de metadados de file no áudito.
     const { audit } = await extractMasterCvCanonicalProfile(
       mockClient,
       "gpt-4.1-mini",
-      { file, locale: "pt-BR" },
+      { file, masterCvText: SAMPLE_CV_TEXT, locale: "pt-BR" },
     );
 
     const requestInput = JSON.parse(audit.request.input) as {
@@ -227,7 +233,7 @@ describe("extractMasterCvCanonicalProfile", () => {
     await assert.rejects(
       () =>
         extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-          file: createFileInput(),
+          masterCvText: SAMPLE_CV_TEXT,
         }),
       /fieldStatus|filled|partial|missing/i,
     );
@@ -243,7 +249,7 @@ describe("extractMasterCvCanonicalProfile", () => {
     await assert.rejects(
       () =>
         extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-          file: createFileInput(),
+          masterCvText: SAMPLE_CV_TEXT,
         }),
       /JSON|parse/i,
     );
@@ -270,7 +276,7 @@ describe("extractMasterCvCanonicalProfile", () => {
       await assert.rejects(
         () =>
           extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-            file: createFileInput(),
+            masterCvText: SAMPLE_CV_TEXT,
           }),
         /confidence|0|1|finite/i,
       );
@@ -292,7 +298,7 @@ describe("extractMasterCvCanonicalProfile", () => {
     await assert.rejects(
       () =>
         extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-          file: createFileInput(),
+          masterCvText: SAMPLE_CV_TEXT,
         }),
       /fieldStatus|unknown/i,
     );
@@ -315,7 +321,7 @@ describe("extractMasterCvCanonicalProfile", () => {
     await assert.rejects(
       () =>
         extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-          file: createFileInput(),
+          masterCvText: SAMPLE_CV_TEXT,
         }),
       /evidence|string\[\]/i,
     );

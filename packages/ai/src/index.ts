@@ -10,6 +10,7 @@ export const aiProviders = [
   "kimi",
   "glm",
   "deepseek",
+  "openrouter",
 ] as const;
 export const defaultAIProvider = aiProviders[0];
 
@@ -68,3 +69,8 @@ export type {
   AIProvider,
   OpenAIClientConfig,
 } from "./types.js";
+export {
+  buildSystemMessage,
+  logAiUsage,
+  stripJsonCodeFence,
+} from "./prompt-cache.js";

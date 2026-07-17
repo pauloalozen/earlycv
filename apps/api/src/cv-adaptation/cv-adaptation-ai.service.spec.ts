@@ -80,7 +80,11 @@ describe("CvAdaptationAiService", () => {
         },
       } as unknown as DatabaseService;
 
-      const service = new CvAdaptationAiService(mockDatabase, mockAiClient);
+      const service = new CvAdaptationAiService(
+        mockDatabase,
+        mockAiClient,
+        mockAiClient,
+      );
 
       const adaptation = {
         id: "test-id",
@@ -158,7 +162,11 @@ describe("CvAdaptationAiService", () => {
         },
       } as unknown as DatabaseService;
 
-      const service = new CvAdaptationAiService(mockDatabase, mockAiClient);
+      const service = new CvAdaptationAiService(
+        mockDatabase,
+        mockAiClient,
+        mockAiClient,
+      );
 
       const adaptation = {
         id: "test-id",
@@ -216,6 +224,7 @@ describe("CvAdaptationAiService", () => {
     await withEnv({ SKIP_AI: "true" }, async () => {
       const service = new CvAdaptationAiService(
         {} as DatabaseService,
+        {} as OpenAI,
         {} as OpenAI,
       );
 

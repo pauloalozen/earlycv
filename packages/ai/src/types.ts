@@ -5,7 +5,8 @@ export type AIProvider =
   | "gemini"
   | "kimi"
   | "glm"
-  | "deepseek";
+  | "deepseek"
+  | "openrouter";
 
 export type AIGenerationRequest = {
   input: string;

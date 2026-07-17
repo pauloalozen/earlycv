@@ -26,6 +26,7 @@ test("InfraService exposes workspace infrastructure diagnostics", async () => {
         "kimi",
         "glm",
         "deepseek",
+        "openrouter",
       ],
     },
     database: {
