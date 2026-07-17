@@ -258,7 +258,7 @@ test("GupyAdapter skips detail fetch for fresh job from HTML board", async () =>
       createJobSourceContext("https://ifood.gupy.io"),
       {
         getExistingJobByCanonicalKey: async () => ({
-          lastSeenAt: new Date("2026-06-10T11:30:00.000Z"),
+          lastSeenAt: new Date(Date.now() - 60 * 60 * 1000),
         }),
       },
     );

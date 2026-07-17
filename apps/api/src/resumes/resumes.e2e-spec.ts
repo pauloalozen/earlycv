@@ -423,69 +423,71 @@ test("updating the current primary resume cannot leave the user without a primar
   await app.close();
 });
 
-test("DELETE /api/resumes/:id removes only the authenticated user's resume and promotes another when needed", async () => {
+test("DELETE /api/resumes/:id removes dependent resumes instead of promoting them", async () => {
   const { app, database } = await createApp();
-  const firstUser = await registerUser(app, database, "resume-delete-one");
-  const secondUser = await registerUser(app, database, "resume-delete-two");
+  try {
+    const firstUser = await registerUser(app, database, "resume-delete-one");
+    const secondUser = await registerUser(app, database, "resume-delete-two");
 
-  const ownResume = await database.resume.create({
-    data: {
-      userId: firstUser.userId,
-      title: "Keep Primary",
-      status: "draft",
-      kind: "master",
-      isMaster: true,
-    },
-  });
-  const secondaryResume = await database.resume.create({
-    data: {
-      userId: firstUser.userId,
-      title: "Delete Me",
-      status: "reviewed",
-      kind: "adapted",
-      isMaster: false,
-      basedOnResumeId: ownResume.id,
-    },
-  });
-  const otherResume = await database.resume.create({
-    data: {
-      userId: secondUser.userId,
-      title: "Keep Me",
-      status: "reviewed",
-    },
-  });
-
-  await request(app.getHttpServer())
-    .delete(`/api/resumes/${otherResume.id}`)
-    .set("Authorization", `Bearer ${firstUser.accessToken}`)
-    .expect(404);
-
-  await request(app.getHttpServer())
-    .delete(`/api/resumes/${ownResume.id}`)
-    .set("Authorization", `Bearer ${firstUser.accessToken}`)
-    .expect(200)
-    .expect(({ body }) => {
-      assert.deepEqual(body, { ok: true });
+    const ownResume = await database.resume.create({
+      data: {
+        userId: firstUser.userId,
+        title: "Keep Primary",
+        status: "draft",
+        kind: "master",
+        isMaster: true,
+      },
+    });
+    const secondaryResume = await database.resume.create({
+      data: {
+        userId: firstUser.userId,
+        title: "Delete Me",
+        status: "reviewed",
+        kind: "adapted",
+        isMaster: false,
+        basedOnResumeId: ownResume.id,
+      },
+    });
+    const otherResume = await database.resume.create({
+      data: {
+        userId: secondUser.userId,
+        title: "Keep Me",
+        status: "reviewed",
+      },
     });
 
-  const deletedPrimaryResume = await database.resume.findUnique({
-    where: { id: ownResume.id },
-  });
-  const promotedResume = await database.resume.findUnique({
-    where: { id: secondaryResume.id },
-  });
-  const untouchedOtherResume = await database.resume.findUnique({
-    where: { id: otherResume.id },
-  });
+    await request(app.getHttpServer())
+      .delete(`/api/resumes/${otherResume.id}`)
+      .set("Authorization", `Bearer ${firstUser.accessToken}`)
+      .expect(404);
 
-  assert.equal(deletedPrimaryResume, null);
-  assert.equal(promotedResume?.isMaster, true);
-  assert.equal(promotedResume?.kind, "master");
-  assert.equal(untouchedOtherResume?.id, otherResume.id);
+    await request(app.getHttpServer())
+      .delete(`/api/resumes/${ownResume.id}`)
+      .set("Authorization", `Bearer ${firstUser.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        assert.deepEqual(body, { ok: true });
+      });
 
-  await deleteUserByEmail(database, firstUser.email);
-  await deleteUserByEmail(database, secondUser.email);
-  await app.close();
+    const deletedPrimaryResume = await database.resume.findUnique({
+      where: { id: ownResume.id },
+    });
+    const deletedDependentResume = await database.resume.findUnique({
+      where: { id: secondaryResume.id },
+    });
+    const untouchedOtherResume = await database.resume.findUnique({
+      where: { id: otherResume.id },
+    });
+
+    assert.equal(deletedPrimaryResume, null);
+    assert.equal(deletedDependentResume, null);
+    assert.equal(untouchedOtherResume?.id, otherResume.id);
+
+    await deleteUserByEmail(database, firstUser.email);
+    await deleteUserByEmail(database, secondUser.email);
+  } finally {
+    await app.close();
+  }
 });
 
 test("GET /api/resumes/master-cv-extraction-status returns latest extraction status for authenticated user", {
