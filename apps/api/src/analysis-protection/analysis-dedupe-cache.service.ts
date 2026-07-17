@@ -105,7 +105,7 @@ export class AnalysisDedupeCacheService {
     context: AnalysisRequestContext,
     canonicalHash: string,
     payload: T,
-    cacheTtlMs = 300_000,
+    cacheTtlMs = 86_400_000, // 24h
   ): Promise<void> {
     await this.store.set<T>(
       this.buildCacheKey(context, canonicalHash),
