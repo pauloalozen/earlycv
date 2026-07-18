@@ -19,7 +19,7 @@ export type CvAdaptationDto = {
   jobTitle: string | null;
   companyName: string | null;
   previewText: string | null;
-  masterResumeId: string;
+  masterResumeId: string | null;
   templateId: string | null;
   template: { id: string; name: string; slug: string } | null;
   paymentStatus: PaymentStatus;
@@ -33,6 +33,7 @@ export type CvAdaptationDto = {
     | "original_file"
     | "markdown_snapshot"
     | "unavailable_legacy";
+  sourceCvFileName: string | null;
   jobApplicationId: string | null;
   createdAt: string;
   updatedAt: string;

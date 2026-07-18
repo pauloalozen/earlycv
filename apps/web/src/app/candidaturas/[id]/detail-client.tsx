@@ -66,6 +66,33 @@ const USER_VISIBLE_STATUS_OPTIONS: Array<{
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 
+// redeem-credit devolve assim que debita o crédito — a geração do CV roda em
+// background. Faz polling em /content até sair de "paid" para "delivered".
+// Timeout não é tratado como erro: o crédito já foi debitado e a entrega
+// está garantida em background, só paramos de esperar visualmente.
+const DELIVERY_POLL_INTERVAL_MS = 2000;
+const DELIVERY_POLL_TIMEOUT_MS = 90_000;
+
+async function pollAdaptationDelivered(adaptationId: string): Promise<void> {
+  const deadline = Date.now() + DELIVERY_POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`/api/cv-adaptation/${adaptationId}/content`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { status?: string };
+        if (body.status === "delivered") return;
+      }
+    } catch {
+      // keep polling
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, DELIVERY_POLL_INTERVAL_MS),
+    );
+  }
+}
+
 // Returns { visible, close } — visible drives CSS transitions, close animates out then calls onClose
 function useModalFade(onClose: () => void) {
   const [visible, setVisible] = useState(false);
@@ -5217,6 +5244,7 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
         }
         throw new Error(msg);
       }
+      await pollAdaptationDelivered(adaptationId);
       // Ensure the unlocked adaptation becomes the selected CV so
       // interviewPrepLocked resolves to false on the next refresh.
       await updateJobApplicationStatus(

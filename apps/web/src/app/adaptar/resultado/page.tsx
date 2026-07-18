@@ -1899,7 +1899,6 @@ export default function ResultadoPage() {
       source_detail: "resultado",
       unlockMethod: "review_redeem",
     });
-    const startedAt = Date.now();
     setReleaseError(null);
     setReleaseStatus("loading");
     setReleaseModalOpen(true);
@@ -1933,9 +1932,6 @@ export default function ResultadoPage() {
       }
       setReviewPaymentStatus("completed");
       setHasCredits(false);
-      await waitForMinimumDuration(startedAt, RELEASE_MIN_LOADING_MS);
-      setReleaseStatus("success");
-      setClaiming(false);
       window.dispatchEvent(new Event("dashboard:credit-redeemed"));
       emitResultadoEvent("cv_unlock_completed", {
         adaptationId: reviewAdaptationId,
@@ -1943,6 +1939,10 @@ export default function ResultadoPage() {
         unlockMethod: "review_redeem",
         remainingCredits: 0,
       });
+      // Redireciona direto — a geração do CV roda em background e a tela de
+      // destino (/adaptacao-cv) já tem seu próprio polling com microfeedback.
+      // Não faz sentido mostrar o popup de "sucesso + baixar PDF/DOCX" aqui
+      // só pra ele piscar e sumir na navegação.
       if (reviewAdaptationId) {
         router.push(`/adaptacao-cv/${reviewAdaptationId}`);
       }

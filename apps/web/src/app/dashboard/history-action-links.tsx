@@ -579,8 +579,6 @@ export function HistoryActionLinks({
                 throw new Error(apiMessage);
               }
 
-              await waitForMinimumDuration(startedAt, MIN_RELEASE_LOADING_MS);
-              if (!isMountedRef.current) return;
               setWasRedeemedInSession(true);
               try {
                 sessionStorage.setItem(
@@ -590,8 +588,19 @@ export function HistoryActionLinks({
               } catch {
                 // no-op
               }
-              setReleaseStatus("success");
               window.dispatchEvent(new Event(CREDIT_REDEEMED_EVENT));
+              // Redireciona direto pra /adaptacao-cv, igual aos outros dois
+              // pontos de liberação — a geração roda em background e essa
+              // tela já tem seu próprio polling com microfeedback. Sem
+              // adaptationId (não deveria acontecer aqui) cai no fluxo antigo
+              // de "sucesso" nesta mesma tela, como salvaguarda.
+              if (adaptationId) {
+                router.push(`/adaptacao-cv/${adaptationId}`);
+                return;
+              }
+              await waitForMinimumDuration(startedAt, MIN_RELEASE_LOADING_MS);
+              if (!isMountedRef.current) return;
+              setReleaseStatus("success");
             } catch (error) {
               if (!isMountedRef.current) return;
               const message = (() => {

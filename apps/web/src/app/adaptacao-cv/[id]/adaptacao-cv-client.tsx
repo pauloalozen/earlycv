@@ -1382,7 +1382,25 @@ function buildBulletKey(itemKey: string, bullet: string, bulletIdx: number) {
   return `${itemKey}::${bullet || `empty-${bulletIdx}`}`;
 }
 
+const CV_GENERATION_MICROFEEDBACK_MESSAGES = [
+  "Aplicando os ajustes recomendados…",
+  "Reescrevendo o resumo profissional…",
+  "Incorporando as palavras-chave da vaga…",
+  "Organizando as seções do currículo…",
+  "Ajustando a formatação final…",
+  "Quase lá…",
+];
+
 function CvSkeleton() {
+  const [msgIndex, setMsgIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setMsgIndex((i) => (i + 1) % CV_GENERATION_MICROFEEDBACK_MESSAGES.length);
+    }, 8200);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <div style={{ maxWidth: 720, margin: "0 auto" }}>
       <p
@@ -1394,7 +1412,7 @@ function CvSkeleton() {
           letterSpacing: 0.2,
         }}
       >
-        Montando seu CV adaptado…
+        {CV_GENERATION_MICROFEEDBACK_MESSAGES[msgIndex]}
       </p>
       <div
         style={{
@@ -1457,6 +1475,10 @@ export function AdaptacaoCvClient({
     adaptationStatus === "delivered" &&
     hasSections(editedCvJson ?? initialFinalCvOutput);
   const [isGenerating, setIsGenerating] = useState(!isDelivered);
+  // Só vira true depois de 8 minutos sem sucesso (margem bem folgada) —
+  // enquanto isGenerating for true, mostramos só microfeedback, nunca um
+  // estado de "atualizar página" prematuro como antes.
+  const [generationTimedOut, setGenerationTimedOut] = useState(false);
 
   // Local copy of saved output so view mode reflects edits immediately after save
   const [localEditedOutput, setLocalEditedOutput] =
@@ -1555,18 +1577,22 @@ export function AdaptacaoCvClient({
 
   useEffect(() => {
     if (!isGenerating) return;
-    let attempts = 0;
-    const MAX = 24;
+    // Margem bem folgada: a geração roda em background (não segura mais o
+    // request), então não há risco de timeout de proxy — só paramos de
+    // esperar se realmente passar tempo demais.
+    const POLL_TIMEOUT_MS = 8 * 60 * 1000;
+    const POLL_INTERVAL_MS = 3000;
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
 
     async function attempt() {
-      if (attempts >= MAX) {
+      if (Date.now() >= deadline) {
         setIsGenerating(false);
+        setGenerationTimedOut(true);
         return;
       }
-      attempts++;
       const done = await pollContent();
       if (!done) {
-        pollRef.current = setTimeout(attempt, 1500);
+        pollRef.current = setTimeout(attempt, POLL_INTERVAL_MS);
       }
     }
 
@@ -2882,53 +2908,57 @@ export function AdaptacaoCvClient({
                   </div>
                 )}
 
-                {/* Fallback: no sections */}
-                {displaySections.length === 0 && (
-                  <div
-                    style={{
-                      background: AMBER_SOFT,
-                      border: `1px solid ${AMBER_BORDER}`,
-                      borderRadius: 10,
-                      padding: "14px 18px",
-                    }}
-                  >
-                    <p
+                {/* Fallback: only after a real terminal state (timeout or legacy
+                    format) — never mid-polling, isGenerating already covers that. */}
+                {displaySections.length === 0 &&
+                  (isLegacyFormat || generationTimedOut) && (
+                    <div
                       style={{
-                        fontSize: 12,
-                        color: "#7a3d10",
-                        margin: 0,
-                        lineHeight: 1.6,
-                      }}
-                    >
-                      {isLegacyFormat
-                        ? "Este currículo foi gerado em uma versão antiga do sistema. Faça uma nova análise para ver o resultado atualizado."
-                        : "Ainda estamos finalizando seu currículo. Isso pode levar alguns instantes — atualize a página para ver o resultado."}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isLegacyFormat) {
-                          window.location.href = "/adaptar";
-                        } else {
-                          window.location.reload();
-                        }
-                      }}
-                      style={{
-                        marginTop: 10,
-                        padding: "7px 14px",
-                        background: "transparent",
-                        color: "#7a3d10",
+                        background: AMBER_SOFT,
                         border: `1px solid ${AMBER_BORDER}`,
-                        borderRadius: 7,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: "pointer",
+                        borderRadius: 10,
+                        padding: "14px 18px",
                       }}
                     >
-                      {isLegacyFormat ? "Fazer nova análise" : "Atualizar página"}
-                    </button>
-                  </div>
-                )}
+                      <p
+                        style={{
+                          fontSize: 12,
+                          color: "#7a3d10",
+                          margin: 0,
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {isLegacyFormat
+                          ? "Este currículo foi gerado em uma versão antiga do sistema. Faça uma nova análise para ver o resultado atualizado."
+                          : "A geração do seu currículo está demorando bem mais que o esperado. Tente atualizar a página — se persistir, entre em contato com o suporte."}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isLegacyFormat) {
+                            window.location.href = "/adaptar";
+                          } else {
+                            window.location.reload();
+                          }
+                        }}
+                        style={{
+                          marginTop: 10,
+                          padding: "7px 14px",
+                          background: "transparent",
+                          color: "#7a3d10",
+                          border: `1px solid ${AMBER_BORDER}`,
+                          borderRadius: 7,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {isLegacyFormat
+                          ? "Fazer nova análise"
+                          : "Atualizar página"}
+                      </button>
+                    </div>
+                  )}
               </div>
             )}
           </div>

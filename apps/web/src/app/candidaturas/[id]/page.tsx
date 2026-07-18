@@ -16,7 +16,6 @@ import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getJobApplication } from "@/lib/job-applications-api";
 import { getMyPlan } from "@/lib/plans-api";
-import { listMyResumes } from "@/lib/resumes-api";
 import { DetailClient } from "./detail-client";
 
 export const metadata: Metadata = {
@@ -36,12 +35,10 @@ export default async function CandidaturaDetailPage({ params }: Props) {
 
   const { id } = await params;
 
-  const [applicationResult, planResult, resumesResult] =
-    await Promise.allSettled([
-      getJobApplication(id),
-      getMyPlan(),
-      listMyResumes(),
-    ]);
+  const [applicationResult, planResult] = await Promise.allSettled([
+    getJobApplication(id),
+    getMyPlan(),
+  ]);
 
   if (applicationResult.status === "rejected") {
     notFound();
@@ -53,9 +50,6 @@ export default async function CandidaturaDetailPage({ params }: Props) {
   const initialHasCredits = hasAvailableCredits(planInfo);
 
   // Compute per-adaptation scores exactly like dashboard_old does
-  const resumeList =
-    resumesResult.status === "fulfilled" ? resumesResult.value : [];
-
   const contentResponses = await Promise.allSettled(
     application.cvAdaptations.map(async (a) => {
       const [content, dto] = await Promise.all([
@@ -82,15 +76,10 @@ export default async function CandidaturaDetailPage({ params }: Props) {
             .join("\n")
         : null;
       const notes = signal.adjustments.notes ?? (ajustesConteudo || null);
-      const masterResumeId = dto?.masterResumeId ?? null;
-      const resumeUsed = masterResumeId
-        ? (resumeList.find((r) => r.id === masterResumeId) ?? null)
-        : null;
-      const resumeUsedTitle = resumeUsed
-        ? resumeUsed.isMaster
-          ? "CV Master"
-          : resumeUsed.title
-        : null;
+      // Vem do snapshot da análise (analysisCvSnapshot), não do Resume
+      // master ao vivo — sobrevive mesmo que o usuário já tenha substituído
+      // ou apagado o CV master usado originalmente.
+      const resumeUsedTitle = dto?.sourceCvFileName ?? null;
       return {
         id: a.id,
         scoreBefore: signal.adjustments.scoreBefore,

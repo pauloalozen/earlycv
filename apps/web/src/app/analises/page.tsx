@@ -20,7 +20,6 @@ import {
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getMyPlan } from "@/lib/plans-api";
-import { getMasterResumeFromList, listMyResumes } from "@/lib/resumes-api";
 import { HistoryActionLinks } from "../dashboard/history-action-links";
 
 export const metadata: Metadata = {
@@ -97,12 +96,10 @@ export default async function AnalisesPage({ searchParams }: Props) {
   const currentFilter = parseFilter(params.filter);
 
   // Fetch a large page to enable client counts and server-side filter
-  const [allAdaptationsResult, planResult, resumesResult] =
-    await Promise.allSettled([
-      listCvAdaptations(1, 500),
-      getMyPlan(),
-      listMyResumes(),
-    ]);
+  const [allAdaptationsResult, planResult] = await Promise.allSettled([
+    listCvAdaptations(1, 500),
+    getMyPlan(),
+  ]);
 
   const planInfo = planResult.status === "fulfilled" ? planResult.value : null;
   const hasCredits =
@@ -113,13 +110,6 @@ export default async function AnalisesPage({ searchParams }: Props) {
     allAdaptationsResult.status === "fulfilled"
       ? allAdaptationsResult.value.items
       : [];
-
-  const resumeList =
-    resumesResult.status === "fulfilled" ? resumesResult.value : [];
-  const resumeTitleById = new Map(
-    resumeList.map((resume) => [resume.id, resume.title]),
-  );
-  await getMasterResumeFromList(resumeList);
 
   const availableCredits = toHeaderAvailableCredits(planInfo);
 
@@ -605,9 +595,7 @@ export default async function AnalisesPage({ searchParams }: Props) {
                             adjustments={adjustments}
                             analysisContext={{
                               jobTitle: item.jobTitle,
-                              masterResumeTitle:
-                                resumeTitleById.get(item.masterResumeId) ??
-                                null,
+                              masterResumeTitle: item.sourceCvFileName,
                             }}
                             jobApplicationId={item.jobApplicationId}
                             adaptationId={item.id}
