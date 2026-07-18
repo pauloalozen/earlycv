@@ -14,6 +14,7 @@ const routerPrefetchMock = vi.hoisted(() => vi.fn());
 const trackEventMock = vi.hoisted(() => vi.fn());
 const analyzeGuestCvMock = vi.hoisted(() => vi.fn());
 const analyzeAuthenticatedCvMock = vi.hoisted(() => vi.fn());
+const pollAnalysisJobMock = vi.hoisted(() => vi.fn());
 const saveGuestPreviewMock = vi.hoisted(() => vi.fn());
 const getAuthStatusMock = vi.hoisted(() => vi.fn());
 const getMyMasterResumeMock = vi.hoisted(() => vi.fn());
@@ -49,6 +50,10 @@ vi.mock("@/lib/cv-adaptation-api", () => ({
   saveGuestPreview: saveGuestPreviewMock,
 }));
 
+vi.mock("@/lib/analysis-job-polling", () => ({
+  pollAnalysisJob: pollAnalysisJobMock,
+}));
+
 vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: trackEventMock,
 }));
@@ -70,6 +75,7 @@ describe("AdaptarPage submit analytics flow", () => {
     trackEventMock.mockReset();
     analyzeGuestCvMock.mockReset();
     analyzeAuthenticatedCvMock.mockReset();
+    pollAnalysisJobMock.mockReset();
     saveGuestPreviewMock.mockReset();
     getAuthStatusMock.mockReset();
     getMyMasterResumeMock.mockReset();
@@ -80,21 +86,20 @@ describe("AdaptarPage submit analytics flow", () => {
     trackEventMock.mockResolvedValue(undefined);
     analyzeGuestCvMock.mockResolvedValue({
       ok: true,
-      adaptedContentJson: { vaga: { cargo: "", empresa: "" } },
-      previewText: "",
-      masterCvText: "master-cv",
-      analysisCvSnapshotId: "snapshot-1",
+      jobId: "job-1",
       guestSessionPublicToken: "guest-token-1",
     });
     analyzeAuthenticatedCvMock.mockResolvedValue({
       ok: true,
-      adaptedContentJson: {
-        vaga: { cargo: "", empresa: "" },
-      },
+      jobId: "job-1",
+      guestSessionPublicToken: null,
+    });
+    pollAnalysisJobMock.mockResolvedValue({
+      ok: true,
+      adaptedContentJson: { vaga: { cargo: "", empresa: "" } },
       previewText: "",
       masterCvText: "master-cv",
       analysisCvSnapshotId: "snapshot-1",
-      guestSessionPublicToken: null,
     });
     saveGuestPreviewMock.mockResolvedValue({ id: "saved-1" });
     sessionStorage.clear();
@@ -292,10 +297,7 @@ describe("AdaptarPage submit analytics flow", () => {
       order.push("analyze_request");
       return {
         ok: true,
-        adaptedContentJson: { vaga: { cargo: "", empresa: "" } },
-        previewText: "",
-        masterCvText: "master-cv",
-        analysisCvSnapshotId: "snapshot-2",
+        jobId: "job-2",
         guestSessionPublicToken: "guest-token-2",
       };
     });

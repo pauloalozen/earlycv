@@ -169,6 +169,18 @@ enum MasterCvCanonicalExtractionStatus {
   failed
 }
 
+enum AnalysisJobStatus {
+  pending
+  processing
+  succeeded
+  failed
+}
+
+enum AnalysisJobOwnerKind {
+  guest
+  authenticated
+}
+
 enum PaymentStatus {
   none
   pending
@@ -268,44 +280,45 @@ enum AnalysisConfigRiskLevel {
 }
 
 model User {
-  id              String         @id @default(cuid())
-  email           String         @unique
-  passwordHash    String?
-  name            String
-  planType         UserPlanType   @default(free)
-  creditsRemaining Int            @default(0)
-  analysisCreditsRemaining Int    @default(0)
-  planActivatedAt  DateTime?
-  planExpiresAt    DateTime?
-  status           UserStatus     @default(pending)
-  internalRole     InternalRole   @default(none)
-  isStaff          Boolean        @default(false)
-  emailVerifiedAt  DateTime?
-  lastLoginAt      DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  profile          UserProfile?
-  authAccounts     AuthAccount[]
-  refreshTokens    RefreshToken[]
-  emailVerificationChallenges EmailVerificationChallenge[]
-  passwordResetTokens         PasswordResetToken[]
-  resumes          Resume[]
-  cvAdaptations    CvAdaptation[]
-  cvUnlocks        CvUnlock[]
-  planPurchases    PlanPurchase[]
-  dailyAnalysisUsages         UserDailyAnalysisUsage[]
-  affiliateAttributions     AffiliateAttribution[]
-  affiliateCommissionEvents AffiliateCommissionEvent[]
-  analysisSessions          AnalysisSession[]
-  analysisRequestFingerprints AnalysisRequestFingerprint[]
-  analysisUsageCounters     AnalysisUsageCounter[]
-  analysisProtectionEvents  AnalysisProtectionEvent[]
-  businessFunnelEvents      BusinessFunnelEvent[]
-  analysisCvSnapshots       AnalysisCvSnapshot[]           @relation("AnalysisCvSnapshotOwner")
-  claimedAnalysisCvSnapshots AnalysisCvSnapshot[]          @relation("AnalysisCvSnapshotClaimedBy")
-  requestedIngestionBatchRuns IngestionBatchRun[]          @relation("IngestionBatchRunRequestedByUser")
-  jobApplications           JobApplication[]
+  id                           String                        @id @default(cuid())
+  email                        String                        @unique
+  passwordHash                 String?
+  name                         String
+  planType                     UserPlanType                  @default(free)
+  creditsRemaining             Int                           @default(0)
+  analysisCreditsRemaining     Int                           @default(0)
+  planActivatedAt              DateTime?
+  planExpiresAt                DateTime?
+  status                       UserStatus                    @default(pending)
+  internalRole                 InternalRole                  @default(none)
+  isStaff                      Boolean                       @default(false)
+  emailVerifiedAt              DateTime?
+  lastLoginAt                  DateTime?
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  profile                      UserProfile?
+  authAccounts                 AuthAccount[]
+  refreshTokens                RefreshToken[]
+  emailVerificationChallenges  EmailVerificationChallenge[]
+  passwordResetTokens          PasswordResetToken[]
+  resumes                      Resume[]
+  cvAdaptations                CvAdaptation[]
+  cvUnlocks                    CvUnlock[]
+  planPurchases                PlanPurchase[]
+  dailyAnalysisUsages          UserDailyAnalysisUsage[]
+  affiliateAttributions        AffiliateAttribution[]
+  affiliateCommissionEvents    AffiliateCommissionEvent[]
+  analysisSessions             AnalysisSession[]
+  analysisRequestFingerprints  AnalysisRequestFingerprint[]
+  analysisUsageCounters        AnalysisUsageCounter[]
+  analysisProtectionEvents     AnalysisProtectionEvent[]
+  businessFunnelEvents         BusinessFunnelEvent[]
+  analysisCvSnapshots          AnalysisCvSnapshot[]          @relation("AnalysisCvSnapshotOwner")
+  claimedAnalysisCvSnapshots   AnalysisCvSnapshot[]          @relation("AnalysisCvSnapshotClaimedBy")
+  requestedIngestionBatchRuns  IngestionBatchRun[]           @relation("IngestionBatchRunRequestedByUser")
+  jobApplications              JobApplication[]
   masterCvCanonicalExtractions MasterCvCanonicalExtraction[]
+  analysisJobs                 AnalysisJob[]
 }
 
 model UserDailyAnalysisUsage {
@@ -322,26 +335,26 @@ model UserDailyAnalysisUsage {
 }
 
 model PlanPurchase {
-  id               String          @id @default(cuid())
-  userId           String
-  planType         UserPlanType
-  amountInCents    Int
-  currency         String          @default("BRL")
-  paymentProvider  PaymentProvider
-  paymentReference String          @unique
-  status           PaymentStatus   @default(none)
-  paidAt           DateTime?
-  creditsGranted   Int
-  analysisCreditsGranted Int       @default(0)
-  mpPaymentId          String?
-  mpMerchantOrderId    String?
-  mpPreferenceId       String?
-  originAction         PlanPurchaseOriginAction @default(buy_credits)
-  originAdaptationId   String?
-  autoUnlockProcessedAt DateTime?
-  autoUnlockError      String?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id                     String                   @id @default(cuid())
+  userId                 String
+  planType               UserPlanType
+  amountInCents          Int
+  currency               String                   @default("BRL")
+  paymentProvider        PaymentProvider
+  paymentReference       String                   @unique
+  status                 PaymentStatus            @default(none)
+  paidAt                 DateTime?
+  creditsGranted         Int
+  analysisCreditsGranted Int                      @default(0)
+  mpPaymentId            String?
+  mpMerchantOrderId      String?
+  mpPreferenceId         String?
+  originAction           PlanPurchaseOriginAction @default(buy_credits)
+  originAdaptationId     String?
+  autoUnlockProcessedAt  DateTime?
+  autoUnlockError        String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -375,7 +388,7 @@ model PaymentRecoveryEmail {
   createdAt         DateTime                   @default(now())
   updatedAt         DateTime                   @updatedAt
 
-  token             PaymentRecoveryToken?      @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+  token PaymentRecoveryToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
 
   @@index([purchaseId, createdAt])
   @@index([userId, createdAt])
@@ -384,19 +397,19 @@ model PaymentRecoveryEmail {
 }
 
 model PaymentRecoveryToken {
-  id           String   @id @default(cuid())
-  purchaseId   String
-  userId       String
-  adaptationId String?
+  id               String    @id @default(cuid())
+  purchaseId       String
+  userId           String
+  adaptationId     String?
   recoveryGroupKey String
-  tokenHash    String   @unique
-  emailRecordId String? @unique
-  expiresAt    DateTime
-  usedAt       DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  tokenHash        String    @unique
+  emailRecordId    String?   @unique
+  expiresAt        DateTime
+  usedAt           DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  emailRecord  PaymentRecoveryEmail?
+  emailRecord PaymentRecoveryEmail?
 
   @@index([purchaseId, createdAt])
   @@index([userId, createdAt])
@@ -456,53 +469,53 @@ model PasswordResetToken {
 }
 
 model EmailVerificationChallenge {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   userId     String
   codeHash   String
   expiresAt  DateTime
   consumedAt DateTime?
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([userId, consumedAt, expiresAt])
 }
 
 model UserProfile {
-  id                    String            @id @default(cuid())
-  userId                String            @unique
-  fullName              String?
-  contactEmail          String?
-  phone                 String?
-  linkedinUrl           String?
-  professionalSummary   String?
-  headline              String?
-  currentTitle          String?
-  summary               String?
-  yearsExperience       Int?
-  city                  String?
-  state                 String?
-  country               String?
-  remotePreference      RemotePreference?
-  relocationPreference  Boolean?
-  targetSalaryMin       Int?
-  targetSalaryMax       Int?
-  preferredLanguage     String?
-  experiencesJson       Json?
-  educationJson         Json?
-  skillsJson            Json?
-  languagesJson         Json?
-  certificationsJson    Json?
-  profileFieldMetaJson  Json?
+  id                     String                 @id @default(cuid())
+  userId                 String                 @unique
+  fullName               String?
+  contactEmail           String?
+  phone                  String?
+  linkedinUrl            String?
+  professionalSummary    String?
+  headline               String?
+  currentTitle           String?
+  summary                String?
+  yearsExperience        Int?
+  city                   String?
+  state                  String?
+  country                String?
+  remotePreference       RemotePreference?
+  relocationPreference   Boolean?
+  targetSalaryMin        Int?
+  targetSalaryMax        Int?
+  preferredLanguage      String?
+  experiencesJson        Json?
+  educationJson          Json?
+  skillsJson             Json?
+  languagesJson          Json?
+  certificationsJson     Json?
+  profileFieldMetaJson   Json?
   profileSuggestionsJson Json?
   profileReadinessStatus ProfileReadinessStatus @default(empty)
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AuthAccount {
-  id                    String        @id @default(cuid())
+  id                    String       @id @default(cuid())
   userId                String
   provider              AuthProvider
   providerAccountId     String
@@ -510,56 +523,56 @@ model AuthAccount {
   accessTokenEncrypted  String?
   refreshTokenEncrypted String?
   tokenExpiresAt        DateTime?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
-  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@index([userId])
 }
 
 model RefreshToken {
-  id         String   @id @default(cuid())
-  userId     String
-  sessionId  String   @unique
-  tokenHash  String
-  userAgent  String?
-  ipAddress  String?
-  expiresAt  DateTime
-  revokedAt  DateTime?
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(cuid())
+  userId    String
+  sessionId String    @unique
+  tokenHash String
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
 }
 
 model Resume {
-  id                      String           @id @default(cuid())
-  userId                  String
-  title                   String
-  sourceFileName          String?
-  sourceFileUrl           String?
-  sourceFileType          String?
-  rawText                 String?
-  parsedJson              Json?
-  normalizedJson          Json?
-  status                  ResumeStatus     @default(draft)
-  kind                    ResumeKind       @default(master)
-  isMaster                Boolean          @default(true)
-  basedOnResumeId         String?
-  templateId           String?
-  targetJobId             String?
-  targetJobTitle          String?
-  createdAt               DateTime         @default(now())
-  updatedAt               DateTime         @updatedAt
-  user                    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  basedOnResume           Resume?          @relation("ResumeDerivation", fields: [basedOnResumeId], references: [id], onDelete: SetNull)
-  derivedResumes          Resume[]         @relation("ResumeDerivation")
-  template                ResumeTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  targetJob               Job?             @relation(fields: [targetJobId], references: [id], onDelete: SetNull)
-  cvAdaptationsAsMaster   CvAdaptation[]   @relation("CvAdaptationMaster")
-  cvAdaptationAsResult    CvAdaptation?    @relation("CvAdaptationResult")
+  id                           String                        @id @default(cuid())
+  userId                       String
+  title                        String
+  sourceFileName               String?
+  sourceFileUrl                String?
+  sourceFileType               String?
+  rawText                      String?
+  parsedJson                   Json?
+  normalizedJson               Json?
+  status                       ResumeStatus                  @default(draft)
+  kind                         ResumeKind                    @default(master)
+  isMaster                     Boolean                       @default(true)
+  basedOnResumeId              String?
+  templateId                   String?
+  targetJobId                  String?
+  targetJobTitle               String?
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  user                         User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  basedOnResume                Resume?                       @relation("ResumeDerivation", fields: [basedOnResumeId], references: [id], onDelete: SetNull)
+  derivedResumes               Resume[]                      @relation("ResumeDerivation")
+  template                     ResumeTemplate?               @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  targetJob                    Job?                          @relation(fields: [targetJobId], references: [id], onDelete: SetNull)
+  cvAdaptationsAsMaster        CvAdaptation[]                @relation("CvAdaptationMaster")
+  cvAdaptationAsResult         CvAdaptation?                 @relation("CvAdaptationResult")
   masterCvCanonicalExtractions MasterCvCanonicalExtraction[]
 
   @@index([userId])
@@ -569,14 +582,14 @@ model Resume {
 }
 
 model CanonicalJob {
-  id                            String      @id @default(cuid())
-  canonicalJobHash              String      @unique
+  id                            String              @id @default(cuid())
+  canonicalJobHash              String              @unique
   requirementSourceHash         String
   canonicalJobJson              Json
   canonicalizationModel         String
   canonicalizationPromptVersion String
-  createdAt                     DateTime    @default(now())
-  updatedAt                     DateTime    @updatedAt
+  createdAt                     DateTime            @default(now())
+  updatedAt                     DateTime            @updatedAt
   rawInputs                     JobRawInput[]
   cvAdaptations                 CvAdaptation[]
   jobRequirementSets            JobRequirementSet[]
@@ -585,41 +598,41 @@ model CanonicalJob {
 }
 
 model JobRequirementSet {
-  id                    String         @id @default(cuid())
-  requirementSourceHash String         @unique
+  id                    String   @id @default(cuid())
+  requirementSourceHash String   @unique
   canonicalJobId        String
   requirementsJson      Json
   analysisModel         String
   analysisPromptVersion String
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  canonicalJob          CanonicalJob   @relation(fields: [canonicalJobId], references: [id], onDelete: Cascade)
-  cvAdaptations         CvAdaptation[]
+  canonicalJob  CanonicalJob   @relation(fields: [canonicalJobId], references: [id], onDelete: Cascade)
+  cvAdaptations CvAdaptation[]
 
   @@index([canonicalJobId])
 }
 
 model JobRawInput {
-  id                String       @id @default(cuid())
-  rawJobHash        String       @unique
-  rawText           String       @db.Text
-  normalizedRawText String       @db.Text
+  id                String   @id @default(cuid())
+  rawJobHash        String   @unique
+  rawText           String   @db.Text
+  normalizedRawText String   @db.Text
   canonicalJobId    String
-  createdAt         DateTime     @default(now())
+  createdAt         DateTime @default(now())
 
-  canonicalJob      CanonicalJob @relation(fields: [canonicalJobId], references: [id], onDelete: Cascade)
+  canonicalJob CanonicalJob @relation(fields: [canonicalJobId], references: [id], onDelete: Cascade)
 
   @@index([canonicalJobId, createdAt])
 }
 
 model MasterCvCanonicalExtraction {
-  id             String                           @id @default(cuid())
+  id             String                            @id @default(cuid())
   userId         String
   resumeId       String
   inputHash      String
   status         MasterCvCanonicalExtractionStatus @default(pending)
-  attempts       Int                              @default(0)
+  attempts       Int                               @default(0)
   lastError      String?
   canonicalJson  Json?
   coverageJson   Json?
@@ -627,11 +640,11 @@ model MasterCvCanonicalExtraction {
   evidenceJson   Json?
   startedAt      DateTime?
   finishedAt     DateTime?
-  createdAt      DateTime                         @default(now())
-  updatedAt      DateTime                         @updatedAt
+  createdAt      DateTime                          @default(now())
+  updatedAt      DateTime                          @updatedAt
 
-  user           User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  resume         Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
 
   @@unique([resumeId, inputHash])
   @@index([userId, createdAt(sort: Desc)])
@@ -639,92 +652,93 @@ model MasterCvCanonicalExtraction {
 }
 
 model ResumeTemplate {
-  id                String           @id @default(cuid())
-  name              String
-  slug              String           @unique
-  description       String?
-  targetRole        String?
-  fileUrl           String?
-  previewImageUrl   String?
-  structureJson     Json?
-  isActive          Boolean          @default(true)
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  resumes           Resume[]
-  cvAdaptations     CvAdaptation[]
+  id              String         @id @default(cuid())
+  name            String
+  slug            String         @unique
+  description     String?
+  targetRole      String?
+  fileUrl         String?
+  previewImageUrl String?
+  structureJson   Json?
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  resumes         Resume[]
+  cvAdaptations   CvAdaptation[]
 }
 
 model Company {
-  id             String      @id @default(cuid())
-  name           String
-  normalizedName String      @unique
-  websiteUrl     String?
-  careersUrl     String?
-  linkedinUrl    String?
-  industry       String?
-  country        String?
-  isActive       Boolean     @default(true)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  jobSources     JobSource[]
-  jobs           Job[]
+  id                  String               @id @default(cuid())
+  name                String
+  normalizedName      String               @unique
+  websiteUrl          String?
+  careersUrl          String?
+  linkedinUrl         String?
+  industry            String?
+  country             String?
+  isActive            Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  jobSources          JobSource[]
+  jobs                Job[]
   ingestionBatchItems IngestionBatchItem[]
 }
 
 model CvAdaptation {
-  id                   String              @id @default(cuid())
-  userId               String
-  masterResumeId       String?
-  templateId           String?
-  canonicalJobId       String?
-  jobRequirementSetId  String?
-  adaptationSource     CvAdaptationSource  @default(uploaded_content)
-  inputMode            CvAdaptationInputMode @default(file_upload)
-  jobDescriptionText   String
-  jobTitle             String?
-  companyName          String?
-  status               CvAdaptationStatus  @default(pending)
-  adaptedContentJson   Json?
-  previewText          String?
-  adaptedResumeId      String?             @unique
-  aiAuditJson          Json?
-  editedCvJson         Json?
-  paymentStatus        PaymentStatus       @default(none)
-  paymentProvider      PaymentProvider?
-  paymentReference     String?             @unique
-  paymentAmountInCents Int?
-  paymentCurrency      String?             @default("BRL")
-  paidAt               DateTime?
-  mpPaymentId          String?
-  mpMerchantOrderId    String?
-  mpPreferenceId       String?
-  failureReason        String?
-  isUnlocked           Boolean             @default(false)
-  unlockedAt           DateTime?
-  analysisCvSnapshotId String?             @unique
-  userProfileSnapshotJson Json?
+  id                          String                @id @default(cuid())
+  userId                      String
+  masterResumeId              String?
+  templateId                  String?
+  canonicalJobId              String?
+  jobRequirementSetId         String?
+  adaptationSource            CvAdaptationSource    @default(uploaded_content)
+  inputMode                   CvAdaptationInputMode @default(file_upload)
+  jobDescriptionText          String
+  jobTitle                    String?
+  companyName                 String?
+  status                      CvAdaptationStatus    @default(pending)
+  adaptedContentJson          Json?
+  previewText                 String?
+  adaptedResumeId             String?               @unique
+  aiAuditJson                 Json?
+  editedCvJson                Json?
+  paymentStatus               PaymentStatus         @default(none)
+  paymentProvider             PaymentProvider?
+  paymentReference            String?               @unique
+  paymentAmountInCents        Int?
+  paymentCurrency             String?               @default("BRL")
+  paidAt                      DateTime?
+  mpPaymentId                 String?
+  mpMerchantOrderId           String?
+  mpPreferenceId              String?
+  failureReason               String?
+  isUnlocked                  Boolean               @default(false)
+  unlockedAt                  DateTime?
+  analysisCvSnapshotId        String?               @unique
+  userProfileSnapshotJson     Json?
   uploadedContentSnapshotJson Json?
-  analysisInputSnapshotJson Json?
+  analysisInputSnapshotJson   Json?
   generationInputSnapshotJson Json?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
 
-  jobApplicationId     String?
+  jobApplicationId String?
 
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Não usar Cascade: o CV master é editável/substituível a qualquer momento
   // (ver apps/api/src/resumes/resumes.service.ts) e a análise deve
   // sobreviver independente dele — o conteúdo real do CV usado na análise
   // fica em analysisCvSnapshot, não neste ponteiro. masterResumeId é só
   // referência informativa; perdê-la (SetNull) não perde a análise.
-  masterResume  Resume?         @relation("CvAdaptationMaster", fields: [masterResumeId], references: [id], onDelete: SetNull)
-  template      ResumeTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  canonicalJob  CanonicalJob?   @relation(fields: [canonicalJobId], references: [id], onDelete: SetNull)
-  jobRequirementSet JobRequirementSet? @relation(fields: [jobRequirementSetId], references: [id], onDelete: SetNull)
-  adaptedResume Resume?         @relation("CvAdaptationResult", fields: [adaptedResumeId], references: [id], onDelete: SetNull)
+  masterResume       Resume?             @relation("CvAdaptationMaster", fields: [masterResumeId], references: [id], onDelete: SetNull)
+  template           ResumeTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  canonicalJob       CanonicalJob?       @relation(fields: [canonicalJobId], references: [id], onDelete: SetNull)
+  jobRequirementSet  JobRequirementSet?  @relation(fields: [jobRequirementSetId], references: [id], onDelete: SetNull)
+  adaptedResume      Resume?             @relation("CvAdaptationResult", fields: [adaptedResumeId], references: [id], onDelete: SetNull)
   analysisCvSnapshot AnalysisCvSnapshot? @relation(fields: [analysisCvSnapshotId], references: [id], onDelete: SetNull)
-  cvUnlock     CvUnlock?
-  jobApplication JobApplication? @relation(fields: [jobApplicationId], references: [id], onDelete: SetNull)
+  cvUnlock           CvUnlock?
+  jobApplication     JobApplication?     @relation(fields: [jobApplicationId], references: [id], onDelete: SetNull)
+  originAnalysisJob  AnalysisJob?
 
   @@index([userId, createdAt])
   @@index([masterResumeId])
@@ -736,15 +750,15 @@ model CvAdaptation {
 }
 
 model CvUnlock {
-  id             String         @id @default(cuid())
-  userId         String
-  cvAdaptationId String         @unique
-  creditsConsumed Int           @default(1)
-  source         CvUnlockSource @default(CREDIT)
-  status         CvUnlockStatus @default(UNLOCKED)
-  unlockedAt     DateTime       @default(now())
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id              String         @id @default(cuid())
+  userId          String
+  cvAdaptationId  String         @unique
+  creditsConsumed Int            @default(1)
+  source          CvUnlockSource @default(CREDIT)
+  status          CvUnlockStatus @default(UNLOCKED)
+  unlockedAt      DateTime       @default(now())
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   cvAdaptation CvAdaptation @relation(fields: [cvAdaptationId], references: [id], onDelete: Cascade)
@@ -757,30 +771,31 @@ model CvUnlock {
 }
 
 model AnalysisCvSnapshot {
-  id                    String               @id @default(cuid())
-  userId                String?
-  guestSessionHash      String?
-  sourceType            AnalysisCvSourceType
-  textStorageKey        String
-  textSha256            String
-  textSizeBytes         Int
-  originalFileStorageKey String?
-  originalFileSha256    String?
-  originalFileName      String?
-  originalMimeType      String?
-  originalFileSizeBytes Int?
+  id                             String               @id @default(cuid())
+  userId                         String?
+  guestSessionHash               String?
+  sourceType                     AnalysisCvSourceType
+  textStorageKey                 String
+  textSha256                     String
+  textSizeBytes                  Int
+  originalFileStorageKey         String?
+  originalFileSha256             String?
+  originalFileName               String?
+  originalMimeType               String?
+  originalFileSizeBytes          Int?
   professionalProfileFingerprint String
-  professionalProfileJson Json
-  capturedAt            DateTime             @default(now())
-  expiresAt             DateTime?
-  claimedAt             DateTime?
-  claimedByUserId       String?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  professionalProfileJson        Json
+  capturedAt                     DateTime             @default(now())
+  expiresAt                      DateTime?
+  claimedAt                      DateTime?
+  claimedByUserId                String?
+  createdAt                      DateTime             @default(now())
+  updatedAt                      DateTime             @updatedAt
 
-  ownerUser             User?                @relation("AnalysisCvSnapshotOwner", fields: [userId], references: [id], onDelete: SetNull)
-  claimedByUser         User?                @relation("AnalysisCvSnapshotClaimedBy", fields: [claimedByUserId], references: [id], onDelete: SetNull)
-  cvAdaptation          CvAdaptation?
+  ownerUser     User?         @relation("AnalysisCvSnapshotOwner", fields: [userId], references: [id], onDelete: SetNull)
+  claimedByUser User?         @relation("AnalysisCvSnapshotClaimedBy", fields: [claimedByUserId], references: [id], onDelete: SetNull)
+  cvAdaptation  CvAdaptation?
+  analysisJob   AnalysisJob?
 
   @@index([userId])
   @@index([guestSessionHash])
@@ -789,30 +804,76 @@ model AnalysisCvSnapshot {
   @@index([professionalProfileFingerprint])
 }
 
+// Assíncrono desde a criação (item 3 do plano de LLM síncronas → assíncronas):
+// canonicalização da vaga + análise rodam em background, o cliente (guest ou
+// autenticado) faz polling nesta linha até status "succeeded"/"failed".
+//
+// Também é o registro permanente de retenção/analytics decidido em
+// 2026-07-18: toda análise feita (guest ou logada) fica guardada aqui pra
+// sempre, mesmo que a pessoa nunca converta — hoje esse dado era gerado e
+// jogado fora. convertedAt/convertedCvAdaptationId marcam quando (e se) virou
+// conta de verdade, sem depender de nenhum token novo: a correlação usa o
+// mesmo analysisCvSnapshotId que já flui pela jornada do guest hoje
+// (sessionStorage do navegador → saveGuestPreview/claimGuest →
+// validateAndClaimSnapshot).
+model AnalysisJob {
+  id                      String               @id @default(cuid())
+  ownerKind               AnalysisJobOwnerKind
+  status                  AnalysisJobStatus    @default(pending)
+  userId                  String?
+  guestSessionHash        String?
+  jobDescriptionText      String
+  masterCvText            String?
+  jobTitle                String?
+  companyName             String?
+  adaptedContentJson      Json?
+  previewText             String?
+  scoreBefore             Int?
+  scoreAfter              Int?
+  analysisCvSnapshotId    String?              @unique
+  lastError               String?
+  convertedAt             DateTime?
+  convertedCvAdaptationId String?              @unique
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  startedAt               DateTime?
+  finishedAt              DateTime?
+
+  user                  User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  analysisCvSnapshot    AnalysisCvSnapshot? @relation(fields: [analysisCvSnapshotId], references: [id], onDelete: SetNull)
+  convertedCvAdaptation CvAdaptation?       @relation(fields: [convertedCvAdaptationId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([guestSessionHash])
+  @@index([status])
+  @@index([createdAt])
+  @@index([convertedAt])
+}
+
 model JobSource {
-  id                   String         @id @default(cuid())
+  id                   String               @id @default(cuid())
   companyId            String
   sourceName           String
   sourceType           JobSourceType
   sourceUrl            String
   parserKey            String
   crawlStrategy        CrawlStrategy
-  isActive             Boolean        @default(true)
-  scheduleEnabled      Boolean        @default(false)
+  isActive             Boolean              @default(true)
+  scheduleEnabled      Boolean              @default(false)
   scheduleCron         String?
-  scheduleTimezone     String         @default("America/Sao_Paulo")
-  isFallbackAdapter    Boolean        @default(false)
+  scheduleTimezone     String               @default("America/Sao_Paulo")
+  isFallbackAdapter    Boolean              @default(false)
   checkIntervalMinutes Int
   lastCheckedAt        DateTime?
   lastSuccessAt        DateTime?
   lastErrorAt          DateTime?
   lastErrorMessage     String?
-  consecutive403Count  Int            @default(0)
+  consecutive403Count  Int                  @default(0)
   pausedUntil          DateTime?
   pauseReason          String?
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-  company              Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  company              Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   jobs                 Job[]
   ingestionRuns        IngestionRun[]
   ingestionBatchItems  IngestionBatchItem[]
@@ -842,20 +903,20 @@ model IngestionSchedulerLock {
 }
 
 model IngestionRun {
-  id           String             @id @default(cuid())
-  jobSourceId  String
-  status       IngestionRunStatus @default(running)
-  startedAt    DateTime           @default(now())
-  finishedAt   DateTime?
-  newCount     Int                @default(0)
-  updatedCount Int                @default(0)
-  skippedCount Int                @default(0)
-  failedCount  Int                @default(0)
-  errorSummary String?
-  previewJson  Json?
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  jobSource    JobSource          @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  id                  String               @id @default(cuid())
+  jobSourceId         String
+  status              IngestionRunStatus   @default(running)
+  startedAt           DateTime             @default(now())
+  finishedAt          DateTime?
+  newCount            Int                  @default(0)
+  updatedCount        Int                  @default(0)
+  skippedCount        Int                  @default(0)
+  failedCount         Int                  @default(0)
+  errorSummary        String?
+  previewJson         Json?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  jobSource           JobSource            @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
   ingestionBatchItems IngestionBatchItem[]
 
   @@index([jobSourceId, createdAt])
@@ -904,12 +965,12 @@ model IngestionBatchItem {
   company        Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   ingestionRun   IngestionRun?            @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
 
+  @@unique([batchRunId, jobSourceId])
   @@index([batchRunId, status, createdAt])
   @@index([status, updatedAt])
   @@index([jobSourceId])
   @@index([companyId])
   @@index([ingestionRunId])
-  @@unique([batchRunId, jobSourceId])
 }
 
 model AffiliatePartner {
@@ -924,19 +985,19 @@ model AffiliatePartner {
 }
 
 model AffiliateCampaign {
-  id                     String                  @id @default(cuid())
+  id                     String                     @id @default(cuid())
   partnerId              String
   name                   String
-  attributionWindowDays  Int                     @default(30)
-  defaultCurrency        String                  @default("BRL")
+  attributionWindowDays  Int                        @default(30)
+  defaultCurrency        String                     @default("BRL")
   defaultDiscountType    AffiliateRewardType?
   defaultDiscountValue   Int?
   defaultCommissionType  AffiliateRewardType
   defaultCommissionValue Int
-  status                 AffiliateCampaignStatus @default(draft)
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  partner                AffiliatePartner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  status                 AffiliateCampaignStatus    @default(draft)
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+  partner                AffiliatePartner           @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   codes                  AffiliateCode[]
   attributions           AffiliateAttribution[]
   commissionEvents       AffiliateCommissionEvent[]
@@ -945,35 +1006,35 @@ model AffiliateCampaign {
 }
 
 model AffiliateCode {
-  id               String              @id @default(cuid())
+  id               String                     @id @default(cuid())
   campaignId       String
-  code             String              @unique
+  code             String                     @unique
   landingPageUrl   String?
-  status           AffiliateCodeStatus @default(draft)
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  campaign         AffiliateCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  status           AffiliateCodeStatus        @default(draft)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  campaign         AffiliateCampaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   attributions     AffiliateAttribution[]
   commissionEvents AffiliateCommissionEvent[]
 
-  @@index([campaignId])
   @@unique([id, campaignId])
+  @@index([campaignId])
 }
 
 model AffiliateAttribution {
-  id               String                     @id @default(cuid())
-  userId           String
+  id                  String                     @id @default(cuid())
+  userId              String
   affiliateCampaignId String
-  affiliateCodeId  String
-  attributedAt     DateTime                   @default(now())
-  expiresAt        DateTime
-  metadataJson     Json?
-  createdAt        DateTime                   @default(now())
-  updatedAt        DateTime                   @updatedAt
-  user             User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  affiliateCampaign AffiliateCampaign         @relation(fields: [affiliateCampaignId], references: [id], onDelete: Cascade)
-  affiliateCode    AffiliateCode              @relation(fields: [affiliateCodeId, affiliateCampaignId], references: [id, campaignId], onDelete: Cascade)
-  commissionEvents AffiliateCommissionEvent[]
+  affiliateCodeId     String
+  attributedAt        DateTime                   @default(now())
+  expiresAt           DateTime
+  metadataJson        Json?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  affiliateCampaign   AffiliateCampaign          @relation(fields: [affiliateCampaignId], references: [id], onDelete: Cascade)
+  affiliateCode       AffiliateCode              @relation(fields: [affiliateCodeId, affiliateCampaignId], references: [id, campaignId], onDelete: Cascade)
+  commissionEvents    AffiliateCommissionEvent[]
 
   @@index([userId])
   @@index([affiliateCampaignId])
@@ -982,28 +1043,28 @@ model AffiliateAttribution {
 }
 
 model AffiliateCommissionEvent {
-  id                        String                    @id @default(cuid())
-  userId                    String
-  affiliateCampaignId       String
-  affiliateCodeId           String
-  affiliateAttributionId    String?
-  purchaseReference         String                    @unique
-  planKey                   String
-  grossAmountInCents        Int
-  discountAmountInCents     Int                       @default(0)
-  netAmountInCents          Int
-  commissionType            AffiliateRewardType
-  commissionValue           Int
-  commissionAmountInCents   Int
-  currency                  String                    @default("BRL")
-  status                    AffiliateCommissionStatus @default(pending)
-  paidAt                    DateTime?
-  createdAt                 DateTime                  @default(now())
-  updatedAt                 DateTime                  @updatedAt
-  user                      User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  affiliateCampaign         AffiliateCampaign         @relation(fields: [affiliateCampaignId], references: [id], onDelete: Cascade)
-  affiliateCode             AffiliateCode             @relation(fields: [affiliateCodeId, affiliateCampaignId], references: [id, campaignId], onDelete: Cascade)
-  affiliateAttribution      AffiliateAttribution?     @relation(fields: [affiliateAttributionId], references: [id], onDelete: SetNull)
+  id                      String                    @id @default(cuid())
+  userId                  String
+  affiliateCampaignId     String
+  affiliateCodeId         String
+  affiliateAttributionId  String?
+  purchaseReference       String                    @unique
+  planKey                 String
+  grossAmountInCents      Int
+  discountAmountInCents   Int                       @default(0)
+  netAmountInCents        Int
+  commissionType          AffiliateRewardType
+  commissionValue         Int
+  commissionAmountInCents Int
+  currency                String                    @default("BRL")
+  status                  AffiliateCommissionStatus @default(pending)
+  paidAt                  DateTime?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  user                    User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  affiliateCampaign       AffiliateCampaign         @relation(fields: [affiliateCampaignId], references: [id], onDelete: Cascade)
+  affiliateCode           AffiliateCode             @relation(fields: [affiliateCodeId, affiliateCampaignId], references: [id, campaignId], onDelete: Cascade)
+  affiliateAttribution    AffiliateAttribution?     @relation(fields: [affiliateAttributionId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([affiliateCampaignId])
@@ -1039,15 +1100,15 @@ model AnalysisProtectionConfigAudit {
 }
 
 model AnalysisSession {
-  id                     String                     @id @default(cuid())
-  sessionPublicTokenHash String                     @unique
+  id                     String                       @id @default(cuid())
+  sessionPublicTokenHash String                       @unique
   userId                 String?
   userAgentHash          String?
   ipHash                 String?
-  createdAt              DateTime                   @default(now())
-  updatedAt              DateTime                   @updatedAt
-  lastSeenAt             DateTime                   @default(now())
-  user                   User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  lastSeenAt             DateTime                     @default(now())
+  user                   User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
   requestFingerprints    AnalysisRequestFingerprint[]
   usageCounters          AnalysisUsageCounter[]
   protectionEvents       AnalysisProtectionEvent[]
@@ -1142,27 +1203,27 @@ model BusinessFunnelEvent {
 }
 
 model BusinessFunnelStageMetric {
-  id            String   @id @default(cuid())
-  stageKey      String
-  metricDate    DateTime
-  totalCount    Int      @default(0)
-  successCount  Int      @default(0)
-  errorCount    Int      @default(0)
-  avgLatencyMs  Float?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  stageKey     String
+  metricDate   DateTime
+  totalCount   Int      @default(0)
+  successCount Int      @default(0)
+  errorCount   Int      @default(0)
+  avgLatencyMs Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([stageKey, metricDate])
   @@index([metricDate])
 }
 
 model Job {
-  id                String     @id @default(cuid())
+  id                String    @id @default(cuid())
   companyId         String
   jobSourceId       String
   externalJobId     String?
   sourceJobUrl      String
-  canonicalKey      String     @unique
+  canonicalKey      String    @unique
   title             String
   normalizedTitle   String
   descriptionRaw    String
@@ -1180,12 +1241,12 @@ model Job {
   publishedAtSource DateTime?
   firstSeenAt       DateTime
   lastSeenAt        DateTime
-  status            JobStatus  @default(active)
+  status            JobStatus @default(active)
   metadataJson      Json?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  company           Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  jobSource         JobSource  @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobSource         JobSource @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
   targetResumes     Resume[]
 
   @@index([companyId])
@@ -1194,38 +1255,38 @@ model Job {
 }
 
 model JobApplication {
-  id                     String                   @id @default(cuid())
-  userId                 String
-  jobTitle               String
-  companyName            String
-  normalizedJobTitle     String
-  normalizedCompanyName  String
-  location               String?
-  jobUrl                 String?
-  jobDescriptionText     String?
-  status                 JobApplicationStatus     @default(ANALYZED)
-  origin                 JobApplicationOrigin     @default(analysis_auto)
-  currentCvAdaptationId  String?
-  scoreBefore            Int?
-  scoreAfter             Int?
-  notes                  String?
-  appliedAt              DateTime?
-  nextActionAt           DateTime?
-  interviewTitle         String?
-  interviewerName        String?
-  interviewMeetingUrl    String?
-  interviewLocation      String?
-  rejectionStrengths     String?
-  rejectionImprovements  String?
-  archivedAt             DateTime?
-  deletedAt              DateTime?
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
+  id                    String               @id @default(cuid())
+  userId                String
+  jobTitle              String
+  companyName           String
+  normalizedJobTitle    String
+  normalizedCompanyName String
+  location              String?
+  jobUrl                String?
+  jobDescriptionText    String?
+  status                JobApplicationStatus @default(ANALYZED)
+  origin                JobApplicationOrigin @default(analysis_auto)
+  currentCvAdaptationId String?
+  scoreBefore           Int?
+  scoreAfter            Int?
+  notes                 String?
+  appliedAt             DateTime?
+  nextActionAt          DateTime?
+  interviewTitle        String?
+  interviewerName       String?
+  interviewMeetingUrl   String?
+  interviewLocation     String?
+  rejectionStrengths    String?
+  rejectionImprovements String?
+  archivedAt            DateTime?
+  deletedAt             DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 
-  user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cvAdaptations          CvAdaptation[]
-  events                 JobApplicationEvent[]
-  interviewPrep          JobApplicationInterviewPrep?
+  user          User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cvAdaptations CvAdaptation[]
+  events        JobApplicationEvent[]
+  interviewPrep JobApplicationInterviewPrep?
 
   @@index([userId, createdAt])
   @@index([userId, status])
@@ -1233,26 +1294,26 @@ model JobApplication {
 }
 
 model JobApplicationEvent {
-  id                   String                      @id @default(cuid())
-  jobApplicationId     String
-  eventType            JobApplicationEventType
-  previousStatus       JobApplicationStatus?
-  newStatus            JobApplicationStatus?
-  metadata             Json?
-  createdAt            DateTime                    @default(now())
+  id               String                  @id @default(cuid())
+  jobApplicationId String
+  eventType        JobApplicationEventType
+  previousStatus   JobApplicationStatus?
+  newStatus        JobApplicationStatus?
+  metadata         Json?
+  createdAt        DateTime                @default(now())
 
-  jobApplication       JobApplication              @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
+  jobApplication JobApplication @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
 
   @@index([jobApplicationId, createdAt])
 }
 
 model JobApplicationInterviewPrep {
-  id                   String         @id @default(cuid())
-  jobApplicationId     String         @unique
+  id                   String   @id @default(cuid())
+  jobApplicationId     String   @unique
   generatedContentJson Json
-  generatedAt          DateTime       @default(now())
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  generatedAt          DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  jobApplication       JobApplication @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
+  jobApplication JobApplication @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
 }

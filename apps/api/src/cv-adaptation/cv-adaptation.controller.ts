@@ -132,7 +132,7 @@ export class CvAdaptationController {
     )
     dto: AnalyzeCvDto,
   ) {
-    return this.cvAdaptationService.analyzeAuthenticated(
+    return this.cvAdaptationService.startAuthenticatedAnalysisJob(
       user.id,
       dto,
       file,

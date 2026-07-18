@@ -75,6 +75,16 @@ export class CvAdaptationProtectedAnalyzeService {
     private readonly aiService: CvAdaptationAiService,
   ) {}
 
+  async precheckTurnstile(
+    input: { turnstileToken?: string | null },
+    context: AnalysisRequestContext & { routeKey?: string | null },
+  ) {
+    return this.analysisProtectionFacade.precheckTurnstile(
+      { turnstileToken: input.turnstileToken },
+      context,
+    );
+  }
+
   async executeProtectedAnalyze<TPayload>(
     input: ProtectedAnalyzeInput<TPayload>,
   ): Promise<ProtectedAnalysisResult<ProtectedAnalyzeOutput>> {

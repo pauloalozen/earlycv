@@ -791,6 +791,227 @@ export class CvAdaptationService {
     };
   }
 
+  // Item 3 do plano de LLM síncronas → assíncronas: canonicalização da vaga +
+  // análise (duas chamadas de LLM em série) hoje rodam dentro do request de
+  // analyze-guest/analyze, com um timeout de 180s no client como remendo —
+  // mesmo sintoma que MASTERCV e CV_GENERATION já tinham. A linha AnalysisJob
+  // criada aqui também é o registro permanente de retenção/analytics decidido
+  // em 2026-07-18: fica salva mesmo se a pessoa nunca converter.
+  //
+  // Deliberadamente NÃO reescreve analyzeGuest/analyzeAuthenticated — só os
+  // envolve em fire-and-forget, igual já fizemos em processJob/deliverAdaptation.
+  // Isso preserva toda a lógica de proteção (turnstile, rate limit, dedupe)
+  // sem precisar desmontar o AnalysisProtectionFacade.
+  async startGuestAnalysisJob(
+    jobDescriptionText: string,
+    file?: FileUpload,
+    masterCvText?: string,
+    turnstileToken?: string,
+    analysisContext?: AnalysisRequestContext,
+  ): Promise<{
+    jobId: string;
+    status: "pending";
+    guestSessionPublicToken: string | null;
+  }> {
+    const turnstilePrecheck = await this.protectedAnalyzeService.precheckTurnstile(
+      { turnstileToken },
+      this.buildProtectionContext(
+        analysisContext,
+        null,
+        "cv-adaptation/analyze-guest",
+      ),
+    );
+    if (!turnstilePrecheck.ok) {
+      throw new BadRequestException("Turnstile verification failed");
+    }
+
+    const guestSessionHash = this.hashGuestSessionToken(
+      analysisContext?.sessionPublicToken,
+    );
+
+    const job = await this.database.analysisJob.create({
+      data: {
+        ownerKind: "guest",
+        status: "pending",
+        guestSessionHash,
+        jobDescriptionText,
+        masterCvText: masterCvText?.trim() || null,
+      },
+    });
+
+    this.processAnalysisJob(job.id, () =>
+      this.analyzeGuest(
+        jobDescriptionText,
+        file,
+        masterCvText,
+        turnstileToken,
+        analysisContext,
+      ),
+    ).catch((err) => {
+      this.logger.error(
+        `[analysis-job] ${job.id} background processing crashed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+
+    return {
+      jobId: job.id,
+      status: "pending",
+      guestSessionPublicToken: analysisContext?.sessionPublicToken ?? null,
+    };
+  }
+
+  async startAuthenticatedAnalysisJob(
+    userId: string,
+    dto: AnalyzeCvDto,
+    file?: FileUpload,
+    analysisContext?: AnalysisRequestContext,
+  ): Promise<{ jobId: string; status: "pending" }> {
+    const turnstilePrecheck = await this.protectedAnalyzeService.precheckTurnstile(
+      { turnstileToken: dto.turnstileToken },
+      this.buildProtectionContext(analysisContext, userId, "cv-adaptation/analyze"),
+    );
+    if (!turnstilePrecheck.ok) {
+      throw new BadRequestException("Turnstile verification failed");
+    }
+
+    const job = await this.database.analysisJob.create({
+      data: {
+        ownerKind: "authenticated",
+        status: "pending",
+        userId,
+        jobDescriptionText: dto.jobDescriptionText,
+        masterCvText: dto.masterCvText?.trim() || null,
+      },
+    });
+
+    this.processAnalysisJob(job.id, () =>
+      this.analyzeAuthenticated(userId, dto, file, analysisContext),
+    ).catch((err) => {
+      this.logger.error(
+        `[analysis-job] ${job.id} background processing crashed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+
+    return { jobId: job.id, status: "pending" };
+  }
+
+  private async processAnalysisJob(
+    jobId: string,
+    run: () => Promise<{
+      adaptedContentJson: unknown;
+      previewText: string;
+      masterCvText: string;
+      analysisCvSnapshotId: string;
+    }>,
+  ): Promise<void> {
+    await this.database.analysisJob.update({
+      where: { id: jobId },
+      data: { status: "processing", startedAt: new Date() },
+    });
+
+    try {
+      const result = await run();
+      const signals = this.extractAnalysisJobSignals(
+        result.adaptedContentJson,
+      );
+
+      await this.database.analysisJob.update({
+        where: { id: jobId },
+        data: {
+          status: "succeeded",
+          finishedAt: new Date(),
+          adaptedContentJson: result.adaptedContentJson as Prisma.InputJsonValue,
+          previewText: result.previewText,
+          masterCvText: result.masterCvText,
+          analysisCvSnapshotId: result.analysisCvSnapshotId,
+          jobTitle: signals.jobTitle,
+          companyName: signals.companyName,
+          scoreBefore: signals.scoreBefore,
+          scoreAfter: signals.scoreAfter,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`[analysis-job] ${jobId} failed: ${message}`);
+      await this.database.analysisJob.update({
+        where: { id: jobId },
+        data: { status: "failed", finishedAt: new Date(), lastError: message },
+      });
+    }
+  }
+
+  private extractAnalysisJobSignals(adaptedContentJson: unknown): {
+    jobTitle: string | null;
+    companyName: string | null;
+    scoreBefore: number | null;
+    scoreAfter: number | null;
+  } {
+    if (!adaptedContentJson || typeof adaptedContentJson !== "object") {
+      return {
+        jobTitle: null,
+        companyName: null,
+        scoreBefore: null,
+        scoreAfter: null,
+      };
+    }
+
+    const data = adaptedContentJson as {
+      vaga?: { cargo?: unknown; empresa?: unknown };
+      scoreBefore?: unknown;
+      scoreAfter?: unknown;
+    };
+
+    return {
+      jobTitle: typeof data.vaga?.cargo === "string" ? data.vaga.cargo : null,
+      companyName:
+        typeof data.vaga?.empresa === "string" ? data.vaga.empresa : null,
+      scoreBefore:
+        typeof data.scoreBefore === "number"
+          ? Math.round(data.scoreBefore)
+          : null,
+      scoreAfter:
+        typeof data.scoreAfter === "number"
+          ? Math.round(data.scoreAfter)
+          : null,
+    };
+  }
+
+  async getAnalysisJobStatus(
+    jobId: string,
+    input: { userId: string | null; sessionPublicToken: string | null },
+  ) {
+    const job = await this.database.analysisJob.findUnique({
+      where: { id: jobId },
+    });
+
+    if (!job) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    const isOwner = job.userId
+      ? job.userId === input.userId
+      : job.guestSessionHash
+        ? job.guestSessionHash ===
+          this.hashGuestSessionToken(input.sessionPublicToken)
+        : true;
+
+    if (!isOwner) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    return {
+      jobId: job.id,
+      status: job.status,
+      lastError: job.status === "failed" ? job.lastError : null,
+      adaptedContentJson:
+        job.status === "succeeded" ? job.adaptedContentJson : null,
+      previewText: job.status === "succeeded" ? job.previewText : null,
+      masterCvText: job.status === "succeeded" ? job.masterCvText : null,
+      analysisCvSnapshotId:
+        job.status === "succeeded" ? job.analysisCvSnapshotId : null,
+    };
+  }
+
   async analyzeAuthenticated(
     userId: string,
     dto: AnalyzeCvDto,
@@ -1515,6 +1736,12 @@ export class CvAdaptationService {
           },
         },
       });
+      await this.markAnalysisJobConverted(
+        snapshot?.id,
+        userId,
+        existingAdaptation.id,
+      );
+
       return createCvAdaptationResponseDto(
         refreshedExisting ?? existingAdaptation,
       );
@@ -1574,7 +1801,39 @@ export class CvAdaptationService {
       },
     });
 
+    await this.markAnalysisJobConverted(snapshot?.id, userId, adaptation.id);
+
     return createCvAdaptationResponseDto(refreshedAdaptation ?? adaptation);
+  }
+
+  // Marca em AnalysisJob (via analysisCvSnapshotId, o mesmo identificador que
+  // já flui pela jornada do guest hoje) o momento em que a análise virou
+  // conta de verdade — "converteu" pra fins de retenção/analytics significa
+  // "criou conta e a análise foi salva" (saveGuestPreview), não "pagou pelo
+  // CV". updateMany + convertedAt: null no where: idempotente, nunca falha
+  // se não achar linha correspondente (ex: análise anterior à criação do
+  // AnalysisJob) e nunca sobrescreve uma conversão já registrada.
+  private async markAnalysisJobConverted(
+    analysisCvSnapshotId: string | null | undefined,
+    userId: string,
+    cvAdaptationId: string,
+  ): Promise<void> {
+    if (!analysisCvSnapshotId) return;
+
+    try {
+      await this.database.analysisJob.updateMany({
+        where: { analysisCvSnapshotId, convertedAt: null },
+        data: {
+          convertedAt: new Date(),
+          convertedCvAdaptationId: cvAdaptationId,
+          userId,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `[analysis-job] failed to mark conversion for snapshot ${analysisCvSnapshotId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   async list(userId: string, page: number = 1, limit: number = 20) {
@@ -1734,29 +1993,16 @@ export class CvAdaptationService {
     return createCvAdaptationResponseDto(adaptation);
   }
 
-  async delete(userId: string, id: string) {
-    const adaptation = await this.database.cvAdaptation.findFirst({
-      where: {
-        id,
-        userId,
-      },
-    });
-
-    if (!adaptation) {
-      throw new NotFoundException("adaptation not found");
-    }
-
-    // Delete adapted resume if it exists
-    if (adaptation.adaptedResumeId) {
-      await this.database.resume.delete({
-        where: { id: adaptation.adaptedResumeId },
-      });
-    }
-
-    // Delete adaptation record
-    await this.database.cvAdaptation.delete({
-      where: { id },
-    });
+  // Análise, CV adaptado e preparação de entrevista nunca podem ser apagados
+  // — invariante de produto (usuário pagou por usar), reforçado depois do
+  // incidente de perda de dados de 2026-07-18. Este método (e o endpoint
+  // DELETE /cv-adaptation/:id) não tinha nenhum consumidor no frontend, mas
+  // apagava a linha de verdade, sem nenhuma trava mesmo pra análise já paga.
+  // Bloqueado de propósito, sem exceção — não reabrir sem decisão explícita.
+  async delete(_userId: string, _id: string): Promise<never> {
+    throw new BadRequestException(
+      "Excluir análises não é permitido. Entre em contato com o suporte se precisar de ajuda.",
+    );
   }
 
   async createCheckout(userId: string, id: string) {

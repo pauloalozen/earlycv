@@ -7,11 +7,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { EcvBuildLoader, EcvScanLoader } from "@/components/ecv-loader";
 import { PageShell } from "@/components/page-shell";
+import {
+  type AnalysisJobResult,
+  pollAnalysisJob,
+} from "@/lib/analysis-job-polling";
 import { trackEvent } from "@/lib/analytics-tracking";
 import type { AppInternalRole } from "@/lib/app-session";
 import {
   analyzeAuthenticatedCv,
   analyzeGuestCv,
+  type AnalysisJobStartResult,
   saveGuestPreview,
 } from "@/lib/cv-adaptation-api";
 import {
@@ -542,7 +547,36 @@ export default function AdaptarPage() {
       }
       const turnstileToken = await requestTurnstileToken();
       appendTurnstileTokenToAnalyzeFormData(formData, turnstileToken);
-      let analyzeResult: Awaited<ReturnType<typeof analyzeAuthenticatedCv>>;
+
+      // A análise em si roda em background no servidor (job assíncrono) —
+      // startAndPoll dispara o job e espera aqui, junto com um piso mínimo
+      // de tempo de loading pra não "piscar" quando a resposta é rápida.
+      async function startAndPoll(
+        starter: Promise<AnalysisJobStartResult>,
+      ): Promise<{
+        result: AnalysisJobResult;
+        guestSessionPublicToken: string | null;
+      }> {
+        const started = await starter;
+        if (!started.ok) {
+          return {
+            result: { ok: false, error: started.error },
+            guestSessionPublicToken: null,
+          };
+        }
+        const [result] = await Promise.all([
+          pollAnalysisJob(started.jobId),
+          new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
+        ]);
+        return {
+          result,
+          guestSessionPublicToken: started.guestSessionPublicToken,
+        };
+      }
+
+      let analyzeResult: AnalysisJobResult;
+      let guestSessionPublicToken: string | null = null;
+
       if (isAuthenticated && cvMode === "profile") {
         if (!isProfileModeReady) {
           if (masterResume?.id) {
@@ -562,9 +596,10 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const result = await analyzeAuthenticatedCv(formData, "profile");
-        await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
-        analyzeResult = result;
+        const started = await startAndPoll(
+          analyzeAuthenticatedCv(formData, "profile"),
+        );
+        analyzeResult = started.result;
       } else if (isAuthenticated && cvMode === "upload" && file) {
         if (saveMasterDecisionRef.current) {
           const masterFormData = new FormData();
@@ -588,12 +623,13 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const result = await analyzeAuthenticatedCv(
-          formData,
-          saveMasterDecisionRef.current ? "profile" : "file_upload",
+        const started = await startAndPoll(
+          analyzeAuthenticatedCv(
+            formData,
+            saveMasterDecisionRef.current ? "profile" : "file_upload",
+          ),
         );
-        await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
-        analyzeResult = result;
+        analyzeResult = started.result;
       } else if (isAuthenticated && cvMode === "text") {
         if (saveMasterDecisionRef.current) {
           const masterFormData = new FormData();
@@ -612,12 +648,13 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const result = await analyzeAuthenticatedCv(
-          formData,
-          saveMasterDecisionRef.current ? "profile" : "text_paste",
+        const started = await startAndPoll(
+          analyzeAuthenticatedCv(
+            formData,
+            saveMasterDecisionRef.current ? "profile" : "text_paste",
+          ),
         );
-        await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
-        analyzeResult = result;
+        analyzeResult = started.result;
       } else {
         if (cvMode === "text") {
           emitUiFunnelEvent("analysis_started", {
@@ -627,19 +664,20 @@ export default function AdaptarPage() {
               isAuthenticated,
             },
           });
-          const result = await analyzeGuestCv(formData);
-          analyzeResult = result;
+          const started = await startAndPoll(analyzeGuestCv(formData));
+          analyzeResult = started.result;
+          guestSessionPublicToken = started.guestSessionPublicToken;
           if (!analyzeResult.ok) {
             setLoading(false);
             setError(analyzeResult.error);
             return;
           }
-          await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
           setLoadingStep(3);
           await new Promise((r) => setTimeout(r, RESULT_TRANSITION_DELAY_MS));
           setGuestAnalysisRaw(
             JSON.stringify({
               ...analyzeResult,
+              guestSessionPublicToken,
               jobDescriptionText: jobDescription,
             }),
           );
@@ -661,15 +699,15 @@ export default function AdaptarPage() {
             isAuthenticated,
           },
         });
-        const result = await analyzeGuestCv(formData);
-        analyzeResult = result;
+        const started = await startAndPoll(analyzeGuestCv(formData));
+        analyzeResult = started.result;
+        guestSessionPublicToken = started.guestSessionPublicToken;
       }
       if (!analyzeResult.ok) {
         setLoading(false);
         setError(analyzeResult.error);
         return;
       }
-      await new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS));
       setLoadingStep(3);
       await new Promise((r) => setTimeout(r, RESULT_TRANSITION_DELAY_MS));
 
@@ -697,6 +735,7 @@ export default function AdaptarPage() {
       setGuestAnalysisRaw(
         JSON.stringify({
           ...analyzeResult,
+          guestSessionPublicToken,
           jobDescriptionText: jobDescription,
         }),
       );

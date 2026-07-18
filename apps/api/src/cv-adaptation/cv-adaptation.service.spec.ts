@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { CvAdaptationService } from "./cv-adaptation.service";
 
@@ -3387,4 +3388,334 @@ test("getContent: isLegacyFormat is true only when there is no snapshot and no b
 
   const result = await service.getContent("user-1", "adapt-1");
   assert.equal(result.isLegacyFormat, true);
+});
+
+test("startGuestAnalysisJob returns immediately with a pending job and fills it in the background on success", async () => {
+  const jobUpdates: Array<{ data: Record<string, unknown> }> = [];
+  let createdJob: Record<string, unknown> | null = null;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-async-1" }),
+      },
+      analysisJob: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          createdJob = { id: "job-async-1", ...data };
+          return createdJob;
+        },
+        update: async (args: { data: Record<string, unknown> }) => {
+          jobUpdates.push(args);
+          return args;
+        },
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-async-1",
+        result: {
+          adaptedContentJson: {
+            vaga: { cargo: "Analista de Dados", empresa: "EarlyCV" },
+            scoreBefore: 62,
+            scoreAfter: 88.4,
+          },
+          masterCvText: "CV completo extraído",
+          previewText: "preview",
+        },
+      }),
+    },
+  );
+
+  const started = await service.startGuestAnalysisJob(
+    "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+    undefined,
+    "Resumo do candidato com experiencia relevante para a vaga.",
+    "token",
+    {
+      correlationId: "corr",
+      ip: "203.0.113.10",
+      requestId: "req",
+      sessionInternalId: null,
+      sessionPublicToken: "guest-session-token",
+      userId: null,
+    },
+  );
+
+  // Volta na hora, "pending" — a chamada de IA (mockada com executeProtectedAnalyze)
+  // ainda nem rodou nesse ponto do teste.
+  assert.equal(started.status, "pending");
+  assert.equal(started.jobId, "job-async-1");
+  assert.equal((createdJob as Record<string, unknown> | null)?.status, "pending");
+
+  await sleep(20);
+
+  const statuses = jobUpdates.map((u) => u.data.status);
+  assert.deepEqual(statuses, ["processing", "succeeded"]);
+
+  const finalUpdate = jobUpdates[jobUpdates.length - 1]?.data;
+  assert.equal(finalUpdate?.previewText, "preview");
+  assert.equal(finalUpdate?.masterCvText, "CV completo extraído");
+  assert.equal(finalUpdate?.analysisCvSnapshotId, "snapshot-async-1");
+  assert.equal(finalUpdate?.jobTitle, "Analista de Dados");
+  assert.equal(finalUpdate?.companyName, "EarlyCV");
+  assert.equal(finalUpdate?.scoreBefore, 62);
+  assert.equal(finalUpdate?.scoreAfter, 88);
+});
+
+test("startGuestAnalysisJob marks the job as failed when the background analysis throws", async () => {
+  const jobUpdates: Array<{ data: Record<string, unknown> }> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisJob: {
+        create: async () => ({ id: "job-async-fail-1" }),
+        update: async (args: { data: Record<string, unknown> }) => {
+          jobUpdates.push(args);
+          return args;
+        },
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => {
+        throw new Error("modelo indisponível");
+      },
+    },
+  );
+
+  await service.startGuestAnalysisJob(
+    "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+    undefined,
+    "Resumo do candidato com experiencia relevante para a vaga.",
+    "token",
+    undefined,
+  );
+
+  await sleep(20);
+
+  const statuses = jobUpdates.map((u) => u.data.status);
+  assert.deepEqual(statuses, ["processing", "failed"]);
+  assert.match(
+    String(jobUpdates[jobUpdates.length - 1]?.data.lastError),
+    /modelo indisponível/,
+  );
+});
+
+test("getAnalysisJobStatus returns the job for its guest session owner", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          id: "job-1",
+          status: "succeeded",
+          userId: null,
+          guestSessionHash: createHash("sha256")
+            .update("guest-token-abc")
+            .digest("hex"),
+          lastError: null,
+          adaptedContentJson: { ok: true },
+          previewText: "preview",
+          masterCvText: "cv text",
+          analysisCvSnapshotId: "snapshot-1",
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const result = await service.getAnalysisJobStatus("job-1", {
+    userId: null,
+    sessionPublicToken: "guest-token-abc",
+  });
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.previewText, "preview");
+  assert.equal(result.analysisCvSnapshotId, "snapshot-1");
+});
+
+test("getAnalysisJobStatus hides the job from a different guest session", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          id: "job-1",
+          status: "succeeded",
+          userId: null,
+          guestSessionHash: createHash("sha256")
+            .update("guest-token-abc")
+            .digest("hex"),
+          lastError: null,
+          adaptedContentJson: { ok: true },
+          previewText: "preview",
+          masterCvText: "cv text",
+          analysisCvSnapshotId: "snapshot-1",
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () =>
+      service.getAnalysisJobStatus("job-1", {
+        userId: null,
+        sessionPublicToken: "someone-elses-token",
+      }),
+    /not found/i,
+  );
+});
+
+test("getAnalysisJobStatus scopes authenticated jobs to their owner", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          id: "job-2",
+          status: "processing",
+          userId: "user-1",
+          guestSessionHash: null,
+          lastError: null,
+          adaptedContentJson: null,
+          previewText: null,
+          masterCvText: null,
+          analysisCvSnapshotId: null,
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const ownResult = await service.getAnalysisJobStatus("job-2", {
+    userId: "user-1",
+    sessionPublicToken: null,
+  });
+  assert.equal(ownResult.status, "processing");
+
+  await assert.rejects(
+    () =>
+      service.getAnalysisJobStatus("job-2", {
+        userId: "user-2",
+        sessionPublicToken: null,
+      }),
+    /not found/i,
+  );
+});
+
+test("markAnalysisJobConverted links the job to the new account and CvAdaptation, without overwriting an already-converted job", async () => {
+  const updateManyCalls: Array<{
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  }> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        updateMany: async (args: {
+          where: Record<string, unknown>;
+          data: Record<string, unknown>;
+        }) => {
+          updateManyCalls.push(args);
+          return { count: 1 };
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await (
+    service as unknown as {
+      markAnalysisJobConverted: (
+        snapshotId: string | null | undefined,
+        userId: string,
+        cvAdaptationId: string,
+      ) => Promise<void>;
+    }
+  ).markAnalysisJobConverted("snapshot-1", "user-9", "adapt-9");
+
+  assert.equal(updateManyCalls.length, 1);
+  assert.deepEqual(updateManyCalls[0]?.where, {
+    analysisCvSnapshotId: "snapshot-1",
+    convertedAt: null,
+  });
+  assert.equal(updateManyCalls[0]?.data.convertedCvAdaptationId, "adapt-9");
+  assert.equal(updateManyCalls[0]?.data.userId, "user-9");
+  assert.ok(updateManyCalls[0]?.data.convertedAt instanceof Date);
+});
+
+test("markAnalysisJobConverted is a no-op without a snapshot id", async () => {
+  let called = false;
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        updateMany: async () => {
+          called = true;
+          return { count: 0 };
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await (
+    service as unknown as {
+      markAnalysisJobConverted: (
+        snapshotId: string | null | undefined,
+        userId: string,
+        cvAdaptationId: string,
+      ) => Promise<void>;
+    }
+  ).markAnalysisJobConverted(null, "user-9", "adapt-9");
+
+  assert.equal(called, false);
 });

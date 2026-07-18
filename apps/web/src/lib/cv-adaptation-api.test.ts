@@ -89,29 +89,8 @@ describe("analyzeGuestCv request forwarding", () => {
       async (..._args: unknown[]) =>
         new Response(
           JSON.stringify({
-            adaptedContentJson: {
-              vaga: { cargo: "", empresa: "" },
-              fit: {
-                score: 0,
-                categoria: "baixo",
-                headline: "",
-                subheadline: "",
-              },
-              comparacao: { antes: "", depois: "" },
-              pontos_fortes: [],
-              lacunas: [],
-              melhorias_aplicadas: [],
-              ats_keywords: { presentes: [], ausentes: [] },
-              preview: { antes: "", depois: "" },
-              projecao_melhoria: {
-                score_atual: 0,
-                score_pos_otimizacao: 0,
-                explicacao_curta: "",
-              },
-              mensagem_venda: { titulo: "", subtexto: "" },
-            },
-            previewText: "",
-            masterCvText: "",
+            jobId: "job-1",
+            guestSessionPublicToken: null,
           }),
           {
             status: 200,

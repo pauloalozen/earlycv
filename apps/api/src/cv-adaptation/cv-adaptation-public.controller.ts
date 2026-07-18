@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Inject,
+  Param,
   Post,
   Query,
   Req,
@@ -53,13 +54,21 @@ export class CvAdaptationPublicController {
     if (!jobDescriptionText?.trim()) {
       throw new BadRequestException("jobDescriptionText is required");
     }
-    return this.cvAdaptationService.analyzeGuest(
+    return this.cvAdaptationService.startGuestAnalysisJob(
       jobDescriptionText,
       file,
       masterCvText,
       turnstileToken,
       req.analysisContext,
     );
+  }
+
+  @Get("analysis-jobs/:jobId")
+  getAnalysisJobStatus(@Req() req: Request, @Param("jobId") jobId: string) {
+    return this.cvAdaptationService.getAnalysisJobStatus(jobId, {
+      userId: req.analysisContext?.userId ?? null,
+      sessionPublicToken: req.analysisContext?.sessionPublicToken ?? null,
+    });
   }
 
   @Get("job-count")

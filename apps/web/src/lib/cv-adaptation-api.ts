@@ -367,16 +367,8 @@ export type CvAnalysisData = {
   scoreDelta?: number;
 };
 
-export type GuestAnalysisResult = {
-  adaptedContentJson: CvAnalysisData;
-  previewText: string;
-  masterCvText: string;
-  analysisCvSnapshotId: string;
-  guestSessionPublicToken: string | null;
-};
-
-export type AnalyzeResult =
-  | ({ ok: true } & GuestAnalysisResult)
+export type AnalysisJobStartResult =
+  | { ok: true; jobId: string; guestSessionPublicToken: string | null }
   | { ok: false; error: string };
 
 export type BusinessFunnelEventPayload = {
@@ -416,12 +408,11 @@ export async function emitBusinessFunnelEvent(
 
 export async function analyzeGuestCv(
   formData: FormData,
-): Promise<AnalyzeResult> {
+): Promise<AnalysisJobStartResult> {
   const response = await apiRequest(
     "POST",
     "/cv-adaptation/analyze-guest",
     formData,
-    180_000,
   );
   if (!response.ok) {
     const raw = await response.text();
@@ -433,7 +424,15 @@ export async function analyzeGuestCv(
       ),
     };
   }
-  return { ok: true, ...((await response.json()) as GuestAnalysisResult) };
+  const body = (await response.json()) as {
+    jobId: string;
+    guestSessionPublicToken: string | null;
+  };
+  return {
+    ok: true,
+    jobId: body.jobId,
+    guestSessionPublicToken: body.guestSessionPublicToken,
+  };
 }
 
 export async function claimGuestAnalysis(payload: {
@@ -515,16 +514,11 @@ export async function saveGuestPreview(payload: {
 export async function analyzeAuthenticatedCv(
   formData: FormData,
   inputMode?: "file_upload" | "text_paste" | "profile",
-): Promise<AnalyzeResult> {
+): Promise<AnalysisJobStartResult> {
   if (inputMode) {
     formData.set("inputMode", inputMode);
   }
-  const response = await apiRequest(
-    "POST",
-    "/cv-adaptation/analyze",
-    formData,
-    180_000,
-  );
+  const response = await apiRequest("POST", "/cv-adaptation/analyze", formData);
   if (!response.ok) {
     const raw = await response.text();
     return {
@@ -535,7 +529,8 @@ export async function analyzeAuthenticatedCv(
       ),
     };
   }
-  return { ok: true, ...((await response.json()) as GuestAnalysisResult) };
+  const body = (await response.json()) as { jobId: string };
+  return { ok: true, jobId: body.jobId, guestSessionPublicToken: null };
 }
 
 export async function downloadCvAdaptationPdf(id: string): Promise<Blob> {

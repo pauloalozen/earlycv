@@ -6,6 +6,7 @@ import { getAtsScoreColors } from "@/app/adaptar/resultado/ats-score-colors";
 import { AppHeader } from "@/components/app-header";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
+import { pollAnalysisJob } from "@/lib/analysis-job-polling";
 import type { AppInternalRole } from "@/lib/app-session";
 import type { DownloadProgressStage } from "@/lib/client-download";
 import { downloadFromApi } from "@/lib/client-download";
@@ -1954,7 +1955,14 @@ export function AdaptacaoCvClient({
       formData.set("masterCvText", cvText);
       formData.set("inputMode", "text_paste");
 
-      const result = await analyzeAuthenticatedCv(formData, "text_paste");
+      const started = await analyzeAuthenticatedCv(formData, "text_paste");
+      if (!started.ok) {
+        setReanaliseError(started.error);
+        setReanaliseState("error");
+        return;
+      }
+
+      const result = await pollAnalysisJob(started.jobId);
       if (!result.ok) {
         setReanaliseError(result.error);
         setReanaliseState("error");

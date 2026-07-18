@@ -9,6 +9,7 @@ import { Test } from "@nestjs/testing";
 import { Prisma } from "@prisma/client";
 import request from "supertest";
 
+import { requestContextMiddleware } from "../analysis-protection/request-context.middleware";
 import { AppModule } from "../app.module";
 import { DatabaseService } from "../database/database.service";
 import { PlansService } from "../plans/plans.service";
@@ -60,6 +61,7 @@ async function createApp() {
     .compile();
 
   const app: INestApplication = moduleRef.createNestApplication();
+  app.use(requestContextMiddleware);
   app.setGlobalPrefix("api");
   app.useGlobalPipes(
     new ValidationPipe({
@@ -114,6 +116,47 @@ async function waitForAdaptationStatus(
   }
   throw new Error(
     `timed out waiting for adaptation ${id} to reach status in [${targetStatuses.join(", ")}]`,
+  );
+}
+
+async function waitForAnalysisJobStatus(
+  app: INestApplication,
+  accessToken: string | null,
+  jobId: string,
+  targetStatuses: string[] = ["succeeded", "failed"],
+  timeoutMs = 15_000,
+  cookie?: string,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const req = request(app.getHttpServer()).get(
+      `/api/cv-adaptation/analysis-jobs/${jobId}`,
+    );
+    if (accessToken) {
+      req.set("Authorization", `Bearer ${accessToken}`);
+    }
+    if (cookie) {
+      req.set("Cookie", cookie);
+    }
+    const response = await req;
+    if (
+      response.status === 200 &&
+      targetStatuses.includes(response.body.status)
+    ) {
+      return response.body as {
+        jobId: string;
+        status: string;
+        lastError: string | null;
+        adaptedContentJson: unknown;
+        previewText: string | null;
+        masterCvText: string | null;
+        analysisCvSnapshotId: string | null;
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(
+    `timed out waiting for analysis job ${jobId} to reach status in [${targetStatuses.join(", ")}]`,
   );
 }
 
@@ -339,7 +382,7 @@ test("GET /cv-adaptation/:id returns 404 for another user's adaptation", async (
   await app.close();
 });
 
-test("DELETE /cv-adaptation/:id deletes the record", async () => {
+test("DELETE /cv-adaptation/:id is blocked — analyses/CVs adaptados nunca podem ser apagados", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "cv-adaptation-delete-user");
 
@@ -358,78 +401,20 @@ test("DELETE /cv-adaptation/:id deletes the record", async () => {
       userId: user.userId,
       masterResumeId: resume.id,
       jobDescriptionText: "Job",
-      status: "pending",
+      status: "delivered",
     },
   });
 
-  // Delete adaptation
   await request(app.getHttpServer())
     .delete(`/api/cv-adaptation/${adaptation.id}`)
     .set("Authorization", `Bearer ${user.accessToken}`)
-    .expect(204);
+    .expect(400);
 
-  // Verify it's deleted
+  // Continua existindo, sem exceção — mesmo dono, mesmo se nunca foi paga.
   await request(app.getHttpServer())
     .get(`/api/cv-adaptation/${adaptation.id}`)
     .set("Authorization", `Bearer ${user.accessToken}`)
-    .expect(404);
-
-  await deleteUserByEmail(database, user.email);
-  await app.close();
-});
-
-test("DELETE /cv-adaptation/:id also deletes the adaptedResume if present", async () => {
-  const { app, database } = await createApp();
-  const user = await registerUser(app, database, "cv-adapt-del-adapted");
-
-  const masterResume = await database.resume.create({
-    data: {
-      userId: user.userId,
-      title: "Master CV",
-      kind: "master",
-      status: "uploaded",
-      rawText: "Resume",
-    },
-  });
-
-  const adaptedResume = await database.resume.create({
-    data: {
-      userId: user.userId,
-      title: "Adapted CV",
-      kind: "adapted",
-      isMaster: false,
-      status: "reviewed",
-      basedOnResumeId: masterResume.id,
-    },
-  });
-
-  const adaptation = await database.cvAdaptation.create({
-    data: {
-      userId: user.userId,
-      masterResumeId: masterResume.id,
-      jobDescriptionText: "Job",
-      status: "delivered",
-      adaptedResumeId: adaptedResume.id,
-    },
-  });
-
-  // Verify adapted resume exists
-  const beforeDelete = await database.resume.findUnique({
-    where: { id: adaptedResume.id },
-  });
-  assert.ok(beforeDelete);
-
-  // Delete adaptation
-  await request(app.getHttpServer())
-    .delete(`/api/cv-adaptation/${adaptation.id}`)
-    .set("Authorization", `Bearer ${user.accessToken}`)
-    .expect(204);
-
-  // Verify adapted resume is also deleted
-  const afterDelete = await database.resume.findUnique({
-    where: { id: adaptedResume.id },
-  });
-  assert.equal(afterDelete, null);
+    .expect(200);
 
   await deleteUserByEmail(database, user.email);
   await app.close();
@@ -1047,7 +1032,7 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
 
     process.env.SKIP_TURNSTILE_VERIFICATION = "true";
 
-    await request(app.getHttpServer())
+    const analyzeResponse = await request(app.getHttpServer())
       .post("/api/cv-adaptation/analyze")
       .set("Authorization", `Bearer ${user.accessToken}`)
       .send({
@@ -1062,13 +1047,22 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
           201,
           `unexpected status: ${response.status} body=${JSON.stringify(response.body)}`,
         );
-      })
-      .expect(({ body }) => {
-        assert.equal(typeof body.previewText, "string");
-        assert.equal(typeof body.masterCvText, "string");
-        assert.equal(typeof body.analysisCvSnapshotId, "string");
-        assert.ok(body.adaptedContentJson);
       });
+
+    assert.equal(analyzeResponse.body.status, "pending");
+    assert.equal(typeof analyzeResponse.body.jobId, "string");
+
+    const job = await waitForAnalysisJobStatus(
+      app,
+      user.accessToken,
+      analyzeResponse.body.jobId as string,
+    );
+
+    assert.equal(job.status, "succeeded");
+    assert.equal(typeof job.previewText, "string");
+    assert.equal(typeof job.masterCvText, "string");
+    assert.equal(typeof job.analysisCvSnapshotId, "string");
+    assert.ok(job.adaptedContentJson);
   } finally {
     if (previousRolloutMode === undefined) {
       delete process.env.ANALYSIS_ROLLOUT_MODE;
@@ -1173,7 +1167,7 @@ test("analysis reuses the persisted requirement rule by requirementSourceHash", 
       },
     });
 
-    const firstResponse = await request(app.getHttpServer())
+    const firstAnalyzeResponse = await request(app.getHttpServer())
       .post("/api/cv-adaptation/analyze")
       .set("Authorization", `Bearer ${user.accessToken}`)
       .send({
@@ -1184,7 +1178,14 @@ test("analysis reuses the persisted requirement rule by requirementSourceHash", 
       })
       .expect(201);
 
-    await request(app.getHttpServer())
+    const firstResponse = await waitForAnalysisJobStatus(
+      app,
+      user.accessToken,
+      firstAnalyzeResponse.body.jobId as string,
+    );
+    assert.equal(firstResponse.status, "succeeded");
+
+    const secondAnalyzeResponse = await request(app.getHttpServer())
       .post("/api/cv-adaptation/analyze")
       .set("Authorization", `Bearer ${user.accessToken}`)
       .send({
@@ -1194,6 +1195,13 @@ test("analysis reuses the persisted requirement rule by requirementSourceHash", 
         turnstileToken: "token-test",
       })
       .expect(201);
+
+    const secondResponse = await waitForAnalysisJobStatus(
+      app,
+      user.accessToken,
+      secondAnalyzeResponse.body.jobId as string,
+    );
+    assert.equal(secondResponse.status, "succeeded");
 
     const ruleCount = await database.jobRequirementSet.count({
       where: { requirementSourceHash },
@@ -1205,14 +1213,14 @@ test("analysis reuses the persisted requirement rule by requirementSourceHash", 
       .set("Authorization", `Bearer ${user.accessToken}`)
       .field(
         "adaptedContentJson",
-        JSON.stringify(firstResponse.body.adaptedContentJson),
+        JSON.stringify(firstResponse.adaptedContentJson),
       )
       .field("jobDescriptionText", VALID_JOB_DESCRIPTION_TEXT)
-      .field("masterCvText", firstResponse.body.masterCvText)
-      .field("analysisCvSnapshotId", firstResponse.body.analysisCvSnapshotId)
+      .field("masterCvText", firstResponse.masterCvText ?? "")
+      .field("analysisCvSnapshotId", firstResponse.analysisCvSnapshotId ?? "")
       .field("jobTitle", "Analista de Dados")
       .field("companyName", "EarlyCV")
-      .field("previewText", firstResponse.body.previewText)
+      .field("previewText", firstResponse.previewText ?? "")
       .expect(201);
 
     const savedAdaptation = await database.cvAdaptation.findUnique({
@@ -1271,6 +1279,60 @@ test("POST /cv-adaptation/analyze-guest blocks missing turnstile token", async (
   }
 
   await app.close();
+});
+
+test("POST /cv-adaptation/analyze-guest returns a pending job and scopes polling to the guest session", async () => {
+  const { app } = await createApp();
+
+  try {
+    const analyzeResponse = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze-guest")
+      .set("Cookie", "analysis_session_token=guest-session-owner")
+      .send({
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
+        masterCvText:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia em SQL e BI.\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL, dashboards e comunicacao com areas de negocio.",
+        turnstileToken: "token-test",
+      })
+      .expect(201);
+
+    assert.equal(analyzeResponse.body.status, "pending");
+    assert.equal(typeof analyzeResponse.body.jobId, "string");
+    assert.equal(
+      analyzeResponse.body.guestSessionPublicToken,
+      "guest-session-owner",
+    );
+
+    const jobId = analyzeResponse.body.jobId as string;
+
+    // O dono da sessão de guest consegue acompanhar o job até concluir.
+    const job = await waitForAnalysisJobStatus(
+      app,
+      null,
+      jobId,
+      ["succeeded", "failed"],
+      15_000,
+      "analysis_session_token=guest-session-owner",
+    );
+    assert.equal(job.status, "succeeded");
+    assert.ok(job.adaptedContentJson);
+    assert.equal(typeof job.previewText, "string");
+    assert.equal(typeof job.masterCvText, "string");
+    assert.equal(typeof job.analysisCvSnapshotId, "string");
+
+    // Uma sessão de guest diferente (cookie diferente) não pode ver o job.
+    await request(app.getHttpServer())
+      .get(`/api/cv-adaptation/analysis-jobs/${jobId}`)
+      .set("Cookie", "analysis_session_token=guest-session-stranger")
+      .expect(404);
+
+    // Sem nenhum cookie de sessão também não deve conseguir ver o job.
+    await request(app.getHttpServer())
+      .get(`/api/cv-adaptation/analysis-jobs/${jobId}`)
+      .expect(404);
+  } finally {
+    await app.close();
+  }
 });
 
 test("user can redeem an awaiting analysis with one credit", async () => {

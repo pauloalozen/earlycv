@@ -92,6 +92,43 @@ export class AnalysisProtectionFacade {
     };
   }
 
+  // Chamada rápida e síncrona, pensada para rodar ANTES de enfileirar um job
+  // assíncrono (ver AnalysisJob) — ela não repete rate-limit/dedupe/kill-switch,
+  // que continuam avaliados dentro de executeProtectedAnalysis quando o job
+  // roda de fato. Isso preserva o único gate que precisa rejeitar a request
+  // imediatamente (turnstile), sem duplicar toda a lógica de proteção.
+  async precheckTurnstile(
+    input: { skipTurnstile?: boolean; turnstileToken?: string | null },
+    context: AnalysisRequestContext & { routeKey?: string | null },
+  ): Promise<{ ok: true } | { ok: false; message: string; reason: string }> {
+    const cfg = await this.config.getAll();
+
+    if (!cfg.turnstile_enforced || input.skipTurnstile) {
+      return { ok: true };
+    }
+
+    const rolloutMode = this.resolveRolloutMode(cfg.rollout_mode);
+    const turnstileDecision = await this.turnstile.verifyToken(
+      input.turnstileToken,
+      context,
+      {
+        expectedAction: context.routeKey ?? undefined,
+        maxTokenAgeMs: cfg.turnstile_max_token_age_ms,
+      },
+    );
+
+    if (turnstileDecision.valid) {
+      return { ok: true };
+    }
+
+    const reason = turnstileDecision.reason ?? "turnstile_invalid";
+    if (this.shouldBlockByRolloutMode(rolloutMode, reason)) {
+      return { ok: false, reason, message: "Invalid anti-bot verification" };
+    }
+
+    return { ok: true };
+  }
+
   async executeProtectedAnalysis<TPayload, TResult>(
     input: ProtectedAnalysisInput<TPayload>,
     context: AnalysisRequestContext,
