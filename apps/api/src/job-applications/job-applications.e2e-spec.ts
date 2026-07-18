@@ -436,3 +436,158 @@ test("POST /job-applications/:id/notes enforces ownership", async () => {
   await deleteUserByEmail(database, user2.email);
   await app.close();
 });
+
+// ─── POST /job-applications/:id/interview-prep ────────────────────────────────
+
+async function createApplicationWithUnlockedCv(
+  database: DatabaseService,
+  userId: string,
+) {
+  const adaptation = await database.cvAdaptation.create({
+    data: {
+      userId,
+      jobDescriptionText: "Vaga para dev backend com Node.js.",
+      jobTitle: "Engenheiro de Software",
+      companyName: "Acme Corp",
+      status: "delivered",
+      isUnlocked: true,
+      adaptedContentJson: {
+        pontos_fortes: ["Experiência sólida com Node.js"],
+        lacunas: ["Pouca experiência com Go"],
+      },
+    },
+  });
+
+  const application = await database.jobApplication.create({
+    data: {
+      userId,
+      jobTitle: "Engenheiro de Software",
+      companyName: "Acme Corp",
+      normalizedJobTitle: "engenheiro de software",
+      normalizedCompanyName: "acme corp",
+      status: "INTERVIEW",
+      currentCvAdaptationId: adaptation.id,
+    },
+  });
+
+  await database.cvAdaptation.update({
+    where: { id: adaptation.id },
+    data: { jobApplicationId: application.id },
+  });
+
+  return { adaptation, application };
+}
+
+async function waitForInterviewPrepStatus(
+  app: INestApplication,
+  accessToken: string,
+  applicationId: string,
+  targetStatuses: string[] = ["succeeded", "failed"],
+  timeoutMs = 15_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const response = await request(app.getHttpServer())
+      .post(`/api/job-applications/${applicationId}/interview-prep`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({});
+    if (
+      response.status === 201 &&
+      targetStatuses.includes(response.body.status)
+    ) {
+      return response.body as {
+        id: string;
+        status: string;
+        lastError: string | null;
+        generatedContentJson: unknown;
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(
+    `timed out waiting for interview prep on application ${applicationId} to reach status in [${targetStatuses.join(", ")}]`,
+  );
+}
+
+test("POST /job-applications/:id/interview-prep starts async generation and can be polled to completion", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "ja-interview-prep");
+  const { application } = await createApplicationWithUnlockedCv(
+    database,
+    user.userId,
+  );
+
+  const firstResponse = await request(app.getHttpServer())
+    .post(`/api/job-applications/${application.id}/interview-prep`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({});
+
+  assert.equal(firstResponse.status, 201);
+  assert.equal(firstResponse.body.status, "pending");
+
+  const prep = await waitForInterviewPrepStatus(
+    app,
+    user.accessToken,
+    application.id,
+  );
+
+  assert.equal(prep.status, "succeeded");
+  assert.ok(prep.generatedContentJson);
+
+  // Idempotente: chamar de novo não gera um novo registro nem reprocessa.
+  const secondResponse = await request(app.getHttpServer())
+    .post(`/api/job-applications/${application.id}/interview-prep`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({});
+  assert.equal(secondResponse.status, 201);
+  assert.equal(secondResponse.body.id, prep.id);
+  assert.equal(secondResponse.body.status, "succeeded");
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("POST /job-applications/:id/interview-prep rejects when the selected CV is locked", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "ja-interview-prep-locked");
+
+  const adaptation = await database.cvAdaptation.create({
+    data: {
+      userId: user.userId,
+      jobDescriptionText: "Vaga para dev backend com Node.js.",
+      jobTitle: "Engenheiro de Software",
+      companyName: "Acme Corp",
+      status: "awaiting_payment",
+      isUnlocked: false,
+    },
+  });
+  const application = await database.jobApplication.create({
+    data: {
+      userId: user.userId,
+      jobTitle: "Engenheiro de Software",
+      companyName: "Acme Corp",
+      normalizedJobTitle: "engenheiro de software",
+      normalizedCompanyName: "acme corp",
+      status: "CV_READY",
+      currentCvAdaptationId: adaptation.id,
+    },
+  });
+  await database.cvAdaptation.update({
+    where: { id: adaptation.id },
+    data: { jobApplicationId: application.id },
+  });
+
+  const response = await request(app.getHttpServer())
+    .post(`/api/job-applications/${application.id}/interview-prep`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({});
+
+  assert.equal(response.status, 409);
+  assert.match(
+    String(response.body.message),
+    /Libere o CV desta vaga para preparar sua entrevista/i,
+  );
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});

@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { DatabaseService } from "../database/database.service";
@@ -70,6 +70,13 @@ export class JobApplicationInterviewPrepService {
     private readonly funnelEvents: BusinessFunnelEventService,
   ) {}
 
+  // Chamada de LLM aqui rodava inteira dentro do request (POST .../interview-prep),
+  // mesmo risco de timeout de proxy que MASTERCV/CV_GENERATION/analyze já tinham
+  // (ver plano de LLM síncronas → assíncronas). generateOrGet agora só faz as
+  // validações rápidas e cria/reseta a linha com status pending, devolvendo na
+  // hora — a geração roda em background em processInterviewPrepJob. O client
+  // faz "polling" chamando este mesmo endpoint de novo (idempotente: se já
+  // existe uma linha em qualquer status, ela é só retornada).
   async generateOrGet(
     userId: string,
     applicationId: string,
@@ -96,11 +103,12 @@ export class JobApplicationInterviewPrepService {
       throw new NotFoundException("job application not found");
     }
 
-    if (application.interviewPrep) {
+    const existingPrep = application.interviewPrep;
+    if (existingPrep && existingPrep.status !== "failed") {
       this.logger.log(
-        `[interview-prep] returning existing — jobApplicationId=${applicationId} userId=${userId}`,
+        `[interview-prep] returning existing (status=${existingPrep.status}) — jobApplicationId=${applicationId} userId=${userId}`,
       );
-      return application.interviewPrep;
+      return existingPrep;
     }
 
     const resolvedAdaptationId =
@@ -167,10 +175,6 @@ export class JobApplicationInterviewPrepService {
     const usedStructuredData = Boolean(structuredAnalysis);
     const usedPastReflections = pastProcessesReflections.length > 0;
 
-    this.logger.log(
-      `[interview-prep] generating — jobApplicationId=${applicationId} userId=${userId} hasJobDescription=${usedJobDescription} hasStructuredData=${usedStructuredData} pastReflections=${pastProcessesReflections.length}`,
-    );
-
     const context: InterviewPrepContext = {
       jobTitle: application.jobTitle,
       companyName: application.companyName,
@@ -184,58 +188,121 @@ export class JobApplicationInterviewPrepService {
         : null,
     };
 
+    // Persist the selected adaptation so interviewPrepLocked resolves correctly.
+    if (adaptationId && adaptationId !== application.currentCvAdaptationId) {
+      await this.database.jobApplication.update({
+        where: { id: applicationId },
+        data: { currentCvAdaptationId: adaptationId },
+      });
+    }
+
+    const prep = existingPrep
+      ? await this.database.jobApplicationInterviewPrep.update({
+          where: { id: existingPrep.id },
+          data: {
+            status: "pending",
+            lastError: null,
+            generatedContentJson: Prisma.JsonNull,
+            generatedAt: null,
+            startedAt: null,
+            finishedAt: null,
+          },
+        })
+      : await this.database.jobApplicationInterviewPrep.create({
+          data: {
+            jobApplicationId: applicationId,
+            status: "pending",
+          },
+        });
+
+    this.logger.log(
+      `[interview-prep] queued — jobApplicationId=${applicationId} userId=${userId} prepId=${prep.id} hasJobDescription=${usedJobDescription} hasStructuredData=${usedStructuredData} pastReflections=${pastProcessesReflections.length}`,
+    );
+
+    this.processInterviewPrepJob(prep.id, {
+      applicationId,
+      userId,
+      context,
+      usedJobDescription,
+      usedStructuredData,
+      usedPastReflections,
+    }).catch((err) => {
+      this.logger.error(
+        `[interview-prep] ${prep.id} background processing crashed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+
+    return prep;
+  }
+
+  private async processInterviewPrepJob(
+    prepId: string,
+    input: {
+      applicationId: string;
+      userId: string;
+      context: InterviewPrepContext;
+      usedJobDescription: boolean;
+      usedStructuredData: boolean;
+      usedPastReflections: boolean;
+    },
+  ): Promise<void> {
+    const { applicationId, userId, context } = input;
+
+    await this.database.jobApplicationInterviewPrep.update({
+      where: { id: prepId },
+      data: { status: "processing", startedAt: new Date() },
+    });
+
     let content: InterviewPrepContent;
     try {
       content = await this.aiService.generate(context);
     } catch (error) {
       const msg = error instanceof Error ? error.message : "AI error";
       this.logger.error(
-        `[interview-prep] generation failed — jobApplicationId=${applicationId} error=${msg}`,
+        `[interview-prep] generation failed — jobApplicationId=${applicationId} prepId=${prepId} error=${msg}`,
       );
-      throw error;
+      await this.database.jobApplicationInterviewPrep.update({
+        where: { id: prepId },
+        data: { status: "failed", lastError: msg, finishedAt: new Date() },
+      });
+      return;
     }
 
     const result = await this.database.$transaction(async (tx) => {
-      const prep = await tx.jobApplicationInterviewPrep.create({
+      const updated = await tx.jobApplicationInterviewPrep.update({
+        where: { id: prepId },
         data: {
-          jobApplicationId: applicationId,
+          status: "succeeded",
           generatedContentJson: content as unknown as Prisma.InputJsonValue,
+          generatedAt: new Date(),
+          finishedAt: new Date(),
         },
       });
-
-      // Persist the selected adaptation so interviewPrepLocked resolves correctly.
-      if (adaptationId && adaptationId !== application.currentCvAdaptationId) {
-        await tx.jobApplication.update({
-          where: { id: applicationId },
-          data: { currentCvAdaptationId: adaptationId },
-        });
-      }
 
       await tx.jobApplicationEvent.create({
         data: {
           jobApplicationId: applicationId,
           eventType: "INTERVIEW_PREP_GENERATED",
           metadata: {
-            usedJobDescription,
-            usedStructuredData,
-            usedPastReflections,
+            usedJobDescription: input.usedJobDescription,
+            usedStructuredData: input.usedStructuredData,
+            usedPastReflections: input.usedPastReflections,
           },
         },
       });
 
-      return prep;
+      return updated;
     });
 
     this.logger.log(
       `[interview-prep] generated — jobApplicationId=${applicationId} prepId=${result.id}`,
     );
 
-    const prepContent = content as {
-      questionsTheyMayAsk?: unknown[];
-    };
     if (!this.funnelEvents) {
-      return result;
+      return;
     }
+
+    const prepContent = content as { questionsTheyMayAsk?: unknown[] };
     await this.funnelEvents
       .record(
         {
@@ -243,9 +310,9 @@ export class JobApplicationInterviewPrepService {
           eventVersion: 1,
           idempotencyKey: `interview_prep_generated:${result.id}`,
           metadata: {
-            has_previous_rejection_context: usedPastReflections,
-            used_job_description: usedJobDescription,
-            used_structured_data: usedStructuredData,
+            has_previous_rejection_context: input.usedPastReflections,
+            used_job_description: input.usedJobDescription,
+            used_structured_data: input.usedStructuredData,
             questions_count: Array.isArray(prepContent.questionsTheyMayAsk)
               ? prepContent.questionsTheyMayAsk.length
               : 0,
@@ -268,7 +335,5 @@ export class JobApplicationInterviewPrepService {
           `[interview-prep] failed to record interview_prep_generated: ${err}`,
         );
       });
-
-    return result;
   }
 }

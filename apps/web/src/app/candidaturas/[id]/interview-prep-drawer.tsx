@@ -1,15 +1,12 @@
 "use client";
 
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useTransition,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { trackEvent } from "@/lib/analytics-tracking";
-import type { InterviewPrepDto } from "@/lib/job-applications-api";
+import type {
+  InterviewPrepContent,
+  InterviewPrepDto,
+} from "@/lib/job-applications-api";
 import { generateOrGetInterviewPrep } from "@/lib/job-applications-api";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -296,7 +293,9 @@ function PrepContent({
   nextActionAt?: string | null;
   onClose: () => void;
 }) {
-  const c = prep.generatedContentJson;
+  // PrepContent só é renderizado quando prep.status === "succeeded" (ver
+  // gate no componente pai), onde generatedContentJson é sempre preenchido.
+  const c = prep.generatedContentJson as InterviewPrepContent;
 
   const chips = [
     "Vaga + JD",
@@ -722,7 +721,7 @@ function PrepContent({
           }}
         >
           Gerado em{" "}
-          {new Date(prep.generatedAt).toLocaleDateString("pt-BR", {
+          {new Date(prep.generatedAt as string).toLocaleDateString("pt-BR", {
             day: "2-digit",
             month: "short",
             year: "numeric",
@@ -749,10 +748,21 @@ export function InterviewPrepDrawer({
   adaptationId,
 }: Props) {
   const TRANSITION_MS = 280;
+  // Margem generosa: uma preparação de entrevista é uma única chamada de LLM
+  // (ao contrário de análise/geração de CV), mas roda em background do mesmo
+  // jeito — sem risco de timeout de proxy, só paramos de esperar se passar
+  // tempo demais mesmo.
+  const POLL_TIMEOUT_MS = 3 * 60 * 1000;
+  const POLL_INTERVAL_MS = 3000;
 
-  const [prep, setPrep] = useState<InterviewPrepDto | null>(initialPrep);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [prep, setPrep] = useState<InterviewPrepDto | null>(
+    initialPrep?.status === "succeeded" ? initialPrep : null,
+  );
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(
+    initialPrep?.status === "failed" ? (initialPrep.lastError ?? null) : null,
+  );
+  const pollInFlightRef = useRef(false);
   const [isRendered, setIsRendered] = useState(false);
   // backdropReady and visible are separate so the backdrop can appear
   // instantly on mount (no flicker) while the panel slides in via rAF.
@@ -814,22 +824,68 @@ export function InterviewPrepDrawer({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open, onClose]);
 
-  function handleGenerate() {
+  async function pollUntilDone() {
+    if (pollInFlightRef.current) return;
+    pollInFlightRef.current = true;
+    setPending(true);
     setError(null);
-    startTransition(async () => {
-      try {
-        const result = await generateOrGetInterviewPrep(applicationId, adaptationId);
-        setPrep(result);
-        onGenerated?.();
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Falha ao gerar preparação. Tente novamente.",
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+
+    try {
+      while (Date.now() < deadline) {
+        const result = await generateOrGetInterviewPrep(
+          applicationId,
+          adaptationId,
+        );
+
+        if (result.status === "succeeded") {
+          setPrep(result);
+          onGenerated?.();
+          return;
+        }
+
+        if (result.status === "failed") {
+          setError(
+            result.lastError ?? "Falha ao gerar preparação. Tente novamente.",
+          );
+          return;
+        }
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, POLL_INTERVAL_MS),
         );
       }
-    });
+      setError(
+        "A preparação está demorando mais que o esperado. Tente novamente.",
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Falha ao gerar preparação. Tente novamente.",
+      );
+    } finally {
+      pollInFlightRef.current = false;
+      setPending(false);
+    }
   }
+
+  function handleGenerate() {
+    void pollUntilDone();
+  }
+
+  // Se a preparação já estava em andamento (ex.: usuário atualizou a página
+  // no meio da geração), retoma o polling sozinho, sem esperar novo clique.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one-shot resume guarded by pollInFlightRef
+  useEffect(() => {
+    if (!open) return;
+    if (
+      initialPrep?.status === "pending" ||
+      initialPrep?.status === "processing"
+    ) {
+      void pollUntilDone();
+    }
+  }, [open]);
 
   if (!isRendered) return null;
 

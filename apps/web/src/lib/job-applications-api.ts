@@ -59,11 +59,19 @@ export type InterviewPrepContent = {
   } | null;
 };
 
+export type InterviewPrepStatus =
+  | "pending"
+  | "processing"
+  | "succeeded"
+  | "failed";
+
 export type InterviewPrepDto = {
   id: string;
   jobApplicationId: string;
-  generatedContentJson: InterviewPrepContent;
-  generatedAt: string;
+  status: InterviewPrepStatus;
+  lastError: string | null;
+  generatedContentJson: InterviewPrepContent | null;
+  generatedAt: string | null;
 };
 
 export type JobApplicationDto = {

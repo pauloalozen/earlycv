@@ -47,6 +47,7 @@ vi.mock("@/lib/job-applications-api", () => ({
 import * as dashboardMetrics from "@/lib/dashboard-test-metrics";
 import { getDashboardScoreColor } from "@/lib/dashboard-test-metrics";
 import type {
+  InterviewPrepContent,
   InterviewPrepDto,
   JobApplicationDetailDto,
   JobApplicationDto,
@@ -114,6 +115,8 @@ function makePrep(overrides: Partial<InterviewPrepDto> = {}): InterviewPrepDto {
   return {
     id: "prep-1",
     jobApplicationId: "app-1",
+    status: "succeeded",
+    lastError: null,
     generatedAt: "2026-05-10T10:00:00Z",
     generatedContentJson: {
       strategySummary: "Prepare-se bem para esta entrevista.",
@@ -995,7 +998,7 @@ describe.skip("DetailClient", () => {
   it("19. hides strategySummary section when it is an empty string", () => {
     const prep = makePrep({
       generatedContentJson: {
-        ...makePrep().generatedContentJson,
+        ...(makePrep().generatedContentJson as InterviewPrepContent),
         strategySummary: "",
       },
     });

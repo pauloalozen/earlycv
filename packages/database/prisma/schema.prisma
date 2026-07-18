@@ -1307,13 +1307,24 @@ model JobApplicationEvent {
   @@index([jobApplicationId, createdAt])
 }
 
+enum InterviewPrepStatus {
+  pending
+  processing
+  succeeded
+  failed
+}
+
 model JobApplicationInterviewPrep {
-  id                   String   @id @default(cuid())
-  jobApplicationId     String   @unique
-  generatedContentJson Json
-  generatedAt          DateTime @default(now())
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                   String              @id @default(cuid())
+  jobApplicationId     String              @unique
+  status               InterviewPrepStatus @default(pending)
+  generatedContentJson Json?
+  lastError            String?
+  generatedAt          DateTime?
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
   jobApplication JobApplication @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
 }

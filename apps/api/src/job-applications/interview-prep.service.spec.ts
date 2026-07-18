@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { JobApplicationInterviewPrepService } from "./interview-prep.service";
 
@@ -69,25 +70,42 @@ function makeApp(overrides: Record<string, unknown> = {}) {
 }
 
 function makeDb(app: ReturnType<typeof makeApp> | null = makeApp()) {
-  const createdPreps: unknown[] = [];
+  const createdPreps: Record<string, unknown>[] = [];
+  const updatedPreps: Record<string, unknown>[] = [];
   const createdEvents: unknown[] = [];
+  let prepRecord: Record<string, unknown> | null = null;
 
   const db = {
     jobApplication: {
       findFirst: async () => app,
       findMany: async () => [],
+      update: async () => ({}),
     },
     jobApplicationInterviewPrep: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        const record = {
+        prepRecord = {
           id: "prep-1",
           createdAt: new Date(),
           updatedAt: new Date(),
-          generatedAt: new Date(),
+          generatedContentJson: null,
+          generatedAt: null,
+          startedAt: null,
+          finishedAt: null,
+          lastError: null,
           ...data,
         };
-        createdPreps.push(record);
-        return record;
+        createdPreps.push(prepRecord);
+        return prepRecord;
+      },
+      update: async ({
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
+        prepRecord = { ...(prepRecord ?? { id: "prep-1" }), ...data };
+        updatedPreps.push(prepRecord);
+        return prepRecord;
       },
     },
     jobApplicationEvent: {
@@ -100,6 +118,7 @@ function makeDb(app: ReturnType<typeof makeApp> | null = makeApp()) {
       return fn(db);
     },
     _createdPreps: createdPreps,
+    _updatedPreps: updatedPreps,
     _createdEvents: createdEvents,
   };
 
@@ -129,10 +148,11 @@ test("throws NotFoundException when application not found for userId", async () 
 
 // ─── idempotency ──────────────────────────────────────────────────────────────
 
-test("returns existing interviewPrep without calling AI", async () => {
+test("returns existing interviewPrep without calling AI when succeeded", async () => {
   const existingPrep = {
     id: "prep-existing",
     jobApplicationId: "app-1",
+    status: "succeeded",
     generatedContentJson: STUB_CONTENT,
     generatedAt: new Date(),
     createdAt: new Date(),
@@ -151,6 +171,31 @@ test("returns existing interviewPrep without calling AI", async () => {
 
   assert.equal(aiCalls.length, 0, "AI should not be called when prep exists");
   assert.equal((result as typeof existingPrep).id, "prep-existing");
+});
+
+test("returns existing pending interviewPrep as-is (client keeps polling)", async () => {
+  const existingPrep = {
+    id: "prep-existing",
+    jobApplicationId: "app-1",
+    status: "pending",
+    generatedContentJson: null,
+    generatedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const db = makeDb(makeApp({ interviewPrep: existingPrep }));
+  const aiCalls: unknown[] = [];
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
+
+  const result = await service.generateOrGet("user-1", "app-1");
+
+  assert.equal(aiCalls.length, 0);
+  assert.equal((result as typeof existingPrep).status, "pending");
 });
 
 test("rejects when application has no selected CV", async () => {
@@ -207,9 +252,9 @@ test("rejects when selected CV is not unlocked", async () => {
   assert.equal(aiCalls.length, 0);
 });
 
-// ─── generation ───────────────────────────────────────────────────────────────
+// ─── generation (async) ─────────────────────────────────────────────────────────
 
-test("generates and persists interviewPrep when none exists", async () => {
+test("returns immediately with a pending prep and generates in the background", async () => {
   const db = makeDb(makeApp());
   const aiCalls: unknown[] = [];
   const service = new InterviewPrepServiceCtor(
@@ -218,14 +263,22 @@ test("generates and persists interviewPrep when none exists", async () => {
     makeFunnelEventsMock(),
   );
 
-  const result = await service.generateOrGet("user-1", "app-1");
+  const started = await service.generateOrGet("user-1", "app-1");
+
+  // "pending" na hora — a análise roda em background, sem segurar o request.
+  assert.equal((started as { status: string }).status, "pending");
+  assert.equal(db._createdPreps.length, 1);
+
+  await sleep(20);
 
   assert.equal(aiCalls.length, 1, "AI must be called exactly once");
-  assert.equal(db._createdPreps.length, 1, "prep must be persisted");
-  assert.ok(result);
+  const statuses = (db._updatedPreps as Array<{ status: string }>).map(
+    (u) => u.status,
+  );
+  assert.deepEqual(statuses, ["processing", "succeeded"]);
 });
 
-test("creates INTERVIEW_PREP_GENERATED event after generation", async () => {
+test("creates INTERVIEW_PREP_GENERATED event after background generation", async () => {
   const db = makeDb(makeApp());
   const service = new InterviewPrepServiceCtor(
     db,
@@ -234,6 +287,7 @@ test("creates INTERVIEW_PREP_GENERATED event after generation", async () => {
   );
 
   await service.generateOrGet("user-1", "app-1");
+  await sleep(20);
 
   const events = db._createdEvents as Array<Record<string, unknown>>;
   const prepEvent = events.find(
@@ -243,7 +297,7 @@ test("creates INTERVIEW_PREP_GENERATED event after generation", async () => {
   assert.equal(prepEvent.jobApplicationId, "app-1");
 });
 
-test("persists generatedContentJson in the created record", async () => {
+test("persists generatedContentJson once generation succeeds", async () => {
   const db = makeDb(makeApp());
   const service = new InterviewPrepServiceCtor(
     db,
@@ -252,10 +306,13 @@ test("persists generatedContentJson in the created record", async () => {
   );
 
   await service.generateOrGet("user-1", "app-1");
+  await sleep(20);
 
-  const preps = db._createdPreps as Array<Record<string, unknown>>;
-  assert.equal(preps.length, 1);
-  assert.deepEqual(preps[0].generatedContentJson, STUB_CONTENT);
+  const finalUpdate = (
+    db._updatedPreps as Array<Record<string, unknown>>
+  ).at(-1);
+  assert.equal(finalUpdate?.status, "succeeded");
+  assert.deepEqual(finalUpdate?.generatedContentJson, STUB_CONTENT);
 });
 
 // ─── context building ─────────────────────────────────────────────────────────
@@ -272,6 +329,7 @@ test("passes jobDescriptionText to AI when available on application", async () =
   );
 
   await service.generateOrGet("user-1", "app-1");
+  await sleep(20);
 
   assert.equal(
     aiCalls[0].jobDescriptionText,
@@ -310,6 +368,7 @@ test("generates without jobDescriptionText using fallback", async () => {
   );
 
   await service.generateOrGet("user-1", "app-1");
+  await sleep(20);
 
   assert.equal(aiCalls[0].jobDescriptionText, null);
   const event = (db._createdEvents as Array<Record<string, unknown>>).find(
@@ -352,6 +411,7 @@ test("uses adaptedContentJson from CvAdaptation as structured context", async ()
   );
 
   await service.generateOrGet("user-1", "app-1");
+  await sleep(20);
 
   const ctx = aiCalls[0] as { structuredAnalysis: Record<string, unknown> };
   assert.ok(ctx.structuredAnalysis, "structuredAnalysis must be passed to AI");
@@ -410,6 +470,7 @@ test("uses the selected CV even when another unlocked adaptation is more recent"
   );
 
   await service.generateOrGet("user-1", "app-1");
+  await sleep(20);
 
   assert.equal(aiCalls[0].jobDescriptionText, "Vaga escolhida");
   assert.deepEqual(aiCalls[0].structuredAnalysis, {
@@ -426,6 +487,7 @@ test("does not pass jobUrl to AI context (no scraping)", async () => {
   const service = new InterviewPrepServiceCtor(db, makeAiMock(aiCalls));
 
   await service.generateOrGet("user-1", "app-1");
+  await sleep(20);
 
   assert.ok(
     !("jobUrl" in (aiCalls[0] as object)),
@@ -435,7 +497,7 @@ test("does not pass jobUrl to AI context (no scraping)", async () => {
 
 // ─── failure isolation ────────────────────────────────────────────────────────
 
-test("propagates AI error without leaving partial state", async () => {
+test("marks prep as failed without throwing out of generateOrGet", async () => {
   const db = makeDb(makeApp());
   const failingAi = {
     generate: async () => {
@@ -449,24 +511,58 @@ test("propagates AI error without leaving partial state", async () => {
     makeFunnelEventsMock(),
   );
 
-  await assert.rejects(
-    () => service.generateOrGet("user-1", "app-1"),
-    (err: Error) => {
-      assert.match(err.message, /AI timeout/);
-      return true;
-    },
-  );
+  const started = await service.generateOrGet("user-1", "app-1");
+  assert.equal((started as { status: string }).status, "pending");
 
-  assert.equal(
-    db._createdPreps.length,
-    0,
-    "no prep must be persisted on failure",
-  );
+  await sleep(20);
+
+  const finalUpdate = (
+    db._updatedPreps as Array<Record<string, unknown>>
+  ).at(-1);
+  assert.equal(finalUpdate?.status, "failed");
+  assert.match(String(finalUpdate?.lastError), /AI timeout/);
   assert.equal(
     db._createdEvents.length,
     0,
     "no event must be created on failure",
   );
+});
+
+test("retries generation on the next call after a failure", async () => {
+  const failedPrep = {
+    id: "prep-existing",
+    jobApplicationId: "app-1",
+    status: "failed",
+    lastError: "AI timeout",
+    generatedContentJson: null,
+    generatedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const db = makeDb(makeApp({ interviewPrep: failedPrep }));
+  const aiCalls: unknown[] = [];
+  const service = new InterviewPrepServiceCtor(
+    db,
+    makeAiMock(aiCalls),
+    makeFunnelEventsMock(),
+  );
+
+  const started = await service.generateOrGet("user-1", "app-1");
+  assert.equal((started as { status: string }).status, "pending");
+  assert.equal(
+    db._createdPreps.length,
+    0,
+    "must reuse the existing row, not create a new one",
+  );
+
+  await sleep(20);
+
+  assert.equal(aiCalls.length, 1);
+  const finalUpdate = (
+    db._updatedPreps as Array<Record<string, unknown>>
+  ).at(-1);
+  assert.equal(finalUpdate?.status, "succeeded");
 });
 
 test("propagates validation error without leaving partial state", async () => {
@@ -483,19 +579,14 @@ test("propagates validation error without leaving partial state", async () => {
     makeFunnelEventsMock(),
   );
 
-  await assert.rejects(
-    () => service.generateOrGet("user-1", "app-1"),
-    (err: Error) => {
-      assert.match(err.message, /validation failed/i);
-      return true;
-    },
-  );
+  await service.generateOrGet("user-1", "app-1");
+  await sleep(20);
 
-  assert.equal(
-    db._createdPreps.length,
-    0,
-    "no prep must be persisted on validation failure",
-  );
+  const finalUpdate = (
+    db._updatedPreps as Array<Record<string, unknown>>
+  ).at(-1);
+  assert.equal(finalUpdate?.status, "failed");
+  assert.match(String(finalUpdate?.lastError), /validation failed/i);
   assert.equal(
     db._createdEvents.length,
     0,
@@ -517,6 +608,7 @@ test("existing CvAdaptationAiService methods are not called by InterviewPrepServ
   );
 
   await service.generateOrGet("user-1", "app-1");
+  await sleep(20);
 
   // Just asserting the service ran successfully without any cross-contamination
   assert.equal(aiCalls.length, 1);

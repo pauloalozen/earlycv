@@ -7,7 +7,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getDashboardScoreColor } from "@/lib/dashboard-test-metrics";
-import type { JobApplicationDetailDto } from "@/lib/job-applications-api";
+import type {
+  JobApplicationDetailDto,
+  JobApplicationDto,
+} from "@/lib/job-applications-api";
 import {
   deleteJobApplication,
   splitJobApplicationAnalysis,
@@ -877,7 +880,7 @@ describe("DetailClient - CV ADAPTADO card", () => {
       buildApplication({
         id: "app_123",
         archivedAt: "2026-05-01T00:00:00.000Z",
-      }),
+      }) as unknown as JobApplicationDto,
     );
 
     render(
