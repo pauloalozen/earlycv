@@ -640,7 +640,13 @@ describe("CandidaturasClient", () => {
       }),
     ];
 
-    render(<CandidaturasClient initialApplications={apps} header={null} />);
+    render(
+      <CandidaturasClient
+        initialApplications={apps}
+        header={null}
+        hasCredits={true}
+      />,
+    );
 
     fireEvent.click(
       screen.getByRole("button", { name: /Liberar CV · 1 crédito/i }),

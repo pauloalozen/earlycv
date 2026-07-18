@@ -15,6 +15,7 @@ import { PageShell } from "@/components/page-shell";
 import { PublicFooter } from "@/components/public-footer";
 import { trackEvent } from "@/lib/analytics-tracking";
 import { downloadFromApi } from "@/lib/client-download";
+import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import {
   getStatusConfig,
@@ -726,6 +727,7 @@ function CandRow({
   isArchivedView,
   onRestored,
   onDeleted,
+  hasCredits,
 }: {
   application: JobApplicationDto;
   derivedScore?: { scoreBefore: number | null; scoreAfter: number | null };
@@ -733,10 +735,14 @@ function CandRow({
   isArchivedView: boolean;
   onRestored: (applicationId: string) => void;
   onDeleted: (applicationId: string) => void;
+  hasCredits: boolean;
 }) {
   const router = useRouter();
   const [confirmUnlock, setConfirmUnlock] = useState(false);
   const [confirmUnlockVisible, setConfirmUnlockVisible] = useState(false);
+  const [noCreditsOpen, setNoCreditsOpen] = useState(false);
+  const [noCreditsVisible, setNoCreditsVisible] = useState(false);
+  const noCreditsCloseTimerRef = useRef<number | null>(null);
   const [redeeming, setRedeeming] = useState(false);
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -890,7 +896,27 @@ function CandRow({
     }
   };
 
+  const openNoCreditsModal = () => {
+    setNoCreditsOpen(true);
+    setNoCreditsVisible(false);
+    window.requestAnimationFrame(() => setNoCreditsVisible(true));
+  };
+
+  const closeNoCreditsModal = () => {
+    setNoCreditsVisible(false);
+    if (noCreditsCloseTimerRef.current) {
+      window.clearTimeout(noCreditsCloseTimerRef.current);
+    }
+    noCreditsCloseTimerRef.current = window.setTimeout(() => {
+      setNoCreditsOpen(false);
+    }, 200);
+  };
+
   const openUnlockModal = () => {
+    if (!hasCredits) {
+      openNoCreditsModal();
+      return;
+    }
     setRedeemError(null);
     setConfirmUnlock(true);
     setConfirmUnlockVisible(false);
@@ -930,6 +956,9 @@ function CandRow({
     return () => {
       if (closeTimerRef.current) {
         window.clearTimeout(closeTimerRef.current);
+      }
+      if (noCreditsCloseTimerRef.current) {
+        window.clearTimeout(noCreditsCloseTimerRef.current);
       }
     };
   }, []);
@@ -1773,6 +1802,126 @@ function CandRow({
         </div>
       ) : null}
 
+      {noCreditsOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cand-no-credits-title"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 70,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(10,10,10,0.35)",
+            padding: "0 16px",
+            transition: "opacity 180ms ease",
+            opacity: noCreditsVisible ? 1 : 0,
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Fechar"
+            onClick={closeNoCreditsModal}
+            style={{
+              position: "absolute",
+              inset: 0,
+              border: "none",
+              background: "transparent",
+              padding: 0,
+              cursor: "default",
+            }}
+          />
+          <div
+            style={{
+              position: "relative",
+              zIndex: 1,
+              width: "100%",
+              maxWidth: 420,
+              background: "#fafaf6",
+              border: "1px solid rgba(10,10,10,0.08)",
+              borderRadius: 18,
+              padding: "28px 28px 24px",
+              fontFamily: GEIST,
+              boxShadow: "0 24px 60px -20px rgba(10,10,10,0.4)",
+              transition: "opacity 200ms ease-out, transform 200ms ease-out",
+              opacity: noCreditsVisible ? 1 : 0,
+              transform: noCreditsVisible
+                ? "translateY(0) scale(1)"
+                : "translateY(8px) scale(0.98)",
+            }}
+          >
+            <h3
+              id="cand-no-credits-title"
+              style={{
+                fontSize: 18,
+                fontWeight: 500,
+                letterSpacing: "-0.4px",
+                color: "#0a0a0a",
+                margin: "0 0 8px",
+                fontFamily: GEIST,
+              }}
+            >
+              Sem créditos disponíveis
+            </h3>
+            <p
+              style={{
+                fontSize: 13.5,
+                color: "#6a6560",
+                lineHeight: 1.55,
+                margin: "0 0 24px",
+                fontFamily: GEIST,
+              }}
+            >
+              Você não tem créditos para liberar este CV. Adquira um crédito
+              para gerar o CV adaptado desta vaga.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <a
+                href={buildCvUnlockPlansHref({
+                  adaptationId: cvAdaptationIdForActions,
+                  source: "resultado-buy-credits",
+                })}
+                style={{
+                  display: "block",
+                  textAlign: "center",
+                  background: "#0a0a0a",
+                  color: "#fafaf6",
+                  borderRadius: 10,
+                  padding: "12px 16px",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  textDecoration: "none",
+                  fontFamily: GEIST,
+                }}
+              >
+                Comprar crédito
+              </a>
+              <button
+                type="button"
+                onClick={closeNoCreditsModal}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  background: "transparent",
+                  color: "#6a6560",
+                  border: "1px solid rgba(10,10,10,0.10)",
+                  borderRadius: 10,
+                  padding: "12px 16px",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: GEIST,
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {confirmDelete ? (
         <div
           role="dialog"
@@ -1877,6 +2026,7 @@ type Props = {
   initialView?: SegmentKey;
   applicationsLoadError?: string | null;
   hasMasterResume: boolean;
+  hasCredits: boolean;
   header: ReactNode;
 };
 
@@ -1886,6 +2036,7 @@ export function CandidaturasClient({
   initialView = "ativas",
   applicationsLoadError = null,
   hasMasterResume,
+  hasCredits,
   header,
 }: Props) {
   const router = useRouter();
@@ -2561,6 +2712,7 @@ export function CandidaturasClient({
                         isArchivedView={segment === "arquivadas"}
                         onRestored={handleRestored}
                         onDeleted={handleDeleted}
+                        hasCredits={hasCredits}
                       />
                     ))}
                   </StatusAccordion>

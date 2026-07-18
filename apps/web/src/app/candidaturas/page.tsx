@@ -9,6 +9,7 @@ import {
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { listJobApplications } from "@/lib/job-applications-api";
+import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMasterResumeFromList, listMyResumes } from "@/lib/resumes-api";
 import { CandidaturasClient } from "./candidaturas-client";
@@ -57,6 +58,7 @@ export default async function CandidaturasPage({ searchParams }: Props) {
 
   const planInfo = planResult.status === "fulfilled" ? planResult.value : null;
   const availableCredits = toHeaderAvailableCredits(planInfo);
+  const hasCredits = hasAvailableCredits(planInfo);
   const hasMasterResume =
     resumesResult.status === "fulfilled"
       ? Boolean(await getMasterResumeFromList(resumesResult.value))
@@ -73,6 +75,7 @@ export default async function CandidaturasPage({ searchParams }: Props) {
       initialView={initialView}
       applicationsLoadError={applicationsLoadError}
       hasMasterResume={hasMasterResume}
+      hasCredits={hasCredits}
       header={
         <AppHeader
           userName={user.name}
