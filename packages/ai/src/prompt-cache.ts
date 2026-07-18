@@ -32,12 +32,3 @@ export function stripJsonCodeFence(content: string): string {
   const match = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i);
   return match ? match[1].trim() : trimmed;
 }
-
-// Diagnóstico temporário para validar cache de prompt durante os testes com
-// OpenRouter — imprime o objeto usage bruto da resposta (sem filtrar campos),
-// já que cada provedor expõe o cache com nomes diferentes (ex:
-// cache_read_input_tokens na Anthropic, prompt_tokens_details.cached_tokens
-// na OpenAI). Remover quando a validação de modelos/cache estiver concluída.
-export function logAiUsage(label: string, model: string, usage: unknown): void {
-  console.log(`[ai-usage] ${label} model=${model} usage=${JSON.stringify(usage)}`);
-}

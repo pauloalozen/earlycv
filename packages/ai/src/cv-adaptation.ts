@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type OpenAI from "openai";
 
-import {
-  buildSystemMessage,
-  logAiUsage,
-  stripJsonCodeFence,
-} from "./prompt-cache.js";
+import { buildSystemMessage, stripJsonCodeFence } from "./prompt-cache.js";
 import type { AIProvider } from "./types.js";
 
 const CV_MAX_CHARS = 12_000;
@@ -2991,7 +2987,6 @@ export async function analyzeAndAdaptCv(
     temperature: 0,
     seed: DETERMINISTIC_SEED,
   });
-  logAiUsage("cv-adaptation.analyze", model, response.usage);
 
   const content = response.choices[0]?.message.content;
   if (!content) {
@@ -3062,7 +3057,6 @@ export async function adaptCv(
       temperature: 0.3,
       seed: DETERMINISTIC_SEED,
     });
-    logAiUsage("cv-adaptation.generate", model, response.usage);
 
     const content = response.choices[0]?.message.content;
     if (!content) {

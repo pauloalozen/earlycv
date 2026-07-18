@@ -2,11 +2,7 @@ import { randomUUID } from "node:crypto";
 import type OpenAI from "openai";
 
 import { extractTextFromPdf } from "./pdf-parser.js";
-import {
-  buildSystemMessage,
-  logAiUsage,
-  stripJsonCodeFence,
-} from "./prompt-cache.js";
+import { buildSystemMessage, stripJsonCodeFence } from "./prompt-cache.js";
 import type { AIProvider } from "./types.js";
 
 const MASTER_CV_MAX_CHARS = 24_000;
@@ -517,7 +513,6 @@ export async function extractMasterCvCanonicalProfile(
     ],
     response_format: { type: "json_object" },
   });
-  logAiUsage("master-cv-extraction", model, response.usage);
 
   const content = response.choices[0]?.message.content;
   if (!content) throw new Error("No response content from AI model");

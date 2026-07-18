@@ -69,8 +69,4 @@ export type {
   AIProvider,
   OpenAIClientConfig,
 } from "./types.js";
-export {
-  buildSystemMessage,
-  logAiUsage,
-  stripJsonCodeFence,
-} from "./prompt-cache.js";
+export { buildSystemMessage, stripJsonCodeFence } from "./prompt-cache.js";
