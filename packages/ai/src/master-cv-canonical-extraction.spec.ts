@@ -197,7 +197,7 @@ describe("extractMasterCvCanonicalProfile", () => {
     assert.match(requestInput.sentToModel.masterCvText, /Ana Silva/);
   });
 
-  it("accepts only filled|partial|missing fieldStatus values", async () => {
+  it("drops fieldStatus entries with an invalid value instead of failing", async () => {
     const mockClient = {
       chat: {
         completions: {
@@ -213,14 +213,14 @@ describe("extractMasterCvCanonicalProfile", () => {
                 professionalSummary: null,
                 experiences: [],
                 education: [],
-                skills: { technical: [], business: [], soft: [] },
+                skills: [],
                 languages: [],
                 certifications: [],
               },
               extractionCoverage: {
                 identifiedFields: [],
                 missingFields: ["fullName"],
-                fieldStatus: { fullName: "unknown" },
+                fieldStatus: { fullName: "unknown", email: "filled" },
               },
               confidence: {},
               evidence: {},
@@ -230,13 +230,15 @@ describe("extractMasterCvCanonicalProfile", () => {
       },
     } as unknown as OpenAI;
 
-    await assert.rejects(
-      () =>
-        extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-          masterCvText: SAMPLE_CV_TEXT,
-        }),
-      /fieldStatus|filled|partial|missing/i,
+    const { output } = await extractMasterCvCanonicalProfile(
+      mockClient,
+      "gpt-4.1-mini",
+      { masterCvText: SAMPLE_CV_TEXT },
     );
+
+    assert.deepEqual(output.extractionCoverage.fieldStatus, {
+      email: "filled",
+    });
   });
 
   it("rejects malformed JSON responses", async () => {
@@ -255,7 +257,7 @@ describe("extractMasterCvCanonicalProfile", () => {
     );
   });
 
-  it("rejects confidence values outside [0,1] and non-finite numbers", async () => {
+  it("drops out-of-range or non-finite confidence values instead of failing", async () => {
     for (const invalidValue of [
       Number.NaN,
       Number.POSITIVE_INFINITY,
@@ -264,6 +266,7 @@ describe("extractMasterCvCanonicalProfile", () => {
     ]) {
       const invalidOutput = createValidOutput();
       invalidOutput.confidence.fullName = invalidValue;
+      invalidOutput.confidence.email = 0.7;
 
       const mockClient = {
         chat: {
@@ -273,17 +276,17 @@ describe("extractMasterCvCanonicalProfile", () => {
         },
       } as unknown as OpenAI;
 
-      await assert.rejects(
-        () =>
-          extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-            masterCvText: SAMPLE_CV_TEXT,
-          }),
-        /confidence|0|1|finite/i,
+      const { output } = await extractMasterCvCanonicalProfile(
+        mockClient,
+        "gpt-4.1-mini",
+        { masterCvText: SAMPLE_CV_TEXT },
       );
+
+      assert.deepEqual(output.confidence, { email: 0.7 });
     }
   });
 
-  it("rejects unknown fieldStatus keys", async () => {
+  it("drops unknown fieldStatus keys instead of failing", async () => {
     const invalidOutput = createValidOutput();
     invalidOutput.extractionCoverage.fieldStatus["not.a.real.field"] = "filled";
 
@@ -295,16 +298,19 @@ describe("extractMasterCvCanonicalProfile", () => {
       },
     } as unknown as OpenAI;
 
-    await assert.rejects(
-      () =>
-        extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-          masterCvText: SAMPLE_CV_TEXT,
-        }),
-      /fieldStatus|unknown/i,
+    const { output } = await extractMasterCvCanonicalProfile(
+      mockClient,
+      "gpt-4.1-mini",
+      { masterCvText: SAMPLE_CV_TEXT },
     );
+
+    assert.deepEqual(output.extractionCoverage.fieldStatus, {
+      fullName: "filled",
+      linkedinUrl: "missing",
+    });
   });
 
-  it("rejects non-string evidence entries", async () => {
+  it("drops non-string evidence entries instead of failing", async () => {
     const invalidOutput = createValidOutput() as unknown as {
       evidence: Record<string, unknown>;
     };
@@ -318,12 +324,12 @@ describe("extractMasterCvCanonicalProfile", () => {
       },
     } as unknown as OpenAI;
 
-    await assert.rejects(
-      () =>
-        extractMasterCvCanonicalProfile(mockClient, "gpt-4.1-mini", {
-          masterCvText: SAMPLE_CV_TEXT,
-        }),
-      /evidence|string\[\]/i,
+    const { output } = await extractMasterCvCanonicalProfile(
+      mockClient,
+      "gpt-4.1-mini",
+      { masterCvText: SAMPLE_CV_TEXT },
     );
+
+    assert.deepEqual(output.evidence.fullName, ["Ana Silva"]);
   });
 });

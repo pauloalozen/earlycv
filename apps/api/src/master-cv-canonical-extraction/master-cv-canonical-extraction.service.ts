@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { Inject, Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 
@@ -31,6 +31,8 @@ type ExtractionClient = {
 
 @Injectable()
 export class MasterCvCanonicalExtractionService {
+  private readonly logger = new Logger(MasterCvCanonicalExtractionService.name);
+
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(ProfileCanonicalMergeService)
@@ -71,11 +73,24 @@ export class MasterCvCanonicalExtractionService {
       },
     });
 
-    return this.processJob({
+    // Não aguardar: a extração roda em background e o cliente faz polling em
+    // master-cv-extraction-status. Aguardar aqui prende a conexão HTTP pela
+    // duração inteira da chamada de IA (sem teto de tokens garantido), o que
+    // já estourou o timeout de proxy do Cloudflare (~100s) em produção.
+    this.processJob({
       extractionId: created.id,
       file: input.file,
       rawText: input.rawText,
+    }).catch((error) => {
+      this.logger.error("master CV canonical extraction failed in background", {
+        extractionId: created.id,
+        resumeId: input.resumeId,
+        userId: input.userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     });
+
+    return created;
   }
 
   async processJob(input: ProcessMasterCvCanonicalExtractionJobInput) {
@@ -115,6 +130,24 @@ export class MasterCvCanonicalExtractionService {
           : { masterCvText: "" };
       const output = await this.extractCanonical(extractionInput);
       const payload = parseMasterCvCanonicalExtractionPayload(output);
+
+      // A extração roda em background (ver enqueueFromMasterResumeUpload) e
+      // pode levar vários segundos — nesse meio-tempo o usuário pode ter
+      // apagado o resume/perfil ("Limpar tudo"), que deleta esta linha em
+      // cascata (onDelete: Cascade). Sem essa checagem, o merge abaixo
+      // "ressuscitaria" o perfil recém-limpo com dados de uma extração que o
+      // usuário já descartou.
+      const stillExists = await table.findUnique({
+        where: { id: extraction.id },
+        select: { id: true },
+      });
+      if (!stillExists) {
+        this.logger.log(
+          "skipping merge: extraction was deleted while processing",
+          { extractionId: extraction.id, userId: extraction.userId },
+        );
+        return null;
+      }
 
       await this.mergeIntoUserProfile({
         userId: extraction.userId,

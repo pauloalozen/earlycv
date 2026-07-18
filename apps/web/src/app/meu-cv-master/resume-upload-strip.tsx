@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { EcvBuildLoader } from "@/components/ecv-loader";
@@ -10,7 +9,6 @@ import {
   uploadMasterResume,
 } from "@/lib/resumes-api";
 
-import { clearAllProfileForReupload } from "./actions";
 import { ConfirmDialog } from "./confirm-dialog";
 
 const UPLOAD_TOKEN = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()
@@ -122,7 +120,6 @@ const BTN_STYLE = { fontFamily: GEIST, fontSize: "13px" } as const;
 type Props = { masterResume: ResumeDto | null; hasFilledFields: boolean };
 
 export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -147,38 +144,50 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
         if (!status) return;
         if (status.status === "succeeded" || status.status === "failed") {
           stopPolling();
-          setProcessing(false);
-          router.refresh();
+          // router.refresh() depende do router cache do App Router, que pode
+          // colidir com a revalidação disparada pela ação de limpar o perfil
+          // logo antes do upload — o resultado é a tela ficar com dados
+          // velhos até um F5 manual. Um reload completo busca o estado atual
+          // direto do servidor, sem essa ambiguidade.
+          window.location.reload();
         }
       } catch {
         // keep polling
       }
     }, POLL_INTERVAL_MS);
-  }, [router, stopPolling]);
+  }, [stopPolling]);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
     if (!file) return;
+    setError(null);
 
     if (hasFilledFields) {
+      // Já tem dado preenchido: pede confirmação antes de sobrescrever.
       setPendingFile(file);
       setShowConfirm(true);
-    } else {
-      setPendingFile(file);
+      return;
     }
-    setError(null);
+
+    // Perfil vazio: processa direto, sem passo intermediário de "confirmar
+    // envio" — esse clique extra confundia o usuário (não é óbvio que
+    // escolher o arquivo no seletor do SO não é o suficiente).
+    setProcessingFileName(file.name);
+    setProcessing(true);
+    void doUpload(file);
   };
 
-  const doUpload = async (file: File, alreadyUploading = false) => {
-    if (!alreadyUploading) setUploading(true);
+  const doUpload = async (file: File, clearExistingProfile = false) => {
+    setUploading(true);
     setError(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("title", file.name.replace(/\.[^.]+$/, ""));
       formData.append("isPrimary", "true");
+      if (clearExistingProfile) formData.append("clearExistingProfile", "true");
       if (UPLOAD_TOKEN) formData.append("turnstileToken", UPLOAD_TOKEN);
       await uploadMasterResume(formData);
       setPendingFile(null);
@@ -199,35 +208,17 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
     if (!pendingFile) return;
     setProcessingFileName(pendingFile.name);
     setProcessing(true);
-    setUploading(true);
-    setError(null);
-    try {
-      await clearAllProfileForReupload();
-    } catch (err) {
-      setProcessing(false);
-      setError(err instanceof Error ? err.message : "Erro ao limpar o perfil.");
-      setUploading(false);
-      return;
-    }
+    // Limpar o perfil e subir o novo arquivo é uma única requisição
+    // (clearExistingProfile no upload) — evitar dois server actions em
+    // sequência, cada um disparando sua própria revalidação de rota, que
+    // corria com o polling do status de extração e deixava a tela presa em
+    // dados velhos/vazios até um F5 manual.
     await doUpload(pendingFile, true);
   };
 
   const handleCancelConfirm = () => {
     setShowConfirm(false);
     setPendingFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleUpload = async () => {
-    if (!pendingFile) return;
-    setProcessingFileName(pendingFile.name);
-    setProcessing(true);
-    await doUpload(pendingFile);
-  };
-
-  const handleCancel = () => {
-    setPendingFile(null);
-    setError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -283,42 +274,19 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
             </p>
           )}
 
-          {pendingFile && !showConfirm ? (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleCancel}
-                disabled={uploading}
-                className={`${btnBase} border border-[rgba(10,10,10,0.12)] bg-white text-[#0a0a0a] hover:bg-[rgba(10,10,10,0.04)]`}
-                style={BTN_STYLE}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleUpload}
-                disabled={uploading}
-                className={`${btnBase} bg-[#0a0a0a] text-[#fafaf6] hover:bg-[#1a1a1a]`}
-                style={BTN_STYLE}
-              >
-                {uploading ? "Enviando..." : "Confirmar envio"}
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              disabled={uploading}
-              onClick={() => fileInputRef.current?.click()}
-              className={`${btnBase} bg-[#0a0a0a] text-[#fafaf6] hover:bg-[#1a1a1a]`}
-              style={BTN_STYLE}
-            >
-              {uploading
-                ? "Enviando..."
-                : masterResume
-                  ? "Substituir Arquivo"
-                  : "Enviar Arquivo"}
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            className={`${btnBase} bg-[#0a0a0a] text-[#fafaf6] hover:bg-[#1a1a1a]`}
+            style={BTN_STYLE}
+          >
+            {uploading
+              ? "Enviando..."
+              : masterResume
+                ? "Substituir Arquivo"
+                : "Enviar Arquivo"}
+          </button>
         </div>
       </div>
     </>

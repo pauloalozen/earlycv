@@ -3,12 +3,21 @@ import type { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import type { UpdateProfileDto } from "./dto/update-profile.dto";
-import type { ProfileFieldMetaEntry } from "./profile-canonical.types";
+import type {
+  CanonicalProfileData,
+  ProfileFieldMetaEntry,
+} from "./profile-canonical.types";
+import { ProfileReadinessService } from "./profile-readiness.service";
 
 @Injectable()
 export class ProfilesService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(ProfileReadinessService)
+    private readonly profileReadinessService: Pick<
+      ProfileReadinessService,
+      "compute"
+    >,
   ) {}
 
   async getByUserId(userId: string) {
@@ -40,6 +49,36 @@ export class ProfilesService {
       };
     }
 
+    const readiness = this.profileReadinessService.compute({
+      fullName: dto.fullName !== undefined ? dto.fullName : profile.fullName ?? undefined,
+      headline: dto.headline !== undefined ? dto.headline : profile.headline ?? undefined,
+      professionalSummary:
+        dto.professionalSummary !== undefined
+          ? dto.professionalSummary
+          : profile.professionalSummary ?? undefined,
+      experiences: this.asArray(
+        dto.experiencesJson !== undefined
+          ? dto.experiencesJson
+          : profile.experiencesJson,
+      ) as CanonicalProfileData["experiences"],
+      education: this.asArray(
+        dto.educationJson !== undefined ? dto.educationJson : profile.educationJson,
+      ) as CanonicalProfileData["education"],
+      skills: this.asSkills(
+        dto.skillsJson !== undefined ? dto.skillsJson : profile.skillsJson,
+      ),
+      languages: this.asArray(
+        dto.languagesJson !== undefined
+          ? dto.languagesJson
+          : profile.languagesJson,
+      ) as CanonicalProfileData["languages"],
+      certifications: this.asArray(
+        dto.certificationsJson !== undefined
+          ? dto.certificationsJson
+          : profile.certificationsJson,
+      ) as CanonicalProfileData["certifications"],
+    });
+
     return this.database.userProfile.update({
       where: { userId },
       data: {
@@ -50,8 +89,31 @@ export class ProfilesService {
         languagesJson: this.toJsonValue(dto.languagesJson),
         certificationsJson: this.toJsonValue(dto.certificationsJson),
         profileFieldMetaJson: existingMeta,
+        profileReadinessStatus: readiness,
       },
     });
+  }
+
+  private asArray(value: unknown): unknown[] {
+    return Array.isArray(value) ? value : [];
+  }
+
+  private asSkills(value: unknown): CanonicalProfileData["skills"] {
+    const record =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    return {
+      technical: this.asStringArray(record.technical),
+      business: this.asStringArray(record.business),
+      soft: this.asStringArray(record.soft),
+    };
+  }
+
+  private asStringArray(value: unknown): string[] {
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [];
   }
 
   private parseFieldMeta(

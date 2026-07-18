@@ -15,7 +15,76 @@ function createFileUpload() {
   };
 }
 
-test("create waits for master CV extraction and forwards the raw file payload", async () => {
+test("create deletes the previous master resume (and its dependents) instead of just demoting it", async () => {
+  const findManyCalls: Array<Record<string, unknown>> = [];
+  const deleteManyCalls: Array<Record<string, unknown>> = [];
+  const updateManyCalls: Array<Record<string, unknown>> = [];
+
+  const service = new ResumesService(
+    {
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          resume: {
+            count: async () => 1,
+            updateMany: async (args: { where: Record<string, unknown> }) => {
+              updateManyCalls.push(args.where);
+              return { count: 0 };
+            },
+            findMany: async (args: { where: Record<string, unknown> }) => {
+              findManyCalls.push(args.where);
+              return [{ id: "old-master-1" }];
+            },
+            deleteMany: async (args: { where: Record<string, unknown> }) => {
+              deleteManyCalls.push(args.where);
+              return { count: 1 };
+            },
+            create: async ({ data }: { data: Record<string, unknown> }) => ({
+              id: "resume-new-1",
+              ...data,
+            }),
+          },
+          userProfile: {
+            findUnique: async () => null,
+          },
+        }),
+    } as never,
+    {
+      putObject: async () => "https://storage/resume-new-1.pdf",
+    } as never,
+    {
+      enqueueFromMasterResumeUpload: async () => ({ id: "ext-new-1" }),
+    } as never,
+  );
+  (
+    service as unknown as { extractCvText: () => Promise<string> }
+  ).extractCvText = async () => "";
+
+  const created = await service.create(
+    "user-1",
+    { title: "CV Master", isPrimary: true },
+    createFileUpload(),
+    "turnstile-upload-token",
+  );
+
+  assert.equal(created.id, "resume-new-1");
+  // Finds the existing master resume(s)...
+  assert.deepEqual(findManyCalls[0], { userId: "user-1", kind: "master" });
+  // ...clears any resume derived from it (would otherwise violate the
+  // adapted-resume-requires-context check once orphaned)...
+  assert.deepEqual(deleteManyCalls[0], {
+    userId: "user-1",
+    basedOnResumeId: "old-master-1",
+  });
+  // ...then deletes the old master resume itself (cascades to its
+  // extraction via onDelete: Cascade) — never just demoted.
+  assert.deepEqual(deleteManyCalls[1], {
+    userId: "user-1",
+    id: { in: ["old-master-1"] },
+  });
+  assert.equal(updateManyCalls.length, 1);
+});
+
+test("create does not wait for master CV extraction to finish", async () => {
   let resolveExtraction: (() => void) | null = null;
   const enqueueCalls: Array<unknown> = [];
 
@@ -30,6 +99,8 @@ test("create waits for master CV extraction and forwards the raw file payload", 
           resume: {
             count: async () => 0,
             updateMany: async () => ({ count: 0 }),
+            findMany: async () => [],
+            deleteMany: async () => ({ count: 0 }),
             create: async ({ data }: { data: Record<string, unknown> }) => ({
               id: "resume-1",
               ...data,
@@ -44,10 +115,13 @@ test("create waits for master CV extraction and forwards the raw file payload", 
       putObject: async () => "https://storage/resume-1.pdf",
     } as never,
     {
+      // enqueueFromMasterResumeUpload creates the extraction row and returns
+      // it right away — the AI extraction itself runs detached in the
+      // background, so this mock resolves before extractionPromise settles.
       enqueueFromMasterResumeUpload: async (input: unknown) => {
         enqueueCalls.push(input);
-        await extractionPromise;
-        return { id: "ext-1" };
+        void extractionPromise;
+        return { id: "ext-1", status: "pending" };
       },
     } as never,
   );
@@ -56,24 +130,12 @@ test("create waits for master CV extraction and forwards the raw file payload", 
   ).extractCvText = async () =>
     "Ana Souza\nData Analyst\nExperiencia em analytics e projetos\nEducation and skills";
 
-  const createPromise = service.create(
+  const created = await service.create(
     "user-1",
     { title: "CV Master" },
     createFileUpload(),
     "turnstile-upload-token",
   );
-
-  let createdResolved = false;
-  createPromise.then(() => {
-    createdResolved = true;
-  });
-
-  await setImmediate();
-  assert.equal(createdResolved, false);
-
-  resolveExtraction?.();
-
-  const created = await createPromise;
 
   assert.equal(created.id, "resume-1");
   assert.equal(enqueueCalls.length, 1);
@@ -87,6 +149,9 @@ test("create waits for master CV extraction and forwards the raw file payload", 
       size: 12,
     },
   });
+
+  resolveExtraction?.();
+  await setImmediate();
 });
 
 test("create delegates master CV uploads to synchronous extraction without heuristic merge", async () => {
@@ -100,6 +165,8 @@ test("create delegates master CV uploads to synchronous extraction without heuri
           resume: {
             count: async () => 0,
             updateMany: async () => ({ count: 0 }),
+            findMany: async () => [],
+            deleteMany: async () => ({ count: 0 }),
             create: async ({ data }: { data: Record<string, unknown> }) => ({
               id: "resume-sync-1",
               ...data,
@@ -137,6 +204,116 @@ test("create delegates master CV uploads to synchronous extraction without heuri
   assert.equal(enqueueCalls.length, 1);
 });
 
+test("create clears the existing profile before creating the replacement resume when clearExistingProfile is set", async () => {
+  const profileUpdateManyCalls: Array<unknown> = [];
+  const callOrder: string[] = [];
+
+  const service = new ResumesService(
+    {
+      userProfile: {
+        updateMany: async (args: unknown) => {
+          profileUpdateManyCalls.push(args);
+          callOrder.push("profile-cleared");
+          return { count: 1 };
+        },
+      },
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          resume: {
+            count: async () => 1,
+            updateMany: async () => ({ count: 0 }),
+            findMany: async () => [],
+            deleteMany: async () => ({ count: 0 }),
+            create: async ({ data }: { data: Record<string, unknown> }) => {
+              callOrder.push("resume-created");
+              return { id: "resume-replace-1", ...data };
+            },
+          },
+          userProfile: {
+            findUnique: async () => null,
+          },
+        }),
+    } as never,
+    {
+      putObject: async () => "https://storage/resume-replace-1.pdf",
+    } as never,
+    {
+      enqueueFromMasterResumeUpload: async () => ({ id: "ext-replace-1" }),
+    } as never,
+  );
+  (
+    service as unknown as { extractCvText: () => Promise<string> }
+  ).extractCvText = async () => "";
+
+  const created = await service.create(
+    "user-1",
+    { title: "CV Master", clearExistingProfile: true },
+    createFileUpload(),
+    "turnstile-upload-token",
+  );
+
+  assert.equal(created.id, "resume-replace-1");
+  assert.equal(profileUpdateManyCalls.length, 1);
+  assert.deepEqual(callOrder, ["profile-cleared", "resume-created"]);
+
+  const clearedData = (
+    profileUpdateManyCalls[0] as { where: { userId: string }; data: Record<string, unknown> }
+  ).data;
+  assert.equal(clearedData.fullName, null);
+  assert.equal(clearedData.headline, null);
+  assert.deepEqual(clearedData.experiencesJson, []);
+  assert.equal(clearedData.profileReadinessStatus, "empty");
+});
+
+test("create does not touch the profile when clearExistingProfile is not set", async () => {
+  let profileUpdateManyCalled = false;
+
+  const service = new ResumesService(
+    {
+      userProfile: {
+        updateMany: async () => {
+          profileUpdateManyCalled = true;
+          return { count: 0 };
+        },
+      },
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          resume: {
+            count: async () => 0,
+            updateMany: async () => ({ count: 0 }),
+            findMany: async () => [],
+            deleteMany: async () => ({ count: 0 }),
+            create: async ({ data }: { data: Record<string, unknown> }) => ({
+              id: "resume-first-1",
+              ...data,
+            }),
+          },
+          userProfile: {
+            findUnique: async () => null,
+          },
+        }),
+    } as never,
+    {
+      putObject: async () => "https://storage/resume-first-1.pdf",
+    } as never,
+    {
+      enqueueFromMasterResumeUpload: async () => ({ id: "ext-first-1" }),
+    } as never,
+  );
+  (
+    service as unknown as { extractCvText: () => Promise<string> }
+  ).extractCvText = async () => "";
+
+  await service.create(
+    "user-1",
+    { title: "CV Master" },
+    createFileUpload(),
+    "turnstile-upload-token",
+  );
+
+  assert.equal(profileUpdateManyCalled, false);
+});
+
 test("create requires a turnstile token for uploaded master CVs", async () => {
   let extractCalls = 0;
   const enqueueCalls: Array<unknown> = [];
@@ -148,6 +325,8 @@ test("create requires a turnstile token for uploaded master CVs", async () => {
           resume: {
             count: async () => 0,
             updateMany: async () => ({ count: 0 }),
+            findMany: async () => [],
+            deleteMany: async () => ({ count: 0 }),
             create: async ({ data }: { data: Record<string, unknown> }) => ({
               id: "resume-4",
               ...data,
@@ -194,6 +373,8 @@ test("create still succeeds when extraction enqueue fails", async () => {
           resume: {
             count: async () => 0,
             updateMany: async () => ({ count: 0 }),
+            findMany: async () => [],
+            deleteMany: async () => ({ count: 0 }),
             create: async ({ data }: { data: Record<string, unknown> }) => ({
               id: "resume-2",
               ...data,
@@ -238,6 +419,8 @@ test("create succeeds when extraction service is not provided", async () => {
           resume: {
             count: async () => 0,
             updateMany: async () => ({ count: 0 }),
+            findMany: async () => [],
+            deleteMany: async () => ({ count: 0 }),
             create: async ({ data }: { data: Record<string, unknown> }) => ({
               id: "resume-3",
               ...data,

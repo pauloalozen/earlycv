@@ -353,6 +353,154 @@ test("mapped experience and education ids are stable across reorder", async () =
   assert.deepEqual(first.education, second.education);
 });
 
+test("processJob drops malformed evidence entries instead of failing the whole extraction", async () => {
+  const updates: Array<unknown> = [];
+  const extractionOutput = buildExtractionOutput() as {
+    evidence: Record<string, unknown>;
+  };
+  // Simulate the model returning a non-string citation (seen in prod: gpt-4o-mini
+  // returned null for one item of evidence.location).
+  extractionOutput.evidence.location = ["Sao Paulo, SP", null, "Brasil"];
+
+  const service = new MasterCvCanonicalExtractionService(
+    {
+      masterCvCanonicalExtraction: {
+        findUnique: async () => ({
+          id: "ext-evidence",
+          userId: "user-1",
+          resumeId: "resume-1",
+          status: "pending",
+          resume: { rawText: "texto do cv" },
+        }),
+        update: async (args: unknown) => {
+          updates.push(args);
+          return args;
+        },
+      },
+      userProfile: {
+        findUnique: async () => ({
+          userId: "user-1",
+          fullName: null,
+          headline: null,
+          linkedinUrl: null,
+          phone: null,
+          professionalSummary: null,
+          city: null,
+          state: null,
+          country: null,
+          experiencesJson: [],
+          educationJson: [],
+          skillsJson: { technical: [], business: [], soft: [] },
+          profileFieldMetaJson: {},
+          profileSuggestionsJson: [],
+        }),
+        update: async () => ({}),
+      },
+    } as never,
+    {
+      merge: () => ({
+        next: {
+          fullName: "Ana Souza",
+          experiences: [],
+          education: [],
+          skills: { technical: ["SQL"], business: [], soft: [] },
+        },
+        fieldMeta: {},
+        suggestions: [],
+      }),
+    } as never,
+    {
+      compute: () => "ready",
+    } as never,
+    {} as never,
+    {
+      extract: async () => extractionOutput as never,
+    } as never,
+  );
+
+  await service.processJob({ extractionId: "ext-evidence" });
+
+  const succeededUpdate = updates.find(
+    (entry) =>
+      (entry as { data?: { status?: string } }).data?.status === "succeeded",
+  ) as { data: { evidenceJson: { location: string[] } } };
+
+  assert.equal(Boolean(succeededUpdate), true);
+  assert.deepEqual(succeededUpdate.data.evidenceJson.location, [
+    "Sao Paulo, SP",
+    "Brasil",
+  ]);
+});
+
+test("processJob skips the profile merge when the extraction row was deleted mid-flight", async () => {
+  const updates: Array<unknown> = [];
+  let findUniqueCalls = 0;
+  let mergeCalled = false;
+  let profileUpdateCalled = false;
+  const extractionOutput = buildExtractionOutput();
+
+  const service = new MasterCvCanonicalExtractionService(
+    {
+      masterCvCanonicalExtraction: {
+        findUnique: async () => {
+          findUniqueCalls += 1;
+          // First call (job start) finds the row; second call (right before
+          // merging) simulates the user having run "Limpar tudo" in the
+          // meantime, which cascade-deletes this row via the Resume relation.
+          if (findUniqueCalls === 1) {
+            return {
+              id: "ext-deleted",
+              userId: "user-1",
+              resumeId: "resume-1",
+              status: "pending",
+              resume: { rawText: "texto do cv" },
+            };
+          }
+          return null;
+        },
+        update: async (args: unknown) => {
+          updates.push(args);
+          return args;
+        },
+      },
+      userProfile: {
+        findUnique: async () => ({ userId: "user-1" }),
+        update: async () => {
+          profileUpdateCalled = true;
+          return {};
+        },
+      },
+    } as never,
+    {
+      merge: () => {
+        mergeCalled = true;
+        return { next: {}, fieldMeta: {}, suggestions: [] };
+      },
+    } as never,
+    {
+      compute: () => "ready",
+    } as never,
+    {} as never,
+    {
+      extract: async () => extractionOutput,
+    } as never,
+  );
+
+  const result = await service.processJob({ extractionId: "ext-deleted" });
+
+  assert.equal(result, null);
+  assert.equal(mergeCalled, false);
+  assert.equal(profileUpdateCalled, false);
+  assert.equal(
+    updates.some(
+      (entry) =>
+        (entry as { data?: { status?: string } }).data?.status ===
+        "succeeded",
+    ),
+    false,
+  );
+});
+
 test("processJob persists payload and merges canonical profile on success", async () => {
   const updates: Array<unknown> = [];
   const profileUpdates: Array<unknown> = [];

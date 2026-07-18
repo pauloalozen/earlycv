@@ -244,72 +244,90 @@ function validateOutput(payload: unknown): MasterCvCanonicalExtractionOutput {
     "canonicalProfile.location",
   );
 
+  // extractionCoverage is also supplementary audit data (which fields the
+  // model thinks it found), not canonical profile content — same leniency
+  // rationale as confidence/evidence below. Already seen in prod: the model
+  // emitting a fieldStatus key using the full JSON path
+  // ("canonicalProfile.fullName") instead of the relative one ("fullName")
+  // took down the entire extraction.
   const typedCoverage = {
-    identifiedFields: validateStringArray(
-      coverage.identifiedFields,
-      "extractionCoverage.identifiedFields",
-    ),
-    missingFields: validateStringArray(
-      coverage.missingFields,
-      "extractionCoverage.missingFields",
-    ),
+    identifiedFields: Array.isArray(coverage.identifiedFields)
+      ? coverage.identifiedFields.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [],
+    missingFields: Array.isArray(coverage.missingFields)
+      ? coverage.missingFields.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [],
     fieldStatus: (() => {
-      const fieldStatus = validateRecord(
-        coverage.fieldStatus,
-        "extractionCoverage.fieldStatus",
-      );
+      if (
+        !coverage.fieldStatus ||
+        typeof coverage.fieldStatus !== "object" ||
+        Array.isArray(coverage.fieldStatus)
+      ) {
+        return {} as Record<string, FieldStatus>;
+      }
+      const fieldStatus = coverage.fieldStatus as Record<string, unknown>;
+      const sanitized: Record<string, FieldStatus> = {};
       for (const [key, value] of Object.entries(fieldStatus)) {
         if (
           !ALLOWED_CANONICAL_FIELD_PATHS.includes(
             key as (typeof ALLOWED_CANONICAL_FIELD_PATHS)[number],
           )
         ) {
-          throw new Error(
-            `Unknown fieldStatus key at extractionCoverage.fieldStatus.${key}`,
-          );
+          continue;
         }
         if (
-          typeof value !== "string" ||
-          !ALLOWED_FIELD_STATUS.includes(value as FieldStatus)
+          typeof value === "string" &&
+          ALLOWED_FIELD_STATUS.includes(value as FieldStatus)
         ) {
-          throw new Error(
-            `Invalid fieldStatus value at extractionCoverage.fieldStatus.${key}. Allowed: filled|partial|missing`,
-          );
+          sanitized[key] = value as FieldStatus;
         }
       }
-      return fieldStatus as Record<string, FieldStatus>;
+      return sanitized;
     })(),
   };
 
+  // confidence/evidence are supplementary audit data (confidence scores and
+  // verbatim citations backing them), not canonical profile content. A
+  // single malformed or unexpected entry from the model shouldn't fail the
+  // whole extraction — drop just that entry instead of rejecting the
+  // payload. canonicalProfile below stays strict since that IS the data we
+  // persist into the user's profile.
+  const sanitizedConfidence: Record<string, number> = {};
   for (const [key, value] of Object.entries(confidence)) {
     if (
       !ALLOWED_CANONICAL_FIELD_PATHS.includes(
         key as (typeof ALLOWED_CANONICAL_FIELD_PATHS)[number],
       )
     ) {
-      throw new Error(`Unknown confidence key at confidence.${key}`);
+      continue;
     }
     if (
-      typeof value !== "number" ||
-      !Number.isFinite(value) ||
-      value < 0 ||
-      value > 1
+      typeof value === "number" &&
+      Number.isFinite(value) &&
+      value >= 0 &&
+      value <= 1
     ) {
-      throw new Error(
-        `Invalid confidence value at confidence.${key}. Expected finite number in [0,1]`,
-      );
+      sanitizedConfidence[key] = value;
     }
   }
 
+  const sanitizedEvidence: Record<string, string[]> = {};
   for (const [key, value] of Object.entries(evidence)) {
     if (
       !ALLOWED_CANONICAL_FIELD_PATHS.includes(
         key as (typeof ALLOWED_CANONICAL_FIELD_PATHS)[number],
-      )
+      ) ||
+      !Array.isArray(value)
     ) {
-      throw new Error(`Unknown evidence key at evidence.${key}`);
+      continue;
     }
-    validateStringArray(value, `evidence.${key}`);
+    sanitizedEvidence[key] = value.filter(
+      (item): item is string => typeof item === "string",
+    );
   }
 
   return {
@@ -486,8 +504,8 @@ function validateOutput(payload: unknown): MasterCvCanonicalExtractionOutput {
       })(),
     },
     extractionCoverage: typedCoverage,
-    confidence: confidence as Record<string, number>,
-    evidence: evidence as Record<string, string[]>,
+    confidence: sanitizedConfidence,
+    evidence: sanitizedEvidence,
   };
 }
 

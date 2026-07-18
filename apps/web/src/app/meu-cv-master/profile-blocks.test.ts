@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildClearAllPayload,
   buildProfileBlockStates,
   buildProfileBlockUpdatePayload,
+  hasAnyProfileContent,
   profileBlockDefinitions,
 } from "./profile-blocks";
 
@@ -129,5 +131,66 @@ describe("buildProfileBlockUpdatePayload", () => {
   it("serializes links as empty (no backend field yet)", () => {
     const formData = new FormData();
     expect(buildProfileBlockUpdatePayload("links", formData)).toEqual({});
+  });
+});
+
+describe("buildClearAllPayload", () => {
+  it("clears headline along with the other identity fields", () => {
+    // headline não é editável em nenhum bloco desta tela, mas é preenchido
+    // pela extração de IA e entra no cálculo de profileReadinessStatus —
+    // se "Limpar tudo" não zerar, o perfil fica preso em "partial"/"ready"
+    // mesmo depois de limpo (bug: popup de confirmação de reupload continua
+    // aparecendo com o perfil vazio).
+    expect(buildClearAllPayload().headline).toBe("");
+  });
+});
+
+describe("hasAnyProfileContent", () => {
+  it("returns false for a null profile", () => {
+    expect(hasAnyProfileContent(null)).toBe(false);
+  });
+
+  it("returns false when every visible block field is empty, even if headline (not shown on screen) has content", () => {
+    const emptyProfile = {
+      ...baseProfile,
+      fullName: null,
+      contactEmail: null,
+      phone: null,
+      linkedinUrl: null,
+      city: null,
+      state: null,
+      country: null,
+      professionalSummary: null,
+      experiencesJson: [],
+      educationJson: [],
+      skillsJson: { technical: [], business: [], soft: [] },
+      languagesJson: [],
+      certificationsJson: [],
+      // headline is intentionally left filled: it's not part of any block's
+      // fields, so it must not make the popup think there's content on screen.
+      headline: "Data Analyst",
+    };
+
+    expect(hasAnyProfileContent(emptyProfile)).toBe(false);
+  });
+
+  it("returns true when at least one visible field has content", () => {
+    const partialProfile = {
+      ...baseProfile,
+      contactEmail: null,
+      phone: null,
+      linkedinUrl: null,
+      city: null,
+      state: null,
+      country: null,
+      professionalSummary: null,
+      experiencesJson: [],
+      educationJson: [],
+      skillsJson: { technical: [], business: [], soft: [] },
+      languagesJson: [],
+      certificationsJson: [],
+    };
+
+    expect(hasAnyProfileContent(partialProfile)).toBe(true);
   });
 });

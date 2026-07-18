@@ -42,6 +42,17 @@ export class CreateResumeDto {
   turnstileToken?: string;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === "") {
+      return undefined;
+    }
+
+    return value === true || value === "true";
+  })
+  @IsBoolean()
+  clearExistingProfile?: boolean;
+
+  @IsOptional()
   @IsString()
   @MaxLength(80000)
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))

@@ -663,3 +663,81 @@ test("GET /api/resumes/master-cv-extraction-status omits extractionCoverage when
     await app.close();
   }
 });
+
+test("GET /api/resumes/master-cv-extraction-status returns the currently processing extraction, not an older already-finished one", {
+  timeout: 120_000,
+}, async () => {
+  const { app, database } = await createApp();
+  let user: UserSession | null = null;
+
+  try {
+    user = await createActiveUserSession(
+      database,
+      "resume-extraction-status-in-progress",
+    );
+
+    const previousResume = await database.resume.create({
+      data: {
+        userId: user.userId,
+        title: "Previous Resume",
+        status: "uploaded",
+        kind: "master",
+        isMaster: false,
+      },
+    });
+
+    // Older upload already finished successfully.
+    await database.masterCvCanonicalExtraction.create({
+      data: {
+        userId: user.userId,
+        resumeId: previousResume.id,
+        inputHash: randomUUID(),
+        status: "succeeded",
+        finishedAt: new Date(),
+        coverageJson: {
+          identifiedFields: ["fullName"],
+          missingFields: [],
+          fieldStatus: { fullName: "filled" },
+        },
+      },
+    });
+
+    const replacementResume = await database.resume.create({
+      data: {
+        userId: user.userId,
+        title: "Replacement Resume",
+        status: "uploaded",
+        kind: "master",
+        isMaster: true,
+      },
+    });
+
+    // Replace-upload flow: a newer extraction is still running in the
+    // background (finishedAt still null) when the frontend polls.
+    const inProgressExtraction =
+      await database.masterCvCanonicalExtraction.create({
+        data: {
+          userId: user.userId,
+          resumeId: replacementResume.id,
+          inputHash: randomUUID(),
+          status: "processing",
+        },
+      });
+
+    const response = await request(app.getHttpServer())
+      .get("/api/resumes/master-cv-extraction-status")
+      .set("Authorization", `Bearer ${user.accessToken}`);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.status, "processing");
+    assert.equal(
+      response.body.updatedAt,
+      inProgressExtraction.updatedAt.toISOString(),
+    );
+  } finally {
+    if (user) {
+      await deleteUserByEmail(database, user.email);
+    }
+    await app.close();
+  }
+});

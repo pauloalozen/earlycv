@@ -300,6 +300,19 @@ export function getPrimaryGapBlockId(blocks: ProfileBlockState[]) {
   return blocks.find((block) => !block.optional && block.hasGap)?.id ?? null;
 }
 
+// Reflete exatamente o que a tela mostra: true só se algum campo dos blocos
+// visíveis (profileBlockDefinitions) tiver conteúdo. Não usa
+// profileReadinessStatus de propósito — esse status é calculado no backend e
+// pode considerar campos que não aparecem em nenhum bloco (ex: headline), ou
+// ficar temporariamente dessincronizado com o que está gravado. O popup de
+// "vai perder seus dados" só pode aparecer se o usuário realmente vê algo
+// preenchido nesta tela.
+export function hasAnyProfileContent(profile: UserProfileRecord | null) {
+  return profileBlockDefinitions.some((definition) =>
+    definition.fields.some((field) => !isFieldMissing(profile, field)),
+  );
+}
+
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
@@ -411,6 +424,10 @@ export function buildClearAllPayload() {
     state: "",
     country: "",
     professionalSummary: "",
+    // headline não é editável nesta tela, mas é preenchido pela extração de
+    // IA e conta para profileReadinessStatus — sem zerar aqui, "Limpar tudo"
+    // deixa o perfil com status "partial" mesmo depois de limpo.
+    headline: "",
     experiencesJson: [] as unknown[],
     educationJson: [] as unknown[],
     skillsJson: {

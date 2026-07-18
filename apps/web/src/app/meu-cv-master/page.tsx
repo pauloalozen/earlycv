@@ -21,6 +21,7 @@ import { CvMasterBlock } from "./cv-master-block";
 import {
   buildProfileBlockStates,
   getPrimaryGapBlockId,
+  hasAnyProfileContent,
   type UserProfileRecord,
 } from "./profile-blocks";
 import { ResumeUploadStrip } from "./resume-upload-strip";
@@ -221,7 +222,7 @@ export default async function MeuCvMasterPage({
             {/* Strip do arquivo — inline upload sem sair da página */}
             <ResumeUploadStrip
               masterResume={masterResume}
-              hasFilledFields={profile !== null}
+              hasFilledFields={hasAnyProfileContent(profileData)}
             />
 
             {/* Revisão: gaps summary */}

@@ -30,6 +30,17 @@ function asStringArray(value: unknown, path: string): string[] {
   return value.map((entry, index) => asString(entry, `${path}[${index}]`));
 }
 
+// Evidence citations are supplementary audit data (verbatim quotes backing a
+// confidence score), not canonical profile content. A single malformed
+// citation from the model (null, wrong type) shouldn't fail the whole
+// extraction — drop just that entry instead of rejecting the payload.
+function asStringArrayLenient(value: unknown, path: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid extraction payload: ${path} must be an array`);
+  }
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
 function asNumber(value: unknown, path: string): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
     throw new Error(`Invalid extraction payload: ${path} must be a number`);
@@ -232,9 +243,13 @@ export function parseMasterCvCanonicalExtractionPayload(
   }
 
   const evidence = asRecord(root.evidence, "evidence");
+  const sanitizedEvidence: Record<string, string[]> = {};
   for (const [field, value] of Object.entries(evidence)) {
-    asStringArray(value, `evidence.${field}`);
+    sanitizedEvidence[field] = asStringArrayLenient(value, `evidence.${field}`);
   }
 
-  return input as MasterCvCanonicalExtractionOutput;
+  return {
+    ...root,
+    evidence: sanitizedEvidence,
+  } as MasterCvCanonicalExtractionOutput;
 }

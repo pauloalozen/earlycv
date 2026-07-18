@@ -57,43 +57,17 @@ export class ResumesService {
   async getMasterCvExtractionStatus(
     userId: string,
   ): Promise<MasterCvExtractionStatusDto> {
-    const completedExtraction =
-      await this.database.masterCvCanonicalExtraction.findFirst({
-        where: {
-          userId,
-          finishedAt: { not: null },
-          status: { not: "pending" },
-        },
-        orderBy: [
-          { finishedAt: "desc" },
-          { updatedAt: "desc" },
-          { createdAt: "desc" },
-        ],
-        select: {
-          status: true,
-          coverageJson: true,
-          updatedAt: true,
-        },
-      });
-
-    if (completedExtraction) {
-      return {
-        status: completedExtraction.status,
-        extractionCoverage: this.parseExtractionCoverage(
-          completedExtraction.coverageJson,
-        ),
-        updatedAt: completedExtraction.updatedAt.toISOString(),
-      };
-    }
-
+    // Must reflect the extraction for the CURRENT upload (the most recently
+    // created one), not "whichever extraction finished most recently" — a
+    // replace upload creates a new pending/processing row while an older one
+    // from a previous upload may already be "succeeded". Preferring the
+    // already-finished one here made the frontend's polling see a false
+    // "done" on the very first check and stop before the new extraction
+    // (still running in the background) ever completed.
     const extraction =
       await this.database.masterCvCanonicalExtraction.findFirst({
         where: { userId },
-        orderBy: [
-          { finishedAt: "desc" },
-          { updatedAt: "desc" },
-          { createdAt: "desc" },
-        ],
+        orderBy: { createdAt: "desc" },
         select: {
           status: true,
           coverageJson: true,
@@ -118,6 +92,35 @@ export class ResumesService {
     file?: FileUpload,
     turnstileToken?: string,
   ) {
+    // Clearing the profile and uploading the replacement file used to be two
+    // separate server actions (each triggering its own Next.js route
+    // revalidation). That gap between the two round-trips raced with the
+    // client-side polling that watches extraction status, leaving the screen
+    // stuck on stale/empty data until a manual refresh. Folding the clear
+    // into this same request removes that gap entirely.
+    if (dto.clearExistingProfile) {
+      await this.database.userProfile.updateMany({
+        where: { userId },
+        data: {
+          fullName: null,
+          contactEmail: null,
+          phone: null,
+          linkedinUrl: null,
+          headline: null,
+          city: null,
+          state: null,
+          country: null,
+          professionalSummary: null,
+          experiencesJson: [],
+          educationJson: [],
+          skillsJson: { technical: [], business: [], soft: [] },
+          languagesJson: [],
+          certificationsJson: [],
+          profileReadinessStatus: "empty",
+        },
+      });
+    }
+
     let sourceFileUrl: string | null = null;
     let extractedRawText: string | null = null;
 
@@ -155,6 +158,28 @@ export class ResumesService {
       const shouldBecomeMaster = dto.isPrimary ?? existingResumeCount === 0;
 
       if (shouldBecomeMaster) {
+        // O CV master é um singleton: só existe UM ativo por vez, nunca um
+        // histórico. Manter uploads antigos por perto (mesmo só como
+        // isMaster: false) foi a causa raiz de vários bugs de polling/status
+        // — o sistema não tinha como distinguir "a extração atual" de
+        // extrações de uploads já substituídos. Apagar o resume master
+        // anterior (a extração dele cai em cascata, onDelete: Cascade)
+        // garante no máximo 1 resume + 1 extração master por usuário.
+        const oldMasterResumes = await tx.resume.findMany({
+          where: { userId, kind: ResumeKind.master },
+          select: { id: true },
+        });
+        for (const old of oldMasterResumes) {
+          await tx.resume.deleteMany({
+            where: { userId, basedOnResumeId: old.id },
+          });
+        }
+        await tx.resume.deleteMany({
+          where: {
+            userId,
+            id: { in: oldMasterResumes.map((resume) => resume.id) },
+          },
+        });
         await this.demoteOtherResumes(tx, userId);
       }
 
