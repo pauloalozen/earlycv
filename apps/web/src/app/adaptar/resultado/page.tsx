@@ -195,6 +195,9 @@ function GuestBlurOverlay({
         marginTop: 8,
         overflow: "hidden",
         borderRadius: 12,
+        // Garante espaço suficiente pro badge centralizado (ícone + 2 linhas
+        // de texto) mesmo quando o conteúdo borrado é uma única linha curta.
+        minHeight: 60,
       }}
     >
       <div

@@ -53,10 +53,13 @@ export function GuestAnalysisClaimer() {
       jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
       companyName: parsed.adaptedContentJson?.vaga?.empresa,
     })
-      .then(() => {
+      .then((saved) => {
         clearGuestAnalysisRaw();
         setStatus("done");
-        router.refresh();
+        // Independente de como o usuário criou a conta (email, Google, link
+        // do header etc.), se tinha uma análise guest pendente, ele deve cair
+        // direto nela — não no /meu-perfil genérico.
+        router.push(`/adaptar/resultado?adaptationId=${saved.id}`);
       })
       .catch((err: unknown) => {
         console.error("[GuestAnalysisClaimer] saveGuestPreview failed:", err);
