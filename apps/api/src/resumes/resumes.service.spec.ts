@@ -15,7 +15,7 @@ function createFileUpload() {
   };
 }
 
-test("create deletes the previous master resume (and its dependents) instead of just demoting it", async () => {
+test("create deletes the previous master resume (and its adapted dependents) instead of just demoting it", async () => {
   const findManyCalls: Array<Record<string, unknown>> = [];
   const deleteManyCalls: Array<Record<string, unknown>> = [];
   const updateManyCalls: Array<Record<string, unknown>> = [];
@@ -67,16 +67,19 @@ test("create deletes the previous master resume (and its dependents) instead of 
   );
 
   assert.equal(created.id, "resume-new-1");
-  // Finds the existing master resume(s)...
+  // Safe only because CvAdaptation.masterResumeId is onDelete: SetNull (see
+  // migration 20260718160236_make_cv_adaptation_master_resume_optional) —
+  // any analysis that referenced the old master resume survives, it just
+  // loses the pointer. Finds the old master resume(s)...
   assert.deepEqual(findManyCalls[0], { userId: "user-1", kind: "master" });
-  // ...clears any resume derived from it (would otherwise violate the
-  // adapted-resume-requires-context check once orphaned)...
+  // ...clears any resume derived from it (basedOnResumeId) — required by
+  // Resume_adapted_requires_context_check, and safe: the adapted resume row
+  // is a disposable placeholder, the real content lives on CvAdaptation...
   assert.deepEqual(deleteManyCalls[0], {
     userId: "user-1",
     basedOnResumeId: "old-master-1",
   });
-  // ...then deletes the old master resume itself (cascades to its
-  // extraction via onDelete: Cascade) — never just demoted.
+  // ...then deletes the old master resume itself — never just demoted.
   assert.deepEqual(deleteManyCalls[1], {
     userId: "user-1",
     id: { in: ["old-master-1"] },

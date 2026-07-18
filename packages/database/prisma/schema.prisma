@@ -674,7 +674,7 @@ model Company {
 model CvAdaptation {
   id                   String              @id @default(cuid())
   userId               String
-  masterResumeId       String
+  masterResumeId       String?
   templateId           String?
   canonicalJobId       String?
   jobRequirementSetId  String?
@@ -712,7 +712,12 @@ model CvAdaptation {
   jobApplicationId     String?
 
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  masterResume  Resume          @relation("CvAdaptationMaster", fields: [masterResumeId], references: [id], onDelete: Cascade)
+  // Não usar Cascade: o CV master é editável/substituível a qualquer momento
+  // (ver apps/api/src/resumes/resumes.service.ts) e a análise deve
+  // sobreviver independente dele — o conteúdo real do CV usado na análise
+  // fica em analysisCvSnapshot, não neste ponteiro. masterResumeId é só
+  // referência informativa; perdê-la (SetNull) não perde a análise.
+  masterResume  Resume?         @relation("CvAdaptationMaster", fields: [masterResumeId], references: [id], onDelete: SetNull)
   template      ResumeTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   canonicalJob  CanonicalJob?   @relation(fields: [canonicalJobId], references: [id], onDelete: SetNull)
   jobRequirementSet JobRequirementSet? @relation(fields: [jobRequirementSetId], references: [id], onDelete: SetNull)

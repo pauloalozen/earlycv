@@ -159,17 +159,27 @@ export class ResumesService {
 
       if (shouldBecomeMaster) {
         // O CV master é um singleton: só existe UM ativo por vez, nunca um
-        // histórico. Manter uploads antigos por perto (mesmo só como
-        // isMaster: false) foi a causa raiz de vários bugs de polling/status
-        // — o sistema não tinha como distinguir "a extração atual" de
-        // extrações de uploads já substituídos. Apagar o resume master
-        // anterior (a extração dele cai em cascata, onDelete: Cascade)
-        // garante no máximo 1 resume + 1 extração master por usuário.
+        // histórico. Isso só é seguro apagar porque CvAdaptation.masterResumeId
+        // agora é onDelete: SetNull (migration
+        // 20260718160236_make_cv_adaptation_master_resume_optional) — apagar
+        // o Resume nunca mais apaga a análise; ela sobrevive via
+        // analysisCvSnapshot, que já é a fonte real do "CV usado na análise"
+        // (ver createCvAdaptationResponseDto: canDownloadBaseCv/baseCvDownloadKind
+        // dependem só do snapshot, nunca de masterResume). Antes disso era
+        // Cascade e apagar aqui já destruiu análises reais — nunca reverter
+        // essa premissa sem confirmar o onDelete atual da FK.
         const oldMasterResumes = await tx.resume.findMany({
           where: { userId, kind: ResumeKind.master },
           select: { id: true },
         });
         for (const old of oldMasterResumes) {
+          // Resumes "adaptados" derivados do master antigo (basedOnResumeId)
+          // também precisam ser apagados aqui: a constraint
+          // Resume_adapted_requires_context_check exige templateId/targetJob*
+          // OU basedOnResumeId — um SetNull simples os deixaria órfãos e
+          // inválidos. O conteúdo real do CV adaptado não mora nesse resume
+          // (é placeholder, recriado sob demanda por ensureAdaptedResumeRecord)
+          // — o que baixa pro usuário vem de CvAdaptation.adaptedContentJson.
           await tx.resume.deleteMany({
             where: { userId, basedOnResumeId: old.id },
           });

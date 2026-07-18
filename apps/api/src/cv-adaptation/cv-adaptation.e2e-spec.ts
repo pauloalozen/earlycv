@@ -98,6 +98,25 @@ async function deleteUserByEmail(database: DatabaseService, email: string) {
   });
 }
 
+async function waitForAdaptationStatus(
+  database: DatabaseService,
+  id: string,
+  targetStatuses: string[],
+  timeoutMs = 5_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const row = await database.cvAdaptation.findUnique({ where: { id } });
+    if (row && targetStatuses.includes(row.status)) {
+      return row;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(
+    `timed out waiting for adaptation ${id} to reach status in [${targetStatuses.join(", ")}]`,
+  );
+}
+
 async function promoteToInternalAdmin(
   database: DatabaseService,
   userId: string,
@@ -1322,6 +1341,80 @@ test("user can redeem an awaiting analysis with one credit", async () => {
 
   assert.equal(refreshedUser?.creditsRemaining, 0);
 
+  // Let the background deliverAdaptation finish before tearing down the
+  // user — otherwise it races the cleanup below (FK/deadlock noise, even
+  // though it doesn't fail the test).
+  await waitForAdaptationStatus(database, adaptation.id, [
+    "delivered",
+    "paid",
+  ]);
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});
+
+test("redeem-credit returns immediately with status paid and delivers the CV in the background", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-adapt-redeem-async");
+
+  const masterResume = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV Master",
+      kind: "master",
+      status: "uploaded",
+      sourceFileType: "application/pdf",
+      rawText: "Resumo profissional de teste",
+    },
+  });
+
+  const adaptation = await database.cvAdaptation.create({
+    data: {
+      userId: user.userId,
+      masterResumeId: masterResume.id,
+      jobDescriptionText: "Descricao da vaga",
+      jobTitle: "Data Manager",
+      companyName: "EarlyCV",
+      status: "awaiting_payment",
+      paymentStatus: "none",
+      adaptedContentJson: {
+        vaga: { cargo: "Data Manager", empresa: "EarlyCV" },
+        fit: { score: 80, categoria: "alto", headline: "ok" },
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  await database.user.update({
+    where: { id: user.userId },
+    data: { creditsRemaining: 1 },
+  });
+
+  await request(app.getHttpServer())
+    .post(`/api/cv-adaptation/${adaptation.id}/redeem-credit`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(201)
+    .expect(({ body }) => {
+      // The heavy CV_GENERATION call (deliverAdaptation) must not be awaited
+      // — the response reflects the state right after the credit debit /
+      // unlock transaction, before generation runs.
+      assert.equal(body.status, "paid");
+      assert.equal(body.isUnlocked, true);
+    });
+
+  const delivered = await waitForAdaptationStatus(database, adaptation.id, [
+    "delivered",
+  ]);
+  assert.equal(delivered.status, "delivered");
+  assert.ok(delivered.adaptedResumeId, "adaptedResumeId should be set once delivered");
+
+  await request(app.getHttpServer())
+    .get(`/api/cv-adaptation/${adaptation.id}`)
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(body.status, "delivered");
+    });
+
   await deleteUserByEmail(database, user.email);
   await app.close();
 });
@@ -1379,6 +1472,11 @@ test("redeem-credit does not debit twice for the same adaptation", async () => {
     where: { cvAdaptationId: adaptation.id },
   });
   assert.equal(unlockCount, 1);
+
+  await waitForAdaptationStatus(database, adaptation.id, [
+    "delivered",
+    "paid",
+  ]);
 
   await deleteUserByEmail(database, user.email);
   await app.close();
@@ -1452,6 +1550,11 @@ test("admin payments list excludes cv unlock entries and cv-unlocks list include
         true,
       );
     });
+
+  await waitForAdaptationStatus(database, adaptation.id, [
+    "delivered",
+    "paid",
+  ]);
 
   await deleteUserByEmail(database, user.email);
   await deleteUserByEmail(database, superadmin.email);

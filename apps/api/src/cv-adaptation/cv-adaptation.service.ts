@@ -548,7 +548,11 @@ export class CvAdaptationService {
         include: {
           template: { select: { id: true, name: true, slug: true } },
           analysisCvSnapshot: {
-            select: { sourceType: true, originalFileStorageKey: true },
+            select: {
+            sourceType: true,
+            originalFileStorageKey: true,
+            originalFileName: true,
+          },
           },
         },
       });
@@ -573,9 +577,13 @@ export class CvAdaptationService {
         include: {
           template: { select: { id: true, name: true, slug: true } },
           analysisCvSnapshot: {
-            select: { sourceType: true, originalFileStorageKey: true },
+            select: {
+              sourceType: true,
+              originalFileStorageKey: true,
+              originalFileName: true,
+            },
           },
-          masterResume: { select: { rawText: true } },
+          masterResume: { select: { rawText: true, title: true, sourceFileName: true } },
         },
       });
 
@@ -1464,7 +1472,11 @@ export class CvAdaptationService {
       include: {
         template: { select: { id: true, name: true, slug: true } },
         analysisCvSnapshot: {
-          select: { sourceType: true, originalFileStorageKey: true },
+          select: {
+            sourceType: true,
+            originalFileStorageKey: true,
+            originalFileName: true,
+          },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -1495,7 +1507,11 @@ export class CvAdaptationService {
         include: {
           template: { select: { id: true, name: true, slug: true } },
           analysisCvSnapshot: {
-            select: { sourceType: true, originalFileStorageKey: true },
+            select: {
+            sourceType: true,
+            originalFileStorageKey: true,
+            originalFileName: true,
+          },
           },
         },
       });
@@ -1524,7 +1540,11 @@ export class CvAdaptationService {
       include: {
         template: { select: { id: true, name: true, slug: true } },
         analysisCvSnapshot: {
-          select: { sourceType: true, originalFileStorageKey: true },
+          select: {
+            sourceType: true,
+            originalFileStorageKey: true,
+            originalFileName: true,
+          },
         },
       },
     });
@@ -1545,7 +1565,11 @@ export class CvAdaptationService {
       include: {
         template: { select: { id: true, name: true, slug: true } },
         analysisCvSnapshot: {
-          select: { sourceType: true, originalFileStorageKey: true },
+          select: {
+            sourceType: true,
+            originalFileStorageKey: true,
+            originalFileName: true,
+          },
         },
       },
     });
@@ -1568,8 +1592,13 @@ export class CvAdaptationService {
             },
           },
           analysisCvSnapshot: {
-            select: { sourceType: true, originalFileStorageKey: true },
+            select: {
+              sourceType: true,
+              originalFileStorageKey: true,
+              originalFileName: true,
+            },
           },
+          masterResume: { select: { title: true, sourceFileName: true } },
         },
         orderBy: { createdAt: "desc" },
         skip,
@@ -1688,8 +1717,13 @@ export class CvAdaptationService {
           },
         },
         analysisCvSnapshot: {
-          select: { sourceType: true, originalFileStorageKey: true },
+          select: {
+            sourceType: true,
+            originalFileStorageKey: true,
+            originalFileName: true,
+          },
         },
+        masterResume: { select: { title: true, sourceFileName: true } },
       },
     });
 
@@ -1921,9 +1955,14 @@ export class CvAdaptationService {
       callerMethod: "redeemWithCredit",
     });
 
-    // Await so the CV sections exist before this response reaches the
-    // frontend, which redirects to /adaptacao-cv immediately on success.
-    await this.deliverAdaptation(adaptation.id).catch((err) => {
+    // Fire-and-forget: deliverAdaptation runs the CV_GENERATION LLM call,
+    // the heaviest of the 4 operations converted to async — same pattern
+    // already used by the webhook/reconciliation callers below. Awaiting it
+    // here held the HTTP request open for the full generation time, risking
+    // the same Cloudflare proxy timeout (~100s) that hit MASTERCV. The
+    // response returns with status "paid"; frontend polls GET
+    // /cv-adaptation/:id until status flips to "delivered".
+    this.deliverAdaptation(adaptation.id).catch((err) => {
       this.logger.error(
         `[redeem-credit] delivery failed for ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -2799,7 +2838,7 @@ export class CvAdaptationService {
     const adaptedResume = await this.database.resume.create({
       data: {
         userId: adaptation.userId,
-        title: `${adaptation.masterResume.title} - Adaptado`,
+        title: `${adaptation.masterResume?.title ?? adaptation.jobTitle ?? "CV"} - Adaptado`,
         kind: "adapted",
         isMaster: false,
         status: "reviewed",
@@ -2849,9 +2888,9 @@ export class CvAdaptationService {
   private async ensureAdaptedResumeRecord(adaptation: {
     id: string;
     userId: string;
-    masterResumeId: string;
+    masterResumeId: string | null;
     adaptedResumeId: string | null;
-    masterResume: { title: string };
+    masterResume: { title: string } | null;
     jobTitle: string | null;
   }) {
     if (adaptation.adaptedResumeId) {
@@ -2861,7 +2900,7 @@ export class CvAdaptationService {
     const adaptedResume = await this.database.resume.create({
       data: {
         userId: adaptation.userId,
-        title: `${adaptation.masterResume.title} - Adaptado`,
+        title: `${adaptation.masterResume?.title ?? adaptation.jobTitle ?? "CV"} - Adaptado`,
         kind: "adapted",
         isMaster: false,
         status: "reviewed",
@@ -2890,11 +2929,11 @@ export class CvAdaptationService {
     userId: string;
     createdAt: Date;
     analysisCvSnapshotId: string | null;
-    masterResumeId?: string;
+    masterResumeId?: string | null;
     adaptationSource?: "uploaded_content" | "user_profile";
     inputMode?: "file_upload" | "text_paste" | "profile";
     generationInputSnapshotJson?: unknown;
-    masterResume: { rawText: string | null };
+    masterResume: { rawText: string | null } | null;
   }): Promise<CvAdaptationOutput | null> {
     if (
       adaptation.aiAuditJson &&
@@ -3034,7 +3073,7 @@ export class CvAdaptationService {
       jobDescriptionText: string;
       jobTitle: string | null;
       companyName: string | null;
-      masterResumeId?: string;
+      masterResumeId?: string | null;
       adaptationSource?: "uploaded_content" | "user_profile";
       inputMode?: "file_upload" | "text_paste" | "profile";
       generationInputSnapshotJson?: unknown;
@@ -4179,7 +4218,7 @@ export class CvAdaptationService {
     adaptedContentJson: unknown;
     analysisCvSnapshotId: string | null;
     createdAt: Date;
-    masterResume: { rawText: string | null };
+    masterResume: { rawText: string | null } | null;
   }): Promise<string | null> {
     if (adaptation.analysisCvSnapshotId) {
       const snapshot = await this.database.analysisCvSnapshot.findUnique({
@@ -4202,7 +4241,7 @@ export class CvAdaptationService {
     }
 
     return (
-      adaptation.masterResume.rawText?.trim() ||
+      adaptation.masterResume?.rawText?.trim() ||
       this.synthesizeMasterCvTextFromGuestAnalysis(
         adaptation.adaptedContentJson,
       )

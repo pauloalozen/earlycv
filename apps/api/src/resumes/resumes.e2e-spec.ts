@@ -490,6 +490,53 @@ test("DELETE /api/resumes/:id removes dependent resumes instead of promoting the
   }
 });
 
+test("DELETE /api/resumes/:id never deletes CvAdaptation records that reference it as masterResumeId", async () => {
+  const { app, database } = await createApp();
+  try {
+    const user = await registerUser(app, database, "resume-delete-analysis");
+
+    const masterResume = await database.resume.create({
+      data: {
+        userId: user.userId,
+        title: "Master CV",
+        status: "uploaded",
+        kind: "master",
+        isMaster: true,
+      },
+    });
+
+    const adaptation = await database.cvAdaptation.create({
+      data: {
+        userId: user.userId,
+        masterResumeId: masterResume.id,
+        jobDescriptionText: "Vaga de teste para garantir que a análise sobrevive à exclusão do CV master",
+        status: "delivered",
+      },
+    });
+
+    await request(app.getHttpServer())
+      .delete(`/api/resumes/${masterResume.id}`)
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .expect(200);
+
+    const survivingAdaptation = await database.cvAdaptation.findUnique({
+      where: { id: adaptation.id },
+    });
+
+    // The Resume is gone, but the analysis it was derived from must not be —
+    // onDelete: Cascade on masterResumeId already wiped out real analysis
+    // history once; masterResumeId is now SetNull specifically to prevent
+    // that from ever happening again.
+    assert.notEqual(survivingAdaptation, null);
+    assert.equal(survivingAdaptation?.masterResumeId, null);
+    assert.equal(survivingAdaptation?.status, "delivered");
+
+    await deleteUserByEmail(database, user.email);
+  } finally {
+    await app.close();
+  }
+});
+
 test("GET /api/resumes/master-cv-extraction-status returns latest extraction status for authenticated user", {
   timeout: 120_000,
 }, async () => {

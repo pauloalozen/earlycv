@@ -11,7 +11,7 @@ export type CvAdaptationResponseDto = {
   jobTitle: string | null;
   companyName: string | null;
   previewText: string | null;
-  masterResumeId: string;
+  masterResumeId: string | null;
   templateId: string | null;
   template: {
     id: string;
@@ -29,6 +29,11 @@ export type CvAdaptationResponseDto = {
     | "original_file"
     | "markdown_snapshot"
     | "unavailable_legacy";
+  // Nome do CV usado nesta análise. Vem do snapshot (analysisCvSnapshot),
+  // capturado no momento da análise — nunca depende do Resume master ainda
+  // existir, já que o usuário pode substituí-lo/apagá-lo depois. Só cai para
+  // o Resume (legado) em análises anteriores à existência do snapshot.
+  sourceCvFileName: string | null;
   jobApplicationId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -39,8 +44,9 @@ export const createCvAdaptationResponseDto = (
     template?: { id: string; name: string; slug: string } | null;
     analysisCvSnapshot?: Pick<
       AnalysisCvSnapshot,
-      "sourceType" | "originalFileStorageKey"
+      "sourceType" | "originalFileStorageKey" | "originalFileName"
     > | null;
+    masterResume?: { title: string; sourceFileName: string | null } | null;
   },
 ): CvAdaptationResponseDto => ({
   id: adaptation.id,
@@ -72,6 +78,11 @@ export const createCvAdaptationResponseDto = (
       ? "original_file"
       : "markdown_snapshot"
     : "unavailable_legacy",
+  sourceCvFileName:
+    adaptation.analysisCvSnapshot?.originalFileName ??
+    adaptation.masterResume?.sourceFileName ??
+    adaptation.masterResume?.title ??
+    null,
   jobApplicationId: adaptation.jobApplicationId,
   createdAt: adaptation.createdAt.toISOString(),
   updatedAt: adaptation.updatedAt.toISOString(),
