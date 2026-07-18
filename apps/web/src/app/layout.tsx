@@ -73,6 +73,13 @@ const GA_MEASUREMENT_ID = "G-FGMKXL50XR";
 const analyticsConsentEnabled =
   process.env.NEXT_PUBLIC_ANALYTICS_CONSENT_ENABLED !== "false";
 
+// Server Actions de upload de CV master (meu-cv-master, adaptar, dashboard)
+// aguardam extração via LLM síncrona na API (ResumesService.create ->
+// MasterCvCanonicalExtractionService); desde a troca do modelo pra
+// deepseek/openrouter isso passou a estourar o timeout padrão da Vercel.
+// Aumentado globalmente até a extração rodar em background.
+export const maxDuration = 60;
+
 export const viewport: Viewport = {
   colorScheme: "light",
   themeColor: "#111111",
