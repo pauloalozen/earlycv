@@ -1049,8 +1049,11 @@ export class CvAdaptationService {
     });
     const hasTextInput = Boolean(dto.masterCvText?.trim());
     const shouldUseUploadedFile = !hasTextInput && Boolean(file);
-    let sourceType: "text_input" | "uploaded_file" | "master_resume" =
-      "master_resume";
+    let sourceType:
+      | "text_input"
+      | "uploaded_file"
+      | "master_resume"
+      | "user_profile" = "master_resume";
     let resolvedMasterCvText: string | null = null;
 
     if (hasTextInput && dto.masterCvText) {
@@ -1088,6 +1091,16 @@ export class CvAdaptationService {
         jobDescriptionText: normalizedJobDescriptionText,
         loadMasterCvText: async () => {
           if (resolvedMasterCvText) {
+            return resolvedMasterCvText;
+          }
+
+          // Modo perfil sempre vem dos campos estruturados do UserProfile —
+          // nunca de Resume.rawText, mesmo que um masterResumeId tenha sido
+          // enviado (ver resolveProfileMasterCvText).
+          if (dto.inputMode === "profile") {
+            sourceType = "user_profile";
+            resolvedMasterCvText =
+              await this.resolveProfileMasterCvText(userId);
             return resolvedMasterCvText;
           }
 
@@ -3943,6 +3956,125 @@ export class CvAdaptationService {
     };
   }
 
+  // Modo "perfil" (inputMode: profile) precisa vir sempre dos campos
+  // estruturados do UserProfile, nunca de Resume.rawText — resolvido em
+  // 2026-07-18 após bug reportado onde editar cidade/estado no CV Base não
+  // tinha efeito nenhum na análise/geração, já que o texto usado no modo
+  // perfil vinha só do arquivo originalmente enviado, nunca do perfil.
+  private async resolveProfileMasterCvText(userId: string): Promise<string> {
+    const profile = await this.database.userProfile.findUnique({
+      where: { userId },
+    });
+
+    const canonical = profile
+      ? this.mapProfileRecordToCanonicalData(profile)
+      : null;
+
+    if (!canonical || !this.hasAnyCanonicalValue(canonical)) {
+      throw new BadRequestException(
+        "Complete seu CV Base antes de usar o modo perfil.",
+      );
+    }
+
+    return this.renderCanonicalProfileToText(canonical);
+  }
+
+  private renderCanonicalProfileToText(data: CanonicalProfileData): string {
+    const lines: string[] = [];
+
+    if (data.fullName) lines.push(data.fullName);
+    if (data.headline) lines.push(data.headline);
+
+    const location = [data.city, data.state, data.country]
+      .filter((v) => v?.trim())
+      .join(", ");
+    const contactLine = [
+      location,
+      data.phone,
+      data.contactEmail,
+      data.linkedinUrl,
+    ]
+      .filter((v) => v?.trim())
+      .join(" | ");
+    if (contactLine) lines.push(contactLine);
+
+    if (data.professionalSummary) {
+      lines.push("", "Resumo", data.professionalSummary);
+    }
+
+    if (data.experiences.length > 0) {
+      lines.push("", "Experiência");
+      for (const exp of data.experiences) {
+        const dateRange = [
+          exp.startDate,
+          exp.isCurrent ? "Atual" : exp.endDate,
+        ]
+          .filter((v) => v?.trim())
+          .join(" - ");
+        const header = [
+          [exp.role, exp.company].filter((v) => v?.trim()).join(" — "),
+          dateRange,
+        ]
+          .filter((v) => v?.trim())
+          .join(" | ");
+        if (header) lines.push(header);
+        if (exp.description) lines.push(exp.description);
+        for (const achievement of exp.achievements ?? []) {
+          if (achievement?.trim()) lines.push(`- ${achievement}`);
+        }
+      }
+    }
+
+    if (data.education.length > 0) {
+      lines.push("", "Formação");
+      for (const edu of data.education) {
+        const dateRange = [edu.startDate, edu.endDate]
+          .filter((v) => v?.trim())
+          .join(" - ");
+        const header = [
+          [edu.degree, edu.fieldOfStudy].filter((v) => v?.trim()).join(" em "),
+          edu.institution,
+          dateRange,
+        ]
+          .filter((v) => v?.trim())
+          .join(" | ");
+        if (header) lines.push(header);
+        if (edu.description) lines.push(edu.description);
+      }
+    }
+
+    const allSkills = [
+      ...data.skills.technical,
+      ...data.skills.business,
+      ...data.skills.soft,
+    ].filter((v) => v?.trim());
+    if (allSkills.length > 0) {
+      lines.push("", "Competências", allSkills.join(", "));
+    }
+
+    if (data.languages.length > 0) {
+      lines.push("", "Idiomas");
+      for (const lang of data.languages) {
+        lines.push(
+          [lang.language, lang.level].filter((v) => v?.trim()).join(" - "),
+        );
+      }
+    }
+
+    if (data.certifications.length > 0) {
+      lines.push("", "Certificações");
+      for (const cert of data.certifications) {
+        lines.push(
+          [cert.name, cert.issuer, cert.year]
+            .filter((v) => v?.trim())
+            .join(" - "),
+        );
+      }
+    }
+
+    return lines.join("\n").trim();
+  }
+
   private parseArray(value: unknown): unknown[] {
     return Array.isArray(value) ? value : [];
   }
@@ -4332,7 +4464,11 @@ export class CvAdaptationService {
   private async createAnalysisCvSnapshot(input: {
     userId: string | null;
     guestSessionHash: string | null;
-    sourceType: "text_input" | "uploaded_file" | "master_resume";
+    sourceType:
+      | "text_input"
+      | "uploaded_file"
+      | "master_resume"
+      | "user_profile";
     text: string;
     file?: FileUpload;
   }) {

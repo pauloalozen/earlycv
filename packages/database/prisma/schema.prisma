@@ -229,6 +229,7 @@ enum AnalysisCvSourceType {
   text_input
   uploaded_file
   master_resume
+  user_profile
 }
 
 enum AnalysisConfigValueType {

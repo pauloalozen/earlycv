@@ -160,6 +160,33 @@ async function waitForAnalysisJobStatus(
   );
 }
 
+async function createUsableUserProfile(
+  database: DatabaseService,
+  userId: string,
+) {
+  const data = {
+    fullName: "Usuário de Teste",
+    city: "Santana de Parnaíba",
+    state: "SP",
+    professionalSummary: "Profissional de dados com foco em produto.",
+    experiencesJson: [
+      {
+        id: "exp-1",
+        company: "Empresa X",
+        role: "Analista de Dados",
+        startDate: "2022",
+        isCurrent: true,
+        description: "Responsável por dashboards e pipelines de dados.",
+      },
+    ] as Prisma.InputJsonValue,
+  };
+  await database.userProfile.upsert({
+    where: { userId },
+    create: { userId, ...data },
+    update: data,
+  });
+}
+
 async function promoteToInternalAdmin(
   database: DatabaseService,
   userId: string,
@@ -1007,6 +1034,7 @@ test("POST /cv-adaptation/analyze succeeds regardless of analysisCreditsRemainin
       rawText: "Experiencia em produto e analytics",
     },
   });
+  await createUsableUserProfile(database, user.userId);
 
   await database.user.update({
     where: { id: user.userId },
@@ -1119,6 +1147,7 @@ test("analysis reuses the persisted requirement rule by requirementSourceHash", 
         "Experiencia com analise de dados, SQL, dashboards e comunicacao com stakeholders.",
     },
   });
+  await createUsableUserProfile(database, user.userId);
 
   const rawJobHash = createHash("sha256")
     .update(normalizedRawJobText)

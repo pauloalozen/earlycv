@@ -829,6 +829,151 @@ test("analyzeAuthenticated accepts masterCvText without file or masterResumeId",
   assert.equal(result.previewText, "preview");
 });
 
+test("analyzeAuthenticated with inputMode=profile builds masterCvText from UserProfile, never from Resume.rawText", async () => {
+  let aiLoadedText = "";
+  let resumeLookupCalled = false;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: {
+        findFirst: async () => {
+          resumeLookupCalled = true;
+          return { id: "resume-1", rawText: "Texto do arquivo, sem cidade nenhuma." };
+        },
+      },
+      userProfile: {
+        findUnique: async () => ({
+          fullName: "Maria Teste",
+          phone: "+55 11 99999-0000",
+          linkedinUrl: "https://linkedin.com/in/mariateste",
+          city: "Santana de Parnaíba",
+          state: "SP",
+          country: "Brasil",
+          headline: "Analista de Dados Sênior",
+          professionalSummary:
+            "Profissional de dados com foco em produto e negócio.",
+          experiencesJson: [
+            {
+              id: "exp-1",
+              company: "Empresa X",
+              role: "Analista de Dados",
+              startDate: "2022",
+              isCurrent: true,
+              description: "Responsável por dashboards e pipelines.",
+              achievements: ["Reduziu tempo de relatório em 40%"],
+            },
+          ],
+          educationJson: [],
+          skillsJson: { technical: ["SQL", "Python"], business: [], soft: [] },
+          languagesJson: [],
+          certificationsJson: [],
+        }),
+      },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-profile-1" }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async ({
+        loadMasterCvText,
+      }: {
+        loadMasterCvText: () => Promise<string>;
+      }) => {
+        aiLoadedText = await loadMasterCvText();
+        return {
+          ok: true,
+          cached: false,
+          canonicalHash: "hash-profile-1",
+          result: {
+            adaptedContentJson: { ok: true },
+            masterCvText: "valor ignorado",
+            previewText: "preview",
+          },
+        };
+      },
+    },
+  );
+
+  await service.analyzeAuthenticated("user-1", {
+    jobDescriptionText:
+      "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+    inputMode: "profile",
+    masterResumeId: "resume-1",
+    saveAsMaster: false,
+    turnstileToken: "token",
+  });
+
+  assert.ok(
+    aiLoadedText.includes("Santana de Parnaíba"),
+    "masterCvText must include the structured profile location",
+  );
+  assert.ok(!aiLoadedText.includes("sem cidade nenhuma"));
+  assert.equal(
+    resumeLookupCalled,
+    false,
+    "Resume.rawText must never be read in profile mode, even if masterResumeId is sent",
+  );
+});
+
+test("analyzeAuthenticated with inputMode=profile rejects when UserProfile has no usable content", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      userProfile: {
+        findUnique: async () => null,
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("must not reach AI");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async ({
+        loadMasterCvText,
+      }: {
+        loadMasterCvText: () => Promise<string>;
+      }) => {
+        await loadMasterCvText();
+        throw new Error("loadMasterCvText should have thrown first");
+      },
+    },
+  );
+
+  await assert.rejects(
+    () =>
+      service.analyzeAuthenticated("user-1", {
+        jobDescriptionText:
+          "Descricao da vaga com requisitos tecnicos, responsabilidades diarias, habilidades esperadas, experiencia necessaria e colaboracao com produto.",
+        inputMode: "profile",
+        saveAsMaster: false,
+        turnstileToken: "token",
+      }),
+    /Complete seu CV Base/i,
+  );
+});
+
 test("create delegates async analysis through protected boundary instead of direct AI call", async () => {
   let directAnalyzeCalls = 0;
   let protectedCalls = 0;
