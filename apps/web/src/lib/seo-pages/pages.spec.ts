@@ -21,7 +21,7 @@ test("seo registry keeps unique slugs and canonical paths", () => {
 
 test("seo registry returns only published pages for static generation", () => {
   const published = getPublishedSeoPages();
-  assert.equal(published.length, 5);
+  assert.equal(published.length, 7);
   assert.equal(
     published.every((page) => page.published),
     true,

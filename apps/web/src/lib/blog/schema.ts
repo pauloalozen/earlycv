@@ -66,6 +66,10 @@ export function parseBlogFrontmatter(
   }
 
   return {
+    canonical:
+      typeof input.canonical === "string" && input.canonical.trim().length > 0
+        ? input.canonical.trim()
+        : undefined,
     category: assertString(input.category, "category"),
     coverImage:
       typeof input.coverImage === "string" && input.coverImage.trim().length > 0

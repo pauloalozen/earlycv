@@ -30,7 +30,7 @@ export function SeoPageLayout({ children }: { children: ReactNode }) {
       <PublicNavBar hideHowItWorksLink />
       <div
         style={{
-          maxWidth: 720,
+          maxWidth: 760,
           margin: "0 auto",
           padding: "56px 40px 0",
           display: "flow-root",

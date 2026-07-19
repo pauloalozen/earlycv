@@ -110,6 +110,7 @@ export const curriculoGupyPage: SeoPageDefinition = {
     },
     { href: "/curriculo-ats", label: "Currículo ATS" },
     { href: "/blog/curriculo-ats", label: "Blog: currículo ATS" },
+    { href: "/preparar-curriculo", label: "Preparar currículo" },
   ],
   cta: {
     title: "Descubra se seu currículo combina com a vaga",

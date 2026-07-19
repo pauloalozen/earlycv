@@ -1,7 +1,7 @@
 ---
 title: "Como adaptar currículo para uma vaga sem inventar experiência"
 description: "Passo a passo prático para ajustar seu currículo para uma vaga específica com fidelidade total ao seu histórico real — reorganizando foco, linguagem e evidências para aumentar aderência sem distorcer fatos."
-slug: como-adaptar-curriculo-para-vaga
+slug: como-adaptar-curriculo-para-vaga-guia-avancado
 publishedAt: "2026-05-01"
 updatedAt: "2026-05-01"
 category: Curriculo

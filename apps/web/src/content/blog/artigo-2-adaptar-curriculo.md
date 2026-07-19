@@ -2,6 +2,7 @@
 title: "Como adaptar o currículo para cada vaga sem reescrever tudo do zero"
 description: "Um currículo único para todas as vagas é o erro mais comum de quem está procurando emprego. Aprenda o método para personalizar seu documento por candidatura em menos tempo do que parece — e por que isso faz diferença real na taxa de retorno."
 slug: como-adaptar-curriculo-para-vaga
+canonical: "https://www.earlycv.com.br/adaptar-curriculo-para-vaga"
 publishedAt: "2026-05-03"
 updatedAt: "2026-05-03"
 category: Curriculo
@@ -52,7 +53,7 @@ Dados da Gupy de 2025 mostraram que currículos personalizados têm 3,2 vezes ma
 
 ## O que adaptar (e o que não precisa mudar)
 
-Antes de tudo: adaptar não significa reescrever tudo. Existe uma distinção importante entre o que é fixo e o que é variável no currículo.
+Antes de tudo: adaptar não significa reescrever tudo. Existe uma distinção importante entre o que é fixo e o que é variável no currículo — cada [currículo por vaga](/curriculo-por-vaga) muda só a parte que precisa conversar com aquela oportunidade específica.
 
 **O que não muda:**
 
@@ -156,3 +157,5 @@ A EarlyCV foi construída para essa tarefa específica. Você faz upload do seu 
 O que levaria 30 minutos de análise manual leva menos de 5 minutos. E você ainda recebe uma visualização do gap de aderência que mostra exatamente onde seu currículo estava perdendo pontos naquela vaga.
 
 Experimente gratuitamente com sua primeira adaptação em [/adaptar](/adaptar).
+
+[Veja o guia completo sobre como adaptar currículo para vaga](/adaptar-curriculo-para-vaga)

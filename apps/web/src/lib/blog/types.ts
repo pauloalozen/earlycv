@@ -6,6 +6,7 @@ export type BlogFaqItem = {
 };
 
 export type BlogFrontmatter = {
+  canonical?: string;
   category: string;
   coverImage?: string;
   description: string;
