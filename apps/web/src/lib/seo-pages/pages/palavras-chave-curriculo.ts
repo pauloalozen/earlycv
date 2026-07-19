@@ -525,6 +525,10 @@ export const palavrasChaveCurriculoHubPage: SeoPageDefinition = {
       href: "/adaptar-curriculo-para-vaga",
       label: "adaptar o currículo para a vaga",
     },
+    {
+      href: "/blog/palavras-chave-curriculo",
+      label: "Como usar palavras-chave no currículo sem parecer genérico",
+    },
   ],
   cta: {
     title: "Descubra se seu currículo combina com a vaga",

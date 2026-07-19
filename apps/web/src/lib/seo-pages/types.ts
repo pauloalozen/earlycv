@@ -4,6 +4,8 @@ export const SEO_PAGE_SLUGS = [
   "curriculo-gupy",
   "modelo-curriculo-ats",
   "palavras-chave-curriculo",
+  "preparar-curriculo",
+  "curriculo-por-vaga",
 ] as const;
 
 export type SeoPageSlug = (typeof SEO_PAGE_SLUGS)[number];

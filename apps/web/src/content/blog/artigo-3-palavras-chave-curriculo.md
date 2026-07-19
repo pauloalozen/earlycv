@@ -17,8 +17,8 @@ tags:
 featured: false
 readingTime: "8 min"
 status: published
-seoTitle: "Palavras-chave no currículo: guia prático para profissionais de tech e dados"
-seoDescription: "Como identificar, selecionar e aplicar palavras-chave no currículo com contexto real, evitando exageros e termos vazios. Guia com exemplos para profissionais de tecnologia, dados e produto."
+seoTitle: "Palavras-chave no Currículo: como escolher e usar do jeito certo"
+seoDescription: "Descubra quais palavras-chave colocar no currículo, onde posicioná-las e como usá-las sem parecer forçado. Exemplos práticos por área."
 mainTag: Keywords
 faq:
   - question: "Quantas palavras-chave devo colocar no currículo?"
@@ -82,7 +82,7 @@ Organize o que encontrou em três grupos:
 - **Competências técnicas contextuais**: práticas e abordagens que variam por empresa (ex: modelagem dimensional, análise exploratória, feature engineering);
 - **Indicadores de impacto**: o tipo de resultado esperado (ex: redução de churn, aumento de conversão, eficiência operacional).
 
-Essa separação ajuda a priorizar o que colocar em evidência e onde no currículo.
+Essa separação ajuda a priorizar o que colocar em evidência e onde no currículo. Se você já sabe para qual vaga vai se candidatar, vale ir direto ao ponto: o passo a passo de [adaptar o currículo para cada vaga](/adaptar-curriculo-para-vaga) mostra como aplicar essa priorização na prática.
 
 ## Onde posicionar palavras-chave no currículo
 
@@ -147,3 +147,5 @@ Keyword com contexto é sinal. Keyword sem contexto é ruído.
 Para aprofundar a estrutura do documento em si, veja o guia de [currículo ATS](/blog/curriculo-ats). Para aplicar tudo isso em uma candidatura específica, o passo a passo de [adaptação por vaga](/blog/como-adaptar-curriculo-para-vaga) cobre o processo completo.
 
 Se quiser validar aderência de forma objetiva antes de enviar, use a análise gratuita da EarlyCV em [/adaptar](/adaptar).
+
+[Veja a lista completa de palavras-chave por área e cargo](/palavras-chave-curriculo)

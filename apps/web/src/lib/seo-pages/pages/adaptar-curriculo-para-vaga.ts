@@ -153,6 +153,11 @@ export const adaptarCurriculoParaVagaPage: SeoPageDefinition = {
       href: "/palavras-chave-curriculo",
       label: "palavras-chave certas",
     },
+    {
+      href: "/blog/como-adaptar-curriculo-para-vaga",
+      label: "Como adaptar o currículo para cada vaga (guia completo)",
+    },
+    { href: "/curriculo-por-vaga", label: "currículo por vaga" },
   ],
   cta: {
     title: "Descubra se seu currículo combina com a vaga",

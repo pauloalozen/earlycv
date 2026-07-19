@@ -128,3 +128,5 @@ O currículo que maximiza suas chances é o que foi ajustado para a vaga especí
 Fazer esse ajuste manualmente a cada candidatura é trabalhoso. A análise de aderência da EarlyCV automatiza exatamente esse trabalho: você cola a descrição da vaga, faz upload do seu currículo e o sistema identifica os gaps de palavras-chave, sugere onde e como incorporá-los e gera uma versão adaptada sem inventar nada — apenas reorganizando e destacando o que já existe na sua experiência real.
 
 O resultado é um currículo que fala a língua de cada vaga sem você precisar reescrever tudo do zero. Experimente gratuitamente em [/adaptar](/adaptar).
+
+Se você está montando o documento do zero ou quer revisar a estrutura antes de otimizar para ATS, veja o passo a passo completo em [preparar currículo](/preparar-curriculo).
