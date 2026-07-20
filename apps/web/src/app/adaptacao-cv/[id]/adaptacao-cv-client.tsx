@@ -632,6 +632,7 @@ function HeaderSectionView({
   ) => void;
 }) {
   const item = section.items[0];
+  const [contactDraft, setContactDraft] = useState<string | null>(null);
   if (!item) return null;
 
   return (
@@ -676,17 +677,20 @@ function HeaderSectionView({
             <input
               id="hdr-contact"
               type="text"
-              value={(item.bullets ?? []).join(" | ")}
-              onChange={(e) =>
+              value={contactDraft ?? (item.bullets ?? []).join(" | ")}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setContactDraft(raw);
                 onItemChange(
                   0,
                   "bullets",
-                  e.target.value
+                  raw
                     .split("|")
                     .map((s) => s.trim())
                     .filter(Boolean),
-                )
-              }
+                );
+              }}
+              onBlur={() => setContactDraft(null)}
               style={inputStyle}
             />
           </div>

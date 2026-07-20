@@ -1056,6 +1056,21 @@ export class CvAdaptationService {
       | "user_profile" = "master_resume";
     let resolvedMasterCvText: string | null = null;
 
+    // Cache de dedupe é chaveado pelo payload abaixo; no modo "profile" nada
+    // ali refletia o conteúdo do UserProfile (masterResumeId/cvFingerprint
+    // ficam null), então editar o CV Base e reanalisar a mesma vaga dentro
+    // do TTL do cache devolvia o resultado antigo, ignorando a edição.
+    // profileUpdatedAt garante que qualquer alteração no formulário invalide
+    // o cache.
+    let profileUpdatedAtIso: string | null = null;
+    if (dto.inputMode === "profile") {
+      const profileTimestamp = await this.database.userProfile.findUnique({
+        where: { userId },
+        select: { updatedAt: true },
+      });
+      profileUpdatedAtIso = profileTimestamp?.updatedAt?.toISOString() ?? null;
+    }
+
     if (hasTextInput && dto.masterCvText) {
       this.validateCvTextInput(this.normalizeSnapshotText(dto.masterCvText));
     }
@@ -1189,8 +1204,20 @@ export class CvAdaptationService {
               : null,
           hasFile: shouldUseUploadedFile,
           hasTextInput,
+          // Modo "text_paste" (usado também na reanálise ao editar o CV em
+          // /adaptacao-cv/[id]) não tinha nada no payload ligado ao conteúdo
+          // do texto colado — reanalisar a mesma vaga com um CV editado
+          // (ex: excluindo uma experiência) batia no cache e devolvia o
+          // resultado antigo, sem refletir a edição.
+          textFingerprint:
+            hasTextInput && dto.masterCvText
+              ? this.buildFileFingerprint(
+                  Buffer.from(this.normalizeSnapshotText(dto.masterCvText)),
+                )
+              : null,
           jobDescriptionText: normalizedJobDescriptionText,
           masterResumeId: dto.masterResumeId ?? null,
+          profileUpdatedAt: profileUpdatedAtIso,
           route: "cv-adaptation/analyze",
           saveAsMaster: dto.saveAsMaster === true,
           userId,
@@ -2596,6 +2623,34 @@ export class CvAdaptationService {
     return isUnlocked || cvUnlock?.status === "UNLOCKED";
   }
 
+  // Fallback de contato para geração de PDF/DOCX: preenche nome, telefone,
+  // email e localização só quando o header gerado pela IA vier vazio nesses
+  // campos — os dados estruturados do UserProfile são a fonte da verdade.
+  private async resolveProfileContactFallback(userId: string) {
+    const profile = await this.database.userProfile.findUnique({
+      where: { userId },
+      select: {
+        fullName: true,
+        phone: true,
+        contactEmail: true,
+        city: true,
+        state: true,
+        linkedinUrl: true,
+      },
+    });
+
+    if (!profile) return null;
+
+    return {
+      fullName: profile.fullName,
+      phone: profile.phone,
+      email: profile.contactEmail,
+      city: profile.city,
+      state: profile.state,
+      linkedinUrl: profile.linkedinUrl,
+    };
+  }
+
   async downloadPdf(userId: string, id: string, res: Response): Promise<void> {
     const adaptation = await this.database.cvAdaptation.findFirst({
       where: { id, userId },
@@ -2652,6 +2707,10 @@ export class CvAdaptationService {
       generatedOutput ?? adaptation.aiAuditJson,
     );
 
+    const profileFallback = await this.resolveProfileContactFallback(userId);
+    const contactMode =
+      adaptation.adaptationSource === "user_profile" ? "override" : "fallback";
+
     let pdfBuffer: Buffer;
 
     if (resolvedTemplateFileUrl?.endsWith(".docx")) {
@@ -2659,6 +2718,8 @@ export class CvAdaptationService {
       const docxBuffer = await this.docxService.generateDocx(
         output,
         resolvedTemplateFileUrl,
+        profileFallback,
+        contactMode,
       );
       pdfBuffer = await this.docxService.toPdf(docxBuffer);
     } else {
@@ -2666,6 +2727,8 @@ export class CvAdaptationService {
       pdfBuffer = await this.pdfService.generatePdf(
         output,
         resolvedStructureJson ?? resolvedTemplateSlug,
+        profileFallback,
+        contactMode,
       );
     }
 
@@ -2712,6 +2775,8 @@ export class CvAdaptationService {
       ? null
       : await this.getDefaultTemplate();
 
+    const profileFallback = await this.resolveProfileContactFallback(userId);
+
     const docxBuffer = await this.docxService.generateDocx(
       this.resolveEffectiveCvOutput(
         (adaptation as { editedCvJson?: unknown }).editedCvJson,
@@ -2719,6 +2784,7 @@ export class CvAdaptationService {
         generatedOutput ?? adaptation.aiAuditJson,
       ),
       templateFileUrl ?? fallbackTemplate?.fileUrl ?? null,
+      profileFallback,
     );
 
     res.setHeader(
@@ -3912,6 +3978,7 @@ export class CvAdaptationService {
 
   private mapProfileRecordToCanonicalData(profile: {
     fullName: string | null;
+    contactEmail: string | null;
     phone: string | null;
     linkedinUrl: string | null;
     city: string | null;
@@ -3933,6 +4000,7 @@ export class CvAdaptationService {
 
     return {
       city: profile.city ?? undefined,
+      contactEmail: profile.contactEmail ?? undefined,
       country: profile.country ?? undefined,
       education: this.parseEducationArray(profile.educationJson),
       experiences: this.parseExperienceArray(profile.experiencesJson),
