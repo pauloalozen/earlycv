@@ -5,6 +5,7 @@ import type {
   CvAdaptationOutput,
   CvSection,
 } from "./dto/cv-adaptation-output.types";
+import type { ProfileContactFallback } from "./cv-adaptation-docx.service";
 
 export interface TemplateStructureJson {
   templateHtml?: string;
@@ -20,6 +21,8 @@ export class CvAdaptationPdfService {
   async generatePdf(
     output: CvAdaptationOutput,
     structureJsonOrSlug: TemplateStructureJson | string | null,
+    profileFallback?: ProfileContactFallback | null,
+    contactMode: "fallback" | "override" = "fallback",
   ): Promise<Buffer> {
     const structureJson =
       typeof structureJsonOrSlug === "string" || structureJsonOrSlug === null
@@ -31,8 +34,13 @@ export class CvAdaptationPdfService {
         : "classico-simples";
 
     const html = structureJson?.templateHtml
-      ? this.injectIntoTemplateHtml(output, structureJson)
-      : this.buildHtml(output, templateSlug);
+      ? this.injectIntoTemplateHtml(
+          output,
+          structureJson,
+          profileFallback,
+          contactMode,
+        )
+      : this.buildHtml(output, templateSlug, profileFallback, contactMode);
 
     const puppeteer = await import("puppeteer");
     const browser = await puppeteer.default.launch({
@@ -64,6 +72,8 @@ export class CvAdaptationPdfService {
   private injectIntoTemplateHtml(
     output: CvAdaptationOutput,
     structureJson: TemplateStructureJson,
+    profileFallback?: ProfileContactFallback | null,
+    contactMode: "fallback" | "override" = "fallback",
   ): string {
     const templateHtml = this.stripCodeFences(structureJson.templateHtml ?? "");
     const sectionHeaderHtml = structureJson.sectionHeaderHtml
@@ -82,9 +92,17 @@ export class CvAdaptationPdfService {
     const contentSections =
       output.sections?.filter((s) => s.sectionType !== "header") ?? [];
 
-    const candidateName = headerSection?.items?.[0]?.heading ?? "";
+    const candidateName = this.resolveCandidateName(
+      headerSection,
+      profileFallback,
+      contactMode,
+    );
     const jobTitle = "";
-    const contactLine = (headerSection?.items?.[0]?.bullets ?? []).join(" | ");
+    const contactLine = this.buildContactLine(
+      headerSection,
+      profileFallback,
+      contactMode,
+    );
     const summary = this.escapeHtml(output.summary ?? "");
 
     const sectionsHtml = contentSections
@@ -185,7 +203,12 @@ export class CvAdaptationPdfService {
     return result;
   }
 
-  private buildHtml(output: CvAdaptationOutput, templateSlug: string): string {
+  private buildHtml(
+    output: CvAdaptationOutput,
+    templateSlug: string,
+    profileFallback?: ProfileContactFallback | null,
+    contactMode: "fallback" | "override" = "fallback",
+  ): string {
     const templatePath = this.resolveTemplatePath(templateSlug);
     let template = readFileSync(templatePath, "utf-8");
 
@@ -195,8 +218,16 @@ export class CvAdaptationPdfService {
     const contentSections =
       output.sections?.filter((s) => s.sectionType !== "header") ?? [];
 
-    const candidateName = headerSection?.items?.[0]?.heading ?? "";
-    const contactLine = (headerSection?.items?.[0]?.bullets ?? []).join(" | ");
+    const candidateName = this.resolveCandidateName(
+      headerSection,
+      profileFallback,
+      contactMode,
+    );
+    const contactLine = this.buildContactLine(
+      headerSection,
+      profileFallback,
+      contactMode,
+    );
     const summary = this.escapeHtml(output.summary ?? "");
     const sectionsHtml = this.buildSectionsHtml(contentSections);
 
@@ -207,6 +238,47 @@ export class CvAdaptationPdfService {
       .replace("{{sectionsHtml}}", sectionsHtml);
 
     return template;
+  }
+
+  // Modo "override" (CV master / perfil): o formulário do UserProfile é a
+  // fonte da verdade e tem precedência sobre o header gerado pela IA — a IA
+  // só complementa o que o profile não tiver preenchido. Modo "fallback"
+  // (upload de arquivo/texto): é o contrário, o header da IA manda.
+  private resolveCandidateName(
+    headerSection: CvSection | undefined,
+    profileFallback?: ProfileContactFallback | null,
+    contactMode: "fallback" | "override" = "fallback",
+  ): string {
+    const aiName = headerSection?.items?.[0]?.heading?.trim() ?? "";
+    const profileName = profileFallback?.fullName?.trim() ?? "";
+    return contactMode === "override"
+      ? profileName || aiName
+      : aiName || profileName;
+  }
+
+  private buildContactLine(
+    headerSection: CvSection | undefined,
+    profileFallback?: ProfileContactFallback | null,
+    contactMode: "fallback" | "override" = "fallback",
+  ): string {
+    const bullets = headerSection?.items?.[0]?.bullets ?? [];
+    const aiContactLine = bullets.join(" | ");
+
+    const profileLocationBase = [profileFallback?.city, profileFallback?.state]
+      .filter((v) => v?.trim())
+      .join(", ");
+    const profileContactLine = [
+      profileLocationBase,
+      profileFallback?.phone,
+      profileFallback?.email,
+      profileFallback?.linkedinUrl,
+    ]
+      .filter((v) => v?.trim())
+      .join(" | ");
+
+    return contactMode === "override"
+      ? profileContactLine || aiContactLine
+      : aiContactLine || profileContactLine;
   }
 
   private resolveTemplatePath(templateSlug: string): string {

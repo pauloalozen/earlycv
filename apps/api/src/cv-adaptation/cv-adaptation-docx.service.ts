@@ -33,6 +33,15 @@ const SECTION_LABELS = {
   },
 } as const;
 
+export interface ProfileContactFallback {
+  fullName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  city?: string | null;
+  state?: string | null;
+  linkedinUrl?: string | null;
+}
+
 @Injectable()
 export class CvAdaptationDocxService {
   constructor(
@@ -43,15 +52,27 @@ export class CvAdaptationDocxService {
   /**
    * Generate DOCX from a stored template file + CV adaptation output.
    * Falls back to a plain text buffer if no template file URL is provided.
+   * `profileFallback` são os campos de contato do UserProfile. Quando
+   * `contactMode: "override"` (adaptação criada no modo CV master / perfil),
+   * eles têm precedência sobre o que a IA escreveu no header — o formulário
+   * é a fonte da verdade, o header da IA só serve de complemento. No modo
+   * "fallback" (upload de arquivo / texto colado), é o inverso: o header da
+   * IA manda, o profile só preenche o que ficou vazio.
    */
   async generateDocx(
     output: CvAdaptationOutput,
     templateFileUrl: string | null,
+    profileFallback?: ProfileContactFallback | null,
+    contactMode: "fallback" | "override" = "fallback",
   ): Promise<Buffer> {
     if (!templateFileUrl?.endsWith(".docx")) {
       return this.buildFallbackDocx(output);
     }
-    const data = this.mapOutputToTemplateData(output);
+    const data = this.mapOutputToTemplateData(
+      output,
+      profileFallback,
+      contactMode,
+    );
     return this.templateDocx.fillFromStorage(templateFileUrl, data);
   }
 
@@ -151,7 +172,11 @@ export class CvAdaptationDocxService {
     return scores[0][1] > 0 ? scores[0][0] : "pt";
   }
 
-  private mapOutputToTemplateData(output: CvAdaptationOutput) {
+  private mapOutputToTemplateData(
+    output: CvAdaptationOutput,
+    profileFallback?: ProfileContactFallback | null,
+    contactMode: "fallback" | "override" = "fallback",
+  ) {
     // Fallback only: summary has no section of its own, so it has no
     // AI-generated title to reuse. Every other section title below comes
     // straight from `output` (already in the CV's own language).
@@ -180,8 +205,11 @@ export class CvAdaptationDocxService {
       ["idiomas", "languages"],
     );
 
-    const { candidateName, phone, email, location } =
-      this.extractHeader(headerSection);
+    const { candidateName, phone, email, location } = this.extractHeader(
+      headerSection,
+      profileFallback,
+      contactMode,
+    );
 
     const summaryText = output.summary ?? "";
     let mainGoal = output.mainGoal ?? "";
@@ -235,18 +263,47 @@ export class CvAdaptationDocxService {
     };
   }
 
-  private extractHeader(section?: CvSection) {
+  private extractHeader(
+    section?: CvSection,
+    profileFallback?: ProfileContactFallback | null,
+    contactMode: "fallback" | "override" = "fallback",
+  ) {
     const bullets = section?.items?.[0]?.bullets ?? [];
-    const candidateName = section?.items?.[0]?.heading ?? "";
 
-    const phone =
+    const aiName = section?.items?.[0]?.heading?.trim() ?? "";
+    const aiPhone =
       bullets.find((b) => /[\d\s()+-]{7,}/.test(b) && !b.includes("@")) ?? "";
-    const email = bullets.find((b) => b.includes("@")) ?? "";
-    const location = bullets
-      .filter((b) => b !== phone && b !== email)
+    const aiEmail = bullets.find((b) => b.includes("@")) ?? "";
+    const aiLocation = bullets
+      .filter((b) => b !== aiPhone && b !== aiEmail)
       .join(" | ");
 
-    return { candidateName, phone, email, location };
+    const profileName = profileFallback?.fullName?.trim() ?? "";
+    const profilePhone = profileFallback?.phone?.trim() ?? "";
+    const profileEmail = profileFallback?.email?.trim() ?? "";
+    const profileLocationBase = [profileFallback?.city, profileFallback?.state]
+      .filter((v) => v?.trim())
+      .join(", ");
+    const profileLocation = [profileLocationBase, profileFallback?.linkedinUrl]
+      .filter((v) => v?.trim())
+      .join(" | ");
+
+    // Modo "override" (CV master / perfil): o formulário é a fonte da
+    // verdade e tem precedência sobre o que a IA reescreveu no header — a IA
+    // só complementa o que o profile não tiver. Modo "fallback" (upload de
+    // arquivo/texto): é o contrário, o header da IA manda.
+    const profileFirst = contactMode === "override";
+
+    return {
+      candidateName: profileFirst
+        ? profileName || aiName
+        : aiName || profileName,
+      phone: profileFirst ? profilePhone || aiPhone : aiPhone || profilePhone,
+      email: profileFirst ? profileEmail || aiEmail : aiEmail || profileEmail,
+      location: profileFirst
+        ? profileLocation || aiLocation
+        : aiLocation || profileLocation,
+    };
   }
 
   private mapExperience(section?: CvSection) {
