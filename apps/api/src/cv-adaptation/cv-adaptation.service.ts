@@ -1204,6 +1204,17 @@ export class CvAdaptationService {
               : null,
           hasFile: shouldUseUploadedFile,
           hasTextInput,
+          // Modo "text_paste" (usado também na reanálise ao editar o CV em
+          // /adaptacao-cv/[id]) não tinha nada no payload ligado ao conteúdo
+          // do texto colado — reanalisar a mesma vaga com um CV editado
+          // (ex: excluindo uma experiência) batia no cache e devolvia o
+          // resultado antigo, sem refletir a edição.
+          textFingerprint:
+            hasTextInput && dto.masterCvText
+              ? this.buildFileFingerprint(
+                  Buffer.from(this.normalizeSnapshotText(dto.masterCvText)),
+                )
+              : null,
           jobDescriptionText: normalizedJobDescriptionText,
           masterResumeId: dto.masterResumeId ?? null,
           profileUpdatedAt: profileUpdatedAtIso,
