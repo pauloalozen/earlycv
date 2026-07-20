@@ -317,6 +317,29 @@ If a selected keyword cannot be honestly integrated into experience or summary, 
 
 9. The final CV must not reveal that it was generated, optimized, analyzed, scored, or adapted by a system.
 
+10. EXPERIENCE BULLETS MUST ALWAYS BE WRITTEN IN THE FIRST PERSON (implied subject "eu"/"yo"/"I"), NEVER in the third person.
+In Portuguese and Spanish this means the verb must be conjugated in the first-person singular past tense, NOT the third-person singular.
+This rule is mandatory in every language and applies to every rewritten bullet, with no exceptions.
+
+Portuguese — FORBIDDEN (third person):
+"Liderou a equipe de vendas."
+"Desenvolveu dashboards em Power BI."
+"Estruturou o processo de onboarding."
+"Evoluiu a base de clientes em 20%."
+
+Portuguese — REQUIRED (first person):
+"Liderei a equipe de vendas."
+"Desenvolvi dashboards em Power BI."
+"Estruturei o processo de onboarding."
+"Evolui a base de clientes em 20%."
+
+Spanish — FORBIDDEN (third person): "Lideró el equipo de ventas." / "Desarrolló dashboards en Power BI."
+Spanish — REQUIRED (first person): "Lideré el equipo de ventas." / "Desarrollé dashboards en Power BI."
+
+English does not distinguish first vs. third person in the simple past tense (e.g. "Led", "Developed" are correct as-is) — no change needed for English output, but never rewrite an English bullet into an explicit third-person construction (e.g. "He led", "She developed").
+
+Before finalizing each bullet, verify the verb conjugation is first-person singular. If it is third-person, rewrite it.
+
 ═══════════════════════════════════════
 GOAL
 ═══════════════════════════════════════
@@ -365,6 +388,7 @@ For each role:
 - Rewrite bullets to align with the job responsibilities whenever possible
 - Reinterpret existing experience to match the job context WITHOUT inventing anything
 - Translate generic experience into domain-relevant impact
+- Every verb must be in the first person (see rule 10 above) — "Desenvolvi", "Liderei", "Estruturei", "Evolui", never "Desenvolveu", "Liderou", "Estruturou", "Evoluiu"
 
 Examples:
 - "data pipeline" → "data pipeline supporting business decision-making / analytics"
