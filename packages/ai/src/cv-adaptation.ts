@@ -203,7 +203,7 @@ type RequirementScoringSummary = {
   qualitativeSignals: string[];
 };
 
-export const CV_ANALYSIS_PROMPT_VERSION = "2026-06-29.v1";
+export const CV_ANALYSIS_PROMPT_VERSION = "2026-07-28.v1";
 
 const SYSTEM_PROMPT = `You are an expert CV enhancement specialist focused on the Brazilian job market. Your task is to improve a candidate's existing CV to better match a specific job opening and improve machine readability, while keeping the final CV natural, credible, and human-written.
 
@@ -1619,21 +1619,21 @@ SAÍDA — JSON VÁLIDO, SEM MARKDOWN
   "keywords": {
     "presentes": [
       {
-        "kw": "keyword presente no CV",
+        "kw": "keyword curta (máx. 4 palavras) presente no CV",
         "pontos": number,
         "importance": "high" | "medium" | "low"
       }
     ],
     "possiveis": [
       {
-        "kw": "keyword com base parcial no CV e que pode ser reforçada sem inventar fatos",
+        "kw": "keyword curta (máx. 4 palavras) com base parcial no CV e que pode ser reforçada sem inventar fatos",
         "pontos": number,
         "importance": "high" | "medium" | "low"
       }
     ],
     "ausentes": [
       {
-        "kw": "termo selecionável de CV ausente, curto e relevante para triagem",
+        "kw": "termo selecionável de CV ausente, curto (máx. 4 palavras) e relevante para triagem",
         "pontos": number,
         "importance": "high" | "medium" | "low"
       }
