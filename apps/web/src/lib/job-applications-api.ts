@@ -29,7 +29,8 @@ export type JobApplicationEventType =
   | "STATUS_CHANGED"
   | "NOTE_ADDED"
   | "MARKED_AS_SENT"
-  | "INTERVIEW_PREP_GENERATED";
+  | "INTERVIEW_PREP_GENERATED"
+  | "COVER_LETTER_GENERATED";
 
 export type JobApplicationEvent = {
   id: string;
@@ -71,6 +72,35 @@ export type InterviewPrepDto = {
   status: InterviewPrepStatus;
   lastError: string | null;
   generatedContentJson: InterviewPrepContent | null;
+  generatedAt: string | null;
+};
+
+export type CoverLetterStatus =
+  | "pending"
+  | "processing"
+  | "succeeded"
+  | "failed";
+export type CoverLetterStyle =
+  | "formal"
+  | "moderno"
+  | "executivo"
+  | "primeiro_emprego";
+export type CoverLetterLengthMode = "curta" | "media" | "completa" | "custom";
+
+export type CoverLetterContent = {
+  body: string;
+  characterCount: number;
+};
+
+export type CoverLetterDto = {
+  id: string;
+  jobApplicationId: string;
+  status: CoverLetterStatus;
+  style: CoverLetterStyle;
+  lengthMode: CoverLetterLengthMode;
+  maxCharacters: number | null;
+  lastError: string | null;
+  generatedContentJson: CoverLetterContent | null;
   generatedAt: string | null;
 };
 
@@ -143,6 +173,7 @@ export type JobApplicationDetailDto = Omit<
   "interviewPrep" | "cvAdaptations"
 > & {
   interviewPrep: InterviewPrepDto | null;
+  coverLetter: CoverLetterDto | null;
   cvAdaptations: Array<{
     id: string;
     status: string;
@@ -418,6 +449,37 @@ export async function generateOrGetInterviewPrep(
     throw new Error(detail || "Falha ao gerar preparação para entrevista");
   }
   return response.json() as Promise<InterviewPrepDto>;
+}
+
+export async function generateOrGetCoverLetter(
+  id: string,
+  input: {
+    style: CoverLetterStyle;
+    lengthMode: CoverLetterLengthMode;
+    maxCharacters?: number;
+    adaptationId?: string;
+  },
+): Promise<CoverLetterDto> {
+  const response = await apiRequest(
+    "POST",
+    `/job-applications/${id}/cover-letter`,
+    input,
+  );
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (Array.isArray(payload.message)) {
+        detail = payload.message.join("; ");
+      }
+    } catch {
+      // noop
+    }
+    throw new Error(detail || "Falha ao gerar carta de apresentação");
+  }
+  return response.json() as Promise<CoverLetterDto>;
 }
 
 export async function splitJobApplicationAnalysis(

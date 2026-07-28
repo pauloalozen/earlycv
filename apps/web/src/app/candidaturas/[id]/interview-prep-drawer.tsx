@@ -565,41 +565,41 @@ function PrepContent({
             const watchOuts = c.lessonsFromPastProcesses?.watchOuts ?? [];
             return (
               <>
-          <div
-            style={{
-              fontSize: 14,
-              color: "#1a2a5a",
-              lineHeight: 1.65,
-              marginBottom: watchOuts.length > 0 ? 14 : 0,
-            }}
-          >
-            {c.lessonsFromPastProcesses.keyInsight}
-          </div>
-          {watchOuts.length > 0 && (
-            <div>
-              <div
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 9.5,
-                  letterSpacing: 0.8,
-                  color: "#3a5098",
-                  fontWeight: 500,
-                  textTransform: "uppercase",
-                  marginBottom: 8,
-                }}
-              >
-                Pontos de atenção
-              </div>
-              {watchOuts.map((item, i) => (
-                <PrepBullet
-                  key={item}
-                  kicker="ATENÇÃO"
-                  body={item}
-                  last={i === watchOuts.length - 1}
-                />
-              ))}
-            </div>
-          )}
+                <div
+                  style={{
+                    fontSize: 14,
+                    color: "#1a2a5a",
+                    lineHeight: 1.65,
+                    marginBottom: watchOuts.length > 0 ? 14 : 0,
+                  }}
+                >
+                  {c.lessonsFromPastProcesses.keyInsight}
+                </div>
+                {watchOuts.length > 0 && (
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 9.5,
+                        letterSpacing: 0.8,
+                        color: "#3a5098",
+                        fontWeight: 500,
+                        textTransform: "uppercase",
+                        marginBottom: 8,
+                      }}
+                    >
+                      Pontos de atenção
+                    </div>
+                    {watchOuts.map((item, i) => (
+                      <PrepBullet
+                        key={item}
+                        kicker="ATENÇÃO"
+                        body={item}
+                        last={i === watchOuts.length - 1}
+                      />
+                    ))}
+                  </div>
+                )}
               </>
             );
           })()}
@@ -851,9 +851,7 @@ export function InterviewPrepDrawer({
           return;
         }
 
-        await new Promise((resolve) =>
-          setTimeout(resolve, POLL_INTERVAL_MS),
-        );
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
       }
       setError(
         "A preparação está demorando mais que o esperado. Tente novamente.",
@@ -871,6 +869,10 @@ export function InterviewPrepDrawer({
   }
 
   function handleGenerate() {
+    void trackEvent({
+      eventName: "interview_prep_generate_clicked",
+      eventVersion: 1,
+    });
     void pollUntilDone();
   }
 
@@ -911,7 +913,9 @@ export function InterviewPrepDrawer({
           pointerEvents: backdropReady ? "auto" : "none",
           // No transition on entry (backdropReady=true in same flush as mount)
           // so backdrop is instant. On exit (backdropReady→false) transition plays.
-          transition: backdropReady ? "none" : "opacity 200ms ease, backdrop-filter 200ms ease",
+          transition: backdropReady
+            ? "none"
+            : "opacity 200ms ease, backdrop-filter 200ms ease",
         }}
       />
 

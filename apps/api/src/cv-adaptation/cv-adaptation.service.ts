@@ -549,10 +549,10 @@ export class CvAdaptationService {
           template: { select: { id: true, name: true, slug: true } },
           analysisCvSnapshot: {
             select: {
-            sourceType: true,
-            originalFileStorageKey: true,
-            originalFileName: true,
-          },
+              sourceType: true,
+              originalFileStorageKey: true,
+              originalFileName: true,
+            },
           },
         },
       });
@@ -583,7 +583,9 @@ export class CvAdaptationService {
               originalFileName: true,
             },
           },
-          masterResume: { select: { rawText: true, title: true, sourceFileName: true } },
+          masterResume: {
+            select: { rawText: true, title: true, sourceFileName: true },
+          },
         },
       });
 
@@ -813,14 +815,15 @@ export class CvAdaptationService {
     status: "pending";
     guestSessionPublicToken: string | null;
   }> {
-    const turnstilePrecheck = await this.protectedAnalyzeService.precheckTurnstile(
-      { turnstileToken },
-      this.buildProtectionContext(
-        analysisContext,
-        null,
-        "cv-adaptation/analyze-guest",
-      ),
-    );
+    const turnstilePrecheck =
+      await this.protectedAnalyzeService.precheckTurnstile(
+        { turnstileToken },
+        this.buildProtectionContext(
+          analysisContext,
+          null,
+          "cv-adaptation/analyze-guest",
+        ),
+      );
     if (!turnstilePrecheck.ok) {
       throw new BadRequestException("Turnstile verification failed");
     }
@@ -866,10 +869,15 @@ export class CvAdaptationService {
     file?: FileUpload,
     analysisContext?: AnalysisRequestContext,
   ): Promise<{ jobId: string; status: "pending" }> {
-    const turnstilePrecheck = await this.protectedAnalyzeService.precheckTurnstile(
-      { turnstileToken: dto.turnstileToken },
-      this.buildProtectionContext(analysisContext, userId, "cv-adaptation/analyze"),
-    );
+    const turnstilePrecheck =
+      await this.protectedAnalyzeService.precheckTurnstile(
+        { turnstileToken: dto.turnstileToken },
+        this.buildProtectionContext(
+          analysisContext,
+          userId,
+          "cv-adaptation/analyze",
+        ),
+      );
     if (!turnstilePrecheck.ok) {
       throw new BadRequestException("Turnstile verification failed");
     }
@@ -911,16 +919,15 @@ export class CvAdaptationService {
 
     try {
       const result = await run();
-      const signals = this.extractAnalysisJobSignals(
-        result.adaptedContentJson,
-      );
+      const signals = this.extractAnalysisJobSignals(result.adaptedContentJson);
 
       await this.database.analysisJob.update({
         where: { id: jobId },
         data: {
           status: "succeeded",
           finishedAt: new Date(),
-          adaptedContentJson: result.adaptedContentJson as Prisma.InputJsonValue,
+          adaptedContentJson:
+            result.adaptedContentJson as Prisma.InputJsonValue,
           previewText: result.previewText,
           masterCvText: result.masterCvText,
           analysisCvSnapshotId: result.analysisCvSnapshotId,
@@ -1769,10 +1776,10 @@ export class CvAdaptationService {
           template: { select: { id: true, name: true, slug: true } },
           analysisCvSnapshot: {
             select: {
-            sourceType: true,
-            originalFileStorageKey: true,
-            originalFileName: true,
-          },
+              sourceType: true,
+              originalFileStorageKey: true,
+              originalFileName: true,
+            },
           },
         },
       });
@@ -3338,7 +3345,10 @@ export class CvAdaptationService {
 
       await this.database.cvAdaptation.update({
         where: { id: adaptation.id },
-        data: { aiAuditJson: output as unknown as Prisma.InputJsonValue },
+        data: {
+          aiAuditJson: output as unknown as Prisma.InputJsonValue,
+          language: output.language,
+        },
       });
 
       this.logger.log(
@@ -4073,10 +4083,7 @@ export class CvAdaptationService {
     if (data.experiences.length > 0) {
       lines.push("", "Experiência");
       for (const exp of data.experiences) {
-        const dateRange = [
-          exp.startDate,
-          exp.isCurrent ? "Atual" : exp.endDate,
-        ]
+        const dateRange = [exp.startDate, exp.isCurrent ? "Atual" : exp.endDate]
           .filter((v) => v?.trim())
           .join(" - ");
         const header = [

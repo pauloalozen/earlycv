@@ -411,6 +411,7 @@ export class JobApplicationsService {
       include: {
         events: { orderBy: { createdAt: "asc" } },
         interviewPrep: true,
+        coverLetter: true,
         cvAdaptations: {
           select: {
             id: true,
@@ -887,7 +888,11 @@ export class JobApplicationsService {
       // Check if CvAdaptation already has a jobApplicationId
       const adaptation = await tx.cvAdaptation.findUnique({
         where: { id: cvAdaptationId },
-        select: { jobApplicationId: true, adaptedContentJson: true },
+        select: {
+          jobApplicationId: true,
+          adaptedContentJson: true,
+          language: true,
+        },
       });
 
       if (!adaptation) {
@@ -974,6 +979,7 @@ export class JobApplicationsService {
               ? { scoreAfter: resolvedScoreAfter }
               : {}),
             ...(shouldAdvance ? { status: targetStatus } : {}),
+            ...(adaptation.language ? { language: adaptation.language } : {}),
           },
         });
 
@@ -1008,6 +1014,7 @@ export class JobApplicationsService {
             currentCvAdaptationId: cvAdaptationId,
             scoreBefore: resolvedScoreBefore,
             scoreAfter: resolvedScoreAfter,
+            language: adaptation.language,
           },
         });
 

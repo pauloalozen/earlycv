@@ -214,7 +214,9 @@ export function LandingVariantE() {
                     display: "inline-block",
                   }}
                 />
-                <span>Novo · candidaturas + entrevistas</span>
+                <span>
+                  Novo · kit de candidatura completo (CV + carta + entrevista)
+                </span>
                 <span style={{ opacity: 0.55 }}>→</span>
               </a>
 
@@ -1019,7 +1021,8 @@ export function LandingVariantE() {
               }}
             >
               Análise grátis sempre. Pague só quando quiser gerar CVs adaptados,
-              acompanhar candidaturas e se preparar para entrevistas.
+              cartas de apresentação, acompanhar candidaturas e se preparar para
+              entrevistas.
             </p>
           </div>
 
@@ -1269,8 +1272,8 @@ export function LandingVariantE() {
                 lineHeight: 1.4,
               }}
             >
-              1 crédito = 1 CV adaptado + preparação de entrevista daquela vaga.
-              Organizar candidaturas e análises de CV são grátis.
+              1 crédito = Kit completo por vaga (CV + carta de apresentação +
+              preparaçao entrevista).
             </span>
           </div>
 
@@ -1532,8 +1535,8 @@ export function LandingVariantE() {
             >
               &ldquo;Criei o EarlyCV depois de mandar o mesmo currículo para
               vagas diferentes e não passar em nenhuma triagem. Hoje uso essa
-              mesma ferramenta para adaptar meu CV a cada vaga que realmente
-              me interessa.&rdquo;
+              mesma ferramenta para adaptar meu CV a cada vaga que realmente me
+              interessa.&rdquo;
             </p>
           </div>
         </div>

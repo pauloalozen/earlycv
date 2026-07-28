@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAtsScoreColors } from "@/app/adaptar/resultado/ats-score-colors";
 import { AppHeader } from "@/components/app-header";
+import { CoverLetterPanel } from "@/components/cover-letter-panel";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
 import { pollAnalysisJob } from "@/lib/analysis-job-polling";
@@ -1531,6 +1532,7 @@ export function AdaptacaoCvClient({
   const [downloadFormat, setDownloadFormat] = useState<"pdf" | "docx" | null>(
     null,
   );
+  const [showCoverLetter, setShowCoverLetter] = useState(false);
   const cvPanelRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -2041,6 +2043,18 @@ export function AdaptacaoCvClient({
         stage={downloadStage}
         format={downloadFormat}
       />
+
+      {jobApplicationId && (
+        <CoverLetterPanel
+          applicationId={jobApplicationId}
+          adaptationId={adaptationId}
+          jobTitle={jobTitle ?? ""}
+          company={companyName ?? ""}
+          initialCoverLetter={null}
+          open={showCoverLetter}
+          onClose={() => setShowCoverLetter(false)}
+        />
+      )}
 
       {/* Reset confirmation modal */}
       {resetModalMounted && (
@@ -2666,6 +2680,25 @@ export function AdaptacaoCvClient({
 
               {/* RIGHT: download actions */}
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {jobApplicationId && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCoverLetter(true)}
+                    style={{
+                      padding: "6px 13px",
+                      background: "#f0ede8",
+                      color: "#333",
+                      border: "1px solid rgba(10,10,10,0.2)",
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ✉ Carta de apresentação
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => handleDownload("docx")}

@@ -57,7 +57,11 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   candidatura_rejection_feedback_submitted: "backend",
   // Interview Prep
   interview_prep_drawer_opened: "frontend",
+  interview_prep_generate_clicked: "frontend",
   interview_prep_generated: "backend",
   interview_prep_viewed: "frontend",
   interview_prep_printed: "frontend",
+  // Cover Letter
+  cover_letter_generate_clicked: "frontend",
+  cover_letter_generated: "backend",
 };

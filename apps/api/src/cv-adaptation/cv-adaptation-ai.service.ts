@@ -148,6 +148,7 @@ export class CvAdaptationAiService {
   }): Promise<{ output: CvAdaptationOutput; audit: unknown }> {
     if (process.env.SKIP_AI === "true") {
       const stub: CvAdaptationOutput = {
+        language: "pt-BR",
         summary: input.masterCvText.slice(0, 300),
         sections: [],
         highlightedSkills: [],
@@ -193,6 +194,7 @@ export class CvAdaptationAiService {
   }): Promise<CvAdaptationOutput> {
     if (process.env.SKIP_AI === "true") {
       return {
+        language: "pt-BR",
         summary: input.masterCvText.slice(0, 300),
         sections: [
           {
@@ -284,6 +286,7 @@ export class CvAdaptationAiService {
           status: "awaiting_payment",
           adaptedContentJson: stubOutput as unknown as Prisma.InputJsonValue,
           previewText: masterCvText.slice(0, 200),
+          language: "pt-BR",
         },
       });
       return;
@@ -316,6 +319,7 @@ export class CvAdaptationAiService {
           adaptedContentJson: output as unknown as Prisma.InputJsonValue,
           previewText,
           aiAuditJson: audit as unknown as Prisma.InputJsonValue,
+          language: output.language,
         },
       });
     } catch (error) {
