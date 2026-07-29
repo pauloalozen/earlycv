@@ -60,9 +60,13 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
     "candidatura_rejection_feedback_submitted",
   // Interview Prep
   interview_prep_drawer_opened: "interview_prep_drawer_opened",
+  interview_prep_generate_clicked: "interview_prep_generate_clicked",
   interview_prep_generated: "interview_prep_generated",
   interview_prep_viewed: "interview_prep_viewed",
   interview_prep_printed: "interview_prep_printed",
+  // Cover Letter
+  cover_letter_generate_clicked: "cover_letter_generate_clicked",
+  cover_letter_generated: "cover_letter_generated",
 };
 
 const PROTECTION_EVENT_MAPPING: Record<AnalysisProtectionEventName, string> = {

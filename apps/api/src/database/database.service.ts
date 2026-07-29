@@ -161,6 +161,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.jobApplicationInterviewPrep;
   }
 
+  get jobApplicationCoverLetter() {
+    return this.prisma.jobApplicationCoverLetter;
+  }
+
   get $transaction() {
     return this.prisma.$transaction.bind(this.prisma);
   }

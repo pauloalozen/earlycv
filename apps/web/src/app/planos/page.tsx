@@ -130,6 +130,34 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
         >
           {/* Hero */}
           <div style={{ textAlign: "center", marginBottom: 20 }}>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontFamily: MONO,
+                fontSize: 10.5,
+                letterSpacing: 1.1,
+                fontWeight: 500,
+                color: "#3a5008",
+                background: "rgba(198,255,58,0.18)",
+                border: "1px solid rgba(110,150,20,0.28)",
+                borderRadius: 999,
+                padding: "4px 12px 4px 10px",
+                marginBottom: 14,
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "#557d0c",
+                  boxShadow: "0 0 6px rgba(198,255,58,0.7)",
+                }}
+              />
+              NOVO · KIT DE CANDIDATURA COMPLETO (CV + CARTA + ENTREVISTA)
+            </div>
             <h1
               style={{
                 fontSize: "clamp(28px, 3.5vw, 44px)",
@@ -512,6 +540,21 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
               );
             })}
           </div>
+
+          <p
+            style={{
+              maxWidth: 560,
+              margin: "0 auto 22px",
+              textAlign: "center",
+              fontFamily: GEIST,
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: "#6a6560",
+            }}
+          >
+            1 crédito = Kit completo por vaga (CV + carta de apresentação +
+            preparaçao entrevista).
+          </p>
 
           {/* Trust row */}
           <div

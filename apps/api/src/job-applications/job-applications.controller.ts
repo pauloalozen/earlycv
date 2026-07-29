@@ -7,12 +7,16 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
+import type { Response } from "express";
 
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { JobApplicationCoverLetterService } from "./cover-letter.service";
+import type { CoverLetterContext } from "./cover-letter-ai.service";
 import { AddNoteDto } from "./dto/add-note.dto";
 import { CreateJobApplicationDto } from "./dto/create-job-application.dto";
 import { ListJobApplicationHighlightsDto } from "./dto/list-job-application-highlights.dto";
@@ -33,6 +37,8 @@ export class JobApplicationsController {
     private readonly service: JobApplicationsService,
     @Inject(JobApplicationInterviewPrepService)
     private readonly interviewPrepService: JobApplicationInterviewPrepService,
+    @Inject(JobApplicationCoverLetterService)
+    private readonly coverLetterService: JobApplicationCoverLetterService,
   ) {}
 
   @Get()
@@ -240,6 +246,36 @@ export class JobApplicationsController {
       user.id,
       id,
       body?.adaptationId,
+    );
+  }
+
+  @Post(":id/cover-letter")
+  generateOrGetCoverLetter(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+    @Body()
+    body: {
+      style: CoverLetterContext["style"];
+      lengthMode: CoverLetterContext["lengthMode"];
+      maxCharacters?: number;
+      adaptationId?: string;
+    },
+  ) {
+    return this.coverLetterService.generateOrGet(user.id, id, body);
+  }
+
+  @Get(":id/cover-letter/download")
+  downloadCoverLetter(
+    @AuthenticatedUser() user: { id: string },
+    @Param("id") id: string,
+    @Query("format") format: string | undefined,
+    @Res() res: Response,
+  ) {
+    return this.coverLetterService.download(
+      user.id,
+      id,
+      format === "docx" ? "docx" : "pdf",
+      res,
     );
   }
 

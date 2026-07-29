@@ -12,6 +12,7 @@ import {
   useTransition,
 } from "react";
 import { createPortal } from "react-dom";
+import { CoverLetterPanel } from "@/components/cover-letter-panel";
 import {
   CvReleaseModal,
   type CvReleaseModalStatus,
@@ -907,7 +908,6 @@ function AnaliseRow({
       /* no-op */
     }
   }, [redeemSessionKey]);
-
 
   useEffect(() => {
     if (!releaseModalOpen || releaseStatus !== "loading") return;
@@ -1984,9 +1984,13 @@ function AnalisesSection({
   const [descInput, setDescInput] = useState("");
   const [descError, setDescError] = useState<string | null>(null);
   const [descSaving, setDescSaving] = useState(false);
-  const noDescCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noDescCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [isClient, setIsClient] = useState(false);
-  useEffect(() => { setIsClient(true); }, []);
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const closeNoDescModal = () => {
     setNoDescVisible(false);
@@ -2006,7 +2010,10 @@ function AnalisesSection({
       requestAnimationFrame(() => setNoDescVisible(true));
       return;
     }
-    sessionStorage.setItem("adaptar_prefill_job_description", application.jobDescriptionText);
+    sessionStorage.setItem(
+      "adaptar_prefill_job_description",
+      application.jobDescriptionText,
+    );
     sessionStorage.setItem("adaptar_prefill_application_id", application.id);
     window.location.href = "/adaptar";
   };
@@ -2033,277 +2040,335 @@ function AnalisesSection({
 
   return (
     <>
-    <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-          marginBottom: 6,
-        }}
-      >
+      <div>
         <div
           style={{
-            fontFamily: MONO,
-            fontSize: 10,
-            letterSpacing: 1.2,
-            color: "#8a8a85",
-            fontWeight: 500,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            marginBottom: 6,
           }}
         >
-          ANÁLISES DESTA CANDIDATURA
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              letterSpacing: 1.2,
+              color: "#8a8a85",
+              fontWeight: 500,
+            }}
+          >
+            ANÁLISES DESTA CANDIDATURA
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 10, color: "#a8a6a0" }}>
+            {adaptations.length}{" "}
+            {adaptations.length === 1 ? "análise" : "análises"} · mesma vaga
+          </div>
         </div>
-        <div style={{ fontFamily: MONO, fontSize: 10, color: "#a8a6a0" }}>
-          {adaptations.length}{" "}
-          {adaptations.length === 1 ? "análise" : "análises"} · mesma vaga
+
+        <div
+          style={{
+            background: "rgba(255,255,255,0.55)",
+            border: "1px solid rgba(10,10,10,0.07)",
+            borderRadius: 12,
+            padding: "2px 18px",
+          }}
+        >
+          {adaptations.length === 0 ? (
+            <div
+              style={{
+                padding: "24px 0",
+                textAlign: "center",
+                color: "#8a8a85",
+                fontSize: 13,
+                fontFamily: GEIST,
+              }}
+            >
+              Nenhuma análise registrada ainda.
+            </div>
+          ) : (
+            (() => {
+              const sorted = [...adaptations].sort((a, b) => {
+                const aIsSent =
+                  a.id === application.currentCvAdaptationId &&
+                  application.appliedAt !== null;
+                const bIsSent =
+                  b.id === application.currentCvAdaptationId &&
+                  application.appliedAt !== null;
+                if (aIsSent !== bIsSent) return aIsSent ? -1 : 1;
+                const aScore = a.scoreAfter ?? -1;
+                const bScore = b.scoreAfter ?? -1;
+                return bScore - aScore;
+              });
+              const maxScore = Math.max(
+                ...sorted.map((a) => a.scoreAfter ?? -1),
+              );
+              const bestId =
+                maxScore >= 0
+                  ? (sorted.find((a) => (a.scoreAfter ?? -1) === maxScore)
+                      ?.id ?? null)
+                  : null;
+              return sorted.map((a, idx, arr) => {
+                const isBest = bestId !== null && a.id === bestId;
+                const isSent =
+                  a.id === application.currentCvAdaptationId &&
+                  application.appliedAt !== null;
+                const isLast = idx === arr.length - 1;
+                return (
+                  <AnaliseRow
+                    key={a.id}
+                    adaptation={a}
+                    applicationId={application.id}
+                    isBest={isBest}
+                    isSent={isSent}
+                    isLast={isLast}
+                    companyName={application.companyName}
+                    jobTitle={application.jobTitle}
+                    isArchived={isArchived}
+                    onUpdated={onUpdated}
+                    hasCredits={hasCredits}
+                  />
+                );
+              });
+            })()
+          )}
+
+          {/* Nova análise button */}
+          {!isArchived && (
+            <button
+              type="button"
+              onClick={handleNovaAnalise}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 7,
+                width: "100%",
+                padding: "15px 0 13px",
+                border: "none",
+                background: "transparent",
+                color: "#3a5008",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: GEIST,
+                textDecoration: "none",
+                boxSizing: "border-box",
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <title>Fazer nova análise</title>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Fazer nova análise desta vaga
+            </button>
+          )}
         </div>
       </div>
 
-      <div
-        style={{
-          background: "rgba(255,255,255,0.55)",
-          border: "1px solid rgba(10,10,10,0.07)",
-          borderRadius: 12,
-          padding: "2px 18px",
-        }}
-      >
-        {adaptations.length === 0 ? (
+      {/* Popup: inserir descrição da vaga */}
+      {isClient &&
+        noDescOpen &&
+        createPortal(
           <div
+            onClick={closeNoDescModal}
             style={{
-              padding: "24px 0",
-              textAlign: "center",
-              color: "#8a8a85",
-              fontSize: 13,
-              fontFamily: GEIST,
-            }}
-          >
-            Nenhuma análise registrada ainda.
-          </div>
-        ) : (
-          (() => {
-            const sorted = [...adaptations].sort((a, b) => {
-              const aIsSent =
-                a.id === application.currentCvAdaptationId &&
-                application.appliedAt !== null;
-              const bIsSent =
-                b.id === application.currentCvAdaptationId &&
-                application.appliedAt !== null;
-              if (aIsSent !== bIsSent) return aIsSent ? -1 : 1;
-              const aScore = a.scoreAfter ?? -1;
-              const bScore = b.scoreAfter ?? -1;
-              return bScore - aScore;
-            });
-            const maxScore = Math.max(...sorted.map((a) => a.scoreAfter ?? -1));
-            const bestId =
-              maxScore >= 0
-                ? (sorted.find((a) => (a.scoreAfter ?? -1) === maxScore)?.id ??
-                  null)
-                : null;
-            return sorted.map((a, idx, arr) => {
-              const isBest = bestId !== null && a.id === bestId;
-              const isSent =
-                a.id === application.currentCvAdaptationId &&
-                application.appliedAt !== null;
-              const isLast = idx === arr.length - 1;
-              return (
-                <AnaliseRow
-                  key={a.id}
-                  adaptation={a}
-                  applicationId={application.id}
-                  isBest={isBest}
-                  isSent={isSent}
-                  isLast={isLast}
-                  companyName={application.companyName}
-                  jobTitle={application.jobTitle}
-                  isArchived={isArchived}
-                  onUpdated={onUpdated}
-                  hasCredits={hasCredits}
-                />
-              );
-            });
-          })()
-        )}
-
-        {/* Nova análise button */}
-        {!isArchived && (
-          <button
-            type="button"
-            onClick={handleNovaAnalise}
-            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 200,
+              background: "rgba(10,10,10,0.5)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: 7,
-              width: "100%",
-              padding: "15px 0 13px",
-              border: "none",
-              background: "transparent",
-              color: "#3a5008",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: GEIST,
-              textDecoration: "none",
-              boxSizing: "border-box",
+              padding: 16,
+              transition: "opacity 240ms ease-out",
+              opacity: noDescVisible ? 1 : 0,
             }}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <title>Fazer nova análise</title>
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            Fazer nova análise desta vaga
-          </button>
-        )}
-      </div>
-    </div>
-
-    {/* Popup: inserir descrição da vaga */}
-    {isClient && noDescOpen && createPortal(
-      <div
-        onClick={closeNoDescModal}
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 200,
-          background: "rgba(10,10,10,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 16,
-          transition: "opacity 240ms ease-out",
-          opacity: noDescVisible ? 1 : 0,
-        }}
-      >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="no-desc-title"
-          style={{
-            background: "#fafaf6",
-            border: "1px solid rgba(10,10,10,0.08)",
-            borderRadius: 18,
-            padding: "24px",
-            maxWidth: 480,
-            width: "100%",
-            boxShadow: "0 24px 60px -20px rgba(10,10,10,0.4)",
-            fontFamily: GEIST,
-            transition: "opacity 240ms ease-out, transform 240ms ease-out",
-            opacity: noDescVisible ? 1 : 0,
-            transform: noDescVisible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.98)",
-          }}
-        >
-          <p id="no-desc-title" style={{ fontSize: 15, fontWeight: 600, color: "#0a0a0a", margin: "0 0 6px", letterSpacing: -0.3 }}>
-            Descrição da vaga
-          </p>
-          <p style={{ fontSize: 13.5, color: "#6a6560", margin: "0 0 16px", lineHeight: 1.55 }}>
-            Cole a descrição completa da vaga para continuar com a análise.
-          </p>
-
-          <div style={{
-            background: "#fff",
-            border: `1px solid ${descError ? "#d9534f" : "#d8d6ce"}`,
-            borderRadius: 12,
-            padding: "12px 14px",
-            marginBottom: 6,
-          }}>
-            <textarea
-              value={descInput}
-              onChange={(e) => {
-                const next = e.target.value.slice(0, JOB_DESCRIPTION_MAX_CHARS);
-                setDescInput(next);
-                if (descError) setDescError(null);
-              }}
-              placeholder="Cole a vaga completa"
-              disabled={descSaving}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="no-desc-title"
               style={{
+                background: "#fafaf6",
+                border: "1px solid rgba(10,10,10,0.08)",
+                borderRadius: 18,
+                padding: "24px",
+                maxWidth: 480,
                 width: "100%",
-                border: "none",
-                outline: "none",
+                boxShadow: "0 24px 60px -20px rgba(10,10,10,0.4)",
                 fontFamily: GEIST,
-                fontSize: 13.5,
-                background: "transparent",
-                color: "#0a0a0a",
-                minHeight: 140,
-                resize: "none",
-                lineHeight: 1.55,
+                transition: "opacity 240ms ease-out, transform 240ms ease-out",
+                opacity: noDescVisible ? 1 : 0,
+                transform: noDescVisible
+                  ? "translateY(0) scale(1)"
+                  : "translateY(8px) scale(0.98)",
               }}
-            />
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              borderTop: "1px solid rgba(10,10,10,0.06)",
-              paddingTop: 8,
-              marginTop: 6,
-            }}>
-              <span style={{ fontFamily: MONO, fontSize: 10.5, color: descInput.length >= JOB_DESCRIPTION_MAX_CHARS ? "#d9534f" : "#8a8a85" }}>
-                {descInput.length} / {JOB_DESCRIPTION_MAX_CHARS}
-              </span>
-              <span style={{ fontFamily: MONO, fontSize: 10.5, color: "#8a8a85" }}>
-                ⌘+V para colar
-              </span>
+            >
+              <p
+                id="no-desc-title"
+                style={{
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: "#0a0a0a",
+                  margin: "0 0 6px",
+                  letterSpacing: -0.3,
+                }}
+              >
+                Descrição da vaga
+              </p>
+              <p
+                style={{
+                  fontSize: 13.5,
+                  color: "#6a6560",
+                  margin: "0 0 16px",
+                  lineHeight: 1.55,
+                }}
+              >
+                Cole a descrição completa da vaga para continuar com a análise.
+              </p>
+
+              <div
+                style={{
+                  background: "#fff",
+                  border: `1px solid ${descError ? "#d9534f" : "#d8d6ce"}`,
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                  marginBottom: 6,
+                }}
+              >
+                <textarea
+                  value={descInput}
+                  onChange={(e) => {
+                    const next = e.target.value.slice(
+                      0,
+                      JOB_DESCRIPTION_MAX_CHARS,
+                    );
+                    setDescInput(next);
+                    if (descError) setDescError(null);
+                  }}
+                  placeholder="Cole a vaga completa"
+                  disabled={descSaving}
+                  style={{
+                    width: "100%",
+                    border: "none",
+                    outline: "none",
+                    fontFamily: GEIST,
+                    fontSize: 13.5,
+                    background: "transparent",
+                    color: "#0a0a0a",
+                    minHeight: 140,
+                    resize: "none",
+                    lineHeight: 1.55,
+                  }}
+                />
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    borderTop: "1px solid rgba(10,10,10,0.06)",
+                    paddingTop: 8,
+                    marginTop: 6,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10.5,
+                      color:
+                        descInput.length >= JOB_DESCRIPTION_MAX_CHARS
+                          ? "#d9534f"
+                          : "#8a8a85",
+                    }}
+                  >
+                    {descInput.length} / {JOB_DESCRIPTION_MAX_CHARS}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10.5,
+                      color: "#8a8a85",
+                    }}
+                  >
+                    ⌘+V para colar
+                  </span>
+                </div>
+              </div>
+
+              {descError && (
+                <p
+                  style={{
+                    fontSize: 12.5,
+                    color: "#d9534f",
+                    margin: "0 0 12px",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  {descError}
+                </p>
+              )}
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 8,
+                  marginTop: 12,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={closeNoDescModal}
+                  disabled={descSaving}
+                  style={{
+                    background: "transparent",
+                    color: "#6a6560",
+                    border: "1px solid #d8d6ce",
+                    borderRadius: 10,
+                    padding: "10px 16px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDescSubmit}
+                  disabled={descSaving}
+                  style={{
+                    background: "#0a0a0a",
+                    color: "#fafaf6",
+                    border: "none",
+                    borderRadius: 10,
+                    padding: "10px 18px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: descSaving ? "not-allowed" : "pointer",
+                    fontFamily: GEIST,
+                    opacity: descSaving ? 0.7 : 1,
+                  }}
+                >
+                  {descSaving ? "Salvando..." : "Continuar →"}
+                </button>
+              </div>
             </div>
-          </div>
-
-          {descError && (
-            <p style={{ fontSize: 12.5, color: "#d9534f", margin: "0 0 12px", fontFamily: GEIST }}>
-              {descError}
-            </p>
-          )}
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-            <button
-              type="button"
-              onClick={closeNoDescModal}
-              disabled={descSaving}
-              style={{
-                background: "transparent",
-                color: "#6a6560",
-                border: "1px solid #d8d6ce",
-                borderRadius: 10,
-                padding: "10px 16px",
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: "pointer",
-                fontFamily: GEIST,
-              }}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={handleDescSubmit}
-              disabled={descSaving}
-              style={{
-                background: "#0a0a0a",
-                color: "#fafaf6",
-                border: "none",
-                borderRadius: 10,
-                padding: "10px 18px",
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: descSaving ? "not-allowed" : "pointer",
-                fontFamily: GEIST,
-                opacity: descSaving ? 0.7 : 1,
-              }}
-            >
-              {descSaving ? "Salvando..." : "Continuar →"}
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body,
-    )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
@@ -2680,7 +2745,9 @@ function Timeline({
       case "NOTE_ADDED":
         return "Nota adicionada.";
       case "INTERVIEW_PREP_GENERATED":
-        return "Preparação para entrevista gerada com IA.";
+        return "Preparação para entrevista gerada.";
+      case "COVER_LETTER_GENERATED":
+        return "Carta de apresentação gerada.";
       default:
         return event.eventType;
     }
@@ -5057,9 +5124,14 @@ const PREP_ELIGIBLE_STATUSES: JobApplicationStatus[] = [
   "OFFER",
 ];
 
-export function DetailClient({ application, header, initialHasCredits }: Props) {
+export function DetailClient({
+  application,
+  header,
+  initialHasCredits,
+}: Props) {
   const router = useRouter();
   const [showPrep, setShowPrep] = useState(false);
+  const [showCoverLetter, setShowCoverLetter] = useState(false);
   const [showStatusEdit, setShowStatusEdit] = useState(false);
   const [showUrlModal, setShowUrlModal] = useState(false);
   const [showInterviewModal, setShowInterviewModal] = useState(false);
@@ -5077,8 +5149,12 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
   >(initialHasCredits);
   const [cvPickerOpen, setCvPickerOpen] = useState(false);
   const [cvPickerVisible, setCvPickerVisible] = useState(false);
-  const [cvPickerMode, setCvPickerMode] = useState<"unlock" | "select">("unlock");
-  const [pendingPrepAdaptationId, setPendingPrepAdaptationId] = useState<string | null>(null);
+  const [cvPickerMode, setCvPickerMode] = useState<"unlock" | "select">(
+    "unlock",
+  );
+  const [pendingPrepAdaptationId, setPendingPrepAdaptationId] = useState<
+    string | null
+  >(null);
   const [interviewUnlocking, setInterviewUnlocking] = useState(false);
   const [interviewUnlockError, setInterviewUnlockError] = useState<
     string | null
@@ -5212,7 +5288,6 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
       if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
     };
   }, []);
-
 
   const closeCvPicker = () => {
     setCvPickerVisible(false);
@@ -5566,14 +5641,19 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
                 </button>
 
                 {isPrepEligible &&
-                  (unlockedAdaptations.length > 0 || !application.interviewPrepLocked ? (
+                  (unlockedAdaptations.length > 0 ||
+                  !application.interviewPrepLocked ? (
                     // Has unlocked CVs (or prep already set up) → show prep button
                     <button
                       type="button"
                       className="detail-prep-btn"
                       disabled={interviewUnlocking}
                       onClick={() => {
-                        if (application.interviewPrep || (!application.interviewPrepLocked && unlockedAdaptations.length <= 1)) {
+                        if (
+                          application.interviewPrep ||
+                          (!application.interviewPrepLocked &&
+                            unlockedAdaptations.length <= 1)
+                        ) {
                           setShowPrep(true);
                         } else {
                           handlePrepWithUnlockedCv();
@@ -5608,59 +5688,82 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
                           : "Preparar entrevista"}
                       {isInterview && !interviewUnlocking && " →"}
                     </button>
+                  ) : // No unlocked CVs → show unlock button
+                  interviewPrepUnlockHref ||
+                    hasCreditsForInterview !== false ? (
+                    <button
+                      type="button"
+                      className="detail-prep-btn"
+                      onClick={handleInterviewCvUnlock}
+                      disabled={interviewUnlocking}
+                      title={interviewPrepHelperText ?? undefined}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        padding: "8px 15px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(10,10,10,0.12)",
+                        background: "rgba(255,255,255,0.7)",
+                        color: "#0a0a0a",
+                        fontSize: 12.5,
+                        fontWeight: 500,
+                        cursor: interviewUnlocking ? "not-allowed" : "pointer",
+                        fontFamily: GEIST,
+                      }}
+                    >
+                      {interviewUnlocking
+                        ? "Liberando..."
+                        : "Liberar CV para entrevista"}
+                    </button>
                   ) : (
-                    // No unlocked CVs → show unlock button
-                    interviewPrepUnlockHref || hasCreditsForInterview !== false ? (
-                      <button
-                        type="button"
-                        className="detail-prep-btn"
-                        onClick={handleInterviewCvUnlock}
-                        disabled={interviewUnlocking}
-                        title={interviewPrepHelperText ?? undefined}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 5,
-                          padding: "8px 15px",
-                          borderRadius: 8,
-                          border: "1px solid rgba(10,10,10,0.12)",
-                          background: "rgba(255,255,255,0.7)",
-                          color: "#0a0a0a",
-                          fontSize: 12.5,
-                          fontWeight: 500,
-                          cursor: interviewUnlocking ? "not-allowed" : "pointer",
-                          fontFamily: GEIST,
-                        }}
-                      >
-                        {interviewUnlocking
-                          ? "Liberando..."
-                          : "Liberar CV para entrevista"}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="detail-prep-btn"
-                        disabled
-                        title={interviewPrepHelperText ?? undefined}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 5,
-                          padding: "8px 15px",
-                          borderRadius: 8,
-                          border: "1px solid rgba(10,10,10,0.12)",
-                          background: "rgba(255,255,255,0.55)",
-                          color: "#8a8a85",
-                          fontSize: 12.5,
-                          fontWeight: 500,
-                          cursor: "not-allowed",
-                          fontFamily: GEIST,
-                        }}
-                      >
-                        Preparação indisponível
-                      </button>
-                    )
+                    <button
+                      type="button"
+                      className="detail-prep-btn"
+                      disabled
+                      title={interviewPrepHelperText ?? undefined}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        padding: "8px 15px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(10,10,10,0.12)",
+                        background: "rgba(255,255,255,0.55)",
+                        color: "#8a8a85",
+                        fontSize: 12.5,
+                        fontWeight: 500,
+                        cursor: "not-allowed",
+                        fontFamily: GEIST,
+                      }}
+                    >
+                      Preparação indisponível
+                    </button>
                   ))}
+                {hasUnlockedCv && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCoverLetter(true)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      padding: "8px 15px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(10,10,10,0.12)",
+                      background: "rgba(255,255,255,0.7)",
+                      color: "#0a0a0a",
+                      fontSize: 12.5,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    {application.coverLetter?.status === "succeeded"
+                      ? "Ver carta de apresentação"
+                      : "Gerar carta de apresentação"}
+                  </button>
+                )}
                 {(isArchived || !isFinalized) && (
                   <button
                     type="button"
@@ -6008,132 +6111,136 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
                   ? "Selecione qual CV liberado deseja usar para preparar sua entrevista."
                   : "Selecione qual CV deseja liberar para preparar sua entrevista. O crédito será consumido após a confirmação."}
               </p>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: 8 }}
-              >
-                {(cvPickerMode === "select" ? unlockedAdaptations : application.cvAdaptations.filter((a) => !a.isUnlocked))
-                  .map((a, i) => {
-                    const score = a.scoreAfter ?? a.scoreBefore;
-                    const date = new Date(a.createdAt).toLocaleDateString(
-                      "pt-BR",
-                      { day: "2-digit", month: "short" },
-                    );
-                    const handleClick = cvPickerMode === "select"
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {(cvPickerMode === "select"
+                  ? unlockedAdaptations
+                  : application.cvAdaptations.filter((a) => !a.isUnlocked)
+                ).map((a, i) => {
+                  const score = a.scoreAfter ?? a.scoreBefore;
+                  const date = new Date(a.createdAt).toLocaleDateString(
+                    "pt-BR",
+                    { day: "2-digit", month: "short" },
+                  );
+                  const handleClick =
+                    cvPickerMode === "select"
                       ? () => void selectAdaptationAndOpenPrep(a.id)
                       : () => void redeemAdaptationForInterview(a.id);
-                    const actionLabel = cvPickerMode === "select"
-                      ? (interviewUnlocking ? "..." : "Usar este →")
-                      : (interviewUnlocking ? "..." : "Liberar →");
-                    return (
-                      <button
-                        key={a.id}
-                        type="button"
-                        disabled={interviewUnlocking}
-                        onClick={handleClick}
+                  const actionLabel =
+                    cvPickerMode === "select"
+                      ? interviewUnlocking
+                        ? "..."
+                        : "Usar este →"
+                      : interviewUnlocking
+                        ? "..."
+                        : "Liberar →";
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      disabled={interviewUnlocking}
+                      onClick={handleClick}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(10,10,10,0.12)",
+                        background: "#fafaf8",
+                        cursor: interviewUnlocking ? "not-allowed" : "pointer",
+                        textAlign: "left",
+                        fontFamily: GEIST,
+                      }}
+                    >
+                      <span
                         style={{
+                          flexShrink: 0,
+                          width: 28,
+                          height: 28,
+                          borderRadius: 6,
+                          background: "rgba(10,10,10,0.06)",
                           display: "flex",
                           alignItems: "center",
-                          gap: 10,
-                          padding: "10px 12px",
-                          borderRadius: 10,
-                          border: "1px solid rgba(10,10,10,0.12)",
-                          background: "#fafaf8",
-                          cursor: interviewUnlocking ? "not-allowed" : "pointer",
-                          textAlign: "left",
-                          fontFamily: GEIST,
+                          justifyContent: "center",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: "#55524d",
                         }}
                       >
+                        {i + 1}
+                      </span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
                         <span
                           style={{
-                            flexShrink: 0,
-                            width: 28,
-                            height: 28,
-                            borderRadius: 6,
-                            background: "rgba(10,10,10,0.06)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "#55524d",
+                            display: "block",
+                            fontSize: 13,
+                            fontWeight: 500,
+                            color: "#0a0a0a",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
                           }}
                         >
-                          {i + 1}
+                          {a.resumeUsedTitle ?? `Análise ${i + 1}`}
                         </span>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span
-                            style={{
-                              display: "block",
-                              fontSize: 13,
-                              fontWeight: 500,
-                              color: "#0a0a0a",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {a.resumeUsedTitle ?? `Análise ${i + 1}`}
-                          </span>
-                          <span
-                            style={{
-                              display: "block",
-                              fontSize: 11.5,
-                              color: "#8a8a85",
-                            }}
-                          >
-                            {date}
-                            <span
-                              style={{
-                                marginLeft: 6,
-                                fontFamily: MONO,
-                                fontSize: 10.5,
-                                color: "#b0aea6",
-                                letterSpacing: 0.3,
-                              }}
-                            >
-                              ID: {a.id}
-                            </span>
-                          </span>
-                        </span>
-                        {score != null && (
-                          <span
-                            style={{
-                              flexShrink: 0,
-                              textAlign: "right",
-                              lineHeight: 1,
-                            }}
-                          >
-                            <span
-                              style={{
-                                display: "block",
-                                fontSize: 20,
-                                fontWeight: 600,
-                                letterSpacing: -0.5,
-                                color: getDashboardScoreColor(score),
-                                fontVariantNumeric: "tabular-nums",
-                              }}
-                            >
-                              {score}
-                              <span
-                                style={{ fontSize: 12, fontWeight: 500 }}
-                              >
-                                %
-                              </span>
-                            </span>
-                          </span>
-                        )}
                         <span
                           style={{
+                            display: "block",
                             fontSize: 11.5,
                             color: "#8a8a85",
-                            flexShrink: 0,
                           }}
                         >
-                          {actionLabel}
+                          {date}
+                          <span
+                            style={{
+                              marginLeft: 6,
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#b0aea6",
+                              letterSpacing: 0.3,
+                            }}
+                          >
+                            ID: {a.id}
+                          </span>
                         </span>
-                      </button>
-                    );
-                  })}
+                      </span>
+                      {score != null && (
+                        <span
+                          style={{
+                            flexShrink: 0,
+                            textAlign: "right",
+                            lineHeight: 1,
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 20,
+                              fontWeight: 600,
+                              letterSpacing: -0.5,
+                              color: getDashboardScoreColor(score),
+                              fontVariantNumeric: "tabular-nums",
+                            }}
+                          >
+                            {score}
+                            <span style={{ fontSize: 12, fontWeight: 500 }}>
+                              %
+                            </span>
+                          </span>
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          fontSize: 11.5,
+                          color: "#8a8a85",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {actionLabel}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
               {interviewUnlockError && (
                 <p
@@ -6294,6 +6401,21 @@ export function DetailClient({ application, header, initialHasCredits }: Props) 
         scoreAfter={application.scoreAfter}
         nextActionAt={application.nextActionAt}
         adaptationId={pendingPrepAdaptationId ?? undefined}
+      />
+
+      <CoverLetterPanel
+        applicationId={application.id}
+        adaptationId={
+          selectedAdaptation?.id ??
+          application.currentCvAdaptationId ??
+          undefined
+        }
+        jobTitle={application.jobTitle}
+        company={application.companyName}
+        initialCoverLetter={application.coverLetter}
+        open={showCoverLetter}
+        onClose={() => setShowCoverLetter(false)}
+        onGenerated={handleUpdated}
       />
     </PageShell>
   );

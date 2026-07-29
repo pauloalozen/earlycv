@@ -272,6 +272,7 @@ enum JobApplicationEventType {
   NOTE_ADDED
   MARKED_AS_SENT
   INTERVIEW_PREP_GENERATED
+  COVER_LETTER_GENERATED
 }
 
 enum AnalysisConfigRiskLevel {
@@ -700,6 +701,10 @@ model CvAdaptation {
   status                      CvAdaptationStatus    @default(pending)
   adaptedContentJson          Json?
   previewText                 String?
+  // Idioma-alvo resolvido pela IA durante adaptCv (fonte única para todo o
+  // Kit de Candidatura — carta, prep de entrevista e futuros artefatos leem
+  // este valor via JobApplication.language, nunca redetectam).
+  language                    String?
   adaptedResumeId             String?               @unique
   aiAuditJson                 Json?
   editedCvJson                Json?
@@ -1281,6 +1286,10 @@ model JobApplication {
   rejectionImprovements String?
   archivedAt            DateTime?
   deletedAt             DateTime?
+  // Cópia de conveniência do language resolvido em CvAdaptation.language
+  // (mantida em sync por upsertFromCvAdaptation) — fonte única de idioma
+  // para todo o Kit de Candidatura.
+  language              String?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
@@ -1288,6 +1297,7 @@ model JobApplication {
   cvAdaptations CvAdaptation[]
   events        JobApplicationEvent[]
   interviewPrep JobApplicationInterviewPrep?
+  coverLetter   JobApplicationCoverLetter?
 
   @@index([userId, createdAt])
   @@index([userId, status])
@@ -1326,6 +1336,46 @@ model JobApplicationInterviewPrep {
   finishedAt           DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
+
+  jobApplication JobApplication @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
+}
+
+enum CoverLetterStatus {
+  pending
+  processing
+  succeeded
+  failed
+}
+
+enum CoverLetterStyle {
+  formal
+  moderno
+  executivo
+  primeiro_emprego
+}
+
+enum CoverLetterLengthMode {
+  curta
+  media
+  completa
+  custom
+}
+
+model JobApplicationCoverLetter {
+  id                   String                 @id @default(cuid())
+  jobApplicationId     String                 @unique
+  cvAdaptationId       String?
+  status               CoverLetterStatus      @default(pending)
+  style                CoverLetterStyle
+  lengthMode           CoverLetterLengthMode
+  maxCharacters        Int?
+  generatedContentJson Json?
+  lastError            String?
+  generatedAt          DateTime?
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
 
   jobApplication JobApplication @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
 }

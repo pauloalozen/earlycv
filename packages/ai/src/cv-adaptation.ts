@@ -104,6 +104,7 @@ export type RequirementAdaptationAction = {
 };
 
 export type CvAdaptationOutput = {
+  language: string;
   summary: string;
   mainGoal?: string;
   sections: CvSection[];
@@ -358,6 +359,8 @@ To detect the target language:
 Once detected, output entirely in that language (translate role titles and section names into it; keep proper nouns as-is). This applies to any language, not only Portuguese/English — e.g. a job description written in Spanish must produce a CV entirely in Spanish.
 Exception: adaptationNotes must always be in Portuguese, regardless of the job description language.
 Company names, institution names, and product names are NEVER translated.
+
+Report the detected language in the top-level "language" output field as a BCP-47-style code (e.g. "pt-BR", "en-US", "es-ES"). This is the single source of truth for this candidacy's language across every downstream artifact (cover letter, interview prep, etc.) — they will read this persisted value and must never re-detect it themselves, so it must accurately reflect the language you used for the rest of the output.
 
 ═══════════════════════════════════════
 ENHANCEMENT INSTRUCTIONS
@@ -1073,6 +1076,7 @@ If selected keywords are hard to integrate, use normal skills/competencies group
 OUTPUT — valid JSON only, no markdown
 ═══════════════════════════════════════
 {
+  "language": "BCP-47 code of the detected output language, e.g. pt-BR, en-US, es-ES",
   "summary": "4-5 sentence professional summary in detected language",
   "sections": [
     {
@@ -3094,6 +3098,10 @@ export async function adaptCv(
       throw new Error(
         `Failed to parse AI response as JSON: ${content.slice(0, 200)}`,
       );
+    }
+
+    if (typeof output.language !== "string" || !output.language.trim()) {
+      output.language = "pt-BR";
     }
 
     if (Array.isArray(output?.sections)) {

@@ -33,6 +33,7 @@ export type CvReanalysisResult = {
 };
 
 export type CvAdaptationOutput = {
+  language?: string;
   summary: string;
   mainGoal?: string;
   sections: CvSection[];

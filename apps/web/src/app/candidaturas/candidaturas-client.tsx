@@ -1074,8 +1074,9 @@ function CandRow({
             {cfg.label.toUpperCase()}
           </span>
 
-          {/* CV adaptado badge */}
-          {hasCv && (
+          {/* CV adaptado badge — omitido quando status já é CV_READY para não
+              duplicar a informação do pill "CV Liberado" logo acima */}
+          {hasCv && application.status !== "CV_READY" && (
             <span
               style={{
                 display: "inline-flex",

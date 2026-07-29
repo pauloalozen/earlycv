@@ -1937,6 +1937,7 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
         highlightedSkills: [],
         removedSections: [],
       },
+      language: undefined,
     },
   });
 });

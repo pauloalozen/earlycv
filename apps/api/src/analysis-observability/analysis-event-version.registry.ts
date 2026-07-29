@@ -82,9 +82,13 @@ export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   candidatura_rejection_feedback_submitted: 1,
   // Interview Prep
   interview_prep_drawer_opened: 1,
+  interview_prep_generate_clicked: 1,
   interview_prep_generated: 1,
   interview_prep_viewed: 1,
   interview_prep_printed: 1,
+  // Cover Letter
+  cover_letter_generate_clicked: 1,
+  cover_letter_generated: 1,
 } as const;
 
 export type BusinessFunnelEventName =
