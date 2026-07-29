@@ -60,12 +60,15 @@ function elapsedLabel(startedAt: string) {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-function dateLabel(value: string) {
+function dateLabel(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function SortableTh({

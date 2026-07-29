@@ -405,10 +405,9 @@ export async function updateGlobalSchedulerConfig(
 
 export async function runGlobalSchedulerNow(token?: string) {
   return apiRequest<{
-    failed?: number;
-    skipped?: number;
+    batchRunId: string;
     status: string;
-    succeeded?: number;
+    totalSources: number;
   }>("/runs/scheduler/global/run", token, {
     method: "POST",
   });

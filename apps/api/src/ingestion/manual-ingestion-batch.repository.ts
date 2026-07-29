@@ -33,6 +33,10 @@ type CreateAdapterBatchRunInput = {
   requestedByUserId?: string;
 };
 
+type CreateGlobalBatchRunInput = {
+  requestedByUserId?: string;
+};
+
 type ListRunsFilters = {
   status?: IngestionBatchRunStatus;
   scopeType?: IngestionBatchScopeType;
@@ -71,6 +75,64 @@ export class ManualIngestionBatchRepository {
             requestedByUserId: input.requestedByUserId,
             scopeType: "adapter",
             scopeValue: input.adapterType,
+            status: "queued",
+            totalSources: sources.length,
+          },
+        });
+
+        if (sources.length > 0) {
+          await tx.ingestionBatchItem.createMany({
+            data: sources.map((source) => ({
+              batchRunId: batchRun.id,
+              companyId: source.companyId,
+              companyName: source.company.name,
+              jobSourceId: source.id,
+              sourceName: source.sourceName,
+              sourceType: source.sourceType,
+              status: "queued",
+            })),
+          });
+        }
+
+        return batchRun;
+      });
+    } catch (error) {
+      if (isMissingManualBatchTableError(error)) {
+        throw new Error(
+          "Manual ingestion tables are missing. Apply database migrations before starting manual runs.",
+        );
+      }
+      throw error;
+    }
+  }
+
+  // Mirrors createAdapterBatchRun, but scoped to every scheduleEnabled
+  // source across all adapters — this is what "run like the automatic
+  // scheduler would" means: only sources someone opted into scheduling,
+  // skipping ones currently paused by the 403 circuit breaker.
+  async createGlobalBatchRun(input: CreateGlobalBatchRunInput) {
+    try {
+      return this.database.$transaction(async (tx) => {
+        const sources = await tx.jobSource.findMany({
+          where: {
+            isActive: true,
+            OR: [{ pausedUntil: null }, { pausedUntil: { lte: new Date() } }],
+            scheduleEnabled: true,
+          },
+          select: {
+            company: { select: { name: true } },
+            companyId: true,
+            id: true,
+            sourceName: true,
+            sourceType: true,
+          },
+        });
+
+        const batchRun = await tx.ingestionBatchRun.create({
+          data: {
+            requestedByUserId: input.requestedByUserId,
+            scopeType: "global",
+            scopeValue: "all",
             status: "queued",
             totalSources: sources.length,
           },

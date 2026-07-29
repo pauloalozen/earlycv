@@ -287,7 +287,7 @@ export async function runGlobalSchedulerNowAction(formData: FormData) {
       buildAdminRedirect(
         redirectPath,
         "success",
-        `Execucao global: ${result.status}.`,
+        `Execucao global enfileirada (${result.totalSources} fonte(s) com agendamento ativo). Acompanhe em Execucoes manuais.`,
       ),
     );
   } catch (error) {

@@ -103,9 +103,9 @@ export class IngestionController {
   }
 
   @Post("scheduler/global/run")
-  @HttpCode(200)
-  runGlobalSchedulerNow() {
-    return this.ingestionSchedulerService.runGlobalNow();
+  @HttpCode(202)
+  runGlobalSchedulerNow(@AuthenticatedUser() user: AuthenticatedRequestUser) {
+    return this.ingestionSchedulerService.runGlobalNow(user.id);
   }
 
   @Post("manual/adapter/:adapterType")
