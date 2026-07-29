@@ -78,14 +78,15 @@ Direcao futura: descobrir vagas cedo em portais de carreira, explicar a aderenci
 
 ## Versao atual e roadmap
 
-### v1.2 — Producao hoje (branch `main`)
+### v2.1 — Producao hoje (branch `main`)
 
-Fluxo core de adaptacao de CV:
+Fluxo core de adaptacao de CV + Kit de Candidatura:
 
 1. Upload do CV em PDF
 2. Cola a descricao da vaga (texto livre)
 3. IA analisa os dois e retorna o CV adaptado
 4. Pagamento antes de liberar o resultado completo
+5. Kit de Candidatura complementar (gratuito apos desbloqueio da vaga): preparacao de entrevista e carta de apresentacao, cada artefato com prompt isolado e contexto minimo (ver `feedback-kit-candidatura-artifact-isolation`)
 
 Regras especificas:
 - Nunca preencher campos do CV com informacoes que nao vieram do PDF original do usuario.
@@ -94,9 +95,9 @@ Regras especificas:
 - Schema em `packages/database`, client gerado apos cada mudanca.
 - Rotas do Next.js seguem App Router; paginas publicas com SEO completo.
 
-### v2.1 — Proxima versao (branch `develop`)
+### v3.1 — Proxima versao (branch `develop`)
 
-Modulo de ingestao de vagas sobre `Company`, `JobSource` e `Job`, preservando `canonicalKey` e `firstSeenAt` como invariantes do produto.
+Radar de oportunidades / portal de vagas: modulo de ingestao de vagas sobre `Company`, `JobSource` e `Job`, preservando `canonicalKey` e `firstSeenAt` como invariantes do produto.
 
 - Adaptadores reais Gupy e Greenhouse (hoje existem apenas mocks)
 - Engine de regras de captura (include/exclude por keyword/departamento)
@@ -116,7 +117,7 @@ Plano de implementacao: `docs/superpowers/plans/2026-04-02-job-ingestion-crawler
 - Score de compatibilidade CV x vaga com sugestoes de melhoria de perfil
 - Painel do usuario com metricas de candidatura
 
-Decisoes de arquitetura do v1.2 devem ser reversiveis e nao bloquear essas ondas.
+Decisoes de arquitetura do v2.1 devem ser reversiveis e nao bloquear essas ondas.
 
 ---
 
@@ -126,8 +127,8 @@ Decisoes de arquitetura do v1.2 devem ser reversiveis e nao bloquear essas ondas
 
 | Branch | Proposito | Versao |
 |--------|-----------|--------|
-| `main` | Producao — sempre estavel, sempre deployavel | `1.2.x` |
-| `develop` | Desenvolvimento da proxima versao | `2.1.0-beta` |
+| `main` | Producao — sempre estavel, sempre deployavel | `2.1.x` |
+| `develop` | Desenvolvimento da proxima versao | `3.1.0-beta` |
 
 **Nunca commitar diretamente em `main`.** Todo merge em main exige PR.
 
@@ -169,9 +170,9 @@ Mergear o hotfix em `develop` imediatamente apos o deploy em `main` e obrigatori
 
 ### Versionamento
 
-- Cada hotfix deployado em `main` incrementa o patch: `1.2.0` → `1.2.1` → `1.2.2`
-- `develop` permanece em `2.1.0-beta` durante todo o desenvolvimento
-- Quando a v2.1 estiver pronta: `develop` mergeia em `main`, tag `2.1.0`, novo ciclo comeca
+- Cada hotfix deployado em `main` incrementa o patch: `2.1.0` → `2.1.1` → `2.1.2`
+- `develop` permanece em `3.1.0-beta` durante todo o desenvolvimento
+- Quando a v3.1 estiver pronta: `develop` mergeia em `main`, tag `3.1.0`, novo ciclo comeca
 
 ### Instrucoes para agentes
 
