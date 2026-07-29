@@ -179,6 +179,7 @@ export type JobSourceRecord = {
   };
   companyId: string;
   consecutive403Count?: number;
+  createdAt: string;
   id: string;
   ingestionRuns?: IngestionRunSummary[];
   isActive: boolean;
@@ -221,11 +222,10 @@ async function resolveToken(token?: string) {
 
 async function apiRequest<T>(path: string, token?: string, init?: RequestInit) {
   const bearerToken = await resolveToken(token);
-  const isRead = !init?.method || init.method === "GET";
 
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
-    ...(isRead ? { next: { revalidate: 60 } } : { cache: "no-store" as const }),
+    cache: "no-store" as const,
     headers: {
       Authorization: `Bearer ${bearerToken}`,
       ...(init?.headers ?? {}),
@@ -243,6 +243,13 @@ export async function listJobSources(token?: string) {
   return apiRequest<JobSourceRecord[]>("/job-sources", token);
 }
 
+export type JobSourceSortBy =
+  | "sourceName"
+  | "company"
+  | "sourceType"
+  | "activeJobsCount"
+  | "createdAt";
+
 export async function listJobSourcesPaginated(
   params: {
     page?: number;
@@ -250,6 +257,8 @@ export async function listJobSourcesPaginated(
     search?: string;
     statusFilter?: string;
     typeFilter?: string;
+    sortBy?: JobSourceSortBy;
+    sortDir?: "asc" | "desc";
   },
   token?: string,
 ) {
@@ -259,6 +268,8 @@ export async function listJobSourcesPaginated(
   if (params.search) qs.set("search", params.search);
   if (params.statusFilter) qs.set("statusFilter", params.statusFilter);
   if (params.typeFilter) qs.set("typeFilter", params.typeFilter);
+  if (params.sortBy) qs.set("sortBy", params.sortBy);
+  if (params.sortDir) qs.set("sortDir", params.sortDir);
   return apiRequest<JobSourcePagedResult>(
     `/job-sources/paginated?${qs}`,
     token,

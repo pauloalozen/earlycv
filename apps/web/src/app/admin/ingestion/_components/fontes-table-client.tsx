@@ -28,6 +28,7 @@ type JobSourceRow = {
   activeJobsCount: number;
   company: { name: string };
   consecutive403Count?: number;
+  createdAt: string;
   id: string;
   ingestionRuns?: IngestionRunSummary[];
   pausedUntil?: string | null;
@@ -49,11 +50,68 @@ type Props = {
   initialData: PagedResult;
 };
 
+type SortBy = "sourceName" | "company" | "sourceType" | "activeJobsCount" | "createdAt";
+type SortDir = "asc" | "desc";
+
 function elapsedLabel(startedAt: string) {
   const secs = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function dateLabel(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function SortableTh({
+  align,
+  children,
+  column,
+  onSort,
+  sortBy,
+  sortDir,
+  w,
+}: {
+  align?: "left" | "right" | "center";
+  children: React.ReactNode;
+  column: SortBy;
+  onSort: (column: SortBy) => void;
+  sortBy: SortBy | null;
+  sortDir: SortDir;
+  w?: number | string;
+}) {
+  const active = sortBy === column;
+  return (
+    <AdminTh align={align} w={w}>
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          background: "none",
+          border: "none",
+          padding: 0,
+          font: "inherit",
+          letterSpacing: "inherit",
+          textTransform: "inherit",
+          color: active ? AT.ink2 : "inherit",
+          cursor: "pointer",
+        }}
+      >
+        {children}
+        <span style={{ opacity: active ? 1 : 0.35 }}>
+          {active ? (sortDir === "asc" ? "▲" : "▼") : "▲"}
+        </span>
+      </button>
+    </AdminTh>
+  );
 }
 
 function RunStatusBadge({ run }: { run?: IngestionRunSummary | null }) {
@@ -94,6 +152,8 @@ export function FontesTableClient({ initialData }: Props) {
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<SortBy | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [result, setResult] = useState<PagedResult>(initialData);
   const [togglePending, setTogglePending] = useState(false);
 
@@ -103,6 +163,8 @@ export function FontesTableClient({ initialData }: Props) {
     statusFilter: "",
     typeFilter: "",
     page: 1,
+    sortBy: null as SortBy | null,
+    sortDir: "asc" as SortDir,
   });
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -113,6 +175,8 @@ export function FontesTableClient({ initialData }: Props) {
       statusFilter: string;
       typeFilter: string;
       page: number;
+      sortBy: SortBy | null;
+      sortDir: SortDir;
     }) => {
       try {
         const qs = new URLSearchParams({
@@ -122,7 +186,13 @@ export function FontesTableClient({ initialData }: Props) {
         if (params.search) qs.set("search", params.search);
         if (params.statusFilter) qs.set("statusFilter", params.statusFilter);
         if (params.typeFilter) qs.set("typeFilter", params.typeFilter);
-        const res = await fetch(`/api/admin/ingestion/sources?${qs}`);
+        if (params.sortBy) {
+          qs.set("sortBy", params.sortBy);
+          qs.set("sortDir", params.sortDir);
+        }
+        const res = await fetch(`/api/admin/ingestion/sources?${qs}`, {
+          cache: "no-store",
+        });
         if (!res.ok) return;
         const data: PagedResult = await res.json();
         setResult(data);
@@ -138,9 +208,9 @@ export function FontesTableClient({ initialData }: Props) {
       isFirstRender.current = false;
       return;
     }
-    paramsRef.current = { search, statusFilter, typeFilter, page };
-    fetchSources({ search, statusFilter, typeFilter, page });
-  }, [search, statusFilter, typeFilter, page, fetchSources]);
+    paramsRef.current = { search, statusFilter, typeFilter, page, sortBy, sortDir };
+    fetchSources({ search, statusFilter, typeFilter, page, sortBy, sortDir });
+  }, [search, statusFilter, typeFilter, page, sortBy, sortDir, fetchSources]);
 
   useEffect(() => {
     pollingRef.current = setInterval(() => {
@@ -166,6 +236,12 @@ export function FontesTableClient({ initialData }: Props) {
 
   function handleTypeFilterChange(value: string) {
     setTypeFilter(value);
+    setPage(1);
+  }
+
+  function handleSort(column: SortBy) {
+    setSortDir((prevDir) => (sortBy === column && prevDir === "asc" ? "desc" : "asc"));
+    setSortBy(column);
     setPage(1);
   }
 
@@ -327,10 +403,21 @@ export function FontesTableClient({ initialData }: Props) {
       <AdminTable>
         <thead>
           <tr>
-            <AdminTh>Empresa</AdminTh>
-            <AdminTh>Fonte</AdminTh>
-            <AdminTh w={110}>Adapter</AdminTh>
-            <AdminTh w={70}>Vagas</AdminTh>
+            <SortableTh column="company" onSort={handleSort} sortBy={sortBy} sortDir={sortDir}>
+              Empresa
+            </SortableTh>
+            <SortableTh column="sourceName" onSort={handleSort} sortBy={sortBy} sortDir={sortDir}>
+              Fonte
+            </SortableTh>
+            <SortableTh column="sourceType" onSort={handleSort} sortBy={sortBy} sortDir={sortDir} w={110}>
+              Adapter
+            </SortableTh>
+            <SortableTh column="activeJobsCount" onSort={handleSort} sortBy={sortBy} sortDir={sortDir} w={70}>
+              Vagas
+            </SortableTh>
+            <SortableTh column="createdAt" onSort={handleSort} sortBy={sortBy} sortDir={sortDir} w={110}>
+              Incluída em
+            </SortableTh>
             <AdminTh w={180}>Status</AdminTh>
             <AdminTh w={140}>Agendamento</AdminTh>
             <AdminTh w={160}>Último run</AdminTh>
@@ -343,7 +430,7 @@ export function FontesTableClient({ initialData }: Props) {
           {rows.length === 0 && (
             <tr>
               <td
-                colSpan={8}
+                colSpan={9}
                 style={{
                   padding: "32px 16px",
                   textAlign: "center",
@@ -387,6 +474,9 @@ export function FontesTableClient({ initialData }: Props) {
                   >
                     {source.activeJobsCount}
                   </span>
+                </AdminTd>
+                <AdminTd mono muted>
+                  {dateLabel(source.createdAt)}
                 </AdminTd>
                 <AdminTd>
                   <div

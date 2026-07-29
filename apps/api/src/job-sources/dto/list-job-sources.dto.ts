@@ -1,5 +1,15 @@
 import { Type } from "class-transformer";
-import { IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+
+const SORT_BY_VALUES = [
+  "sourceName",
+  "company",
+  "sourceType",
+  "activeJobsCount",
+  "createdAt",
+] as const;
+
+export type JobSourceSortBy = (typeof SORT_BY_VALUES)[number];
 
 export class ListJobSourcesDto {
   @IsOptional()
@@ -26,4 +36,12 @@ export class ListJobSourcesDto {
   @IsOptional()
   @IsString()
   typeFilter?: string;
+
+  @IsOptional()
+  @IsIn(SORT_BY_VALUES)
+  sortBy?: JobSourceSortBy;
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  sortDir?: "asc" | "desc";
 }
