@@ -274,6 +274,13 @@ export function FontesTableClient({ initialData }: Props) {
             flexWrap: "wrap",
           }}
         >
+          <a
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+            href="/api/admin/ingestion/companies-csv"
+            download
+          >
+            Baixar modelo CSV
+          </a>
           <span
             style={{
               fontSize: 12,

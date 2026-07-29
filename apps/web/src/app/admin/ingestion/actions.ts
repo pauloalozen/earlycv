@@ -164,11 +164,30 @@ export async function importCompanySourcesCsvAction(formData: FormData) {
 
   try {
     const report = await importCompanySourcesCsv({ dryRun, file: fileEntry });
+    const label = dryRun ? "Dry-run" : "Importacao";
+    const hasSuccess = report.summary.successCount > 0;
+
+    if (!hasSuccess && report.summary.errorCount > 0) {
+      const firstErrors = report.lines
+        .filter((line) => line.status === "error")
+        .slice(0, 3)
+        .map((line) => `linha ${line.line} (${line.companyName}): ${line.message}`)
+        .join("; ");
+
+      redirect(
+        buildAdminRedirect(
+          redirectPath,
+          "error",
+          `${label} falhou: ${report.summary.errorCount} erro(s), 0 sucesso(s). ${firstErrors}`,
+        ),
+      );
+    }
+
     redirect(
       buildAdminRedirect(
         redirectPath,
         "success",
-        `${dryRun ? "Dry-run" : "Importacao"} concluido: ${report.summary.successCount} sucesso(s), ${report.summary.errorCount} erro(s).`,
+        `${label} concluido: ${report.summary.successCount} sucesso(s), ${report.summary.errorCount} erro(s).`,
       ),
     );
   } catch (error) {
