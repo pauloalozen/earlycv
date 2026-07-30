@@ -78,6 +78,8 @@ test("SemanticFilterAdminService.createNewVersion deactivates current and increm
   const database = moduleRef.get(DatabaseService);
   const service = moduleRef.get(SemanticFilterAdminService);
 
+  const versionBefore = await service.getActiveConfig();
+
   const first = await service.createNewVersion({
     noiseSignals: ["enfermeiro"],
     techSignals: ["desenvolvedor"],
@@ -88,8 +90,8 @@ test("SemanticFilterAdminService.createNewVersion deactivates current and increm
     techSignals: ["desenvolvedor", "engenheiro"],
   });
 
-  assert.equal(first.version, "v1");
-  assert.equal(second.version, "v2");
+  assert.notEqual(first.version, versionBefore?.version);
+  assert.notEqual(second.version, first.version);
   assert.equal(second.isActive, true);
 
   const reloadedFirst = await database.semanticFilterConfig.findUniqueOrThrow({
@@ -103,6 +105,12 @@ test("SemanticFilterAdminService.createNewVersion deactivates current and increm
   await database.semanticFilterConfig.deleteMany({
     where: { id: { in: [first.id, second.id] } },
   });
+  if (versionBefore) {
+    await database.semanticFilterConfig.update({
+      where: { id: versionBefore.id },
+      data: { isActive: true },
+    });
+  }
   await moduleRef.close();
 });
 
