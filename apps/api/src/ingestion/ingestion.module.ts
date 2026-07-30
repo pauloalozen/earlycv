@@ -11,6 +11,7 @@ import { IngestionManualRunnerService } from "./ingestion-manual-runner.service"
 import { IngestionSchedulerService } from "./ingestion-scheduler.service";
 import { ManualIngestionService } from "./manual-ingestion.service";
 import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
+import { SemanticFilterService } from "./semantic-filter.service";
 
 @Module({
   imports: [DatabaseModule],
@@ -24,10 +25,11 @@ import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.reposit
     IngestionManualRunnerService,
     ManualIngestionBatchRepository,
     ManualIngestionService,
+    SemanticFilterService,
     CustomHtmlAdapter,
     CustomApiAdapter,
     GupyAdapter,
   ],
-  exports: [IngestionService],
+  exports: [IngestionService, SemanticFilterService],
 })
 export class IngestionModule {}
