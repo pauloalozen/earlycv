@@ -53,6 +53,43 @@ type Props = {
 type SortBy = "sourceName" | "company" | "sourceType" | "activeJobsCount" | "createdAt";
 type SortDir = "asc" | "desc";
 
+const SORT_STORAGE_KEY = "admin-ingestion-fontes-sort";
+
+function readStoredSort(): { sortBy: SortBy; sortDir: SortDir } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SORT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed.sortBy === "string" &&
+      typeof parsed.sortDir === "string"
+    ) {
+      return parsed as { sortBy: SortBy; sortDir: SortDir };
+    }
+  } catch {
+    // ignore malformed/unavailable storage
+  }
+  return null;
+}
+
+function writeStoredSort(sortBy: SortBy | null, sortDir: SortDir) {
+  if (typeof window === "undefined") return;
+  try {
+    if (sortBy === null) {
+      window.sessionStorage.removeItem(SORT_STORAGE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(
+      SORT_STORAGE_KEY,
+      JSON.stringify({ sortBy, sortDir }),
+    );
+  } catch {
+    // ignore malformed/unavailable storage
+  }
+}
+
 function elapsedLabel(startedAt: string) {
   const secs = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
   const m = Math.floor(secs / 60);
@@ -224,6 +261,20 @@ export function FontesTableClient({ initialData }: Props) {
     };
   }, [fetchSources]);
 
+  // Restores the sort the admin picked before a full-page action (rodar,
+  // excluir, editar) redirected them back here — otherwise every such
+  // action silently reset the table back to its default order. Runs after
+  // the effect above so isFirstRender is already false, letting the state
+  // change here actually trigger a fetch with the restored sort.
+  useEffect(() => {
+    const stored = readStoredSort();
+    if (stored) {
+      setSortBy(stored.sortBy);
+      setSortDir(stored.sortDir);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function handleSearchChange(value: string) {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     searchDebounceRef.current = setTimeout(() => {
@@ -243,9 +294,11 @@ export function FontesTableClient({ initialData }: Props) {
   }
 
   function handleSort(column: SortBy) {
-    setSortDir((prevDir) => (sortBy === column && prevDir === "asc" ? "desc" : "asc"));
+    const nextDir = sortBy === column && sortDir === "asc" ? "desc" : "asc";
+    setSortDir(nextDir);
     setSortBy(column);
     setPage(1);
+    writeStoredSort(column, nextDir);
   }
 
   const rows = result.rows;
@@ -323,6 +376,12 @@ export function FontesTableClient({ initialData }: Props) {
           <option value="custom_html">custom_html</option>
           <option value="custom_api">custom_api</option>
           <option value="gupy">gupy</option>
+          <option value="greenhouse">greenhouse</option>
+          <option value="lever">lever</option>
+          <option value="ashby">ashby</option>
+          <option value="inhire">inhire</option>
+          <option value="solides">solides</option>
+          <option value="pandape">pandape</option>
         </select>
       </div>
 
@@ -607,7 +666,27 @@ export function FontesTableClient({ initialData }: Props) {
                     >
                       Detalhe
                     </Link>
-                    <form action={deleteJobSourceAction}>
+                    <Link
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
+                      href={`/admin/ingestion/${source.id}#editar-fonte`}
+                    >
+                      Editar
+                    </Link>
+                    <form
+                      action={deleteJobSourceAction}
+                      onSubmit={(e) => {
+                        if (
+                          !confirm(
+                            `Excluir a fonte "${source.sourceName}" (${source.company.name})? Essa acao nao pode ser desfeita.`,
+                          )
+                        ) {
+                          e.preventDefault();
+                        }
+                      }}
+                    >
                       <input
                         name="jobSourceId"
                         type="hidden"

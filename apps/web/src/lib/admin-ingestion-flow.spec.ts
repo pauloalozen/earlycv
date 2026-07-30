@@ -48,6 +48,23 @@ test("getSourceDefaults maps source type to parser and crawl strategy", () => {
   });
 });
 
+test("getSourceDefaults maps ATS types without an adapter yet to api strategy", () => {
+  for (const type of [
+    "greenhouse",
+    "lever",
+    "ashby",
+    "inhire",
+    "solides",
+    "pandape",
+  ] as const) {
+    assert.deepEqual(getSourceDefaults(type), {
+      crawlStrategy: "api",
+      parserKey: type,
+      sourceType: type,
+    });
+  }
+});
+
 test("parseCompanyFormData trims fields and omits blank optional values", () => {
   const formData = new FormData();
 

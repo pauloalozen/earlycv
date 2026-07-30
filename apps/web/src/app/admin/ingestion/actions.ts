@@ -21,6 +21,7 @@ import {
   parseJobSourceFormData,
   parseManualAdapterType,
   parseManualBatchRunId,
+  parseUpdateJobSourceFormData,
 } from "@/lib/admin-ingestion-flow";
 
 const ROOT_REDIRECT_PATH = "/admin/ingestion";
@@ -171,7 +172,9 @@ export async function importCompanySourcesCsvAction(formData: FormData) {
       const firstErrors = report.lines
         .filter((line) => line.status === "error")
         .slice(0, 3)
-        .map((line) => `linha ${line.line} (${line.companyName}): ${line.message}`)
+        .map(
+          (line) => `linha ${line.line} (${line.companyName}): ${line.message}`,
+        )
         .join("; ");
 
       redirect(
@@ -272,6 +275,37 @@ export async function updateJobSourceScheduleAction(formData: FormData) {
       redirectPath,
       "success",
       "Agendamento da fonte atualizado.",
+    ),
+  );
+}
+
+export async function updateJobSourceAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const jobSourceId = String(formData.get("jobSourceId") ?? "").trim();
+
+  if (!jobSourceId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe a fonte."));
+  }
+
+  try {
+    const payload = parseUpdateJobSourceFormData(formData);
+    await updateJobSource(jobSourceId, payload);
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error ? error.message : "Falha ao atualizar a fonte.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  redirect(
+    buildAdminRedirect(
+      redirectPath,
+      "success",
+      "Fonte atualizada com sucesso.",
     ),
   );
 }

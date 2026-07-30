@@ -3,7 +3,12 @@ import { test } from "node:test";
 
 import { IngestionManualRunnerService } from "./ingestion-manual-runner.service";
 
-function createServiceFixture() {
+function createServiceFixture(
+  config: { errorDelayMs: number; normalDelayMs: number } = {
+    errorDelayMs: 0,
+    normalDelayMs: 0,
+  },
+) {
   let beforeMarkRunning: ((itemId: string) => void) | undefined;
   let onAcquireItemLock: ((itemId: string) => boolean | undefined) | undefined;
   const runs = new Map<
@@ -178,6 +183,13 @@ function createServiceFixture() {
       if (jobSourceId === "source-fail") {
         throw new Error("boom");
       }
+      if (jobSourceId === "source-partial-fail") {
+        return {
+          errorSummary: "2 item(s) failed during ingestion.",
+          id: `run-${jobSourceId}`,
+          status: "failed" as const,
+        };
+      }
       const run = runs.get("batch-cancel");
       if (run && jobSourceId === "source-cancel-1") {
         runs.set("batch-cancel", {
@@ -186,13 +198,19 @@ function createServiceFixture() {
           status: "cancelling",
         });
       }
+      return { id: `run-${jobSourceId}`, status: "completed" as const };
     },
+  };
+
+  const globalConfigService = {
+    getConfig: async () => config,
   };
 
   const service = new IngestionManualRunnerService(
     database as never,
     ingestionService as never,
     lockRepository as never,
+    globalConfigService as never,
   );
 
   return {
@@ -257,6 +275,62 @@ test("runner processes queued adapter batch sequentially", async () => {
   assert.equal(items.get("item-2")?.status, "completed");
 });
 
+test("runner waits a jittered delay between sources instead of running them back-to-back", async () => {
+  const { items, runs, service } = createServiceFixture({
+    errorDelayMs: 0,
+    normalDelayMs: 100,
+  });
+  runs.set("batch-delay", {
+    id: "batch-delay",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 2,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-delay-1", {
+    id: "item-delay-1",
+    batchRunId: "batch-delay",
+    jobSourceId: "source-delay-1",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-delay-2", {
+    id: "item-delay-2",
+    batchRunId: "batch-delay",
+    jobSourceId: "source-delay-2",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:01.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  const startedAt = Date.now();
+  await service.processNextBatchRun();
+  const elapsedMs = Date.now() - startedAt;
+
+  // normalDelayMs=100 with a 0.7-1.3x jitter window: at least one delay
+  // must have been applied between the two sources (min ~70ms), and none
+  // after the last item (so this stays well under 2x the base delay).
+  assert.ok(
+    elapsedMs >= 60,
+    `expected a delay between sources, got ${elapsedMs}ms`,
+  );
+  assert.ok(
+    elapsedMs < 300,
+    `expected no delay after the last item, got ${elapsedMs}ms`,
+  );
+  assert.equal(runs.get("batch-delay")?.status, "completed");
+});
+
 test("runner marks failed item and batch as failed", async () => {
   const { items, runs, service } = createServiceFixture();
   runs.set("batch-2", {
@@ -288,6 +362,42 @@ test("runner marks failed item and batch as failed", async () => {
   assert.equal(run?.status, "failed");
   assert.equal(run?.failedCount, 1);
   assert.equal(items.get("item-fail")?.status, "failed");
+});
+
+test("runner marks item and batch as failed when adapter run resolves with partial failures", async () => {
+  const { items, runs, service } = createServiceFixture();
+  runs.set("batch-partial-fail", {
+    id: "batch-partial-fail",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-partial-fail", {
+    id: "item-partial-fail",
+    batchRunId: "batch-partial-fail",
+    jobSourceId: "source-partial-fail",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  const run = runs.get("batch-partial-fail");
+  const item = items.get("item-partial-fail");
+  assert.equal(run?.status, "failed");
+  assert.equal(run?.failedCount, 1);
+  assert.equal(run?.succeededCount, 0);
+  assert.equal(item?.status, "failed");
+  assert.equal(item?.errorMessage, "2 item(s) failed during ingestion.");
 });
 
 test("runner stops scheduling remaining items when cancellation is requested", async () => {

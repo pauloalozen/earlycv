@@ -201,6 +201,17 @@ export class ManualIngestionBatchRepository {
           batchRunId,
           status: filters.status,
         },
+        include: {
+          ingestionRun: {
+            select: {
+              errorSummary: true,
+              failedCount: true,
+              newCount: true,
+              skippedCount: true,
+              updatedCount: true,
+            },
+          },
+        },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       });
     } catch (error) {

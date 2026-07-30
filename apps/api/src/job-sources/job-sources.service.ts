@@ -88,7 +88,10 @@ export class JobSourcesService {
             ? [{ sourceType: sortDir }]
             : dto.sortBy === "createdAt"
               ? [{ createdAt: sortDir }]
-              : [{ updatedAt: "desc" }, { createdAt: "desc" }];
+              // Default is alphabetical by name — sorting by updatedAt
+              // made any toggle/run/edit jump that source to the top,
+              // reordering the table on every action.
+              : [{ sourceName: "asc" }];
 
     // activeJobsCount is derived (not a column), so it can't be sorted at
     // the database level — fetch every matching row, sort in memory, then

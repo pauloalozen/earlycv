@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { JobSourceTypeOption } from "./admin-ingestion-flow";
 import { getBackofficeSessionToken } from "./backoffice-session.server";
 
 export type IngestionPreviewItem = {
@@ -52,14 +53,22 @@ export type CreateJobSourcePayload = {
   scheduleEnabled?: boolean;
   scheduleTimezone?: "America/Sao_Paulo";
   sourceName: string;
-  sourceType: "custom_api" | "custom_html" | "gupy";
+  sourceType: JobSourceTypeOption;
   sourceUrl: string;
 };
 
 export type UpdateJobSourcePayload = {
+  checkIntervalMinutes?: number;
+  crawlStrategy?: "api" | "html";
+  isActive?: boolean;
+  isFallbackAdapter?: boolean;
+  parserKey?: string;
   scheduleCron?: string | null;
   scheduleEnabled?: boolean;
   scheduleTimezone?: "America/Sao_Paulo";
+  sourceName?: string;
+  sourceType?: JobSourceTypeOption;
+  sourceUrl?: string;
 };
 
 export type JobSourcePagedResult = {
@@ -166,6 +175,13 @@ export type ManualRunItemRecord = {
   startedAt: string | null;
   finishedAt: string | null;
   errorMessage: string | null;
+  ingestionRun: {
+    errorSummary: string | null;
+    failedCount: number;
+    newCount: number;
+    skippedCount: number;
+    updatedCount: number;
+  } | null;
   createdAt: string;
   updatedAt: string;
 };

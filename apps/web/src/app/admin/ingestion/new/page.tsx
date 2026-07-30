@@ -297,6 +297,14 @@ export default async function NewAdminSourcePage({
                       <option value="gupy">gupy</option>
                       <option value="custom_html">custom_html</option>
                       <option value="custom_api">custom_api</option>
+                      <option value="greenhouse">
+                        greenhouse (sem adapter)
+                      </option>
+                      <option value="lever">lever (sem adapter)</option>
+                      <option value="ashby">ashby (sem adapter)</option>
+                      <option value="inhire">inhire (sem adapter)</option>
+                      <option value="solides">solides (sem adapter)</option>
+                      <option value="pandape">pandape (sem adapter)</option>
                     </select>
                   </label>
 

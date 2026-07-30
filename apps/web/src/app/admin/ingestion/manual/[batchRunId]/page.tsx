@@ -121,29 +121,45 @@ export default async function ManualRunDetailPage({
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Inicio</th>
                   <th className="px-4 py-3">Fim</th>
+                  <th className="px-4 py-3">Vagas lidas</th>
                   <th className="px-4 py-3">Erro</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
-                  <tr className="border-t border-stone-200" key={item.id}>
-                    <td className="px-4 py-3">{item.companyName}</td>
-                    <td className="px-4 py-3">{item.sourceName}</td>
-                    <td className="px-4 py-3">{item.sourceType}</td>
-                    <td className="px-4 py-3">{item.status}</td>
-                    <td className="px-4 py-3">
-                      {item.startedAt
-                        ? new Date(item.startedAt).toLocaleString("pt-BR")
-                        : "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {item.finishedAt
-                        ? new Date(item.finishedAt).toLocaleString("pt-BR")
-                        : "-"}
-                    </td>
-                    <td className="px-4 py-3">{item.errorMessage ?? "-"}</td>
-                  </tr>
-                ))}
+                {items.map((item) => {
+                  const run = item.ingestionRun;
+                  const jobsRead = run
+                    ? run.newCount +
+                      run.updatedCount +
+                      run.skippedCount +
+                      run.failedCount
+                    : null;
+
+                  return (
+                    <tr className="border-t border-stone-200" key={item.id}>
+                      <td className="px-4 py-3">{item.companyName}</td>
+                      <td className="px-4 py-3">{item.sourceName}</td>
+                      <td className="px-4 py-3">{item.sourceType}</td>
+                      <td className="px-4 py-3">{item.status}</td>
+                      <td className="px-4 py-3">
+                        {item.startedAt
+                          ? new Date(item.startedAt).toLocaleString("pt-BR")
+                          : "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {item.finishedAt
+                          ? new Date(item.finishedAt).toLocaleString("pt-BR")
+                          : "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {jobsRead === null
+                          ? "-"
+                          : `${jobsRead} (novas ${run?.newCount} / atualizadas ${run?.updatedCount} / falhas ${run?.failedCount})`}
+                      </td>
+                      <td className="px-4 py-3">{item.errorMessage ?? "-"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
