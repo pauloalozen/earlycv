@@ -15,6 +15,7 @@ import {
   ValidationPipe,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { SkipThrottle } from "@nestjs/throttler";
 import {
   type AuthenticatedRequestUser,
   AuthenticatedUser,
@@ -39,6 +40,10 @@ const ingestionValidationOptions = {
   forbidNonWhitelisted: true,
 } as const;
 
+// Already gated behind JWT + admin/superadmin role, so the public
+// throttler adds no real protection here — it just breaks the admin
+// panel's 5s polling table + bulk schedule toggles with 429s.
+@SkipThrottle()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @InternalRoles("admin", "superadmin")
 @Controller("runs")
@@ -103,9 +108,9 @@ export class IngestionController {
   }
 
   @Post("scheduler/global/run")
-  @HttpCode(200)
-  runGlobalSchedulerNow() {
-    return this.ingestionSchedulerService.runGlobalNow();
+  @HttpCode(202)
+  runGlobalSchedulerNow(@AuthenticatedUser() user: AuthenticatedRequestUser) {
+    return this.ingestionSchedulerService.runGlobalNow(user.id);
   }
 
   @Post("manual/adapter/:adapterType")

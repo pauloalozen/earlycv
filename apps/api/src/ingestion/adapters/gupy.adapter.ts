@@ -89,6 +89,23 @@ function normalizeWorkModel(
   return undefined;
 }
 
+const EMPLOYMENT_TYPE_MAP: Record<string, string> = {
+  vacancy_type_effective: "full_time",
+  vacancy_type_internship: "internship",
+  vacancy_type_apprentice: "apprentice",
+  vacancy_type_temporary: "temporary",
+  vacancy_type_talent_pool: "talent_pool",
+  vacancy_legal_entity: "pj",
+  vacancy_type_autonomous: "autonomous",
+  full_time: "full_time",
+};
+
+function normalizeEmploymentType(value?: string | null) {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  return EMPLOYMENT_TYPE_MAP[raw] ?? raw;
+}
+
 function normalizeTitle(value?: string | null) {
   return (value ?? "")
     .normalize("NFKD")
@@ -375,10 +392,12 @@ export class GupyAdapter implements IngestionSourceAdapter {
       canonicalKey: `gupy:${subdomain}:${String(job.id)}`,
       city: job.addressCity?.trim() || undefined,
       country: job.addressCountry?.trim() || undefined,
+      department: job.departmentName?.trim() || undefined,
       descriptionClean,
       descriptionRaw,
       detailFetchSkipped: options?.detailFetchSkipped,
-      employmentType: job.type?.trim() || undefined,
+      employmentType: normalizeEmploymentType(job.type),
+      employmentTypeRaw: job.type?.trim() || undefined,
       externalJobId: String(job.id),
       firstSeenAt: publishedAt,
       lastSeenAt: publishedAt,

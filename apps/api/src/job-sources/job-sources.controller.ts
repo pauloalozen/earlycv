@@ -12,6 +12,7 @@ import {
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
+import { SkipThrottle } from "@nestjs/throttler";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
@@ -28,6 +29,10 @@ const jobSourcesValidationOptions = {
   forbidNonWhitelisted: true,
 } as const;
 
+// Already gated behind JWT + admin/superadmin role, so the public
+// throttler adds no real protection here — it just breaks the admin
+// panel's 5s polling table + bulk schedule toggles with 429s.
+@SkipThrottle()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @InternalRoles("admin", "superadmin")
 @Controller("job-sources")

@@ -1,0 +1,197 @@
+import { ContractType, JobArea, SeniorityLevel } from "@prisma/client";
+import type OpenAI from "openai";
+
+export const JOB_ENRICHMENT_PROMPT_VERSION = "2026-07-30.v1";
+
+const DESCRIPTION_MAX_CHARS = 2000;
+const CAREER_FINGERPRINT_MAX_ITEMS = 6;
+
+export type JobEnrichmentLlmInput = {
+  department?: string | null;
+  descriptionClean: string;
+  title: string;
+};
+
+export type JobEnrichmentLlmResult = {
+  areas: JobArea[];
+  careerFingerprint: string[];
+  certifications: string[];
+  contractType: ContractType | null;
+  dominantArea: JobArea | null;
+  experienceYearsMin: number | null;
+  languageRequirements: string[];
+  managementRequired: boolean;
+  optionalSkills: string[];
+  requiredSkills: string[];
+  seniority: SeniorityLevel | null;
+  specialties: string[];
+  technologies: string[];
+  travelRequired: boolean;
+};
+
+const SYSTEM_PROMPT = `Você é um sistema de classificação de vagas de emprego para um radar de oportunidades tech.
+
+Analise a vaga abaixo e retorne EXCLUSIVAMENTE um JSON válido no formato especificado.
+
+## Taxonomia de áreas disponíveis
+DATA_AI: dados, analytics, BI, data engineering, data science, machine learning, AI, MLOps
+SOFTWARE_ENGINEERING: desenvolvimento backend, frontend, fullstack, mobile, embedded
+CLOUD_DEVOPS: cloud, devops, SRE, platform engineering, infraestrutura, redes
+CYBERSECURITY: segurança da informação, pentest, AppSec, SOC, GRC, IAM
+PRODUCT: product manager, product owner, gestão de produto
+DESIGN_UX: UX design, UI design, product design, UX research
+QA_TEST: QA, quality assurance, teste, automação de testes
+PROJECT_AGILE: scrum master, agile coach, gestão de projetos tech, PMO tech
+ARCHITECTURE: arquiteto de software, solutions architect, enterprise architect
+LEADERSHIP: tech lead com gestão, engineering manager, head, CTO, CIO, diretor tech
+OTHER: qualquer coisa que não se encaixe nas categorias acima
+
+## Formato de resposta (JSON estrito, sem texto fora do JSON)
+{
+  "dominantArea": "<JobArea>",
+  "areas": ["<JobArea>"],
+  "specialties": ["<string>"],
+  "seniority": "<SeniorityLevel>",
+  "requiredSkills": ["<string>"],
+  "optionalSkills": ["<string>"],
+  "technologies": ["<string>"],
+  "contractType": "<ContractType>",
+  "languageRequirements": ["<string>"],
+  "certifications": [],
+  "experienceYearsMin": <int ou null>,
+  "managementRequired": <boolean>,
+  "travelRequired": <boolean>,
+  "careerFingerprint": ["<string>"]
+}
+
+## Regras importantes
+- Se dominantArea for OTHER, retorne o JSON com todos os outros campos vazios/null
+- careerFingerprint: máximo 6 labels concisos em português que descrevem o profissional ideal (ex: ["Engenheiro Backend", "Java", "AWS", "Microsserviços", "Sênior"])
+- requiredSkills: só o que é explicitamente obrigatório na descrição
+- optionalSkills: o que é "diferencial" ou "desejável"
+- technologies: frameworks, linguagens, ferramentas (ex: "Python", "React", "Kubernetes")
+- specialties: sub-área dentro da área principal (ex: para DATA_AI: "data engineering", "analytics")
+- Normalize para lowercase em requiredSkills, optionalSkills, technologies
+- SeniorityLevel válidos: INTERN | JUNIOR | MID | SENIOR | LEAD | STAFF | MANAGER | DIRECTOR | UNKNOWN
+- ContractType válidos: CLT | PJ | BOTH | UNKNOWN
+- Se informação não disponível, use null ou [] — nunca invente`;
+
+export function buildJobEnrichmentPrompt(input: JobEnrichmentLlmInput) {
+  const description = input.descriptionClean
+    .trim()
+    .slice(0, DESCRIPTION_MAX_CHARS);
+
+  return `## Vaga
+Título: ${input.title}
+Empresa/Departamento: ${input.department?.trim() || "não informado"}
+Descrição: ${description}`;
+}
+
+function toStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function toLowerStringArray(value: unknown) {
+  return toStringArray(value).map((item) => item.toLowerCase());
+}
+
+function toJobAreaArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is JobArea =>
+    Object.values(JobArea).includes(item as JobArea),
+  );
+}
+
+function toJobArea(value: unknown): JobArea | null {
+  return typeof value === "string" &&
+    Object.values(JobArea).includes(value as JobArea)
+    ? (value as JobArea)
+    : null;
+}
+
+function toSeniorityLevel(value: unknown): SeniorityLevel | null {
+  return typeof value === "string" &&
+    Object.values(SeniorityLevel).includes(value as SeniorityLevel)
+    ? (value as SeniorityLevel)
+    : null;
+}
+
+function toContractType(value: unknown): ContractType | null {
+  return typeof value === "string" &&
+    Object.values(ContractType).includes(value as ContractType)
+    ? (value as ContractType)
+    : null;
+}
+
+function toNullableInt(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.trunc(value);
+}
+
+export function parseJobEnrichmentJson(raw: unknown): JobEnrichmentLlmResult {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error("Job enrichment response is not a JSON object");
+  }
+
+  const record = raw as Record<string, unknown>;
+
+  return {
+    areas: toJobAreaArray(record.areas),
+    careerFingerprint: toStringArray(record.careerFingerprint).slice(
+      0,
+      CAREER_FINGERPRINT_MAX_ITEMS,
+    ),
+    certifications: toStringArray(record.certifications),
+    contractType: toContractType(record.contractType),
+    dominantArea: toJobArea(record.dominantArea),
+    experienceYearsMin: toNullableInt(record.experienceYearsMin),
+    languageRequirements: toStringArray(record.languageRequirements),
+    managementRequired: record.managementRequired === true,
+    optionalSkills: toLowerStringArray(record.optionalSkills),
+    requiredSkills: toLowerStringArray(record.requiredSkills),
+    seniority: toSeniorityLevel(record.seniority),
+    specialties: toStringArray(record.specialties),
+    technologies: toLowerStringArray(record.technologies),
+    travelRequired: record.travelRequired === true,
+  };
+}
+
+export async function enrichJobWithLlm(
+  client: OpenAI,
+  model: string,
+  input: JobEnrichmentLlmInput,
+): Promise<JobEnrichmentLlmResult> {
+  const { buildSystemMessage, stripJsonCodeFence } = await import(
+    "@earlycv/ai"
+  );
+
+  const response = await client.chat.completions.create({
+    model,
+    messages: [
+      buildSystemMessage(model, SYSTEM_PROMPT),
+      { role: "user", content: buildJobEnrichmentPrompt(input) },
+    ],
+    temperature: 0,
+    response_format: { type: "json_object" },
+  });
+
+  const content = response.choices[0]?.message.content;
+  if (!content) {
+    throw new Error("Model returned empty job enrichment output");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripJsonCodeFence(content));
+  } catch (error) {
+    throw new Error(
+      `Failed to parse job enrichment JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  return parseJobEnrichmentJson(parsed);
+}

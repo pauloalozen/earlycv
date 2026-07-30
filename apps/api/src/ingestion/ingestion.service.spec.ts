@@ -238,6 +238,15 @@ test("IngestionService creates audited jobs for a manual custom_html source", as
     true,
   );
 
+  const enrichments = await database.jobEnrichment.findMany({
+    where: { jobId: { in: jobs.map((job) => job.id) } },
+  });
+  assert.equal(enrichments.length, 2);
+  assert.equal(
+    enrichments.every((entry) => entry.enrichmentStatus === "PENDING"),
+    true,
+  );
+
   await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
   await database.jobSource.delete({ where: { id: jobSource.id } });
   await database.company.delete({ where: { id: company.id } });
@@ -290,6 +299,15 @@ test("IngestionService preserves firstSeenAt and updates existing jobs on rerun"
   assert.equal(secondRun.updatedCount, 1);
   assert.equal(updatedJob.firstSeenAt.toISOString(), originalFirstSeenAt);
   assert.equal(updatedJob.lastSeenAt >= firstJob.lastSeenAt, true);
+
+  const enrichments = await database.jobEnrichment.findMany({
+    where: { jobId: updatedJob.id },
+  });
+  assert.equal(
+    enrichments.length,
+    1,
+    "rerun on an existing job must not create a second JobEnrichment row",
+  );
 
   await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
   await database.jobSource.delete({ where: { id: jobSource.id } });

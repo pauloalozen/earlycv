@@ -53,6 +53,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.job;
   }
 
+  get jobEnrichment() {
+    return this.prisma.jobEnrichment;
+  }
+
+  get semanticFilterConfig() {
+    return this.prisma.semanticFilterConfig;
+  }
+
   get ingestionRun() {
     return this.prisma.ingestionRun;
   }

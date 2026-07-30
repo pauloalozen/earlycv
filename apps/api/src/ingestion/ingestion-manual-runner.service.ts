@@ -3,12 +3,31 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 
 import { DatabaseService } from "../database/database.service";
+import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
 import { IngestionService } from "./ingestion.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
 
 const MANUAL_RUNNER_LOCK_ID = "manual-ingestion-batch-runner";
-const MANUAL_RUNNER_LOCK_TTL_MS = 60_000;
+// Long TTL because a batch can now take much longer than one tick — the
+// jittered inter-item delay below can add tens of minutes for a large
+// batch, and this lock is held (not renewed) for the whole run.
+const MANUAL_RUNNER_LOCK_TTL_MS = 60 * 60_000;
 const ITEM_LOCK_TTL_MS = 10 * 60_000;
+// Jitter window around normalDelayMs/errorDelayMs so requests to the same
+// source don't land at a fixed cadence — a predictable interval is itself
+// a signal anti-bot heuristics key off of.
+const JITTER_MIN_FACTOR = 0.7;
+const JITTER_MAX_FACTOR = 1.3;
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function jitteredDelay(baseMs: number) {
+  const factor =
+    JITTER_MIN_FACTOR + Math.random() * (JITTER_MAX_FACTOR - JITTER_MIN_FACTOR);
+  return Math.round(baseMs * factor);
+}
 
 function clampRunAggregate(
   totalSources: number,
@@ -70,6 +89,8 @@ export class IngestionManualRunnerService {
     private readonly ingestionService: IngestionService,
     @Inject(IngestionLockRepository)
     private readonly lockRepository: IngestionLockRepository,
+    @Inject(GlobalSchedulerConfigService)
+    private readonly globalConfigService: GlobalSchedulerConfigService,
   ) {}
 
   @Cron("*/10 * * * * *")
@@ -151,7 +172,9 @@ export class IngestionManualRunnerService {
       return;
     }
 
-    for (const item of items) {
+    const delayConfig = await this.globalConfigService.getConfig();
+
+    for (const [index, item] of items.entries()) {
       const latestRun = await this.database.ingestionBatchRun.findUnique({
         where: { id: batchRunId },
       });
@@ -197,24 +220,58 @@ export class IngestionManualRunnerService {
         continue;
       }
 
+      let sourceFailed = false;
+
       try {
-        await this.ingestionService.runJobSource(item.jobSourceId);
-        const markCompletedResult =
-          await this.database.ingestionBatchItem.updateMany({
-            where: { id: item.id, status: { in: ["queued", "running"] } },
-            data: {
-              errorMessage: null,
-              finishedAt: new Date(),
-              status: "completed",
-            },
-          });
-        if (markCompletedResult.count > 0) {
-          await this.database.ingestionBatchRun.update({
-            where: { id: batchRunId },
-            data: { succeededCount: { increment: 1 } },
-          });
+        const result = await this.ingestionService.runJobSource(
+          item.jobSourceId,
+        );
+
+        // runJobSource resolves even when individual job observations
+        // failed inside an otherwise-successful adapter run (status
+        // "failed" with previewItems/errorSummary describing why) — it
+        // only throws for source-level failures (network, 403, etc).
+        // Both cases must count as a failed batch item, or partial
+        // failures silently show up as "completed" in the batch log.
+        if (result.status === "failed") {
+          sourceFailed = true;
+          const markFailedResult =
+            await this.database.ingestionBatchItem.updateMany({
+              where: { id: item.id, status: { in: ["queued", "running"] } },
+              data: {
+                errorMessage:
+                  result.errorSummary ?? "ingestion completed with failures",
+                finishedAt: new Date(),
+                ingestionRunId: result.id,
+                status: "failed",
+              },
+            });
+          if (markFailedResult.count > 0) {
+            await this.database.ingestionBatchRun.update({
+              where: { id: batchRunId },
+              data: { failedCount: { increment: 1 } },
+            });
+          }
+        } else {
+          const markCompletedResult =
+            await this.database.ingestionBatchItem.updateMany({
+              where: { id: item.id, status: { in: ["queued", "running"] } },
+              data: {
+                errorMessage: null,
+                finishedAt: new Date(),
+                ingestionRunId: result.id,
+                status: "completed",
+              },
+            });
+          if (markCompletedResult.count > 0) {
+            await this.database.ingestionBatchRun.update({
+              where: { id: batchRunId },
+              data: { succeededCount: { increment: 1 } },
+            });
+          }
         }
       } catch (error) {
+        sourceFailed = true;
         const markFailedResult =
           await this.database.ingestionBatchItem.updateMany({
             where: { id: item.id, status: { in: ["queued", "running"] } },
@@ -236,6 +293,16 @@ export class IngestionManualRunnerService {
         );
       } finally {
         await this.lockRepository.release(itemLockId, itemOwner);
+      }
+
+      // Space out requests to real job sources with a jittered delay —
+      // running every company back-to-back is what gets us 403'd/banned.
+      // Skip after the last item so we don't stall run finalization.
+      if (index < items.length - 1) {
+        const baseDelayMs = sourceFailed
+          ? delayConfig.errorDelayMs
+          : delayConfig.normalDelayMs;
+        await sleep(jitteredDelay(baseDelayMs));
       }
     }
 

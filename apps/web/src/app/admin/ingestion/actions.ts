@@ -21,6 +21,7 @@ import {
   parseJobSourceFormData,
   parseManualAdapterType,
   parseManualBatchRunId,
+  parseUpdateJobSourceFormData,
 } from "@/lib/admin-ingestion-flow";
 
 const ROOT_REDIRECT_PATH = "/admin/ingestion";
@@ -164,11 +165,32 @@ export async function importCompanySourcesCsvAction(formData: FormData) {
 
   try {
     const report = await importCompanySourcesCsv({ dryRun, file: fileEntry });
+    const label = dryRun ? "Dry-run" : "Importacao";
+    const hasSuccess = report.summary.successCount > 0;
+
+    if (!hasSuccess && report.summary.errorCount > 0) {
+      const firstErrors = report.lines
+        .filter((line) => line.status === "error")
+        .slice(0, 3)
+        .map(
+          (line) => `linha ${line.line} (${line.companyName}): ${line.message}`,
+        )
+        .join("; ");
+
+      redirect(
+        buildAdminRedirect(
+          redirectPath,
+          "error",
+          `${label} falhou: ${report.summary.errorCount} erro(s), 0 sucesso(s). ${firstErrors}`,
+        ),
+      );
+    }
+
     redirect(
       buildAdminRedirect(
         redirectPath,
         "success",
-        `${dryRun ? "Dry-run" : "Importacao"} concluido: ${report.summary.successCount} sucesso(s), ${report.summary.errorCount} erro(s).`,
+        `${label} concluido: ${report.summary.successCount} sucesso(s), ${report.summary.errorCount} erro(s).`,
       ),
     );
   } catch (error) {
@@ -257,6 +279,37 @@ export async function updateJobSourceScheduleAction(formData: FormData) {
   );
 }
 
+export async function updateJobSourceAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const jobSourceId = String(formData.get("jobSourceId") ?? "").trim();
+
+  if (!jobSourceId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe a fonte."));
+  }
+
+  try {
+    const payload = parseUpdateJobSourceFormData(formData);
+    await updateJobSource(jobSourceId, payload);
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error ? error.message : "Falha ao atualizar a fonte.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  redirect(
+    buildAdminRedirect(
+      redirectPath,
+      "success",
+      "Fonte atualizada com sucesso.",
+    ),
+  );
+}
+
 export async function runGlobalSchedulerNowAction(formData: FormData) {
   const redirectPath = String(
     formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
@@ -268,7 +321,7 @@ export async function runGlobalSchedulerNowAction(formData: FormData) {
       buildAdminRedirect(
         redirectPath,
         "success",
-        `Execucao global: ${result.status}.`,
+        `Execucao global enfileirada (${result.totalSources} fonte(s) com agendamento ativo). Acompanhe em Execucoes manuais.`,
       ),
     );
   } catch (error) {
