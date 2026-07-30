@@ -3,6 +3,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import type {
@@ -72,6 +73,7 @@ function toRunSummary(run: IngestionRunRecord): IngestionRunSummary {
 
 @Injectable()
 export class IngestionService {
+  private readonly logger = new Logger(IngestionService.name);
   private readonly adapters: ReadonlyMap<
     JobSource["sourceType"],
     IngestionSourceAdapter
@@ -539,12 +541,25 @@ export class IngestionService {
     };
 
     if (!existingJob) {
-      await this.database.job.create({
+      const createdJob = await this.database.job.create({
         data: {
           ...payload,
           canonicalKey: observation.canonicalKey,
         },
       });
+
+      // Enriquecimento roda em worker assincrono (JobEnrichmentWorker) e
+      // nunca deve bloquear nem falhar a ingestao — a vaga ja esta salva e
+      // visivel no admin independente do enriquecimento acontecer.
+      try {
+        await this.database.jobEnrichment.create({
+          data: { jobId: createdJob.id },
+        });
+      } catch (error) {
+        this.logger.warn(
+          `failed to create JobEnrichment for job ${createdJob.id}: ${error instanceof Error ? error.message : "unknown"}`,
+        );
+      }
 
       return {
         previewItem: {
