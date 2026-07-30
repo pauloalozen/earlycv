@@ -1,3 +1,5 @@
+import { CronExpressionParser } from "cron-parser";
+
 function parsePart(part: string, value: number) {
   if (part === "*") {
     return true;
@@ -55,14 +57,21 @@ export function doesCronMatchDate(cron: string, date: Date) {
 // de timezone (todo fuso horário real tem offset em minutos inteiros),
 // então não precisa da conversão pra America/Sao_Paulo que os outros
 // campos usam.
+// Parse sintatico via cron-parser em vez de testar contra uma data fixa —
+// uma data fixa rejeita expressoes validas cujo passo (ex: "*/30") nao
+// divide o segundo/minuto daquela data especifica.
 export function isSecondsCronExpressionValid(cron: string) {
   const parts = cron.trim().split(/\s+/);
   if (parts.length !== 6) {
     return false;
   }
 
-  const date = new Date("2026-01-01T10:15:20Z");
-  return doesSecondsCronMatchDate(cron, date);
+  try {
+    CronExpressionParser.parse(cron);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function doesSecondsCronMatchDate(cron: string, date: Date) {

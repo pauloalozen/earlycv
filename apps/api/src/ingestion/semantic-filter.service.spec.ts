@@ -97,6 +97,42 @@ test("SemanticFilterService.evaluate removes geographic suffix before evaluating
   });
 });
 
+test("SemanticFilterService.evaluate applies word boundary for short (<=3 char) signals", async () => {
+  const { database } = createDatabaseMock(
+    createConfig({ techSignals: ["ux", "cio", "dados"] }),
+  );
+  const service = new SemanticFilterService(database);
+
+  const auxiliar = await service.evaluate("Auxiliar de Servicos Gerais");
+  assert.equal(auxiliar.result, "SKIP");
+  assert.equal(auxiliar.reason, "zona_cinza");
+
+  const comercial = await service.evaluate("Analista Comercial Internacional");
+  assert.equal(comercial.result, "SKIP");
+  assert.equal(comercial.reason, "zona_cinza");
+
+  const uxDesigner = await service.evaluate("UX Designer");
+  assert.deepEqual(uxDesigner, {
+    configVersion: "v1",
+    reason: "tech_signal:ux",
+    result: "ENRICH",
+  });
+
+  const diretorCio = await service.evaluate("Diretor CIO");
+  assert.deepEqual(diretorCio, {
+    configVersion: "v1",
+    reason: "tech_signal:cio",
+    result: "ENRICH",
+  });
+
+  const analistaDados = await service.evaluate("Analista de Dados");
+  assert.deepEqual(analistaDados, {
+    configVersion: "v1",
+    reason: "tech_signal:dados",
+    result: "ENRICH",
+  });
+});
+
 test("SemanticFilterService respects cache TTL and does not hit the database on consecutive calls", async () => {
   let now = 0;
   const { database, getFindFirstCalls } = createDatabaseMock(createConfig());

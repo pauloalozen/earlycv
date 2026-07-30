@@ -19,9 +19,15 @@ test("doesCronMatchDate matches minute and hour", () => {
   assert.equal(doesCronMatchDate("31 * * * *", date), false);
 });
 
-test("isSecondsCronExpressionValid accepts 6-field patterns and rejects 5-field ones", () => {
+test("isSecondsCronExpressionValid accepts syntactically valid 6-field step patterns", () => {
+  assert.equal(isSecondsCronExpressionValid("*/30 * * * * *"), true);
   assert.equal(isSecondsCronExpressionValid("*/10 * * * * *"), true);
-  assert.equal(isSecondsCronExpressionValid("*/15 * * * *"), false);
+  assert.equal(isSecondsCronExpressionValid("0 * * * * *"), true);
+});
+
+test("isSecondsCronExpressionValid rejects malformed expressions and 5-field ones", () => {
+  assert.equal(isSecondsCronExpressionValid("abc"), false);
+  assert.equal(isSecondsCronExpressionValid("* * * * *"), false);
   assert.equal(isSecondsCronExpressionValid("bad expression"), false);
 });
 

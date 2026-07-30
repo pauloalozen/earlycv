@@ -33,6 +33,30 @@ function normalizeTitleForFilter(value: string) {
   return stripGeographicSuffix(normalized).replace(/\s+/g, " ").trim();
 }
 
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Sinais curtos (<=3 chars, ex: "ux", "cio", "ia", "bi") precisam de word
+// boundary — senao "ux" casa dentro de "auxiliar" e "cio" dentro de
+// "internacional". Sinais de 4+ chars mantem substring simples, que ja
+// funciona bem pra termos como "desenvolvedor"/"engenheiro" e cobre
+// variacoes (plural, prefixos) sem precisar de boundary.
+function matchesSignal(title: string, signal: string) {
+  const normalizedSignal = signal.trim().toLowerCase();
+  if (!normalizedSignal) return false;
+
+  if (normalizedSignal.length <= 3) {
+    const regex = new RegExp(
+      `(?:^|\\s)${escapeRegex(normalizedSignal)}(?:\\s|$)`,
+      "i",
+    );
+    return regex.test(title);
+  }
+
+  return title.includes(normalizedSignal);
+}
+
 @Injectable()
 export class SemanticFilterService {
   private readonly cacheTtlMs: number;
@@ -78,7 +102,7 @@ export class SemanticFilterService {
     const title = normalizeTitleForFilter(normalizedTitle);
 
     const noiseSignal = config.noiseSignals.find((signal) =>
-      title.includes(signal.toLowerCase()),
+      matchesSignal(title, signal),
     );
     if (noiseSignal) {
       return {
@@ -89,7 +113,7 @@ export class SemanticFilterService {
     }
 
     const techSignal = config.techSignals.find((signal) =>
-      title.includes(signal.toLowerCase()),
+      matchesSignal(title, signal),
     );
     if (techSignal) {
       return {

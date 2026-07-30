@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnApplicationBootstrap,
+  Optional,
+} from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import type OpenAI from "openai";
 
@@ -44,7 +50,7 @@ function getDepartmentFromMetadata(metadataJson: unknown): string | null {
 }
 
 @Injectable()
-export class JobEnrichmentWorker {
+export class JobEnrichmentWorker implements OnApplicationBootstrap {
   private readonly logger = new Logger(JobEnrichmentWorker.name);
   private readonly maxAttempts: number;
   private readonly enrich: (input: {
@@ -77,6 +83,12 @@ export class JobEnrichmentWorker {
         }
         return enrichJobWithLlm(aiClient, getAiModel("JOB_ENRICHMENT"), input);
       });
+  }
+
+  onApplicationBootstrap() {
+    this.logger.log(
+      `JobEnrichmentWorker iniciado — cron base: ${BASE_TICK_CRON}`,
+    );
   }
 
   @Cron(BASE_TICK_CRON)
