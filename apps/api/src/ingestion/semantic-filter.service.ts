@@ -69,6 +69,10 @@ export class SemanticFilterService {
     return config;
   }
 
+  invalidateCache() {
+    this.cache = null;
+  }
+
   async evaluate(normalizedTitle: string): Promise<SemanticFilterDecision> {
     const config = await this.getActiveConfig();
     const title = normalizeTitleForFilter(normalizedTitle);

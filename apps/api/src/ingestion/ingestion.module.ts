@@ -16,11 +16,13 @@ import {
 } from "./job-enrichment.worker";
 import { ManualIngestionService } from "./manual-ingestion.service";
 import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
+import { SemanticFilterController } from "./semantic-filter.controller";
 import { SemanticFilterService } from "./semantic-filter.service";
+import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
 
 @Module({
   imports: [DatabaseModule],
-  controllers: [IngestionController],
+  controllers: [IngestionController, SemanticFilterController],
   providers: [
     IngestionService,
     AdminIngestionImportService,
@@ -31,6 +33,7 @@ import { SemanticFilterService } from "./semantic-filter.service";
     ManualIngestionBatchRepository,
     ManualIngestionService,
     SemanticFilterService,
+    SemanticFilterAdminService,
     JobEnrichmentWorker,
     {
       provide: JOB_ENRICHMENT_AI_CLIENT,
