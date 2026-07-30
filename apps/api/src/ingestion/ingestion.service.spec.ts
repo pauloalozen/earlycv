@@ -520,3 +520,209 @@ test("IngestionService reports detailFetchSkippedCount from observations", async
   const result = await fixture.service.runJobSource("source-1");
   assert.equal(result.detailFetchSkippedCount, 1);
 });
+
+test("IngestionService.getRun attaches enrichment info to preview items", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const company = await database.company.create({
+    data: {
+      name: "Enrichment Preview Co",
+      normalizedName: `enrichment-preview-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "html",
+      parserKey: "custom_html",
+      sourceName: "Enrichment Preview Source",
+      sourceType: "custom_html",
+      sourceUrl: `https://manual.example.com/${randomUUID()}`,
+    },
+  });
+
+  const result = await service.runJobSource(jobSource.id);
+  const jobs = await database.job.findMany({
+    where: { jobSourceId: jobSource.id },
+    orderBy: { canonicalKey: "asc" },
+  });
+  assert.equal(jobs.length, 2);
+
+  const enrichments = await database.jobEnrichment.findMany({
+    where: { jobId: { in: jobs.map((job) => job.id) } },
+  });
+  await database.jobEnrichment.update({
+    where: { id: enrichments[0]?.id },
+    data: {
+      careerFingerprint: ["Desenvolvedor Backend", "Java"],
+      dominantArea: "SOFTWARE_ENGINEERING",
+      enrichmentStatus: "COMPLETED",
+    },
+  });
+  await database.jobEnrichment.update({
+    where: { id: enrichments[1]?.id },
+    data: {
+      enrichmentStatus: "SKIPPED",
+      semanticFilterReason: "zona_cinza",
+    },
+  });
+
+  const run = await service.getRun(jobSource.id, result.id);
+
+  assert.equal(run.previewItems.length, 2);
+  const byCanonicalKey = new Map(
+    run.previewItems.map((item) => [item.canonicalKey, item]),
+  );
+  const completedJob = jobs.find((job) => job.id === enrichments[0]?.jobId);
+  const skippedJob = jobs.find((job) => job.id === enrichments[1]?.jobId);
+  assert.deepEqual(
+    byCanonicalKey.get(completedJob?.canonicalKey ?? "")?.enrichment,
+    {
+      careerFingerprint: ["Desenvolvedor Backend", "Java"],
+      dominantArea: "SOFTWARE_ENGINEERING",
+      enrichmentStatus: "COMPLETED",
+      id: enrichments[0]?.id,
+      semanticFilterReason: null,
+    },
+  );
+  assert.deepEqual(
+    byCanonicalKey.get(skippedJob?.canonicalKey ?? "")?.enrichment,
+    {
+      careerFingerprint: [],
+      dominantArea: null,
+      enrichmentStatus: "SKIPPED",
+      id: enrichments[1]?.id,
+      semanticFilterReason: "zona_cinza",
+    },
+  );
+
+  await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
+});
+
+test("IngestionService.getRunEnrichmentSummary counts new-job enrichment status", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const company = await database.company.create({
+    data: {
+      name: "Enrichment Summary Co",
+      normalizedName: `enrichment-summary-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "html",
+      parserKey: "custom_html",
+      sourceName: "Enrichment Summary Source",
+      sourceType: "custom_html",
+      sourceUrl: `https://manual.example.com/${randomUUID()}`,
+    },
+  });
+
+  const result = await service.runJobSource(jobSource.id);
+  const jobs = await database.job.findMany({
+    where: { jobSourceId: jobSource.id },
+  });
+  const enrichments = await database.jobEnrichment.findMany({
+    where: { jobId: { in: jobs.map((job) => job.id) } },
+  });
+
+  await database.jobEnrichment.update({
+    where: { id: enrichments[0]?.id },
+    data: { enrichmentStatus: "COMPLETED" },
+  });
+  await database.jobEnrichment.update({
+    where: { id: enrichments[1]?.id },
+    data: { enrichmentStatus: "SKIPPED" },
+  });
+
+  const summary = await service.getRunEnrichmentSummary(result.id);
+
+  assert.deepEqual(summary, {
+    completed: 1,
+    failed: 0,
+    pending: 0,
+    skipped: 1,
+    total: 2,
+  });
+
+  await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
+});
+
+test("IngestionService.getRunEnrichmentSummary returns zeros when the run created no jobs", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const company = await database.company.create({
+    data: {
+      name: "Enrichment Summary Empty Co",
+      normalizedName: `enrichment-summary-empty-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "html",
+      parserKey: "custom_html",
+      sourceName: "Enrichment Summary Empty Source",
+      sourceType: "custom_html",
+      sourceUrl: `https://manual.example.com/${randomUUID()}`,
+    },
+  });
+
+  await service.runJobSource(jobSource.id);
+  // segunda rodada: mesmos canonicalKeys, action vira "updated" (nao cria
+  // JobEnrichment novo).
+  const second = await service.runJobSource(jobSource.id);
+  assert.equal(second.newCount, 0);
+
+  const summary = await service.getRunEnrichmentSummary(second.id);
+
+  assert.deepEqual(summary, {
+    completed: 0,
+    failed: 0,
+    pending: 0,
+    skipped: 0,
+    total: 0,
+  });
+
+  await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
+});

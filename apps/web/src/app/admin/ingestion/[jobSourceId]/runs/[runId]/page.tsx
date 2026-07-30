@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Card } from "@/components/ui";
-import { getIngestionRun, getJobSource } from "@/lib/admin-ingestion-api";
+import {
+  getIngestionRun,
+  getJobSource,
+  getRunEnrichmentSummary,
+} from "@/lib/admin-ingestion-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { enrichJobNowAction } from "./actions";
 
 export const metadata = buildAdminMetadata("Detalhe do run de ingestion");
 
@@ -13,6 +18,45 @@ type RunDetailPageProps = {
   params: Promise<{ jobSourceId: string; runId: string }>;
   searchParams: Promise<{ token?: string }>;
 };
+
+const ENRICHMENT_BADGE: Record<string, { className: string; emoji: string }> = {
+  COMPLETED: {
+    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    emoji: "✅",
+  },
+  FAILED: { className: "border-red-200 bg-red-50 text-red-700", emoji: "❌" },
+  PENDING: {
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+    emoji: "⏳",
+  },
+  PROCESSING: {
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+    emoji: "⏳",
+  },
+  SKIPPED: {
+    className: "border-stone-200 bg-stone-100 text-stone-600",
+    emoji: "⊘",
+  },
+};
+
+function EnrichmentBadge({ status }: { status: string }) {
+  const badge = ENRICHMENT_BADGE[status];
+  if (!badge) {
+    return (
+      <span className="rounded-md border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-medium text-stone-400">
+        —
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
+    >
+      {badge.emoji} {status}
+    </span>
+  );
+}
 
 export default async function IngestionRunDetailPage({
   params,
@@ -47,9 +91,10 @@ export default async function IngestionRunDetailPage({
   }
 
   try {
-    const [jobSource, run] = await Promise.all([
+    const [jobSource, run, enrichmentSummary] = await Promise.all([
       getJobSource(jobSourceId),
       getIngestionRun(jobSourceId, runId),
+      getRunEnrichmentSummary(runId).catch(() => null),
     ]);
     return (
       <main className="min-h-screen bg-linear-to-b from-stone-50 to-stone-50 px-6 py-10 text-stone-900 md:px-10">
@@ -100,6 +145,20 @@ export default async function IngestionRunDetailPage({
             </Card>
           </div>
 
+          {enrichmentSummary && enrichmentSummary.total > 0 ? (
+            <Card className="space-y-2">
+              <p className="text-[11px] font-medium text-stone-400">
+                enriquecimento das vagas novas desta run
+              </p>
+              <p className="flex flex-wrap gap-4 text-sm font-medium text-stone-900">
+                <span>✅ {enrichmentSummary.completed} enriquecidas</span>
+                <span>⊘ {enrichmentSummary.skipped} descartadas</span>
+                <span>⏳ {enrichmentSummary.pending} pendentes</span>
+                <span>❌ {enrichmentSummary.failed} falharam</span>
+              </p>
+            </Card>
+          ) : null}
+
           <Card className="space-y-4">
             <div>
               <p className="text-[11px] font-medium text-stone-400">janela</p>
@@ -122,9 +181,16 @@ export default async function IngestionRunDetailPage({
                       <p className="text-sm font-semibold text-stone-900">
                         {item.title}
                       </p>
-                      <span className="rounded-md bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-600">
-                        {item.action}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-md bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-600">
+                          {item.action}
+                        </span>
+                        {item.enrichment !== undefined && (
+                          <EnrichmentBadge
+                            status={item.enrichment?.enrichmentStatus ?? "—"}
+                          />
+                        )}
+                      </div>
                     </div>
                     <p className="mt-2 font-mono text-[11px] text-stone-500">
                       {item.canonicalKey}
@@ -132,6 +198,45 @@ export default async function IngestionRunDetailPage({
                     <p className="mt-3 text-sm leading-6 text-stone-600">
                       {item.message}
                     </p>
+
+                    {item.enrichment?.enrichmentStatus === "COMPLETED" && (
+                      <p className="mt-2 text-xs text-stone-600">
+                        {item.enrichment.dominantArea ?? "—"}
+                        {item.enrichment.careerFingerprint.length > 0
+                          ? ` — ${item.enrichment.careerFingerprint.slice(0, 2).join(", ")}`
+                          : ""}
+                      </p>
+                    )}
+                    {item.enrichment?.enrichmentStatus === "SKIPPED" && (
+                      <p className="mt-2 text-xs text-stone-600">
+                        {item.enrichment.semanticFilterReason ?? "—"}
+                      </p>
+                    )}
+                    {(item.enrichment?.enrichmentStatus === "PENDING" ||
+                      item.enrichment?.enrichmentStatus === "FAILED") && (
+                      <form action={enrichJobNowAction} className="mt-3">
+                        <input
+                          name="jobEnrichmentId"
+                          type="hidden"
+                          value={item.enrichment.id}
+                        />
+                        <input
+                          name="jobSourceId"
+                          type="hidden"
+                          value={jobSourceId}
+                        />
+                        <input name="runId" type="hidden" value={runId} />
+                        <button
+                          className={buttonVariants({
+                            size: "sm",
+                            variant: "outline",
+                          })}
+                          type="submit"
+                        >
+                          Enriquecer
+                        </button>
+                      </form>
+                    )}
                   </div>
                 ))}
               </div>

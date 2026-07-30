@@ -324,7 +324,108 @@ export class IngestionService {
       throw new NotFoundException("ingestion run not found");
     }
 
-    return toRunSummary(run as IngestionRunRecord);
+    const summary = toRunSummary(run as IngestionRunRecord);
+    return {
+      ...summary,
+      previewItems: await this.attachEnrichmentToPreviewItems(
+        summary.previewItems,
+      ),
+    };
+  }
+
+  // Job.canonicalKey e globalmente unico (gupy:subdominio:id externo), entao
+  // da pra resolver qual Job cada item do preview virou sem precisar de uma
+  // coluna de associacao run->job dedicada.
+  private async attachEnrichmentToPreviewItems(
+    items: IngestionPreviewItem[],
+  ): Promise<IngestionPreviewItem[]> {
+    if (items.length === 0) {
+      return items;
+    }
+
+    const canonicalKeys = items.map((item) => item.canonicalKey);
+    const jobs = await this.database.job.findMany({
+      where: { canonicalKey: { in: canonicalKeys } },
+      select: {
+        canonicalKey: true,
+        enrichment: {
+          select: {
+            careerFingerprint: true,
+            dominantArea: true,
+            enrichmentStatus: true,
+            id: true,
+            semanticFilterReason: true,
+          },
+        },
+      },
+    });
+
+    const enrichmentByCanonicalKey = new Map(
+      jobs.map((job) => [job.canonicalKey, job.enrichment]),
+    );
+
+    return items.map((item) => ({
+      ...item,
+      enrichment: enrichmentByCanonicalKey.get(item.canonicalKey) ?? null,
+    }));
+  }
+
+  // Resumo de enriquecimento das vagas NOVAS de uma run (action "created" no
+  // preview) — vagas so "updated"/"skipped"/"failed" nao disparam
+  // JobEnrichment novo nesta run, entao ficam fora da contagem.
+  async getRunEnrichmentSummary(runId: string) {
+    const run = await this.database.ingestionRun.findUnique({
+      where: { id: runId },
+    });
+
+    if (!run) {
+      throw new NotFoundException("ingestion run not found");
+    }
+
+    const createdCanonicalKeys = (
+      (run.previewJson as IngestionPreviewItem[] | null) ?? []
+    )
+      .filter((item) => item.action === "created")
+      .map((item) => item.canonicalKey);
+
+    if (createdCanonicalKeys.length === 0) {
+      return { completed: 0, failed: 0, pending: 0, skipped: 0, total: 0 };
+    }
+
+    const jobs = await this.database.job.findMany({
+      where: { canonicalKey: { in: createdCanonicalKeys } },
+      select: { id: true },
+    });
+    const jobIds = jobs.map((job) => job.id);
+
+    const grouped = await this.database.jobEnrichment.groupBy({
+      by: ["enrichmentStatus"],
+      where: { jobId: { in: jobIds } },
+      _count: { _all: true },
+    });
+
+    let completed = 0;
+    let skipped = 0;
+    let failed = 0;
+    // PENDING e PROCESSING contam juntos como "pendente" — nao ha slot
+    // separado pra PROCESSING no resumo (Parte 2.3 da spec).
+    let pending = 0;
+
+    for (const group of grouped) {
+      const count = group._count._all;
+      if (group.enrichmentStatus === "COMPLETED") completed += count;
+      else if (group.enrichmentStatus === "SKIPPED") skipped += count;
+      else if (group.enrichmentStatus === "FAILED") failed += count;
+      else pending += count;
+    }
+
+    // Jobs criados nesta run sem nenhum JobEnrichment (falha silenciosa na
+    // criacao do trigger) tambem contam como pendentes, pra completed +
+    // skipped + pending + failed sempre somar total.
+    const accounted = completed + skipped + failed + pending;
+    pending += Math.max(0, jobIds.length - accounted);
+
+    return { completed, failed, pending, skipped, total: jobIds.length };
   }
 
   async getDashboard() {

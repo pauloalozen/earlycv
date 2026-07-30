@@ -11,6 +11,7 @@ import { IngestionController } from "./ingestion.controller";
 import { IngestionService } from "./ingestion.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
 import { IngestionManualRunnerService } from "./ingestion-manual-runner.service";
+import { IngestionRunEnrichmentController } from "./ingestion-run-enrichment.controller";
 import { IngestionSchedulerService } from "./ingestion-scheduler.service";
 import {
   JOB_ENRICHMENT_AI_CLIENT,
@@ -28,6 +29,7 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
     IngestionController,
     SemanticFilterController,
     EnrichmentConfigController,
+    IngestionRunEnrichmentController,
   ],
   providers: [
     IngestionService,

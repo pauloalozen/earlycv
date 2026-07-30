@@ -3,11 +3,36 @@ import "server-only";
 import type { JobSourceTypeOption } from "./admin-ingestion-flow";
 import { getBackofficeSessionToken } from "./backoffice-session.server";
 
+// null = Job existe mas sem JobEnrichment (vaga antiga). undefined = campo
+// nao calculado por esse endpoint (so getIngestionRun/getIngestionRunById
+// preenchem).
+export type IngestionPreviewItemEnrichment = {
+  careerFingerprint: string[];
+  dominantArea: string | null;
+  enrichmentStatus:
+    | "PENDING"
+    | "PROCESSING"
+    | "COMPLETED"
+    | "SKIPPED"
+    | "FAILED";
+  id: string;
+  semanticFilterReason: string | null;
+} | null;
+
 export type IngestionPreviewItem = {
   action: "created" | "updated" | "skipped" | "failed";
   canonicalKey: string;
+  enrichment?: IngestionPreviewItemEnrichment;
   message: string;
   title: string;
+};
+
+export type RunEnrichmentSummary = {
+  completed: number;
+  failed: number;
+  pending: number;
+  skipped: number;
+  total: number;
 };
 
 export type CompanyRecord = {
@@ -358,6 +383,13 @@ export async function getIngestionRun(
 
 export async function getIngestionRunById(runId: string, token?: string) {
   return apiRequest<IngestionRunSummary>(`/runs/${runId}`, token);
+}
+
+export async function getRunEnrichmentSummary(runId: string, token?: string) {
+  return apiRequest<RunEnrichmentSummary>(
+    `/ingestion/runs/${runId}/enrichment-summary`,
+    token,
+  );
 }
 
 export async function runJobSource(jobSourceId: string, token?: string) {

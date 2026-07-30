@@ -10,9 +10,22 @@ export type IngestionPreviewAction =
   | "skipped"
   | "failed";
 
+// null = Job existe mas nao tem JobEnrichment (vaga antiga, anterior ao
+// trigger de enriquecimento). undefined = campo nao calculado por esse
+// endpoint (so getRun/getRunById preenchem, pra nao pagar o join extra
+// em toda listagem de runs).
+export type IngestionPreviewItemEnrichment = {
+  careerFingerprint: string[];
+  dominantArea: string | null;
+  enrichmentStatus: string;
+  id: string;
+  semanticFilterReason: string | null;
+} | null;
+
 export type IngestionPreviewItem = {
   action: IngestionPreviewAction;
   canonicalKey: string;
+  enrichment?: IngestionPreviewItemEnrichment;
   message: string;
   title: string;
 };
