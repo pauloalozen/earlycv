@@ -21,10 +21,12 @@ export type NormalizedJobObservation = {
   canonicalKey: string;
   city?: string;
   country?: string;
+  department?: string | null;
   descriptionClean: string;
   descriptionRaw: string;
   detailFetchSkipped?: boolean;
   employmentType?: string;
+  employmentTypeRaw?: string | null;
   externalJobId?: string;
   firstSeenAt: string;
   lastSeenAt: string;
@@ -77,6 +79,7 @@ export type JobSourceContext = Pick<
 export type IngestionRunSummary = {
   companyId?: string;
   companyName?: string;
+  errorSummary?: string | null;
   failedCount: number;
   finishedAt: string | null;
   id: string;

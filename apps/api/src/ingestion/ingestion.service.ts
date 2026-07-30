@@ -49,6 +49,7 @@ function normalizeUrl(rawUrl: string) {
 
 function toRunSummary(run: IngestionRunRecord): IngestionRunSummary {
   return {
+    errorSummary: run.errorSummary ?? null,
     failedCount: run.failedCount,
     finishedAt: run.finishedAt?.toISOString() ?? null,
     id: run.id,
@@ -522,6 +523,9 @@ export class IngestionService {
       jobSourceId: jobSource.id,
       lastSeenAt: nextLastSeenAt,
       locationText: observation.locationText,
+      metadataJson: observation.department
+        ? { department: observation.department }
+        : undefined,
       normalizedTitle: observation.normalizedTitle,
       publishedAtSource: observation.publishedAtSource
         ? new Date(observation.publishedAtSource)

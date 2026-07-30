@@ -142,6 +142,87 @@ test("GupyAdapter paginates and maps observation fields", async () => {
   }
 });
 
+test("GupyAdapter maps department and normalizes employmentType from API path", async () => {
+  const now = "2026-05-16T10:00:00.000Z";
+  const cases: Array<[string, string]> = [
+    ["vacancy_type_effective", "full_time"],
+    ["vacancy_type_internship", "internship"],
+    ["vacancy_type_apprentice", "apprentice"],
+    ["vacancy_type_temporary", "temporary"],
+    ["vacancy_type_talent_pool", "talent_pool"],
+    ["vacancy_legal_entity", "pj"],
+    ["vacancy_type_autonomous", "autonomous"],
+    ["full_time", "full_time"],
+  ];
+
+  for (const [raw, expected] of cases) {
+    const fetchMock = createFetchMock([
+      {
+        json: {
+          results: [
+            {
+              id: 500,
+              name: "Pessoa Engenheira",
+              description: "Descricao",
+              publishedAt: now,
+              departmentName: "Tecnologia",
+              type: raw,
+            },
+          ],
+          total: 1,
+        },
+      },
+    ]);
+
+    try {
+      const adapter = new GupyAdapter();
+      const observations = await adapter.collect(
+        createJobSourceContext("https://ifood.gupy.io"),
+      );
+
+      assert.equal(observations[0]?.department, "Tecnologia");
+      assert.equal(observations[0]?.employmentType, expected);
+      assert.equal(observations[0]?.employmentTypeRaw, raw);
+    } finally {
+      fetchMock.restore();
+    }
+  }
+});
+
+test("GupyAdapter passes through unmapped employmentType raw value", async () => {
+  const now = "2026-05-16T10:00:00.000Z";
+  const fetchMock = createFetchMock([
+    {
+      json: {
+        results: [
+          {
+            id: 501,
+            name: "Pessoa Engenheira",
+            description: "Descricao",
+            publishedAt: now,
+            type: "vacancy_type_unknown_future_value",
+          },
+        ],
+        total: 1,
+      },
+    },
+  ]);
+
+  try {
+    const adapter = new GupyAdapter();
+    const observations = await adapter.collect(
+      createJobSourceContext("https://ifood.gupy.io"),
+    );
+
+    assert.equal(
+      observations[0]?.employmentType,
+      "vacancy_type_unknown_future_value",
+    );
+  } finally {
+    fetchMock.restore();
+  }
+});
+
 test("GupyAdapter retries once on 429 and continues on non-404 errors", async () => {
   const now = "2026-05-16T10:00:00.000Z";
   const fetchMock = createFetchMock([
