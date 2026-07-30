@@ -123,8 +123,14 @@ export async function listEnrichmentJobs(params: {
   );
 }
 
-export async function runEnrichmentNow() {
-  return apiRequest<{ processed: number }>("/ingestion/enrichment/run-now", {
-    method: "POST",
-  });
+// Processa uma vaga especifica imediatamente, sem depender da posicao dela
+// na fila FIFO do batch generico (POST /ingestion/enrichment/run-now,
+// usado pelo botao "Disparar agora" em EnrichmentWorkerControls) —
+// necessario porque com backlog grande a vaga clicada podia nunca ser
+// alcancada em 30s.
+export async function runEnrichmentNowForJob(jobEnrichmentId: string) {
+  return apiRequest<{ processed: boolean }>(
+    `/ingestion/enrichment/jobs/${jobEnrichmentId}/run-now`,
+    { method: "POST" },
+  );
 }

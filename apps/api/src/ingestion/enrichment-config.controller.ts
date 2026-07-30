@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Inject,
+  Param,
   Post,
   Put,
   Query,
@@ -79,5 +80,13 @@ export class EnrichmentConfigController {
   async runNow() {
     const processed = await this.jobEnrichmentWorker.runNow();
     return { processed: processed ?? 0 };
+  }
+
+  // Processa uma vaga especifica imediatamente, sem depender da posicao
+  // dela na fila FIFO do batch generico (ver JobEnrichmentWorker.processOne).
+  @Post("jobs/:id/run-now")
+  @HttpCode(200)
+  async runNowForJob(@Param("id") id: string) {
+    return this.jobEnrichmentWorker.processOne(id);
   }
 }

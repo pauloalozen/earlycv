@@ -50,6 +50,11 @@ function createFixture() {
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
           .slice(0, take)
           .map((item) => ({ ...item, job: jobs.get(item.jobId) })),
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        const item = enrichments.get(where.id);
+        if (!item) return null;
+        return { ...item, job: jobs.get(item.jobId) };
+      },
       update: async ({
         data,
         where,
@@ -141,6 +146,7 @@ function createFixture() {
   return {
     enrichments,
     getEnrichCalls: () => enrichCalls,
+    lockRepository,
     seedEnrichment,
     setEnrich(impl: typeof enrichImpl) {
       enrichImpl = impl;
@@ -333,4 +339,65 @@ test("JobEnrichmentWorker.processPendingBatch respects enrichmentBatchSize from 
 
   assert.equal(processed, 1);
   assert.equal(fixture.getEnrichCalls(), 1);
+});
+
+test("JobEnrichmentWorker.processOne processes the targeted job regardless of queue order", async () => {
+  const fixture = createFixture();
+  fixture.setEnrichmentConfig({ enrichmentBatchSize: 1 });
+  fixture.setEnrich(async () => fullResult());
+  // "older" ficaria na frente de um processPendingBatch com batchSize 1 —
+  // processOne deve pegar "newer" mesmo assim, por ser o id pedido.
+  fixture.seedEnrichment({
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    id: "older",
+  });
+  fixture.seedEnrichment({
+    createdAt: new Date("2026-06-01T00:00:00.000Z"),
+    id: "newer",
+  });
+
+  const result = await fixture.worker.processOne("newer");
+
+  assert.deepEqual(result, { processed: true });
+  assert.equal(fixture.getEnrichCalls(), 1);
+  assert.equal(fixture.enrichments.get("newer")?.enrichmentStatus, "COMPLETED");
+  assert.equal(fixture.enrichments.get("older")?.enrichmentStatus, "PENDING");
+});
+
+test("JobEnrichmentWorker.processOne returns processed:false for an unknown id", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+
+  const result = await fixture.worker.processOne("does-not-exist");
+
+  assert.deepEqual(result, { processed: false });
+  assert.equal(fixture.getEnrichCalls(), 0);
+});
+
+test("JobEnrichmentWorker.processOne retries the lock and eventually succeeds once it frees up", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment({ id: "job-1" });
+
+  let attempts = 0;
+  fixture.lockRepository.acquire = async () => {
+    attempts += 1;
+    return attempts >= 3;
+  };
+
+  const result = await fixture.worker.processOne("job-1");
+
+  assert.deepEqual(result, { processed: true });
+  assert.equal(attempts, 3);
+  assert.equal(fixture.enrichments.get("job-1")?.enrichmentStatus, "COMPLETED");
+});
+
+test("JobEnrichmentWorker.processOne throws when the lock stays busy after retrying", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment({ id: "job-1" });
+  fixture.lockRepository.acquire = async () => false;
+
+  await assert.rejects(() => fixture.worker.processOne("job-1"));
+  assert.equal(fixture.getEnrichCalls(), 0);
 });

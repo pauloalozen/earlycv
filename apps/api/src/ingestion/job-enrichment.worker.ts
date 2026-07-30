@@ -26,6 +26,8 @@ export const JOB_ENRICHMENT_WORKER_OPTIONS = "JOB_ENRICHMENT_WORKER_OPTIONS";
 
 const LOCK_ID = "job-enrichment-worker";
 const LOCK_TTL_MS = 5 * 60_000;
+const LOCK_RETRY_ATTEMPTS = 6;
+const LOCK_RETRY_DELAY_MS = 500;
 
 // Tick base fixo do NestJS @Cron: precisa ser mais fino que o menor
 // enrichmentCronExpression configuravel em banco (default "*/10 * * * * *")
@@ -121,6 +123,73 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
   // desabilitado, respeitando apenas o enrichmentBatchSize configurado.
   async runNow() {
     return this.processPendingBatch();
+  }
+
+  // Processa uma vaga especifica imediatamente, sem depender da posicao
+  // dela na fila FIFO do batch (processPendingBatch pega sempre as
+  // enrichmentBatchSize mais antigas por createdAt — com backlog grande,
+  // uma vaga PENDING recem-resetada pode nunca ser alcancada). Usado pelo
+  // botao "Enriquecer agora"/"Enriquecer" por linha nas telas de admin.
+  //
+  // O lock e compartilhado com o cron do batch (tick a cada 5s), que pode
+  // segura-lo por varios segundos processando itens reais. Sem retry, um
+  // clique que cai nessa janela falhava em silencio (processed: false sem
+  // erro) e a UI reportava sucesso indevido. Faz poll curto pelo lock antes
+  // de desistir; se mesmo assim nao conseguir, lanca erro pra propagar a
+  // falha real ate o usuario.
+  async processOne(jobEnrichmentId: string) {
+    const owner = `job-enrichment-worker-single-${randomUUID()}`;
+    const acquired = await this.acquireLockWithRetry(owner);
+
+    if (!acquired) {
+      throw new Error(
+        "job enrichment worker lock is busy, try again shortly",
+      );
+    }
+
+    try {
+      const enrichment = await this.database.jobEnrichment.findUnique({
+        where: { id: jobEnrichmentId },
+        include: {
+          job: {
+            select: {
+              descriptionClean: true,
+              metadataJson: true,
+              normalizedTitle: true,
+              title: true,
+            },
+          },
+        },
+      });
+
+      if (!enrichment) {
+        return { processed: false };
+      }
+
+      await this.processItem(enrichment);
+      return { processed: true };
+    } finally {
+      await this.lockRepository.release(LOCK_ID, owner);
+    }
+  }
+
+  private async acquireLockWithRetry(owner: string) {
+    for (let attempt = 0; attempt < LOCK_RETRY_ATTEMPTS; attempt++) {
+      const acquired = await this.lockRepository.acquire(
+        LOCK_ID,
+        owner,
+        LOCK_TTL_MS,
+      );
+      if (acquired) {
+        return true;
+      }
+      if (attempt < LOCK_RETRY_ATTEMPTS - 1) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, LOCK_RETRY_DELAY_MS),
+        );
+      }
+    }
+    return false;
   }
 
   async processPendingBatch() {

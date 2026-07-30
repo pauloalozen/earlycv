@@ -2,11 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 
-import { reenrichJob, runEnrichmentNow } from "@/lib/admin-semantic-filter-api";
+import {
+  reenrichJob,
+  runEnrichmentNowForJob,
+} from "@/lib/admin-semantic-filter-api";
 
 // Enriquecimento individual inline na listagem de vagas do run: reseta a
-// vaga pra PENDING e dispara o worker imediatamente, mesmo mecanismo do
-// botao "Enriquecer agora" da listagem unificada (/admin/ingestion/filter).
+// vaga pra PENDING e processa ela especificamente na hora (nao entra na
+// fila FIFO geral), mesmo mecanismo do botao "Enriquecer agora" da
+// listagem unificada (/admin/ingestion/filter).
 export async function enrichJobNowAction(formData: FormData) {
   const jobEnrichmentId = String(formData.get("jobEnrichmentId") ?? "");
   const jobSourceId = String(formData.get("jobSourceId") ?? "");
@@ -14,6 +18,6 @@ export async function enrichJobNowAction(formData: FormData) {
   if (!jobEnrichmentId || !jobSourceId || !runId) return;
 
   await reenrichJob(jobEnrichmentId);
-  await runEnrichmentNow();
+  await runEnrichmentNowForJob(jobEnrichmentId);
   revalidatePath(`/admin/ingestion/${jobSourceId}/runs/${runId}`);
 }
