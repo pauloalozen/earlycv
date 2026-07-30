@@ -62,6 +62,10 @@ enum JobSourceType {
   successfactors
   custom_html
   custom_api
+  ashby
+  inhire
+  solides
+  pandape
 }
 
 enum CrawlStrategy {
@@ -279,6 +283,61 @@ enum AnalysisConfigRiskLevel {
   low
   medium
   high
+}
+
+enum JobArea {
+  DATA_AI
+  SOFTWARE_ENGINEERING
+  CLOUD_DEVOPS
+  CYBERSECURITY
+  PRODUCT
+  DESIGN_UX
+  QA_TEST
+  PROJECT_AGILE
+  ARCHITECTURE
+  LEADERSHIP
+  OTHER
+}
+
+enum SeniorityLevel {
+  INTERN
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+  STAFF
+  MANAGER
+  DIRECTOR
+  UNKNOWN
+}
+
+enum ContractType {
+  CLT
+  PJ
+  BOTH
+  UNKNOWN
+}
+
+enum EnrichmentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum SemanticFilterResult {
+  PENDING
+  ENRICH
+  SKIP
+}
+
+enum AutoApplyStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  RATE_LIMITED
 }
 
 model User {
@@ -576,6 +635,7 @@ model Resume {
   cvAdaptationsAsMaster        CvAdaptation[]                @relation("CvAdaptationMaster")
   cvAdaptationAsResult         CvAdaptation?                 @relation("CvAdaptationResult")
   masterCvCanonicalExtractions MasterCvCanonicalExtraction[]
+  jobApplicationsAsResumeUsed  JobApplication[]              @relation("JobApplicationResume")
 
   @@index([userId])
   @@index([basedOnResumeId])
@@ -1254,10 +1314,66 @@ model Job {
   company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   jobSource         JobSource @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
   targetResumes     Resume[]
+  enrichment        JobEnrichment?
+  applications      JobApplication[]
 
   @@index([companyId])
   @@index([jobSourceId])
   @@index([firstSeenAt])
+}
+
+model JobEnrichment {
+  id                    String                @id @default(cuid())
+  jobId                 String                @unique
+  job                   Job                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  // Taxonomia (output do LLM)
+  dominantArea          JobArea?
+  areas                 JobArea[]
+  specialties           String[]
+  seniority             SeniorityLevel?
+  requiredSkills        String[]
+  optionalSkills        String[]
+  technologies          String[]
+  contractType          ContractType?
+  languageRequirements  String[]
+  certifications        String[]
+  experienceYearsMin    Int?
+  managementRequired    Boolean               @default(false)
+  travelRequired        Boolean               @default(false)
+  careerFingerprint     String[]
+
+  // Filtro semântico (preenchido antes do LLM)
+  semanticFilterResult  SemanticFilterResult  @default(PENDING)
+  semanticFilterReason  String?
+  semanticFilterVersion String?
+
+  // Metadados do enriquecimento
+  enrichmentStatus      EnrichmentStatus      @default(PENDING)
+  enrichmentVersion     String?
+  enrichmentModel       String?
+  enrichmentError       String?
+  enrichedAt            DateTime?
+  attempts              Int                   @default(0)
+
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([enrichmentStatus])
+  @@index([semanticFilterResult])
+  @@index([dominantArea])
+  @@index([seniority])
+}
+
+model SemanticFilterConfig {
+  id           String   @id @default(cuid())
+  version      String   @unique
+  isActive     Boolean  @default(false)
+  techSignals  String[]
+  noiseSignals String[]
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model JobApplication {
@@ -1290,6 +1406,29 @@ model JobApplication {
   // (mantida em sync por upsertFromCvAdaptation) — fonte única de idioma
   // para todo o Kit de Candidatura.
   language              String?
+
+  // Radar de Oportunidades: FK opcional quando a candidatura tem origem
+  // numa vaga ingerida pelo Radar (não preenchido para candidaturas manuais).
+  jobId                 String?
+  job                   Job?                 @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  // v4.1 Auto Apply
+  autoApplyEnabled        Boolean          @default(false)
+  autoApplyStatus         AutoApplyStatus?
+  autoApplyAttemptedAt    DateTime?
+  autoApplyCompletedAt    DateTime?
+  autoApplyResultJson     Json?
+  externalApplicationId   String?
+  externalApplicationUrl  String?
+
+  // v4.1 Auto Apply: CV master/base usado na candidatura automática.
+  // Diferente de currentCvAdaptationId (CV adaptado para a vaga específica).
+  resumeUsedId          String?
+  resumeUsed            Resume?              @relation("JobApplicationResume", fields: [resumeUsedId], references: [id], onDelete: SetNull)
+
+  matchScore            Int?
+  matchSnapshotJson     Json?
+
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
@@ -1302,6 +1441,8 @@ model JobApplication {
   @@index([userId, createdAt])
   @@index([userId, status])
   @@index([userId, normalizedCompanyName, normalizedJobTitle])
+  @@index([jobId])
+  @@index([resumeUsedId])
 }
 
 model JobApplicationEvent {
