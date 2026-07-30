@@ -71,6 +71,15 @@ function createFixture() {
     release: async () => undefined,
   };
 
+  let enrichmentConfig = {
+    enrichmentBatchSize: 10,
+    enrichmentCronExpression: "*/10 * * * * *",
+    enrichmentEnabled: true,
+  };
+  const enrichmentConfigService = {
+    getConfig: async () => enrichmentConfig,
+  };
+
   let evaluateImpl: (title: string) => Promise<EvaluateResult> = async () => ({
     configVersion: "v1",
     reason: "tech_signal:desenvolvedor",
@@ -93,6 +102,7 @@ function createFixture() {
     database as never,
     semanticFilterService as never,
     lockRepository as never,
+    enrichmentConfigService as never,
     undefined,
     {
       enrich: async (input) => {
@@ -134,6 +144,9 @@ function createFixture() {
     seedEnrichment,
     setEnrich(impl: typeof enrichImpl) {
       enrichImpl = impl;
+    },
+    setEnrichmentConfig(overrides: Partial<typeof enrichmentConfig>) {
+      enrichmentConfig = { ...enrichmentConfig, ...overrides };
     },
     setEvaluate(impl: typeof evaluateImpl) {
       evaluateImpl = impl;
@@ -252,4 +265,72 @@ test("JobEnrichmentWorker marks COMPLETED for dominantArea OTHER", async () => {
   const [record] = fixture.enrichments.values();
   assert.equal(record.enrichmentStatus, "COMPLETED");
   assert.equal(record.dominantArea, "OTHER");
+});
+
+test("JobEnrichmentWorker.runScheduledCycle skips processing when enrichmentEnabled is false", async () => {
+  const fixture = createFixture();
+  fixture.setEnrichmentConfig({ enrichmentEnabled: false });
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment();
+
+  const processed = await fixture.worker.runScheduledCycle(new Date());
+
+  assert.equal(processed, 0);
+  assert.equal(fixture.getEnrichCalls(), 0);
+  const [record] = fixture.enrichments.values();
+  assert.equal(record.enrichmentStatus, "PENDING");
+});
+
+test("JobEnrichmentWorker.runScheduledCycle skips processing when the cron is not due", async () => {
+  const fixture = createFixture();
+  fixture.setEnrichmentConfig({ enrichmentCronExpression: "30 * * * * *" });
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment();
+
+  const now = new Date("2026-05-17T15:30:20.000Z");
+  const processed = await fixture.worker.runScheduledCycle(now);
+
+  assert.equal(processed, 0);
+  assert.equal(fixture.getEnrichCalls(), 0);
+});
+
+test("JobEnrichmentWorker.runScheduledCycle processes when enabled and the cron is due", async () => {
+  const fixture = createFixture();
+  fixture.setEnrichmentConfig({ enrichmentCronExpression: "*/10 * * * * *" });
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment();
+
+  const now = new Date("2026-05-17T15:30:20.000Z");
+  const processed = await fixture.worker.runScheduledCycle(now);
+
+  assert.equal(processed, 1);
+  const [record] = fixture.enrichments.values();
+  assert.equal(record.enrichmentStatus, "COMPLETED");
+});
+
+test("JobEnrichmentWorker.runNow processes pending jobs even when enrichmentEnabled is false", async () => {
+  const fixture = createFixture();
+  fixture.setEnrichmentConfig({ enrichmentEnabled: false });
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment();
+
+  const processed = await fixture.worker.runNow();
+
+  assert.equal(processed, 1);
+  assert.equal(fixture.getEnrichCalls(), 1);
+  const [record] = fixture.enrichments.values();
+  assert.equal(record.enrichmentStatus, "COMPLETED");
+});
+
+test("JobEnrichmentWorker.processPendingBatch respects enrichmentBatchSize from config", async () => {
+  const fixture = createFixture();
+  fixture.setEnrichmentConfig({ enrichmentBatchSize: 1 });
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment({ id: "enrichment-a" });
+  fixture.seedEnrichment({ id: "enrichment-b" });
+
+  const processed = await fixture.worker.processPendingBatch();
+
+  assert.equal(processed, 1);
+  assert.equal(fixture.getEnrichCalls(), 1);
 });

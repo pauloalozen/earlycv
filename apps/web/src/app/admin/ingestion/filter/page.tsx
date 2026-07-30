@@ -14,6 +14,7 @@ import {
 } from "@/lib/admin-semantic-filter-api";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
+import { EnrichmentWorkerControls } from "./_components/enrichment-worker-controls";
 import { SemanticFilterConfigForm } from "./_components/semantic-filter-config-form";
 import { SemanticFilterDashboardCards } from "./_components/semantic-filter-dashboard-cards";
 import {
@@ -101,6 +102,8 @@ export default async function AdminSemanticFilterPage({
       />
 
       <SemanticFilterDashboardCards />
+
+      <EnrichmentWorkerControls />
 
       <div className="mb-6 rounded-xl border border-stone-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-semibold text-stone-900">

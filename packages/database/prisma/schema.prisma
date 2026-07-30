@@ -955,6 +955,14 @@ model IngestionSchedulerConfig {
   timezone      String   @default("America/Sao_Paulo")
   normalDelayMs Int      @default(45000)
   errorDelayMs  Int      @default(90000)
+
+  // Radar de Oportunidades: config do JobEnrichmentWorker, lida com cache
+  // de 60s (EnrichmentConfigService) em vez de env var — ver
+  // docs/specs/2026-07-30-radar-oportunidades-sprint1-spec.md.
+  enrichmentEnabled        Boolean @default(true)
+  enrichmentCronExpression String  @default("*/10 * * * * *")
+  enrichmentBatchSize      Int     @default(10)
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }

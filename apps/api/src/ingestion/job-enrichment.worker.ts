@@ -5,6 +5,8 @@ import type OpenAI from "openai";
 
 import { getAiModel } from "../common/ai-client-factory";
 import { DatabaseService } from "../database/database.service";
+import { doesSecondsCronMatchDate } from "./cron-utils";
+import { EnrichmentConfigService } from "./enrichment-config.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
 import {
   enrichJobWithLlm,
@@ -19,8 +21,14 @@ export const JOB_ENRICHMENT_WORKER_OPTIONS = "JOB_ENRICHMENT_WORKER_OPTIONS";
 const LOCK_ID = "job-enrichment-worker";
 const LOCK_TTL_MS = 5 * 60_000;
 
+// Tick base fixo do NestJS @Cron: precisa ser mais fino que o menor
+// enrichmentCronExpression configuravel em banco (default "*/10 * * * * *")
+// pra doesSecondsCronMatchDate ter chance de casar. O intervalo real
+// efetivo continua controlado pelo config em banco (Ajuste 1), lido a
+// cada tick com cache de 60s — igual ao SemanticFilterService.
+const BASE_TICK_CRON = "*/5 * * * * *";
+
 type JobEnrichmentWorkerOptions = {
-  batchSize?: number;
   enrich?: (input: {
     department: string | null;
     descriptionClean: string;
@@ -38,7 +46,6 @@ function getDepartmentFromMetadata(metadataJson: unknown): string | null {
 @Injectable()
 export class JobEnrichmentWorker {
   private readonly logger = new Logger(JobEnrichmentWorker.name);
-  private readonly batchSize: number;
   private readonly maxAttempts: number;
   private readonly enrich: (input: {
     department: string | null;
@@ -52,6 +59,8 @@ export class JobEnrichmentWorker {
     private readonly semanticFilterService: SemanticFilterService,
     @Inject(IngestionLockRepository)
     private readonly lockRepository: IngestionLockRepository,
+    @Inject(EnrichmentConfigService)
+    private readonly enrichmentConfigService: EnrichmentConfigService,
     @Optional()
     @Inject(JOB_ENRICHMENT_AI_CLIENT)
     aiClient?: OpenAI,
@@ -59,8 +68,6 @@ export class JobEnrichmentWorker {
     @Inject(JOB_ENRICHMENT_WORKER_OPTIONS)
     options: JobEnrichmentWorkerOptions = {},
   ) {
-    this.batchSize =
-      options.batchSize ?? Number(process.env.ENRICHMENT_BATCH_SIZE || 10);
     this.maxAttempts = options.maxAttempts ?? 3;
     this.enrich =
       options.enrich ??
@@ -72,13 +79,36 @@ export class JobEnrichmentWorker {
       });
   }
 
-  @Cron(process.env.ENRICHMENT_CRON_EXPRESSION || "*/10 * * * * *")
+  @Cron(BASE_TICK_CRON)
   async tick() {
     if (process.env.NODE_ENV === "test") {
       return;
     }
 
-    await this.processPendingBatch();
+    await this.runScheduledCycle(new Date());
+  }
+
+  // Extraido do tick() pra ser testavel sem depender do guard de
+  // NODE_ENV === "test" do decorator @Cron.
+  async runScheduledCycle(now: Date) {
+    const config = await this.enrichmentConfigService.getConfig();
+
+    if (!config.enrichmentEnabled) {
+      this.logger.log("job enrichment worker is disabled, skipping tick");
+      return 0;
+    }
+
+    if (!doesSecondsCronMatchDate(config.enrichmentCronExpression, now)) {
+      return 0;
+    }
+
+    return this.processPendingBatch();
+  }
+
+  // Ciclo manual (Ajuste 3 — "Disparar agora"): roda mesmo com o worker
+  // desabilitado, respeitando apenas o enrichmentBatchSize configurado.
+  async runNow() {
+    return this.processPendingBatch();
   }
 
   async processPendingBatch() {
@@ -90,14 +120,15 @@ export class JobEnrichmentWorker {
     );
 
     if (!acquired) {
-      return;
+      return 0;
     }
 
     try {
+      const config = await this.enrichmentConfigService.getConfig();
       const pending = await this.database.jobEnrichment.findMany({
         where: { enrichmentStatus: "PENDING" },
         orderBy: [{ createdAt: "asc" }],
-        take: this.batchSize,
+        take: config.enrichmentBatchSize,
         include: {
           job: {
             select: {
@@ -113,6 +144,8 @@ export class JobEnrichmentWorker {
       for (const enrichment of pending) {
         await this.processItem(enrichment);
       }
+
+      return pending.length;
     } finally {
       await this.lockRepository.release(LOCK_ID, owner);
     }

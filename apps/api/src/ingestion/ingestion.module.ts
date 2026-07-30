@@ -4,6 +4,8 @@ import { createAiClientFromEnv } from "../common/ai-client-factory";
 import { DatabaseModule } from "../database/database.module";
 import { CustomApiAdapter, CustomHtmlAdapter, GupyAdapter } from "./adapters";
 import { AdminIngestionImportService } from "./admin-ingestion-import.service";
+import { EnrichmentConfigController } from "./enrichment-config.controller";
+import { EnrichmentConfigService } from "./enrichment-config.service";
 import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
 import { IngestionController } from "./ingestion.controller";
 import { IngestionService } from "./ingestion.service";
@@ -22,7 +24,11 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
 
 @Module({
   imports: [DatabaseModule],
-  controllers: [IngestionController, SemanticFilterController],
+  controllers: [
+    IngestionController,
+    SemanticFilterController,
+    EnrichmentConfigController,
+  ],
   providers: [
     IngestionService,
     AdminIngestionImportService,
@@ -34,6 +40,7 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
     ManualIngestionService,
     SemanticFilterService,
     SemanticFilterAdminService,
+    EnrichmentConfigService,
     JobEnrichmentWorker,
     {
       provide: JOB_ENRICHMENT_AI_CLIENT,
