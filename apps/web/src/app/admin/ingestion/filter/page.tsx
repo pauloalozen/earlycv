@@ -8,9 +8,11 @@ import {
   AdminTd,
   AdminTh,
 } from "@/app/admin/_components/admin-primitives";
+import { listJobSources } from "@/lib/admin-ingestion-api";
 import {
+  type EnrichmentStatusValue,
   getActiveSemanticFilterConfig,
-  listSkippedEnrichments,
+  listEnrichmentJobs,
 } from "@/lib/admin-semantic-filter-api";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
@@ -18,17 +20,36 @@ import { EnrichmentWorkerControls } from "./_components/enrichment-worker-contro
 import { SemanticFilterConfigForm } from "./_components/semantic-filter-config-form";
 import { SemanticFilterDashboardCards } from "./_components/semantic-filter-dashboard-cards";
 import {
-  reenrichJobFormAction,
+  enrichNowFormAction,
   saveSemanticFilterConfigVersionAction,
 } from "./actions";
 
-export const metadata = buildAdminMetadata("Filtro semantico");
+export const metadata = buildAdminMetadata("Enriquecimento de Vagas");
 
 const fieldClassName = "h-9 rounded-md border px-3 text-[12.5px]";
 const fieldStyle = {
   borderColor: "rgba(10,10,10,0.08)",
   background: "#fafaf6",
   color: "#2a2620",
+};
+
+const STATUS_OPTIONS: EnrichmentStatusValue[] = [
+  "PENDING",
+  "PROCESSING",
+  "COMPLETED",
+  "SKIPPED",
+  "FAILED",
+];
+
+const STATUS_PILL_TONE: Record<
+  EnrichmentStatusValue,
+  "neutral" | "warn" | "ok" | "danger"
+> = {
+  COMPLETED: "ok",
+  FAILED: "danger",
+  PENDING: "neutral",
+  PROCESSING: "warn",
+  SKIPPED: "neutral",
 };
 
 function formatDate(iso: string) {
@@ -42,11 +63,10 @@ function formatDate(iso: string) {
 }
 
 type SearchParams = {
-  from?: string;
   page?: string;
-  reasonKind?: "zona_cinza" | "noise_signal" | "tech_signal";
-  sourceName?: string;
-  to?: string;
+  search?: string;
+  sourceId?: string;
+  status?: EnrichmentStatusValue;
 };
 
 export default async function AdminSemanticFilterPage({
@@ -57,26 +77,25 @@ export default async function AdminSemanticFilterPage({
   const sp = await searchParams;
   const page = sp.page ? Number.parseInt(sp.page, 10) : 1;
 
-  const [activeConfig, skipped] = await Promise.all([
+  const [activeConfig, jobs, sources] = await Promise.all([
     getActiveSemanticFilterConfig(),
-    listSkippedEnrichments({
-      from: sp.from,
+    listEnrichmentJobs({
       page,
       pageSize: 20,
-      reasonKind: sp.reasonKind,
-      sourceName: sp.sourceName,
-      to: sp.to,
+      search: sp.search,
+      sourceId: sp.sourceId,
+      status: sp.status,
     }),
+    listJobSources(),
   ]);
 
   const buildUrl = (overrides: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
     const merged = {
-      from: sp.from,
       page: String(page),
-      reasonKind: sp.reasonKind,
-      sourceName: sp.sourceName,
-      to: sp.to,
+      search: sp.search,
+      sourceId: sp.sourceId,
+      status: sp.status,
       ...overrides,
     };
     for (const [key, value] of Object.entries(merged)) {
@@ -96,12 +115,16 @@ export default async function AdminSemanticFilterPage({
             ← Voltar pra ingestao
           </Link>
         }
-        eyebrow="admin · ingestao · filtro"
-        subtitle="Auditoria do filtro semantico pre-LLM: config ativa, vagas descartadas e status do enriquecimento."
-        title="Filtro semantico."
+        eyebrow="admin · ingestao · enriquecimento de vagas"
+        subtitle="Auditoria do filtro semantico pre-LLM: config ativa, status do enriquecimento e vagas por status."
+        title="Enriquecimento de Vagas."
       />
 
-      <SemanticFilterDashboardCards />
+      <SemanticFilterDashboardCards
+        activeStatus={sp.status}
+        search={sp.search}
+        sourceId={sp.sourceId}
+      />
 
       <EnrichmentWorkerControls />
 
@@ -126,7 +149,7 @@ export default async function AdminSemanticFilterPage({
       </div>
 
       <h2 className="mb-3 text-sm font-semibold text-stone-900">
-        Vagas descartadas (SKIPPED)
+        Vagas por status de enriquecimento
       </h2>
 
       <form
@@ -136,35 +159,36 @@ export default async function AdminSemanticFilterPage({
       >
         <select
           className={fieldClassName}
-          defaultValue={sp.reasonKind ?? ""}
-          name="reasonKind"
+          defaultValue={sp.status ?? ""}
+          name="status"
           style={fieldStyle}
         >
-          <option value="">motivo: todos</option>
-          <option value="zona_cinza">zona_cinza</option>
-          <option value="noise_signal">noise_signal</option>
-          <option value="tech_signal">tech_signal</option>
+          <option value="">status: todos</option>
+          {STATUS_OPTIONS.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
+        <select
+          className={fieldClassName}
+          defaultValue={sp.sourceId ?? ""}
+          name="sourceId"
+          style={fieldStyle}
+        >
+          <option value="">fonte: todas</option>
+          {sources.map((source) => (
+            <option key={source.id} value={source.id}>
+              {source.company.name} · {source.sourceName}
+            </option>
+          ))}
         </select>
         <input
           className={fieldClassName}
-          defaultValue={sp.sourceName ?? ""}
-          name="sourceName"
-          placeholder="Fonte"
+          defaultValue={sp.search ?? ""}
+          name="search"
+          placeholder="Buscar por titulo ou empresa"
           style={fieldStyle}
-        />
-        <input
-          className={fieldClassName}
-          defaultValue={sp.from ?? ""}
-          name="from"
-          style={fieldStyle}
-          type="date"
-        />
-        <input
-          className={fieldClassName}
-          defaultValue={sp.to ?? ""}
-          name="to"
-          style={fieldStyle}
-          type="date"
         />
         <button className={buttonVariants()} type="submit">
           Filtrar
@@ -180,20 +204,21 @@ export default async function AdminSemanticFilterPage({
       <AdminTable>
         <thead>
           <tr>
-            <AdminTh>Titulo normalizado</AdminTh>
-            <AdminTh w={180}>Fonte</AdminTh>
-            <AdminTh w={200}>Motivo</AdminTh>
-            <AdminTh w={160}>Primeira vez visto</AdminTh>
+            <AdminTh>Vaga</AdminTh>
+            <AdminTh w={200}>Empresa</AdminTh>
+            <AdminTh w={110}>Status</AdminTh>
+            <AdminTh>Detalhe</AdminTh>
+            <AdminTh w={160}>Data</AdminTh>
             <AdminTh w={140} align="right">
               Acao
             </AdminTh>
           </tr>
         </thead>
         <tbody>
-          {skipped.rows.length === 0 && (
+          {jobs.rows.length === 0 && (
             <tr>
               <td
-                colSpan={5}
+                colSpan={6}
                 style={{
                   padding: "32px 16px",
                   textAlign: "center",
@@ -201,56 +226,81 @@ export default async function AdminSemanticFilterPage({
                   fontSize: 13,
                 }}
               >
-                Nenhuma vaga descartada encontrada.
+                Nenhuma vaga encontrada.
               </td>
             </tr>
           )}
-          {skipped.rows.map((row) => (
+          {jobs.rows.map((row) => (
             <tr key={row.id}>
-              <AdminTd>{row.normalizedTitle}</AdminTd>
-              <AdminTd muted>{row.sourceName}</AdminTd>
+              <AdminTd>{row.jobTitle}</AdminTd>
+              <AdminTd muted>{row.companyName}</AdminTd>
               <AdminTd>
-                <AdminPill tone="neutral" mono>
-                  {row.semanticFilterReason ?? "—"}
+                <AdminPill mono tone={STATUS_PILL_TONE[row.enrichmentStatus]}>
+                  {row.enrichmentStatus}
                 </AdminPill>
               </AdminTd>
+              <AdminTd muted>
+                {row.enrichmentStatus === "COMPLETED" &&
+                  (row.dominantArea ?? row.careerFingerprint.length > 0) && (
+                    <span>
+                      {row.dominantArea ?? "—"}
+                      {row.careerFingerprint.length > 0
+                        ? ` — ${row.careerFingerprint.join(", ")}`
+                        : ""}
+                    </span>
+                  )}
+                {row.enrichmentStatus === "SKIPPED" &&
+                  (row.semanticFilterReason ?? "—")}
+                {row.enrichmentStatus === "FAILED" &&
+                  (row.enrichmentError ?? "—")}
+                {(row.enrichmentStatus === "PENDING" ||
+                  row.enrichmentStatus === "PROCESSING") &&
+                  "—"}
+              </AdminTd>
               <AdminTd mono muted>
-                {formatDate(row.firstSeenAt)}
+                {formatDate(row.enrichedAt ?? row.createdAt)}
               </AdminTd>
               <AdminTd align="right">
-                <form action={reenrichJobFormAction}>
-                  <input name="jobEnrichmentId" type="hidden" value={row.id} />
-                  <button
-                    className={buttonVariants({
-                      size: "sm",
-                      variant: "outline",
-                    })}
-                    type="submit"
-                  >
-                    Enriquecer mesmo assim
-                  </button>
-                </form>
+                {row.enrichmentStatus === "PENDING" ||
+                row.enrichmentStatus === "FAILED" ? (
+                  <form action={enrichNowFormAction}>
+                    <input
+                      name="jobEnrichmentId"
+                      type="hidden"
+                      value={row.id}
+                    />
+                    <button
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
+                      type="submit"
+                    >
+                      Enriquecer agora
+                    </button>
+                  </form>
+                ) : (
+                  "—"
+                )}
               </AdminTd>
             </tr>
           ))}
         </tbody>
       </AdminTable>
 
-      <AdminPagination
-        summary={`pagina ${skipped.page} de ${skipped.totalPages}`}
-      >
-        {skipped.page > 1 && (
+      <AdminPagination summary={`pagina ${jobs.page} de ${jobs.totalPages}`}>
+        {jobs.page > 1 && (
           <Link
             className={buttonVariants({ size: "sm", variant: "outline" })}
-            href={buildUrl({ page: String(skipped.page - 1) })}
+            href={buildUrl({ page: String(jobs.page - 1) })}
           >
             ← anterior
           </Link>
         )}
-        {skipped.page < skipped.totalPages && (
+        {jobs.page < jobs.totalPages && (
           <Link
             className={buttonVariants({ size: "sm", variant: "outline" })}
-            href={buildUrl({ page: String(skipped.page + 1) })}
+            href={buildUrl({ page: String(jobs.page + 1) })}
           >
             proxima →
           </Link>

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import type { EnrichmentStatus, Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import { SemanticFilterService } from "./semantic-filter.service";
@@ -12,6 +12,17 @@ type ListSkippedParams = {
   sourceName?: string;
   to?: string;
 };
+
+type ListJobsParams = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  sourceId?: string;
+  status?: EnrichmentStatus;
+};
+
+const CAREER_FINGERPRINT_PREVIEW_ITEMS = 3;
+const ENRICHMENT_ERROR_PREVIEW_CHARS = 60;
 
 function nextVersion(currentVersion: string | undefined) {
   if (!currentVersion) return "v1";
@@ -136,6 +147,75 @@ export class SemanticFilterAdminService {
     };
   }
 
+  async listJobs(params: ListJobsParams) {
+    const page = params.page ?? 1;
+    const pageSize = params.pageSize ?? 20;
+    const skip = (page - 1) * pageSize;
+
+    const where: Prisma.JobEnrichmentWhereInput = {};
+    if (params.status) {
+      where.enrichmentStatus = params.status;
+    }
+
+    const jobWhere: Prisma.JobWhereInput = {};
+    if (params.sourceId) {
+      jobWhere.jobSourceId = params.sourceId;
+    }
+    if (params.search) {
+      const term = params.search;
+      jobWhere.OR = [
+        { title: { contains: term, mode: "insensitive" } },
+        { company: { name: { contains: term, mode: "insensitive" } } },
+      ];
+    }
+    if (Object.keys(jobWhere).length > 0) {
+      where.job = jobWhere;
+    }
+
+    const [rows, total] = await Promise.all([
+      this.database.jobEnrichment.findMany({
+        where,
+        orderBy: { updatedAt: "desc" },
+        skip,
+        take: pageSize,
+        include: {
+          job: {
+            select: {
+              company: { select: { name: true } },
+              createdAt: true,
+              title: true,
+            },
+          },
+        },
+      }),
+      this.database.jobEnrichment.count({ where }),
+    ]);
+
+    return {
+      page,
+      pageSize,
+      rows: rows.map((row) => ({
+        careerFingerprint: row.careerFingerprint.slice(
+          0,
+          CAREER_FINGERPRINT_PREVIEW_ITEMS,
+        ),
+        companyName: row.job.company.name,
+        createdAt: row.job.createdAt.toISOString(),
+        dominantArea: row.dominantArea,
+        enrichedAt: row.enrichedAt?.toISOString() ?? null,
+        enrichmentError: row.enrichmentError
+          ? row.enrichmentError.slice(0, ENRICHMENT_ERROR_PREVIEW_CHARS)
+          : null,
+        enrichmentStatus: row.enrichmentStatus,
+        id: row.id,
+        jobTitle: row.job.title,
+        semanticFilterReason: row.semanticFilterReason,
+      })),
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
+  }
+
   async reenrich(jobEnrichmentId: string) {
     return this.database.jobEnrichment.update({
       where: { id: jobEnrichmentId },
@@ -150,11 +230,8 @@ export class SemanticFilterAdminService {
   }
 
   async getDashboard() {
-    const now = new Date();
-    const cutoff24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-    const [pending, processing, completed24h, skipped24h, failed] =
-      await Promise.all([
+    const [pending, processing, completed, skipped, failed] = await Promise.all(
+      [
         this.database.jobEnrichment.count({
           where: { enrichmentStatus: "PENDING" },
         }),
@@ -162,32 +239,30 @@ export class SemanticFilterAdminService {
           where: { enrichmentStatus: "PROCESSING" },
         }),
         this.database.jobEnrichment.count({
-          where: {
-            enrichmentStatus: "COMPLETED",
-            enrichedAt: { gte: cutoff24h },
-          },
+          where: { enrichmentStatus: "COMPLETED" },
         }),
         this.database.jobEnrichment.count({
-          where: { enrichmentStatus: "SKIPPED", updatedAt: { gte: cutoff24h } },
+          where: { enrichmentStatus: "SKIPPED" },
         }),
         this.database.jobEnrichment.count({
           where: { enrichmentStatus: "FAILED" },
         }),
-      ]);
+      ],
+    );
 
-    const filterDenominator = completed24h + skipped24h;
+    const filterDenominator = completed + skipped;
     const approvalRatePct =
       filterDenominator === 0
         ? null
-        : Math.round((completed24h / filterDenominator) * 1000) / 10;
+        : Math.round((completed / filterDenominator) * 1000) / 10;
 
     return {
       approvalRatePct,
-      completed24h,
+      completed,
       failed,
       pending,
       processing,
-      skipped24h,
+      skipped,
     };
   }
 }

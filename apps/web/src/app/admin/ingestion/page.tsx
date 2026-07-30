@@ -337,7 +337,7 @@ export default async function AdminIngestionPage({
             Scheduler
           </TabLink>
           <TabLink active={false} href="/admin/ingestion/filter">
-            Filtro
+            Enriquecimento de Vagas
           </TabLink>
         </div>
 

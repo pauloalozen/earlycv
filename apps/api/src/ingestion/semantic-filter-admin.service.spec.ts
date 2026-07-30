@@ -188,7 +188,7 @@ test("SemanticFilterAdminService.getDashboard counts by status", async () => {
   const dashboard = await service.getDashboard();
 
   assert.equal(dashboard.pending >= 1, true);
-  assert.equal(dashboard.skipped24h >= 1, true);
+  assert.equal(dashboard.skipped >= 1, true);
 
   await database.job.deleteMany({
     where: { id: { in: [pending.job.id, skipped.job.id] } },
@@ -198,6 +198,98 @@ test("SemanticFilterAdminService.getDashboard counts by status", async () => {
   });
   await database.company.deleteMany({
     where: { id: { in: [pending.company.id, skipped.company.id] } },
+  });
+  await moduleRef.close();
+});
+
+test("SemanticFilterAdminService.getDashboard counts are absolute (not windowed to 24h)", async () => {
+  const moduleRef = await createModule();
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(SemanticFilterAdminService);
+
+  const oldCompleted = await seedJobWithEnrichment(database, {
+    enrichmentStatus: "COMPLETED",
+  });
+  await database.jobEnrichment.update({
+    where: { id: oldCompleted.enrichment.id },
+    data: { enrichedAt: new Date("2020-01-01T00:00:00.000Z") },
+  });
+
+  const dashboardBefore = await service.getDashboard();
+
+  await database.job.delete({ where: { id: oldCompleted.job.id } });
+  await database.jobSource.delete({ where: { id: oldCompleted.jobSource.id } });
+  await database.company.delete({ where: { id: oldCompleted.company.id } });
+
+  const dashboardAfter = await service.getDashboard();
+
+  assert.equal(dashboardBefore.completed, dashboardAfter.completed + 1);
+  await moduleRef.close();
+});
+
+test("SemanticFilterAdminService.listJobs filters by status, sourceId and search", async () => {
+  const moduleRef = await createModule();
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(SemanticFilterAdminService);
+
+  const pending = await seedJobWithEnrichment(database, {
+    enrichmentStatus: "PENDING",
+    normalizedTitle: "desenvolvedor backend",
+    sourceName: "Fonte X",
+  });
+  const completed = await seedJobWithEnrichment(database, {
+    enrichmentStatus: "COMPLETED",
+    normalizedTitle: "analista bi",
+    sourceName: "Fonte Y",
+  });
+  await database.job.update({
+    where: { id: pending.job.id },
+    data: { title: "Desenvolvedor Backend" },
+  });
+  await database.job.update({
+    where: { id: completed.job.id },
+    data: { title: "Analista BI" },
+  });
+  await database.jobEnrichment.update({
+    where: { id: completed.enrichment.id },
+    data: {
+      careerFingerprint: ["Analista BI", "ETL", "SQL", "Power BI"],
+      dominantArea: "DATA_AI",
+    },
+  });
+
+  const onlyPending = await service.listJobs({ status: "PENDING" });
+  assert.equal(
+    onlyPending.rows.every((row) => row.enrichmentStatus === "PENDING"),
+    true,
+  );
+  assert.equal(
+    onlyPending.rows.some((row) => row.id === pending.enrichment.id),
+    true,
+  );
+
+  const bySource = await service.listJobs({ sourceId: completed.jobSource.id });
+  assert.equal(bySource.total, 1);
+  assert.equal(bySource.rows[0]?.id, completed.enrichment.id);
+  assert.equal(bySource.rows[0]?.companyName, completed.company.name);
+  assert.deepEqual(bySource.rows[0]?.careerFingerprint, [
+    "Analista BI",
+    "ETL",
+    "SQL",
+  ]);
+
+  const bySearch = await service.listJobs({ search: "backend" });
+  assert.equal(bySearch.total, 1);
+  assert.equal(bySearch.rows[0]?.id, pending.enrichment.id);
+
+  await database.job.deleteMany({
+    where: { id: { in: [pending.job.id, completed.job.id] } },
+  });
+  await database.jobSource.deleteMany({
+    where: { id: { in: [pending.jobSource.id, completed.jobSource.id] } },
+  });
+  await database.company.deleteMany({
+    where: { id: { in: [pending.company.id, completed.company.id] } },
   });
   await moduleRef.close();
 });

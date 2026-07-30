@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import {
   createSemanticFilterConfigVersion,
   reenrichJob,
+  runEnrichmentNow,
 } from "@/lib/admin-semantic-filter-api";
 
 export type FilterActionUiResult = {
@@ -62,10 +63,13 @@ export async function saveSemanticFilterConfigVersionAction(
   }
 }
 
-export async function reenrichJobFormAction(formData: FormData) {
+// Marca a vaga como PENDING (reenrichJob reseta status/attempts) e dispara
+// o worker imediatamente, pra vagas PENDING/FAILED na listagem unificada.
+export async function enrichNowFormAction(formData: FormData) {
   const jobEnrichmentId = String(formData.get("jobEnrichmentId") ?? "");
   if (!jobEnrichmentId) return;
 
   await reenrichJob(jobEnrichmentId);
+  await runEnrichmentNow();
   revalidatePath("/admin/ingestion/filter");
 }

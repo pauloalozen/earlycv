@@ -12,30 +12,41 @@ export type SemanticFilterConfig = {
   version: string;
 };
 
-export type SkippedEnrichmentRow = {
-  enrichmentStatus: string;
-  firstSeenAt: string;
-  id: string;
-  normalizedTitle: string;
-  semanticFilterReason: string | null;
-  sourceName: string;
-};
-
-export type SkippedEnrichmentsResponse = {
-  page: number;
-  pageSize: number;
-  rows: SkippedEnrichmentRow[];
-  total: number;
-  totalPages: number;
-};
-
 export type SemanticFilterDashboard = {
   approvalRatePct: number | null;
-  completed24h: number;
+  completed: number;
   failed: number;
   pending: number;
   processing: number;
-  skipped24h: number;
+  skipped: number;
+};
+
+export type EnrichmentStatusValue =
+  | "PENDING"
+  | "PROCESSING"
+  | "COMPLETED"
+  | "SKIPPED"
+  | "FAILED";
+
+export type EnrichmentJobRow = {
+  careerFingerprint: string[];
+  companyName: string;
+  createdAt: string;
+  dominantArea: string | null;
+  enrichedAt: string | null;
+  enrichmentError: string | null;
+  enrichmentStatus: EnrichmentStatusValue;
+  id: string;
+  jobTitle: string;
+  semanticFilterReason: string | null;
+};
+
+export type EnrichmentJobsResponse = {
+  page: number;
+  pageSize: number;
+  rows: EnrichmentJobRow[];
+  total: number;
+  totalPages: number;
 };
 
 function getApiBaseUrl() {
@@ -82,27 +93,6 @@ export async function createSemanticFilterConfigVersion(input: {
   });
 }
 
-export async function listSkippedEnrichments(params: {
-  from?: string;
-  page?: number;
-  pageSize?: number;
-  reasonKind?: "zona_cinza" | "noise_signal" | "tech_signal";
-  sourceName?: string;
-  to?: string;
-}) {
-  const qs = new URLSearchParams();
-  if (params.page) qs.set("page", String(params.page));
-  if (params.pageSize) qs.set("pageSize", String(params.pageSize));
-  if (params.reasonKind) qs.set("reasonKind", params.reasonKind);
-  if (params.sourceName) qs.set("sourceName", params.sourceName);
-  if (params.from) qs.set("from", params.from);
-  if (params.to) qs.set("to", params.to);
-
-  return apiRequest<SkippedEnrichmentsResponse>(
-    `/semantic-filter/skipped?${qs.toString()}`,
-  );
-}
-
 export async function reenrichJob(jobEnrichmentId: string) {
   return apiRequest<{ id: string }>(
     `/semantic-filter/skipped/${jobEnrichmentId}/reenrich`,
@@ -112,4 +102,29 @@ export async function reenrichJob(jobEnrichmentId: string) {
 
 export async function getSemanticFilterDashboard() {
   return apiRequest<SemanticFilterDashboard>("/semantic-filter/dashboard");
+}
+
+export async function listEnrichmentJobs(params: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  sourceId?: string;
+  status?: EnrichmentStatusValue;
+}) {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.pageSize) qs.set("pageSize", String(params.pageSize));
+  if (params.search) qs.set("search", params.search);
+  if (params.sourceId) qs.set("sourceId", params.sourceId);
+  if (params.status) qs.set("status", params.status);
+
+  return apiRequest<EnrichmentJobsResponse>(
+    `/ingestion/enrichment/jobs?${qs.toString()}`,
+  );
+}
+
+export async function runEnrichmentNow() {
+  return apiRequest<{ processed: number }>("/ingestion/enrichment/run-now", {
+    method: "POST",
+  });
 }

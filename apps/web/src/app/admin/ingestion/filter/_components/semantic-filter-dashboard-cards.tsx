@@ -1,33 +1,56 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AdminStatsRow, AT } from "@/app/admin/_components/admin-primitives";
+import type { EnrichmentStatusValue } from "@/lib/admin-semantic-filter-api";
 
 type Dashboard = {
   approvalRatePct: number | null;
-  completed24h: number;
+  completed: number;
   failed: number;
   pending: number;
   processing: number;
-  skipped24h: number;
+  skipped: number;
 };
+
+type CardStatus = EnrichmentStatusValue;
+
+function buildHref(
+  status: CardStatus | null,
+  currentFilters: { search?: string; sourceId?: string },
+) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (currentFilters.search) params.set("search", currentFilters.search);
+  if (currentFilters.sourceId) params.set("sourceId", currentFilters.sourceId);
+  const qs = params.toString();
+  return `/admin/ingestion/filter${qs ? `?${qs}` : ""}`;
+}
 
 function Card({
   label,
   value,
   danger,
+  active,
+  href,
 }: {
+  active?: boolean;
   danger?: boolean;
+  href: string;
   label: string;
   value: string;
 }) {
   return (
-    <div
+    <Link
+      href={href}
       style={{
         background: danger ? "#fef2f2" : AT.card,
-        border: `1px solid ${danger ? "rgba(239,68,68,0.25)" : AT.border}`,
+        border: `1px solid ${active ? AT.ink : danger ? "rgba(239,68,68,0.25)" : AT.border}`,
         borderRadius: 10,
+        display: "block",
         padding: "16px 18px",
+        textDecoration: "none",
       }}
     >
       <div
@@ -54,11 +77,19 @@ function Card({
       >
         {value}
       </div>
-    </div>
+    </Link>
   );
 }
 
-export function SemanticFilterDashboardCards() {
+export function SemanticFilterDashboardCards({
+  activeStatus,
+  search,
+  sourceId,
+}: {
+  activeStatus?: CardStatus;
+  search?: string;
+  sourceId?: string;
+}) {
   const [data, setData] = useState<Dashboard | null>(null);
 
   const fetchDashboard = useCallback(async () => {
@@ -76,26 +107,39 @@ export function SemanticFilterDashboardCards() {
     return () => clearInterval(id);
   }, [fetchDashboard]);
 
-  const dash = data === null ? "—" : String(data.pending);
+  const filters = { search, sourceId };
 
   return (
     <div style={{ marginBottom: 20 }}>
       <AdminStatsRow cols={5}>
-        <Card label="Pending" value={dash} />
         <Card
+          active={activeStatus === "PENDING"}
+          href={buildHref("PENDING", filters)}
+          label="Pending"
+          value={data === null ? "—" : String(data.pending)}
+        />
+        <Card
+          active={activeStatus === "PROCESSING"}
+          href={buildHref("PROCESSING", filters)}
           label="Processing"
           value={data === null ? "—" : String(data.processing)}
         />
         <Card
-          label="Completed (24h)"
-          value={data === null ? "—" : String(data.completed24h)}
+          active={activeStatus === "COMPLETED"}
+          href={buildHref("COMPLETED", filters)}
+          label="Completed"
+          value={data === null ? "—" : String(data.completed)}
         />
         <Card
-          label="Skipped (24h)"
-          value={data === null ? "—" : String(data.skipped24h)}
+          active={activeStatus === "SKIPPED"}
+          href={buildHref("SKIPPED", filters)}
+          label="Skipped"
+          value={data === null ? "—" : String(data.skipped)}
         />
         <Card
+          active={activeStatus === "FAILED"}
           danger={Boolean(data && data.failed > 0)}
+          href={buildHref("FAILED", filters)}
           label="Failed"
           value={data === null ? "—" : String(data.failed)}
         />
@@ -108,7 +152,7 @@ export function SemanticFilterDashboardCards() {
           marginTop: -8,
         }}
       >
-        Taxa de aprovacao do filtro (24h):{" "}
+        Taxa de aprovacao do filtro:{" "}
         {data?.approvalRatePct === null || data?.approvalRatePct === undefined
           ? "—"
           : `${data.approvalRatePct}%`}
