@@ -1,0 +1,255 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { JobEnrichmentWorker } from "./job-enrichment.worker";
+import type { JobEnrichmentLlmResult } from "./job-enrichment-llm";
+
+type EnrichmentRecord = {
+  attempts: number;
+  createdAt: Date;
+  enrichmentError: string | null;
+  enrichmentStatus: string;
+  id: string;
+  jobId: string;
+  semanticFilterReason: string | null;
+  semanticFilterResult: string;
+  semanticFilterVersion: string | null;
+} & Partial<JobEnrichmentLlmResult> & {
+    enrichedAt?: Date | null;
+    enrichmentModel?: string | null;
+    enrichmentVersion?: string | null;
+  };
+
+type JobRecord = {
+  descriptionClean: string;
+  metadataJson: unknown;
+  normalizedTitle: string;
+  title: string;
+};
+
+type EvaluateResult = {
+  configVersion: string;
+  reason: string;
+  result: "ENRICH" | "SKIP";
+};
+
+function createFixture() {
+  const enrichments = new Map<string, EnrichmentRecord>();
+  const jobs = new Map<string, JobRecord>();
+
+  const database = {
+    jobEnrichment: {
+      findMany: async ({
+        take,
+        where,
+      }: {
+        take: number;
+        where: { enrichmentStatus: string };
+      }) =>
+        Array.from(enrichments.values())
+          .filter((item) => item.enrichmentStatus === where.enrichmentStatus)
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+          .slice(0, take)
+          .map((item) => ({ ...item, job: jobs.get(item.jobId) })),
+      update: async ({
+        data,
+        where,
+      }: {
+        data: Partial<EnrichmentRecord>;
+        where: { id: string };
+      }) => {
+        const current = enrichments.get(where.id);
+        assert.ok(current, `enrichment ${where.id} must exist`);
+        const next = { ...current, ...data };
+        enrichments.set(where.id, next);
+        return next;
+      },
+    },
+  };
+
+  const lockRepository = {
+    acquire: async () => true,
+    release: async () => undefined,
+  };
+
+  let evaluateImpl: (title: string) => Promise<EvaluateResult> = async () => ({
+    configVersion: "v1",
+    reason: "tech_signal:desenvolvedor",
+    result: "ENRICH",
+  });
+  const semanticFilterService = {
+    evaluate: async (title: string) => evaluateImpl(title),
+  };
+
+  let enrichImpl: (input: {
+    department: string | null;
+    descriptionClean: string;
+    title: string;
+  }) => Promise<JobEnrichmentLlmResult> = async () => {
+    throw new Error("enrich not configured for this test");
+  };
+  let enrichCalls = 0;
+
+  const worker = new JobEnrichmentWorker(
+    database as never,
+    semanticFilterService as never,
+    lockRepository as never,
+    undefined,
+    {
+      enrich: async (input) => {
+        enrichCalls += 1;
+        return enrichImpl(input);
+      },
+      maxAttempts: 3,
+    },
+  );
+
+  function seedEnrichment(overrides: Partial<EnrichmentRecord> = {}) {
+    const id = overrides.id ?? `enrichment-${enrichments.size + 1}`;
+    const jobId = overrides.jobId ?? `job-${id}`;
+    const record: EnrichmentRecord = {
+      attempts: 0,
+      createdAt: new Date(),
+      enrichmentError: null,
+      enrichmentStatus: "PENDING",
+      id,
+      jobId,
+      semanticFilterReason: null,
+      semanticFilterResult: "PENDING",
+      semanticFilterVersion: null,
+      ...overrides,
+    };
+    enrichments.set(id, record);
+    jobs.set(jobId, {
+      descriptionClean: "Descricao da vaga",
+      metadataJson: { department: "Tecnologia" },
+      normalizedTitle: "desenvolvedor backend",
+      title: "Desenvolvedor Backend",
+    });
+    return record;
+  }
+
+  return {
+    enrichments,
+    getEnrichCalls: () => enrichCalls,
+    seedEnrichment,
+    setEnrich(impl: typeof enrichImpl) {
+      enrichImpl = impl;
+    },
+    setEvaluate(impl: typeof evaluateImpl) {
+      evaluateImpl = impl;
+    },
+    worker,
+  };
+}
+
+function fullResult(
+  overrides: Partial<JobEnrichmentLlmResult> = {},
+): JobEnrichmentLlmResult {
+  return {
+    areas: ["SOFTWARE_ENGINEERING"],
+    careerFingerprint: ["Engenheiro Backend"],
+    certifications: [],
+    contractType: "CLT",
+    dominantArea: "SOFTWARE_ENGINEERING",
+    experienceYearsMin: 3,
+    languageRequirements: [],
+    managementRequired: false,
+    optionalSkills: [],
+    requiredSkills: ["java"],
+    seniority: "SENIOR",
+    specialties: ["backend"],
+    technologies: ["java"],
+    travelRequired: false,
+    ...overrides,
+  };
+}
+
+test("JobEnrichmentWorker skips LLM call when semantic filter returns SKIP", async () => {
+  const fixture = createFixture();
+  fixture.setEvaluate(async () => ({
+    configVersion: "v1",
+    reason: "noise_signal:enfermeiro",
+    result: "SKIP",
+  }));
+  fixture.seedEnrichment();
+
+  await fixture.worker.processPendingBatch();
+
+  assert.equal(fixture.getEnrichCalls(), 0);
+  const [record] = fixture.enrichments.values();
+  assert.equal(record.enrichmentStatus, "SKIPPED");
+  assert.equal(record.semanticFilterResult, "SKIP");
+  assert.equal(record.semanticFilterReason, "noise_signal:enfermeiro");
+});
+
+test("JobEnrichmentWorker calls LLM and persists fields when semantic filter returns ENRICH", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment();
+
+  await fixture.worker.processPendingBatch();
+
+  assert.equal(fixture.getEnrichCalls(), 1);
+  const [record] = fixture.enrichments.values();
+  assert.equal(record.enrichmentStatus, "COMPLETED");
+  assert.equal(record.semanticFilterResult, "ENRICH");
+  assert.equal(record.dominantArea, "SOFTWARE_ENGINEERING");
+  assert.deepEqual(record.requiredSkills, ["java"]);
+  assert.ok(record.enrichedAt);
+  assert.ok(record.enrichmentModel);
+  assert.ok(record.enrichmentVersion);
+});
+
+test("JobEnrichmentWorker increments attempts on LLM failure and keeps PENDING below max attempts", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => {
+    throw new Error("openrouter timeout");
+  });
+  fixture.seedEnrichment({ attempts: 0 });
+
+  await fixture.worker.processPendingBatch();
+
+  const [record] = fixture.enrichments.values();
+  assert.equal(record.attempts, 1);
+  assert.equal(record.enrichmentStatus, "PENDING");
+  assert.equal(record.enrichmentError, "openrouter timeout");
+});
+
+test("JobEnrichmentWorker marks FAILED once attempts reach the max", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => {
+    throw new Error("openrouter timeout");
+  });
+  fixture.seedEnrichment({ attempts: 2 });
+
+  await fixture.worker.processPendingBatch();
+
+  const [record] = fixture.enrichments.values();
+  assert.equal(record.attempts, 3);
+  assert.equal(record.enrichmentStatus, "FAILED");
+  assert.equal(record.enrichmentError, "openrouter timeout");
+});
+
+test("JobEnrichmentWorker marks COMPLETED for dominantArea OTHER", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () =>
+    fullResult({
+      areas: [],
+      careerFingerprint: [],
+      contractType: null,
+      dominantArea: "OTHER",
+      experienceYearsMin: null,
+      requiredSkills: [],
+      seniority: null,
+      specialties: [],
+      technologies: [],
+    }),
+  );
+  fixture.seedEnrichment();
+
+  await fixture.worker.processPendingBatch();
+
+  const [record] = fixture.enrichments.values();
+  assert.equal(record.enrichmentStatus, "COMPLETED");
+  assert.equal(record.dominantArea, "OTHER");
+});

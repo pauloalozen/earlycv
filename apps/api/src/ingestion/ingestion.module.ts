@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { createAiClientFromEnv } from "../common/ai-client-factory";
 import { DatabaseModule } from "../database/database.module";
 import { CustomApiAdapter, CustomHtmlAdapter, GupyAdapter } from "./adapters";
 import { AdminIngestionImportService } from "./admin-ingestion-import.service";
@@ -9,6 +10,10 @@ import { IngestionService } from "./ingestion.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
 import { IngestionManualRunnerService } from "./ingestion-manual-runner.service";
 import { IngestionSchedulerService } from "./ingestion-scheduler.service";
+import {
+  JOB_ENRICHMENT_AI_CLIENT,
+  JobEnrichmentWorker,
+} from "./job-enrichment.worker";
 import { ManualIngestionService } from "./manual-ingestion.service";
 import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
 import { SemanticFilterService } from "./semantic-filter.service";
@@ -26,6 +31,11 @@ import { SemanticFilterService } from "./semantic-filter.service";
     ManualIngestionBatchRepository,
     ManualIngestionService,
     SemanticFilterService,
+    JobEnrichmentWorker,
+    {
+      provide: JOB_ENRICHMENT_AI_CLIENT,
+      useFactory: () => createAiClientFromEnv("JOB_ENRICHMENT"),
+    },
     CustomHtmlAdapter,
     CustomApiAdapter,
     GupyAdapter,
