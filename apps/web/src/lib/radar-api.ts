@@ -15,6 +15,8 @@ export type RadarProfileDto = {
   preferredContractTypes: string[];
   openToRelocation: boolean;
   salaryExpectationMin: number | null;
+  generatedAt: string;
+  updatedAt: string;
 };
 
 export type JobMatchScoreDto = {
