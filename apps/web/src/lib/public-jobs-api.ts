@@ -20,6 +20,7 @@ export type PublicJob = {
   status: string;
   title: string;
   workModel: string | null;
+  score?: number | null;
 };
 
 export type PublicJobsPage = {

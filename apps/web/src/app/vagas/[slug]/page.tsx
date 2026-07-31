@@ -14,9 +14,14 @@ import {
   listPublicJobs,
   type PublicJob,
 } from "@/lib/public-jobs-api";
+import { getJobMatchScore } from "@/lib/radar-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
-import { JobScoreWidget, type ScoreState } from "../job-score-widget";
+import {
+  JobScoreWidget,
+  type MatchData,
+  type ScoreState,
+} from "../job-score-widget";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -238,9 +243,21 @@ export default async function JobPage({ params }: JobPageProps) {
   if (!job) notFound();
 
   let hasCvMaster = false;
+  let match: MatchData | null = null;
   if (user) {
-    const master = await getMyMasterResume().catch(() => null);
+    const [master, matchScore] = await Promise.all([
+      getMyMasterResume().catch(() => null),
+      getJobMatchScore(job.slug),
+    ]);
     hasCvMaster = !!master;
+    if (typeof matchScore?.score === "number" && matchScore.breakdown) {
+      match = {
+        score: matchScore.score,
+        breakdown: matchScore.breakdown,
+        matchedSkills: matchScore.matchedSkills,
+        missingSkills: matchScore.missingSkills,
+      };
+    }
   }
 
   const scoreState: ScoreState = !user
@@ -676,7 +693,7 @@ export default async function JobPage({ params }: JobPageProps) {
           {/* Sidebar */}
           <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {/* Compat widget (black card) */}
-            <JobScoreWidget scoreState={scoreState} />
+            <JobScoreWidget scoreState={scoreState} match={match} />
 
             {/* Candidatura card */}
             <div

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getPublicJobBySlug: vi.fn(),
   listPublicJobs: vi.fn(),
   notFound: vi.fn<() => never>(),
+  getJobMatchScore: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound }));
@@ -29,6 +30,9 @@ vi.mock("@/lib/public-jobs-api", () => ({
 }));
 vi.mock("@/lib/resumes-api", () => ({
   getMyMasterResume: mocks.getMyMasterResume,
+}));
+vi.mock("@/lib/radar-api", () => ({
+  getJobMatchScore: mocks.getJobMatchScore,
 }));
 
 import JobPage from "./page";
@@ -54,6 +58,7 @@ describe("/vagas/[slug] ghost mode access", () => {
     mocks.getPublicJobBySlug.mockReset();
     mocks.listPublicJobs.mockReset();
     mocks.getMyMasterResume.mockReset();
+    mocks.getJobMatchScore.mockReset();
 
     mocks.notFound.mockImplementation(() => {
       throw new Error("NEXT_NOT_FOUND");
@@ -85,6 +90,7 @@ describe("/vagas/[slug] ghost mode access", () => {
       limit: 4,
     });
     mocks.getMyMasterResume.mockResolvedValue(null);
+    mocks.getJobMatchScore.mockResolvedValue(null);
   });
 
   afterEach(() => {

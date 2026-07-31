@@ -14,10 +14,34 @@ import {
   listPublicJobs,
   type PublicJob,
 } from "@/lib/public-jobs-api";
+import { getMyRadarProfile } from "@/lib/radar-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { type ActiveFilters, FiltersSidebar } from "./filters-sidebar";
-import { JobScoreWidget, type ScoreState } from "./job-score-widget";
+import {
+  JobScoreWidget,
+  type MatchData,
+  type ScoreState,
+} from "./job-score-widget";
+
+const EMPTY_BREAKDOWN = {
+  area: 0,
+  skills: 0,
+  seniority: 0,
+  technologies: 0,
+  language: 0,
+  workModel: 0,
+};
+
+function matchFromScore(score: number | null | undefined): MatchData | null {
+  if (typeof score !== "number") return null;
+  return {
+    score,
+    breakdown: EMPTY_BREAKDOWN,
+    matchedSkills: [],
+    missingSkills: [],
+  };
+}
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -164,6 +188,7 @@ type JobCardProps = {
 };
 
 function JobCard({ job, adaptarHref, scoreState }: JobCardProps) {
+  const match = matchFromScore(job.score);
   const early = isEarlyJob(job);
   const published = job.publishedAtSource ?? job.firstSeenAt;
   const workModelLabel = job.workModel
@@ -399,7 +424,7 @@ function JobCard({ job, adaptarHref, scoreState }: JobCardProps) {
           </svg>
         </button>
 
-        <JobScoreWidget scoreState={scoreState} compact />
+        <JobScoreWidget scoreState={scoreState} match={match} compact />
 
         <a
           href={adaptarUrl}
@@ -494,9 +519,14 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
   ]);
 
   let hasCvMaster = false;
+  let radarProfile: Awaited<ReturnType<typeof getMyRadarProfile>> = null;
   if (user) {
-    const master = await getMyMasterResume().catch(() => null);
+    const [master, radar] = await Promise.all([
+      getMyMasterResume().catch(() => null),
+      getMyRadarProfile(),
+    ]);
     hasCvMaster = !!master;
+    radarProfile = radar;
   }
 
   const scoreState: ScoreState = !user
@@ -504,6 +534,27 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
     : hasCvMaster
       ? "has-cv"
       : "no-cv";
+
+  // Onboarding do Radar (Parte 6.3): só faz sentido pra quem já está logado.
+  const radarOnboardingBanner: {
+    text: string;
+    href: string;
+    linkLabel: string;
+  } | null = !user
+    ? null
+    : !radarProfile
+      ? {
+          text: "Faça upload do seu CV para ver vagas compatíveis com seu perfil.",
+          href: "/cv-base",
+          linkLabel: "Enviar CV",
+        }
+      : radarProfile.areas.length === 0
+        ? {
+            text: "Seu perfil ainda está sendo processado. Envie um CV para ativar o Radar.",
+            href: "/cv-base",
+            linkLabel: "Enviar CV",
+          }
+        : null;
 
   const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar";
   const totalPages = Math.ceil(jobsResult.total / jobsResult.limit);
@@ -592,6 +643,41 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
           zIndex: 1,
         }}
       >
+        {radarOnboardingBanner ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              background: "rgba(198,255,58,0.15)",
+              border: "1px solid rgba(64,84,16,0.2)",
+              borderRadius: 10,
+              padding: "12px 16px",
+              marginBottom: 20,
+              fontSize: 13,
+              color: "#3a3a38",
+            }}
+          >
+            <span>{radarOnboardingBanner.text}</span>
+            <a
+              href={radarOnboardingBanner.href}
+              style={{
+                fontFamily: MONO,
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#0a0a0a",
+                textDecoration: "underline",
+                textUnderlineOffset: 3,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {radarOnboardingBanner.linkLabel} →
+            </a>
+          </div>
+        ) : null}
+
         {/* Hero */}
         <header style={{ marginBottom: 24 }}>
           <div
