@@ -50,6 +50,23 @@ export type MatchData = {
   missingSkills: string[];
 };
 
+// Pontos máximos por dimensão em MatchingEngine.calculateScore() — os
+// valores de `breakdown` vêm em pontos brutos (ex: area até 25), não em
+// percentual, então precisam ser normalizados antes de virar largura de
+// barra ou cor por faixa.
+export const BREAKDOWN_MAX: Record<keyof MatchBreakdown, number> = {
+  area: 25,
+  skills: 30,
+  seniority: 20,
+  technologies: 15,
+  language: 5,
+  workModel: 5,
+};
+
+export function breakdownPct(key: keyof MatchBreakdown, value: number): number {
+  return Math.round((value / BREAKDOWN_MAX[key]) * 100);
+}
+
 // ── Score ring dominante (elemento principal do card) ──
 export function ScoreRing({
   value,

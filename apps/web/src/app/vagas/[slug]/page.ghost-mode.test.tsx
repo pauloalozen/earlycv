@@ -18,8 +18,12 @@ vi.mock("@/components/public-footer", () => ({
 vi.mock("@/components/public-nav-bar", () => ({
   PublicNavBar: () => <div>nav</div>,
 }));
-vi.mock("../job-score-widget", () => ({
-  JobScoreWidget: () => <div>score</div>,
+vi.mock("../radar-ui", () => ({
+  ScoreRing: () => <div>ring</div>,
+  ScorePill: () => <span>pill</span>,
+  SkillChip: () => <span>chip</span>,
+  AdaptBtn: () => <a href="#adaptar">adaptar</a>,
+  breakdownPct: (_key: string, value: number) => value,
 }));
 vi.mock("@/lib/app-session.server", () => ({
   getCurrentAppUserFromCookies: mocks.getCurrentAppUserFromCookies,

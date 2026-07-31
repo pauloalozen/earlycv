@@ -19,7 +19,13 @@ import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { CompanyLogo } from "./company-logo";
 import { type ActiveFilters, FiltersBar } from "./filters-bar";
-import { AdaptBtn, MiniBar, ScoreRing, SkillChip } from "./radar-ui";
+import {
+  AdaptBtn,
+  breakdownPct,
+  MiniBar,
+  ScoreRing,
+  SkillChip,
+} from "./radar-ui";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -411,16 +417,24 @@ function JobCard({ job, adaptarHref, showScore }: JobCardProps) {
             borderTop: "1px solid rgba(10,10,10,0.06)",
           }}
         >
-          <MiniBar label="área" value={job.breakdown.area} compact />
-          <MiniBar label="skills" value={job.breakdown.skills} compact />
+          <MiniBar
+            label="área"
+            value={breakdownPct("area", job.breakdown.area)}
+            compact
+          />
+          <MiniBar
+            label="skills"
+            value={breakdownPct("skills", job.breakdown.skills)}
+            compact
+          />
           <MiniBar
             label="senioridade"
-            value={job.breakdown.seniority}
+            value={breakdownPct("seniority", job.breakdown.seniority)}
             compact
           />
           <MiniBar
             label="tecnologias"
-            value={job.breakdown.technologies}
+            value={breakdownPct("technologies", job.breakdown.technologies)}
             compact
           />
         </div>

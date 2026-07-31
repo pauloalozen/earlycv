@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
@@ -19,10 +20,14 @@ import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { CompanyLogo } from "../company-logo";
 import {
-  JobScoreWidget,
+  AdaptBtn,
+  breakdownPct,
+  type MatchBreakdown,
   type MatchData,
-  type ScoreState,
-} from "../job-score-widget";
+  ScorePill,
+  ScoreRing,
+  SkillChip,
+} from "../radar-ui";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -53,9 +58,292 @@ const SENIORITY_LABELS: Record<string, string> = {
   principal: "Principal",
 };
 
+type ScoreState = "anonymous" | "no-cv" | "has-cv";
+
 type JobPageProps = {
   params: Promise<{ slug: string }>;
 };
+
+const BREAKDOWN_ROWS: Array<{ key: keyof MatchBreakdown; label: string }> = [
+  { key: "area", label: "Área" },
+  { key: "skills", label: "Skills" },
+  { key: "seniority", label: "Senioridade" },
+  { key: "technologies", label: "Tecnologias" },
+  { key: "language", label: "Idioma" },
+  { key: "workModel", label: "Modelo de trabalho" },
+];
+
+function dimensionDescription(
+  key: keyof MatchBreakdown,
+  pct: number,
+  match: MatchData,
+): string {
+  if (key === "skills") {
+    const total = match.matchedSkills.length + match.missingSkills.length;
+    if (total === 0) return "sem skills-chave mapeadas nesta vaga";
+    return `${match.matchedSkills.length} de ${total} skills-chave presentes`;
+  }
+  if (pct >= 70) return "forte alinhamento com seu perfil";
+  if (pct >= 40) return "alinhamento parcial";
+  return "pouco alinhado com seu perfil";
+}
+
+function CompatHead() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 16,
+      }}
+    >
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+          fontFamily: MONO,
+          fontSize: 10,
+          letterSpacing: 1.4,
+          color: "#8a8a85",
+          fontWeight: 500,
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#c6ff3a",
+            display: "inline-block",
+            flexShrink: 0,
+          }}
+        />
+        COMPATIBILIDADE
+      </span>
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: 9.5,
+          color: "#8a8a85",
+          letterSpacing: 0.3,
+        }}
+      >
+        vs. seu CV
+      </span>
+    </div>
+  );
+}
+
+function CompatCardShell({ children }: { children: ReactNode }) {
+  return (
+    <div
+      style={{
+        background: "#fafaf6",
+        border: "1px solid rgba(10,10,10,0.08)",
+        borderRadius: 14,
+        padding: "22px 22px 20px",
+        fontFamily: GEIST,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function CompatCardCta({
+  title,
+  description,
+  href,
+  linkLabel,
+}: {
+  title: string;
+  description: string;
+  href: string;
+  linkLabel: string;
+}) {
+  return (
+    <CompatCardShell>
+      <CompatHead />
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          textAlign: "center",
+          padding: "8px 0 4px",
+        }}
+      >
+        <div
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: "50%",
+            border: "1.5px dashed rgba(10,10,10,0.15)",
+            marginBottom: 14,
+          }}
+        />
+        <p style={{ fontSize: 13.5, fontWeight: 500, margin: "0 0 6px" }}>
+          {title}
+        </p>
+        <p style={{ fontSize: 12, color: "#6a6560", margin: "0 0 16px" }}>
+          {description}
+        </p>
+        <a
+          href={href}
+          style={{
+            background: "#0a0a0a",
+            color: "#fafaf6",
+            borderRadius: 9,
+            padding: "11px 16px",
+            fontSize: 13,
+            fontWeight: 500,
+            textDecoration: "none",
+            display: "block",
+            width: "100%",
+            boxSizing: "border-box",
+          }}
+        >
+          {linkLabel} →
+        </a>
+      </div>
+    </CompatCardShell>
+  );
+}
+
+function CompatCard({
+  scoreState,
+  match,
+}: {
+  scoreState: ScoreState;
+  match: MatchData | null;
+}) {
+  if (scoreState === "anonymous") {
+    return (
+      <CompatCardCta
+        title="Cadastre-se para ver sua compatibilidade"
+        description="Análise gratuita, calculada a partir do seu CV."
+        href="/entrar?tab=cadastrar"
+        linkLabel="Cadastre-se grátis"
+      />
+    );
+  }
+
+  if (scoreState === "no-cv") {
+    return (
+      <CompatCardCta
+        title="Suba seu CV para ver compatibilidade"
+        description="O score é calculado com base no seu CV Master."
+        href="/cv-base"
+        linkLabel="Enviar CV"
+      />
+    );
+  }
+
+  if (!match) {
+    return (
+      <CompatCardCta
+        title="Seu CV está sendo processado"
+        description="Assim que terminar, esta vaga ganha um score de compatibilidade com seu perfil."
+        href="/cv-base"
+        linkLabel="Ver status"
+      />
+    );
+  }
+
+  const topSkills = [
+    ...match.matchedSkills.map((s) => ({ label: s, have: true })),
+    ...match.missingSkills.map((s) => ({ label: s, have: false })),
+  ].slice(0, 10);
+
+  return (
+    <CompatCardShell>
+      <CompatHead />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          marginBottom: 20,
+          paddingBottom: 18,
+          borderBottom: "1px solid rgba(10,10,10,0.07)",
+        }}
+      >
+        <ScoreRing value={match.score} size={88} />
+        <ScorePill value={match.score} size="lg" />
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          marginBottom: topSkills.length > 0 ? 20 : 0,
+        }}
+      >
+        {BREAKDOWN_ROWS.map((row) => {
+          const pct = breakdownPct(row.key, match.breakdown[row.key]);
+          return (
+            <div
+              key={row.key}
+              style={{ display: "flex", flexDirection: "column", gap: 3 }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 8,
+                }}
+              >
+                <span style={{ fontSize: 12, color: "#3a3a38" }}>
+                  {row.label}
+                </span>
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 11,
+                    color: "#6a6560",
+                    fontWeight: 500,
+                  }}
+                >
+                  {pct}%
+                </span>
+              </div>
+              <div
+                style={{
+                  height: 4,
+                  background: "rgba(10,10,10,0.06)",
+                  borderRadius: 99,
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${Math.max(0, Math.min(100, pct))}%`,
+                    background:
+                      pct >= 70 ? "#2fa84c" : pct >= 40 ? "#d9a322" : "#a0a098",
+                    borderRadius: 99,
+                  }}
+                />
+              </div>
+              <span style={{ fontSize: 10.5, color: "#8a8a85" }}>
+                {dimensionDescription(row.key, pct, match)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {topSkills.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {topSkills.map((s) => (
+            <SkillChip key={s.label} label={s.label} have={s.have} />
+          ))}
+        </div>
+      ) : null}
+    </CompatCardShell>
+  );
+}
 
 function sanitizeJobHtml(html: string) {
   return html
@@ -658,8 +946,8 @@ export default async function JobPage({ params }: JobPageProps) {
 
           {/* Sidebar */}
           <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {/* Compat widget (black card) */}
-            <JobScoreWidget scoreState={scoreState} match={match} />
+            {/* Compat card */}
+            <CompatCard scoreState={scoreState} match={match} />
 
             {/* Candidatura card */}
             <div
@@ -682,33 +970,13 @@ export default async function JobPage({ params }: JobPageProps) {
               >
                 CANDIDATURA
               </div>
-              <a
-                href={adaptarJobHref}
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 7,
-                  background: "#0a0a0a",
-                  color: "#fafaf6",
-                  borderRadius: 9,
-                  padding: "12px",
-                  fontSize: 13.5,
-                  fontWeight: 500,
-                  textDecoration: "none",
-                  fontFamily: GEIST,
-                  marginBottom: 8,
-                  boxSizing: "border-box",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-                }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="#c6ff3a">
-                  <title>Adaptar</title>
-                  <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
-                </svg>
-                Adaptar CV para esta vaga
-              </a>
+              <div style={{ marginBottom: 8 }}>
+                <AdaptBtn
+                  href={adaptarJobHref}
+                  score={match?.score}
+                  size="lg"
+                />
+              </div>
               <a
                 href={job.sourceJobUrl}
                 target="_blank"
