@@ -137,14 +137,12 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
   // erro) e a UI reportava sucesso indevido. Faz poll curto pelo lock antes
   // de desistir; se mesmo assim nao conseguir, lanca erro pra propagar a
   // falha real ate o usuario.
-  async processOne(jobEnrichmentId: string) {
+  async processOne(jobEnrichmentId: string, options?: { force?: boolean }) {
     const owner = `job-enrichment-worker-single-${randomUUID()}`;
     const acquired = await this.acquireLockWithRetry(owner);
 
     if (!acquired) {
-      throw new Error(
-        "job enrichment worker lock is busy, try again shortly",
-      );
+      throw new Error("job enrichment worker lock is busy, try again shortly");
     }
 
     try {
@@ -166,7 +164,7 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
         return { processed: false };
       }
 
-      await this.processItem(enrichment);
+      await this.processItem(enrichment, { force: options?.force ?? false });
       return { processed: true };
     } finally {
       await this.lockRepository.release(LOCK_ID, owner);
@@ -232,52 +230,68 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     }
   }
 
-  private async processItem(enrichment: {
-    attempts: number;
-    id: string;
-    job: {
-      descriptionClean: string;
-      metadataJson: unknown;
-      normalizedTitle: string;
-      title: string;
-    };
-  }) {
+  private async processItem(
+    enrichment: {
+      attempts: number;
+      id: string;
+      job: {
+        descriptionClean: string;
+        metadataJson: unknown;
+        normalizedTitle: string;
+        title: string;
+      };
+    },
+    options?: { force?: boolean },
+  ) {
     await this.database.jobEnrichment.update({
       where: { id: enrichment.id },
       data: { enrichmentStatus: "PROCESSING" },
     });
 
-    let decision: Awaited<ReturnType<SemanticFilterService["evaluate"]>>;
-    try {
-      decision = await this.semanticFilterService.evaluate(
-        enrichment.job.normalizedTitle,
-      );
-    } catch (error) {
-      this.logger.error(
-        `semantic filter failed for job enrichment ${enrichment.id}: ${error instanceof Error ? error.message : "unknown"}`,
-      );
+    // "Forcar LLM" (botao admin pra vaga marcada SKIPPED por engano):
+    // pula a avaliacao do filtro semantico e vai direto pro enriquecimento,
+    // registrando o motivo pra deixar rastro de que foi decisao manual.
+    if (options?.force) {
       await this.database.jobEnrichment.update({
         where: { id: enrichment.id },
-        data: { enrichmentStatus: "PENDING" },
+        data: {
+          semanticFilterReason: "forced_by_admin",
+          semanticFilterResult: "ENRICH",
+        },
       });
-      return;
-    }
+    } else {
+      let decision: Awaited<ReturnType<SemanticFilterService["evaluate"]>>;
+      try {
+        decision = await this.semanticFilterService.evaluate(
+          enrichment.job.normalizedTitle,
+        );
+      } catch (error) {
+        this.logger.error(
+          `semantic filter failed for job enrichment ${enrichment.id}: ${error instanceof Error ? error.message : "unknown"}`,
+        );
+        await this.database.jobEnrichment.update({
+          where: { id: enrichment.id },
+          data: { enrichmentStatus: "PENDING" },
+        });
+        return;
+      }
 
-    await this.database.jobEnrichment.update({
-      where: { id: enrichment.id },
-      data: {
-        semanticFilterReason: decision.reason,
-        semanticFilterResult: decision.result,
-        semanticFilterVersion: decision.configVersion,
-      },
-    });
-
-    if (decision.result === "SKIP") {
       await this.database.jobEnrichment.update({
         where: { id: enrichment.id },
-        data: { enrichmentStatus: "SKIPPED" },
+        data: {
+          semanticFilterReason: decision.reason,
+          semanticFilterResult: decision.result,
+          semanticFilterVersion: decision.configVersion,
+        },
       });
-      return;
+
+      if (decision.result === "SKIP") {
+        await this.database.jobEnrichment.update({
+          where: { id: enrichment.id },
+          data: { enrichmentStatus: "SKIPPED" },
+        });
+        return;
+      }
     }
 
     try {

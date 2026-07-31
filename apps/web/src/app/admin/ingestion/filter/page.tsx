@@ -16,11 +16,13 @@ import {
 } from "@/lib/admin-semantic-filter-api";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
+import { EnrichmentJobDetailButton } from "./_components/enrichment-job-detail-button";
 import { EnrichmentWorkerControls } from "./_components/enrichment-worker-controls";
 import { SemanticFilterConfigForm } from "./_components/semantic-filter-config-form";
 import { SemanticFilterDashboardCards } from "./_components/semantic-filter-dashboard-cards";
 import {
   enrichNowFormAction,
+  forceEnrichFormAction,
   saveSemanticFilterConfigVersionAction,
 } from "./actions";
 
@@ -261,27 +263,59 @@ export default async function AdminSemanticFilterPage({
                 {formatDate(row.enrichedAt ?? row.createdAt)}
               </AdminTd>
               <AdminTd align="right">
-                {row.enrichmentStatus === "PENDING" ||
-                row.enrichmentStatus === "FAILED" ? (
-                  <form action={enrichNowFormAction}>
-                    <input
-                      name="jobEnrichmentId"
-                      type="hidden"
-                      value={row.id}
-                    />
-                    <button
-                      className={buttonVariants({
-                        size: "sm",
-                        variant: "outline",
-                      })}
-                      type="submit"
-                    >
-                      Enriquecer agora
-                    </button>
-                  </form>
-                ) : (
-                  "—"
-                )}
+                <div className="flex flex-col items-end gap-1.5">
+                  <a
+                    className={buttonVariants({
+                      size: "sm",
+                      variant: "outline",
+                    })}
+                    href={row.sourceJobUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Ver vaga
+                  </a>
+                  {(row.enrichmentStatus === "PENDING" ||
+                    row.enrichmentStatus === "FAILED") && (
+                    <form action={enrichNowFormAction}>
+                      <input
+                        name="jobEnrichmentId"
+                        type="hidden"
+                        value={row.id}
+                      />
+                      <button
+                        className={buttonVariants({
+                          size: "sm",
+                          variant: "outline",
+                        })}
+                        type="submit"
+                      >
+                        Enriquecer agora
+                      </button>
+                    </form>
+                  )}
+                  {row.enrichmentStatus === "SKIPPED" && (
+                    <form action={forceEnrichFormAction}>
+                      <input
+                        name="jobEnrichmentId"
+                        type="hidden"
+                        value={row.id}
+                      />
+                      <button
+                        className={buttonVariants({
+                          size: "sm",
+                          variant: "outline",
+                        })}
+                        type="submit"
+                      >
+                        Forçar LLM
+                      </button>
+                    </form>
+                  )}
+                  {row.enrichmentStatus === "COMPLETED" && (
+                    <EnrichmentJobDetailButton jobEnrichmentId={row.id} />
+                  )}
+                </div>
               </AdminTd>
             </tr>
           ))}

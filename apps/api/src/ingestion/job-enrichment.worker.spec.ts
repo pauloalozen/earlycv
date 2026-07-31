@@ -374,6 +374,26 @@ test("JobEnrichmentWorker.processOne returns processed:false for an unknown id",
   assert.equal(fixture.getEnrichCalls(), 0);
 });
 
+test("JobEnrichmentWorker.processOne with force:true bypasses the semantic filter SKIP", async () => {
+  const fixture = createFixture();
+  fixture.setEvaluate(async () => ({
+    configVersion: "v1",
+    reason: "noise_signal:enfermeiro",
+    result: "SKIP",
+  }));
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment({ id: "job-1" });
+
+  const result = await fixture.worker.processOne("job-1", { force: true });
+
+  assert.deepEqual(result, { processed: true });
+  assert.equal(fixture.getEnrichCalls(), 1);
+  const record = fixture.enrichments.get("job-1");
+  assert.equal(record?.enrichmentStatus, "COMPLETED");
+  assert.equal(record?.semanticFilterResult, "ENRICH");
+  assert.equal(record?.semanticFilterReason, "forced_by_admin");
+});
+
 test("JobEnrichmentWorker.processOne retries the lock and eventually succeeds once it frees up", async () => {
   const fixture = createFixture();
   fixture.setEnrich(async () => fullResult());

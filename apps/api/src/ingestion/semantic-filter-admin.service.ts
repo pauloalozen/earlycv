@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { EnrichmentStatus, Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
@@ -183,6 +183,7 @@ export class SemanticFilterAdminService {
             select: {
               company: { select: { name: true } },
               createdAt: true,
+              sourceJobUrl: true,
               title: true,
             },
           },
@@ -210,9 +211,61 @@ export class SemanticFilterAdminService {
         id: row.id,
         jobTitle: row.job.title,
         semanticFilterReason: row.semanticFilterReason,
+        sourceJobUrl: row.job.sourceJobUrl,
       })),
       total,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
+  }
+
+  // Detalhe completo pro popup "Ver dados" na listagem — busca sob demanda
+  // no clique, nao entra no listJobs (paginado) pra nao pesar a tela.
+  async getJobDetail(jobEnrichmentId: string) {
+    const row = await this.database.jobEnrichment.findUnique({
+      where: { id: jobEnrichmentId },
+      include: {
+        job: {
+          select: {
+            company: { select: { name: true } },
+            sourceJobUrl: true,
+            title: true,
+          },
+        },
+      },
+    });
+
+    if (!row) {
+      throw new NotFoundException("JobEnrichment not found");
+    }
+
+    return {
+      areas: row.areas,
+      attempts: row.attempts,
+      careerFingerprint: row.careerFingerprint,
+      certifications: row.certifications,
+      companyName: row.job.company.name,
+      contractType: row.contractType,
+      dominantArea: row.dominantArea,
+      enrichedAt: row.enrichedAt?.toISOString() ?? null,
+      enrichmentError: row.enrichmentError,
+      enrichmentModel: row.enrichmentModel,
+      enrichmentStatus: row.enrichmentStatus,
+      enrichmentVersion: row.enrichmentVersion,
+      experienceYearsMin: row.experienceYearsMin,
+      id: row.id,
+      jobTitle: row.job.title,
+      languageRequirements: row.languageRequirements,
+      managementRequired: row.managementRequired,
+      optionalSkills: row.optionalSkills,
+      requiredSkills: row.requiredSkills,
+      semanticFilterReason: row.semanticFilterReason,
+      semanticFilterResult: row.semanticFilterResult,
+      semanticFilterVersion: row.semanticFilterVersion,
+      seniority: row.seniority,
+      sourceJobUrl: row.job.sourceJobUrl,
+      specialties: row.specialties,
+      technologies: row.technologies,
+      travelRequired: row.travelRequired,
     };
   }
 

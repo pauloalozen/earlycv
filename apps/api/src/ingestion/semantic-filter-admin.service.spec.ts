@@ -272,6 +272,7 @@ test("SemanticFilterAdminService.listJobs filters by status, sourceId and search
   assert.equal(bySource.total, 1);
   assert.equal(bySource.rows[0]?.id, completed.enrichment.id);
   assert.equal(bySource.rows[0]?.companyName, completed.company.name);
+  assert.equal(bySource.rows[0]?.sourceJobUrl, completed.job.sourceJobUrl);
   assert.deepEqual(bySource.rows[0]?.careerFingerprint, [
     "Analista BI",
     "ETL",
@@ -291,5 +292,48 @@ test("SemanticFilterAdminService.listJobs filters by status, sourceId and search
   await database.company.deleteMany({
     where: { id: { in: [pending.company.id, completed.company.id] } },
   });
+  await moduleRef.close();
+});
+
+test("SemanticFilterAdminService.getJobDetail returns the full enrichment payload", async () => {
+  const moduleRef = await createModule();
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(SemanticFilterAdminService);
+
+  const seeded = await seedJobWithEnrichment(database, {
+    enrichmentStatus: "COMPLETED",
+  });
+  await database.jobEnrichment.update({
+    where: { id: seeded.enrichment.id },
+    data: {
+      careerFingerprint: ["Enfermeiro Plantonista"],
+      dominantArea: "OTHER",
+      requiredSkills: ["cuidados intensivos"],
+      seniority: "MID",
+    },
+  });
+
+  const detail = await service.getJobDetail(seeded.enrichment.id);
+
+  assert.equal(detail.id, seeded.enrichment.id);
+  assert.equal(detail.jobTitle, seeded.job.title);
+  assert.equal(detail.companyName, seeded.company.name);
+  assert.equal(detail.sourceJobUrl, seeded.job.sourceJobUrl);
+  assert.equal(detail.dominantArea, "OTHER");
+  assert.equal(detail.seniority, "MID");
+  assert.deepEqual(detail.requiredSkills, ["cuidados intensivos"]);
+
+  await database.job.delete({ where: { id: seeded.job.id } });
+  await database.jobSource.delete({ where: { id: seeded.jobSource.id } });
+  await database.company.delete({ where: { id: seeded.company.id } });
+  await moduleRef.close();
+});
+
+test("SemanticFilterAdminService.getJobDetail throws NotFoundException for an unknown id", async () => {
+  const moduleRef = await createModule();
+  const service = moduleRef.get(SemanticFilterAdminService);
+
+  await assert.rejects(() => service.getJobDetail("does-not-exist"));
+
   await moduleRef.close();
 });

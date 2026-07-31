@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const createSemanticFilterConfigVersionMock = vi.hoisted(() => vi.fn());
 const reenrichJobMock = vi.hoisted(() => vi.fn());
 const runEnrichmentNowForJobMock = vi.hoisted(() => vi.fn());
+const forceRunEnrichmentNowForJobMock = vi.hoisted(() => vi.fn());
 const revalidatePathMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/cache", () => ({
@@ -11,12 +12,14 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@/lib/admin-semantic-filter-api", () => ({
   createSemanticFilterConfigVersion: createSemanticFilterConfigVersionMock,
+  forceRunEnrichmentNowForJob: forceRunEnrichmentNowForJobMock,
   reenrichJob: reenrichJobMock,
   runEnrichmentNowForJob: runEnrichmentNowForJobMock,
 }));
 
 import {
   enrichNowFormAction,
+  forceEnrichFormAction,
   saveSemanticFilterConfigVersionAction,
 } from "./actions";
 
@@ -90,5 +93,27 @@ describe("semantic filter actions", () => {
 
     expect(reenrichJobMock).not.toHaveBeenCalled();
     expect(runEnrichmentNowForJobMock).not.toHaveBeenCalled();
+  });
+
+  it("forceEnrichFormAction resets the job and forces it past the semantic filter", async () => {
+    const formData = new FormData();
+    formData.set("jobEnrichmentId", "enrichment-1");
+
+    await forceEnrichFormAction(formData);
+
+    expect(reenrichJobMock).toHaveBeenCalledWith("enrichment-1");
+    expect(forceRunEnrichmentNowForJobMock).toHaveBeenCalledWith(
+      "enrichment-1",
+    );
+    expect(revalidatePathMock).toHaveBeenCalledWith("/admin/ingestion/filter");
+  });
+
+  it("forceEnrichFormAction no-ops without an id", async () => {
+    const formData = new FormData();
+
+    await forceEnrichFormAction(formData);
+
+    expect(reenrichJobMock).not.toHaveBeenCalled();
+    expect(forceRunEnrichmentNowForJobMock).not.toHaveBeenCalled();
   });
 });

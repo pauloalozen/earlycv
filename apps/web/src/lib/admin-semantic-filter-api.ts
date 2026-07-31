@@ -39,6 +39,7 @@ export type EnrichmentJobRow = {
   id: string;
   jobTitle: string;
   semanticFilterReason: string | null;
+  sourceJobUrl: string;
 };
 
 export type EnrichmentJobsResponse = {
@@ -131,6 +132,15 @@ export async function listEnrichmentJobs(params: {
 export async function runEnrichmentNowForJob(jobEnrichmentId: string) {
   return apiRequest<{ processed: boolean }>(
     `/ingestion/enrichment/jobs/${jobEnrichmentId}/run-now`,
+    { method: "POST" },
+  );
+}
+
+// Forca o enriquecimento via LLM ignorando o resultado do filtro semantico
+// (botao "Forcar LLM" nas vagas SKIPPED, quando o admin discorda do filtro).
+export async function forceRunEnrichmentNowForJob(jobEnrichmentId: string) {
+  return apiRequest<{ processed: boolean }>(
+    `/ingestion/enrichment/jobs/${jobEnrichmentId}/force-run-now`,
     { method: "POST" },
   );
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import {
   createSemanticFilterConfigVersion,
+  forceRunEnrichmentNowForJob,
   reenrichJob,
   runEnrichmentNowForJob,
 } from "@/lib/admin-semantic-filter-api";
@@ -72,5 +73,16 @@ export async function enrichNowFormAction(formData: FormData) {
 
   await reenrichJob(jobEnrichmentId);
   await runEnrichmentNowForJob(jobEnrichmentId);
+  revalidatePath("/admin/ingestion/filter");
+}
+
+// Forca o enriquecimento via LLM ignorando o resultado do filtro semantico
+// — pra vagas SKIPPED onde o admin revisou e discorda da decisao do filtro.
+export async function forceEnrichFormAction(formData: FormData) {
+  const jobEnrichmentId = String(formData.get("jobEnrichmentId") ?? "");
+  if (!jobEnrichmentId) return;
+
+  await reenrichJob(jobEnrichmentId);
+  await forceRunEnrichmentNowForJob(jobEnrichmentId);
   revalidatePath("/admin/ingestion/filter");
 }
