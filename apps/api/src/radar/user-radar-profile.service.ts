@@ -1,7 +1,14 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { JobArea, type Prisma, SeniorityLevel } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import type { UpdateRadarProfileDto } from "./dto/update-radar-profile.dto";
+
+type FieldMetaEntry = {
+  source: string;
+  manuallyEdited?: boolean;
+  lastEditedAt?: string;
+};
 
 type SkillsBucketJson = {
   technical?: unknown;
@@ -187,6 +194,114 @@ export class UserRadarProfileService {
           : {}),
       },
     });
+  }
+
+  async getProfile(userId: string) {
+    return this.database.userRadarProfile.findUnique({ where: { userId } });
+  }
+
+  // areas/seniority são espelhados em UserProfile.radarAreas/radarSeniority
+  // (fonte de verdade editável, ver Parte 1.2 da spec) e marcados como
+  // manuallyEdited, para que uma futura extração de CV não os sobrescreva
+  // silenciosamente. preferredWorkModels/preferredContractTypes só existem
+  // em UserRadarProfile, então são escritos direto ali. O refresh() ao
+  // final é só reconciliação fire-and-forget (nunca aguardado no request) —
+  // a resposta deste método já reflete o estado final direto, sem depender
+  // dele.
+  async updateProfile(userId: string, dto: UpdateRadarProfileDto) {
+    const userProfile = await this.database.userProfile.findUnique({
+      where: { userId },
+    });
+    if (!userProfile) {
+      throw new NotFoundException("profile not found");
+    }
+    const existingRadarProfile = await this.database.userRadarProfile.findUnique({
+      where: { userId },
+    });
+
+    const nowIso = new Date().toISOString();
+    const fieldMeta = this.asFieldMetaRecord(userProfile.profileFieldMetaJson);
+
+    const userProfileUpdate: Prisma.UserProfileUpdateInput = {};
+    if (dto.areas !== undefined) {
+      userProfileUpdate.radarAreas = dto.areas;
+      fieldMeta.radarAreas = {
+        source: "manual_edit",
+        manuallyEdited: true,
+        lastEditedAt: nowIso,
+      };
+    }
+    if (dto.seniority !== undefined) {
+      userProfileUpdate.radarSeniority = dto.seniority;
+      fieldMeta.radarSeniority = {
+        source: "manual_edit",
+        manuallyEdited: true,
+        lastEditedAt: nowIso,
+      };
+    }
+    if (Object.keys(userProfileUpdate).length > 0) {
+      userProfileUpdate.profileFieldMetaJson =
+        fieldMeta as Prisma.InputJsonValue;
+      await this.database.userProfile.update({
+        where: { userId },
+        data: userProfileUpdate,
+      });
+    }
+
+    const areas = dto.areas ?? existingRadarProfile?.areas ?? userProfile.radarAreas;
+    const seniority =
+      dto.seniority ??
+      existingRadarProfile?.seniority ??
+      userProfile.radarSeniority ??
+      SeniorityLevel.UNKNOWN;
+    const preferredWorkModels =
+      dto.preferredWorkModels ?? existingRadarProfile?.preferredWorkModels ?? [];
+    const preferredContractTypes =
+      dto.preferredContractTypes ??
+      existingRadarProfile?.preferredContractTypes ??
+      [];
+
+    const updated = await this.database.userRadarProfile.upsert({
+      where: { userId },
+      create: {
+        userId,
+        areas,
+        seniority,
+        skills: this.normalizeSkills(userProfile.skillsJson),
+        technologies: existingRadarProfile?.technologies ?? [],
+        languages: this.extractLanguages(userProfile.languagesJson),
+        certifications: this.extractCertifications(
+          userProfile.certificationsJson,
+        ),
+        careerFingerprint: existingRadarProfile?.careerFingerprint ?? [],
+        preferredWorkModels,
+        preferredContractTypes,
+        openToRelocation: existingRadarProfile?.openToRelocation ?? false,
+        salaryExpectationMin: existingRadarProfile?.salaryExpectationMin ?? null,
+        sourceResumeId: existingRadarProfile?.sourceResumeId ?? null,
+      },
+      update: {
+        areas,
+        seniority,
+        preferredWorkModels,
+        preferredContractTypes,
+      },
+    });
+
+    this.refresh(userId).catch(() => {
+      // reconciliação best-effort; updateProfile já retornou o estado final.
+    });
+
+    return updated;
+  }
+
+  private asFieldMetaRecord(
+    value: Prisma.JsonValue,
+  ): Record<string, FieldMetaEntry> {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return {};
+    }
+    return value as Record<string, FieldMetaEntry>;
   }
 
   inferAreasFromSkills(skillsJson: Prisma.JsonValue): JobArea[] {

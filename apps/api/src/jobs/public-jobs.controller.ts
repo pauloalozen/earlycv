@@ -10,15 +10,26 @@ import {
 } from "@nestjs/common";
 import type { Request } from "express";
 
+import {
+  AuthenticatedUser,
+  type AuthenticatedRequestUser,
+} from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
+import { MatchingEngine } from "../radar/matching.engine";
+import { UserRadarProfileService } from "../radar/user-radar-profile.service";
 import { JobsService } from "./jobs.service";
 import { buildPublicJobSlug, toPublicJobView } from "./public-job-view";
 import { PublicJobsGhostModeGuard } from "./public-jobs-ghost-mode.guard";
 
 @Controller("public/jobs")
 export class PublicJobsController {
-  constructor(@Inject(JobsService) private readonly jobsService: JobsService) {}
+  constructor(
+    @Inject(JobsService) private readonly jobsService: JobsService,
+    @Inject(UserRadarProfileService)
+    private readonly userRadarProfileService: UserRadarProfileService,
+    @Inject(MatchingEngine) private readonly matchingEngine: MatchingEngine,
+  ) {}
 
   @Get()
   @InternalRoles("admin", "superadmin")
@@ -88,8 +99,69 @@ export class PublicJobsController {
 
   @Get(":slug/score")
   @UseGuards(JwtAuthGuard)
-  getScore() {
-    // TODO: implementar cálculo real com IA
-    return { score: null, strengths: [], gaps: [] };
+  async getScore(
+    @AuthenticatedUser() user: AuthenticatedRequestUser,
+    @Param("slug") slug: string,
+  ) {
+    const EMPTY_SCORE = {
+      score: null,
+      breakdown: null,
+      matchedSkills: [] as string[],
+      missingSkills: [] as string[],
+      strengths: [] as string[],
+      gaps: [] as string[],
+    };
+
+    const jobs = await this.jobsService.listPublic();
+    const found = jobs.find(
+      (job) => buildPublicJobSlug(job.id, job.title, job.company.name) === slug,
+    );
+    if (!found) {
+      throw new NotFoundException("job not found");
+    }
+
+    const radarProfile = await this.userRadarProfileService.getProfile(
+      user.id,
+    );
+    if (!radarProfile) {
+      return EMPTY_SCORE;
+    }
+
+    const jobWithEnrichment = await this.jobsService.getByIdWithEnrichment(
+      found.id,
+    );
+    if (
+      !jobWithEnrichment?.enrichment ||
+      jobWithEnrichment.enrichment.enrichmentStatus !== "COMPLETED"
+    ) {
+      return EMPTY_SCORE;
+    }
+
+    const matchScore = this.matchingEngine.calculateScore(
+      {
+        jobId: jobWithEnrichment.id,
+        workModel: jobWithEnrichment.workModel,
+        dominantArea: jobWithEnrichment.enrichment.dominantArea,
+        areas: jobWithEnrichment.enrichment.areas,
+        requiredSkills: jobWithEnrichment.enrichment.requiredSkills,
+        technologies: jobWithEnrichment.enrichment.technologies,
+        seniority: jobWithEnrichment.enrichment.seniority,
+        languageRequirements: jobWithEnrichment.enrichment.languageRequirements,
+      },
+      {
+        areas: radarProfile.areas,
+        skills: radarProfile.skills,
+        technologies: radarProfile.technologies,
+        seniority: radarProfile.seniority,
+        languages: radarProfile.languages,
+        preferredWorkModels: radarProfile.preferredWorkModels,
+      },
+    );
+
+    return {
+      ...matchScore,
+      strengths: matchScore.matchedSkills,
+      gaps: matchScore.missingSkills,
+    };
   }
 }

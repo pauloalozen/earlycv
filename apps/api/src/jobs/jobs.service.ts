@@ -272,6 +272,13 @@ export class JobsService {
     return job;
   }
 
+  async getByIdWithEnrichment(jobId: string) {
+    return this.database.job.findUnique({
+      where: { id: jobId },
+      include: { enrichment: true },
+    });
+  }
+
   async update(jobId: string, dto: UpdateJobDto) {
     const currentJob = await this.getById(jobId);
     this.assertSeenAtOrdering(

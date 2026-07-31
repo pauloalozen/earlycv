@@ -13,6 +13,7 @@ function buildProfile(overrides: Record<string, unknown> = {}) {
     certificationsJson: [],
     experiencesJson: [],
     remotePreference: null,
+    profileFieldMetaJson: {},
     ...overrides,
   };
 }
@@ -195,4 +196,95 @@ test("inferSeniorityFromExperiences covers year-based bands", () => {
     ),
     "LEAD",
   );
+});
+
+test("getProfile returns the stored UserRadarProfile row", async () => {
+  const service = new UserRadarProfileService({
+    userRadarProfile: {
+      findUnique: async () => ({ userId: "user-1", areas: ["PRODUCT"] }),
+    },
+  } as never);
+
+  const result = await service.getProfile("user-1");
+  assert.deepEqual(result, { userId: "user-1", areas: ["PRODUCT"] });
+});
+
+test("updateProfile writes areas/seniority to UserProfile as manually edited and to UserRadarProfile", async () => {
+  const profileUpdates: Array<unknown> = [];
+  const radarUpserts: Array<unknown> = [];
+  const service = new UserRadarProfileService({
+    userProfile: {
+      findUnique: async () => buildProfile({ radarAreas: [], radarSeniority: null }),
+      update: async (args: unknown) => {
+        profileUpdates.push(args);
+        return args;
+      },
+    },
+    userRadarProfile: {
+      findUnique: async () => null,
+      upsert: async (args: unknown) => {
+        radarUpserts.push(args);
+        return { userId: "user-1", ...(args as { create: unknown }).create };
+      },
+    },
+  } as never);
+
+  await service.updateProfile("user-1", {
+    areas: ["DATA_AI"],
+    seniority: "SENIOR",
+    preferredWorkModels: ["remote"],
+  } as never);
+
+  const profileUpdate = profileUpdates[0] as {
+    data: { radarAreas: string[]; radarSeniority: string; profileFieldMetaJson: Record<string, { manuallyEdited: boolean }> };
+  };
+  assert.deepEqual(profileUpdate.data.radarAreas, ["DATA_AI"]);
+  assert.equal(profileUpdate.data.radarSeniority, "SENIOR");
+  assert.equal(profileUpdate.data.profileFieldMetaJson.radarAreas.manuallyEdited, true);
+  assert.equal(profileUpdate.data.profileFieldMetaJson.radarSeniority.manuallyEdited, true);
+
+  const radarUpsert = radarUpserts[0] as {
+    create: { areas: string[]; seniority: string; preferredWorkModels: string[] };
+  };
+  assert.deepEqual(radarUpsert.create.areas, ["DATA_AI"]);
+  assert.equal(radarUpsert.create.seniority, "SENIOR");
+  assert.deepEqual(radarUpsert.create.preferredWorkModels, ["remote"]);
+});
+
+test("updateProfile preserves existing preferredContractTypes when not present in the dto", async () => {
+  const radarUpserts: Array<unknown> = [];
+  const service = new UserRadarProfileService({
+    userProfile: {
+      findUnique: async () => buildProfile(),
+      update: async (args: unknown) => args,
+    },
+    userRadarProfile: {
+      findUnique: async () => ({
+        userId: "user-1",
+        areas: ["SOFTWARE_ENGINEERING"],
+        seniority: "MID",
+        preferredWorkModels: ["hybrid"],
+        preferredContractTypes: ["PJ"],
+        technologies: [],
+        careerFingerprint: [],
+        openToRelocation: false,
+        salaryExpectationMin: null,
+        sourceResumeId: null,
+      }),
+      upsert: async (args: unknown) => {
+        radarUpserts.push(args);
+        return args;
+      },
+    },
+  } as never);
+
+  await service.updateProfile("user-1", {
+    preferredWorkModels: ["remote"],
+  } as never);
+
+  const radarUpsert = radarUpserts[0] as {
+    update: { preferredContractTypes: string[]; areas: string[] };
+  };
+  assert.deepEqual(radarUpsert.update.preferredContractTypes, ["PJ"]);
+  assert.deepEqual(radarUpsert.update.areas, ["SOFTWARE_ENGINEERING"]);
 });
