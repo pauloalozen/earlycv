@@ -380,6 +380,7 @@ model User {
   jobApplications              JobApplication[]
   masterCvCanonicalExtractions MasterCvCanonicalExtraction[]
   analysisJobs                 AnalysisJob[]
+  radarProfile                 UserRadarProfile?
 }
 
 model UserDailyAnalysisUsage {
@@ -570,9 +571,36 @@ model UserProfile {
   profileFieldMetaJson   Json?
   profileSuggestionsJson Json?
   profileReadinessStatus ProfileReadinessStatus @default(empty)
+  radarAreas             JobArea[]
+  radarSeniority         SeniorityLevel?
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
   user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserRadarProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  areas             JobArea[]
+  seniority         SeniorityLevel @default(UNKNOWN)
+  skills            String[]
+  technologies      String[]
+  languages         String[]
+  certifications    String[]
+  careerFingerprint String[]
+
+  preferredWorkModels    String[]
+  preferredContractTypes ContractType[]
+  openToRelocation       Boolean        @default(false)
+  salaryExpectationMin   Int?
+
+  sourceResumeId String?
+  generatedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model AuthAccount {
@@ -949,12 +977,12 @@ model JobSource {
 }
 
 model IngestionSchedulerConfig {
-  id            String   @id
-  enabled       Boolean  @default(false)
+  id            String  @id
+  enabled       Boolean @default(false)
   globalCron    String?
-  timezone      String   @default("America/Sao_Paulo")
-  normalDelayMs Int      @default(45000)
-  errorDelayMs  Int      @default(90000)
+  timezone      String  @default("America/Sao_Paulo")
+  normalDelayMs Int     @default(45000)
+  errorDelayMs  Int     @default(90000)
 
   // Radar de Oportunidades: config do JobEnrichmentWorker, lida com cache
   // de 60s (EnrichmentConfigService) em vez de env var — ver
@@ -963,8 +991,8 @@ model IngestionSchedulerConfig {
   enrichmentCronExpression String  @default("*/10 * * * * *")
   enrichmentBatchSize      Int     @default(10)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model IngestionSchedulerLock {
@@ -1292,12 +1320,12 @@ model BusinessFunnelStageMetric {
 }
 
 model Job {
-  id                String    @id @default(cuid())
+  id                String           @id @default(cuid())
   companyId         String
   jobSourceId       String
   externalJobId     String?
   sourceJobUrl      String
-  canonicalKey      String    @unique
+  canonicalKey      String           @unique
   title             String
   normalizedTitle   String
   descriptionRaw    String
@@ -1315,12 +1343,12 @@ model Job {
   publishedAtSource DateTime?
   firstSeenAt       DateTime
   lastSeenAt        DateTime
-  status            JobStatus @default(active)
+  status            JobStatus        @default(active)
   metadataJson      Json?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  jobSource         JobSource @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobSource         JobSource        @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
   targetResumes     Resume[]
   enrichment        JobEnrichment?
   applications      JobApplication[]
@@ -1331,41 +1359,41 @@ model Job {
 }
 
 model JobEnrichment {
-  id                    String                @id @default(cuid())
-  jobId                 String                @unique
-  job                   Job                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  id    String @id @default(cuid())
+  jobId String @unique
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   // Taxonomia (output do LLM)
-  dominantArea          JobArea?
-  areas                 JobArea[]
-  specialties           String[]
-  seniority             SeniorityLevel?
-  requiredSkills        String[]
-  optionalSkills        String[]
-  technologies          String[]
-  contractType          ContractType?
-  languageRequirements  String[]
-  certifications        String[]
-  experienceYearsMin    Int?
-  managementRequired    Boolean               @default(false)
-  travelRequired        Boolean               @default(false)
-  careerFingerprint     String[]
+  dominantArea         JobArea?
+  areas                JobArea[]
+  specialties          String[]
+  seniority            SeniorityLevel?
+  requiredSkills       String[]
+  optionalSkills       String[]
+  technologies         String[]
+  contractType         ContractType?
+  languageRequirements String[]
+  certifications       String[]
+  experienceYearsMin   Int?
+  managementRequired   Boolean         @default(false)
+  travelRequired       Boolean         @default(false)
+  careerFingerprint    String[]
 
   // Filtro semântico (preenchido antes do LLM)
-  semanticFilterResult  SemanticFilterResult  @default(PENDING)
+  semanticFilterResult  SemanticFilterResult @default(PENDING)
   semanticFilterReason  String?
   semanticFilterVersion String?
 
   // Metadados do enriquecimento
-  enrichmentStatus      EnrichmentStatus      @default(PENDING)
-  enrichmentVersion     String?
-  enrichmentModel       String?
-  enrichmentError       String?
-  enrichedAt            DateTime?
-  attempts              Int                   @default(0)
+  enrichmentStatus  EnrichmentStatus @default(PENDING)
+  enrichmentVersion String?
+  enrichmentModel   String?
+  enrichmentError   String?
+  enrichedAt        DateTime?
+  attempts          Int              @default(0)
 
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([enrichmentStatus])
   @@index([semanticFilterResult])
@@ -1417,28 +1445,28 @@ model JobApplication {
 
   // Radar de Oportunidades: FK opcional quando a candidatura tem origem
   // numa vaga ingerida pelo Radar (não preenchido para candidaturas manuais).
-  jobId                 String?
-  job                   Job?                 @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  jobId String?
+  job   Job?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
 
   // v4.1 Auto Apply
-  autoApplyEnabled        Boolean          @default(false)
-  autoApplyStatus         AutoApplyStatus?
-  autoApplyAttemptedAt    DateTime?
-  autoApplyCompletedAt    DateTime?
-  autoApplyResultJson     Json?
-  externalApplicationId   String?
-  externalApplicationUrl  String?
+  autoApplyEnabled       Boolean          @default(false)
+  autoApplyStatus        AutoApplyStatus?
+  autoApplyAttemptedAt   DateTime?
+  autoApplyCompletedAt   DateTime?
+  autoApplyResultJson    Json?
+  externalApplicationId  String?
+  externalApplicationUrl String?
 
   // v4.1 Auto Apply: CV master/base usado na candidatura automática.
   // Diferente de currentCvAdaptationId (CV adaptado para a vaga específica).
-  resumeUsedId          String?
-  resumeUsed            Resume?              @relation("JobApplicationResume", fields: [resumeUsedId], references: [id], onDelete: SetNull)
+  resumeUsedId String?
+  resumeUsed   Resume? @relation("JobApplicationResume", fields: [resumeUsedId], references: [id], onDelete: SetNull)
 
-  matchScore            Int?
-  matchSnapshotJson     Json?
+  matchScore        Int?
+  matchSnapshotJson Json?
 
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user          User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
   cvAdaptations CvAdaptation[]
@@ -1511,10 +1539,10 @@ enum CoverLetterLengthMode {
 }
 
 model JobApplicationCoverLetter {
-  id                   String                 @id @default(cuid())
-  jobApplicationId     String                 @unique
+  id                   String                @id @default(cuid())
+  jobApplicationId     String                @unique
   cvAdaptationId       String?
-  status               CoverLetterStatus      @default(pending)
+  status               CoverLetterStatus     @default(pending)
   style                CoverLetterStyle
   lengthMode           CoverLetterLengthMode
   maxCharacters        Int?
@@ -1523,8 +1551,8 @@ model JobApplicationCoverLetter {
   generatedAt          DateTime?
   startedAt            DateTime?
   finishedAt           DateTime?
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
   jobApplication JobApplication @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
 }

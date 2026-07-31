@@ -21,6 +21,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.userProfile;
   }
 
+  get userRadarProfile() {
+    return this.prisma.userRadarProfile;
+  }
+
   get authAccount() {
     return this.prisma.authAccount;
   }
