@@ -11,8 +11,8 @@ import {
 import type { Request } from "express";
 
 import {
-  AuthenticatedUser,
   type AuthenticatedRequestUser,
+  AuthenticatedUser,
 } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { OptionalJwtAuthGuard } from "../common/optional-jwt-auth.guard";
@@ -51,11 +51,17 @@ export class PublicJobsController {
     @Query("publishedWithin") publishedWithin?: string,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
+    @Query("minScore") minScoreRaw?: string,
+    @Query("minSkillsPct") minSkillsPctRaw?: string,
   ) {
     const validPublishedWithin = ["24h", "3d", "7d"].includes(
       publishedWithin ?? "",
     )
       ? (publishedWithin as "24h" | "3d" | "7d")
+      : undefined;
+    const minScore = minScoreRaw ? Number.parseInt(minScoreRaw, 10) : undefined;
+    const minSkillsPct = minSkillsPctRaw
+      ? Number.parseInt(minSkillsPctRaw, 10)
       : undefined;
 
     const parsedPage = Math.max(1, Number.parseInt(page ?? "1", 10) || 1);
@@ -90,24 +96,23 @@ export class PublicJobsController {
       };
     }
 
-    // Usuário logado com UserRadarProfile: filtra pelas mesmas regras do
-    // MatchingEngine e ordena por score DESC (desempate por lastSeenAt
-    // DESC). Sem paginação no banco aqui — o conjunto compatível já tende a
-    // ser bem menor que o total de vagas ativas.
-    const compatibleJobIds = await this.matchingEngine.filterCompatibleJobs({
-      userId: user.id,
-    });
+    // Usuário logado com UserRadarProfile: o Radar prioriza por relevância,
+    // mas nunca esconde vagas — traz o mesmo conjunto que o anônimo veria
+    // (mesmos filtros de texto/empresa/data) e ordena por score DESC
+    // (vagas ainda sem enrichment COMPLETED, sem score, vão por último,
+    // desempatadas por lastSeenAt DESC como no anônimo).
     const jobsWithEnrichment = await this.jobsService.listByIdsWithEnrichment(
-      compatibleJobIds,
+      null,
       filters,
     );
 
-    const scored = jobsWithEnrichment
-      .filter((job) => job.enrichment)
+    const scoredAll = jobsWithEnrichment
       .map((job) => {
-        // biome-ignore lint/style/noNonNullAssertion: filtrado acima
-        const enrichment = job.enrichment!;
-        const matchScore = this.matchingEngine.calculateScore(
+        const enrichment = job.enrichment;
+        if (!enrichment || enrichment.enrichmentStatus !== "COMPLETED") {
+          return { job, match: null, skillsPct: null };
+        }
+        const match = this.matchingEngine.calculateScore(
           {
             jobId: job.id,
             workModel: job.workModel,
@@ -127,23 +132,60 @@ export class PublicJobsController {
             preferredWorkModels: radarProfile.preferredWorkModels,
           },
         );
-        return { job, score: matchScore.score };
+        const totalSkills =
+          match.matchedSkills.length + match.missingSkills.length;
+        const skillsPct =
+          totalSkills > 0
+            ? Math.round((match.matchedSkills.length / totalSkills) * 100)
+            : 100;
+        return { job, match, skillsPct };
       })
       .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
+        const aScore = a.match?.score ?? null;
+        const bScore = b.match?.score ?? null;
+        if (aScore === null && bScore === null) {
+          return b.job.lastSeenAt.getTime() - a.job.lastSeenAt.getTime();
+        }
+        if (aScore === null) return 1;
+        if (bScore === null) return -1;
+        if (bScore !== aScore) return bScore - aScore;
         return b.job.lastSeenAt.getTime() - a.job.lastSeenAt.getTime();
       });
+
+    const highCompatCount = scoredAll.filter(
+      (item) => (item.match?.score ?? 0) >= 70,
+    ).length;
+
+    // minScore/minSkillsPct só existem quando o usuário ativa o filtro
+    // explicitamente (Radar nunca esconde vaga por conta própria por
+    // padrão) — vagas sem score calculável nunca passam nesses filtros.
+    const scored = scoredAll.filter((item) => {
+      if (minScore !== undefined && (item.match?.score ?? -1) < minScore) {
+        return false;
+      }
+      if (
+        minSkillsPct !== undefined &&
+        (item.skillsPct ?? -1) < minSkillsPct
+      ) {
+        return false;
+      }
+      return true;
+    });
 
     const total = scored.length;
     const start = (parsedPage - 1) * parsedLimit;
     const pageItems = scored.slice(start, start + parsedLimit);
 
     return {
-      data: pageItems.map(({ job, score }) => ({
+      data: pageItems.map(({ job, match }) => ({
         ...toPublicJobView(job),
-        score,
+        score: match?.score ?? null,
+        breakdown: match?.breakdown ?? null,
+        matchedSkills: match?.matchedSkills ?? [],
+        missingSkills: match?.missingSkills ?? [],
       })),
       total,
+      highCompatCount,
       page: parsedPage,
       limit: parsedLimit,
     };
@@ -195,9 +237,7 @@ export class PublicJobsController {
       throw new NotFoundException("job not found");
     }
 
-    const radarProfile = await this.userRadarProfileService.getProfile(
-      user.id,
-    );
+    const radarProfile = await this.userRadarProfileService.getProfile(user.id);
     if (!radarProfile) {
       return EMPTY_SCORE;
     }
