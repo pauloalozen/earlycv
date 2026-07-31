@@ -91,8 +91,16 @@ function matchPercentage(
   required: string[],
   available: Set<string>,
 ): { pct: number; matched: string[]; missing: string[] } {
+  // Lista vazia de requiredSkills/technologies quase sempre significa que o
+  // enrichment não extraiu nada da vaga (ex: dominantArea=OTHER, dado
+  // insuficiente) — não que a vaga genuinamente não exige nenhuma skill.
+  // Tratar como "trivialmente satisfeito" (100%) inflava o score de vagas
+  // sem classificação real acima de vagas relevantes com requisitos de
+  // verdade (achado em teste manual: "Analista de Governança de TI", sem
+  // nenhum dado extraído, rankeava acima de "Engenheiro de Dados"). 0% é a
+  // leitura honesta: sem dado, sem evidência de match.
   if (required.length === 0) {
-    return { pct: 1, matched: [], missing: [] };
+    return { pct: 0, matched: [], missing: [] };
   }
   const matched: string[] = [];
   const missing: string[] = [];

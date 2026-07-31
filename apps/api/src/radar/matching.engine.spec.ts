@@ -182,7 +182,7 @@ test("calculateScore breakdown is correct per dimension for a partial match", ()
   assert.equal(result.breakdown.workModel, 0);
 });
 
-test("calculateScore treats empty requirements/preferences as trivially satisfied", () => {
+test("calculateScore treats empty language/workModel requirements as trivially satisfied, but NOT empty skills/technologies", () => {
   const engine = new MatchingEngine({} as never);
   const result = engine.calculateScore(
     buildScorableJob({
@@ -194,8 +194,54 @@ test("calculateScore treats empty requirements/preferences as trivially satisfie
     buildScorableProfile({ skills: [], technologies: [], preferredWorkModels: [] }),
   );
 
-  assert.equal(result.breakdown.skills, 30);
-  assert.equal(result.breakdown.technologies, 15);
+  // requiredSkills/technologies vazios quase sempre significam "enrichment
+  // não extraiu nada" (dominantArea=OTHER, dado insuficiente), não "vaga
+  // não exige skill nenhuma" — por isso NÃO é tratado como match trivial
+  // (ver comentário em matchPercentage). language/workModel continuam
+  // trivialmente satisfeitos quando vazios (ausência de requisito/
+  // preferência é, de fato, "compatível com qualquer coisa").
+  assert.equal(result.breakdown.skills, 0);
+  assert.equal(result.breakdown.technologies, 0);
   assert.equal(result.breakdown.language, 5);
   assert.equal(result.breakdown.workModel, 5);
+});
+
+test("calculateScore does not let an unclassified job (dominantArea OTHER, no extracted data) outrank a real match", () => {
+  const engine = new MatchingEngine({} as never);
+  const profile = buildScorableProfile({
+    areas: ["DATA_AI"] as never,
+    skills: ["python", "sql", "machine learning"],
+    technologies: ["python", "sql"],
+    seniority: "MANAGER" as never,
+    preferredWorkModels: [],
+  });
+
+  const unclassifiedJob = engine.calculateScore(
+    buildScorableJob({
+      dominantArea: "OTHER" as never,
+      areas: [] as never,
+      requiredSkills: [],
+      technologies: [],
+      seniority: "UNKNOWN" as never,
+      languageRequirements: [],
+    }),
+    profile,
+  );
+
+  const realMatchJob = engine.calculateScore(
+    buildScorableJob({
+      dominantArea: "DATA_AI" as never,
+      areas: ["DATA_AI"] as never,
+      requiredSkills: ["Python", "SQL", "Machine Learning", "Airflow"],
+      technologies: ["Python", "SQL"],
+      seniority: "SENIOR" as never,
+      languageRequirements: [],
+    }),
+    profile,
+  );
+
+  assert.ok(
+    realMatchJob.score > unclassifiedJob.score,
+    `expected real match (${realMatchJob.score}) to outrank unclassified job (${unclassifiedJob.score})`,
+  );
 });
