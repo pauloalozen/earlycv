@@ -18,13 +18,17 @@ function buildProfile(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function buildService(profile: Record<string, unknown>) {
+function buildService(
+  profile: Record<string, unknown>,
+  existingRadarProfile: Record<string, unknown> | null = null,
+) {
   const upserts: Array<unknown> = [];
   const service = new UserRadarProfileService({
     userProfile: {
       findUnique: async () => profile,
     },
     userRadarProfile: {
+      findUnique: async () => existingRadarProfile,
       upsert: async (args: unknown) => {
         upserts.push(args);
         return args;
@@ -106,6 +110,38 @@ test("refresh normalizes skills to lowercase and dedups", async () => {
     "excel",
     "python",
     "sql",
+  ]);
+});
+
+test("refresh persists careerFingerprint when passed in options (fresh extraction)", async () => {
+  const profile = buildProfile();
+  const { service, upserts } = buildService(profile);
+
+  await service.refresh("user-1", {
+    careerFingerprint: ["Engenheiro de Dados", "Python", "AWS"],
+  });
+
+  const args = upserts[0] as { create: { careerFingerprint: string[] } };
+  assert.deepEqual(args.create.careerFingerprint, [
+    "Engenheiro de Dados",
+    "Python",
+    "AWS",
+  ]);
+});
+
+test("refresh preserves existing careerFingerprint when options don't provide one", async () => {
+  const profile = buildProfile();
+  const { service, upserts } = buildService(profile, {
+    careerFingerprint: ["Engenheiro de Dados", "Python", "AWS"],
+  });
+
+  await service.refresh("user-1");
+
+  const args = upserts[0] as { update: { careerFingerprint: string[] } };
+  assert.deepEqual(args.update.careerFingerprint, [
+    "Engenheiro de Dados",
+    "Python",
+    "AWS",
   ]);
 });
 

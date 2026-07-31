@@ -169,7 +169,10 @@ export class MasterCvCanonicalExtractionService {
       // relação ao request do usuário, ver enqueueFromMasterResumeUpload)
       // esperando por ele.
       this.userRadarProfileService
-        ?.refresh(extraction.userId, { sourceResumeId: extraction.resumeId })
+        ?.refresh(extraction.userId, {
+          sourceResumeId: extraction.resumeId,
+          careerFingerprint: payload.canonicalProfile.radarProfile?.careerFingerprint,
+        })
         .catch((error) => {
           this.logger.error(
             `[master-cv-canonical-extraction] radar profile refresh failed: ${error instanceof Error ? error.message : String(error)}`,

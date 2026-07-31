@@ -844,7 +844,14 @@ test("processJob does not overwrite manually edited radarAreas/radarSeniority, c
 });
 
 test("processJob triggers UserRadarProfile.refresh fire-and-forget after a successful merge", async () => {
-  const extractionOutput = buildExtractionOutput();
+  const extractionOutput = buildExtractionOutput() as {
+    canonicalProfile: Record<string, unknown>;
+  };
+  extractionOutput.canonicalProfile.radarProfile = {
+    areas: ["DATA_AI"],
+    seniority: "SENIOR",
+    careerFingerprint: ["Engenheiro de Dados", "Python", "AWS"],
+  };
   const refreshCalls: Array<{ userId: string; options?: unknown }> = [];
 
   const service = new MasterCvCanonicalExtractionService(
@@ -901,7 +908,10 @@ test("processJob triggers UserRadarProfile.refresh fire-and-forget after a succe
   assert.equal(result, "processJob-resolved");
   assert.equal(refreshCalls.length, 1);
   assert.equal(refreshCalls[0]?.userId, "user-1");
-  assert.deepEqual(refreshCalls[0]?.options, { sourceResumeId: "resume-1" });
+  assert.deepEqual(refreshCalls[0]?.options, {
+    sourceResumeId: "resume-1",
+    careerFingerprint: ["Engenheiro de Dados", "Python", "AWS"],
+  });
 });
 
 test("worker retries transient failures up to max attempts", async () => {

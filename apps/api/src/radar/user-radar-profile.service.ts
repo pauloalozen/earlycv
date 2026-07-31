@@ -136,13 +136,19 @@ export class UserRadarProfileService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
 
-  async refresh(userId: string, options?: { sourceResumeId?: string }) {
+  async refresh(
+    userId: string,
+    options?: { sourceResumeId?: string; careerFingerprint?: string[] },
+  ) {
     const profile = await this.database.userProfile.findUnique({
       where: { userId },
     });
     if (!profile) {
       return null;
     }
+    const existingRadarProfile = await this.database.userRadarProfile.findUnique(
+      { where: { userId } },
+    );
 
     const skills = this.normalizeSkills(profile.skillsJson);
     const areas = profile.radarAreas.length
@@ -160,6 +166,12 @@ export class UserRadarProfileService {
     const preferredWorkModels = profile.remotePreference
       ? [profile.remotePreference]
       : [];
+    // careerFingerprint não tem fonte durável em UserProfile (só existe no
+    // canonicalJson da extração que acabou de rodar) — quando esta chamada
+    // não vem logo após uma extração (ex: refresh() disparado por
+    // updateProfile()), preserva o valor já salvo em vez de zerá-lo.
+    const careerFingerprint =
+      options?.careerFingerprint ?? existingRadarProfile?.careerFingerprint ?? [];
 
     const generatedAt = new Date();
 
@@ -173,7 +185,7 @@ export class UserRadarProfileService {
         technologies: [],
         languages,
         certifications,
-        careerFingerprint: [],
+        careerFingerprint,
         preferredWorkModels,
         preferredContractTypes: [],
         openToRelocation: false,
@@ -187,6 +199,7 @@ export class UserRadarProfileService {
         skills,
         languages,
         certifications,
+        careerFingerprint,
         preferredWorkModels,
         generatedAt,
         ...(options?.sourceResumeId
