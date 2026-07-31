@@ -691,6 +691,158 @@ test("processJob uses the raw file payload when one is supplied", async () => {
   );
 });
 
+test("processJob persists radarAreas/radarSeniority from radarProfile when profile has none yet", async () => {
+  const profileUpdates: Array<unknown> = [];
+  const extractionOutput = buildExtractionOutput() as {
+    canonicalProfile: Record<string, unknown>;
+  };
+  extractionOutput.canonicalProfile.radarProfile = {
+    areas: ["DATA_AI", "SOFTWARE_ENGINEERING"],
+    seniority: "SENIOR",
+    careerFingerprint: ["Engenheiro de Dados"],
+  };
+
+  const service = new MasterCvCanonicalExtractionService(
+    {
+      masterCvCanonicalExtraction: {
+        findUnique: async () => ({
+          id: "ext-radar-1",
+          userId: "user-1",
+          resumeId: "resume-1",
+          status: "pending",
+          resume: { rawText: "texto do cv" },
+        }),
+        update: async (args: unknown) => args,
+      },
+      userProfile: {
+        findUnique: async () => ({
+          userId: "user-1",
+          radarAreas: [],
+          radarSeniority: null,
+          profileFieldMetaJson: {},
+          profileSuggestionsJson: [],
+        }),
+        update: async (args: unknown) => {
+          profileUpdates.push(args);
+          return args;
+        },
+      },
+    } as never,
+    {
+      merge: () => ({
+        next: {
+          experiences: [],
+          education: [],
+          skills: { technical: [], business: [], soft: [] },
+        },
+        fieldMeta: {},
+        suggestions: [],
+      }),
+    } as never,
+    { compute: () => "partial" } as never,
+    {} as never,
+    { extract: async () => extractionOutput as never },
+  );
+
+  await service.processJob({ extractionId: "ext-radar-1" });
+
+  const update = profileUpdates[0] as {
+    data: {
+      radarAreas: string[];
+      radarSeniority: string;
+      profileFieldMetaJson: Record<string, { source: string }>;
+    };
+  };
+
+  assert.deepEqual(update.data.radarAreas, ["DATA_AI", "SOFTWARE_ENGINEERING"]);
+  assert.equal(update.data.radarSeniority, "SENIOR");
+  assert.equal(
+    update.data.profileFieldMetaJson.radarAreas.source,
+    "base_cv_ai_extraction",
+  );
+  assert.equal(
+    update.data.profileFieldMetaJson.radarSeniority.source,
+    "base_cv_ai_extraction",
+  );
+});
+
+test("processJob does not overwrite manually edited radarAreas/radarSeniority, creates suggestion instead", async () => {
+  const profileUpdates: Array<unknown> = [];
+  const extractionOutput = buildExtractionOutput() as {
+    canonicalProfile: Record<string, unknown>;
+  };
+  extractionOutput.canonicalProfile.radarProfile = {
+    areas: ["DATA_AI"],
+    seniority: "JUNIOR",
+    careerFingerprint: [],
+  };
+
+  const service = new MasterCvCanonicalExtractionService(
+    {
+      masterCvCanonicalExtraction: {
+        findUnique: async () => ({
+          id: "ext-radar-2",
+          userId: "user-1",
+          resumeId: "resume-1",
+          status: "pending",
+          resume: { rawText: "texto do cv" },
+        }),
+        update: async (args: unknown) => args,
+      },
+      userProfile: {
+        findUnique: async () => ({
+          userId: "user-1",
+          radarAreas: ["SOFTWARE_ENGINEERING"],
+          radarSeniority: "SENIOR",
+          profileFieldMetaJson: {
+            radarAreas: { source: "manual_edit", manuallyEdited: true },
+            radarSeniority: { source: "manual_edit", manuallyEdited: true },
+          },
+          profileSuggestionsJson: [],
+        }),
+        update: async (args: unknown) => {
+          profileUpdates.push(args);
+          return args;
+        },
+      },
+    } as never,
+    {
+      merge: () => ({
+        next: {
+          experiences: [],
+          education: [],
+          skills: { technical: [], business: [], soft: [] },
+        },
+        fieldMeta: {
+          radarAreas: { source: "manual_edit", manuallyEdited: true },
+          radarSeniority: { source: "manual_edit", manuallyEdited: true },
+        },
+        suggestions: [],
+      }),
+    } as never,
+    { compute: () => "partial" } as never,
+    {} as never,
+    { extract: async () => extractionOutput as never },
+  );
+
+  await service.processJob({ extractionId: "ext-radar-2" });
+
+  const update = profileUpdates[0] as {
+    data: {
+      radarAreas: string[];
+      radarSeniority: string;
+      profileSuggestionsJson: Array<{ fieldPath: string }>;
+    };
+  };
+
+  assert.deepEqual(update.data.radarAreas, ["SOFTWARE_ENGINEERING"]);
+  assert.equal(update.data.radarSeniority, "SENIOR");
+  assert.deepEqual(
+    update.data.profileSuggestionsJson.map((s) => s.fieldPath).sort(),
+    ["radarAreas", "radarSeniority"],
+  );
+});
+
 test("worker retries transient failures up to max attempts", async () => {
   let attempts = 0;
   const worker = new MasterCvCanonicalExtractionWorker({

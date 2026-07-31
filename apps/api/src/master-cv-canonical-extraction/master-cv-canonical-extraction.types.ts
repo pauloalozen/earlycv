@@ -57,6 +57,11 @@ export type MasterCvCanonicalExtractionOutput = {
       issuer: string | null;
       year: string | null;
     }>;
+    radarProfile?: {
+      areas: string[];
+      seniority: string;
+      careerFingerprint: string[];
+    };
   };
   extractionCoverage: {
     identifiedFields: string[];
