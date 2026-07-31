@@ -5,6 +5,7 @@ import { apiRequest } from "./api-request";
 export type PublicJob = {
   canonicalKey: string;
   company: string;
+  companyWebsiteUrl: string | null;
   country: string | null;
   description: string;
   descriptionHtml: string;

@@ -17,6 +17,7 @@ import {
 import { getJobMatchScore } from "@/lib/radar-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
+import { CompanyLogo } from "../company-logo";
 import {
   JobScoreWidget,
   type MatchData,
@@ -51,20 +52,6 @@ const SENIORITY_LABELS: Record<string, string> = {
   staff: "Staff",
   principal: "Principal",
 };
-
-const COMPANY_COLORS = [
-  "#3a7ff6",
-  "#a855f7",
-  "#06b6d4",
-  "#f97316",
-  "#22c55e",
-  "#ec4899",
-  "#eab308",
-];
-
-function getCompanyColor(name: string): string {
-  return COMPANY_COLORS[name.charCodeAt(0) % COMPANY_COLORS.length];
-}
 
 type JobPageProps = {
   params: Promise<{ slug: string }>;
@@ -168,23 +155,13 @@ function SimCard({ job }: { job: PublicJob }) {
           marginBottom: 14,
         }}
       >
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 7,
-            background: getCompanyColor(job.company),
-            color: "#fafaf6",
-            fontFamily: MONO,
-            fontSize: 11,
-            fontWeight: 700,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {job.company.charAt(0).toUpperCase()}
-        </div>
+        <CompanyLogo
+          name={job.company}
+          websiteUrl={job.companyWebsiteUrl}
+          size={32}
+          borderRadius={7}
+          fontSize={11}
+        />
         <span
           style={{
             fontFamily: MONO,
@@ -394,24 +371,13 @@ export default async function JobPage({ params }: JobPageProps) {
               marginBottom: 22,
             }}
           >
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 10,
-                background: getCompanyColor(job.company),
-                color: "#fafaf6",
-                fontFamily: MONO,
-                fontSize: 13,
-                fontWeight: 700,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              {job.company.charAt(0).toUpperCase()}
-            </div>
+            <CompanyLogo
+              name={job.company}
+              websiteUrl={job.companyWebsiteUrl}
+              size={44}
+              borderRadius={10}
+              fontSize={13}
+            />
             <div>
               <div
                 style={{

@@ -17,6 +17,7 @@ import {
 import { getMyRadarProfile } from "@/lib/radar-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
+import { CompanyLogo } from "./company-logo";
 import { type ActiveFilters, FiltersSidebar } from "./filters-sidebar";
 import {
   JobScoreWidget,
@@ -88,16 +89,6 @@ const CATEGORIES = [
   { value: "remoto", label: "remoto" },
 ];
 
-const COMPANY_COLORS = [
-  "#3a7ff6",
-  "#a855f7",
-  "#06b6d4",
-  "#f97316",
-  "#22c55e",
-  "#ec4899",
-  "#eab308",
-];
-
 type SearchParams = {
   q?: string;
   area?: string;
@@ -152,35 +143,6 @@ function formatRelativeTime(isoDate: string): string {
   return `${diffW} semanas`;
 }
 
-function getCompanyColor(name: string): string {
-  return COMPANY_COLORS[name.charCodeAt(0) % COMPANY_COLORS.length];
-}
-
-function CompanyLogo({ name }: { name: string }) {
-  return (
-    <div
-      aria-hidden
-      style={{
-        width: 42,
-        height: 42,
-        borderRadius: 9,
-        background: getCompanyColor(name),
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#fff",
-        fontSize: 13,
-        fontWeight: 700,
-        letterSpacing: 0,
-        flexShrink: 0,
-        fontFamily: MONO,
-      }}
-    >
-      {name.charAt(0).toUpperCase()}
-    </div>
-  );
-}
-
 type JobCardProps = {
   job: PublicJob;
   adaptarHref: string;
@@ -218,7 +180,7 @@ function JobCard({ job, adaptarHref, scoreState }: JobCardProps) {
     >
       {/* Left */}
       <div style={{ display: "flex", gap: 14, flex: 1, minWidth: 0 }}>
-        <CompanyLogo name={job.company} />
+        <CompanyLogo name={job.company} websiteUrl={job.companyWebsiteUrl} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Title row */}

@@ -115,6 +115,7 @@ export class JobsService {
         company: {
           select: {
             name: true,
+            websiteUrl: true,
           },
         },
         country: true,
@@ -191,7 +192,7 @@ export class JobsService {
 
     const select = {
       canonicalKey: true,
-      company: { select: { name: true } },
+      company: { select: { name: true, websiteUrl: true } },
       country: true,
       descriptionClean: true,
       descriptionRaw: true,
@@ -222,13 +223,16 @@ export class JobsService {
     return { jobs, total, page, limit };
   }
 
-  // Usado pelo Radar (usuário logado com UserRadarProfile): busca todas as
-  // vagas ativas+enriquecidas compatíveis com os mesmos filtros de texto/
-  // empresa/data da listagem pública, restritas a um conjunto de jobIds já
-  // pré-filtrado pelo MatchingEngine. Sem paginação aqui — o score é
+  // Usado pelo Radar (usuário logado com UserRadarProfile): busca vagas
+  // ativas com os mesmos filtros de texto/empresa/data da listagem pública,
+  // com o enrichment incluído para permitir calcular score em memória. O
+  // Radar nunca esconde vagas do usuário — só prioriza por relevância — por
+  // isso `jobIds` é opcional: quando omitido, traz todas as vagas ativas
+  // que batem com os filtros (igual ao anônimo), sem restringir por
+  // compatibilidade de área/senioridade/etc. Sem paginação aqui — o score é
   // calculado e ordenado em memória, a paginação acontece depois disso.
   async listByIdsWithEnrichment(
-    jobIds: string[],
+    jobIds: string[] | null,
     filters: {
       q?: string;
       workModel?: string;
@@ -237,13 +241,16 @@ export class JobsService {
       publishedWithin?: "24h" | "3d" | "7d";
     },
   ) {
-    if (jobIds.length === 0) {
+    if (jobIds && jobIds.length === 0) {
       return [];
     }
     const where = this.buildPublicJobsWhere(filters);
     return this.database.job.findMany({
-      where: { ...where, id: { in: jobIds } },
-      include: { enrichment: true, company: { select: { name: true } } },
+      where: { ...where, ...(jobIds ? { id: { in: jobIds } } : {}) },
+      include: {
+        enrichment: true,
+        company: { select: { name: true, websiteUrl: true } },
+      },
     });
   }
 
