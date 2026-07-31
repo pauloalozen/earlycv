@@ -15,6 +15,7 @@ import {
   type AuthenticatedRequestUser,
 } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { OptionalJwtAuthGuard } from "../common/optional-jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { MatchingEngine } from "../radar/matching.engine";
 import { UserRadarProfileService } from "../radar/user-radar-profile.service";
@@ -33,7 +34,13 @@ export class PublicJobsController {
 
   @Get()
   @InternalRoles("admin", "superadmin")
-  @UseGuards(PublicJobsGhostModeGuard)
+  // PublicJobsGhostModeGuard, sozinho, só roda o JwtAuthGuard quando o ghost
+  // mode está ligado — com ghost mode desligado ele libera o acesso sem
+  // nunca tentar identificar quem está logado, então @AuthenticatedUser()
+  // nunca é preenchido e o score personalizado nunca aparece. O
+  // OptionalJwtAuthGuard garante que a identidade é sempre tentada,
+  // independente do estado do ghost mode, sem bloquear quem não tem token.
+  @UseGuards(PublicJobsGhostModeGuard, OptionalJwtAuthGuard)
   async list(
     @Req() _request: Request,
     @AuthenticatedUser() user: AuthenticatedRequestUser | undefined,
