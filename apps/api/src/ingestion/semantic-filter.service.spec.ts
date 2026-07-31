@@ -133,6 +133,51 @@ test("SemanticFilterService.evaluate applies word boundary for short (<=3 char) 
   });
 });
 
+test("SemanticFilterService.evaluate matches multi-word signals regardless of word order and abbreviation", async () => {
+  const { database } = createDatabaseMock(
+    createConfig({ techSignals: ["suporte tecnico"] }),
+  );
+  const service = new SemanticFilterService(database);
+
+  const fullOrder = await service.evaluate("Tecnico de Suporte I");
+  assert.deepEqual(fullOrder, {
+    configVersion: "v1",
+    reason: "tech_signal:suporte tecnico",
+    result: "ENRICH",
+  });
+
+  const abbreviated = await service.evaluate("Tec de Suporte");
+  assert.deepEqual(abbreviated, {
+    configVersion: "v1",
+    reason: "tech_signal:suporte tecnico",
+    result: "ENRICH",
+  });
+
+  const reversed = await service.evaluate("Suporte Tecnico Senior");
+  assert.deepEqual(reversed, {
+    configVersion: "v1",
+    reason: "tech_signal:suporte tecnico",
+    result: "ENRICH",
+  });
+
+  const missingToken = await service.evaluate("Tecnico em Refrigeracao");
+  assert.equal(missingToken.result, "SKIP");
+  assert.equal(missingToken.reason, "zona_cinza");
+});
+
+test("SemanticFilterService.evaluate does not let a short token in a multi-word signal match unrelated words", async () => {
+  const { database } = createDatabaseMock(
+    createConfig({ techSignals: ["suporte de ti"] }),
+  );
+  const service = new SemanticFilterService(database);
+
+  // "ti" tem so 2 chars, entao nao pode casar por prefixo com "i" (nivel
+  // da vaga) nem com qualquer outra palavra curta do titulo.
+  const decision = await service.evaluate("Tecnico de Suporte I");
+  assert.equal(decision.result, "SKIP");
+  assert.equal(decision.reason, "zona_cinza");
+});
+
 test("SemanticFilterService respects cache TTL and does not hit the database on consecutive calls", async () => {
   let now = 0;
   const { database, getFindFirstCalls } = createDatabaseMock(createConfig());

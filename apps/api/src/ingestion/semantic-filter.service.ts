@@ -37,14 +37,72 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Sinais curtos (<=3 chars, ex: "ux", "cio", "ia", "bi") precisam de word
-// boundary — senao "ux" casa dentro de "auxiliar" e "cio" dentro de
-// "internacional". Sinais de 4+ chars mantem substring simples, que ja
-// funciona bem pra termos como "desenvolvedor"/"engenheiro" e cobre
-// variacoes (plural, prefixos) sem precisar de boundary.
+// Conectores ignorados na tokenizacao de sinais compostos — "suporte de ti"
+// e "suporte ti" devem casar do mesmo jeito, entao "de" nao pode ser um
+// token obrigatorio.
+const STOPWORDS = new Set([
+  "a",
+  "as",
+  "com",
+  "da",
+  "das",
+  "de",
+  "dos",
+  "do",
+  "e",
+  "em",
+  "o",
+  "os",
+  "para",
+]);
+
+function tokenize(value: string) {
+  return value
+    .split(/[^a-z0-9]+/i)
+    .map((token) => token.toLowerCase())
+    .filter((token) => token.length > 0 && !STOPWORDS.has(token));
+}
+
+// Casa um token do sinal com um token do titulo tolerando abreviacao
+// ("tec" -> "tecnico") via prefixo nos dois sentidos. Exige >=3 chars no
+// menor dos dois pra nao deixar token curto (ex: "i", "ti") casar com
+// qualquer coisa que comece igual.
+function tokensMatch(signalToken: string, titleToken: string) {
+  if (signalToken === titleToken) return true;
+  if (signalToken.length < 3 || titleToken.length < 3) return false;
+  return (
+    titleToken.startsWith(signalToken) || signalToken.startsWith(titleToken)
+  );
+}
+
+// Sinais compostos (com espaco, ex: "suporte de ti", "product manager")
+// casam por conjunto de tokens, independente de ordem e tolerando
+// abreviacao por prefixo — assim "tecnico de suporte", "tec de suporte" e
+// "suporte tecnico" casam com o mesmo sinal sem precisar cadastrar cada
+// variacao de frase.
+function matchesMultiWordSignal(title: string, signal: string) {
+  const signalTokens = tokenize(signal);
+  if (signalTokens.length === 0) return false;
+
+  const titleTokens = tokenize(title);
+  return signalTokens.every((signalToken) =>
+    titleTokens.some((titleToken) => tokensMatch(signalToken, titleToken)),
+  );
+}
+
+// Sinais curtos de uma palavra so (<=3 chars, ex: "ux", "cio", "ia", "bi")
+// precisam de word boundary — senao "ux" casa dentro de "auxiliar" e "cio"
+// dentro de "internacional". Sinais de uma palavra com 4+ chars mantem
+// substring simples, que ja funciona bem pra termos como
+// "desenvolvedor"/"engenheiro" e cobre variacoes (plural, prefixos) sem
+// precisar de boundary.
 function matchesSignal(title: string, signal: string) {
   const normalizedSignal = signal.trim().toLowerCase();
   if (!normalizedSignal) return false;
+
+  if (normalizedSignal.includes(" ")) {
+    return matchesMultiWordSignal(title, normalizedSignal);
+  }
 
   if (normalizedSignal.length <= 3) {
     const regex = new RegExp(
