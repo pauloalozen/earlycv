@@ -36,6 +36,7 @@ export class PublicJobsController {
   @UseGuards(PublicJobsGhostModeGuard)
   async list(
     @Req() _request: Request,
+    @AuthenticatedUser() user: AuthenticatedRequestUser | undefined,
     @Query("q") q?: string,
     @Query("workModel") workModel?: string,
     @Query("seniorityLevel") seniorityLevel?: string,
@@ -55,19 +56,86 @@ export class PublicJobsController {
       100,
       Math.max(1, Number.parseInt(limit ?? "20", 10) || 20),
     );
-
-    const { jobs, total } = await this.jobsService.listPublicFiltered({
+    const filters = {
       q,
       workModel,
       seniorityLevel,
       companyName,
       publishedWithin: validPublishedWithin,
-      page: parsedPage,
-      limit: parsedLimit,
+    };
+
+    const radarProfile = user
+      ? await this.userRadarProfileService.getProfile(user.id)
+      : null;
+
+    if (!user || !radarProfile) {
+      const { jobs, total } = await this.jobsService.listPublicFiltered({
+        ...filters,
+        page: parsedPage,
+        limit: parsedLimit,
+      });
+
+      return {
+        data: jobs.map((job) => toPublicJobView(job)),
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+      };
+    }
+
+    // Usuário logado com UserRadarProfile: filtra pelas mesmas regras do
+    // MatchingEngine e ordena por score DESC (desempate por lastSeenAt
+    // DESC). Sem paginação no banco aqui — o conjunto compatível já tende a
+    // ser bem menor que o total de vagas ativas.
+    const compatibleJobIds = await this.matchingEngine.filterCompatibleJobs({
+      userId: user.id,
     });
+    const jobsWithEnrichment = await this.jobsService.listByIdsWithEnrichment(
+      compatibleJobIds,
+      filters,
+    );
+
+    const scored = jobsWithEnrichment
+      .filter((job) => job.enrichment)
+      .map((job) => {
+        // biome-ignore lint/style/noNonNullAssertion: filtrado acima
+        const enrichment = job.enrichment!;
+        const matchScore = this.matchingEngine.calculateScore(
+          {
+            jobId: job.id,
+            workModel: job.workModel,
+            dominantArea: enrichment.dominantArea,
+            areas: enrichment.areas,
+            requiredSkills: enrichment.requiredSkills,
+            technologies: enrichment.technologies,
+            seniority: enrichment.seniority,
+            languageRequirements: enrichment.languageRequirements,
+          },
+          {
+            areas: radarProfile.areas,
+            skills: radarProfile.skills,
+            technologies: radarProfile.technologies,
+            seniority: radarProfile.seniority,
+            languages: radarProfile.languages,
+            preferredWorkModels: radarProfile.preferredWorkModels,
+          },
+        );
+        return { job, score: matchScore.score };
+      })
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return b.job.lastSeenAt.getTime() - a.job.lastSeenAt.getTime();
+      });
+
+    const total = scored.length;
+    const start = (parsedPage - 1) * parsedLimit;
+    const pageItems = scored.slice(start, start + parsedLimit);
 
     return {
-      data: jobs.map((job) => toPublicJobView(job)),
+      data: pageItems.map(({ job, score }) => ({
+        ...toPublicJobView(job),
+        score,
+      })),
       total,
       page: parsedPage,
       limit: parsedLimit,

@@ -109,7 +109,7 @@ export class JobsService {
   listPublic() {
     return this.database.job.findMany({
       where: { status: "active" },
-      orderBy: [{ firstSeenAt: "desc" }, { updatedAt: "desc" }],
+      orderBy: [{ lastSeenAt: "desc" }, { updatedAt: "desc" }],
       select: {
         canonicalKey: true,
         company: {
@@ -135,26 +135,15 @@ export class JobsService {
     });
   }
 
-  async listPublicFiltered(filters: {
+  private buildPublicJobsWhere(filters: {
     q?: string;
     workModel?: string;
     seniorityLevel?: string;
     companyName?: string;
     publishedWithin?: "24h" | "3d" | "7d";
-    page: number;
-    limit: number;
-  }) {
-    const {
-      q,
-      workModel,
-      seniorityLevel,
-      companyName,
-      publishedWithin,
-      page,
-      limit,
-    } = filters;
-    const skip = (page - 1) * limit;
-
+  }): Prisma.JobWhereInput {
+    const { q, workModel, seniorityLevel, companyName, publishedWithin } =
+      filters;
     const where: Prisma.JobWhereInput = { status: "active" };
 
     if (q) {
@@ -184,6 +173,22 @@ export class JobsService {
       where.publishedAtSource = { gte: cutoff };
     }
 
+    return where;
+  }
+
+  async listPublicFiltered(filters: {
+    q?: string;
+    workModel?: string;
+    seniorityLevel?: string;
+    companyName?: string;
+    publishedWithin?: "24h" | "3d" | "7d";
+    page: number;
+    limit: number;
+  }) {
+    const { page, limit } = filters;
+    const skip = (page - 1) * limit;
+    const where = this.buildPublicJobsWhere(filters);
+
     const select = {
       canonicalKey: true,
       company: { select: { name: true } },
@@ -206,7 +211,7 @@ export class JobsService {
     const [jobs, total] = await Promise.all([
       this.database.job.findMany({
         where,
-        orderBy: [{ firstSeenAt: "desc" }, { updatedAt: "desc" }],
+        orderBy: [{ lastSeenAt: "desc" }, { updatedAt: "desc" }],
         skip,
         take: limit,
         select,
@@ -215,6 +220,31 @@ export class JobsService {
     ]);
 
     return { jobs, total, page, limit };
+  }
+
+  // Usado pelo Radar (usuário logado com UserRadarProfile): busca todas as
+  // vagas ativas+enriquecidas compatíveis com os mesmos filtros de texto/
+  // empresa/data da listagem pública, restritas a um conjunto de jobIds já
+  // pré-filtrado pelo MatchingEngine. Sem paginação aqui — o score é
+  // calculado e ordenado em memória, a paginação acontece depois disso.
+  async listByIdsWithEnrichment(
+    jobIds: string[],
+    filters: {
+      q?: string;
+      workModel?: string;
+      seniorityLevel?: string;
+      companyName?: string;
+      publishedWithin?: "24h" | "3d" | "7d";
+    },
+  ) {
+    if (jobIds.length === 0) {
+      return [];
+    }
+    const where = this.buildPublicJobsWhere(filters);
+    return this.database.job.findMany({
+      where: { ...where, id: { in: jobIds } },
+      include: { enrichment: true, company: { select: { name: true } } },
+    });
   }
 
   async listPublicFacets() {
