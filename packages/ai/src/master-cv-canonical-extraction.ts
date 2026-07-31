@@ -23,9 +23,44 @@ const ALLOWED_CANONICAL_FIELD_PATHS = [
   "skills",
   "languages",
   "certifications",
+  "radarProfile",
+  "radarProfile.areas",
+  "radarProfile.seniority",
+  "radarProfile.careerFingerprint",
+] as const;
+
+// Mesmos valores do enum JobArea em packages/database/prisma/schema.prisma,
+// exceto OTHER (que representa "sem classificação" e é expresso como array
+// vazio, não como um valor de área).
+const ALLOWED_RADAR_AREAS = [
+  "DATA_AI",
+  "SOFTWARE_ENGINEERING",
+  "CLOUD_DEVOPS",
+  "CYBERSECURITY",
+  "PRODUCT",
+  "DESIGN_UX",
+  "QA_TEST",
+  "PROJECT_AGILE",
+  "ARCHITECTURE",
+  "LEADERSHIP",
+] as const;
+
+// Mesmos valores do enum SeniorityLevel em packages/database/prisma/schema.prisma.
+const ALLOWED_RADAR_SENIORITY = [
+  "INTERN",
+  "JUNIOR",
+  "MID",
+  "SENIOR",
+  "LEAD",
+  "STAFF",
+  "MANAGER",
+  "DIRECTOR",
+  "UNKNOWN",
 ] as const;
 
 export type FieldStatus = (typeof ALLOWED_FIELD_STATUS)[number];
+export type RadarJobArea = (typeof ALLOWED_RADAR_AREAS)[number];
+export type RadarSeniorityLevel = (typeof ALLOWED_RADAR_SENIORITY)[number];
 
 type MasterCvFileInput = {
   buffer: Buffer;
@@ -78,6 +113,11 @@ export type CanonicalProfile = {
     issuer: string | null;
     year: string | null;
   }>;
+  radarProfile: {
+    areas: RadarJobArea[];
+    seniority: RadarSeniorityLevel;
+    careerFingerprint: string[];
+  };
 };
 
 export type ExtractionCoverage = {
@@ -105,6 +145,18 @@ HARD RULES:
 - Return strict JSON only.
 - extractionCoverage.fieldStatus values must be only: filled, partial, missing.
 
+## Classificação para Radar de Oportunidades
+
+Analise o CV completo e preencha radarProfile com:
+
+**areas**: array de áreas profissionais (pode ter mais de uma se o profissional tiver múltiplos domínios relevantes). Use apenas os valores: DATA_AI | SOFTWARE_ENGINEERING | CLOUD_DEVOPS | CYBERSECURITY | PRODUCT | DESIGN_UX | QA_TEST | PROJECT_AGILE | ARCHITECTURE | LEADERSHIP. Exemplos: profissional que programa e faz BI → [SOFTWARE_ENGINEERING, DATA_AI]. Especialista em segurança que também desenvolve → [CYBERSECURITY, SOFTWARE_ENGINEERING].
+
+**seniority**: nível de senioridade inferido do conjunto de experiências (títulos, anos, complexidade das responsabilidades, não apenas contagem de anos). Valores: INTERN | JUNIOR | MID | SENIOR | LEAD | STAFF | MANAGER | DIRECTOR | UNKNOWN.
+
+**careerFingerprint**: máximo 5 labels concisos que descrevem o profissional ideal (ex: ["Engenheiro de Dados", "Python", "AWS", "Sênior", "Arquitetura de Dados"]). Em português.
+
+Se o CV não tiver informação suficiente para classificar, use UNKNOWN para seniority e [] para areas.
+
 Return exactly this JSON shape:
 {
   "canonicalProfile": {
@@ -119,7 +171,12 @@ Return exactly this JSON shape:
     "education": [{ "institution": string | null, "degree": string | null, "fieldOfStudy": string | null, "startDate": string | null, "endDate": string | null }],
     "skills": string[],
     "languages": [{ "language": string, "level": string | null }],
-    "certifications": [{ "name": string, "issuer": string | null, "year": string | null }]
+    "certifications": [{ "name": string, "issuer": string | null, "year": string | null }],
+    "radarProfile": {
+      "areas": string[],
+      "seniority": string,
+      "careerFingerprint": string[]
+    }
   },
   "extractionCoverage": {
     "identifiedFields": string[],
@@ -224,6 +281,44 @@ function validateRecord(value: unknown, path: string): Record<string, unknown> {
     throw new Error(`Invalid object at ${path}`);
   }
   return value as Record<string, unknown>;
+}
+
+// radarProfile é classificação derivada (não dado transcrito verbatim do CV)
+// — ao contrário do resto de canonicalProfile, um valor malformado ou
+// inesperado do modelo aqui não deve derrubar a extração inteira. Mesma
+// racional da leniência já aplicada a confidence/evidence acima.
+function sanitizeRadarProfile(value: unknown): CanonicalProfile["radarProfile"] {
+  const empty: CanonicalProfile["radarProfile"] = {
+    areas: [],
+    seniority: "UNKNOWN",
+    careerFingerprint: [],
+  };
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return empty;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  const areas = Array.isArray(record.areas)
+    ? record.areas.filter((item): item is RadarJobArea =>
+        (ALLOWED_RADAR_AREAS as readonly string[]).includes(item as string),
+      )
+    : [];
+
+  const seniority = (ALLOWED_RADAR_SENIORITY as readonly string[]).includes(
+    record.seniority as string,
+  )
+    ? (record.seniority as RadarSeniorityLevel)
+    : "UNKNOWN";
+
+  const careerFingerprint = Array.isArray(record.careerFingerprint)
+    ? record.careerFingerprint
+        .filter((item): item is string => typeof item === "string")
+        .slice(0, 5)
+    : [];
+
+  return { areas, seniority, careerFingerprint };
 }
 
 function validateOutput(payload: unknown): MasterCvCanonicalExtractionOutput {
@@ -502,6 +597,7 @@ function validateOutput(payload: unknown): MasterCvCanonicalExtractionOutput {
           };
         });
       })(),
+      radarProfile: sanitizeRadarProfile(canonicalProfile.radarProfile),
     },
     extractionCoverage: typedCoverage,
     confidence: sanitizedConfidence,
