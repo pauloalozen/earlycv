@@ -2,6 +2,15 @@ import "server-only";
 
 import { apiRequest } from "./api-request";
 
+export type MatchBreakdown = {
+  area: number;
+  skills: number;
+  seniority: number;
+  technologies: number;
+  language: number;
+  workModel: number;
+};
+
 export type PublicJob = {
   canonicalKey: string;
   company: string;
@@ -22,6 +31,9 @@ export type PublicJob = {
   title: string;
   workModel: string | null;
   score?: number | null;
+  breakdown?: MatchBreakdown | null;
+  matchedSkills?: string[];
+  missingSkills?: string[];
 };
 
 export type PublicJobsPage = {
@@ -29,6 +41,7 @@ export type PublicJobsPage = {
   total: number;
   page: number;
   limit: number;
+  highCompatCount?: number;
 };
 
 export type PublicJobsFilters = {
@@ -39,6 +52,8 @@ export type PublicJobsFilters = {
   publishedWithin?: "24h" | "3d" | "7d";
   page?: number;
   limit?: number;
+  minScore?: number;
+  minSkillsPct?: number;
 };
 
 export type FacetItem = { value: string; count: number };
@@ -72,6 +87,9 @@ export async function listPublicJobs(
     params.set("publishedWithin", filters.publishedWithin);
   if (filters?.page) params.set("page", String(filters.page));
   if (filters?.limit) params.set("limit", String(filters.limit));
+  if (filters?.minScore) params.set("minScore", String(filters.minScore));
+  if (filters?.minSkillsPct)
+    params.set("minSkillsPct", String(filters.minSkillsPct));
 
   const qs = params.toString();
   return requestPublicJobs<PublicJobsPage>(`/public/jobs${qs ? `?${qs}` : ""}`);

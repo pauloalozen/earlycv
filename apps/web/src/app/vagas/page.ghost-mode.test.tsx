@@ -18,22 +18,21 @@ vi.mock("@/components/public-footer", () => ({
 vi.mock("@/components/public-nav-bar", () => ({
   PublicNavBar: () => <div>nav</div>,
 }));
-vi.mock("./filters-sidebar", () => ({
-  FiltersSidebar: () => <div>filters</div>,
+vi.mock("./filters-bar", () => ({
+  FiltersBar: () => <div>filters</div>,
 }));
-vi.mock("./job-score-widget", () => ({
-  JobScoreWidget: (props: {
-    scoreState: string;
-    match?: { score: number } | null;
-  }) => (
-    <div
-      data-testid="job-score-widget"
-      data-state={props.scoreState}
-      data-score={props.match?.score ?? ""}
-    >
-      score
+vi.mock("./radar-ui", () => ({
+  ScoreRing: (props: { value: number }) => (
+    <div data-testid="score-ring" data-value={props.value}>
+      ring
     </div>
   ),
+  ScorePill: () => <span>pill</span>,
+  MiniBar: () => <div>bar</div>,
+  SkillChip: () => <span>chip</span>,
+  AdaptBtn: () => <a href="#adaptar">adaptar</a>,
+  scoreTier: (value: number) =>
+    value >= 70 ? "high" : value >= 40 ? "mid" : "low",
 }));
 vi.mock("@/lib/app-session.server", () => ({
   getCurrentAppUserFromCookies: mocks.getCurrentAppUserFromCookies,
@@ -152,37 +151,37 @@ describe("/vagas ghost mode access", () => {
 
 // Tree walker que "renderiza" a árvore de React elements retornada por
 // VagasPage() sem um renderer real (jsdom/RTL) — chama componentes função
-// manualmente até encontrar o JobScoreWidget mockado, capturando suas props.
+// manualmente até encontrar o ScoreRing mockado, capturando suas props.
 type ElementLike = { type: unknown; props?: Record<string, unknown> };
 
 function isElementLike(value: unknown): value is ElementLike {
   return typeof value === "object" && value !== null && "type" in value;
 }
 
-let jobScoreWidgetRef: unknown;
+let scoreRingRef: unknown;
 
-function findJobScoreWidgetProps(
+function findScoreRingProps(
   node: unknown,
   results: Record<string, unknown>[] = [],
 ): Record<string, unknown>[] {
   if (!node || typeof node !== "object") return results;
   if (Array.isArray(node)) {
-    for (const item of node) findJobScoreWidgetProps(item, results);
+    for (const item of node) findScoreRingProps(item, results);
     return results;
   }
   if (!isElementLike(node)) return results;
 
   if (typeof node.type === "function") {
-    if (node.type === jobScoreWidgetRef) {
+    if (node.type === scoreRingRef) {
       results.push(node.props ?? {});
       return results;
     }
     const rendered = (node.type as (props: unknown) => unknown)(node.props);
-    findJobScoreWidgetProps(rendered, results);
+    findScoreRingProps(rendered, results);
     return results;
   }
   if (node.props?.children) {
-    findJobScoreWidgetProps(node.props.children, results);
+    findScoreRingProps(node.props.children, results);
   }
   return results;
 }
@@ -204,8 +203,8 @@ describe("/vagas score badge (usuário logado com UserRadarProfile)", () => {
       companies: [],
     });
 
-    const widgetModule = await import("./job-score-widget");
-    jobScoreWidgetRef = widgetModule.JobScoreWidget;
+    const radarUiModule = await import("./radar-ui");
+    scoreRingRef = radarUiModule.ScoreRing;
   });
 
   afterEach(() => {
@@ -218,6 +217,7 @@ describe("/vagas score badge (usuário logado com UserRadarProfile)", () => {
       slug: "vaga-empresa-job-1",
       title: "Engenheiro de Dados",
       company: "EarlyCV",
+      companyWebsiteUrl: null,
       location: "Brasil",
       country: "BR",
       description: "desc",
@@ -235,7 +235,7 @@ describe("/vagas score badge (usuário logado com UserRadarProfile)", () => {
     };
   }
 
-  it("usuário logado com UserRadarProfile e score vê o badge com o score real", async () => {
+  it("usuário logado com UserRadarProfile e score vê o ring com o score real", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
     mocks.getMyMasterResume.mockResolvedValue({
       id: "resume-1",
@@ -257,26 +257,25 @@ describe("/vagas score badge (usuário logado com UserRadarProfile)", () => {
       preferredContractTypes: [],
       openToRelocation: false,
       salaryExpectationMin: null,
+      generatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
     mocks.listPublicJobs.mockResolvedValue({
       data: [buildJob({ score: 87 })],
       total: 1,
       page: 1,
       limit: 20,
+      highCompatCount: 1,
     });
 
     const result = await VagasPage({ searchParams: Promise.resolve({}) });
-    const widgets = findJobScoreWidgetProps(result);
-    const compactWidget = widgets.find((props) => props.compact) as
-      | { scoreState: string; match?: { score: number } | null }
-      | undefined;
+    const rings = findScoreRingProps(result);
+    const cardRing = rings.find((props) => props.value === 87);
 
-    expect(compactWidget).toBeDefined();
-    expect(compactWidget?.scoreState).toBe("has-cv");
-    expect(compactWidget?.match?.score).toBe(87);
+    expect(cardRing).toBeDefined();
   });
 
-  it("usuário anônimo não vê badge de score (match nulo, estado anonymous)", async () => {
+  it("usuário anônimo não vê ring de score (nenhum ScoreRing com score real)", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(null);
     mocks.listPublicJobs.mockResolvedValue({
       data: [buildJob()],
@@ -286,14 +285,9 @@ describe("/vagas score badge (usuário logado com UserRadarProfile)", () => {
     });
 
     const result = await VagasPage({ searchParams: Promise.resolve({}) });
-    const widgets = findJobScoreWidgetProps(result);
-    const compactWidget = widgets.find((props) => props.compact) as
-      | { scoreState: string; match?: { score: number } | null }
-      | undefined;
+    const rings = findScoreRingProps(result);
 
-    expect(compactWidget).toBeDefined();
-    expect(compactWidget?.scoreState).toBe("anonymous");
-    expect(compactWidget?.match ?? null).toBeNull();
+    expect(rings).toHaveLength(0);
     expect(mocks.getMyRadarProfile).not.toHaveBeenCalled();
   });
 });
