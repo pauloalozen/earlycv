@@ -843,6 +843,67 @@ test("processJob does not overwrite manually edited radarAreas/radarSeniority, c
   );
 });
 
+test("processJob triggers UserRadarProfile.refresh fire-and-forget after a successful merge", async () => {
+  const extractionOutput = buildExtractionOutput();
+  const refreshCalls: Array<{ userId: string; options?: unknown }> = [];
+
+  const service = new MasterCvCanonicalExtractionService(
+    {
+      masterCvCanonicalExtraction: {
+        findUnique: async () => ({
+          id: "ext-radar-trigger",
+          userId: "user-1",
+          resumeId: "resume-1",
+          status: "pending",
+          resume: { rawText: "texto do cv" },
+        }),
+        update: async (args: unknown) => args,
+      },
+      userProfile: {
+        findUnique: async () => ({
+          userId: "user-1",
+          profileFieldMetaJson: {},
+          profileSuggestionsJson: [],
+        }),
+        update: async () => ({}),
+      },
+    } as never,
+    {
+      merge: () => ({
+        next: {
+          experiences: [],
+          education: [],
+          skills: { technical: [], business: [], soft: [] },
+        },
+        fieldMeta: {},
+        suggestions: [],
+      }),
+    } as never,
+    { compute: () => "partial" } as never,
+    {} as never,
+    { extract: async () => extractionOutput as never },
+    {
+      // Promise que nunca resolve: se processJob() aguardasse refresh() (em
+      // vez de fire-and-forget), o teste travaria/expiraria no timeout do
+      // Promise.race abaixo.
+      refresh: (userId: string, options?: unknown) => {
+        refreshCalls.push({ userId, options });
+        return new Promise(() => {});
+      },
+    } as never,
+  );
+
+  const result = await Promise.race([
+    service.processJob({ extractionId: "ext-radar-trigger" }).then(() => "processJob-resolved"),
+    new Promise((resolve) => setTimeout(() => resolve("timeout"), 300)),
+  ]);
+
+  assert.equal(result, "processJob-resolved");
+  assert.equal(refreshCalls.length, 1);
+  assert.equal(refreshCalls[0]?.userId, "user-1");
+  assert.deepEqual(refreshCalls[0]?.options, { sourceResumeId: "resume-1" });
+});
+
 test("worker retries transient failures up to max attempts", async () => {
   let attempts = 0;
   const worker = new MasterCvCanonicalExtractionWorker({

@@ -13,6 +13,7 @@ import type {
 } from "../profiles/profile-canonical.types";
 import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merge.service";
 import { ProfileReadinessService } from "../profiles/profile-readiness.service";
+import { UserRadarProfileService } from "../radar/user-radar-profile.service";
 import { parseMasterCvCanonicalExtractionPayload } from "./master-cv-canonical-extraction.schema";
 import type {
   EnqueueMasterCvCanonicalExtractionInput,
@@ -47,6 +48,12 @@ export class MasterCvCanonicalExtractionService {
     >,
     @Inject("MASTERCV_AI_CLIENT") private readonly aiClient: OpenAI,
     @Optional() private readonly extractionClient?: ExtractionClient,
+    @Optional()
+    @Inject(UserRadarProfileService)
+    private readonly userRadarProfileService?: Pick<
+      UserRadarProfileService,
+      "refresh"
+    >,
   ) {}
 
   async enqueueFromMasterResumeUpload(
@@ -155,6 +162,20 @@ export class MasterCvCanonicalExtractionService {
         payload,
         extractedAt: new Date().toISOString(),
       });
+
+      // Fire-and-forget: nunca aguardar aqui. UserRadarProfile.refresh() é
+      // um snapshot derivado que pode ser reconstruído a qualquer momento —
+      // não faz sentido prender esse background job (que já é assíncrono em
+      // relação ao request do usuário, ver enqueueFromMasterResumeUpload)
+      // esperando por ele.
+      this.userRadarProfileService
+        ?.refresh(extraction.userId, { sourceResumeId: extraction.resumeId })
+        .catch((error) => {
+          this.logger.error(
+            `[master-cv-canonical-extraction] radar profile refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+            { extractionId: extraction.id, userId: extraction.userId },
+          );
+        });
 
       return table.update({
         where: { id: extraction.id },
