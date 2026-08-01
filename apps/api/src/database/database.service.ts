@@ -65,6 +65,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.semanticFilterConfig;
   }
 
+  get crawlerDiscardedTitle() {
+    return this.prisma.crawlerDiscardedTitle;
+  }
+
   get ingestionRun() {
     return this.prisma.ingestionRun;
   }

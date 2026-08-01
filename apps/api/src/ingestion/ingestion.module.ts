@@ -4,6 +4,8 @@ import { createAiClientFromEnv } from "../common/ai-client-factory";
 import { DatabaseModule } from "../database/database.module";
 import { CustomApiAdapter, CustomHtmlAdapter, GupyAdapter } from "./adapters";
 import { AdminIngestionImportService } from "./admin-ingestion-import.service";
+import { CrawlerDiscardController } from "./crawler-discard.controller";
+import { CrawlerDiscardService } from "./crawler-discard.service";
 import { EnrichmentConfigController } from "./enrichment-config.controller";
 import { EnrichmentConfigService } from "./enrichment-config.service";
 import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
@@ -30,10 +32,12 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
     SemanticFilterController,
     EnrichmentConfigController,
     IngestionRunEnrichmentController,
+    CrawlerDiscardController,
   ],
   providers: [
     IngestionService,
     AdminIngestionImportService,
+    CrawlerDiscardService,
     GlobalSchedulerConfigService,
     IngestionLockRepository,
     IngestionSchedulerService,

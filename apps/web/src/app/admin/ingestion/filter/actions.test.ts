@@ -4,6 +4,7 @@ const createSemanticFilterConfigVersionMock = vi.hoisted(() => vi.fn());
 const reenrichJobMock = vi.hoisted(() => vi.fn());
 const runEnrichmentNowForJobMock = vi.hoisted(() => vi.fn());
 const forceRunEnrichmentNowForJobMock = vi.hoisted(() => vi.fn());
+const whitelistCrawlerDiscardMock = vi.hoisted(() => vi.fn());
 const revalidatePathMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/cache", () => ({
@@ -17,10 +18,15 @@ vi.mock("@/lib/admin-semantic-filter-api", () => ({
   runEnrichmentNowForJob: runEnrichmentNowForJobMock,
 }));
 
+vi.mock("@/lib/admin-crawler-discards-api", () => ({
+  whitelistCrawlerDiscard: whitelistCrawlerDiscardMock,
+}));
+
 import {
   enrichNowFormAction,
   forceEnrichFormAction,
   saveSemanticFilterConfigVersionAction,
+  whitelistCrawlerDiscardAction,
 } from "./actions";
 
 describe("semantic filter actions", () => {
@@ -115,5 +121,51 @@ describe("semantic filter actions", () => {
 
     expect(reenrichJobMock).not.toHaveBeenCalled();
     expect(forceRunEnrichmentNowForJobMock).not.toHaveBeenCalled();
+  });
+
+  it("whitelistCrawlerDiscardAction adds term and revalidates", async () => {
+    whitelistCrawlerDiscardMock.mockResolvedValueOnce({
+      id: "config-2",
+      version: "v2",
+    });
+
+    const formData = new FormData();
+    formData.set("id", "discard-1");
+    formData.set("term", "governanca de ti");
+
+    const result = await whitelistCrawlerDiscardAction(null, formData);
+
+    expect(whitelistCrawlerDiscardMock).toHaveBeenCalledWith(
+      "discard-1",
+      "governanca de ti",
+    );
+    expect(result.kind).toBe("success");
+    expect(result.message).toMatch(/v2/);
+    expect(revalidatePathMock).toHaveBeenCalledWith("/admin/ingestion/filter");
+  });
+
+  it("whitelistCrawlerDiscardAction returns error when term is empty", async () => {
+    const formData = new FormData();
+    formData.set("id", "discard-1");
+    formData.set("term", "  ");
+
+    const result = await whitelistCrawlerDiscardAction(null, formData);
+
+    expect(result.kind).toBe("error");
+    expect(whitelistCrawlerDiscardMock).not.toHaveBeenCalled();
+  });
+
+  it("whitelistCrawlerDiscardAction returns error result when the API call fails", async () => {
+    whitelistCrawlerDiscardMock.mockRejectedValueOnce(
+      new Error("API 500: boom"),
+    );
+
+    const formData = new FormData();
+    formData.set("id", "discard-1");
+    formData.set("term", "governanca de ti");
+
+    const result = await whitelistCrawlerDiscardAction(null, formData);
+
+    expect(result.kind).toBe("error");
   });
 });

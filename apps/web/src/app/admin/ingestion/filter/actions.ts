@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { whitelistCrawlerDiscard } from "@/lib/admin-crawler-discards-api";
 import {
   createSemanticFilterConfigVersion,
   forceRunEnrichmentNowForJob,
@@ -85,4 +86,28 @@ export async function forceEnrichFormAction(formData: FormData) {
   await reenrichJob(jobEnrichmentId);
   await forceRunEnrichmentNowForJob(jobEnrichmentId);
   revalidatePath("/admin/ingestion/filter");
+}
+
+export async function whitelistCrawlerDiscardAction(
+  _prevState: FilterActionUiResult | null,
+  formData: FormData,
+): Promise<FilterActionUiResult> {
+  try {
+    const id = String(formData.get("id") ?? "");
+    const term = String(formData.get("term") ?? "").trim();
+
+    if (!id || !term) {
+      return { kind: "error", message: "Informe um termo para o whitelist." };
+    }
+
+    const newVersion = await whitelistCrawlerDiscard(id, term);
+    revalidatePath("/admin/ingestion/filter");
+
+    return {
+      kind: "success",
+      message: `Termo adicionado. Nova versao ${newVersion.version} criada.`,
+    };
+  } catch (error) {
+    return { kind: "error", message: parseErrorMessage(error) };
+  }
 }

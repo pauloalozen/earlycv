@@ -1,6 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import { DatabaseService } from "../../database/database.service";
 import { shouldSkipDetailFetch } from "../dedup-policy";
 import { IngestionFetchError } from "../errors";
+import { SemanticFilterService } from "../semantic-filter.service";
 import type {
   IngestionCollectContext,
   IngestionSourceAdapter,
@@ -145,6 +147,13 @@ export class GupyAdapter implements IngestionSourceAdapter {
   private readonly logger = new Logger(GupyAdapter.name);
   private readonly limit = 10;
 
+  constructor(
+    @Inject(SemanticFilterService)
+    private readonly semanticFilter: SemanticFilterService,
+    @Inject(DatabaseService)
+    private readonly database: DatabaseService,
+  ) {}
+
   async collect(
     jobSource: JobSourceContext,
     context?: IngestionCollectContext,
@@ -160,7 +169,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
       const page = await this.fetchPage(baseUrl, offset);
       if (!page) {
         if (offset === 0) {
-          return this.collectFromBoardHtml(subdomain, context);
+          return this.collectFromBoardHtml(subdomain, jobSource.id, context);
         }
         break;
       }
@@ -210,6 +219,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
 
   private async collectFromBoardHtml(
     subdomain: string,
+    jobSourceId: string,
     context?: IngestionCollectContext,
   ) {
     const boardUrl = `https://${subdomain}.gupy.io/jobs`;
@@ -235,10 +245,11 @@ export class GupyAdapter implements IngestionSourceAdapter {
       try {
         const canonicalKey = `gupy:${subdomain}:${String(boardJob.id)}`;
         const now = new Date();
+        let existing: { lastSeenAt: Date | null } | null = null;
+
         if (context) {
           try {
-            const existing =
-              await context.getExistingJobByCanonicalKey(canonicalKey);
+            existing = await context.getExistingJobByCanonicalKey(canonicalKey);
             if (shouldSkipDetailFetch(existing?.lastSeenAt, now)) {
               observations.push(
                 this.toObservation(
@@ -267,6 +278,25 @@ export class GupyAdapter implements IngestionSourceAdapter {
             this.logger.warn(
               `Failed dedup lookup for ${canonicalKey}: ${error instanceof Error ? error.message : "unknown"}`,
             );
+          }
+        }
+
+        if (!existing) {
+          const normalizedTitle = normalizeTitle(boardJob.title);
+          const filterDecision =
+            await this.semanticFilter.evaluate(normalizedTitle);
+
+          if (filterDecision.result === "SKIP") {
+            await this.saveDiscardedTitle({
+              canonicalKey,
+              externalJobId: String(boardJob.id),
+              filterReason: filterDecision.reason,
+              filterVersion: filterDecision.configVersion,
+              jobSourceId,
+              normalizedTitle,
+              title: boardJob.title ?? `Gupy job ${String(boardJob.id)}`,
+            });
+            continue;
           }
         }
 
@@ -335,6 +365,40 @@ export class GupyAdapter implements IngestionSourceAdapter {
     }
 
     return observations;
+  }
+
+  private async saveDiscardedTitle(data: {
+    canonicalKey: string;
+    externalJobId: string;
+    filterReason: string;
+    filterVersion: string;
+    jobSourceId: string;
+    normalizedTitle: string;
+    title: string;
+  }): Promise<void> {
+    try {
+      await this.database.crawlerDiscardedTitle.upsert({
+        where: { canonicalKey: data.canonicalKey },
+        create: {
+          canonicalKey: data.canonicalKey,
+          externalJobId: data.externalJobId,
+          filterReason: data.filterReason,
+          filterVersion: data.filterVersion,
+          jobSourceId: data.jobSourceId,
+          normalizedTitle: data.normalizedTitle,
+          title: data.title,
+        },
+        update: {
+          discardedAt: new Date(),
+          filterReason: data.filterReason,
+          filterVersion: data.filterVersion,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to save CrawlerDiscardedTitle for ${data.canonicalKey}: ${error instanceof Error ? error.message : "unknown"}`,
+      );
+    }
   }
 
   private async fetchWithRetry(url: URL) {

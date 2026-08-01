@@ -971,9 +971,32 @@ model JobSource {
   jobs                 Job[]
   ingestionRuns        IngestionRun[]
   ingestionBatchItems  IngestionBatchItem[]
+  discardedTitles      CrawlerDiscardedTitle[]
 
   @@unique([companyId, sourceUrl])
   @@index([companyId])
+}
+
+model CrawlerDiscardedTitle {
+  id              String    @id @default(cuid())
+  jobSourceId     String
+  jobSource       JobSource @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+
+  title           String
+  normalizedTitle String
+  externalJobId   String?
+  canonicalKey    String
+
+  filterReason    String
+  filterVersion   String
+
+  discardedAt     DateTime  @default(now())
+  whitelistedAt   DateTime?
+
+  @@unique([canonicalKey])
+  @@index([jobSourceId])
+  @@index([filterReason])
+  @@index([discardedAt])
 }
 
 model IngestionSchedulerConfig {
