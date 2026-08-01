@@ -8,13 +8,18 @@ describe("scoreTier", () => {
     expect(scoreTier(100)).toBe("high");
   });
 
-  it("classifica 40-69 como compatibilidade média", () => {
-    expect(scoreTier(40)).toBe("mid");
+  it("classifica 45-69 como compatibilidade média", () => {
+    expect(scoreTier(45)).toBe("mid");
     expect(scoreTier(69)).toBe("mid");
   });
 
-  it("classifica <40 como baixa compatibilidade", () => {
-    expect(scoreTier(39)).toBe("low");
-    expect(scoreTier(0)).toBe("low");
+  it("classifica 25-44 como compatibilidade baixa", () => {
+    expect(scoreTier(25)).toBe("low");
+    expect(scoreTier(44)).toBe("low");
+  });
+
+  it("classifica <25 como compatibilidade muito baixa", () => {
+    expect(scoreTier(24)).toBe("critical");
+    expect(scoreTier(0)).toBe("critical");
   });
 });

@@ -1,10 +1,11 @@
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 
-// Score semantics: verde >70 · âmbar 40-70 · cinza <40. Cores dedicadas pro
-// texto/anel em cima de fundo claro (o lime de marca #c6ff3a não tem
-// contraste suficiente como cor de texto/traço em fundo claro) — porta
-// direta do design (radar-shared.jsx), que já resolveu esse contraste.
+// Escala vermelho → laranja → amarelo → verde (0-100%), aplicada como cor
+// sólida por faixa — a mesma lógica usada nos anéis de score também vale
+// pra barras de breakdown. Cores dedicadas pro texto/anel em cima de fundo
+// claro (o lime de marca #c6ff3a não tem contraste suficiente como cor de
+// texto/traço em fundo claro) — porta direta do design (radar-shared.jsx).
 export const SCORE = {
   high: {
     fg: "#1f7a34",
@@ -19,19 +20,40 @@ export const SCORE = {
     label: "compatibilidade média",
   },
   low: {
-    fg: "#6a6560",
-    bg: "rgba(10,10,10,0.055)",
-    ring: "#a0a098",
-    label: "baixa compatibilidade",
+    fg: "#c2410c",
+    bg: "rgba(249,115,22,0.14)",
+    ring: "#f97316",
+    label: "compatibilidade baixa",
   },
+  critical: {
+    fg: "#b91c1c",
+    bg: "rgba(239,68,68,0.14)",
+    ring: "#ef4444",
+    label: "compatibilidade muito baixa",
+  },
+} as const;
+
+// Mesmas faixas, cores com contraste pensado pra cima de fundo escuro
+// (#0a0a0a) — usado no card de compatibilidade do detalhe da vaga, que é
+// preto no design de referência.
+export const SCORE_DARK = {
+  high: { fg: "#4ade80", label: "alta compatibilidade" },
+  mid: { fg: "#fbbf24", label: "compatibilidade média" },
+  low: { fg: "#fb923c", label: "compatibilidade baixa" },
+  critical: { fg: "#f87171", label: "compatibilidade muito baixa" },
 } as const;
 
 export type ScoreTier = keyof typeof SCORE;
 
 export function scoreTier(value: number): ScoreTier {
   if (value >= 70) return "high";
-  if (value >= 40) return "mid";
-  return "low";
+  if (value >= 45) return "mid";
+  if (value >= 25) return "low";
+  return "critical";
+}
+
+export function scoreColor(value: number): string {
+  return SCORE[scoreTier(value)].ring;
 }
 
 export type MatchBreakdown = {
@@ -71,9 +93,11 @@ export function breakdownPct(key: keyof MatchBreakdown, value: number): number {
 export function ScoreRing({
   value,
   size = 84,
+  dark = false,
 }: {
   value: number;
   size?: number;
+  dark?: boolean;
 }) {
   const t = SCORE[scoreTier(value)];
   const r = (size - 10) / 2;
@@ -94,7 +118,7 @@ export function ScoreRing({
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke="rgba(10,10,10,0.07)"
+          stroke={dark ? "rgba(250,250,246,0.1)" : "rgba(10,10,10,0.07)"}
           strokeWidth="7"
           fill="none"
         />
@@ -125,7 +149,7 @@ export function ScoreRing({
             fontSize: size * 0.29,
             fontWeight: 600,
             letterSpacing: -0.8,
-            color: "#0a0a0a",
+            color: dark ? "#fafaf6" : "#0a0a0a",
             lineHeight: 1,
             fontFamily: GEIST,
           }}
@@ -146,12 +170,77 @@ export function ScoreRing({
 export function ScorePill({
   value,
   size = "md",
+  format = "score-first",
 }: {
   value: number;
   size?: "md" | "lg";
+  format?: "score-first" | "label-first" | "label-only";
 }) {
   const t = SCORE[scoreTier(value)];
+  const dt = SCORE_DARK[scoreTier(value)];
   const big = size === "lg";
+  const baseFontSize = big ? 12.5 : 10.5;
+
+  // Sem número: usado ao lado de um ScoreRing que já mostra o percentual —
+  // duplicar o número no badge é redundante, só o texto categórico importa
+  // aqui. Cores pensadas pra fundo escuro (card preto do detalhe da vaga).
+  if (format === "label-only") {
+    return (
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: big ? 12.5 : 11,
+          fontWeight: 600,
+          letterSpacing: 0.3,
+          color: dt.fg,
+        }}
+      >
+        {dt.label}
+      </span>
+    );
+  }
+
+  if (format === "label-first") {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: 1,
+          lineHeight: 1,
+          background: "#fff",
+          border: `1.5px solid ${t.ring}`,
+          borderRadius: 8,
+          padding: "5px 9px",
+          flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 8.5,
+            letterSpacing: 0.3,
+            fontWeight: 600,
+            color: t.fg,
+          }}
+        >
+          score
+        </span>
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 12,
+            fontWeight: 700,
+            color: t.fg,
+          }}
+        >
+          {Math.round(value)}%
+        </span>
+      </div>
+    );
+  }
+
   return (
     <span
       style={{
@@ -163,7 +252,7 @@ export function ScorePill({
         fontWeight: 600,
         fontFamily: MONO,
         letterSpacing: 0.2,
-        fontSize: big ? 12.5 : 10.5,
+        fontSize: baseFontSize,
         padding: big ? "5px 11px" : "3px 8px",
         borderRadius: 99,
       }}
@@ -177,7 +266,7 @@ export function ScorePill({
           flexShrink: 0,
         }}
       />
-      {Math.round(value)}% · {t.label}
+      {`${Math.round(value)}% · ${t.label}`}
     </span>
   );
 }
@@ -242,7 +331,16 @@ export function MiniBar({
 }
 
 // ── Chip de skill: você tem (verde) × falta (cinza) ──
-export function SkillChip({ label, have }: { label: string; have: boolean }) {
+export function SkillChip({
+  label,
+  have,
+  dark = false,
+}: {
+  label: string;
+  have: boolean;
+  dark?: boolean;
+}) {
+  const haveFg = dark ? "#4ade80" : "#1f7a34";
   return (
     <span
       style={{
@@ -254,11 +352,17 @@ export function SkillChip({ label, have }: { label: string; have: boolean }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 5,
-        background: have ? "rgba(34,163,72,0.13)" : "#fff",
-        color: have ? "#1f7a34" : "#8a8a85",
+        background: have
+          ? "rgba(34,163,72,0.13)"
+          : dark
+            ? "rgba(250,250,246,0.06)"
+            : "#fff",
+        color: have ? haveFg : dark ? "rgba(250,250,246,0.5)" : "#8a8a85",
         border: have
-          ? "1px solid rgba(34,163,72,0.22)"
-          : "1px solid rgba(10,10,10,0.1)",
+          ? "1px solid rgba(34,163,72,0.3)"
+          : dark
+            ? "1px solid rgba(250,250,246,0.12)"
+            : "1px solid rgba(10,10,10,0.1)",
         fontWeight: have ? 600 : 400,
       }}
     >
@@ -267,7 +371,7 @@ export function SkillChip({ label, have }: { label: string; have: boolean }) {
           <title>Você tem</title>
           <path
             d="M5 12l5 5L20 7"
-            stroke="#1f7a34"
+            stroke={haveFg}
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -284,10 +388,12 @@ export function AdaptBtn({
   href,
   score,
   size = "md",
+  fullWidth = false,
 }: {
   href: string;
   score?: number | null;
   size?: "md" | "lg";
+  fullWidth?: boolean;
 }) {
   const hasScore = typeof score === "number";
   const tier = hasScore ? scoreTier(score) : null;
@@ -296,10 +402,12 @@ export function AdaptBtn({
     <a
       href={href}
       style={{
-        display: "inline-flex",
+        display: fullWidth ? "flex" : "inline-flex",
         alignItems: "center",
         justifyContent: "center",
         gap: 6,
+        width: fullWidth ? "100%" : undefined,
+        boxSizing: "border-box",
         background: "#0a0a0a",
         color: "#fafaf6",
         border: "none",

@@ -13,6 +13,13 @@ import { JobSourcesService } from "../job-sources/job-sources.service";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
 
+function splitCsv(value: string): string[] {
+  return value
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
 function normalizeSourceJobUrl(rawUrl: string) {
   const url = new URL(rawUrl.trim());
 
@@ -155,15 +162,17 @@ export class JobsService {
     }
 
     if (workModel) {
-      where.workModel = workModel;
+      where.workModel = { in: splitCsv(workModel) };
     }
 
     if (seniorityLevel) {
-      where.seniorityLevel = seniorityLevel;
+      where.seniorityLevel = { in: splitCsv(seniorityLevel) };
     }
 
     if (companyName) {
-      where.company = { name: { contains: companyName, mode: "insensitive" } };
+      where.company = {
+        name: { in: splitCsv(companyName), mode: "insensitive" },
+      };
     }
 
     if (publishedWithin) {

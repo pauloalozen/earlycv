@@ -54,6 +54,7 @@ export type PublicJobsFilters = {
   limit?: number;
   minScore?: number;
   minSkillsPct?: number;
+  sort?: "score_desc" | "score_asc" | "date_desc" | "date_asc";
 };
 
 export type FacetItem = { value: string; count: number };
@@ -90,6 +91,7 @@ export async function listPublicJobs(
   if (filters?.minScore) params.set("minScore", String(filters.minScore));
   if (filters?.minSkillsPct)
     params.set("minSkillsPct", String(filters.minSkillsPct));
+  if (filters?.sort) params.set("sort", filters.sort);
 
   const qs = params.toString();
   return requestPublicJobs<PublicJobsPage>(`/public/jobs${qs ? `?${qs}` : ""}`);

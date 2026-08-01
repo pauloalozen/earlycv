@@ -53,6 +53,7 @@ export class PublicJobsController {
     @Query("limit") limit?: string,
     @Query("minScore") minScoreRaw?: string,
     @Query("minSkillsPct") minSkillsPctRaw?: string,
+    @Query("sort") sort?: string,
   ) {
     const validPublishedWithin = ["24h", "3d", "7d"].includes(
       publishedWithin ?? "",
@@ -141,6 +142,15 @@ export class PublicJobsController {
         return { job, match, skillsPct };
       })
       .sort((a, b) => {
+        if (sort === "date_asc") {
+          return a.job.lastSeenAt.getTime() - b.job.lastSeenAt.getTime();
+        }
+        if (sort === "date_desc") {
+          return b.job.lastSeenAt.getTime() - a.job.lastSeenAt.getTime();
+        }
+        // score_asc/score_desc (e default): vagas sem score calculável vão
+        // sempre por último, nas duas direções — não representam "0%", e
+        // sim "ainda não avaliado".
         const aScore = a.match?.score ?? null;
         const bScore = b.match?.score ?? null;
         if (aScore === null && bScore === null) {
@@ -148,7 +158,9 @@ export class PublicJobsController {
         }
         if (aScore === null) return 1;
         if (bScore === null) return -1;
-        if (bScore !== aScore) return bScore - aScore;
+        if (bScore !== aScore) {
+          return sort === "score_asc" ? aScore - bScore : bScore - aScore;
+        }
         return b.job.lastSeenAt.getTime() - a.job.lastSeenAt.getTime();
       });
 
@@ -163,10 +175,7 @@ export class PublicJobsController {
       if (minScore !== undefined && (item.match?.score ?? -1) < minScore) {
         return false;
       }
-      if (
-        minSkillsPct !== undefined &&
-        (item.skillsPct ?? -1) < minSkillsPct
-      ) {
+      if (minSkillsPct !== undefined && (item.skillsPct ?? -1) < minSkillsPct) {
         return false;
       }
       return true;

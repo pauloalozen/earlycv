@@ -27,6 +27,7 @@ import {
   ScorePill,
   ScoreRing,
   SkillChip,
+  scoreColor,
 } from "../radar-ui";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -140,11 +141,11 @@ function CompatCardShell({ children }: { children: ReactNode }) {
   return (
     <div
       style={{
-        background: "#fafaf6",
-        border: "1px solid rgba(10,10,10,0.08)",
+        background: "#0a0a0a",
         borderRadius: 14,
         padding: "22px 22px 20px",
         fontFamily: GEIST,
+        color: "#fafaf6",
       }}
     >
       {children}
@@ -180,21 +181,21 @@ function CompatCardCta({
             width: 72,
             height: 72,
             borderRadius: "50%",
-            border: "1.5px dashed rgba(10,10,10,0.15)",
+            border: "1.5px dashed rgba(250,250,246,0.15)",
             marginBottom: 14,
           }}
         />
         <p style={{ fontSize: 13.5, fontWeight: 500, margin: "0 0 6px" }}>
           {title}
         </p>
-        <p style={{ fontSize: 12, color: "#6a6560", margin: "0 0 16px" }}>
+        <p style={{ fontSize: 12, color: "#8a8a85", margin: "0 0 16px" }}>
           {description}
         </p>
         <a
           href={href}
           style={{
-            background: "#0a0a0a",
-            color: "#fafaf6",
+            background: "#fafaf6",
+            color: "#0a0a0a",
             borderRadius: 9,
             padding: "11px 16px",
             fontSize: 13,
@@ -267,11 +268,11 @@ function CompatCard({
           gap: 16,
           marginBottom: 20,
           paddingBottom: 18,
-          borderBottom: "1px solid rgba(10,10,10,0.07)",
+          borderBottom: "1px solid rgba(250,250,246,0.08)",
         }}
       >
-        <ScoreRing value={match.score} size={88} />
-        <ScorePill value={match.score} size="lg" />
+        <ScoreRing value={match.score} size={88} dark />
+        <ScorePill value={match.score} size="lg" format="label-only" />
       </div>
       <div
         style={{
@@ -295,14 +296,14 @@ function CompatCard({
                   gap: 8,
                 }}
               >
-                <span style={{ fontSize: 12, color: "#3a3a38" }}>
+                <span style={{ fontSize: 12, color: "#c8c6bf" }}>
                   {row.label}
                 </span>
                 <span
                   style={{
                     fontFamily: MONO,
                     fontSize: 11,
-                    color: "#6a6560",
+                    color: "#8a8a85",
                     fontWeight: 500,
                   }}
                 >
@@ -312,7 +313,7 @@ function CompatCard({
               <div
                 style={{
                   height: 4,
-                  background: "rgba(10,10,10,0.06)",
+                  background: "rgba(250,250,246,0.08)",
                   borderRadius: 99,
                   overflow: "hidden",
                 }}
@@ -321,8 +322,7 @@ function CompatCard({
                   style={{
                     height: "100%",
                     width: `${Math.max(0, Math.min(100, pct))}%`,
-                    background:
-                      pct >= 70 ? "#2fa84c" : pct >= 40 ? "#d9a322" : "#a0a098",
+                    background: scoreColor(pct),
                     borderRadius: 99,
                   }}
                 />
@@ -337,7 +337,7 @@ function CompatCard({
       {topSkills.length > 0 ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {topSkills.map((s) => (
-            <SkillChip key={s.label} label={s.label} have={s.have} />
+            <SkillChip key={s.label} label={s.label} have={s.have} dark />
           ))}
         </div>
       ) : null}
@@ -802,7 +802,7 @@ export default async function JobPage({ params }: JobPageProps) {
               display: "grid",
               gridTemplateColumns: "repeat(4, 1fr)",
               gap: 10,
-              maxWidth: 720,
+              width: "100%",
             }}
           >
             {[
@@ -970,11 +970,12 @@ export default async function JobPage({ params }: JobPageProps) {
               >
                 CANDIDATURA
               </div>
-              <div style={{ marginBottom: 8 }}>
+              <div style={{ marginBottom: 8, width: "100%" }}>
                 <AdaptBtn
                   href={adaptarJobHref}
                   score={match?.score}
                   size="lg"
+                  fullWidth
                 />
               </div>
               <a

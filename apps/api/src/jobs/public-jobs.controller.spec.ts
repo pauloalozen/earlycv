@@ -45,7 +45,10 @@ const PROFILE = {
   preferredWorkModels: [],
 };
 
-function buildController(jobs: ReturnType<typeof buildJob>[], profile: unknown) {
+function buildController(
+  jobs: ReturnType<typeof buildJob>[],
+  profile: unknown,
+) {
   const jobsService = {
     listByIdsWithEnrichment: async () => jobs,
   };
@@ -152,6 +155,66 @@ test("list applies minSkillsPct filter based on matchedSkills ratio, not the buc
 
   assert.equal(result.total, 1);
   assert.equal(result.data[0]?.id, "full-match");
+});
+
+test("list sorts by score DESC by default, and supports score_asc/date_desc/date_asc", async () => {
+  const olderHighScore = buildJob({
+    id: "older-high-score",
+    lastSeenAt: new Date("2026-07-01T00:00:00Z"),
+  });
+  const newerLowScore = buildJob({
+    id: "newer-low-score",
+    lastSeenAt: new Date("2026-07-05T00:00:00Z"),
+    enrichment: {
+      enrichmentStatus: "COMPLETED",
+      dominantArea: "DATA_AI",
+      areas: ["DATA_AI"],
+      requiredSkills: ["python", "sql", "airflow", "spark"],
+      technologies: [],
+      seniority: "SENIOR",
+      languageRequirements: [],
+    },
+  });
+  const controller = buildController([olderHighScore, newerLowScore], PROFILE);
+
+  async function listWithSort(sort: string | undefined) {
+    const result = await controller.list(
+      undefined as never, // _request
+      USER, // user
+      undefined, // q
+      undefined, // workModel
+      undefined, // seniorityLevel
+      undefined, // companyName
+      undefined, // publishedWithin
+      undefined, // page
+      undefined, // limit
+      undefined, // minScore
+      undefined, // minSkillsPct
+      sort,
+    );
+    return result.data.map((item) => item.id);
+  }
+
+  assert.deepEqual(await listWithSort(undefined), [
+    "older-high-score",
+    "newer-low-score",
+  ]);
+  assert.deepEqual(await listWithSort("score_desc"), [
+    "older-high-score",
+    "newer-low-score",
+  ]);
+  assert.deepEqual(await listWithSort("score_asc"), [
+    "newer-low-score",
+    "older-high-score",
+  ]);
+  assert.deepEqual(await listWithSort("date_desc"), [
+    "newer-low-score",
+    "older-high-score",
+  ]);
+  assert.deepEqual(await listWithSort("date_asc"), [
+    "older-high-score",
+    "newer-low-score",
+  ]);
 });
 
 test("list includes breakdown/matchedSkills/missingSkills per item", async () => {

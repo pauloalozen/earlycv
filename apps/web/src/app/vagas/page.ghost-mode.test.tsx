@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppSessionUser } from "@/lib/app-session";
@@ -20,6 +21,9 @@ vi.mock("@/components/public-nav-bar", () => ({
 }));
 vi.mock("./filters-bar", () => ({
   FiltersBar: () => <div>filters</div>,
+}));
+vi.mock("./carousel", () => ({
+  Carousel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("./radar-ui", () => ({
   ScoreRing: (props: { value: number }) => (
