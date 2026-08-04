@@ -146,7 +146,10 @@ function CreateJobModal({
   const [name, setName] = useState(
     initialSourceLabel ? `Crawl — ${initialSourceLabel}` : "",
   );
-  const [jobType, setJobType] = useState<JobType>("CRAWL");
+  // Unico tipo suportado hoje: enriquecimento tem granularidade
+  // incompativel com o sistema de Jobs (ver EnrichmentWorkerControls,
+  // que continua sendo o mecanismo real de enriquecimento continuo).
+  const jobType: JobType = "CRAWL";
   const [scopeType, setScopeType] = useState<ScopeType>(
     initialSourceId ? "SOURCE" : "ALL",
   );
@@ -297,46 +300,6 @@ function CreateJobModal({
               style={fieldStyle}
               value={name}
             />
-          </div>
-
-          <div>
-            <p style={{ color: AT.muted, fontSize: 11.5, marginBottom: 4 }}>
-              Tipo
-            </p>
-            <div style={{ display: "flex", gap: 16 }}>
-              <label
-                style={{
-                  alignItems: "center",
-                  display: "flex",
-                  fontSize: 12.5,
-                  gap: 6,
-                }}
-              >
-                <input
-                  checked={jobType === "CRAWL"}
-                  name="jobType"
-                  onChange={() => setJobType("CRAWL")}
-                  type="radio"
-                />
-                Crawl (ingestão de vagas)
-              </label>
-              <label
-                style={{
-                  alignItems: "center",
-                  display: "flex",
-                  fontSize: 12.5,
-                  gap: 6,
-                }}
-              >
-                <input
-                  checked={jobType === "ENRICHMENT"}
-                  name="jobType"
-                  onChange={() => setJobType("ENRICHMENT")}
-                  type="radio"
-                />
-                Enriquecimento
-              </label>
-            </div>
           </div>
 
           {jobType === "CRAWL" && (
