@@ -1161,6 +1161,27 @@ model IngestionJobRun {
   @@index([status])
 }
 
+// Rastreia execucoes do JobEnrichmentWorker (tick automatico de fundo ou
+// "Processar agora" manual) — antes disso, um lote processado nao deixava
+// nenhum registro em lugar nenhum, so o status individual de cada
+// JobEnrichment mudava. cancelRequestedAt permite parar um lote em
+// andamento entre um item e o proximo (mesmo padrao cooperativo do
+// IngestionBatchRun).
+model EnrichmentBatchRun {
+  id                String                @id @default(cuid())
+  status            IngestionJobRunStatus @default(QUEUED)
+  triggeredBy       IngestionJobTrigger   @default(SCHEDULE)
+  batchSize         Int
+  processedCount    Int                   @default(0)
+  cancelRequestedAt DateTime?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  errorMessage      String?
+  createdAt         DateTime              @default(now())
+
+  @@index([status, createdAt])
+}
+
 enum IngestionJobType {
   CRAWL
   ENRICHMENT
