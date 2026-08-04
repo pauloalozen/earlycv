@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
-import { AT } from "@/app/admin/_components/admin-primitives";
+import { AdminPill, AT } from "@/app/admin/_components/admin-primitives";
 
 type EnrichmentConfig = {
   enrichmentBatchSize: number;
@@ -10,8 +10,32 @@ type EnrichmentConfig = {
   enrichmentEnabled: boolean;
 };
 
+type EnrichmentBatchRun = {
+  id: string;
+  status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+  triggeredBy: "SCHEDULE" | "MANUAL";
+  batchSize: number;
+  processedCount: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+};
+
 const SECOND_PRESETS = [10, 20, 30, 50, 60];
 const CUSTOM_PRESET = "custom";
+const RUNS_POLL_MS = 3_000;
+
+const RUN_STATUS_TONE: Record<
+  EnrichmentBatchRun["status"],
+  "neutral" | "warn" | "ok" | "danger"
+> = {
+  CANCELLED: "neutral",
+  COMPLETED: "ok",
+  FAILED: "danger",
+  QUEUED: "neutral",
+  RUNNING: "warn",
+};
 
 // enrichmentCronExpression e um cron de 6 campos (com segundos). O admin
 // so precisa expressar "a cada N segundos" — os outros 5 campos ficam
@@ -27,6 +51,17 @@ function buildCronFromSeconds(seconds: number): string {
   return `*/${seconds} * * * * *`;
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("pt-BR", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export function EnrichmentWorkerControls() {
   const [config, setConfig] = useState<EnrichmentConfig | null>(null);
   const [secondsPreset, setSecondsPreset] = useState<string>("10");
@@ -35,7 +70,13 @@ export function EnrichmentWorkerControls() {
   const [saving, setSaving] = useState(false);
   const [togglePending, setTogglePending] = useState(false);
   const [runningNow, setRunningNow] = useState(false);
+  const [cancelPending, setCancelPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  const [currentRun, setCurrentRun] = useState<EnrichmentBatchRun | null>(null);
+  const [runs, setRuns] = useState<EnrichmentBatchRun[]>([]);
+  const [loadingRuns, setLoadingRuns] = useState(true);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const applyConfig = useCallback((data: EnrichmentConfig) => {
     setConfig(data);
@@ -55,9 +96,36 @@ export function EnrichmentWorkerControls() {
     applyConfig(await res.json());
   }, [applyConfig]);
 
+  const fetchRuns = useCallback(async () => {
+    setLoadingRuns(true);
+    try {
+      const [currentRes, historyRes] = await Promise.all([
+        fetch("/api/admin/ingestion/enrichment/runs/current", {
+          cache: "no-store",
+        }),
+        fetch("/api/admin/ingestion/enrichment/runs", { cache: "no-store" }),
+      ]);
+      if (currentRes.ok) {
+        const data = await currentRes.json();
+        setCurrentRun(data ?? null);
+      }
+      if (historyRes.ok) setRuns(await historyRes.json());
+    } finally {
+      setLoadingRuns(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchConfig();
-  }, [fetchConfig]);
+    fetchRuns();
+  }, [fetchConfig, fetchRuns]);
+
+  useEffect(() => {
+    pollingRef.current = setInterval(fetchRuns, RUNS_POLL_MS);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [fetchRuns]);
 
   async function updateConfig(body: Partial<EnrichmentConfig>) {
     const res = await fetch("/api/admin/ingestion/enrichment/config", {
@@ -111,12 +179,21 @@ export function EnrichmentWorkerControls() {
         window.alert("Falha ao disparar o worker agora.");
         return;
       }
-      const data: { processed: number } = await res.json();
-      window.alert(
-        `Enriquecimento disparado: ${data.processed} vaga(s) processada(s).`,
-      );
+      await fetchRuns();
     } finally {
       setRunningNow(false);
+    }
+  }
+
+  async function handleCancel(runId: string) {
+    setCancelPending(true);
+    try {
+      await fetch(`/api/admin/ingestion/enrichment/runs/${runId}/cancel`, {
+        method: "POST",
+      });
+      await fetchRuns();
+    } finally {
+      setCancelPending(false);
     }
   }
 
@@ -263,11 +340,102 @@ export function EnrichmentWorkerControls() {
           onClick={handleRunNow}
           type="button"
         >
-          {runningNow ? "Processando..." : "Processar agora"}
+          {runningNow ? "Disparando..." : "Processar agora"}
         </button>
       </div>
 
-      {message ? <p className="text-xs text-stone-600">{message}</p> : null}
+      {message ? (
+        <p className="mb-3 text-xs text-stone-600">{message}</p>
+      ) : null}
+
+      {/* Lote em andamento — pra sempre saber que um disparo (schedule ou
+          manual) esta rodando de verdade, e poder para-lo. */}
+      {currentRun && (
+        <div className="mb-3 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="relative flex size-2">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-amber-400 opacity-75" />
+              <span className="relative inline-flex size-2 rounded-full bg-amber-500" />
+            </span>
+            <span className="text-sm text-stone-800">
+              Lote em andamento: {currentRun.processedCount}/
+              {currentRun.batchSize} processados (
+              {currentRun.triggeredBy === "MANUAL" ? "manual" : "automatico"})
+            </span>
+          </div>
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            disabled={cancelPending}
+            onClick={() => handleCancel(currentRun.id)}
+            type="button"
+          >
+            {cancelPending ? "Cancelando..." : "Cancelar"}
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500">
+          Historico de lotes
+        </h3>
+        <button
+          className={buttonVariants({ size: "sm", variant: "outline" })}
+          disabled={loadingRuns}
+          onClick={() => fetchRuns()}
+          type="button"
+        >
+          {loadingRuns ? "Atualizando..." : "Atualizar"}
+        </button>
+      </div>
+
+      <div className="mt-2 overflow-x-auto rounded-lg border border-stone-200">
+        <table className="min-w-full text-left text-xs">
+          <thead className="border-b border-stone-100 bg-stone-50 text-stone-500">
+            <tr>
+              <th className="px-3 py-2">Início</th>
+              <th className="px-3 py-2">Disparo</th>
+              <th className="px-3 py-2">Lote</th>
+              <th className="px-3 py-2">Processados</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Fim</th>
+            </tr>
+          </thead>
+          <tbody>
+            {runs.length === 0 && (
+              <tr>
+                <td
+                  className="px-3 py-4 text-center text-stone-400"
+                  colSpan={6}
+                >
+                  Nenhuma execução registrada.
+                </td>
+              </tr>
+            )}
+            {runs.map((run) => (
+              <tr className="border-t border-stone-100" key={run.id}>
+                <td className="px-3 py-2 text-stone-600">
+                  {formatDateTime(run.startedAt ?? run.createdAt)}
+                </td>
+                <td className="px-3 py-2 text-stone-600">
+                  {run.triggeredBy === "MANUAL" ? "manual" : "automatico"}
+                </td>
+                <td className="px-3 py-2 text-stone-600">{run.batchSize}</td>
+                <td className="px-3 py-2 text-stone-600">
+                  {run.processedCount}/{run.batchSize}
+                </td>
+                <td className="px-3 py-2">
+                  <AdminPill mono tone={RUN_STATUS_TONE[run.status]}>
+                    {run.status}
+                  </AdminPill>
+                </td>
+                <td className="px-3 py-2 text-stone-600">
+                  {formatDateTime(run.finishedAt)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
