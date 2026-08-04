@@ -75,7 +75,11 @@ export function EnrichmentWorkerControls() {
 
   const [currentRun, setCurrentRun] = useState<EnrichmentBatchRun | null>(null);
   const [runs, setRuns] = useState<EnrichmentBatchRun[]>([]);
-  const [loadingRuns, setLoadingRuns] = useState(true);
+  // Separado do polling de fundo (3s) de proposito — se os dois
+  // compartilhassem o mesmo estado, o rotulo do botao "Atualizar" ficaria
+  // alternando pra "Atualizando..." a cada ciclo do polling automatico,
+  // mesmo sem o usuario ter clicado em nada.
+  const [manualRefreshPending, setManualRefreshPending] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const applyConfig = useCallback((data: EnrichmentConfig) => {
@@ -97,23 +101,27 @@ export function EnrichmentWorkerControls() {
   }, [applyConfig]);
 
   const fetchRuns = useCallback(async () => {
-    setLoadingRuns(true);
-    try {
-      const [currentRes, historyRes] = await Promise.all([
-        fetch("/api/admin/ingestion/enrichment/runs/current", {
-          cache: "no-store",
-        }),
-        fetch("/api/admin/ingestion/enrichment/runs", { cache: "no-store" }),
-      ]);
-      if (currentRes.ok) {
-        const data = await currentRes.json();
-        setCurrentRun(data ?? null);
-      }
-      if (historyRes.ok) setRuns(await historyRes.json());
-    } finally {
-      setLoadingRuns(false);
+    const [currentRes, historyRes] = await Promise.all([
+      fetch("/api/admin/ingestion/enrichment/runs/current", {
+        cache: "no-store",
+      }),
+      fetch("/api/admin/ingestion/enrichment/runs", { cache: "no-store" }),
+    ]);
+    if (currentRes.ok) {
+      const data = await currentRes.json();
+      setCurrentRun(data ?? null);
     }
+    if (historyRes.ok) setRuns(await historyRes.json());
   }, []);
+
+  async function handleManualRefresh() {
+    setManualRefreshPending(true);
+    try {
+      await fetchRuns();
+    } finally {
+      setManualRefreshPending(false);
+    }
+  }
 
   useEffect(() => {
     fetchConfig();
@@ -380,11 +388,11 @@ export function EnrichmentWorkerControls() {
         </h3>
         <button
           className={buttonVariants({ size: "sm", variant: "outline" })}
-          disabled={loadingRuns}
-          onClick={() => fetchRuns()}
+          disabled={manualRefreshPending}
+          onClick={handleManualRefresh}
           type="button"
         >
-          {loadingRuns ? "Atualizando..." : "Atualizar"}
+          {manualRefreshPending ? "Atualizando..." : "Atualizar"}
         </button>
       </div>
 

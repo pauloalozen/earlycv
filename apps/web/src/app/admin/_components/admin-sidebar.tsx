@@ -15,7 +15,7 @@ export function AdminSidebar() {
   const navItems = getAdminNavItems();
   const sectionLabel: Record<string, string> = {
     negocio: "Negocio",
-    ingestion: "Ingestao",
+    ingestion: "Radar Oportunidades",
     sistema: "Sistema",
   };
   let previousSection: string | null = null;
