@@ -15,7 +15,6 @@ import {
   deleteJobSourceAction,
   importCompanySourcesCsvAction,
   runJobSourceAction,
-  toggleScheduleEnabledAction,
 } from "../actions";
 
 type IngestionRunSummary = {
@@ -195,7 +194,6 @@ export function FontesTableClient({ initialData }: Props) {
   const [sortBy, setSortBy] = useState<SortBy | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [result, setResult] = useState<PagedResult>(initialData);
-  const [togglePending, setTogglePending] = useState(false);
 
   const isFirstRender = useRef(true);
   const paramsRef = useRef({
@@ -488,9 +486,8 @@ export function FontesTableClient({ initialData }: Props) {
               Incluída em
             </SortableTh>
             <AdminTh w={180}>Status</AdminTh>
-            <AdminTh w={140}>Agendamento</AdminTh>
             <AdminTh w={160}>Último run</AdminTh>
-            <AdminTh w={200} align="right">
+            <AdminTh w={240} align="right">
               Ações
             </AdminTh>
           </tr>
@@ -499,7 +496,7 @@ export function FontesTableClient({ initialData }: Props) {
           {rows.length === 0 && (
             <tr>
               <td
-                colSpan={9}
+                colSpan={8}
                 style={{
                   padding: "32px 16px",
                   textAlign: "center",
@@ -565,67 +562,6 @@ export function FontesTableClient({ initialData }: Props) {
                   </div>
                 </AdminTd>
                 <AdminTd>
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <button
-                      type="button"
-                      title={
-                        source.scheduleEnabled
-                          ? "Desativar agendamento"
-                          : "Ativar agendamento"
-                      }
-                      disabled={togglePending}
-                      onClick={() => {
-                        setTogglePending(true);
-                        const fd = new FormData();
-                        fd.set("jobSourceId", source.id);
-                        fd.set(
-                          "scheduleEnabled",
-                          source.scheduleEnabled ? "false" : "true",
-                        );
-                        fd.set("redirectPath", redirectPath);
-                        toggleScheduleEnabledAction(fd)
-                          .then(() => fetchSources(paramsRef.current))
-                          .finally(() => setTogglePending(false));
-                      }}
-                      style={{
-                        width: 36,
-                        height: 20,
-                        borderRadius: 10,
-                        border: "none",
-                        background: source.scheduleEnabled ? AT.ok : AT.faint,
-                        cursor: togglePending ? "not-allowed" : "pointer",
-                        position: "relative",
-                        transition: "background 0.2s",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <span
-                        style={{
-                          position: "absolute",
-                          top: 2,
-                          left: source.scheduleEnabled ? 18 : 2,
-                          width: 16,
-                          height: 16,
-                          borderRadius: "50%",
-                          background: "white",
-                          transition: "left 0.2s",
-                        }}
-                      />
-                    </button>
-                    <span
-                      style={{
-                        fontSize: 11.5,
-                        color: AT.muted,
-                        fontFamily: '"Geist Mono", monospace',
-                      }}
-                    >
-                      {source.scheduleCron ?? "—"}
-                    </span>
-                  </div>
-                </AdminTd>
-                <AdminTd>
                   <RunStatusBadge run={latestRun} />
                 </AdminTd>
                 <AdminTd align="right">
@@ -664,6 +600,15 @@ export function FontesTableClient({ initialData }: Props) {
                         Rodar
                       </button>
                     </form>
+                    <Link
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
+                      href={`/admin/ingestion?tab=jobs&createSourceId=${source.id}&createSourceName=${encodeURIComponent(`${source.company.name} · ${source.sourceName}`)}`}
+                    >
+                      Criar job
+                    </Link>
                     <Link
                       className={buttonVariants({
                         size: "sm",
