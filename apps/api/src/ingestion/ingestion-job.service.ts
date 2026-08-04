@@ -154,6 +154,50 @@ export class IngestionJobService {
     return this.dispatchService.dispatchJob(job, "MANUAL");
   }
 
+  // Disparo "Rodar" direto na fonte (aba Fontes / detalhe da fonte) —
+  // fire-and-forget: cria/reaproveita um IngestionJob MANUAL exclusivo
+  // dessa fonte (nunca reaproveita um job com agendamento real, pra nao
+  // adiantar/atrasar o proximo disparo agendado dele) e despacha via o
+  // mesmo dispatchService — que so cria o IngestionBatchRun e retorna,
+  // o crawl de fato roda async pelo IngestionManualRunnerService.
+  // Resultado aparece no historico de execucoes da aba Jobs, com o nome
+  // da fonte e disparo=MANUAL, em vez de ficar visivel so na tela da
+  // fonte.
+  async runSourceAdHoc(jobSourceId: string) {
+    const source = await this.database.jobSource.findUnique({
+      include: { company: { select: { name: true } } },
+      where: { id: jobSourceId },
+    });
+
+    if (!source) {
+      throw new NotFoundException(`job source ${jobSourceId} not found`);
+    }
+
+    let job = await this.database.ingestionJob.findFirst({
+      where: {
+        jobSourceId,
+        scheduleType: "MANUAL",
+        scopeType: "SOURCE",
+      },
+    });
+
+    if (!job) {
+      job = await this.database.ingestionJob.create({
+        data: {
+          jobSourceId,
+          jobType: "CRAWL",
+          name: `${source.company.name} · ${source.sourceName}`,
+          scheduleDaysOfWeek: [],
+          scheduleMinute: 0,
+          scheduleType: "MANUAL",
+          scopeType: "SOURCE",
+        },
+      });
+    }
+
+    return this.dispatchService.dispatchJob(job, "MANUAL");
+  }
+
   async getRuns(id: string, query: ListIngestionJobRunsDto = {}) {
     await this.findById(id);
     return this.listRuns({ ...query, jobId: id });

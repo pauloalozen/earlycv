@@ -22,8 +22,14 @@ function createFixture(
 ) {
   const jobs = new Map(seed.map((job) => [job.id, job]));
   const jobRuns = new Map(jobRunSeed.map((run) => [run.id, run]));
-  const jobSources = new Map<string, { id: string }>([
-    ["source-1", { id: "source-1" }],
+  const jobSources = new Map<
+    string,
+    { id: string; sourceName: string; company: { name: string } }
+  >([
+    [
+      "source-1",
+      { company: { name: "ACME" }, id: "source-1", sourceName: "ACME Careers" },
+    ],
   ]);
   let nextId = seed.length + 1;
 
@@ -44,6 +50,21 @@ function createFixture(
       delete: async ({ where }: { where: { id: string } }) => {
         jobs.delete(where.id);
       },
+      findFirst: async ({
+        where,
+      }: {
+        where: {
+          jobSourceId: string;
+          scheduleType: string;
+          scopeType: string;
+        };
+      }) =>
+        Array.from(jobs.values()).find(
+          (job) =>
+            job.jobSourceId === where.jobSourceId &&
+            job.scheduleType === where.scheduleType &&
+            job.scopeType === where.scopeType,
+        ) ?? null,
       findMany: async () => Array.from(jobs.values()),
       findUnique: async ({ where }: { where: { id: string } }) =>
         jobs.get(where.id) ?? null,
@@ -203,6 +224,51 @@ test("listRuns nao mexe em runs sem batchRun ou ja em status terminal", async ()
   const stillRunning = result.runs.find((r) => r.id === "run-still-running");
   assert.equal(enrichment?.status, "COMPLETED");
   assert.equal(stillRunning?.status, "RUNNING");
+});
+
+test("runSourceAdHoc cria um job MANUAL na primeira chamada e reaproveita nas seguintes", async () => {
+  const { service, jobs, dispatchCalls } = createFixture();
+
+  await service.runSourceAdHoc("source-1");
+  assert.equal(jobs.size, 1);
+  const created = Array.from(jobs.values())[0];
+  assert.equal(created?.scheduleType, "MANUAL");
+  assert.equal(created?.scopeType, "SOURCE");
+  assert.equal(created?.jobSourceId, "source-1");
+  assert.equal(created?.name, "ACME · ACME Careers");
+
+  await service.runSourceAdHoc("source-1");
+  assert.equal(jobs.size, 1, "nao deve criar um segundo job pra mesma fonte");
+  assert.equal(dispatchCalls.length, 2);
+  assert.ok(dispatchCalls.every((call) => call.trigger === "MANUAL"));
+});
+
+test("runSourceAdHoc nao reaproveita um job com agendamento real da mesma fonte", async () => {
+  const scheduledJob = {
+    adapterType: null,
+    createdAt: new Date(),
+    description: null,
+    id: "job-scheduled",
+    isEnabled: true,
+    jobSourceId: "source-1",
+    jobType: "CRAWL",
+    lastRunAt: null,
+    name: "Diario ACME",
+    nextRunAt: new Date(),
+    scheduleDaysOfWeek: [],
+    scheduleHour: 7,
+    scheduleInterval: null,
+    scheduleMinute: 0,
+    scheduleType: "DAILY",
+    scopeType: "SOURCE",
+    updatedAt: new Date(),
+  } as IngestionJob;
+
+  const { service, jobs } = createFixture([scheduledJob]);
+
+  await service.runSourceAdHoc("source-1");
+
+  assert.equal(jobs.size, 2, "deve criar um job MANUAL separado do agendado");
 });
 
 test("remove apaga o job", async () => {

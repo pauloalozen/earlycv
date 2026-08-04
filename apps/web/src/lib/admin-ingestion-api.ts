@@ -404,6 +404,22 @@ export async function runJobSource(jobSourceId: string, token?: string) {
   );
 }
 
+// Fire-and-forget: so cria/reaproveita o IngestionJob MANUAL da fonte e
+// enfileira o IngestionBatchRun — o crawl roda async via
+// IngestionManualRunnerService, essa chamada retorna quase
+// instantaneamente. Diferente de runJobSource() acima, que espera o
+// crawl inteiro terminar antes de responder (usado por outros
+// consumidores que ainda dependem do IngestionRunSummary sincrono).
+export async function runJobSourceAdHoc(jobSourceId: string, token?: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/ingestion/jobs/run-source/${jobSourceId}`,
+    token,
+    {
+      method: "POST",
+    },
+  );
+}
+
 export async function importCompanySourcesCsv(
   payload: { dryRun: boolean; file: File },
   token?: string,

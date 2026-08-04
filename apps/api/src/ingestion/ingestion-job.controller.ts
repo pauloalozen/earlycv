@@ -118,4 +118,12 @@ export class IngestionJobController {
   ) {
     return this.ingestionJobService.getRuns(id, query);
   }
+
+  // Disparo "Rodar" direto na fonte (fora do fluxo de criar/editar um
+  // Job) — fire-and-forget, ver runSourceAdHoc.
+  @Post("run-source/:jobSourceId")
+  @HttpCode(202)
+  runSourceAdHoc(@Param("jobSourceId") jobSourceId: string) {
+    return this.ingestionJobService.runSourceAdHoc(jobSourceId);
+  }
 }

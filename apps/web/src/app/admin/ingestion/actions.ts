@@ -9,7 +9,7 @@ import {
   deleteJobSource,
   importCompanySourcesCsv,
   runGlobalSchedulerNow,
-  runJobSource,
+  runJobSourceAdHoc,
   startManualAdapterRun,
   updateGlobalSchedulerConfig,
   updateJobSource,
@@ -38,14 +38,14 @@ export async function runJobSourceAction(formData: FormData) {
   }
 
   try {
-    await runJobSource(jobSourceId);
+    await runJobSourceAdHoc(jobSourceId);
   } catch (error) {
     if (isRedirectControlFlowError(error)) {
       throw error;
     }
 
     const message =
-      error instanceof Error ? error.message : "Falha ao executar ingestao.";
+      error instanceof Error ? error.message : "Falha ao disparar ingestao.";
 
     redirect(buildAdminRedirect(redirectPath, "error", message));
   }
@@ -54,7 +54,7 @@ export async function runJobSourceAction(formData: FormData) {
     buildAdminRedirect(
       redirectPath,
       "success",
-      "Ingestao executada com sucesso.",
+      "Job disparado. Acompanhe o progresso na aba Jobs.",
     ),
   );
 }
@@ -120,7 +120,7 @@ export async function createJobSourceAction(formData: FormData) {
 
   if (runAfterCreate) {
     try {
-      await runJobSource(source.id);
+      await runJobSourceAdHoc(source.id);
     } catch (error) {
       if (isRedirectControlFlowError(error)) {
         throw error;
@@ -128,8 +128,8 @@ export async function createJobSourceAction(formData: FormData) {
 
       const message =
         error instanceof Error
-          ? `Fonte criada, mas a execucao manual falhou: ${error.message}`
-          : "Fonte criada, mas a execucao manual falhou.";
+          ? `Fonte criada, mas o disparo manual falhou: ${error.message}`
+          : "Fonte criada, mas o disparo manual falhou.";
 
       redirect(buildAdminRedirect(ROOT_REDIRECT_PATH, "error", message));
     }
@@ -138,7 +138,7 @@ export async function createJobSourceAction(formData: FormData) {
       buildAdminRedirect(
         ROOT_REDIRECT_PATH,
         "success",
-        `Fonte ${source.sourceName} criada e executada com sucesso.`,
+        `Fonte ${source.sourceName} criada e job disparado. Acompanhe na aba Jobs.`,
       ),
     );
   }
