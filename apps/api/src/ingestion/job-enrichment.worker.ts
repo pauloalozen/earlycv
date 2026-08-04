@@ -3,10 +3,12 @@ import {
   Inject,
   Injectable,
   Logger,
+  NotFoundException,
   type OnApplicationBootstrap,
   Optional,
 } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
+import type { IngestionJobTrigger } from "@prisma/client";
 import type OpenAI from "openai";
 
 import { getAiModel } from "../common/ai-client-factory";
@@ -123,13 +125,48 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
       return 0;
     }
 
-    return this.processPendingBatch();
+    return this.processPendingBatch("SCHEDULE");
   }
 
   // Ciclo manual (Ajuste 3 — "Disparar agora"): roda mesmo com o worker
   // desabilitado, respeitando apenas o enrichmentBatchSize configurado.
   async runNow() {
-    return this.processPendingBatch();
+    return this.processPendingBatch("MANUAL");
+  }
+
+  // Historico + estado atual pra aba Enriquecimento acompanhar/cancelar
+  // um lote, igual ja existe pro IngestionBatchRun do crawl.
+  listRuns(limit = 20) {
+    return this.database.enrichmentBatchRun.findMany({
+      orderBy: [{ createdAt: "desc" }],
+      take: limit,
+    });
+  }
+
+  getCurrentRun() {
+    return this.database.enrichmentBatchRun.findFirst({
+      orderBy: [{ createdAt: "desc" }],
+      where: { status: { in: ["QUEUED", "RUNNING"] } },
+    });
+  }
+
+  async requestCancel(runId: string) {
+    const run = await this.database.enrichmentBatchRun.findUnique({
+      where: { id: runId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`enrichment batch run ${runId} not found`);
+    }
+
+    if (run.status !== "QUEUED" && run.status !== "RUNNING") {
+      return run;
+    }
+
+    return this.database.enrichmentBatchRun.update({
+      data: { cancelRequestedAt: new Date() },
+      where: { id: runId },
+    });
   }
 
   // Processa uma vaga especifica imediatamente, sem depender da posicao
@@ -197,7 +234,7 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     return false;
   }
 
-  async processPendingBatch() {
+  async processPendingBatch(trigger: IngestionJobTrigger = "SCHEDULE") {
     const owner = `job-enrichment-worker-${randomUUID()}`;
     const acquired = await this.lockRepository.acquire(
       LOCK_ID,
@@ -229,8 +266,53 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
         },
       });
 
-      for (const enrichment of pending) {
-        await this.processItem(enrichment);
+      const batchRun = await this.database.enrichmentBatchRun.create({
+        data: {
+          batchSize: pending.length,
+          startedAt: new Date(),
+          status: "RUNNING",
+          triggeredBy: trigger,
+        },
+      });
+
+      let cancelled = false;
+
+      try {
+        for (const enrichment of pending) {
+          const current = await this.database.enrichmentBatchRun.findUnique({
+            where: { id: batchRun.id },
+          });
+          if (current?.cancelRequestedAt) {
+            cancelled = true;
+            break;
+          }
+
+          await this.processItem(enrichment);
+
+          await this.database.enrichmentBatchRun.update({
+            data: { processedCount: { increment: 1 } },
+            where: { id: batchRun.id },
+          });
+        }
+
+        await this.database.enrichmentBatchRun.update({
+          data: {
+            finishedAt: new Date(),
+            status: cancelled ? "CANCELLED" : "COMPLETED",
+          },
+          where: { id: batchRun.id },
+        });
+      } catch (error) {
+        await this.database.enrichmentBatchRun.update({
+          data: {
+            errorMessage:
+              error instanceof Error ? error.message : "unknown error",
+            finishedAt: new Date(),
+            status: "FAILED",
+          },
+          where: { id: batchRun.id },
+        });
+        throw error;
       }
 
       return pending.length;

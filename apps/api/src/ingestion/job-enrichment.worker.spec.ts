@@ -33,11 +33,75 @@ type EvaluateResult = {
   result: "ENRICH" | "SKIP";
 };
 
+type BatchRunRecord = {
+  id: string;
+  status: string;
+  triggeredBy: string;
+  batchSize: number;
+  processedCount: number;
+  cancelRequestedAt: Date | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  errorMessage: string | null;
+  createdAt: Date;
+};
+
 function createFixture() {
   const enrichments = new Map<string, EnrichmentRecord>();
   const jobs = new Map<string, JobRecord>();
+  const batchRuns = new Map<string, BatchRunRecord>();
+  let nextBatchRunId = 1;
 
   const database = {
+    enrichmentBatchRun: {
+      create: async ({ data }: { data: Partial<BatchRunRecord> }) => {
+        const id = `batch-run-${nextBatchRunId++}`;
+        const record: BatchRunRecord = {
+          batchSize: 0,
+          cancelRequestedAt: null,
+          createdAt: new Date(),
+          errorMessage: null,
+          finishedAt: null,
+          id,
+          processedCount: 0,
+          startedAt: null,
+          status: "QUEUED",
+          triggeredBy: "SCHEDULE",
+          ...data,
+        };
+        batchRuns.set(id, record);
+        return record;
+      },
+      findFirst: async ({ where }: { where: { status: { in: string[] } } }) =>
+        Array.from(batchRuns.values())
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          .find((run) => where.status.in.includes(run.status)) ?? null,
+      findMany: async ({ take }: { take?: number } = {}) =>
+        Array.from(batchRuns.values())
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          .slice(0, take),
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        batchRuns.get(where.id) ?? null,
+      update: async ({
+        data,
+        where,
+      }: {
+        data: Partial<BatchRunRecord> & {
+          processedCount?: { increment: number };
+        };
+        where: { id: string };
+      }) => {
+        const current = batchRuns.get(where.id);
+        assert.ok(current, `batch run ${where.id} must exist`);
+        const processedCount =
+          typeof data.processedCount === "object"
+            ? current.processedCount + data.processedCount.increment
+            : (data.processedCount ?? current.processedCount);
+        const next = { ...current, ...data, processedCount };
+        batchRuns.set(where.id, next);
+        return next;
+      },
+    },
     jobEnrichment: {
       findMany: async ({
         take,
@@ -146,6 +210,7 @@ function createFixture() {
   }
 
   return {
+    batchRuns,
     enrichments,
     getEnrichCalls: () => enrichCalls,
     lockRepository,
@@ -341,6 +406,54 @@ test("JobEnrichmentWorker.processPendingBatch respects enrichmentBatchSize from 
 
   assert.equal(processed, 1);
   assert.equal(fixture.getEnrichCalls(), 1);
+});
+
+test("JobEnrichmentWorker.processPendingBatch cria um EnrichmentBatchRun rastreando o lote", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment({ id: "enrichment-a" });
+  fixture.seedEnrichment({ id: "enrichment-b" });
+
+  await fixture.worker.processPendingBatch("MANUAL");
+
+  const runs = Array.from(fixture.batchRuns.values());
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0]?.status, "COMPLETED");
+  assert.equal(runs[0]?.triggeredBy, "MANUAL");
+  assert.equal(runs[0]?.batchSize, 2);
+  assert.equal(runs[0]?.processedCount, 2);
+  assert.ok(runs[0]?.startedAt instanceof Date);
+  assert.ok(runs[0]?.finishedAt instanceof Date);
+});
+
+test("JobEnrichmentWorker.requestCancel para o lote entre um item e o proximo", async () => {
+  const fixture = createFixture();
+  fixture.seedEnrichment({ id: "enrichment-a" });
+  fixture.seedEnrichment({ id: "enrichment-b" });
+  fixture.seedEnrichment({ id: "enrichment-c" });
+
+  let callCount = 0;
+  fixture.setEnrich(async () => {
+    callCount += 1;
+    if (callCount === 1) {
+      // simula o admin clicando em cancelar enquanto o 1o item processa
+      const [run] = Array.from(fixture.batchRuns.values());
+      assert.ok(run, "batch run deve existir antes do primeiro item rodar");
+      await fixture.worker.requestCancel(run.id);
+    }
+    return fullResult();
+  });
+
+  await fixture.worker.processPendingBatch();
+
+  assert.equal(
+    callCount,
+    1,
+    "loop nao deve seguir pro proximo item apos cancelar",
+  );
+  const runs = Array.from(fixture.batchRuns.values());
+  assert.equal(runs[0]?.status, "CANCELLED");
+  assert.equal(runs[0]?.processedCount, 1);
 });
 
 test("JobEnrichmentWorker.processPendingBatch recovers a stale PROCESSING enrichment back to PENDING", async () => {
