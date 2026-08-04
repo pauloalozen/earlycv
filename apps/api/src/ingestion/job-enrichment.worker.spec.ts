@@ -387,12 +387,18 @@ test("JobEnrichmentWorker.runNow processes pending jobs even when enrichmentEnab
   fixture.setEnrich(async () => fullResult());
   fixture.seedEnrichment();
 
-  const processed = await fixture.worker.runNow();
+  const { batchRun, completion } = await fixture.worker.runNow();
 
-  assert.equal(processed, 1);
+  // runNow e fire-and-forget: retorna assim que o batch run e criado, sem
+  // esperar o processamento — o teste espera `completion` explicitamente
+  // pra poder verificar o resultado final.
+  assert.equal(batchRun.triggeredBy, "MANUAL");
+  await completion;
+
   assert.equal(fixture.getEnrichCalls(), 1);
   const [record] = fixture.enrichments.values();
   assert.equal(record.enrichmentStatus, "COMPLETED");
+  assert.equal(fixture.batchRuns.get(batchRun.id)?.status, "COMPLETED");
 });
 
 test("JobEnrichmentWorker.processPendingBatch respects enrichmentBatchSize from config", async () => {

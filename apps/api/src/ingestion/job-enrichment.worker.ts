@@ -128,10 +128,27 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     return this.processPendingBatch("SCHEDULE");
   }
 
-  // Ciclo manual (Ajuste 3 — "Disparar agora"): roda mesmo com o worker
-  // desabilitado, respeitando apenas o enrichmentBatchSize configurado.
+  // Ciclo manual ("Processar agora"): roda mesmo com o worker desabilitado,
+  // respeitando apenas o enrichmentBatchSize configurado. Fire-and-forget —
+  // so prepara o lote (rapido: lock + consulta + cria o EnrichmentBatchRun)
+  // e retorna, sem esperar cada item processar. Quem chama acompanha o
+  // progresso via listRuns()/getCurrentRun() e pode interromper via
+  // requestCancel(); a promise `completion` so existe pra testes
+  // conseguirem esperar o lote de verdade terminar.
   async runNow() {
-    return this.processPendingBatch("MANUAL");
+    const prepared = await this.prepareBatch("MANUAL");
+
+    if (!prepared) {
+      throw new Error("job enrichment worker lock is busy, try again shortly");
+    }
+
+    const completion = this.executeBatch(prepared).catch((error) => {
+      this.logger.error(
+        `enrichment batch ${prepared.batchRun.id} failed: ${error instanceof Error ? error.message : "unknown"}`,
+      );
+    });
+
+    return { batchRun: prepared.batchRun, completion };
   }
 
   // Historico + estado atual pra aba Enriquecimento acompanhar/cancelar
@@ -234,7 +251,20 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     return false;
   }
 
+  // Usado pelo tick agendado — continua sincrono/bloqueante (nada
+  // HTTP espera por ele, e um timer interno). Prepara e executa o lote
+  // inteiro antes de retornar a contagem processada.
   async processPendingBatch(trigger: IngestionJobTrigger = "SCHEDULE") {
+    const prepared = await this.prepareBatch(trigger);
+    if (!prepared) {
+      return 0;
+    }
+
+    await this.executeBatch(prepared);
+    return prepared.pending.length;
+  }
+
+  private async prepareBatch(trigger: IngestionJobTrigger) {
     const owner = `job-enrichment-worker-${randomUUID()}`;
     const acquired = await this.lockRepository.acquire(
       LOCK_ID,
@@ -243,79 +273,85 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     );
 
     if (!acquired) {
-      return 0;
+      return null;
     }
 
-    try {
-      await this.recoverStaleProcessing();
+    await this.recoverStaleProcessing();
 
-      const config = await this.enrichmentConfigService.getConfig();
-      const pending = await this.database.jobEnrichment.findMany({
-        where: { enrichmentStatus: "PENDING" },
-        orderBy: [{ createdAt: "asc" }],
-        take: config.enrichmentBatchSize,
-        include: {
-          job: {
-            select: {
-              descriptionClean: true,
-              metadataJson: true,
-              normalizedTitle: true,
-              title: true,
-            },
+    const config = await this.enrichmentConfigService.getConfig();
+    const pending = await this.database.jobEnrichment.findMany({
+      where: { enrichmentStatus: "PENDING" },
+      orderBy: [{ createdAt: "asc" }],
+      take: config.enrichmentBatchSize,
+      include: {
+        job: {
+          select: {
+            descriptionClean: true,
+            metadataJson: true,
+            normalizedTitle: true,
+            title: true,
           },
         },
-      });
+      },
+    });
 
-      const batchRun = await this.database.enrichmentBatchRun.create({
-        data: {
-          batchSize: pending.length,
-          startedAt: new Date(),
-          status: "RUNNING",
-          triggeredBy: trigger,
-        },
-      });
+    const batchRun = await this.database.enrichmentBatchRun.create({
+      data: {
+        batchSize: pending.length,
+        startedAt: new Date(),
+        status: "RUNNING",
+        triggeredBy: trigger,
+      },
+    });
 
+    return { batchRun, owner, pending };
+  }
+
+  private async executeBatch(prepared: {
+    batchRun: { id: string };
+    owner: string;
+    pending: Array<Parameters<JobEnrichmentWorker["processItem"]>[0]>;
+  }) {
+    const { batchRun, owner, pending } = prepared;
+
+    try {
       let cancelled = false;
 
-      try {
-        for (const enrichment of pending) {
-          const current = await this.database.enrichmentBatchRun.findUnique({
-            where: { id: batchRun.id },
-          });
-          if (current?.cancelRequestedAt) {
-            cancelled = true;
-            break;
-          }
-
-          await this.processItem(enrichment);
-
-          await this.database.enrichmentBatchRun.update({
-            data: { processedCount: { increment: 1 } },
-            where: { id: batchRun.id },
-          });
+      for (const enrichment of pending) {
+        const current = await this.database.enrichmentBatchRun.findUnique({
+          where: { id: batchRun.id },
+        });
+        if (current?.cancelRequestedAt) {
+          cancelled = true;
+          break;
         }
 
+        await this.processItem(enrichment);
+
         await this.database.enrichmentBatchRun.update({
-          data: {
-            finishedAt: new Date(),
-            status: cancelled ? "CANCELLED" : "COMPLETED",
-          },
+          data: { processedCount: { increment: 1 } },
           where: { id: batchRun.id },
         });
-      } catch (error) {
-        await this.database.enrichmentBatchRun.update({
-          data: {
-            errorMessage:
-              error instanceof Error ? error.message : "unknown error",
-            finishedAt: new Date(),
-            status: "FAILED",
-          },
-          where: { id: batchRun.id },
-        });
-        throw error;
       }
 
-      return pending.length;
+      await this.database.enrichmentBatchRun.update({
+        data: {
+          finishedAt: new Date(),
+          status: cancelled ? "CANCELLED" : "COMPLETED",
+        },
+        where: { id: batchRun.id },
+      });
+    } catch (error) {
+      await this.database.enrichmentBatchRun.update({
+        data: {
+          errorMessage:
+            error instanceof Error ? error.message : "unknown error",
+          finishedAt: new Date(),
+          status: "FAILED",
+        },
+        where: { id: batchRun.id },
+      });
+      throw error;
     } finally {
       await this.lockRepository.release(LOCK_ID, owner);
     }

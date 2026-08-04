@@ -82,11 +82,31 @@ export class EnrichmentConfigController {
     return this.enrichmentConfigService.updateConfig(dto);
   }
 
+  // Fire-and-forget: retorna assim que o lote e criado, sem esperar o
+  // processamento terminar (ver JobEnrichmentWorker.runNow). Acompanhar
+  // via GET .../runs ou GET .../runs/current; cancelar via
+  // POST .../runs/:id/cancel.
   @Post("run-now")
-  @HttpCode(200)
+  @HttpCode(202)
   async runNow() {
-    const processed = await this.jobEnrichmentWorker.runNow();
-    return { processed: processed ?? 0 };
+    const { batchRun } = await this.jobEnrichmentWorker.runNow();
+    return batchRun;
+  }
+
+  @Get("runs")
+  listRuns() {
+    return this.jobEnrichmentWorker.listRuns();
+  }
+
+  @Get("runs/current")
+  getCurrentRun() {
+    return this.jobEnrichmentWorker.getCurrentRun();
+  }
+
+  @Post("runs/:id/cancel")
+  @HttpCode(200)
+  cancelRun(@Param("id") id: string) {
+    return this.jobEnrichmentWorker.requestCancel(id);
   }
 
   // Processa uma vaga especifica imediatamente, sem depender da posicao
