@@ -80,7 +80,7 @@ type SearchParams = {
   search?: string;
   sourceId?: string;
   status?: EnrichmentStatusValue;
-  tab?: "enrichment" | "discards";
+  tab?: "enrichment" | "discards" | "config";
 };
 
 export default async function AdminSemanticFilterPage({
@@ -90,7 +90,8 @@ export default async function AdminSemanticFilterPage({
 }) {
   const sp = await searchParams;
   const page = sp.page ? Number.parseInt(sp.page, 10) : 1;
-  const tab = sp.tab === "discards" ? "discards" : "enrichment";
+  const tab =
+    sp.tab === "discards" || sp.tab === "config" ? sp.tab : "enrichment";
 
   const [activeConfig, jobs, sources, discardsCount] = await Promise.all([
     getActiveSemanticFilterConfig(),
@@ -210,26 +211,6 @@ export default async function AdminSemanticFilterPage({
 
       <EnrichmentWorkerControls />
 
-      <div className="mb-6 rounded-xl border border-stone-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-semibold text-stone-900">
-          Config ativa
-        </h2>
-        <SemanticFilterConfigForm
-          activeConfig={
-            activeConfig
-              ? {
-                  createdAt: activeConfig.createdAt,
-                  description: activeConfig.description,
-                  noiseSignals: activeConfig.noiseSignals,
-                  techSignals: activeConfig.techSignals,
-                  version: activeConfig.version,
-                }
-              : null
-          }
-          saveAction={saveSemanticFilterConfigVersionAction}
-        />
-      </div>
-
       <div className="mb-4 flex gap-2">
         <Link
           className={buttonVariants({
@@ -249,7 +230,43 @@ export default async function AdminSemanticFilterPage({
         >
           Descartados no crawler
         </Link>
+        <Link
+          className={buttonVariants({
+            size: "sm",
+            variant: tab === "config" ? "default" : "outline",
+          })}
+          href={buildUrl({ tab: "config" })}
+        >
+          Config do filtro
+        </Link>
       </div>
+
+      {tab === "config" && (
+        <div className="mb-6 rounded-xl border border-stone-200 bg-white p-5">
+          <h2 className="mb-1 text-sm font-semibold text-stone-900">
+            Config ativa do filtro semantico
+          </h2>
+          <p className="mb-3 text-xs text-stone-500">
+            Usada tanto pelo crawler (descarta titulos antes do detail-fetch)
+            quanto pelo worker de enriquecimento (decide SKIP/ENRICH) — mudar
+            aqui afeta os dois fluxos.
+          </p>
+          <SemanticFilterConfigForm
+            activeConfig={
+              activeConfig
+                ? {
+                    createdAt: activeConfig.createdAt,
+                    description: activeConfig.description,
+                    noiseSignals: activeConfig.noiseSignals,
+                    techSignals: activeConfig.techSignals,
+                    version: activeConfig.version,
+                  }
+                : null
+            }
+            saveAction={saveSemanticFilterConfigVersionAction}
+          />
+        </div>
+      )}
 
       {tab === "enrichment" && (
         <>
