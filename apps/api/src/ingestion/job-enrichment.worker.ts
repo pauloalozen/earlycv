@@ -136,7 +136,7 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
   // requestCancel(); a promise `completion` so existe pra testes
   // conseguirem esperar o lote de verdade terminar.
   async runNow() {
-    const prepared = await this.prepareBatch("MANUAL");
+    const prepared = await this.prepareBatch();
 
     if (!prepared) {
       throw new Error("job enrichment worker lock is busy, try again shortly");
@@ -251,20 +251,72 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     return false;
   }
 
-  // Usado pelo tick agendado — continua sincrono/bloqueante (nada
-  // HTTP espera por ele, e um timer interno). Prepara e executa o lote
-  // inteiro antes de retornar a contagem processada.
+  // Ticks automaticos NUNCA criam EnrichmentBatchRun — o admin controla o
+  // worker pelo toggle, e historico/cancelamento por lote (banner "lote em
+  // andamento") e reservado pra disparos manuais. Sem essa distincao, todo
+  // tick — mesmo vazio — virava uma linha no historico, e o "em andamento"
+  // nunca sumia de fato: o tick seguinte ja recriava outro lote RUNNING
+  // antes do anterior desaparecer da tela.
   async processPendingBatch(trigger: IngestionJobTrigger = "SCHEDULE") {
-    const prepared = await this.prepareBatch(trigger);
-    if (!prepared) {
+    if (trigger === "MANUAL") {
+      const prepared = await this.prepareBatch();
+      if (!prepared) {
+        return 0;
+      }
+
+      await this.executeBatch(prepared);
+      return prepared.pending.length;
+    }
+
+    return this.processScheduledBatch();
+  }
+
+  private async processScheduledBatch() {
+    const owner = `job-enrichment-worker-${randomUUID()}`;
+    const acquired = await this.lockRepository.acquire(
+      LOCK_ID,
+      owner,
+      LOCK_TTL_MS,
+    );
+
+    if (!acquired) {
       return 0;
     }
 
-    await this.executeBatch(prepared);
-    return prepared.pending.length;
+    try {
+      await this.recoverStaleProcessing();
+      const config = await this.enrichmentConfigService.getConfig();
+      const pending = await this.queryPendingItems(config.enrichmentBatchSize);
+
+      for (const enrichment of pending) {
+        await this.processItem(enrichment);
+      }
+
+      return pending.length;
+    } finally {
+      await this.lockRepository.release(LOCK_ID, owner);
+    }
   }
 
-  private async prepareBatch(trigger: IngestionJobTrigger) {
+  private async queryPendingItems(batchSize: number) {
+    return this.database.jobEnrichment.findMany({
+      where: { enrichmentStatus: "PENDING" },
+      orderBy: [{ createdAt: "asc" }],
+      take: batchSize,
+      include: {
+        job: {
+          select: {
+            descriptionClean: true,
+            metadataJson: true,
+            normalizedTitle: true,
+            title: true,
+          },
+        },
+      },
+    });
+  }
+
+  private async prepareBatch() {
     const owner = `job-enrichment-worker-${randomUUID()}`;
     const acquired = await this.lockRepository.acquire(
       LOCK_ID,
@@ -279,28 +331,14 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     await this.recoverStaleProcessing();
 
     const config = await this.enrichmentConfigService.getConfig();
-    const pending = await this.database.jobEnrichment.findMany({
-      where: { enrichmentStatus: "PENDING" },
-      orderBy: [{ createdAt: "asc" }],
-      take: config.enrichmentBatchSize,
-      include: {
-        job: {
-          select: {
-            descriptionClean: true,
-            metadataJson: true,
-            normalizedTitle: true,
-            title: true,
-          },
-        },
-      },
-    });
+    const pending = await this.queryPendingItems(config.enrichmentBatchSize);
 
     const batchRun = await this.database.enrichmentBatchRun.create({
       data: {
         batchSize: pending.length,
         startedAt: new Date(),
         status: "RUNNING",
-        triggeredBy: trigger,
+        triggeredBy: "MANUAL",
       },
     });
 

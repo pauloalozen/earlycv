@@ -450,7 +450,7 @@ test("JobEnrichmentWorker.requestCancel para o lote entre um item e o proximo", 
     return fullResult();
   });
 
-  await fixture.worker.processPendingBatch();
+  await fixture.worker.processPendingBatch("MANUAL");
 
   assert.equal(
     callCount,
@@ -460,6 +460,23 @@ test("JobEnrichmentWorker.requestCancel para o lote entre um item e o proximo", 
   const runs = Array.from(fixture.batchRuns.values());
   assert.equal(runs[0]?.status, "CANCELLED");
   assert.equal(runs[0]?.processedCount, 1);
+});
+
+test("JobEnrichmentWorker.processPendingBatch com trigger SCHEDULE nao cria EnrichmentBatchRun", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment();
+  fixture.seedEnrichment();
+
+  const processed = await fixture.worker.processPendingBatch("SCHEDULE");
+
+  assert.equal(processed, 2);
+  assert.equal(fixture.getEnrichCalls(), 2);
+  assert.equal(
+    fixture.batchRuns.size,
+    0,
+    "tick automatico nao deve gerar log/lote rastreavel",
+  );
 });
 
 test("JobEnrichmentWorker.processPendingBatch recovers a stale PROCESSING enrichment back to PENDING", async () => {
