@@ -11,6 +11,10 @@ import { EnrichmentConfigService } from "./enrichment-config.service";
 import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
 import { IngestionController } from "./ingestion.controller";
 import { IngestionService } from "./ingestion.service";
+import { IngestionJobController } from "./ingestion-job.controller";
+import { IngestionJobService } from "./ingestion-job.service";
+import { IngestionJobDispatchService } from "./ingestion-job-dispatch.service";
+import { IngestionJobSchedulerService } from "./ingestion-job-scheduler.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
 import { IngestionManualRunnerService } from "./ingestion-manual-runner.service";
 import { IngestionRunEnrichmentController } from "./ingestion-run-enrichment.controller";
@@ -29,6 +33,7 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
   imports: [DatabaseModule],
   controllers: [
     IngestionController,
+    IngestionJobController,
     SemanticFilterController,
     EnrichmentConfigController,
     IngestionRunEnrichmentController,
@@ -41,6 +46,9 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
     GlobalSchedulerConfigService,
     IngestionLockRepository,
     IngestionSchedulerService,
+    IngestionJobService,
+    IngestionJobSchedulerService,
+    IngestionJobDispatchService,
     IngestionManualRunnerService,
     ManualIngestionBatchRepository,
     ManualIngestionService,
