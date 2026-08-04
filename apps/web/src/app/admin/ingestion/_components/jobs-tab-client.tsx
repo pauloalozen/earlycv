@@ -714,7 +714,7 @@ export function JobsTabClient({
               <AdminTh w={200}>Frequência</AdminTh>
               <AdminTh w={140}>Próxima execução</AdminTh>
               <AdminTh w={90}>Status</AdminTh>
-              <AdminTh w={260} align="right">
+              <AdminTh w={340} align="right">
                 Ações
               </AdminTh>
             </tr>
