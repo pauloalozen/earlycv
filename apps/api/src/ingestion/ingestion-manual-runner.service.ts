@@ -8,11 +8,19 @@ import { IngestionService } from "./ingestion.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
 
 const MANUAL_RUNNER_LOCK_ID = "manual-ingestion-batch-runner";
-// Long TTL because a batch can now take much longer than one tick — the
-// jittered inter-item delay below can add tens of minutes for a large
-// batch, and this lock is held (not renewed) for the whole run.
-const MANUAL_RUNNER_LOCK_TTL_MS = 60 * 60_000;
+// Renovado a cada item processado (ver processRunItems) em vez de
+// reservado uma vez so pra duracao inteira do batch — um TTL curto aqui
+// significa que, se o processo morrer no meio (deploy, restart, crash),
+// o lock expira rapido e o proximo tick de outra instancia retoma o
+// batch (ou finaliza um cancelamento pendente) em minutos, nao em ate
+// uma hora.
+const MANUAL_RUNNER_LOCK_TTL_MS = 5 * 60_000;
 const ITEM_LOCK_TTL_MS = 10 * 60_000;
+// Um item que ficou "running" por mais que isso sem terminar quase certo
+// morreu junto com o processo que o marcou assim — nada mais vai
+// avança-lo (o where clause so promove "queued" -> "running", nunca
+// retoma um "running" preso). Volta pra "queued" pra ser reprocessado.
+const STALE_ITEM_THRESHOLD_MS = ITEM_LOCK_TTL_MS;
 // Jitter window around normalDelayMs/errorDelayMs so requests to the same
 // source don't land at a fixed cadence — a predictable interval is itself
 // a signal anti-bot heuristics key off of.
@@ -149,7 +157,30 @@ export class IngestionManualRunnerService {
     }
   }
 
+  private async recoverStaleItems(batchRunId: string) {
+    const staleThreshold = new Date(Date.now() - STALE_ITEM_THRESHOLD_MS);
+    const staleItems = await this.database.ingestionBatchItem.findMany({
+      where: {
+        batchRunId,
+        status: "running",
+        startedAt: { lt: staleThreshold },
+      },
+    });
+
+    for (const item of staleItems) {
+      this.logger.warn(
+        `ingestion batch item ${item.id} recovered from stale running (processo provavelmente morreu no meio)`,
+      );
+      await this.database.ingestionBatchItem.update({
+        where: { id: item.id },
+        data: { status: "queued" },
+      });
+    }
+  }
+
   private async processRunItems(batchRunId: string, owner: string) {
+    await this.recoverStaleItems(batchRunId);
+
     const items = await this.database.ingestionBatchItem.findMany({
       where: {
         batchRunId,
@@ -175,6 +206,16 @@ export class IngestionManualRunnerService {
     const delayConfig = await this.globalConfigService.getConfig();
 
     for (const [index, item] of items.entries()) {
+      // Renova o lock externo a cada item — TTL curto (5min) so funciona
+      // pra um batch longo se a gente mesmo estender enquanto seguimos
+      // vivos. acquire() com o mesmo owner sempre sucede e atualiza
+      // expiresAt (ver IngestionLockRepository.acquire).
+      await this.lockRepository.acquire(
+        MANUAL_RUNNER_LOCK_ID,
+        owner,
+        MANUAL_RUNNER_LOCK_TTL_MS,
+      );
+
       const latestRun = await this.database.ingestionBatchRun.findUnique({
         where: { id: batchRunId },
       });

@@ -39,6 +39,13 @@ const TERMINAL_BATCH_STATUS: Partial<
   failed: "FAILED",
 };
 
+// Se o processo que roda o IngestionManualRunnerService morrer no meio
+// (deploy, restart, crash), o batch/job run fica preso indefinidamente
+// em queued/running/cancelling — nada mais vai atualiza-lo (o lock que
+// controlava o processamento tambem morreu com o processo). Sem
+// nenhuma atividade por mais que esse limiar, tratamos como abandonado.
+const STALE_BATCH_THRESHOLD_MS = 15 * 60_000;
+
 @Injectable()
 export class IngestionJobService {
   constructor(
@@ -222,6 +229,7 @@ export class IngestionJobService {
         include: {
           batchRun: {
             select: {
+              cancelRequestedAt: true,
               failedCount: true,
               scopeType: true,
               scopeValue: true,
@@ -229,6 +237,7 @@ export class IngestionJobService {
               status: true,
               succeededCount: true,
               totalSources: true,
+              updatedAt: true,
             },
           },
           job: { select: { id: true, jobType: true, name: true } },
@@ -251,8 +260,13 @@ export class IngestionJobService {
   private async reconcileRunStatus<
     T extends {
       id: string;
+      batchRunId: string | null;
       status: IngestionJobRunStatus;
-      batchRun: { status: IngestionBatchRunStatus } | null;
+      batchRun: {
+        cancelRequestedAt: Date | null;
+        status: IngestionBatchRunStatus;
+        updatedAt: Date;
+      } | null;
     },
   >(run: T): Promise<T> {
     if (
@@ -265,12 +279,44 @@ export class IngestionJobService {
     }
 
     const mappedStatus = TERMINAL_BATCH_STATUS[run.batchRun.status];
-    if (!mappedStatus) {
+    if (mappedStatus) {
+      const updated = await this.database.ingestionJobRun.update({
+        data: { finishedAt: new Date(), status: mappedStatus },
+        where: { id: run.id },
+      });
+
+      return { ...run, ...updated };
+    }
+
+    // batchRun ainda em queued/running/cancelling mas sem nenhuma
+    // atividade ha muito tempo — provavelmente o processo que o
+    // processava morreu (deploy, restart, crash) antes de finalizar.
+    const isStale =
+      Date.now() - run.batchRun.updatedAt.getTime() > STALE_BATCH_THRESHOLD_MS;
+    if (!isStale) {
       return run;
     }
 
+    const finalStatus: IngestionJobRunStatus = run.batchRun.cancelRequestedAt
+      ? "CANCELLED"
+      : "FAILED";
+    const finalBatchStatus: IngestionBatchRunStatus =
+      finalStatus === "CANCELLED" ? "cancelled" : "failed";
+
+    if (run.batchRunId) {
+      await this.database.ingestionBatchRun.update({
+        data: { finishedAt: new Date(), status: finalBatchStatus },
+        where: { id: run.batchRunId },
+      });
+    }
+
     const updated = await this.database.ingestionJobRun.update({
-      data: { finishedAt: new Date(), status: mappedStatus },
+      data: {
+        errorMessage:
+          "Processamento interrompido (ex: reinicio do servidor) e marcado como abandonado apos ficar sem atividade.",
+        finishedAt: new Date(),
+        status: finalStatus,
+      },
       where: { id: run.id },
     });
 

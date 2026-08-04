@@ -10,9 +10,14 @@ import type { IngestionJobDispatchService } from "./ingestion-job-dispatch.servi
 type FixtureJobRun = {
   id: string;
   jobId: string;
+  batchRunId?: string | null;
   status: string;
   finishedAt: Date | null;
-  batchRun: { status: string } | null;
+  batchRun: {
+    status: string;
+    cancelRequestedAt?: Date | null;
+    updatedAt?: Date;
+  } | null;
   job: { id: string; jobType: string; name: string } | null;
 };
 
@@ -80,6 +85,22 @@ function createFixture(
         const updated = { ...existing, ...data };
         jobs.set(where.id, updated);
         return updated;
+      },
+    },
+    ingestionBatchRun: {
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
+        for (const run of jobRuns.values()) {
+          if (run.batchRunId === where.id && run.batchRun) {
+            Object.assign(run.batchRun, data);
+          }
+        }
+        return { id: where.id, ...data };
       },
     },
     ingestionJobRun: {
@@ -208,7 +229,9 @@ test("listRuns nao mexe em runs sem batchRun ou ja em status terminal", async ()
         status: "COMPLETED",
       },
       {
-        batchRun: { status: "running" },
+        // updatedAt recente — ainda esta genuinamente ativo, nao deve
+        // ser tratado como abandonado.
+        batchRun: { status: "running", updatedAt: new Date() },
         finishedAt: null,
         id: "run-still-running",
         job: { id: "job-1", jobType: "CRAWL", name: "Gupy" },
@@ -224,6 +247,60 @@ test("listRuns nao mexe em runs sem batchRun ou ja em status terminal", async ()
   const stillRunning = result.runs.find((r) => r.id === "run-still-running");
   assert.equal(enrichment?.status, "COMPLETED");
   assert.equal(stillRunning?.status, "RUNNING");
+});
+
+test("listRuns marca como abandonado um batch preso sem nenhuma atividade recente", async () => {
+  const { service, jobRuns } = createFixture(
+    [],
+    [
+      {
+        batchRunId: "batch-abandoned",
+        // sem atividade ha muito mais que STALE_BATCH_THRESHOLD_MS — o
+        // processo que rodava provavelmente morreu (deploy, restart).
+        batchRun: {
+          cancelRequestedAt: null,
+          status: "running",
+          updatedAt: new Date(Date.now() - 60 * 60_000),
+        },
+        finishedAt: null,
+        id: "run-abandoned",
+        job: { id: "job-1", jobType: "CRAWL", name: "Gupy" },
+        jobId: "job-1",
+        status: "RUNNING",
+      },
+    ],
+  );
+
+  const result = await service.listRuns();
+
+  assert.equal(result.runs[0]?.status, "FAILED");
+  assert.ok(result.runs[0]?.finishedAt instanceof Date);
+  assert.equal(jobRuns.get("run-abandoned")?.status, "FAILED");
+});
+
+test("listRuns marca abandonado como CANCELLED quando cancelamento ja tinha sido pedido", async () => {
+  const { service } = createFixture(
+    [],
+    [
+      {
+        batchRunId: "batch-abandoned-cancel",
+        batchRun: {
+          cancelRequestedAt: new Date(Date.now() - 30 * 60_000),
+          status: "cancelling",
+          updatedAt: new Date(Date.now() - 60 * 60_000),
+        },
+        finishedAt: null,
+        id: "run-abandoned-cancel",
+        job: { id: "job-1", jobType: "CRAWL", name: "Gupy" },
+        jobId: "job-1",
+        status: "RUNNING",
+      },
+    ],
+  );
+
+  const result = await service.listRuns();
+
+  assert.equal(result.runs[0]?.status, "CANCELLED");
 });
 
 test("runSourceAdHoc cria um job MANUAL na primeira chamada e reaproveita nas seguintes", async () => {

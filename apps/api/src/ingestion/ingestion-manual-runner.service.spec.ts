@@ -129,13 +129,28 @@ function createServiceFixture(
       findMany: async ({
         where,
       }: {
-        where: { batchRunId: string; status?: { in: string[] } };
+        where: {
+          batchRunId: string;
+          status?: { in: string[] } | string;
+          startedAt?: { lt: Date };
+        };
       }) =>
         Array.from(items.values())
           .filter((item) => item.batchRunId === where.batchRunId)
-          .filter((item) =>
-            where.status?.in ? where.status.in.includes(item.status) : true,
-          )
+          .filter((item) => {
+            if (!where.status) return true;
+            if (typeof where.status === "string") {
+              return item.status === where.status;
+            }
+            return where.status.in.includes(item.status);
+          })
+          .filter((item) => {
+            if (!where.startedAt) return true;
+            return Boolean(
+              item.startedAt &&
+                item.startedAt.getTime() < where.startedAt.lt.getTime(),
+            );
+          })
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
       update: async ({
         where,
@@ -629,7 +644,7 @@ test("runner does not double count skipped when item is already cancelled", asyn
   assert.equal(run?.skippedCount, 1);
 });
 
-test("runner does not re-mark already running item", async () => {
+test("runner does not re-mark already running item that started recently", async () => {
   const { items, runJobSourceCalls, runs, service } = createServiceFixture();
   runs.set("batch-existing-running", {
     id: "batch-existing-running",
@@ -643,7 +658,9 @@ test("runner does not re-mark already running item", async () => {
     startedAt: null,
     finishedAt: null,
   });
-  const startedAt = new Date("2026-01-01T00:00:00.000Z");
+  // Comecou ha poucos segundos — ainda esta genuinamente em andamento em
+  // algum outro processo, nao deve ser tratado como preso/abandonado.
+  const startedAt = new Date(Date.now() - 5_000);
   items.set("item-existing-running", {
     id: "item-existing-running",
     batchRunId: "batch-existing-running",
@@ -666,6 +683,46 @@ test("runner does not re-mark already running item", async () => {
   assert.equal(run?.succeededCount, 0);
   assert.equal(run?.failedCount, 0);
   assert.equal(run?.skippedCount, 0);
+});
+
+test("runner recovers an item stuck running from a dead process and reprocesses it", async () => {
+  const { items, runJobSourceCalls, runs, service } = createServiceFixture();
+  runs.set("batch-stale-item", {
+    id: "batch-stale-item",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  // Comecou ha muito mais que o TTL do lock de item — o processo que
+  // marcou "running" morreu no meio (deploy, restart, crash) e nunca
+  // avancou o status. Sem recuperacao, o where clause de markRunning
+  // (status in ["queued"]) nunca casaria e esse item ficaria pulado pra
+  // sempre.
+  items.set("item-stale", {
+    id: "item-stale",
+    batchRunId: "batch-stale-item",
+    jobSourceId: "source-stale-recovery",
+    status: "running",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: new Date("2026-01-01T00:00:00.000Z"),
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  const item = items.get("item-stale");
+  const run = runs.get("batch-stale-item");
+  assert.deepEqual(runJobSourceCalls, ["source-stale-recovery"]);
+  assert.equal(item?.status, "completed");
+  assert.equal(run?.status, "completed");
+  assert.equal(run?.succeededCount, 1);
 });
 
 test("runner clamps aggregate counters to totalSources on finalize", async () => {
