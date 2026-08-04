@@ -23,6 +23,7 @@ import {
   JOB_ENRICHMENT_AI_CLIENT,
   JobEnrichmentWorker,
 } from "./job-enrichment.worker";
+import { JobSourceExportController } from "./job-source-export.controller";
 import { ManualIngestionService } from "./manual-ingestion.service";
 import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
 import { SemanticFilterController } from "./semantic-filter.controller";
@@ -34,6 +35,7 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
   controllers: [
     IngestionController,
     IngestionJobController,
+    JobSourceExportController,
     SemanticFilterController,
     EnrichmentConfigController,
     IngestionRunEnrichmentController,

@@ -237,4 +237,37 @@ export class AdminIngestionImportService {
 
     return report;
   }
+
+  // Mesmo header do importCompanySourcesCsv (CSV_HEADER) — permite
+  // exportar de um ambiente (ex: homolog) e reimportar em outro (ex:
+  // producao) via POST /ingestion/import-csv sem transformacao manual.
+  // Uma linha por JobSource (careers_url = JobSource.sourceUrl), nao por
+  // Company, ja que uma empresa pode ter mais de uma fonte cadastrada.
+  async exportCompanySourcesCsv(): Promise<string> {
+    const sources = await this.database.jobSource.findMany({
+      include: { company: true },
+      orderBy: [{ company: { name: "asc" } }, { createdAt: "asc" }],
+    });
+
+    const lines = sources.map((source) =>
+      [
+        source.company.name,
+        source.company.industry ?? "",
+        source.company.websiteUrl ?? "",
+        source.sourceUrl,
+        source.company.linkedinUrl ?? "",
+      ]
+        .map(escapeCsvField)
+        .join(","),
+    );
+
+    return [CSV_HEADER.join(","), ...lines].join("\n");
+  }
+}
+
+function escapeCsvField(value: string): string {
+  if (/[",\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
 }

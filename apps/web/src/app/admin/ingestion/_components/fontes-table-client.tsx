@@ -419,6 +419,13 @@ export function FontesTableClient({ initialData }: Props) {
           >
             Baixar modelo CSV
           </a>
+          <a
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+            href="/api/admin/ingestion/job-sources/export-csv"
+            download
+          >
+            Exportar fontes (CSV)
+          </a>
           <span
             style={{
               fontSize: 12,
