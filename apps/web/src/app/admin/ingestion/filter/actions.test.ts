@@ -53,7 +53,7 @@ describe("semantic filter actions", () => {
     });
     expect(result.kind).toBe("success");
     expect(result.message).toMatch(/v2/);
-    expect(revalidatePathMock).toHaveBeenCalledWith("/admin/ingestion/filter");
+    expect(revalidatePathMock).toHaveBeenCalledWith("/admin/ingestion");
   });
 
   it("returns an error when techSignals or noiseSignals is empty", async () => {
@@ -89,7 +89,7 @@ describe("semantic filter actions", () => {
 
     expect(reenrichJobMock).toHaveBeenCalledWith("enrichment-1");
     expect(runEnrichmentNowForJobMock).toHaveBeenCalledWith("enrichment-1");
-    expect(revalidatePathMock).toHaveBeenCalledWith("/admin/ingestion/filter");
+    expect(revalidatePathMock).toHaveBeenCalledWith("/admin/ingestion");
   });
 
   it("enrichNowFormAction no-ops without an id", async () => {
@@ -111,7 +111,7 @@ describe("semantic filter actions", () => {
     expect(forceRunEnrichmentNowForJobMock).toHaveBeenCalledWith(
       "enrichment-1",
     );
-    expect(revalidatePathMock).toHaveBeenCalledWith("/admin/ingestion/filter");
+    expect(revalidatePathMock).toHaveBeenCalledWith("/admin/ingestion");
   });
 
   it("forceEnrichFormAction no-ops without an id", async () => {
@@ -141,7 +141,7 @@ describe("semantic filter actions", () => {
     );
     expect(result.kind).toBe("success");
     expect(result.message).toMatch(/v2/);
-    expect(revalidatePathMock).toHaveBeenCalledWith("/admin/ingestion/filter");
+    expect(revalidatePathMock).toHaveBeenCalledWith("/admin/ingestion");
   });
 
   it("whitelistCrawlerDiscardAction returns error when term is empty", async () => {

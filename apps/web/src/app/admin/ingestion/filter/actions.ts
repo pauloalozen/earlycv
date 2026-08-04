@@ -54,7 +54,7 @@ export async function saveSemanticFilterConfigVersionAction(
       techSignals,
     });
 
-    revalidatePath("/admin/ingestion/filter");
+    revalidatePath("/admin/ingestion");
 
     return {
       kind: "success",
@@ -74,7 +74,7 @@ export async function enrichNowFormAction(formData: FormData) {
 
   await reenrichJob(jobEnrichmentId);
   await runEnrichmentNowForJob(jobEnrichmentId);
-  revalidatePath("/admin/ingestion/filter");
+  revalidatePath("/admin/ingestion");
 }
 
 // Forca o enriquecimento via LLM ignorando o resultado do filtro semantico
@@ -85,7 +85,7 @@ export async function forceEnrichFormAction(formData: FormData) {
 
   await reenrichJob(jobEnrichmentId);
   await forceRunEnrichmentNowForJob(jobEnrichmentId);
-  revalidatePath("/admin/ingestion/filter");
+  revalidatePath("/admin/ingestion");
 }
 
 export async function whitelistCrawlerDiscardAction(
@@ -101,7 +101,7 @@ export async function whitelistCrawlerDiscardAction(
     }
 
     const newVersion = await whitelistCrawlerDiscard(id, term);
-    revalidatePath("/admin/ingestion/filter");
+    revalidatePath("/admin/ingestion");
 
     return {
       kind: "success",

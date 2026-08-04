@@ -2,16 +2,11 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const getBackofficeSessionTokenMock = vi.hoisted(() => vi.fn());
 const getActiveSemanticFilterConfigMock = vi.hoisted(() => vi.fn());
 const listEnrichmentJobsMock = vi.hoisted(() => vi.fn());
 const listJobSourcesMock = vi.hoisted(() => vi.fn());
 const getCrawlerDiscardsCountMock = vi.hoisted(() => vi.fn());
 const listCrawlerDiscardsMock = vi.hoisted(() => vi.fn());
-
-vi.mock("@/lib/backoffice-session.server", () => ({
-  getBackofficeSessionToken: getBackofficeSessionTokenMock,
-}));
 
 vi.mock("@/lib/admin-semantic-filter-api", () => ({
   getActiveSemanticFilterConfig: getActiveSemanticFilterConfigMock,
@@ -27,7 +22,7 @@ vi.mock("@/lib/admin-crawler-discards-api", () => ({
   listCrawlerDiscards: listCrawlerDiscardsMock,
 }));
 
-import AdminSemanticFilterPage from "./page";
+import { EnrichmentTabContent } from "./enrichment-tab-content";
 
 function jobsPage(rows: unknown[] = []) {
   return { page: 1, pageSize: 20, rows, total: rows.length, totalPages: 1 };
@@ -52,18 +47,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("AdminSemanticFilterPage crawler discards panel", () => {
+describe("EnrichmentTabContent crawler discards panel", () => {
   it("shows the discards card with the total count", async () => {
-    getBackofficeSessionTokenMock.mockResolvedValue("token-1");
     getActiveSemanticFilterConfigMock.mockResolvedValue(null);
     listEnrichmentJobsMock.mockResolvedValue(jobsPage());
     listJobSourcesMock.mockResolvedValue([]);
     getCrawlerDiscardsCountMock.mockResolvedValue(7);
 
-    const page = await AdminSemanticFilterPage({
-      searchParams: Promise.resolve({}),
-    });
-    render(page);
+    const content = await EnrichmentTabContent({ searchParams: {} });
+    render(content);
 
     expect(
       screen.getAllByText("Descartados no crawler").length,
@@ -71,8 +63,7 @@ describe("AdminSemanticFilterPage crawler discards panel", () => {
     expect(screen.getByText("7")).toBeInTheDocument();
   });
 
-  it("renders the discards tab and table when tab=discards", async () => {
-    getBackofficeSessionTokenMock.mockResolvedValue("token-1");
+  it("renders the discards tab and table when enrichTab=discards", async () => {
     getActiveSemanticFilterConfigMock.mockResolvedValue(null);
     listEnrichmentJobsMock.mockResolvedValue(jobsPage());
     listJobSourcesMock.mockResolvedValue([]);
@@ -96,10 +87,10 @@ describe("AdminSemanticFilterPage crawler discards panel", () => {
       totalPages: 1,
     });
 
-    const page = await AdminSemanticFilterPage({
-      searchParams: Promise.resolve({ tab: "discards" }),
+    const content = await EnrichmentTabContent({
+      searchParams: { enrichTab: "discards" },
     });
-    render(page);
+    render(content);
 
     expect(listCrawlerDiscardsMock).toHaveBeenCalled();
     expect(screen.getByText("Enfermeiro Plantonista")).toBeInTheDocument();
@@ -107,17 +98,14 @@ describe("AdminSemanticFilterPage crawler discards panel", () => {
     expect(screen.getByText("noise_signal:enfermeiro")).toBeInTheDocument();
   });
 
-  it("does not fetch discards list when tab is enrichment (default)", async () => {
-    getBackofficeSessionTokenMock.mockResolvedValue("token-1");
+  it("does not fetch discards list when enrichTab is enrichment (default)", async () => {
     getActiveSemanticFilterConfigMock.mockResolvedValue(null);
     listEnrichmentJobsMock.mockResolvedValue(jobsPage());
     listJobSourcesMock.mockResolvedValue([]);
     getCrawlerDiscardsCountMock.mockResolvedValue(0);
 
-    const page = await AdminSemanticFilterPage({
-      searchParams: Promise.resolve({}),
-    });
-    render(page);
+    const content = await EnrichmentTabContent({ searchParams: {} });
+    render(content);
 
     expect(listCrawlerDiscardsMock).not.toHaveBeenCalled();
     expect(
@@ -126,7 +114,6 @@ describe("AdminSemanticFilterPage crawler discards panel", () => {
   });
 
   it("shows whitelisted pill for already-whitelisted discards", async () => {
-    getBackofficeSessionTokenMock.mockResolvedValue("token-1");
     getActiveSemanticFilterConfigMock.mockResolvedValue(null);
     listEnrichmentJobsMock.mockResolvedValue(jobsPage());
     listJobSourcesMock.mockResolvedValue([]);
@@ -150,10 +137,10 @@ describe("AdminSemanticFilterPage crawler discards panel", () => {
       totalPages: 1,
     });
 
-    const page = await AdminSemanticFilterPage({
-      searchParams: Promise.resolve({ tab: "discards" }),
+    const content = await EnrichmentTabContent({
+      searchParams: { enrichTab: "discards" },
     });
-    render(page);
+    render(content);
 
     expect(screen.getByText("Whitelisted")).toBeInTheDocument();
     expect(

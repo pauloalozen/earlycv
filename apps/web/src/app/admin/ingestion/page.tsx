@@ -12,6 +12,7 @@ import { cn } from "@/lib/cn";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
+import { EnrichmentTabContent } from "./_components/enrichment-tab-content";
 import { FontesTableClient } from "./_components/fontes-table-client";
 import { IngestionDashboardCards } from "./_components/ingestion-dashboard-cards";
 import { JobsTabClient } from "./_components/jobs-tab-client";
@@ -20,7 +21,7 @@ import { VagasTabClient } from "./_components/vagas-tab-client";
 export const metadata = buildAdminMetadata("Ingestao");
 
 type SearchParams = Promise<{
-  tab?: "fontes" | "vagas" | "jobs";
+  tab?: "fontes" | "vagas" | "jobs" | "enrichment";
   message?: string;
   status?: string;
   vagaQuery?: string;
@@ -28,6 +29,14 @@ type SearchParams = Promise<{
   vagaStatus?: string;
   createSourceId?: string;
   createSourceName?: string;
+  discardReason?: string;
+  discardSourceId?: string;
+  discardTitle?: string;
+  enrichPage?: string;
+  enrichTab?: string;
+  enrichStatus?: string;
+  search?: string;
+  sourceId?: string;
 }>;
 
 type AdminIngestionPageProps = {
@@ -86,7 +95,15 @@ export default async function AdminIngestionPage({
   const {
     createSourceId,
     createSourceName,
+    discardReason,
+    discardSourceId,
+    discardTitle,
+    enrichPage,
+    enrichTab,
+    enrichStatus,
     message,
+    search,
+    sourceId,
     status,
     tab,
     vagaQuery,
@@ -99,7 +116,7 @@ export default async function AdminIngestionPage({
   // que nao existem mais (ex: ?tab=manual, de antes da reorganizacao da
   // Sprint 3) — sem essa checagem a pagina renderiza so o cabecalho e as
   // tabs, sem nenhum bloco de conteudo.
-  const VALID_TABS = ["fontes", "jobs", "vagas"] as const;
+  const VALID_TABS = ["fontes", "jobs", "vagas", "enrichment"] as const;
   const activeTab = VALID_TABS.includes(tab as (typeof VALID_TABS)[number])
     ? (tab as (typeof VALID_TABS)[number])
     : "fontes";
@@ -186,7 +203,10 @@ export default async function AdminIngestionPage({
           <TabLink active={activeTab === "jobs"} href={buildTabHref("jobs")}>
             Jobs
           </TabLink>
-          <TabLink active={false} href="/admin/ingestion/filter">
+          <TabLink
+            active={activeTab === "enrichment"}
+            href={buildTabHref("enrichment")}
+          >
             Enriquecimento
           </TabLink>
           <TabLink active={activeTab === "vagas"} href={buildTabHref("vagas")}>
@@ -232,6 +252,22 @@ export default async function AdminIngestionPage({
             initialCreateSourceId={createSourceId}
             initialCreateSourceName={createSourceName}
             sources={jobSourceOptions}
+          />
+        )}
+
+        {/* ── ENRIQUECIMENTO ── */}
+        {activeTab === "enrichment" && (
+          <EnrichmentTabContent
+            searchParams={{
+              discardReason,
+              discardSourceId,
+              discardTitle,
+              enrichPage,
+              enrichStatus,
+              enrichTab,
+              search,
+              sourceId,
+            }}
           />
         )}
       </AdminPageWrap>

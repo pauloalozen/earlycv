@@ -20,12 +20,11 @@ function buildHref(
   status: CardStatus | null,
   currentFilters: { search?: string; sourceId?: string },
 ) {
-  const params = new URLSearchParams();
-  if (status) params.set("status", status);
+  const params = new URLSearchParams({ tab: "enrichment" });
+  if (status) params.set("enrichStatus", status);
   if (currentFilters.search) params.set("search", currentFilters.search);
   if (currentFilters.sourceId) params.set("sourceId", currentFilters.sourceId);
-  const qs = params.toString();
-  return `/admin/ingestion/filter${qs ? `?${qs}` : ""}`;
+  return `/admin/ingestion?${params}`;
 }
 
 function Card({
