@@ -710,7 +710,6 @@ export function JobsTabClient({
           <thead>
             <tr>
               <AdminTh>Nome</AdminTh>
-              <AdminTh w={100}>Tipo</AdminTh>
               <AdminTh w={220}>Escopo</AdminTh>
               <AdminTh w={200}>Frequência</AdminTh>
               <AdminTh w={140}>Próxima execução</AdminTh>
@@ -724,7 +723,7 @@ export function JobsTabClient({
             {!loadingJobs && jobs.length === 0 && (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={6}
                   style={{
                     color: AT.muted,
                     padding: "32px 16px",
@@ -738,9 +737,6 @@ export function JobsTabClient({
             {jobs.map((job) => (
               <tr key={job.id}>
                 <AdminTd>{job.name}</AdminTd>
-                <AdminTd mono muted>
-                  {job.jobType === "CRAWL" ? "Crawl" : "Enrichment"}
-                </AdminTd>
                 <AdminTd muted>{scopeLabel(job)}</AdminTd>
                 <AdminTd muted>{frequencyLabel(job)}</AdminTd>
                 <AdminTd mono muted>
