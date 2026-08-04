@@ -15,6 +15,7 @@ type JobRow = {
   id: string;
   title: string;
   companyId: string;
+  company: { name: string };
   jobSourceId: string;
   locationText: string;
   status: string;
@@ -196,7 +197,7 @@ export function VagasTabClient({
           {result?.jobs.map((job) => (
             <tr key={job.id}>
               <AdminTd>{job.title}</AdminTd>
-              <AdminTd muted>{job.companyId}</AdminTd>
+              <AdminTd muted>{job.company.name}</AdminTd>
               <AdminTd muted>{job.locationText || "—"}</AdminTd>
               <AdminTd>
                 <AdminPill

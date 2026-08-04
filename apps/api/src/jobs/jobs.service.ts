@@ -103,6 +103,7 @@ export class JobsService {
     const [jobs, total] = await Promise.all([
       this.database.job.findMany({
         where,
+        include: { company: { select: { name: true } } },
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
         skip,
         take: pageSize,
