@@ -95,7 +95,14 @@ export default async function AdminIngestionPage({
   } = await searchParams;
 
   const token = await getBackofficeSessionToken();
-  const activeTab = tab ?? "fontes";
+  // Valida o valor de tab: links antigos/externos podem apontar pra abas
+  // que nao existem mais (ex: ?tab=manual, de antes da reorganizacao da
+  // Sprint 3) — sem essa checagem a pagina renderiza so o cabecalho e as
+  // tabs, sem nenhum bloco de conteudo.
+  const VALID_TABS = ["fontes", "jobs", "vagas"] as const;
+  const activeTab = VALID_TABS.includes(tab as (typeof VALID_TABS)[number])
+    ? (tab as (typeof VALID_TABS)[number])
+    : "fontes";
 
   if (!token) {
     const state = buildAdminStateModel("missing-token", "/admin/ingestion");

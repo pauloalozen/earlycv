@@ -9,6 +9,7 @@ import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { RefreshButton } from "../../_components/refresh-button";
 import { cancelManualRunAction } from "../../actions";
 
 export const metadata = buildAdminMetadata("Logs manual ingestion");
@@ -37,7 +38,7 @@ export default async function ManualRunDetailPage({
           </p>
           <Link
             className={buttonVariants()}
-            href={state.actionHref ?? "/admin/ingestion?tab=manual"}
+            href={state.actionHref ?? "/admin/ingestion?tab=jobs"}
           >
             {state.actionLabel ?? "Voltar"}
           </Link>
@@ -76,10 +77,11 @@ export default async function ManualRunDetailPage({
             <div className="flex gap-2">
               <Link
                 className={buttonVariants({ variant: "outline" })}
-                href="/admin/ingestion?tab=manual"
+                href="/admin/ingestion?tab=jobs"
               >
                 Voltar
               </Link>
+              <RefreshButton />
               {run.status === "queued" ||
               run.status === "running" ||
               run.status === "cancelling" ? (
@@ -181,7 +183,7 @@ export default async function ManualRunDetailPage({
           </p>
           <Link
             className={buttonVariants()}
-            href={state.actionHref ?? "/admin/ingestion?tab=manual"}
+            href={state.actionHref ?? "/admin/ingestion?tab=jobs"}
           >
             {state.actionLabel ?? "Voltar"}
           </Link>

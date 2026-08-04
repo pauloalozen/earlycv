@@ -595,6 +595,7 @@ export function JobsTabClient({
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
 
   const [runsResult, setRunsResult] = useState<RunsResponse | null>(null);
+  const [loadingRuns, setLoadingRuns] = useState(true);
   const [runsPage, setRunsPage] = useState(1);
   const [runsJobFilter, setRunsJobFilter] = useState("");
   const [runsStatusFilter, setRunsStatusFilter] = useState("");
@@ -614,16 +615,21 @@ export function JobsTabClient({
 
   const fetchRuns = useCallback(
     async (page: number) => {
-      const qs = new URLSearchParams({ page: String(page), pageSize: "20" });
-      if (runsJobFilter) qs.set("jobId", runsJobFilter);
-      if (runsStatusFilter) qs.set("status", runsStatusFilter);
-      const res = await fetch(
-        `/api/admin/ingestion/ingestion-jobs/runs?${qs}`,
-        {
-          cache: "no-store",
-        },
-      );
-      if (res.ok) setRunsResult(await res.json());
+      setLoadingRuns(true);
+      try {
+        const qs = new URLSearchParams({ page: String(page), pageSize: "20" });
+        if (runsJobFilter) qs.set("jobId", runsJobFilter);
+        if (runsStatusFilter) qs.set("status", runsStatusFilter);
+        const res = await fetch(
+          `/api/admin/ingestion/ingestion-jobs/runs?${qs}`,
+          {
+            cache: "no-store",
+          },
+        );
+        if (res.ok) setRunsResult(await res.json());
+      } finally {
+        setLoadingRuns(false);
+      }
     },
     [runsJobFilter, runsStatusFilter],
   );
@@ -697,13 +703,23 @@ export function JobsTabClient({
           }}
         >
           <h2 style={{ color: AT.ink, fontSize: 15, fontWeight: 600 }}>Jobs</h2>
-          <button
-            className={buttonVariants({ size: "sm" })}
-            onClick={() => setModalOpen(true)}
-            type="button"
-          >
-            + Criar job
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              disabled={loadingJobs}
+              onClick={() => fetchJobs()}
+              type="button"
+            >
+              {loadingJobs ? "Atualizando..." : "Atualizar"}
+            </button>
+            <button
+              className={buttonVariants({ size: "sm" })}
+              onClick={() => setModalOpen(true)}
+              type="button"
+            >
+              + Criar job
+            </button>
+          </div>
         </div>
 
         <AdminTable>
@@ -815,9 +831,25 @@ export function JobsTabClient({
         ref={historyRef}
         style={{ display: "flex", flexDirection: "column", gap: 12 }}
       >
-        <h2 style={{ color: AT.ink, fontSize: 15, fontWeight: 600 }}>
-          Histórico de execuções
-        </h2>
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          <h2 style={{ color: AT.ink, fontSize: 15, fontWeight: 600 }}>
+            Histórico de execuções
+          </h2>
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            disabled={loadingRuns}
+            onClick={() => fetchRuns(runsPage)}
+            type="button"
+          >
+            {loadingRuns ? "Atualizando..." : "Atualizar"}
+          </button>
+        </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <select
