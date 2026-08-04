@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type {
   IngestionBatchItemStatus,
   IngestionBatchRunStatus,
@@ -34,6 +34,11 @@ type CreateAdapterBatchRunInput = {
 };
 
 type CreateGlobalBatchRunInput = {
+  requestedByUserId?: string;
+};
+
+type CreateSourceBatchRunInput = {
+  jobSourceId: string;
   requestedByUserId?: string;
 };
 
@@ -149,6 +154,72 @@ export class ManualIngestionBatchRepository {
               sourceType: source.sourceType,
               status: "queued",
             })),
+          });
+        }
+
+        return batchRun;
+      });
+    } catch (error) {
+      if (isMissingManualBatchTableError(error)) {
+        throw new Error(
+          "Manual ingestion tables are missing. Apply database migrations before starting manual runs.",
+        );
+      }
+      throw error;
+    }
+  }
+
+  // Cria um batch de 1 fonte so, usado por IngestionJob de escopo SOURCE.
+  // Diferente de createAdapterBatchRun/createGlobalBatchRun, ignora
+  // scheduleEnabled — o escopo do job ja define explicitamente qual fonte
+  // rodar, entao esse flag legado nao se aplica aqui.
+  async createSourceBatchRun(input: CreateSourceBatchRunInput) {
+    try {
+      return this.database.$transaction(async (tx) => {
+        const source = await tx.jobSource.findUnique({
+          where: { id: input.jobSourceId },
+          select: {
+            company: { select: { name: true } },
+            companyId: true,
+            id: true,
+            isActive: true,
+            pausedUntil: true,
+            sourceName: true,
+            sourceType: true,
+          },
+        });
+
+        if (!source) {
+          throw new NotFoundException(
+            `job source ${input.jobSourceId} not found`,
+          );
+        }
+
+        const isPaused =
+          source.pausedUntil !== null && source.pausedUntil > new Date();
+        const eligible = source.isActive && !isPaused;
+
+        const batchRun = await tx.ingestionBatchRun.create({
+          data: {
+            requestedByUserId: input.requestedByUserId,
+            scopeType: "source",
+            scopeValue: source.id,
+            status: "queued",
+            totalSources: eligible ? 1 : 0,
+          },
+        });
+
+        if (eligible) {
+          await tx.ingestionBatchItem.create({
+            data: {
+              batchRunId: batchRun.id,
+              companyId: source.companyId,
+              companyName: source.company.name,
+              jobSourceId: source.id,
+              sourceName: source.sourceName,
+              sourceType: source.sourceType,
+              status: "queued",
+            },
           });
         }
 
