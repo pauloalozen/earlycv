@@ -972,6 +972,7 @@ model JobSource {
   ingestionRuns        IngestionRun[]
   ingestionBatchItems  IngestionBatchItem[]
   discardedTitles      CrawlerDiscardedTitle[]
+  ingestionJobs        IngestionJob[]
 
   @@unique([companyId, sourceUrl])
   @@index([companyId])
@@ -1073,6 +1074,7 @@ model IngestionBatchRun {
   updatedAt         DateTime                @updatedAt
   requestedByUser   User?                   @relation("IngestionBatchRunRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: SetNull)
   items             IngestionBatchItem[]
+  jobRun            IngestionJobRun?
 
   @@index([status, createdAt])
   @@index([scopeType, scopeValue, createdAt])
@@ -1105,6 +1107,89 @@ model IngestionBatchItem {
   @@index([jobSourceId])
   @@index([companyId])
   @@index([ingestionRunId])
+}
+
+model IngestionJob {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  jobType IngestionJobType
+
+  // Escopo (para CRAWL)
+  scopeType   IngestionJobScopeType?
+  adapterType JobSourceType?
+  jobSourceId String?
+  jobSource   JobSource?             @relation(fields: [jobSourceId], references: [id], onDelete: SetNull)
+
+  // Agendamento em linguagem humana (sem cron exposto ao usuario)
+  scheduleType       IngestionJobScheduleType
+  scheduleHour       Int?
+  scheduleMinute     Int                      @default(0)
+  scheduleInterval   Int?
+  scheduleDaysOfWeek Int[]
+
+  // Estado
+  isEnabled Boolean   @default(true)
+  lastRunAt DateTime?
+  nextRunAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  runs IngestionJobRun[]
+
+  @@index([jobType, isEnabled])
+  @@index([nextRunAt])
+}
+
+model IngestionJobRun {
+  id    String       @id @default(cuid())
+  jobId String
+  job   IngestionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  batchRunId String?            @unique
+  batchRun   IngestionBatchRun? @relation(fields: [batchRunId], references: [id], onDelete: SetNull)
+
+  status       IngestionJobRunStatus @default(QUEUED)
+  triggeredBy  IngestionJobTrigger   @default(SCHEDULE)
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  errorMessage String?
+  createdAt    DateTime              @default(now())
+
+  @@index([jobId, createdAt])
+  @@index([status])
+}
+
+enum IngestionJobType {
+  CRAWL
+  ENRICHMENT
+}
+
+enum IngestionJobScopeType {
+  ADAPTER
+  SOURCE
+  ALL
+}
+
+enum IngestionJobScheduleType {
+  MANUAL
+  DAILY
+  EVERY_N_HOURS
+  WEEKLY
+}
+
+enum IngestionJobRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum IngestionJobTrigger {
+  SCHEDULE
+  MANUAL
 }
 
 model AffiliatePartner {
