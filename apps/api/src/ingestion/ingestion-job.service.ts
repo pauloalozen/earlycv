@@ -4,6 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import type {
+  IngestionBatchRunStatus,
+  IngestionJobRunStatus,
+} from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import type { CreateIngestionJobDto } from "./dto/create-ingestion-job.dto";
@@ -21,6 +25,19 @@ const jobWithSourceInclude = {
     },
   },
 } as const;
+
+// IngestionJobRun de CRAWL fica QUEUED/RUNNING no dispatch e nunca e
+// atualizado depois — quem processa o IngestionBatchRun de fato e o
+// IngestionManualRunnerService (fora de escopo alterar), entao o status
+// real de conclusao so existe no batchRun. Reconciliamos aqui, na
+// leitura, em vez de um poller separado.
+const TERMINAL_BATCH_STATUS: Partial<
+  Record<IngestionBatchRunStatus, IngestionJobRunStatus>
+> = {
+  cancelled: "CANCELLED",
+  completed: "COMPLETED",
+  failed: "FAILED",
+};
 
 @Injectable()
 export class IngestionJobService {
@@ -180,6 +197,39 @@ export class IngestionJobService {
       this.database.ingestionJobRun.count({ where }),
     ]);
 
-    return { page, pageSize, runs, total };
+    const reconciledRuns = await Promise.all(
+      runs.map((run) => this.reconcileRunStatus(run)),
+    );
+
+    return { page, pageSize, runs: reconciledRuns, total };
+  }
+
+  private async reconcileRunStatus<
+    T extends {
+      id: string;
+      status: IngestionJobRunStatus;
+      batchRun: { status: IngestionBatchRunStatus } | null;
+    },
+  >(run: T): Promise<T> {
+    if (
+      !run.batchRun ||
+      run.status === "COMPLETED" ||
+      run.status === "FAILED" ||
+      run.status === "CANCELLED"
+    ) {
+      return run;
+    }
+
+    const mappedStatus = TERMINAL_BATCH_STATUS[run.batchRun.status];
+    if (!mappedStatus) {
+      return run;
+    }
+
+    const updated = await this.database.ingestionJobRun.update({
+      data: { finishedAt: new Date(), status: mappedStatus },
+      where: { id: run.id },
+    });
+
+    return { ...run, ...updated };
   }
 }

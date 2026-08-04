@@ -7,8 +7,21 @@ import type { CreateIngestionJobDto } from "./dto/create-ingestion-job.dto";
 import { IngestionJobService } from "./ingestion-job.service";
 import type { IngestionJobDispatchService } from "./ingestion-job-dispatch.service";
 
-function createFixture(seed: IngestionJob[] = []) {
+type FixtureJobRun = {
+  id: string;
+  jobId: string;
+  status: string;
+  finishedAt: Date | null;
+  batchRun: { status: string } | null;
+  job: { id: string; jobType: string; name: string } | null;
+};
+
+function createFixture(
+  seed: IngestionJob[] = [],
+  jobRunSeed: FixtureJobRun[] = [],
+) {
   const jobs = new Map(seed.map((job) => [job.id, job]));
+  const jobRuns = new Map(jobRunSeed.map((run) => [run.id, run]));
   const jobSources = new Map<string, { id: string }>([
     ["source-1", { id: "source-1" }],
   ]);
@@ -49,8 +62,21 @@ function createFixture(seed: IngestionJob[] = []) {
       },
     },
     ingestionJobRun: {
-      count: async () => 0,
-      findMany: async () => [],
+      count: async () => jobRuns.size,
+      findMany: async () => Array.from(jobRuns.values()),
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Partial<FixtureJobRun>;
+      }) => {
+        const existing = jobRuns.get(where.id);
+        if (!existing) throw new Error("not found");
+        const updated = { ...existing, ...data };
+        jobRuns.set(where.id, updated);
+        return updated;
+      },
     },
     jobSource: {
       findUnique: async ({ where }: { where: { id: string } }) =>
@@ -68,7 +94,7 @@ function createFixture(seed: IngestionJob[] = []) {
 
   const service = new IngestionJobService(database, dispatchService);
 
-  return { dispatchCalls, jobs, service };
+  return { dispatchCalls, jobRuns, jobs, service };
 }
 
 function baseDto(
@@ -123,6 +149,60 @@ test("runNow cria IngestionJobRun com triggeredBy MANUAL", async () => {
   assert.equal(dispatchCalls.length, 1);
   assert.equal(dispatchCalls[0]?.trigger, "MANUAL");
   assert.equal(run.triggeredBy, "MANUAL");
+});
+
+test("listRuns reconcilia status RUNNING travado usando o status real do batchRun", async () => {
+  const { service, jobRuns } = createFixture(
+    [],
+    [
+      {
+        batchRun: { status: "completed" },
+        finishedAt: null,
+        id: "run-1",
+        job: { id: "job-1", jobType: "CRAWL", name: "Gupy" },
+        jobId: "job-1",
+        status: "RUNNING",
+      },
+    ],
+  );
+
+  const result = await service.listRuns();
+
+  assert.equal(result.runs[0]?.status, "COMPLETED");
+  assert.ok(result.runs[0]?.finishedAt instanceof Date);
+  // reconciliacao deve persistir, nao so refletir na resposta
+  assert.equal(jobRuns.get("run-1")?.status, "COMPLETED");
+});
+
+test("listRuns nao mexe em runs sem batchRun ou ja em status terminal", async () => {
+  const { service } = createFixture(
+    [],
+    [
+      {
+        batchRun: null,
+        finishedAt: null,
+        id: "run-enrichment",
+        job: { id: "job-2", jobType: "ENRICHMENT", name: "Enriquecimento" },
+        jobId: "job-2",
+        status: "COMPLETED",
+      },
+      {
+        batchRun: { status: "running" },
+        finishedAt: null,
+        id: "run-still-running",
+        job: { id: "job-1", jobType: "CRAWL", name: "Gupy" },
+        jobId: "job-1",
+        status: "RUNNING",
+      },
+    ],
+  );
+
+  const result = await service.listRuns();
+
+  const enrichment = result.runs.find((r) => r.id === "run-enrichment");
+  const stillRunning = result.runs.find((r) => r.id === "run-still-running");
+  assert.equal(enrichment?.status, "COMPLETED");
+  assert.equal(stillRunning?.status, "RUNNING");
 });
 
 test("remove apaga o job", async () => {
