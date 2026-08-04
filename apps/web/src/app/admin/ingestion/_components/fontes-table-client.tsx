@@ -15,6 +15,7 @@ import {
   deleteJobSourceAction,
   importCompanySourcesCsvAction,
   runJobSourceAction,
+  toggleScheduleEnabledAction,
 } from "../actions";
 
 type IngestionRunSummary = {
@@ -49,7 +50,12 @@ type Props = {
   initialData: PagedResult;
 };
 
-type SortBy = "sourceName" | "company" | "sourceType" | "activeJobsCount" | "createdAt";
+type SortBy =
+  | "sourceName"
+  | "company"
+  | "sourceType"
+  | "activeJobsCount"
+  | "createdAt";
 type SortDir = "asc" | "desc";
 
 const SORT_STORAGE_KEY = "admin-ingestion-fontes-sort";
@@ -194,6 +200,7 @@ export function FontesTableClient({ initialData }: Props) {
   const [sortBy, setSortBy] = useState<SortBy | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [result, setResult] = useState<PagedResult>(initialData);
+  const [togglePending, setTogglePending] = useState(false);
 
   const isFirstRender = useRef(true);
   const paramsRef = useRef({
@@ -246,7 +253,14 @@ export function FontesTableClient({ initialData }: Props) {
       isFirstRender.current = false;
       return;
     }
-    paramsRef.current = { search, statusFilter, typeFilter, page, sortBy, sortDir };
+    paramsRef.current = {
+      search,
+      statusFilter,
+      typeFilter,
+      page,
+      sortBy,
+      sortDir,
+    };
     fetchSources({ search, statusFilter, typeFilter, page, sortBy, sortDir });
   }, [search, statusFilter, typeFilter, page, sortBy, sortDir, fetchSources]);
 
@@ -470,24 +484,53 @@ export function FontesTableClient({ initialData }: Props) {
       <AdminTable>
         <thead>
           <tr>
-            <SortableTh column="company" onSort={handleSort} sortBy={sortBy} sortDir={sortDir}>
+            <SortableTh
+              column="company"
+              onSort={handleSort}
+              sortBy={sortBy}
+              sortDir={sortDir}
+            >
               Empresa
             </SortableTh>
-            <SortableTh column="sourceName" onSort={handleSort} sortBy={sortBy} sortDir={sortDir}>
+            <SortableTh
+              column="sourceName"
+              onSort={handleSort}
+              sortBy={sortBy}
+              sortDir={sortDir}
+            >
               Fonte
             </SortableTh>
-            <SortableTh column="sourceType" onSort={handleSort} sortBy={sortBy} sortDir={sortDir} w={110}>
+            <SortableTh
+              column="sourceType"
+              onSort={handleSort}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              w={110}
+            >
               Adapter
             </SortableTh>
-            <SortableTh column="activeJobsCount" onSort={handleSort} sortBy={sortBy} sortDir={sortDir} w={70}>
+            <SortableTh
+              column="activeJobsCount"
+              onSort={handleSort}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              w={70}
+            >
               Vagas
             </SortableTh>
-            <SortableTh column="createdAt" onSort={handleSort} sortBy={sortBy} sortDir={sortDir} w={110}>
+            <SortableTh
+              column="createdAt"
+              onSort={handleSort}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              w={110}
+            >
               Incluída em
             </SortableTh>
             <AdminTh w={180}>Status</AdminTh>
+            <AdminTh w={140}>Agendamento</AdminTh>
             <AdminTh w={160}>Último run</AdminTh>
-            <AdminTh w={240} align="right">
+            <AdminTh w={260} align="right">
               Ações
             </AdminTh>
           </tr>
@@ -496,7 +539,7 @@ export function FontesTableClient({ initialData }: Props) {
           {rows.length === 0 && (
             <tr>
               <td
-                colSpan={8}
+                colSpan={9}
                 style={{
                   padding: "32px 16px",
                   textAlign: "center",
@@ -562,12 +605,74 @@ export function FontesTableClient({ initialData }: Props) {
                   </div>
                 </AdminTd>
                 <AdminTd>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <button
+                      type="button"
+                      title={
+                        source.scheduleEnabled
+                          ? "Desativar agendamento"
+                          : "Ativar agendamento"
+                      }
+                      disabled={togglePending}
+                      onClick={() => {
+                        setTogglePending(true);
+                        const fd = new FormData();
+                        fd.set("jobSourceId", source.id);
+                        fd.set(
+                          "scheduleEnabled",
+                          source.scheduleEnabled ? "false" : "true",
+                        );
+                        fd.set("redirectPath", redirectPath);
+                        toggleScheduleEnabledAction(fd)
+                          .then(() => fetchSources(paramsRef.current))
+                          .finally(() => setTogglePending(false));
+                      }}
+                      style={{
+                        width: 36,
+                        height: 20,
+                        borderRadius: 10,
+                        border: "none",
+                        background: source.scheduleEnabled ? AT.ok : AT.faint,
+                        cursor: togglePending ? "not-allowed" : "pointer",
+                        position: "relative",
+                        transition: "background 0.2s",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: 2,
+                          left: source.scheduleEnabled ? 18 : 2,
+                          width: 16,
+                          height: 16,
+                          borderRadius: "50%",
+                          background: "white",
+                          transition: "left 0.2s",
+                        }}
+                      />
+                    </button>
+                    <span
+                      style={{
+                        fontSize: 11.5,
+                        color: AT.muted,
+                        fontFamily: '"Geist Mono", monospace',
+                      }}
+                    >
+                      {source.scheduleCron ?? "—"}
+                    </span>
+                  </div>
+                </AdminTd>
+                <AdminTd>
                   <RunStatusBadge run={latestRun} />
                 </AdminTd>
                 <AdminTd align="right">
                   <div
                     style={{
                       display: "flex",
+                      flexWrap: "wrap",
                       gap: 6,
                       justifyContent: "flex-end",
                     }}
@@ -591,11 +696,12 @@ export function FontesTableClient({ initialData }: Props) {
                         type="submit"
                         disabled={isRunning}
                         title={isRunning ? "Em execução" : undefined}
-                        style={
-                          isRunning
+                        style={{
+                          whiteSpace: "nowrap",
+                          ...(isRunning
                             ? { opacity: 0.45, cursor: "not-allowed" }
-                            : undefined
-                        }
+                            : undefined),
+                        }}
                       >
                         Rodar
                       </button>
@@ -606,6 +712,7 @@ export function FontesTableClient({ initialData }: Props) {
                         variant: "outline",
                       })}
                       href={`/admin/ingestion?tab=jobs&createSourceId=${source.id}&createSourceName=${encodeURIComponent(`${source.company.name} · ${source.sourceName}`)}`}
+                      style={{ whiteSpace: "nowrap" }}
                     >
                       Criar job
                     </Link>
@@ -615,6 +722,7 @@ export function FontesTableClient({ initialData }: Props) {
                         variant: "outline",
                       })}
                       href={`/admin/ingestion/${source.id}`}
+                      style={{ whiteSpace: "nowrap" }}
                     >
                       Detalhe
                     </Link>
@@ -624,6 +732,7 @@ export function FontesTableClient({ initialData }: Props) {
                         variant: "outline",
                       })}
                       href={`/admin/ingestion/${source.id}#editar-fonte`}
+                      style={{ whiteSpace: "nowrap" }}
                     >
                       Editar
                     </Link>
@@ -654,6 +763,7 @@ export function FontesTableClient({ initialData }: Props) {
                           size: "sm",
                           variant: "outline",
                         })}
+                        style={{ whiteSpace: "nowrap" }}
                         type="submit"
                       >
                         Excluir

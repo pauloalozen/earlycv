@@ -6,6 +6,8 @@ import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { JobSourceScheduleForm } from "../_components/job-source-schedule-form";
+import { humanScheduleLabel } from "../_components/job-source-schedule-format";
 import { RunSourceSubmitButton } from "../_components/run-source-submit-button";
 import {
   runJobSourceAction,
@@ -258,9 +260,11 @@ export default async function JobSourceAdminPage({
                 </p>
               </div>
               <div className="space-y-1">
-                <p className="text-[11px] font-medium text-stone-400">Cron</p>
+                <p className="text-[11px] font-medium text-stone-400">
+                  Frequência
+                </p>
                 <p className="font-medium text-stone-900">
-                  {source.scheduleCron ?? "-"}
+                  {humanScheduleLabel(source.scheduleCron ?? null)}
                 </p>
               </div>
               <div className="space-y-1">
@@ -271,35 +275,13 @@ export default async function JobSourceAdminPage({
               </div>
             </div>
 
-            <form action={updateJobSourceScheduleAction} className="space-y-3">
-              <input name="jobSourceId" type="hidden" value={source.id} />
-              <input name="redirectPath" type="hidden" value={redirectPath} />
-
-              <label className="flex items-center gap-2 text-sm text-stone-700">
-                <input
-                  defaultChecked={Boolean(source.scheduleEnabled)}
-                  name="scheduleEnabled"
-                  type="checkbox"
-                />
-                Ativar agendamento da fonte
-              </label>
-
-              <label className="block space-y-1 text-sm text-stone-700">
-                <span className="text-[11px] font-medium text-stone-400">
-                  cron
-                </span>
-                <input
-                  className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 outline-none focus:border-stone-400"
-                  defaultValue={source.scheduleCron ?? "*/30 * * * *"}
-                  name="scheduleCron"
-                  placeholder="*/30 * * * *"
-                />
-              </label>
-
-              <button className={buttonVariants({ size: "sm" })} type="submit">
-                Salvar agendamento
-              </button>
-            </form>
+            <JobSourceScheduleForm
+              action={updateJobSourceScheduleAction}
+              initialCron={source.scheduleCron ?? null}
+              initialEnabled={Boolean(source.scheduleEnabled)}
+              jobSourceId={source.id}
+              redirectPath={redirectPath}
+            />
           </Card>
 
           <Card className="overflow-hidden p-0">

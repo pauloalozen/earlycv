@@ -63,7 +63,10 @@ describe("JobSourceAdminPage schedule", () => {
 
     expect(cardScope.getByText("Status")).toBeInTheDocument();
     expect(cardScope.getByText("Escalonado")).toBeInTheDocument();
-    expect(cardScope.getByText("Cron")).toBeInTheDocument();
+    expect(cardScope.getByText("Frequência")).toBeInTheDocument();
+    // "*/30 * * * *" (a cada 30 minutos) nao corresponde a nenhum dos 3
+    // padroes do picker humano (diario / a cada N horas / semanal) —
+    // cai no fallback UNKNOWN, que exibe o cron cru.
     expect(cardScope.getByText("*/30 * * * *")).toBeInTheDocument();
     expect(cardScope.getByText("Fuso")).toBeInTheDocument();
     expect(cardScope.getByText("America/Sao_Paulo")).toBeInTheDocument();
@@ -110,7 +113,7 @@ describe("JobSourceAdminPage schedule", () => {
 
     expect(cardScope.getByText("Status")).toBeInTheDocument();
     expect(cardScope.getByText("Desligado")).toBeInTheDocument();
-    expect(cardScope.getByText("Cron")).toBeInTheDocument();
+    expect(cardScope.getByText("Frequência")).toBeInTheDocument();
     expect(cardScope.getByText("-")).toBeInTheDocument();
     expect(cardScope.getByText("Fuso")).toBeInTheDocument();
     expect(cardScope.getByText("America/Sao_Paulo")).toBeInTheDocument();

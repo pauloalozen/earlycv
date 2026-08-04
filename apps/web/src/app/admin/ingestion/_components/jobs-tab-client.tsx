@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
   AdminPagination,
@@ -23,7 +23,11 @@ type IngestionJobRow = {
   scopeType: ScopeType | null;
   adapterType: string | null;
   jobSourceId: string | null;
-  jobSource: { id: string; sourceName: string; company: { name: string } } | null;
+  jobSource: {
+    id: string;
+    sourceName: string;
+    company: { name: string };
+  } | null;
   scheduleType: ScheduleType;
   scheduleHour: number | null;
   scheduleMinute: number;
@@ -152,13 +156,17 @@ function CreateJobModal({
   const [scheduleHour, setScheduleHour] = useState("7");
   const [scheduleMinute, setScheduleMinute] = useState("0");
   const [scheduleInterval, setScheduleInterval] = useState("6");
-  const [scheduleDaysOfWeek, setScheduleDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [scheduleDaysOfWeek, setScheduleDaysOfWeek] = useState<number[]>([
+    1, 2, 3, 4, 5,
+  ]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function toggleDay(day: number) {
     setScheduleDaysOfWeek((days) =>
-      days.includes(day) ? days.filter((d) => d !== day) : [...days, day].sort(),
+      days.includes(day)
+        ? days.filter((d) => d !== day)
+        : [...days, day].sort(),
     );
   }
 
@@ -262,11 +270,23 @@ function CreateJobModal({
           Criar job
         </h3>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 16 }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
+            marginTop: 16,
+          }}
+        >
           <div>
             <label
               htmlFor="job-name"
-              style={{ color: AT.muted, display: "block", fontSize: 11.5, marginBottom: 4 }}
+              style={{
+                color: AT.muted,
+                display: "block",
+                fontSize: 11.5,
+                marginBottom: 4,
+              }}
             >
               Nome do job
             </label>
@@ -280,9 +300,18 @@ function CreateJobModal({
           </div>
 
           <div>
-            <p style={{ color: AT.muted, fontSize: 11.5, marginBottom: 4 }}>Tipo</p>
+            <p style={{ color: AT.muted, fontSize: 11.5, marginBottom: 4 }}>
+              Tipo
+            </p>
             <div style={{ display: "flex", gap: 16 }}>
-              <label style={{ alignItems: "center", display: "flex", fontSize: 12.5, gap: 6 }}>
+              <label
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  fontSize: 12.5,
+                  gap: 6,
+                }}
+              >
                 <input
                   checked={jobType === "CRAWL"}
                   name="jobType"
@@ -291,7 +320,14 @@ function CreateJobModal({
                 />
                 Crawl (ingestão de vagas)
               </label>
-              <label style={{ alignItems: "center", display: "flex", fontSize: 12.5, gap: 6 }}>
+              <label
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  fontSize: 12.5,
+                  gap: 6,
+                }}
+              >
                 <input
                   checked={jobType === "ENRICHMENT"}
                   name="jobType"
@@ -305,9 +341,18 @@ function CreateJobModal({
 
           {jobType === "CRAWL" && (
             <div>
-              <p style={{ color: AT.muted, fontSize: 11.5, marginBottom: 4 }}>Escopo</p>
+              <p style={{ color: AT.muted, fontSize: 11.5, marginBottom: 4 }}>
+                Escopo
+              </p>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <label style={{ alignItems: "center", display: "flex", fontSize: 12.5, gap: 8 }}>
+                <label
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    fontSize: 12.5,
+                    gap: 8,
+                  }}
+                >
                   <input
                     checked={scopeType === "ADAPTER"}
                     name="scopeType"
@@ -328,19 +373,35 @@ function CreateJobModal({
                     </select>
                   )}
                 </label>
-                <label style={{ alignItems: "center", display: "flex", fontSize: 12.5, gap: 8 }}>
-                  <input
-                    checked={scopeType === "SOURCE"}
-                    name="scopeType"
-                    onChange={() => setScopeType("SOURCE")}
-                    type="radio"
-                  />
-                  Fonte específica
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  <label
+                    style={{
+                      alignItems: "center",
+                      display: "flex",
+                      fontSize: 12.5,
+                      gap: 8,
+                    }}
+                  >
+                    <input
+                      checked={scopeType === "SOURCE"}
+                      name="scopeType"
+                      onChange={() => setScopeType("SOURCE")}
+                      type="radio"
+                    />
+                    Fonte específica
+                  </label>
                   {scopeType === "SOURCE" && (
                     <select
-                      className="h-8 rounded-md border px-2 text-[12.5px]"
+                      className="h-8 w-full rounded-md border px-2 text-[12.5px]"
                       onChange={(e) => setJobSourceId(e.target.value)}
-                      style={fieldStyle}
+                      style={{
+                        ...fieldStyle,
+                        marginLeft: 24,
+                        maxWidth: "calc(100% - 24px)",
+                        minWidth: 0,
+                      }}
                       value={jobSourceId}
                     >
                       <option value="">selecione...</option>
@@ -351,8 +412,15 @@ function CreateJobModal({
                       ))}
                     </select>
                   )}
-                </label>
-                <label style={{ alignItems: "center", display: "flex", fontSize: 12.5, gap: 8 }}>
+                </div>
+                <label
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    fontSize: 12.5,
+                    gap: 8,
+                  }}
+                >
                   <input
                     checked={scopeType === "ALL"}
                     name="scopeType"
@@ -366,9 +434,18 @@ function CreateJobModal({
           )}
 
           <div>
-            <p style={{ color: AT.muted, fontSize: 11.5, marginBottom: 4 }}>Frequência</p>
+            <p style={{ color: AT.muted, fontSize: 11.5, marginBottom: 4 }}>
+              Frequência
+            </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <label style={{ alignItems: "center", display: "flex", fontSize: 12.5, gap: 8 }}>
+              <label
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  fontSize: 12.5,
+                  gap: 8,
+                }}
+              >
                 <input
                   checked={scheduleType === "MANUAL"}
                   name="scheduleType"
@@ -377,7 +454,14 @@ function CreateJobModal({
                 />
                 Manual (só disparo manual)
               </label>
-              <label style={{ alignItems: "center", display: "flex", fontSize: 12.5, gap: 8 }}>
+              <label
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  fontSize: 12.5,
+                  gap: 8,
+                }}
+              >
                 <input
                   checked={scheduleType === "DAILY"}
                   name="scheduleType"
@@ -409,14 +493,21 @@ function CreateJobModal({
                   </>
                 )}
               </label>
-              <label style={{ alignItems: "center", display: "flex", fontSize: 12.5, gap: 8 }}>
+              <label
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  fontSize: 12.5,
+                  gap: 8,
+                }}
+              >
                 <input
                   checked={scheduleType === "EVERY_N_HOURS"}
                   name="scheduleType"
                   onChange={() => setScheduleType("EVERY_N_HOURS")}
                   type="radio"
                 />
-                A cada
+                <span>A cada</span>{" "}
                 {scheduleType === "EVERY_N_HOURS" && (
                   <input
                     className="h-8 w-16 rounded-md border px-2 text-[12.5px]"
@@ -427,10 +518,17 @@ function CreateJobModal({
                     type="number"
                     value={scheduleInterval}
                   />
-                )}
-                horas
+                )}{" "}
+                <span>horas</span>
               </label>
-              <label style={{ alignItems: "center", display: "flex", fontSize: 12.5, gap: 8 }}>
+              <label
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  fontSize: 12.5,
+                  gap: 8,
+                }}
+              >
                 <input
                   checked={scheduleType === "WEEKLY"}
                   name="scheduleType"
@@ -469,10 +567,14 @@ function CreateJobModal({
                       key={label}
                       onClick={() => toggleDay(day)}
                       style={{
-                        background: scheduleDaysOfWeek.includes(day) ? AT.ink : AT.faint,
+                        background: scheduleDaysOfWeek.includes(day)
+                          ? AT.ink
+                          : AT.faint,
                         border: "none",
                         borderRadius: 6,
-                        color: scheduleDaysOfWeek.includes(day) ? "white" : AT.muted,
+                        color: scheduleDaysOfWeek.includes(day)
+                          ? "white"
+                          : AT.muted,
                         cursor: "pointer",
                         fontSize: 11,
                         padding: "4px 8px",
@@ -487,11 +589,16 @@ function CreateJobModal({
             </div>
           </div>
 
-          {error && (
-            <p style={{ color: "#b91c1c", fontSize: 12.5 }}>{error}</p>
-          )}
+          {error && <p style={{ color: "#b91c1c", fontSize: 12.5 }}>{error}</p>}
 
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              justifyContent: "flex-end",
+              marginTop: 8,
+            }}
+          >
             <button
               className={buttonVariants({ size: "sm", variant: "outline" })}
               onClick={onClose}
@@ -528,6 +635,7 @@ export function JobsTabClient({
   const [runsPage, setRunsPage] = useState(1);
   const [runsJobFilter, setRunsJobFilter] = useState("");
   const [runsStatusFilter, setRunsStatusFilter] = useState("");
+  const historyRef = useRef<HTMLDivElement>(null);
 
   const fetchJobs = useCallback(async () => {
     setLoadingJobs(true);
@@ -546,9 +654,12 @@ export function JobsTabClient({
       const qs = new URLSearchParams({ page: String(page), pageSize: "20" });
       if (runsJobFilter) qs.set("jobId", runsJobFilter);
       if (runsStatusFilter) qs.set("status", runsStatusFilter);
-      const res = await fetch(`/api/admin/ingestion/ingestion-jobs/runs?${qs}`, {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/admin/ingestion/ingestion-jobs/runs?${qs}`,
+        {
+          cache: "no-store",
+        },
+      );
       if (res.ok) setRunsResult(await res.json());
     },
     [runsJobFilter, runsStatusFilter],
@@ -587,6 +698,12 @@ export function JobsTabClient({
     }
   }
 
+  function handleShowLogs(id: string) {
+    setRunsJobFilter(id);
+    setRunsPage(1);
+    historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Excluir o job "${name}"? Essa ação não pode ser desfeita.`)) {
       return;
@@ -609,7 +726,13 @@ export function JobsTabClient({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between" }}>
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
           <h2 style={{ color: AT.ink, fontSize: 15, fontWeight: 600 }}>Jobs</h2>
           <button
             className={buttonVariants({ size: "sm" })}
@@ -629,7 +752,7 @@ export function JobsTabClient({
               <AdminTh w={200}>Frequência</AdminTh>
               <AdminTh w={140}>Próxima execução</AdminTh>
               <AdminTh w={90}>Status</AdminTh>
-              <AdminTh w={140} align="right">
+              <AdminTh w={260} align="right">
                 Ações
               </AdminTh>
             </tr>
@@ -637,7 +760,14 @@ export function JobsTabClient({
           <tbody>
             {!loadingJobs && jobs.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ color: AT.muted, padding: "32px 16px", textAlign: "center" }}>
+                <td
+                  colSpan={7}
+                  style={{
+                    color: AT.muted,
+                    padding: "32px 16px",
+                    textAlign: "center",
+                  }}
+                >
                   Nenhum job cadastrado.
                 </td>
               </tr>
@@ -650,34 +780,66 @@ export function JobsTabClient({
                 </AdminTd>
                 <AdminTd muted>{scopeLabel(job)}</AdminTd>
                 <AdminTd muted>{frequencyLabel(job)}</AdminTd>
-                <AdminTd mono muted>{formatDateTime(job.nextRunAt)}</AdminTd>
+                <AdminTd mono muted>
+                  {formatDateTime(job.nextRunAt)}
+                </AdminTd>
                 <AdminTd>
                   <AdminPill mono tone={job.isEnabled ? "ok" : "neutral"}>
                     {job.isEnabled ? "ativo" : "inativo"}
                   </AdminPill>
                 </AdminTd>
                 <AdminTd align="right">
-                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      justifyContent: "flex-end",
+                    }}
+                  >
                     <button
-                      className={buttonVariants({ size: "sm", variant: "outline" })}
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
                       disabled={pendingJobId === job.id}
                       onClick={() => handleToggle(job.id)}
+                      style={{ whiteSpace: "nowrap" }}
                       type="button"
                     >
                       {job.isEnabled ? "Pausar" : "Ativar"}
                     </button>
                     <button
-                      className={buttonVariants({ size: "sm", variant: "outline" })}
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
                       disabled={pendingJobId === job.id}
                       onClick={() => handleRunNow(job.id)}
+                      style={{ whiteSpace: "nowrap" }}
                       type="button"
                     >
                       Rodar agora
                     </button>
                     <button
-                      className={buttonVariants({ size: "sm", variant: "outline" })}
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
+                      onClick={() => handleShowLogs(job.id)}
+                      style={{ whiteSpace: "nowrap" }}
+                      type="button"
+                    >
+                      Logs
+                    </button>
+                    <button
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
                       disabled={pendingJobId === job.id}
                       onClick={() => handleDelete(job.id, job.name)}
+                      style={{ whiteSpace: "nowrap" }}
                       type="button"
                     >
                       Excluir
@@ -690,7 +852,10 @@ export function JobsTabClient({
         </AdminTable>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div
+        ref={historyRef}
+        style={{ display: "flex", flexDirection: "column", gap: 12 }}
+      >
         <h2 style={{ color: AT.ink, fontSize: 15, fontWeight: 600 }}>
           Histórico de execuções
         </h2>
@@ -702,7 +867,11 @@ export function JobsTabClient({
               setRunsJobFilter(e.target.value);
               setRunsPage(1);
             }}
-            style={{ background: AT.card, borderColor: AT.border, color: AT.ink2 }}
+            style={{
+              background: AT.card,
+              borderColor: AT.border,
+              color: AT.ink2,
+            }}
             value={runsJobFilter}
           >
             <option value="">Todos os jobs</option>
@@ -718,7 +887,11 @@ export function JobsTabClient({
               setRunsStatusFilter(e.target.value);
               setRunsPage(1);
             }}
-            style={{ background: AT.card, borderColor: AT.border, color: AT.ink2 }}
+            style={{
+              background: AT.card,
+              borderColor: AT.border,
+              color: AT.ink2,
+            }}
             value={runsStatusFilter}
           >
             <option value="">Todos os status</option>
@@ -748,7 +921,14 @@ export function JobsTabClient({
           <tbody>
             {(runsResult?.runs.length ?? 0) === 0 && (
               <tr>
-                <td colSpan={8} style={{ color: AT.muted, padding: "32px 16px", textAlign: "center" }}>
+                <td
+                  colSpan={8}
+                  style={{
+                    color: AT.muted,
+                    padding: "32px 16px",
+                    textAlign: "center",
+                  }}
+                >
                   Nenhuma execução registrada.
                 </td>
               </tr>
@@ -756,12 +936,18 @@ export function JobsTabClient({
             {runsResult?.runs.map((run) => (
               <tr key={run.id}>
                 <AdminTd>{run.job?.name ?? "—"}</AdminTd>
-                <AdminTd mono muted>{run.job?.jobType ?? "—"}</AdminTd>
+                <AdminTd mono muted>
+                  {run.job?.jobType ?? "—"}
+                </AdminTd>
                 <AdminTd mono muted>
                   {run.triggeredBy === "SCHEDULE" ? "schedule" : "manual"}
                 </AdminTd>
-                <AdminTd mono muted>{formatDateTime(run.startedAt)}</AdminTd>
-                <AdminTd mono muted>{formatDateTime(run.finishedAt)}</AdminTd>
+                <AdminTd mono muted>
+                  {formatDateTime(run.startedAt)}
+                </AdminTd>
+                <AdminTd mono muted>
+                  {formatDateTime(run.finishedAt)}
+                </AdminTd>
                 <AdminTd>
                   <AdminPill mono tone={RUN_STATUS_TONE[run.status]}>
                     {run.status}
@@ -775,7 +961,10 @@ export function JobsTabClient({
                 <AdminTd align="right">
                   {run.batchRunId ? (
                     <Link
-                      className={buttonVariants({ size: "sm", variant: "outline" })}
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
                       href={`/admin/ingestion/manual/${run.batchRunId}`}
                     >
                       Ver
@@ -789,7 +978,9 @@ export function JobsTabClient({
           </tbody>
         </AdminTable>
 
-        <AdminPagination summary={`página ${runsPage} de ${totalRunsPages} · ${total} execuções`}>
+        <AdminPagination
+          summary={`página ${runsPage} de ${totalRunsPages} · ${total} execuções`}
+        >
           {runsPage > 1 && (
             <button
               className={buttonVariants({ size: "sm", variant: "outline" })}
