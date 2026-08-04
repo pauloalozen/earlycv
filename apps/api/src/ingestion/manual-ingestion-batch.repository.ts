@@ -57,6 +57,11 @@ export class ManualIngestionBatchRepository {
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
 
+  // scheduleEnabled=true e o unico jeito do admin dizer "essa fonte
+  // participa de jobs em lote" — sem esse filtro, um job de escopo
+  // ADAPTER pegava TODAS as fontes isActive daquele tipo (ex: as 79 do
+  // gupy) mesmo quando so 2 estavam com o toggle ligado na aba Fontes,
+  // desperdicando processamento nas 77 restantes so pra pula-las depois.
   async createAdapterBatchRun(input: CreateAdapterBatchRunInput) {
     try {
       return this.database.$transaction(async (tx) => {
@@ -64,6 +69,7 @@ export class ManualIngestionBatchRepository {
           where: {
             isActive: true,
             OR: [{ pausedUntil: null }, { pausedUntil: { lte: new Date() } }],
+            scheduleEnabled: true,
             sourceType: input.adapterType,
           },
           select: {
@@ -111,10 +117,8 @@ export class ManualIngestionBatchRepository {
     }
   }
 
-  // Mirrors createAdapterBatchRun, but scoped to every scheduleEnabled
-  // source across all adapters — this is what "run like the automatic
-  // scheduler would" means: only sources someone opted into scheduling,
-  // skipping ones currently paused by the 403 circuit breaker.
+  // Mirrors createAdapterBatchRun, but without the sourceType filter —
+  // every scheduleEnabled source across every adapter, not just one.
   async createGlobalBatchRun(input: CreateGlobalBatchRunInput) {
     try {
       return this.database.$transaction(async (tx) => {

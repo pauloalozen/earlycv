@@ -13,6 +13,7 @@ test("repository creates adapter batch with queued items", async () => {
   };
 
   let createManyPayload: Array<Record<string, unknown>> = [];
+  let capturedSourceWhere: Record<string, unknown> | undefined;
   const tx = {
     ingestionBatchRun: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
@@ -22,22 +23,25 @@ test("repository creates adapter batch with queued items", async () => {
       },
     },
     jobSource: {
-      findMany: async () => [
-        {
-          id: "source-1",
-          companyId: "company-1",
-          company: { name: "Company 1" },
-          sourceName: "Source 1",
-          sourceType: "gupy",
-        },
-        {
-          id: "source-2",
-          companyId: "company-2",
-          company: { name: "Company 2" },
-          sourceName: "Source 2",
-          sourceType: "gupy",
-        },
-      ],
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        capturedSourceWhere = where;
+        return [
+          {
+            id: "source-1",
+            companyId: "company-1",
+            company: { name: "Company 1" },
+            sourceName: "Source 1",
+            sourceType: "gupy",
+          },
+          {
+            id: "source-2",
+            companyId: "company-2",
+            company: { name: "Company 2" },
+            sourceName: "Source 2",
+            sourceType: "gupy",
+          },
+        ];
+      },
     },
     ingestionBatchItem: {
       createMany: async ({
@@ -65,6 +69,11 @@ test("repository creates adapter batch with queued items", async () => {
   assert.equal(result.status, "queued");
   assert.equal(result.totalSources, 2);
   assert.equal(createManyPayload.length, 2);
+  assert.equal(
+    capturedSourceWhere?.scheduleEnabled,
+    true,
+    "escopo ADAPTER so deve pegar fontes com o toggle de agendamento ligado",
+  );
 });
 
 test("repository lists runs with optional filters", async () => {
