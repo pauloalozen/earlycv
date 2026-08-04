@@ -32,6 +32,7 @@ async function main() {
       prisma.ingestionBatchItem.deleteMany(),
       prisma.ingestionBatchRun.deleteMany(),
       prisma.ingestionRun.deleteMany(),
+      prisma.enrichmentBatchRun.deleteMany(),
       prisma.jobEnrichment.deleteMany(),
       prisma.job.deleteMany(),
       prisma.crawlerDiscardedTitle.deleteMany(),
