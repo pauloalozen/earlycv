@@ -237,7 +237,10 @@ export class GupyAdapter implements IngestionSourceAdapter {
     }
 
     const boardHtml = await boardResponse.text();
-    const boardData = this.extractNextData<GupyDetailPayload>(boardHtml);
+    const boardData = this.extractNextData<GupyDetailPayload>(
+      boardHtml,
+      boardUrl,
+    );
     const boardJobs = boardData.props?.pageProps?.jobs ?? [];
     const observations: NormalizedJobObservation[] = [];
 
@@ -292,6 +295,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
               externalJobId: String(boardJob.id),
               filterReason: filterDecision.reason,
               filterVersion: filterDecision.configVersion,
+              ingestionRunId: context?.ingestionRunId,
               jobSourceId,
               normalizedTitle,
               title: boardJob.title ?? `Gupy job ${String(boardJob.id)}`,
@@ -318,7 +322,10 @@ export class GupyAdapter implements IngestionSourceAdapter {
         }
 
         const detailHtml = await detailResponse.text();
-        const detailData = this.extractNextData<GupyDetailPayload>(detailHtml);
+        const detailData = this.extractNextData<GupyDetailPayload>(
+          detailHtml,
+          detailUrl,
+        );
         const detailJob = detailData.props?.pageProps?.job;
 
         if (!detailJob) {
@@ -372,6 +379,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
     externalJobId: string;
     filterReason: string;
     filterVersion: string;
+    ingestionRunId?: string;
     jobSourceId: string;
     normalizedTitle: string;
     title: string;
@@ -384,6 +392,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
           externalJobId: data.externalJobId,
           filterReason: data.filterReason,
           filterVersion: data.filterVersion,
+          ingestionRunId: data.ingestionRunId,
           jobSourceId: data.jobSourceId,
           normalizedTitle: data.normalizedTitle,
           title: data.title,
@@ -392,6 +401,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
           discardedAt: new Date(),
           filterReason: data.filterReason,
           filterVersion: data.filterVersion,
+          ingestionRunId: data.ingestionRunId,
         },
       });
     } catch (error) {
@@ -416,16 +426,29 @@ export class GupyAdapter implements IngestionSourceAdapter {
     return fetch(url, requestInit);
   }
 
-  private extractNextData<T>(html: string): T {
+  private extractNextData<T>(html: string, sourceUrl: string): T {
+    // Atributos do <script id="__NEXT_DATA__"> variam (a Gupy passou a
+    // adicionar nonce de CSP em ago/2026, quebrando um match exato em
+    // type="application/json">); [^>]* tolera qualquer atributo extra,
+    // em qualquer ordem, entre a abertura da tag e o >.
     const match = html.match(
-      /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/,
+      /<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/,
     );
 
     if (!match?.[1]) {
-      throw new Error("Unable to parse Gupy __NEXT_DATA__ payload");
+      const snippet = html.slice(0, 200).replace(/\s+/g, " ").trim();
+      throw new Error(
+        `Unable to find Gupy __NEXT_DATA__ script tag at ${sourceUrl} (html length ${html.length}, starts with: "${snippet}")`,
+      );
     }
 
-    return JSON.parse(match[1]) as T;
+    try {
+      return JSON.parse(match[1]) as T;
+    } catch (error) {
+      throw new Error(
+        `Unable to parse Gupy __NEXT_DATA__ JSON at ${sourceUrl}: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+    }
   }
 
   private toObservation(

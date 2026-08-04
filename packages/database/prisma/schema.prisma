@@ -978,9 +978,9 @@ model JobSource {
 }
 
 model CrawlerDiscardedTitle {
-  id              String    @id @default(cuid())
+  id              String        @id @default(cuid())
   jobSourceId     String
-  jobSource       JobSource @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  jobSource       JobSource     @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
 
   title           String
   normalizedTitle String
@@ -990,6 +990,13 @@ model CrawlerDiscardedTitle {
   filterReason    String
   filterVersion   String
 
+  // Run em que o titulo foi descartado (ou re-descartado, no re-crawl) —
+  // canonicalKey e @unique, entao upsert atualiza esse campo a cada
+  // ocorrencia, permitindo contar "descartados por essa run" sem depender
+  // de janela de tempo.
+  ingestionRunId String?
+  ingestionRun    IngestionRun? @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
+
   discardedAt     DateTime  @default(now())
   whitelistedAt   DateTime?
 
@@ -997,6 +1004,7 @@ model CrawlerDiscardedTitle {
   @@index([jobSourceId])
   @@index([filterReason])
   @@index([discardedAt])
+  @@index([ingestionRunId])
 }
 
 model IngestionSchedulerConfig {
@@ -1043,6 +1051,7 @@ model IngestionRun {
   updatedAt           DateTime             @updatedAt
   jobSource           JobSource            @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
   ingestionBatchItems IngestionBatchItem[]
+  crawlerDiscardedTitles CrawlerDiscardedTitle[]
 
   @@index([jobSourceId, createdAt])
 }

@@ -29,6 +29,13 @@ const LOCK_TTL_MS = 5 * 60_000;
 const LOCK_RETRY_ATTEMPTS = 6;
 const LOCK_RETRY_DELAY_MS = 500;
 
+// processItem marca PROCESSING antes de chamar o LLM. Se o processo morrer
+// no meio disso (deploy, restart, OOM) o registro fica preso em PROCESSING
+// pra sempre, porque o batch so busca PENDING. Qualquer PROCESSING mais
+// velho que esse limite e tratado como orfao e volta pra fila (ou FAILED,
+// se ja esgotou attempts).
+const STALE_PROCESSING_THRESHOLD_MS = 10 * 60_000;
+
 // Tick base fixo do NestJS @Cron: precisa ser mais fino que o menor
 // enrichmentCronExpression configuravel em banco (default "*/10 * * * * *")
 // pra doesSecondsCronMatchDate ter chance de casar. O intervalo real
@@ -203,6 +210,8 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     }
 
     try {
+      await this.recoverStaleProcessing();
+
       const config = await this.enrichmentConfigService.getConfig();
       const pending = await this.database.jobEnrichment.findMany({
         where: { enrichmentStatus: "PENDING" },
@@ -227,6 +236,34 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
       return pending.length;
     } finally {
       await this.lockRepository.release(LOCK_ID, owner);
+    }
+  }
+
+  private async recoverStaleProcessing() {
+    const staleThreshold = new Date(Date.now() - STALE_PROCESSING_THRESHOLD_MS);
+    const stuck = await this.database.jobEnrichment.findMany({
+      where: { enrichmentStatus: "PROCESSING" },
+    });
+
+    for (const item of stuck) {
+      if (item.updatedAt >= staleThreshold) continue;
+
+      const attempts = item.attempts + 1;
+      const failed = attempts >= this.maxAttempts;
+
+      this.logger.warn(
+        `job enrichment ${item.id} recovered from stale PROCESSING (attempt ${attempts})`,
+      );
+
+      await this.database.jobEnrichment.update({
+        where: { id: item.id },
+        data: {
+          attempts,
+          enrichmentError:
+            "stale PROCESSING recuperado pelo worker (processo provavelmente reiniciado durante o enriquecimento)",
+          enrichmentStatus: failed ? "FAILED" : "PENDING",
+        },
+      });
     }
   }
 

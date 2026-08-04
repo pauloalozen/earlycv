@@ -30,6 +30,7 @@ export class IngestionSchedulerService {
       return;
     }
 
+    await this.ingestionService.recoverStaleRuns();
     await this.runSourceSchedules();
     await this.runGlobalScheduleIfDue();
   }

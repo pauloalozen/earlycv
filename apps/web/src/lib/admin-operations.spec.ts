@@ -86,6 +86,7 @@ test("buildPendingItems derives continuity actions for companies and sources", (
         id: "src_2",
         ingestionRuns: [
           {
+            errorSummary: null,
             failedCount: 1,
             finishedAt: "2026-03-31T20:10:00.000Z",
             id: "run_1",

@@ -58,6 +58,7 @@ export type IngestionCollectContext = {
   getExistingJobByCanonicalKey(
     canonicalKey: string,
   ): Promise<{ lastSeenAt: Date | null } | null>;
+  ingestionRunId?: string;
 };
 
 export type IngestionSourceAdapter = {
@@ -92,6 +93,7 @@ export type JobSourceContext = Pick<
 export type IngestionRunSummary = {
   companyId?: string;
   companyName?: string;
+  discardedByFilterCount?: number;
   errorSummary?: string | null;
   failedCount: number;
   finishedAt: string | null;

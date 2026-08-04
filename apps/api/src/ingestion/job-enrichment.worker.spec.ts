@@ -13,6 +13,7 @@ type EnrichmentRecord = {
   semanticFilterReason: string | null;
   semanticFilterResult: string;
   semanticFilterVersion: string | null;
+  updatedAt: Date;
 } & Partial<JobEnrichmentLlmResult> & {
     enrichedAt?: Date | null;
     enrichmentModel?: string | null;
@@ -64,7 +65,7 @@ function createFixture() {
       }) => {
         const current = enrichments.get(where.id);
         assert.ok(current, `enrichment ${where.id} must exist`);
-        const next = { ...current, ...data };
+        const next = { ...current, ...data, updatedAt: new Date() };
         enrichments.set(where.id, next);
         return next;
       },
@@ -131,6 +132,7 @@ function createFixture() {
       semanticFilterReason: null,
       semanticFilterResult: "PENDING",
       semanticFilterVersion: null,
+      updatedAt: new Date(),
       ...overrides,
     };
     enrichments.set(id, record);
@@ -339,6 +341,58 @@ test("JobEnrichmentWorker.processPendingBatch respects enrichmentBatchSize from 
 
   assert.equal(processed, 1);
   assert.equal(fixture.getEnrichCalls(), 1);
+});
+
+test("JobEnrichmentWorker.processPendingBatch recovers a stale PROCESSING enrichment back to PENDING", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment({
+    attempts: 0,
+    enrichmentStatus: "PROCESSING",
+    id: "stuck",
+    updatedAt: new Date(Date.now() - 60 * 60_000),
+  });
+
+  await fixture.worker.processPendingBatch();
+
+  const record = fixture.enrichments.get("stuck");
+  assert.equal(record?.enrichmentStatus, "COMPLETED");
+  assert.equal(fixture.getEnrichCalls(), 1);
+});
+
+test("JobEnrichmentWorker.processPendingBatch marks a stale PROCESSING enrichment FAILED once attempts are exhausted", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment({
+    attempts: 2,
+    enrichmentStatus: "PROCESSING",
+    id: "stuck",
+    updatedAt: new Date(Date.now() - 60 * 60_000),
+  });
+
+  await fixture.worker.processPendingBatch();
+
+  const record = fixture.enrichments.get("stuck");
+  assert.equal(record?.enrichmentStatus, "FAILED");
+  assert.equal(record?.attempts, 3);
+  assert.equal(fixture.getEnrichCalls(), 0);
+});
+
+test("JobEnrichmentWorker.processPendingBatch leaves a recently-updated PROCESSING enrichment untouched", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment({
+    attempts: 0,
+    enrichmentStatus: "PROCESSING",
+    id: "in-flight",
+    updatedAt: new Date(),
+  });
+
+  await fixture.worker.processPendingBatch();
+
+  const record = fixture.enrichments.get("in-flight");
+  assert.equal(record?.enrichmentStatus, "PROCESSING");
+  assert.equal(fixture.getEnrichCalls(), 0);
 });
 
 test("JobEnrichmentWorker.processOne processes the targeted job regardless of queue order", async () => {

@@ -118,7 +118,7 @@ export default async function IngestionRunDetailPage({
             </Link>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <Card className="space-y-2">
               <p className="text-[11px] font-medium text-stone-400">status</p>
               <p className="text-sm font-medium text-stone-900">{run.status}</p>
@@ -138,12 +138,31 @@ export default async function IngestionRunDetailPage({
               </p>
             </Card>
             <Card className="space-y-2">
+              <p className="text-[11px] font-medium text-stone-400">
+                descartadas pelo crawler
+              </p>
+              <p className="text-sm font-medium text-stone-900">
+                {run.discardedByFilterCount ?? 0}
+              </p>
+            </Card>
+            <Card className="space-y-2">
               <p className="text-[11px] font-medium text-stone-400">falhas</p>
               <p className="text-sm font-medium text-stone-900">
                 {run.failedCount}
               </p>
             </Card>
           </div>
+
+          {run.errorSummary ? (
+            <Card className="space-y-2 border-red-200 bg-red-50">
+              <p className="text-[11px] font-medium text-red-500">
+                erro da run
+              </p>
+              <p className="whitespace-pre-wrap font-mono text-[12.5px] leading-6 text-red-700">
+                {run.errorSummary}
+              </p>
+            </Card>
+          ) : null}
 
           {enrichmentSummary && enrichmentSummary.total > 0 ? (
             <Card className="space-y-2">

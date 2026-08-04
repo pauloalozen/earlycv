@@ -135,6 +135,8 @@ export type CsvImportReport = {
 };
 
 export type IngestionRunSummary = {
+  discardedByFilterCount?: number;
+  errorSummary: string | null;
   failedCount: number;
   finishedAt: string | null;
   id: string;

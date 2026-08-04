@@ -52,6 +52,7 @@ function createIngestionServiceFixture(options?: {
         createdAt: new Date("2026-06-01T12:00:00.000Z"),
       }),
       findFirst: async () => null,
+      findMany: async () => [],
       update: async ({ data }: { data: Record<string, unknown> }) => ({
         id: "run-1",
         jobSourceId: "source-1",
@@ -372,6 +373,63 @@ test("IngestionService blocks starting a second run while one is running", async
   await moduleRef.close();
 });
 
+test("IngestionService recovers a stale running run and lets a new run start", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const company = await database.company.create({
+    data: {
+      name: "Stale Run Co",
+      normalizedName: `stale-run-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "html",
+      parserKey: "custom_html",
+      sourceName: "Stale Run Source",
+      sourceType: "custom_html",
+      sourceUrl: `https://stale.example.com/${randomUUID()}`,
+    },
+  });
+
+  const staleRun = await database.ingestionRun.create({
+    data: {
+      jobSourceId: jobSource.id,
+      startedAt: new Date(Date.now() - 60 * 60_000),
+      status: "running",
+    },
+  });
+
+  const result = await service.runJobSource(jobSource.id);
+
+  assert.equal(result.status, "completed");
+
+  const recovered = await database.ingestionRun.findUnique({
+    where: { id: staleRun.id },
+  });
+  assert.equal(recovered?.status, "failed");
+  assert.ok(recovered?.finishedAt);
+  assert.match(recovered?.errorSummary ?? "", /stale run/);
+
+  await database.ingestionRun.deleteMany({
+    where: { jobSourceId: jobSource.id },
+  });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
+});
+
 test("IngestionService marks stale jobs inactive after fully successful run", async () => {
   const fixture = createIngestionServiceFixture({
     observations: [{ canonicalKey: "job-a" }],
@@ -607,6 +665,97 @@ test("IngestionService.getRun attaches enrichment info to preview items", async 
   );
 
   await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
+});
+
+test("IngestionService.getRun reports how many titles the crawler filter discarded during that run", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const company = await database.company.create({
+    data: {
+      name: "Discard Count Co",
+      normalizedName: `discard-count-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "api",
+      parserKey: "gupy",
+      sourceName: "Discard Count Source",
+      sourceType: "gupy",
+      sourceUrl: `https://discard-count.gupy.io/${randomUUID()}`,
+    },
+  });
+  const run = await database.ingestionRun.create({
+    data: {
+      finishedAt: new Date(),
+      jobSourceId: jobSource.id,
+      status: "completed",
+    },
+  });
+  const otherRun = await database.ingestionRun.create({
+    data: {
+      finishedAt: new Date(),
+      jobSourceId: jobSource.id,
+      status: "completed",
+    },
+  });
+
+  await database.crawlerDiscardedTitle.createMany({
+    data: [
+      {
+        canonicalKey: `gupy:discard-count:${randomUUID()}`,
+        filterReason: "noise_signal:enfermeiro",
+        filterVersion: "v1",
+        ingestionRunId: run.id,
+        jobSourceId: jobSource.id,
+        normalizedTitle: "enfermeiro plantonista",
+        title: "Enfermeiro Plantonista",
+      },
+      {
+        canonicalKey: `gupy:discard-count:${randomUUID()}`,
+        filterReason: "zona_cinza",
+        filterVersion: "v1",
+        ingestionRunId: run.id,
+        jobSourceId: jobSource.id,
+        normalizedTitle: "assistente administrativo",
+        title: "Assistente Administrativo",
+      },
+      {
+        canonicalKey: `gupy:discard-count:${randomUUID()}`,
+        filterReason: "noise_signal:vendedor",
+        filterVersion: "v1",
+        ingestionRunId: otherRun.id,
+        jobSourceId: jobSource.id,
+        normalizedTitle: "vendedor",
+        title: "Vendedor",
+      },
+    ],
+  });
+
+  const result = await service.getRun(jobSource.id, run.id);
+
+  assert.equal(result.discardedByFilterCount, 2);
+
+  await database.crawlerDiscardedTitle.deleteMany({
+    where: { jobSourceId: jobSource.id },
+  });
+  await database.ingestionRun.deleteMany({
+    where: { jobSourceId: jobSource.id },
+  });
   await database.jobSource.delete({ where: { id: jobSource.id } });
   await database.company.delete({ where: { id: company.id } });
   await moduleRef.close();

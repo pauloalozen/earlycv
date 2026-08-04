@@ -367,6 +367,52 @@ test("GupyAdapter throws typed error when board API responds 403", async () => {
   }
 });
 
+test("GupyAdapter parses __NEXT_DATA__ even when the script tag has extra attributes (CSP nonce)", async () => {
+  const boardPayload = {
+    props: { pageProps: { jobs: [] } },
+  };
+  const boardHtml = `<html><script id="__NEXT_DATA__" type="application/json" nonce="aQ8ZBYQZrslLzyHEdWd+TQ==">${JSON.stringify(boardPayload)}</script></html>`;
+  const fetchMock = createFetchMock([
+    { status: 500, json: { message: "fallback html" } },
+    { status: 200, text: boardHtml },
+  ]);
+
+  try {
+    const adapter = new GupyAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+    const observations = await adapter.collect(
+      createJobSourceContext("https://cea.gupy.io"),
+    );
+
+    assert.deepEqual(observations, []);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
+test("GupyAdapter throws an actionable error with the source URL when __NEXT_DATA__ is missing", async () => {
+  const fetchMock = createFetchMock([
+    { status: 500, json: { message: "fallback html" } },
+    { status: 200, text: "<html><body>Just a moment...</body></html>" },
+  ]);
+
+  try {
+    const adapter = new GupyAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+
+    await assert.rejects(
+      () => adapter.collect(createJobSourceContext("https://cea.gupy.io")),
+      /Unable to find Gupy __NEXT_DATA__ script tag at https:\/\/cea\.gupy\.io\/jobs/,
+    );
+  } finally {
+    fetchMock.restore();
+  }
+});
+
 test("GupyAdapter skips detail fetch for fresh job from HTML board", async () => {
   const boardPayload = {
     props: {
@@ -629,7 +675,10 @@ test("GupyAdapter discards new HTML job on noise_signal without detail-fetch", a
 
     const observations = await adapter.collect(
       createJobSourceContext("https://ifood.gupy.io"),
-      { getExistingJobByCanonicalKey: async () => null },
+      {
+        getExistingJobByCanonicalKey: async () => null,
+        ingestionRunId: "run-1",
+      },
     );
 
     assert.equal(observations.length, 0);
@@ -643,6 +692,7 @@ test("GupyAdapter discards new HTML job on noise_signal without detail-fetch", a
         externalJobId: "201",
         filterReason: "noise_signal:enfermeiro",
         filterVersion: "v1",
+        ingestionRunId: "run-1",
         jobSourceId: "job-source-id",
         normalizedTitle: "enfermeiro plantonista",
         title: "Enfermeiro Plantonista",
@@ -651,6 +701,7 @@ test("GupyAdapter discards new HTML job on noise_signal without detail-fetch", a
         discardedAt: upsertCalls[0]?.update?.discardedAt,
         filterReason: "noise_signal:enfermeiro",
         filterVersion: "v1",
+        ingestionRunId: "run-1",
       },
     });
   } finally {

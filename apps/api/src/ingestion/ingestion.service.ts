@@ -37,6 +37,15 @@ type IngestionRunRecord = IngestionRun & {
   previewJson: IngestionPreviewItem[] | null;
 };
 
+// runJobSource cria o IngestionRun com status "running" e so o fecha
+// (completed/failed) no fim do try/catch. Se o processo morrer no meio
+// disso (restart do nest --watch em dev, deploy, OOM em prod) o run fica
+// preso em "running" pra sempre — e como o findFirst({status:"running"})
+// no topo de runJobSource bloqueia nova execucao pra aquela fonte, a fonte
+// fica travada ate alguem mexer no banco na mao. Qualquer run "running" ha
+// mais tempo que isso e tratado como orfao.
+const STALE_RUN_THRESHOLD_MS = 20 * 60_000;
+
 function normalizeUrl(rawUrl: string) {
   const url = new URL(rawUrl.trim());
 
@@ -92,9 +101,40 @@ export class IngestionService {
     ]);
   }
 
+  async recoverStaleRuns() {
+    const staleThreshold = new Date(Date.now() - STALE_RUN_THRESHOLD_MS);
+    const stuck = await this.database.ingestionRun.findMany({
+      where: { status: "running" },
+    });
+
+    let recovered = 0;
+    for (const run of stuck) {
+      if (run.startedAt >= staleThreshold) continue;
+
+      this.logger.warn(
+        `ingestion run ${run.id} (source ${run.jobSourceId}) recovered from stale "running"`,
+      );
+
+      await this.database.ingestionRun.update({
+        where: { id: run.id },
+        data: {
+          errorSummary:
+            "stale run recuperado pelo scheduler (processo provavelmente reiniciado durante a ingestao)",
+          failedCount: run.failedCount || 1,
+          finishedAt: new Date(),
+          status: "failed",
+        },
+      });
+      recovered += 1;
+    }
+
+    return recovered;
+  }
+
   async runJobSource(jobSourceId: string) {
     const jobSource = await this.getJobSourceContext(jobSourceId);
     this.assertJobSourceNotPaused(jobSource);
+    await this.recoverStaleRuns();
     const runningRun = await this.database.ingestionRun.findFirst({
       where: {
         jobSourceId,
@@ -119,7 +159,7 @@ export class IngestionService {
     try {
       const observations = await this.getAdapter(jobSource.sourceType).collect(
         jobSource,
-        this.createCollectContext(),
+        this.createCollectContext(run.id),
       );
       const previewItems: IngestionPreviewItem[] = [];
       let newCount = 0;
@@ -256,7 +296,7 @@ export class IngestionService {
     }
   }
 
-  private createCollectContext(): IngestionCollectContext {
+  private createCollectContext(ingestionRunId: string): IngestionCollectContext {
     return {
       getExistingJobByCanonicalKey: async (canonicalKey: string) => {
         return this.database.job.findUnique({
@@ -264,6 +304,7 @@ export class IngestionService {
           select: { lastSeenAt: true },
         });
       },
+      ingestionRunId,
     };
   }
 
@@ -325,8 +366,14 @@ export class IngestionService {
     }
 
     const summary = toRunSummary(run as IngestionRunRecord);
+    const discardedByFilterCount =
+      await this.database.crawlerDiscardedTitle.count({
+        where: { ingestionRunId: run.id },
+      });
+
     return {
       ...summary,
+      discardedByFilterCount,
       previewItems: await this.attachEnrichmentToPreviewItems(
         summary.previewItems,
       ),
