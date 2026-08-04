@@ -116,8 +116,10 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
   async runScheduledCycle(now: Date) {
     const config = await this.enrichmentConfigService.getConfig();
 
+    // Log removido de proposito — BASE_TICK_CRON roda a cada 5s, entao com
+    // o worker desligado isso poluia o log com a mesma linha repetida
+    // indefinidamente sem informacao nova.
     if (!config.enrichmentEnabled) {
-      this.logger.log("job enrichment worker is disabled, skipping tick");
       return 0;
     }
 
