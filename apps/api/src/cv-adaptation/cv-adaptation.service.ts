@@ -863,6 +863,47 @@ export class CvAdaptationService {
     };
   }
 
+  // Resolve a descrição da vaga antes de qualquer persistência — precisa
+  // rodar aqui (não dentro de analyzeAuthenticated) porque
+  // AnalysisJob.jobDescriptionText é obrigatório no schema e é gravado
+  // logo abaixo, de forma síncrona, antes do processamento assíncrono via
+  // processAnalysisJob. Se jobDescriptionText já veio preenchido, radarJobId
+  // é ignorado (texto colado manualmente sempre tem precedência).
+  private async resolveAnalysisJobDescription(
+    dto: AnalyzeCvDto,
+  ): Promise<string> {
+    if (dto.jobDescriptionText) {
+      return dto.jobDescriptionText;
+    }
+
+    if (!dto.radarJobId) {
+      throw new BadRequestException(
+        "É necessário fornecer a descrição da vaga ou um radarJobId válido.",
+      );
+    }
+
+    const job = await this.database.job.findUnique({
+      where: { id: dto.radarJobId },
+      select: { id: true, descriptionClean: true, status: true },
+    });
+
+    if (!job) {
+      throw new NotFoundException(`Vaga não encontrada: ${dto.radarJobId}`);
+    }
+
+    if (job.status !== "active") {
+      throw new BadRequestException("Esta vaga não está mais disponível.");
+    }
+
+    if (!job.descriptionClean || job.descriptionClean.length < 50) {
+      throw new BadRequestException(
+        "Esta vaga não tem descrição suficiente para análise.",
+      );
+    }
+
+    return job.descriptionClean;
+  }
+
   async startAuthenticatedAnalysisJob(
     userId: string,
     dto: AnalyzeCvDto,
@@ -881,6 +922,11 @@ export class CvAdaptationService {
     if (!turnstilePrecheck.ok) {
       throw new BadRequestException("Turnstile verification failed");
     }
+
+    // Muta o dto com o texto resolvido — analyzeAuthenticated (chamado
+    // abaixo, em background) lê dto.jobDescriptionText de novo pra sua
+    // própria validação/normalização, e precisa enxergar o mesmo valor.
+    dto.jobDescriptionText = await this.resolveAnalysisJobDescription(dto);
 
     const job = await this.database.analysisJob.create({
       data: {
@@ -1030,6 +1076,12 @@ export class CvAdaptationService {
     masterCvText: string;
     analysisCvSnapshotId: string;
   }> {
+    if (!dto.jobDescriptionText) {
+      throw new BadRequestException(
+        "É necessário fornecer a descrição da vaga ou um radarJobId válido.",
+      );
+    }
+
     const normalizedJobDescriptionText = this.validateJobDescription(
       dto.jobDescriptionText,
       {

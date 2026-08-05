@@ -69,4 +69,11 @@ export class SaveGuestPreviewDto {
   @IsOptional()
   @IsString()
   jobApplicationId?: string;
+
+  // Id de Job do Radar de Oportunidades — presente quando a análise (feita
+  // em /adaptar) veio de um clique em "Analisar meu CV" numa vaga do Radar.
+  // Usado só pra vincular a JobApplication criada/atualizada nesta chamada.
+  @IsOptional()
+  @IsString()
+  radarJobId?: string;
 }

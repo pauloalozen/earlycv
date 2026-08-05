@@ -3678,6 +3678,250 @@ test("startGuestAnalysisJob marks the job as failed when the background analysis
   );
 });
 
+// ─── startAuthenticatedAnalysisJob + radarJobId (fluxo de 1 clique) ───────────
+
+test("startAuthenticatedAnalysisJob with a valid radarJobId loads descriptionClean from the Job", async () => {
+  let createdJob: Record<string, unknown> | null = null;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => ({ rawText: "CV base" }) },
+      analysisJob: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          createdJob = { id: "job-radar-1", ...data };
+          return createdJob;
+        },
+        update: async (args: { data: Record<string, unknown> }) => args,
+      },
+      job: {
+        findUnique: async ({ where }: { where: { id: string } }) => {
+          assert.equal(where.id, "job-abc");
+          return {
+            id: "job-abc",
+            status: "active",
+            descriptionClean:
+              "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+          };
+        },
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => {
+        throw new Error("not exercised in this test");
+      },
+    },
+  );
+
+  const started = await service.startAuthenticatedAnalysisJob("user-1", {
+    masterResumeId: "resume-1",
+    radarJobId: "job-abc",
+    turnstileToken: "token",
+  });
+
+  assert.equal(started.status, "pending");
+  assert.equal(
+    (createdJob as Record<string, unknown> | null)?.jobDescriptionText,
+    "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+  );
+});
+
+test("startAuthenticatedAnalysisJob throws NotFoundException when radarJobId does not exist", async () => {
+  const service = new CvAdaptationServiceCtor(
+    { job: { findUnique: async () => null } },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    { precheckTurnstile: async () => ({ ok: true }) },
+  );
+
+  await assert.rejects(
+    service.startAuthenticatedAnalysisJob("user-1", {
+      radarJobId: "job-missing",
+      turnstileToken: "token",
+    }),
+    /Vaga não encontrada/,
+  );
+});
+
+test("startAuthenticatedAnalysisJob throws BadRequestException when the radar job is not active", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      job: {
+        findUnique: async () => ({
+          id: "job-inactive",
+          status: "closed",
+          descriptionClean: "Descricao valida e longa o suficiente para passar na validacao de tamanho.",
+        }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    { precheckTurnstile: async () => ({ ok: true }) },
+  );
+
+  await assert.rejects(
+    service.startAuthenticatedAnalysisJob("user-1", {
+      radarJobId: "job-inactive",
+      turnstileToken: "token",
+    }),
+    /não está mais disponível/,
+  );
+});
+
+test("startAuthenticatedAnalysisJob throws BadRequestException when descriptionClean is empty", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      job: {
+        findUnique: async () => ({
+          id: "job-empty-desc",
+          status: "active",
+          descriptionClean: "",
+        }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    { precheckTurnstile: async () => ({ ok: true }) },
+  );
+
+  await assert.rejects(
+    service.startAuthenticatedAnalysisJob("user-1", {
+      radarJobId: "job-empty-desc",
+      turnstileToken: "token",
+    }),
+    /não tem descrição suficiente/,
+  );
+});
+
+test("startAuthenticatedAnalysisJob prefers jobDescriptionText over radarJobId when both are present", async () => {
+  let createdJob: Record<string, unknown> | null = null;
+  let jobLookupCalled = false;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => ({ rawText: "CV base" }) },
+      analysisJob: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          createdJob = { id: "job-radar-2", ...data };
+          return createdJob;
+        },
+        update: async (args: { data: Record<string, unknown> }) => args,
+      },
+      job: {
+        findUnique: async () => {
+          jobLookupCalled = true;
+          return null;
+        },
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => {
+        throw new Error("not exercised in this test");
+      },
+    },
+  );
+
+  const started = await service.startAuthenticatedAnalysisJob("user-1", {
+    ...makeAnalyzeDto(),
+    radarJobId: "job-should-be-ignored",
+  });
+
+  assert.equal(started.status, "pending");
+  assert.equal(jobLookupCalled, false);
+  assert.equal(
+    (createdJob as Record<string, unknown> | null)?.jobDescriptionText,
+    makeAnalyzeDto().jobDescriptionText,
+  );
+});
+
+test("startAuthenticatedAnalysisJob throws BadRequestException when neither jobDescriptionText nor radarJobId are provided", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {},
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    { precheckTurnstile: async () => ({ ok: true }) },
+  );
+
+  await assert.rejects(
+    service.startAuthenticatedAnalysisJob("user-1", {
+      masterResumeId: "resume-1",
+      turnstileToken: "token",
+    }),
+    /descrição da vaga ou um radarJobId/,
+  );
+});
+
 test("getAnalysisJobStatus returns the job for its guest session owner", async () => {
   const service = new CvAdaptationServiceCtor(
     {
