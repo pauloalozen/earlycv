@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Script from "next/script";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { EcvBuildLoader, EcvScanLoader } from "@/components/ecv-loader";
 import { PageShell } from "@/components/page-shell";
@@ -24,6 +24,8 @@ import {
   buildFunnelEventIdempotencyKey,
 } from "@/lib/cv-adaptation-flow-helpers";
 import { setGuestAnalysisRaw } from "@/lib/guest-analysis-storage";
+import { getPublicJobById } from "@/lib/public-jobs-client-api";
+import type { PublicJob } from "@/lib/public-jobs-api";
 import type { MasterCvExtractionStatusDto, ResumeDto } from "@/lib/resumes-api";
 import {
   getMyMasterCvExtractionStatus,
@@ -137,9 +139,12 @@ function readTurnstileTokenFromDom() {
   return token ? token : null;
 }
 
-export default function AdaptarPage() {
+function AdaptarPageContent() {
   const turnstileSiteKey = getTurnstileSiteKey();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const jobIdParam = searchParams.get("jobId");
+  const [radarJob, setRadarJob] = useState<PublicJob | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [cvText, setCvText] = useState("");
   const [jobDescription, setJobDescription] = useState("");
@@ -361,6 +366,32 @@ export default function AdaptarPage() {
     }
   }, []);
 
+  // Fluxo de 1 clique a partir do Radar (/vagas): jobId na URL carrega a
+  // descrição da vaga automaticamente. jobId inválido ou vaga indisponível
+  // — getPublicJobById devolve null e isso vira falha silenciosa (campo
+  // segue vazio, sem banner). setJobDescription usa forma funcional pra
+  // nunca sobrescrever texto que o usuário já tenha colado/editado.
+  useEffect(() => {
+    if (!jobIdParam) {
+      return;
+    }
+
+    let cancelled = false;
+    getPublicJobById(jobIdParam).then((job) => {
+      if (cancelled || !job) {
+        return;
+      }
+      setRadarJob(job);
+      setJobDescription((current) =>
+        current.trim() ? current : job.description,
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobIdParam]);
+
   useEffect(() => {
     router.prefetch("/adaptar/resultado");
     Promise.all([
@@ -542,6 +573,9 @@ export default function AdaptarPage() {
     try {
       const formData = new FormData();
       formData.append("jobDescriptionText", jobDescription);
+      if (jobIdParam) {
+        formData.append("radarJobId", jobIdParam);
+      }
       if (isTextMode) {
         formData.append("masterCvText", cvText.trim());
       }
@@ -723,6 +757,7 @@ export default function AdaptarPage() {
             previewText: analyzeResult.previewText,
             file: file ?? undefined,
             jobApplicationId: prefillApplicationId ?? undefined,
+            radarJobId: jobIdParam ?? undefined,
           });
 
           router.push(`/adaptar/resultado?adaptationId=${saved.id}`);
@@ -896,6 +931,37 @@ export default function AdaptarPage() {
               está sendo eliminado.
             </h1>
           </div>
+
+          {/* Banner de contexto — fluxo de 1 clique a partir do Radar */}
+          {radarJob && !prefillApplicationId ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+                maxWidth: 780,
+                marginBottom: 20,
+                padding: "12px 16px",
+                background: "rgba(198,255,58,0.12)",
+                border: "1px solid rgba(10,10,10,0.08)",
+                borderRadius: 12,
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 500, color: "#0a0a0a" }}>
+                Analisando para: {radarJob.title} · {radarJob.company}
+              </div>
+              <div
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#7a7a74",
+                  letterSpacing: 0.2,
+                }}
+              >
+                Descrição carregada automaticamente
+              </div>
+            </div>
+          ) : null}
 
           {/* 2-col grid */}
           <form ref={formRef} onSubmit={handleSubmit}>
@@ -2071,5 +2137,29 @@ export default function AdaptarPage() {
         `}</style>
       </main>
     </PageShell>
+  );
+}
+
+export default function AdaptarPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background:
+              "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+          }}
+        >
+          <EcvBuildLoader size={48} />
+        </div>
+      }
+    >
+      <AdaptarPageContent />
+    </Suspense>
   );
 }
