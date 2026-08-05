@@ -207,6 +207,23 @@ export class PublicJobsController {
     return this.jobsService.listPublicFacets();
   }
 
+  // Precisa vir antes de ":slug" — "by-id" tem 2 segmentos e não colide,
+  // mas manter perto do outro lookup por identificador único deixa claro
+  // que os dois cobrem o mesmo caso de uso (fluxo de 1 clique a partir de
+  // /vagas, que só tem o Job.id, não o slug).
+  @Get("by-id/:id")
+  @InternalRoles("admin", "superadmin")
+  @UseGuards(PublicJobsGhostModeGuard)
+  async getById(@Req() _request: Request, @Param("id") id: string) {
+    const found = await this.jobsService.getPublicById(id);
+
+    if (!found) {
+      throw new NotFoundException("job not found");
+    }
+
+    return toPublicJobView(found);
+  }
+
   @Get(":slug")
   @InternalRoles("admin", "superadmin")
   @UseGuards(PublicJobsGhostModeGuard)

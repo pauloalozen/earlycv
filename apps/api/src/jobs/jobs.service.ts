@@ -13,6 +13,30 @@ import { JobSourcesService } from "../job-sources/job-sources.service";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
 
+const PUBLIC_JOB_SELECT = {
+  canonicalKey: true,
+  company: {
+    select: {
+      name: true,
+      websiteUrl: true,
+    },
+  },
+  country: true,
+  descriptionClean: true,
+  descriptionRaw: true,
+  employmentType: true,
+  firstSeenAt: true,
+  id: true,
+  lastSeenAt: true,
+  locationText: true,
+  publishedAtSource: true,
+  seniorityLevel: true,
+  sourceJobUrl: true,
+  status: true,
+  title: true,
+  workModel: true,
+} satisfies Prisma.JobSelect;
+
 function splitCsv(value: string): string[] {
   return value
     .split(",")
@@ -118,29 +142,16 @@ export class JobsService {
     return this.database.job.findMany({
       where: { status: "active" },
       orderBy: [{ lastSeenAt: "desc" }, { updatedAt: "desc" }],
-      select: {
-        canonicalKey: true,
-        company: {
-          select: {
-            name: true,
-            websiteUrl: true,
-          },
-        },
-        country: true,
-        descriptionClean: true,
-        descriptionRaw: true,
-        employmentType: true,
-        firstSeenAt: true,
-        id: true,
-        lastSeenAt: true,
-        locationText: true,
-        publishedAtSource: true,
-        seniorityLevel: true,
-        sourceJobUrl: true,
-        status: true,
-        title: true,
-        workModel: true,
-      },
+      select: PUBLIC_JOB_SELECT,
+    });
+  }
+
+  // Usado pelo fluxo de 1 clique (/adaptar?jobId=...) — o front só tem o id
+  // (veio do botão "Analisar meu CV" na listagem/detalhe), não o slug.
+  async getPublicById(jobId: string) {
+    return this.database.job.findFirst({
+      where: { id: jobId, status: "active" },
+      select: PUBLIC_JOB_SELECT,
     });
   }
 
