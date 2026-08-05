@@ -18,9 +18,9 @@ import {
 import { getJobMatchScore } from "@/lib/radar-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
+import { AnalysisCtaButtons } from "../analysis-cta";
 import { CompanyLogo } from "../company-logo";
 import {
-  AdaptBtn,
   breakdownPct,
   type MatchBreakdown,
   type MatchData,
@@ -508,6 +508,7 @@ export default async function JobPage({ params }: JobPageProps) {
   if (!job) notFound();
 
   let hasCvMaster = false;
+  let masterResumeId: string | null = null;
   let match: MatchData | null = null;
   if (user) {
     const [master, matchScore] = await Promise.all([
@@ -515,6 +516,7 @@ export default async function JobPage({ params }: JobPageProps) {
       getJobMatchScore(job.slug),
     ]);
     hasCvMaster = !!master;
+    masterResumeId = master?.id ?? null;
     if (typeof matchScore?.score === "number" && matchScore.breakdown) {
       match = {
         score: matchScore.score,
@@ -987,14 +989,14 @@ export default async function JobPage({ params }: JobPageProps) {
               >
                 CANDIDATURA
               </div>
-              <div style={{ marginBottom: 8, width: "100%" }}>
-                <AdaptBtn
-                  href={adaptarJobHref}
-                  score={match?.score}
-                  size="lg"
-                  fullWidth
-                />
-              </div>
+              <AnalysisCtaButtons
+                isLoggedIn={!!user}
+                masterResumeId={masterResumeId}
+                radarJobId={job.id}
+                jobDescriptionText={job.description}
+                score={match?.score}
+                secondaryHref={adaptarJobHref}
+              />
               <a
                 href={job.sourceJobUrl}
                 target="_blank"

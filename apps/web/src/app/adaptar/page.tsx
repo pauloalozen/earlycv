@@ -14,9 +14,9 @@ import {
 import { trackEvent } from "@/lib/analytics-tracking";
 import type { AppInternalRole } from "@/lib/app-session";
 import {
+  type AnalysisJobStartResult,
   analyzeAuthenticatedCv,
   analyzeGuestCv,
-  type AnalysisJobStartResult,
   saveGuestPreview,
 } from "@/lib/cv-adaptation-api";
 import {
@@ -24,8 +24,8 @@ import {
   buildFunnelEventIdempotencyKey,
 } from "@/lib/cv-adaptation-flow-helpers";
 import { setGuestAnalysisRaw } from "@/lib/guest-analysis-storage";
-import { getPublicJobById } from "@/lib/public-jobs-client-api";
 import type { PublicJob } from "@/lib/public-jobs-api";
+import { getPublicJobById } from "@/lib/public-jobs-client-api";
 import type { MasterCvExtractionStatusDto, ResumeDto } from "@/lib/resumes-api";
 import {
   getMyMasterCvExtractionStatus,
@@ -33,6 +33,7 @@ import {
   uploadMasterResume,
 } from "@/lib/resumes-api";
 import { getAuthStatus } from "@/lib/session-actions";
+import { useTurnstileToken } from "@/lib/use-turnstile-token";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -89,32 +90,6 @@ type CvMode = "profile" | "upload" | "text";
 
 const ADAPT_FLOW_SESSION_ID_KEY = "adaptFlowSessionId";
 
-function getTurnstileSiteKey() {
-  return process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? "";
-}
-
-type TurnstileApi = {
-  render: (
-    container: HTMLElement,
-    options: {
-      sitekey: string;
-      appearance?: "always" | "execute" | "interaction-only";
-      execution?: "execute" | "render";
-      size: "compact" | "flexible" | "normal";
-      callback: (token: string) => void;
-      "error-callback": () => void;
-      "expired-callback": () => void;
-    },
-  ) => string;
-  execute: (widgetId: string) => void;
-};
-
-declare global {
-  interface Window {
-    turnstile?: TurnstileApi;
-  }
-}
-
 function buildClientAttemptId() {
   if (
     typeof crypto !== "undefined" &&
@@ -126,21 +101,13 @@ function buildClientAttemptId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function readTurnstileTokenFromDom() {
-  if (typeof document === "undefined") {
-    return null;
-  }
-
-  const hiddenInput = document.querySelector<HTMLInputElement>(
-    'input[name="cf-turnstile-response"]',
-  );
-  const token = hiddenInput?.value?.trim();
-
-  return token ? token : null;
-}
-
 function AdaptarPageContent() {
-  const turnstileSiteKey = getTurnstileSiteKey();
+  const {
+    turnstileSiteKey,
+    containerRef: turnstileContainerRef,
+    requestToken: requestTurnstileToken,
+    onScriptReady: markTurnstileScriptReady,
+  } = useTurnstileToken();
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobIdParam = searchParams.get("jobId");
@@ -178,12 +145,6 @@ function AdaptarPageContent() {
   const jobDescriptionFocusTrackedRef = useRef(false);
   const jobDescriptionPasteTrackedRef = useRef(false);
   const flowSessionIdRef = useRef<string | null>(null);
-  const turnstileContainerRef = useRef<HTMLDivElement>(null);
-  const turnstileWidgetIdRef = useRef<string | null>(null);
-  const turnstilePendingTokenResolverRef = useRef<
-    ((token: string | null) => void) | null
-  >(null);
-  const [turnstileScriptReady, setTurnstileScriptReady] = useState(false);
   const [profileReadinessStatus, setProfileReadinessStatus] = useState<
     "empty" | "partial" | "ready" | null
   >(null);
@@ -196,84 +157,6 @@ function AdaptarPageContent() {
       fileInputRef.current.value = "";
     }
   }, []);
-
-  const resolvePendingTurnstileToken = useCallback((token: string | null) => {
-    const resolve = turnstilePendingTokenResolverRef.current;
-    if (!resolve) {
-      return;
-    }
-
-    turnstilePendingTokenResolverRef.current = null;
-    resolve(token);
-  }, []);
-
-  const renderInvisibleTurnstileWidget = useCallback(() => {
-    if (!turnstileSiteKey || turnstileWidgetIdRef.current) {
-      return;
-    }
-
-    const turnstile = window.turnstile;
-    const container = turnstileContainerRef.current;
-    if (!turnstile?.render || !container) {
-      return;
-    }
-
-    turnstileWidgetIdRef.current = turnstile.render(container, {
-      sitekey: turnstileSiteKey,
-      appearance: "execute",
-      execution: "execute",
-      size: "normal",
-      callback: (token) => {
-        resolvePendingTurnstileToken(token.trim() || null);
-      },
-      "error-callback": () => {
-        resolvePendingTurnstileToken(null);
-      },
-      "expired-callback": () => {
-        resolvePendingTurnstileToken(null);
-      },
-    });
-  }, [resolvePendingTurnstileToken, turnstileSiteKey]);
-
-  const requestTurnstileToken = useCallback(async () => {
-    const fallbackToken = readTurnstileTokenFromDom();
-
-    if (!turnstileSiteKey) {
-      return fallbackToken;
-    }
-
-    const turnstile = window.turnstile;
-    if (!turnstile?.execute) {
-      return fallbackToken;
-    }
-
-    renderInvisibleTurnstileWidget();
-
-    const widgetId = turnstileWidgetIdRef.current;
-    if (!widgetId) {
-      return fallbackToken;
-    }
-
-    return new Promise<string | null>((resolve) => {
-      const timeoutId = setTimeout(() => {
-        turnstilePendingTokenResolverRef.current = null;
-        resolve(readTurnstileTokenFromDom() ?? null);
-      }, 2000);
-
-      turnstilePendingTokenResolverRef.current = (token) => {
-        clearTimeout(timeoutId);
-        resolve(token ?? readTurnstileTokenFromDom() ?? null);
-      };
-
-      try {
-        turnstile.execute(widgetId);
-      } catch {
-        clearTimeout(timeoutId);
-        turnstilePendingTokenResolverRef.current = null;
-        resolve(fallbackToken);
-      }
-    });
-  }, [renderInvisibleTurnstileWidget, turnstileSiteKey]);
 
   const getFlowSessionId = useCallback(() => {
     if (flowSessionIdRef.current) {
@@ -447,20 +330,6 @@ function AdaptarPageContent() {
   }, [error]);
 
   useEffect(() => {
-    if (window.turnstile) {
-      setTurnstileScriptReady(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!turnstileScriptReady) {
-      return;
-    }
-
-    renderInvisibleTurnstileWidget();
-  }, [renderInvisibleTurnstileWidget, turnstileScriptReady]);
-
-  useEffect(() => {
     if (!loading) return;
     const dotsTimer = setInterval(
       () => setOverlayDots((d) => (d + 1) % 4),
@@ -538,7 +407,11 @@ function AdaptarPageContent() {
       setError("O arquivo é muito grande. Envie um PDF de até 5 MB.");
       return;
     }
-    if (!jobDescription.trim()) {
+    // Vaga do Radar (jobIdParam): o backend resolve a descrição sozinho a
+    // partir de radarJobId (resolveAnalysisJobDescription), então esse campo
+    // só é obrigatório no client quando não há vaga do Radar ou o usuário é
+    // guest (analyze-guest não lê radarJobId, só jobDescriptionText).
+    if (!jobDescription.trim() && !(jobIdParam && isAuthenticated)) {
       setError("Cole a descrição da vaga.");
       return;
     }
@@ -750,7 +623,9 @@ function AdaptarPageContent() {
           const saved = await saveGuestPreview({
             adaptedContentJson: analyzeResult.adaptedContentJson,
             companyName: analyzeResult.adaptedContentJson?.vaga?.empresa,
-            jobDescriptionText: jobDescription,
+            jobDescriptionText: jobDescription.trim()
+              ? jobDescription
+              : (radarJob?.description ?? jobDescription),
             jobTitle: analyzeResult.adaptedContentJson?.vaga?.cargo,
             masterCvText: analyzeResult.masterCvText,
             analysisCvSnapshotId: analyzeResult.analysisCvSnapshotId,
@@ -809,9 +684,7 @@ function AdaptarPageContent() {
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
           strategy="afterInteractive"
-          onReady={() => {
-            setTurnstileScriptReady(true);
-          }}
+          onReady={markTurnstileScriptReady}
         />
       ) : null}
       <main
