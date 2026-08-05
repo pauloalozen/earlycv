@@ -369,6 +369,53 @@ test("upsertFromCvAdaptation creates new JobApplication from CvAdaptation data",
   assert.equal(app.currentCvAdaptationId, "adapt-1");
 });
 
+test("upsertFromCvAdaptation links Job.id when analysis came from the Radar (radarJobId)", async () => {
+  const db = makeDb();
+
+  const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
+  adaptations.set("adapt-radar", { id: "adapt-radar", jobApplicationId: null });
+
+  const service = new JobApplicationsServiceCtor(db);
+
+  await service.upsertFromCvAdaptation({
+    userId: "user-1",
+    cvAdaptationId: "adapt-radar",
+    jobTitle: "Desenvolvedor Full Stack",
+    companyName: "Tech LTDA",
+    jobDescriptionText: "Descricao da vaga...",
+    targetStatus: "ANALYZED",
+    origin: "analysis_auto",
+    radarJobId: "job-radar-1",
+  });
+
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+  const app = Array.from(apps.values())[0];
+  assert.equal(app.jobId, "job-radar-1");
+});
+
+test("upsertFromCvAdaptation leaves jobId null when analysis did not come from the Radar", async () => {
+  const db = makeDb();
+
+  const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
+  adaptations.set("adapt-manual", { id: "adapt-manual", jobApplicationId: null });
+
+  const service = new JobApplicationsServiceCtor(db);
+
+  await service.upsertFromCvAdaptation({
+    userId: "user-1",
+    cvAdaptationId: "adapt-manual",
+    jobTitle: "Desenvolvedor Full Stack",
+    companyName: "Tech LTDA",
+    jobDescriptionText: "Descricao da vaga...",
+    targetStatus: "ANALYZED",
+    origin: "analysis_auto",
+  });
+
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+  const app = Array.from(apps.values())[0];
+  assert.equal(app.jobId, null);
+});
+
 test("upsertFromCvAdaptation derives score from score_pos_ajustes payload", async () => {
   const db = makeDb();
 

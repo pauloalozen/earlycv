@@ -69,6 +69,7 @@ type JobApplicationHookInput = {
   targetStatus: JobApplicationStatus;
   origin: JobApplicationOrigin;
   callerMethod: string;
+  radarJobId?: string | null;
 };
 
 type AuditEntry = {
@@ -184,6 +185,7 @@ export class CvAdaptationService {
         jobDescriptionText: input.jobDescriptionText,
         targetStatus: input.targetStatus,
         origin: input.origin,
+        radarJobId: input.radarJobId,
       });
     } catch (err) {
       this.logger.error(
@@ -1821,6 +1823,7 @@ export class CvAdaptationService {
         targetStatus: "ANALYZED",
         origin: "analysis_auto",
         callerMethod: "saveGuestPreview(existing)",
+        radarJobId: dto.radarJobId,
       });
       const refreshedExisting = await this.database.cvAdaptation.findUnique({
         where: { id: existingAdaptation.id },
@@ -1884,6 +1887,7 @@ export class CvAdaptationService {
       targetStatus: "ANALYZED",
       origin: "analysis_auto",
       callerMethod: "saveGuestPreview",
+      radarJobId: dto.radarJobId,
     });
 
     const refreshedAdaptation = await this.database.cvAdaptation.findUnique({

@@ -27,6 +27,7 @@ type UpsertFromAdaptationInput = {
   scoreAfter?: number | null;
   targetStatus: JobApplicationStatus;
   origin: JobApplicationOrigin;
+  radarJobId?: string | null;
 };
 
 type CvState = "ready" | "locked" | "missing";
@@ -872,6 +873,7 @@ export class JobApplicationsService {
       scoreAfter,
       targetStatus,
       origin,
+      radarJobId,
     } = input;
 
     if (!jobTitle || !companyName) {
@@ -1015,6 +1017,7 @@ export class JobApplicationsService {
             scoreBefore: resolvedScoreBefore,
             scoreAfter: resolvedScoreAfter,
             language: adaptation.language,
+            jobId: radarJobId ?? null,
           },
         });
 
