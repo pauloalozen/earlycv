@@ -11,25 +11,25 @@ export const SCORE = {
     fg: "#1f7a34",
     bg: "rgba(34,163,72,0.14)",
     ring: "#2fa84c",
-    label: "alta compatibilidade",
+    label: "alta oportunidade",
   },
   mid: {
     fg: "#966615",
     bg: "rgba(217,163,34,0.16)",
     ring: "#d9a322",
-    label: "compatibilidade média",
+    label: "oportunidade média",
   },
   low: {
     fg: "#c2410c",
     bg: "rgba(249,115,22,0.14)",
     ring: "#f97316",
-    label: "compatibilidade baixa",
+    label: "oportunidade baixa",
   },
   critical: {
     fg: "#b91c1c",
     bg: "rgba(239,68,68,0.14)",
     ring: "#ef4444",
-    label: "compatibilidade muito baixa",
+    label: "oportunidade muito baixa",
   },
 } as const;
 
@@ -37,10 +37,10 @@ export const SCORE = {
 // (#0a0a0a) — usado no card de compatibilidade do detalhe da vaga, que é
 // preto no design de referência.
 export const SCORE_DARK = {
-  high: { fg: "#4ade80", label: "alta compatibilidade" },
-  mid: { fg: "#fbbf24", label: "compatibilidade média" },
-  low: { fg: "#fb923c", label: "compatibilidade baixa" },
-  critical: { fg: "#f87171", label: "compatibilidade muito baixa" },
+  high: { fg: "#4ade80", label: "alta oportunidade" },
+  mid: { fg: "#fbbf24", label: "oportunidade média" },
+  low: { fg: "#fb923c", label: "oportunidade baixa" },
+  critical: { fg: "#f87171", label: "oportunidade muito baixa" },
 } as const;
 
 export type ScoreTier = keyof typeof SCORE;
@@ -383,7 +383,7 @@ export function SkillChip({
   );
 }
 
-// ── Botão adaptar CV — com score embutido quando disponível ──
+// ── Botão "Analisar meu CV" — com score embutido quando disponível ──
 export function AdaptBtn({
   href,
   score,
@@ -435,7 +435,7 @@ export function AdaptBtn({
         <title>Adaptar</title>
         <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
       </svg>
-      adaptar CV
+      Analisar meu CV
       {hasScore ? (
         <span style={{ opacity: 0.5, fontFamily: MONO }}>
           · {Math.round(score)}%

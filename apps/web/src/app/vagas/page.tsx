@@ -98,8 +98,8 @@ const SORT_VALUES = [
 ] as const;
 type SortValue = (typeof SORT_VALUES)[number];
 const SORT_LABELS: Record<SortValue, string> = {
-  score_desc: "compatibilidade: maior para menor",
-  score_asc: "compatibilidade: menor para maior",
+  score_desc: "oportunidade: maior para menor",
+  score_asc: "oportunidade: menor para maior",
   date_desc: "data: mais recente",
   date_asc: "data: mais antiga",
 };
@@ -1246,8 +1246,8 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                 style={{ fontSize: 14.5, color: "#3a3a38", margin: "0 0 14px" }}
               >
                 {cvFileName
-                  ? "Seu CV está sendo processado. Assim que terminar, cada vaga abaixo ganha um score de compatibilidade com seu perfil."
-                  : "Envie seu CV e cada vaga abaixo ganha um score de compatibilidade com seu perfil — sem precisar filtrar nada."}
+                  ? "Seu CV está sendo processado. Assim que terminar, cada vaga abaixo ganha um score de oportunidade com seu perfil."
+                  : "Envie seu CV e cada vaga abaixo ganha um score de oportunidade com seu perfil — sem precisar filtrar nada."}
               </p>
               <a
                 href="/cv-base"
@@ -1294,7 +1294,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                       color: "#0a0a0a",
                     }}
                   >
-                    Alta compatibilidade
+                    Alta oportunidade
                   </span>
                   <span style={{ fontSize: 12.5, color: "#8a8a85" }}>
                     {carouselJobs.length}{" "}

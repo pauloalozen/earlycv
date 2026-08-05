@@ -121,7 +121,7 @@ function CompatHead() {
             flexShrink: 0,
           }}
         />
-        COMPATIBILIDADE
+        OPORTUNIDADE
       </span>
       <span
         style={{
@@ -131,7 +131,7 @@ function CompatHead() {
           letterSpacing: 0.3,
         }}
       >
-        vs. seu CV
+        Baseado no seu perfil
       </span>
     </div>
   );
@@ -223,7 +223,7 @@ function CompatCard({
   if (scoreState === "anonymous") {
     return (
       <CompatCardCta
-        title="Cadastre-se para ver sua compatibilidade"
+        title="Cadastre-se para ver sua oportunidade"
         description="Análise gratuita, calculada a partir do seu CV."
         href="/entrar?tab=cadastrar"
         linkLabel="Cadastre-se grátis"
@@ -234,7 +234,7 @@ function CompatCard({
   if (scoreState === "no-cv") {
     return (
       <CompatCardCta
-        title="Suba seu CV para ver compatibilidade"
+        title="Suba seu CV para ver sua oportunidade"
         description="O score é calculado com base no seu CV Master."
         href="/cv-base"
         linkLabel="Enviar CV"
@@ -246,7 +246,7 @@ function CompatCard({
     return (
       <CompatCardCta
         title="Seu CV está sendo processado"
-        description="Assim que terminar, esta vaga ganha um score de compatibilidade com seu perfil."
+        description="Assim que terminar, esta vaga ganha um score de oportunidade com seu perfil."
         href="/cv-base"
         linkLabel="Ver status"
       />
@@ -948,6 +948,23 @@ export default async function JobPage({ params }: JobPageProps) {
           <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {/* Compat card */}
             <CompatCard scoreState={scoreState} match={match} />
+
+            {/* Distinção match (Radar) vs. análise (CV Adaptation) — texto
+                só aparece quando há score pra explicar, sem mudar layout */}
+            {match ? (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                  color: "#8a8a85",
+                }}
+              >
+                Este score mostra o quanto seu perfil combina com a vaga. A
+                análise do CV é mais precisa e pode resultar em um score
+                diferente.
+              </p>
+            ) : null}
 
             {/* Candidatura card */}
             <div
