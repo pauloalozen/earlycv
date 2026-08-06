@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import PizZip from "pizzip";
 import { ResumeTemplateDocxService } from "../resume-templates/resume-template-docx.service";
 import type {
@@ -44,6 +44,8 @@ export interface ProfileContactFallback {
 
 @Injectable()
 export class CvAdaptationDocxService {
+  private readonly logger = new Logger(CvAdaptationDocxService.name);
+
   constructor(
     @Inject(ResumeTemplateDocxService)
     private readonly templateDocx: ResumeTemplateDocxService,
@@ -72,6 +74,9 @@ export class CvAdaptationDocxService {
       output,
       profileFallback,
       contactMode,
+    );
+    this.logger.warn(
+      `[LANG-DEBUG-DOCX] resolvedLanguage=${this.resolveLanguage(output)} sectionTitleSummary=${JSON.stringify(data.sectionTitleSummary)} sectionTitleExperience=${JSON.stringify(data.sectionTitleExperience)} templateFileUrl=${templateFileUrl}`,
     );
     return this.templateDocx.fillFromStorage(templateFileUrl, data);
   }

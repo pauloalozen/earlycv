@@ -2802,6 +2802,10 @@ export class CvAdaptationService {
       effectiveOutput.language = adaptation.language;
     }
 
+    this.logger.warn(
+      `[LANG-DEBUG] adaptationId=${id} dbLanguage=${JSON.stringify(adaptation.language)} outputLanguage=${JSON.stringify(effectiveOutput.language)} templateFileUrl=${templateFileUrl ?? "null"} experienceTitle=${JSON.stringify(effectiveOutput.sections?.find((s) => s.sectionType === "experience")?.title ?? null)} summaryExcerpt=${JSON.stringify((effectiveOutput.summary ?? "").slice(0, 60))}`,
+    );
+
     const docxBuffer = await this.docxService.generateDocx(
       effectiveOutput,
       templateFileUrl ?? fallbackTemplate?.fileUrl ?? null,
