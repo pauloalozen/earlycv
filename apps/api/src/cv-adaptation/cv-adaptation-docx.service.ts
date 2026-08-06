@@ -141,6 +141,20 @@ export class CvAdaptationDocxService {
     return zip.generate({ type: "nodebuffer" }) as Buffer;
   }
 
+  /**
+   * Language is resolved from the persisted `output.language` (BCP-47, e.g.
+   * "pt-BR", "en-US", "es-ES") set once during analysis/adaptation — the
+   * single source of truth per candidacy. The word-count heuristic below is
+   * only a fallback for legacy records saved before that field existed.
+   */
+  private resolveLanguage(output: CvAdaptationOutput): "pt" | "en" | "es" {
+    const persisted = output.language?.trim().toLowerCase();
+    if (persisted?.startsWith("en")) return "en";
+    if (persisted?.startsWith("es")) return "es";
+    if (persisted?.startsWith("pt")) return "pt";
+    return this.detectLanguage(output);
+  }
+
   private detectLanguage(output: CvAdaptationOutput): "pt" | "en" | "es" {
     const text = [
       output.summary ?? "",
@@ -180,7 +194,7 @@ export class CvAdaptationDocxService {
     // Fallback only: summary has no section of its own, so it has no
     // AI-generated title to reuse. Every other section title below comes
     // straight from `output` (already in the CV's own language).
-    const labels = SECTION_LABELS[this.detectLanguage(output)];
+    const labels = SECTION_LABELS[this.resolveLanguage(output)];
 
     const headerSection = output.sections?.find(
       (s) => s.sectionType === "header",
