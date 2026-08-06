@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import PizZip from "pizzip";
 import { ResumeTemplateDocxService } from "../resume-templates/resume-template-docx.service";
 import type {
@@ -44,8 +44,6 @@ export interface ProfileContactFallback {
 
 @Injectable()
 export class CvAdaptationDocxService {
-  private readonly logger = new Logger(CvAdaptationDocxService.name);
-
   constructor(
     @Inject(ResumeTemplateDocxService)
     private readonly templateDocx: ResumeTemplateDocxService,
@@ -75,17 +73,7 @@ export class CvAdaptationDocxService {
       profileFallback,
       contactMode,
     );
-    this.logger.warn(
-      `[LANG-DEBUG-DOCX] sectionTitleSummary=${JSON.stringify(data.sectionTitleSummary)} sectionTitleExperience=${JSON.stringify(data.sectionTitleExperience)} templateFileUrl=${templateFileUrl}`,
-    );
-    const filled = await this.templateDocx.fillFromStorage(
-      templateFileUrl,
-      data,
-    );
-    this.logger.warn(
-      `[LANG-DEBUG-DOCX] filledBufferLength=${filled.length}`,
-    );
-    return filled;
+    return this.templateDocx.fillFromStorage(templateFileUrl, data);
   }
 
   /** Convert a filled DOCX buffer to PDF via LibreOffice. */
