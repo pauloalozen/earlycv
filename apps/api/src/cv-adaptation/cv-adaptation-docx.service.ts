@@ -261,11 +261,19 @@ export class CvAdaptationDocxService {
       hasMainGoal: mainGoal.trim().length > 0,
       summary: summaryText,
       sectionTitleSummary: labels.summary,
-      sectionTitleExperience: experienceSection?.title || labels.experience,
-      sectionTitleSkills: skillsSection?.title || labels.skills,
-      sectionTitleEducation: educationSection?.title || labels.education,
-      sectionTitleCertifications: certSection?.title || labels.certifications,
-      sectionTitleLanguages: langSection?.title || labels.languages,
+      sectionTitleExperience: (
+        experienceSection?.title || labels.experience
+      ).toUpperCase(),
+      sectionTitleSkills: (skillsSection?.title || labels.skills).toUpperCase(),
+      sectionTitleEducation: (
+        educationSection?.title || labels.education
+      ).toUpperCase(),
+      sectionTitleCertifications: (
+        certSection?.title || labels.certifications
+      ).toUpperCase(),
+      sectionTitleLanguages: (
+        langSection?.title || labels.languages
+      ).toUpperCase(),
       items: this.mapExperience(experienceSection),
       competencias: this.mapSkills(skillsSection),
       educacao: this.mapCourseItems(educationSection),
