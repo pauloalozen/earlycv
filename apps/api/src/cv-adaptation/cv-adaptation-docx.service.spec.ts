@@ -216,7 +216,7 @@ describe("CvAdaptationDocxService", () => {
     assert.deepEqual(data.idiomas, []);
   });
 
-  it("uses the AI-generated section titles instead of hardcoded pt-BR labels", async () => {
+  it("uses the AI-generated section titles (uppercased) instead of hardcoded pt-BR labels", async () => {
     const fillFromStorage = mock.fn(async () => Buffer.from("docx"));
     const templateDocx = {
       fillFromStorage,
@@ -276,11 +276,11 @@ describe("CvAdaptationDocxService", () => {
       sectionTitleLanguages: string;
     };
 
-    assert.equal(data.sectionTitleExperience, "Work Experience");
-    assert.equal(data.sectionTitleSkills, "Skills");
-    assert.equal(data.sectionTitleEducation, "Education");
-    assert.equal(data.sectionTitleCertifications, "Certifications");
-    assert.equal(data.sectionTitleLanguages, "Languages");
+    assert.equal(data.sectionTitleExperience, "WORK EXPERIENCE");
+    assert.equal(data.sectionTitleSkills, "SKILLS");
+    assert.equal(data.sectionTitleEducation, "EDUCATION");
+    assert.equal(data.sectionTitleCertifications, "CERTIFICATIONS");
+    assert.equal(data.sectionTitleLanguages, "LANGUAGES");
   });
 
   it("uses the persisted output.language for the summary title instead of the word-count heuristic", async () => {
