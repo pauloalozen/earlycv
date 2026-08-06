@@ -2769,6 +2769,13 @@ export class CvAdaptationService {
       adaptation.adaptedContentJson,
       generatedOutput ?? adaptation.aiAuditJson,
     );
+    // CvAdaptation.language is the single source of truth for this
+    // candidacy's language (resolved once during analysis/adaptation) —
+    // it always takes precedence over whatever the stored/edited CV JSON
+    // carries, so downloads never re-detect language on their own.
+    if (adaptation.language) {
+      output.language = adaptation.language;
+    }
 
     const profileFallback = await this.resolveProfileContactFallback(userId);
     const contactMode =
@@ -2840,12 +2847,19 @@ export class CvAdaptationService {
 
     const profileFallback = await this.resolveProfileContactFallback(userId);
 
+    const effectiveOutput = this.resolveEffectiveCvOutput(
+      (adaptation as { editedCvJson?: unknown }).editedCvJson,
+      adaptation.adaptedContentJson,
+      generatedOutput ?? adaptation.aiAuditJson,
+    );
+    // CvAdaptation.language is the single source of truth for this
+    // candidacy's language — takes precedence over the stored/edited CV JSON.
+    if (adaptation.language) {
+      effectiveOutput.language = adaptation.language;
+    }
+
     const docxBuffer = await this.docxService.generateDocx(
-      this.resolveEffectiveCvOutput(
-        (adaptation as { editedCvJson?: unknown }).editedCvJson,
-        adaptation.adaptedContentJson,
-        generatedOutput ?? adaptation.aiAuditJson,
-      ),
+      effectiveOutput,
       templateFileUrl ?? fallbackTemplate?.fileUrl ?? null,
       profileFallback,
     );

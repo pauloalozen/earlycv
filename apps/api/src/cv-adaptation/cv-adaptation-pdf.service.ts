@@ -142,9 +142,23 @@ export class CvAdaptationPdfService {
       .replace("{{summary}}", summary)
       .replace("{{sectionsHtml}}", sectionsHtml);
 
-    return this.detectCvLanguage(output) === "pt"
+    return this.resolveCvLanguage(output) === "pt"
       ? this.translateEnglishLabels(injected)
       : injected;
+  }
+
+  /**
+   * Language is resolved from the persisted `output.language` (BCP-47, e.g.
+   * "pt-BR", "en-US") set once during analysis/adaptation — the single
+   * source of truth per candidacy. The heuristic below is only a fallback
+   * for legacy records saved before that field existed.
+   */
+  private resolveCvLanguage(output: CvAdaptationOutput): "pt" | "en" {
+    const persisted = output.language?.trim().toLowerCase();
+    if (persisted?.startsWith("en")) return "en";
+    if (persisted?.startsWith("pt")) return "pt";
+    if (persisted && !persisted.startsWith("pt")) return "en";
+    return this.detectCvLanguage(output);
   }
 
   private detectCvLanguage(output: CvAdaptationOutput): "pt" | "en" {

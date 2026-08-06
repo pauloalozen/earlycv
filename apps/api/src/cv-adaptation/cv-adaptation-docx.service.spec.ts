@@ -283,6 +283,41 @@ describe("CvAdaptationDocxService", () => {
     assert.equal(data.sectionTitleLanguages, "Languages");
   });
 
+  it("uses the persisted output.language for the summary title instead of the word-count heuristic", async () => {
+    const fillFromStorage = mock.fn(async () => Buffer.from("docx"));
+    const templateDocx = {
+      fillFromStorage,
+      docxToPdf: mock.fn(async () => Buffer.from("pdf")),
+    } as unknown as ResumeTemplateDocxService;
+
+    const service = new CvAdaptationDocxService(templateDocx);
+
+    // Short/generic summary text that the pt/en/es word-count heuristic can
+    // misclassify — this is exactly the bug: sectionTitleSummary has no
+    // AI-generated title of its own, so it always falls back to the
+    // detected-language label. Persisted `language` must win regardless.
+    const output: CvAdaptationOutput = {
+      language: "en-US",
+      summary: "Data & AI executive with 19 years of experience.",
+      sections: [
+        {
+          sectionType: "header",
+          title: "Header",
+          items: [{ heading: "Paulo", bullets: ["paulo@cv.com"] }],
+        },
+      ],
+      highlightedSkills: [],
+      removedSections: [],
+    };
+
+    await service.generateDocx(output, "https://bucket/template.docx");
+
+    const calls = fillFromStorage.mock.calls as Array<{ arguments: unknown[] }>;
+    const data = calls[0]?.arguments[1] as { sectionTitleSummary: string };
+
+    assert.equal(data.sectionTitleSummary, "PROFESSIONAL SUMMARY");
+  });
+
   it("splits free-text language bullets into language + level instead of leaving language blank", async () => {
     const fillFromStorage = mock.fn(async () => Buffer.from("docx"));
     const templateDocx = {
