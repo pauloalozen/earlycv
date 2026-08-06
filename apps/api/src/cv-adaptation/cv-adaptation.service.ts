@@ -2802,10 +2802,6 @@ export class CvAdaptationService {
       effectiveOutput.language = adaptation.language;
     }
 
-    this.logger.warn(
-      `[LANG-DEBUG] id=${id} templateFileUrl=${templateFileUrl} aiAuditType=${typeof adaptation.aiAuditJson} generatedOutputIsNull=${generatedOutput === null} effectiveSections=${JSON.stringify(effectiveOutput.sections?.map((s) => `${s.sectionType}:${s.title}`))} effectiveLanguage=${JSON.stringify(effectiveOutput.language)} nodeEnv=${process.env.NODE_ENV}`,
-    );
-
     const docxBuffer = await this.docxService.generateDocx(
       effectiveOutput,
       templateFileUrl ?? fallbackTemplate?.fileUrl ?? null,
