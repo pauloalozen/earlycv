@@ -441,6 +441,18 @@ function toSchemaEmploymentType(value: string | null): string | undefined {
   return SCHEMA_EMPLOYMENT_TYPE[value];
 }
 
+// Job.country hoje só tem "Brasil" por extenso no banco (confirmado via
+// SELECT DISTINCT country FROM "Job" — 171/171 linhas), mas o JSON-LD exige
+// código ISO 3166-1 alpha-2 pro Google aceitar no Rich Results. Mapeia as
+// variações plausíveis em vez de assumir "Brasil" fixo, pra não quebrar se
+// algum adapter futuro gravar "Brazil" ou já o código "BR".
+function toIsoCountryCode(value: string | null): string {
+  if (!value) return "BR";
+  const normalized = value.trim().toLowerCase();
+  if (["brasil", "brazil", "br"].includes(normalized)) return "BR";
+  return value;
+}
+
 export async function generateMetadata({
   params,
 }: JobPageProps): Promise<Metadata> {
@@ -665,7 +677,7 @@ export default async function JobPage({ params }: JobPageProps) {
       "@type": "Place",
       address: {
         "@type": "PostalAddress",
-        addressCountry: job.country ?? "BR",
+        addressCountry: toIsoCountryCode(job.country),
         addressLocality: job.location,
       },
     },

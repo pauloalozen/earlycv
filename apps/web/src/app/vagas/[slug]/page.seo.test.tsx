@@ -175,6 +175,24 @@ describe("/vagas/[slug] JSON-LD JobPosting", () => {
     );
   });
 
+  it("normalizes country name to ISO 3166-1 alpha-2 (Brasil -> BR)", async () => {
+    const jsonLd = await renderJobJsonLd({ country: "Brasil" });
+
+    expect(jsonLd.jobLocation.address.addressCountry).toBe("BR");
+  });
+
+  it("falls back to BR when country is null", async () => {
+    const jsonLd = await renderJobJsonLd({ country: null });
+
+    expect(jsonLd.jobLocation.address.addressCountry).toBe("BR");
+  });
+
+  it("passes through an already-valid country value unchanged", async () => {
+    const jsonLd = await renderJobJsonLd({ country: "PT" });
+
+    expect(jsonLd.jobLocation.address.addressCountry).toBe("PT");
+  });
+
   it("includes jobLocationType TELECOMMUTE when workModel is remote", async () => {
     const jsonLd = await renderJobJsonLd({ workModel: "remote" });
 
