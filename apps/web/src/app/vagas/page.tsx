@@ -297,7 +297,39 @@ function AnonymousHeroCard() {
           }}
         >
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-            <CompanyLogo name="Itaú Unibanco" size={38} />
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 9,
+                background: "#0a0a0a",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <svg width={22} height={22} viewBox="0 0 40 40" fill="none">
+                <title>earlyCV</title>
+                <rect x="0" y="0" width="12" height="6.5" rx="2" fill="#fafaf6" />
+                <rect x="16" y="0" width="12" height="6.5" rx="2" fill="#fafaf6" />
+                <rect x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
+                <rect x="0" y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+                <rect x="20" y="11.2" width="18" height="6.5" rx="2" fill="#fafaf6" />
+                <rect x="0" y="22.4" width="7" height="6.5" rx="2" fill="#fafaf6" />
+                <rect x="11" y="22.4" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+                <rect x="30" y="22.4" width="8" height="6.5" rx="2" fill="#fafaf6" />
+                <rect x="0" y="33.5" width="22" height="6.5" rx="2" fill="#fafaf6" />
+                <rect
+                  x="26"
+                  y="33.5"
+                  width="9"
+                  height="6.5"
+                  rx="2"
+                  fill="rgba(250,250,246,0.14)"
+                />
+              </svg>
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p
                 style={{
@@ -310,7 +342,7 @@ function AnonymousHeroCard() {
                 Engenheira de software sênior
               </p>
               <p style={{ fontSize: 12, color: "#8a8a85", margin: 0 }}>
-                Itaú Unibanco
+                earlyCV
               </p>
             </div>
             <ScoreRing value={92} size={52} />
