@@ -1465,6 +1465,7 @@ model Job {
   externalJobId     String?
   sourceJobUrl      String
   canonicalKey      String           @unique
+  slug              String?          @unique
   title             String
   normalizedTitle   String
   descriptionRaw    String
@@ -1496,6 +1497,7 @@ model Job {
   @@index([companyId])
   @@index([jobSourceId])
   @@index([firstSeenAt])
+  @@index([slug])
 }
 
 // Vaga salva/favoritada pelo usuário no Radar de Oportunidades — bookmark
