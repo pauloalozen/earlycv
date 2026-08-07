@@ -122,6 +122,22 @@ export function JobMetaRow({ job }: { job: PublicJob }) {
           marginBottom: 10,
         }}
       >
+        {(job.technologies ?? []).slice(0, 4).map((tech) => (
+          <span
+            key={tech}
+            style={{
+              background: "rgba(10,10,10,0.05)",
+              color: "#3a3a38",
+              fontFamily: MONO,
+              fontSize: 10,
+              padding: "3px 8px",
+              borderRadius: 4,
+              letterSpacing: 0.2,
+            }}
+          >
+            {tech}
+          </span>
+        ))}
         {workModelLabel ? (
           <span
             style={{

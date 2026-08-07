@@ -243,6 +243,7 @@ describe("/vagas score badge (usuário logado com UserRadarProfile)", () => {
       sourceJobUrl: "https://example.com/jobs/1",
       canonicalKey: "job-1",
       status: "active",
+      technologies: ["Python", "SQL"],
       workModel: "remote",
       ...overrides,
     };
