@@ -883,7 +883,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                 </div>
 
                 {user ? (
-                  <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <Link
                       href="/vagas-salvas"
                       style={{
@@ -1140,6 +1140,8 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
             display: "flex",
             alignItems: "flex-start",
             justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 10,
             paddingBottom: 14,
             marginBottom: 14,
           }}
@@ -1178,7 +1180,14 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
           </div>
 
           {scoreState === "has-cv" ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
               <a
                 href={buildExcludeAnalyzedToggleUrl()}
                 style={{
