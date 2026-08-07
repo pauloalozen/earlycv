@@ -64,6 +64,24 @@ describe("JobCard keyword badges", () => {
     cleanup();
   });
 
+  it("marks the top row, headtext and action cluster with the responsive classes (mobile stacking depends on these)", () => {
+    const job = buildJob();
+
+    const { container } = render(
+      <JobCard job={job} adaptarHref="/adaptar" showScore={false} isLoggedIn={false} />,
+    );
+
+    expect(container.querySelector(".jc-top")).toBeInTheDocument();
+    expect(container.querySelector(".jc-headtext")).toBeInTheDocument();
+    expect(container.querySelector(".jc-cluster")).toBeInTheDocument();
+    expect(container.querySelector(".jc-actions")).toBeInTheDocument();
+    // O <style> com o @media da versão mobile precisa estar presente —
+    // sem ele as classes acima não têm nenhum efeito em telas estreitas.
+    expect(container.querySelector("style")?.textContent).toContain(
+      "@media (max-width: 640px)",
+    );
+  });
+
   it("does not render a duplicate technologies row below the top badges when there is no computed score", () => {
     const job = buildJob();
 

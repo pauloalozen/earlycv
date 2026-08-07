@@ -8,6 +8,32 @@ import { ScoreBreakdownPanel } from "./score-breakdown";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 
+// Regras que dependem de breakpoint (mobile empilha em coluna, desktop
+// fica lado a lado) — precisam viver em classes CSS porque inline style não
+// tem @media. Só as propriedades sensíveis ao breakpoint estão aqui; o
+// resto (cor, fonte, tamanho) continua inline. Renderizado uma vez por
+// JobCard/JobCardLocked — duplicar o texto do <style> por card na lista é
+// aceitável (mesmo padrão já usado em ScoreBreakdownPanel).
+export function JobCardResponsiveStyles() {
+  return (
+    <style>{`
+      .jc-top { display: flex; gap: 16px; align-items: center; }
+      .jc-headtext { display: flex; gap: 14px; align-items: center; min-width: 0; flex: 0 1 320px; }
+      .jc-cluster { display: flex; align-items: center; gap: 20px; margin-left: auto; flex-shrink: 0; }
+      .jc-badges { justify-content: flex-end; align-self: center; max-width: 220px; }
+      .jc-actions { display: flex; align-items: center; gap: 10px; }
+      @media (max-width: 640px) {
+        .jc-top { flex-direction: column; align-items: stretch; gap: 14px; }
+        .jc-headtext { flex: 1 1 auto; width: 100%; align-items: flex-start; }
+        .jc-cluster { margin-left: 0; width: 100%; flex-direction: column; align-items: stretch; gap: 14px; }
+        .jc-badges { justify-content: flex-start; align-self: flex-start; max-width: none; }
+        .jc-ringcol { justify-content: center; }
+        .jc-actions > :last-child { flex: 1; }
+      }
+    `}</style>
+  );
+}
+
 const WORK_MODEL_LABELS: Record<string, string> = {
   remote: "Remoto",
   hybrid: "Híbrido",
@@ -58,14 +84,12 @@ export function JobKeywordBadges({ job }: { job: PublicJob }) {
 
   return (
     <div
+      className="jc-badges"
       style={{
         display: "flex",
         flexWrap: "wrap",
         alignContent: "center",
-        alignSelf: "center",
-        justifyContent: "flex-end",
         gap: 5,
-        maxWidth: 220,
         flexShrink: 0,
       }}
     >
@@ -284,16 +308,9 @@ export function JobCard({
         fontFamily: GEIST,
       }}
     >
-      <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 14,
-            alignItems: "center",
-            minWidth: 0,
-            flex: "0 1 320px",
-          }}
-        >
+      <JobCardResponsiveStyles />
+      <div className="jc-top">
+        <div className="jc-headtext">
           <CompanyLogo name={job.company} websiteUrl={job.companyWebsiteUrl} />
           <div style={{ minWidth: 0 }}>
             <JobMetaRow job={job} />
@@ -302,19 +319,13 @@ export function JobCard({
 
         {/* Badges + ring + ações agrupados à direita numa cluster só — evita
         a segunda linha quase vazia que sobrava quando os botões ficavam num
-        row separado abaixo (nada pra preencher o espaço à esquerda deles). */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 20,
-            marginLeft: "auto",
-            flexShrink: 0,
-          }}
-        >
+        row separado abaixo (nada pra preencher o espaço à esquerda deles).
+        No mobile essa cluster empilha em coluna (ver JobCardResponsiveStyles). */}
+        <div className="jc-cluster">
           <JobKeywordBadges job={job} />
 
           <div
+            className="jc-ringcol"
             style={{
               display: "flex",
               flexDirection: "column",
@@ -410,7 +421,7 @@ export function JobCard({
           )}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="jc-actions">
             <SaveJobBtn
               jobId={job.id}
               initialSaved={!!job.isSaved}

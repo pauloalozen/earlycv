@@ -20,7 +20,12 @@ import { getAbsoluteUrl } from "@/lib/site";
 import { Carousel } from "./carousel";
 import { CompanyLogo } from "./company-logo";
 import { type ActiveFilters, FiltersBar } from "./filters-bar";
-import { JobCard, JobKeywordBadges, JobMetaRow } from "./job-card";
+import {
+  JobCard,
+  JobCardResponsiveStyles,
+  JobKeywordBadges,
+  JobMetaRow,
+} from "./job-card";
 import {
   AdaptBtn,
   MiniBar,
@@ -112,41 +117,24 @@ function calibrationPhrase(
 function JobCardLocked({ job }: { job: PublicJob }) {
   return (
     <div
+      className="jc-top"
       style={{
         background: "#fafaf6",
         border: "1px solid rgba(10,10,10,0.08)",
         borderRadius: 14,
         padding: "18px 20px",
-        display: "flex",
-        alignItems: "center",
-        gap: 16,
         opacity: 0.75,
         fontFamily: GEIST,
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          gap: 14,
-          alignItems: "center",
-          minWidth: 0,
-          flex: "0 1 320px",
-        }}
-      >
+      <JobCardResponsiveStyles />
+      <div className="jc-headtext">
         <CompanyLogo name={job.company} websiteUrl={job.companyWebsiteUrl} />
         <div style={{ minWidth: 0 }}>
           <JobMetaRow job={job} />
         </div>
       </div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 20,
-          marginLeft: "auto",
-          flexShrink: 0,
-        }}
-      >
+      <div className="jc-cluster">
         <JobKeywordBadges job={job} />
         <div
           style={{
