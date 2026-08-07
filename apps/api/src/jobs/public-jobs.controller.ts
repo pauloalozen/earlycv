@@ -17,8 +17,10 @@ import {
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { OptionalJwtAuthGuard } from "../common/optional-jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
+import { JobApplicationsService } from "../job-applications/job-applications.service";
 import { MatchingEngine } from "../radar/matching.engine";
 import { UserRadarProfileService } from "../radar/user-radar-profile.service";
+import { SavedJobsService } from "../saved-jobs/saved-jobs.service";
 import { JobsService } from "./jobs.service";
 import { buildPublicJobSlug, toPublicJobView } from "./public-job-view";
 import { PublicJobsGhostModeGuard } from "./public-jobs-ghost-mode.guard";
@@ -30,6 +32,10 @@ export class PublicJobsController {
     @Inject(UserRadarProfileService)
     private readonly userRadarProfileService: UserRadarProfileService,
     @Inject(MatchingEngine) private readonly matchingEngine: MatchingEngine,
+    @Inject(JobApplicationsService)
+    private readonly jobApplicationsService: JobApplicationsService,
+    @Inject(SavedJobsService)
+    private readonly savedJobsService: SavedJobsService,
   ) {}
 
   @Get()
@@ -54,6 +60,7 @@ export class PublicJobsController {
     @Query("minScore") minScoreRaw?: string,
     @Query("minSkillsPct") minSkillsPctRaw?: string,
     @Query("sort") sort?: string,
+    @Query("excludeAnalyzed") excludeAnalyzedRaw?: string,
   ) {
     const validPublishedWithin = ["24h", "3d", "7d"].includes(
       publishedWithin ?? "",
@@ -64,6 +71,7 @@ export class PublicJobsController {
     const minSkillsPct = minSkillsPctRaw
       ? Number.parseInt(minSkillsPctRaw, 10)
       : undefined;
+    const excludeAnalyzed = excludeAnalyzedRaw === "true";
 
     const parsedPage = Math.max(1, Number.parseInt(page ?? "1", 10) || 1);
     const parsedLimit = Math.min(
@@ -89,8 +97,20 @@ export class PublicJobsController {
         limit: parsedLimit,
       });
 
+      // isSaved independe de radarProfile — um usuário sem CV master ainda
+      // pode ter salvo vagas pra depois.
+      const savedJobIds = user
+        ? await this.savedJobsService.listSavedJobIds(
+            user.id,
+            jobs.map((job) => job.id),
+          )
+        : new Set<string>();
+
       return {
-        data: jobs.map((job) => toPublicJobView(job)),
+        data: jobs.map((job) => ({
+          ...toPublicJobView(job),
+          isSaved: savedJobIds.has(job.id),
+        })),
         total,
         page: parsedPage,
         limit: parsedLimit,
@@ -168,14 +188,31 @@ export class PublicJobsController {
       (item) => (item.match?.score ?? 0) >= 70,
     ).length;
 
+    // Resolvido pra todo o conjunto filtrado (não só a página) porque
+    // excludeAnalyzed precisa decidir quem entra na paginação antes de
+    // fatiar — filtrar só a página deixaria passar vagas já analisadas que
+    // deveriam ter sido removidas do total/paginação.
+    const bestScores = await this.jobApplicationsService.getBestScoresByJobIds(
+      user.id,
+      scoredAll.map(({ job }) => job.id),
+    );
+
     // minScore/minSkillsPct só existem quando o usuário ativa o filtro
     // explicitamente (Radar nunca esconde vaga por conta própria por
     // padrão) — vagas sem score calculável nunca passam nesses filtros.
+    // excludeAnalyzed é o único filtro do Radar que vem ligado por padrão no
+    // front (checkbox pré-marcado) — aqui só reage ao que o front mandou.
     const scored = scoredAll.filter((item) => {
       if (minScore !== undefined && (item.match?.score ?? -1) < minScore) {
         return false;
       }
       if (minSkillsPct !== undefined && (item.skillsPct ?? -1) < minSkillsPct) {
+        return false;
+      }
+      if (
+        excludeAnalyzed &&
+        typeof bestScores.get(item.job.id)?.bestScore === "number"
+      ) {
         return false;
       }
       return true;
@@ -185,14 +222,30 @@ export class PublicJobsController {
     const start = (parsedPage - 1) * parsedLimit;
     const pageItems = scored.slice(start, start + parsedLimit);
 
+    const savedJobIds = await this.savedJobsService.listSavedJobIds(
+      user.id,
+      pageItems.map(({ job }) => job.id),
+    );
+
     return {
-      data: pageItems.map(({ job, match }) => ({
-        ...toPublicJobView(job),
-        score: match?.score ?? null,
-        breakdown: match?.breakdown ?? null,
-        matchedSkills: match?.matchedSkills ?? [],
-        missingSkills: match?.missingSkills ?? [],
-      })),
+      data: pageItems.map(({ job, match }) => {
+        const existing = bestScores.get(job.id) ?? null;
+        return {
+          ...toPublicJobView(job),
+          score: match?.score ?? null,
+          breakdown: match?.breakdown ?? null,
+          matchedSkills: match?.matchedSkills ?? [],
+          missingSkills: match?.missingSkills ?? [],
+          isSaved: savedJobIds.has(job.id),
+          existingApplication: existing
+            ? {
+                id: existing.applicationId,
+                status: existing.status,
+                bestScore: existing.bestScore,
+              }
+            : null,
+        };
+      }),
       total,
       highCompatCount,
       page: parsedPage,
@@ -246,15 +299,6 @@ export class PublicJobsController {
     @AuthenticatedUser() user: AuthenticatedRequestUser,
     @Param("slug") slug: string,
   ) {
-    const EMPTY_SCORE = {
-      score: null,
-      breakdown: null,
-      matchedSkills: [] as string[],
-      missingSkills: [] as string[],
-      strengths: [] as string[],
-      gaps: [] as string[],
-    };
-
     const jobs = await this.jobsService.listPublic();
     const found = jobs.find(
       (job) => buildPublicJobSlug(job.id, job.title, job.company.name) === slug,
@@ -262,6 +306,38 @@ export class PublicJobsController {
     if (!found) {
       throw new NotFoundException("job not found");
     }
+
+    // Independe do match Radar: o usuário pode ter analisado essa vaga
+    // diretamente (via /adaptar?jobId=), sem depender de ter UserRadarProfile
+    // ou de a vaga ter enrichment completo.
+    const bestScores = await this.jobApplicationsService.getBestScoresByJobIds(
+      user.id,
+      [found.id],
+    );
+    const existing = bestScores.get(found.id) ?? null;
+    const existingApplication = existing
+      ? {
+          id: existing.applicationId,
+          status: existing.status,
+          bestScore: existing.bestScore,
+        }
+      : null;
+
+    const savedJobIds = await this.savedJobsService.listSavedJobIds(user.id, [
+      found.id,
+    ]);
+    const isSaved = savedJobIds.has(found.id);
+
+    const EMPTY_SCORE = {
+      score: null,
+      breakdown: null,
+      matchedSkills: [] as string[],
+      missingSkills: [] as string[],
+      strengths: [] as string[],
+      gaps: [] as string[],
+      existingApplication,
+      isSaved,
+    };
 
     const radarProfile = await this.userRadarProfileService.getProfile(user.id);
     if (!radarProfile) {
@@ -303,6 +379,8 @@ export class PublicJobsController {
       ...matchScore,
       strengths: matchScore.matchedSkills,
       gaps: matchScore.missingSkills,
+      existingApplication,
+      isSaved,
     };
   }
 }

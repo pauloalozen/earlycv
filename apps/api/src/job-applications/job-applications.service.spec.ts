@@ -774,6 +774,87 @@ test("derives best adaptation preferring CV_READY when scores tie", async () => 
   assert.equal(item.interviewPrepLockReason, "missing_selected_cv");
 });
 
+test("getBestScoresByJobIds returns best score per jobId, keyed for the caller (Radar 'já analisado' UI)", async () => {
+  let capturedWhere: Record<string, unknown> | null = null;
+
+  const db = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        capturedWhere = where;
+        return [
+          {
+            id: "app-1",
+            userId: "user-1",
+            jobId: "job-a",
+            status: "ANALYZED",
+            cvAdaptations: [
+              {
+                id: "a1",
+                createdAt: new Date("2026-05-01T10:00:00Z"),
+                status: "delivered",
+                adaptedResumeId: "resume-1",
+                isUnlocked: true,
+                adaptedContentJson: { scoreAfter: 71 },
+              },
+            ],
+          },
+          {
+            id: "app-2",
+            userId: "user-1",
+            jobId: "job-b",
+            status: "SAVED",
+            cvAdaptations: [],
+          },
+        ];
+      },
+    },
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+  const result = await service.getBestScoresByJobIds("user-1", [
+    "job-a",
+    "job-b",
+    "job-c",
+  ]);
+
+  assert.deepEqual(capturedWhere, {
+    userId: "user-1",
+    jobId: { in: ["job-a", "job-b", "job-c"] },
+    deletedAt: null,
+  });
+  assert.deepEqual(result.get("job-a"), {
+    applicationId: "app-1",
+    status: "ANALYZED",
+    bestScore: 71,
+  });
+  assert.deepEqual(result.get("job-b"), {
+    applicationId: "app-2",
+    status: "SAVED",
+    bestScore: null,
+  });
+  assert.equal(result.has("job-c"), false);
+});
+
+test("getBestScoresByJobIds returns an empty map without querying the database when jobIds is empty", async () => {
+  let called = false;
+  const db = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findMany: async () => {
+        called = true;
+        return [];
+      },
+    },
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+  const result = await service.getBestScoresByJobIds("user-1", []);
+
+  assert.equal(called, false);
+  assert.equal(result.size, 0);
+});
+
 test("list scopes by archived flag and always excludes deleted", async () => {
   let capturedWhere: Record<string, unknown> | null = null;
 

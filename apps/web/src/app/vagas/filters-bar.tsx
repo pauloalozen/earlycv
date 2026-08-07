@@ -46,6 +46,8 @@ export type ActiveFilters = {
   area?: string;
   minSkillsPct?: string;
   sort?: string;
+  // undefined = filtro ligado (default); "false" = usuário desmarcou.
+  excludeAnalyzed?: string;
 };
 
 function csv(value?: string): string[] {
@@ -126,11 +128,15 @@ function MultiFilterDropdown({
 }: MultiFilterDropdownProps) {
   if (options.length === 0) return null;
   const isActive = selected.length > 0;
-  const currentLabel = isActive
-    ? selected
-        .map((v) => options.find((o) => o.value === v)?.label ?? v)
-        .join(", ")
-    : allLabel;
+  // Rótulo com largura previsível — listar todos os valores selecionados
+  // faria a pill crescer sem limite e quebrar a linha de filtros (ex:
+  // "Remoto, Híbrido, onsite"). Acima de 1 item, mostra só a contagem.
+  const currentLabel =
+    selected.length === 0
+      ? allLabel
+      : selected.length === 1
+        ? (options.find((o) => o.value === selected[0])?.label ?? selected[0])
+        : `${selected.length} selecionadas`;
 
   return (
     <details className="vagas-filter-dropdown" style={{ position: "relative" }}>
@@ -143,13 +149,15 @@ function MultiFilterDropdown({
           gap: 7,
           padding: "8px 12px",
           borderRadius: 99,
-          background: isActive ? "#0a0a0a" : "#fafaf6",
-          color: isActive ? "#fafaf6" : "#3a3a38",
-          border: `1px solid ${isActive ? "#0a0a0a" : "rgba(10,10,10,0.1)"}`,
+          background: "#fafaf6",
+          color: "#3a3a38",
+          border: `1.5px solid ${isActive ? "rgba(10,10,10,0.35)" : "rgba(10,10,10,0.1)"}`,
           fontSize: 12.5,
           whiteSpace: "nowrap",
           fontFamily: GEIST,
-          maxWidth: 260,
+          width: 172,
+          boxSizing: "border-box",
+          flexShrink: 0,
         }}
       >
         <span
@@ -165,10 +173,13 @@ function MultiFilterDropdown({
         </span>
         <span
           style={{
-            fontWeight: 500,
+            flex: 1,
+            fontWeight: isActive ? 600 : 500,
+            color: "#0a0a0a",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
+            minWidth: 0,
           }}
         >
           {currentLabel}
@@ -285,12 +296,15 @@ function SingleFilterDropdown({
           gap: 7,
           padding: "8px 12px",
           borderRadius: 99,
-          background: isActive ? "#0a0a0a" : "#fafaf6",
-          color: isActive ? "#fafaf6" : "#3a3a38",
-          border: `1px solid ${isActive ? "#0a0a0a" : "rgba(10,10,10,0.1)"}`,
+          background: "#fafaf6",
+          color: "#3a3a38",
+          border: `1.5px solid ${isActive ? "rgba(10,10,10,0.35)" : "rgba(10,10,10,0.1)"}`,
           fontSize: 12.5,
           whiteSpace: "nowrap",
           fontFamily: GEIST,
+          width: 208,
+          boxSizing: "border-box",
+          flexShrink: 0,
         }}
       >
         <span
@@ -299,11 +313,24 @@ function SingleFilterDropdown({
             fontSize: 9.5,
             letterSpacing: 0.4,
             opacity: 0.6,
+            flexShrink: 0,
           }}
         >
           {label}
         </span>
-        <span style={{ fontWeight: 500 }}>{currentLabel}</span>
+        <span
+          style={{
+            flex: 1,
+            fontWeight: isActive ? 600 : 500,
+            color: "#0a0a0a",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            minWidth: 0,
+          }}
+        >
+          {currentLabel}
+        </span>
         <ChevronIcon />
       </summary>
       <div
@@ -377,6 +404,7 @@ type FiltersBarProps = {
 export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
   const router = useRouter();
 
+  const [q, setQ] = useState(activeFilters.q ?? "");
   const [modalidade, setModalidade] = useState<string[]>(
     csv(activeFilters.modalidade),
   );
@@ -417,9 +445,11 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
     modalidade.length +
     senioridade.length +
     empresa.length +
-    (publicada ? 1 : 0);
+    (publicada ? 1 : 0) +
+    (q.trim() ? 1 : 0);
 
   const isDirty =
+    q !== (activeFilters.q ?? "") ||
     !sameSet(modalidade, csv(activeFilters.modalidade)) ||
     !sameSet(senioridade, csv(activeFilters.senioridade)) ||
     !sameSet(empresa, csv(activeFilters.empresa)) ||
@@ -433,7 +463,7 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
 
   function applyFilters() {
     const p = new URLSearchParams();
-    if (activeFilters.q) p.set("q", activeFilters.q);
+    if (q.trim()) p.set("q", q.trim());
     if (activeFilters.area) p.set("area", activeFilters.area);
     if (modalidade.length > 0) p.set("modalidade", modalidade.join(","));
     if (senioridade.length > 0) p.set("senioridade", senioridade.join(","));
@@ -442,15 +472,32 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
     if (activeFilters.minSkillsPct)
       p.set("minSkillsPct", activeFilters.minSkillsPct);
     if (activeFilters.sort) p.set("sort", activeFilters.sort);
+    if (activeFilters.excludeAnalyzed === "false") {
+      p.set("excludeAnalyzed", "false");
+    }
     const qs = p.toString();
     router.push(`/vagas${qs ? `?${qs}` : ""}`);
   }
 
   function clearAll() {
+    setQ("");
     setModalidade([]);
     setSenioridade([]);
     setEmpresa([]);
     setPublicada("");
+
+    // Navega direto — só resetar o estado local deixa a busca (server-side)
+    // com os filtros antigos até o usuário clicar em "aplicar filtros".
+    // area/minSkillsPct também somem: eram derivados de um filtro que não
+    // existe mais depois do clear. sort e excludeAnalyzed não são "filtros"
+    // desta barra, então continuam como estavam.
+    const p = new URLSearchParams();
+    if (activeFilters.sort) p.set("sort", activeFilters.sort);
+    if (activeFilters.excludeAnalyzed === "false") {
+      p.set("excludeAnalyzed", "false");
+    }
+    const qs = p.toString();
+    router.push(`/vagas${qs ? `?${qs}` : ""}`);
   }
 
   // Fecha qualquer dropdown aberto (<details class="vagas-filter-dropdown">)
@@ -472,17 +519,21 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
   }, []);
 
   return (
-    <div
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        applyFilters();
+      }}
       style={{
         display: "flex",
-        alignItems: "flex-start",
+        alignItems: "center",
         justifyContent: "space-between",
-        gap: 12,
+        gap: 16,
         background: "#fff",
         border: "1px solid rgba(10,10,10,0.08)",
         borderRadius: 12,
         padding: "10px 12px",
-        flexWrap: "wrap",
+        flexWrap: "nowrap",
       }}
     >
       <style>{`
@@ -495,11 +546,78 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
           display: "flex",
           alignItems: "center",
           gap: 8,
-          flexWrap: "wrap",
+          flexWrap: "nowrap",
           flex: 1,
           minWidth: 0,
         }}
       >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flex: "1 1 auto",
+            minWidth: 120,
+            padding: "8px 10px",
+          }}
+        >
+          <svg
+            aria-hidden
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            style={{ flexShrink: 0 }}
+          >
+            <title>Buscar</title>
+            <circle cx="11" cy="11" r="7" stroke="#8a8a85" strokeWidth="1.7" />
+            <path
+              d="M20 20l-3.5-3.5"
+              stroke="#8a8a85"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+            />
+          </svg>
+          <input
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            placeholder="Cargo, tecnologia, empresa…"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              border: "none",
+              background: "transparent",
+              fontSize: 14,
+              fontFamily: GEIST,
+              color: "#0a0a0a",
+              outline: "none",
+            }}
+          />
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              color: "#8a8a85",
+              background: "rgba(10,10,10,0.05)",
+              padding: "2px 6px",
+              borderRadius: 4,
+              flexShrink: 0,
+            }}
+          >
+            ⌘K
+          </span>
+        </div>
+
+        <div
+          aria-hidden
+          style={{
+            width: 1,
+            alignSelf: "stretch",
+            background: "rgba(10,10,10,0.08)",
+            flexShrink: 0,
+          }}
+        />
+
         <MultiFilterDropdown
           label="MODALIDADE"
           allLabel="todas"
@@ -534,59 +652,101 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
         />
       </div>
 
+      {/* Botões-ícone (com tooltip nativo via title) — largura fixa e bem
+          menor que os textos, então essa área nunca disputa espaço com os
+          pills à esquerda nem força a busca a encolher demais. */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 12,
+          gap: 8,
           flexShrink: 0,
         }}
       >
-        {pendingCount > 0 ? (
-          <button
-            type="button"
-            onClick={clearAll}
-            style={{
-              fontFamily: MONO,
-              fontSize: 11,
-              color: "#3a3a38",
-              textDecoration: "underline",
-              textUnderlineOffset: 3,
-              textDecorationColor: "rgba(10,10,10,0.2)",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              background: "transparent",
-              border: "none",
-              padding: 0,
-            }}
-          >
-            limpar filtros ({pendingCount})
-          </button>
-        ) : null}
-
         <button
           type="button"
-          onClick={applyFilters}
-          disabled={!isDirty}
+          onClick={clearAll}
+          title={`limpar filtros (${pendingCount})`}
+          aria-label={`limpar filtros (${pendingCount})`}
+          aria-hidden={pendingCount === 0}
+          tabIndex={pendingCount === 0 ? -1 : 0}
           style={{
-            display: "inline-flex",
+            width: 34,
+            height: 34,
+            display: "flex",
             alignItems: "center",
-            gap: 6,
+            justifyContent: "center",
+            borderRadius: 8,
+            background: "#fafaf6",
+            border: "1px solid rgba(10,10,10,0.1)",
+            color: "#3a3a38",
+            cursor: pendingCount > 0 ? "pointer" : "default",
+            visibility: pendingCount > 0 ? "visible" : "hidden",
+            pointerEvents: pendingCount > 0 ? "auto" : "none",
+            flexShrink: 0,
+          }}
+        >
+          <svg
+            aria-hidden
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <title>Limpar filtros</title>
+            <circle
+              cx="12"
+              cy="12"
+              r="9"
+              stroke="currentColor"
+              strokeWidth="1.7"
+            />
+            <path
+              d="M9 9l6 6M15 9l-6 6"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+
+        <button
+          type="submit"
+          disabled={!isDirty}
+          title="aplicar filtros"
+          aria-label="aplicar filtros"
+          style={{
+            width: 34,
+            height: 34,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             background: isDirty ? "#0a0a0a" : "rgba(10,10,10,0.08)",
             color: isDirty ? "#fafaf6" : "#8a8a85",
             border: "none",
             borderRadius: 8,
-            padding: "8px 14px",
-            fontSize: 12.5,
-            fontWeight: 500,
             cursor: isDirty ? "pointer" : "default",
-            fontFamily: GEIST,
-            whiteSpace: "nowrap",
+            flexShrink: 0,
           }}
         >
-          aplicar filtros
+          <svg
+            aria-hidden
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <title>Aplicar filtros</title>
+            <path
+              d="M5 12l5 5L20 7"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
       </div>
-    </div>
+    </form>
   );
 }

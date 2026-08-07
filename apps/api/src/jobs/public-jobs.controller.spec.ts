@@ -48,6 +48,7 @@ const PROFILE = {
 function buildController(
   jobs: ReturnType<typeof buildJob>[],
   profile: unknown,
+  bestScores: Map<string, unknown> = new Map(),
 ) {
   const jobsService = {
     listByIdsWithEnrichment: async () => jobs,
@@ -56,11 +57,19 @@ function buildController(
     getProfile: async () => profile,
   };
   const matchingEngine = new MatchingEngine({} as never);
+  const jobApplicationsService = {
+    getBestScoresByJobIds: async () => bestScores,
+  };
+  const savedJobsService = {
+    listSavedJobIds: async () => new Set<string>(),
+  };
 
   return new PublicJobsController(
     jobsService as never,
     userRadarProfileService as never,
     matchingEngine,
+    jobApplicationsService as never,
+    savedJobsService as never,
   );
 }
 
@@ -233,6 +242,86 @@ test("list includes breakdown/matchedSkills/missingSkills per item", async () =>
   assert.deepEqual(item.missingSkills, []);
 });
 
+test("list attaches existingApplication for jobs already analyzed, null otherwise", async () => {
+  const analyzedJob = buildJob({ id: "analyzed" });
+  const freshJob = buildJob({ id: "fresh" });
+  const bestScores = new Map([
+    ["analyzed", { applicationId: "app-1", status: "ANALYZED", bestScore: 88 }],
+  ]);
+  const controller = buildController(
+    [analyzedJob, freshJob],
+    PROFILE,
+    bestScores,
+  );
+
+  const result = await controller.list(undefined as never, USER);
+
+  const byId = Object.fromEntries(
+    result.data.map((item) => [item.id, item.existingApplication]),
+  );
+  assert.deepEqual(byId.analyzed, {
+    id: "app-1",
+    status: "ANALYZED",
+    bestScore: 88,
+  });
+  assert.equal(byId.fresh, null);
+});
+
+test("list excludeAnalyzed=true removes already-analyzed jobs from total/pagination, false (default) keeps them", async () => {
+  const analyzedJob = buildJob({ id: "analyzed" });
+  const freshJob = buildJob({ id: "fresh" });
+  const bestScores = new Map([
+    ["analyzed", { applicationId: "app-1", status: "ANALYZED", bestScore: 88 }],
+  ]);
+  const controller = buildController(
+    [analyzedJob, freshJob],
+    PROFILE,
+    bestScores,
+  );
+
+  const withoutFilter = await controller.list(
+    undefined as never,
+    USER,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  );
+  assert.equal(withoutFilter.total, 2);
+  assert.deepEqual(withoutFilter.data.map((j) => j.id).sort(), [
+    "analyzed",
+    "fresh",
+  ]);
+
+  const withFilter = await controller.list(
+    undefined as never,
+    USER,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    "true",
+  );
+  assert.equal(withFilter.total, 1);
+  assert.deepEqual(
+    withFilter.data.map((j) => j.id),
+    ["fresh"],
+  );
+});
+
 test("list falls back to unpersonalized listing when user has no UserRadarProfile", async () => {
   const jobsService = {
     listByIdsWithEnrichment: async () => {
@@ -245,10 +334,13 @@ test("list falls back to unpersonalized listing when user has no UserRadarProfil
   };
   const userRadarProfileService = { getProfile: async () => null };
   const matchingEngine = new MatchingEngine({} as never);
+  const savedJobsService = { listSavedJobIds: async () => new Set<string>() };
   const controller = new PublicJobsController(
     jobsService as never,
     userRadarProfileService as never,
     matchingEngine,
+    undefined as never,
+    savedJobsService as never,
   );
 
   const result = await controller.list(undefined as never, USER);

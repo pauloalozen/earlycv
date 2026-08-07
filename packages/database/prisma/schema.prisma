@@ -381,6 +381,7 @@ model User {
   masterCvCanonicalExtractions MasterCvCanonicalExtraction[]
   analysisJobs                 AnalysisJob[]
   radarProfile                 UserRadarProfile?
+  savedJobs                    SavedJob[]
 }
 
 model UserDailyAnalysisUsage {
@@ -1490,10 +1491,27 @@ model Job {
   targetResumes     Resume[]
   enrichment        JobEnrichment?
   applications      JobApplication[]
+  savedBy           SavedJob[]
 
   @@index([companyId])
   @@index([jobSourceId])
   @@index([firstSeenAt])
+}
+
+// Vaga salva/favoritada pelo usuário no Radar de Oportunidades — bookmark
+// simples, sem relação com o pipeline de candidatura/análise (JobApplication).
+// Botão "Salvar vaga" em /vagas e /vagas/[slug]; listagem em /vagas-salvas.
+model SavedJob {
+  id        String   @id @default(cuid())
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId])
+  @@index([userId, createdAt])
 }
 
 model JobEnrichment {

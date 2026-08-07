@@ -1,0 +1,393 @@
+import Link from "next/link";
+import type { PublicJob } from "@/lib/public-jobs-api";
+import { CompanyLogo } from "./company-logo";
+import {
+  AdaptBtn,
+  breakdownPct,
+  MiniBar,
+  ScoreRing,
+  SkillChip,
+} from "./radar-ui";
+import { SaveJobBtn } from "./save-job-btn";
+
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
+
+const WORK_MODEL_LABELS: Record<string, string> = {
+  remote: "Remoto",
+  hybrid: "Híbrido",
+  "on-site": "Presencial",
+};
+
+const SENIORITY_LABELS: Record<string, string> = {
+  intern: "Estagiário",
+  junior: "Júnior",
+  junior_level: "Júnior",
+  jr: "Júnior",
+  mid: "Pleno",
+  mid_level: "Pleno",
+  pleno: "Pleno",
+  senior: "Sênior",
+  senior_level: "Sênior",
+  sr: "Sênior",
+  lead: "Lead",
+  tech_lead: "Tech Lead",
+  staff: "Staff",
+  principal: "Principal",
+};
+
+function formatRelativeTime(isoDate: string): string {
+  const diffMs = Date.now() - new Date(isoDate).getTime();
+  const diffH = Math.floor(diffMs / 3_600_000);
+  if (diffH < 1) return "< 1h";
+  if (diffH < 24) return `${diffH}h`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD === 1) return "1 dia";
+  if (diffD < 7) return `${diffD} dias`;
+  const diffW = Math.floor(diffD / 7);
+  if (diffW === 1) return "1 semana";
+  return `${diffW} semanas`;
+}
+
+export function JobMetaRow({ job }: { job: PublicJob }) {
+  const alreadyAnalyzed =
+    typeof job.existingApplication?.bestScore === "number";
+  const published = job.publishedAtSource ?? job.firstSeenAt;
+  const workModelLabel = job.workModel
+    ? (WORK_MODEL_LABELS[job.workModel] ?? job.workModel)
+    : null;
+  const seniorityLabel = job.seniorityLevel
+    ? (SENIORITY_LABELS[job.seniorityLevel.toLowerCase()] ?? job.seniorityLevel)
+    : null;
+
+  return (
+    <>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 2,
+          flexWrap: "wrap",
+        }}
+      >
+        <Link
+          href={`/vagas/${job.slug}`}
+          style={{
+            fontSize: 15.5,
+            fontWeight: 500,
+            letterSpacing: -0.3,
+            color: "#0a0a0a",
+            textDecoration: "none",
+            lineHeight: 1.3,
+          }}
+        >
+          {job.title}
+        </Link>
+        {alreadyAnalyzed ? (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 3,
+              background: "#c6ff3a",
+              color: "#405410",
+              fontFamily: MONO,
+              fontSize: 9.5,
+              padding: "2px 6px",
+              borderRadius: 4,
+              fontWeight: 600,
+              letterSpacing: 0.4,
+              flexShrink: 0,
+            }}
+          >
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="#405410">
+              <title>Vaga já analisada</title>
+              <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
+            </svg>
+            Vaga já analisada
+          </span>
+        ) : null}
+      </div>
+
+      <div style={{ fontSize: 12.5, color: "#6a6560", marginBottom: 10 }}>
+        {job.company}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 5,
+          marginBottom: 10,
+        }}
+      >
+        {workModelLabel ? (
+          <span
+            style={{
+              background: "rgba(198,255,58,0.22)",
+              color: "#405410",
+              fontFamily: MONO,
+              fontSize: 10,
+              padding: "3px 8px",
+              borderRadius: 4,
+              letterSpacing: 0.2,
+              fontWeight: 500,
+            }}
+          >
+            {workModelLabel}
+          </span>
+        ) : null}
+        {seniorityLabel ? (
+          <span
+            style={{
+              background: "rgba(10,10,10,0.05)",
+              color: "#3a3a38",
+              fontFamily: MONO,
+              fontSize: 10,
+              padding: "3px 8px",
+              borderRadius: 4,
+              letterSpacing: 0.2,
+            }}
+          >
+            {seniorityLabel}
+          </span>
+        ) : null}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 11.5,
+          color: "#6a6560",
+          flexWrap: "wrap",
+        }}
+      >
+        {job.location ? (
+          <span
+            style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+              <title>Local</title>
+              <circle
+                cx="12"
+                cy="10"
+                r="3.2"
+                stroke="#8a8a85"
+                strokeWidth="1.6"
+              />
+              <path
+                d="M19 10c0 5.5-7 12-7 12s-7-6.5-7-12a7 7 0 0 1 14 0z"
+                stroke="#8a8a85"
+                strokeWidth="1.6"
+              />
+            </svg>
+            {job.location}
+          </span>
+        ) : null}
+        {job.location ? (
+          <span
+            style={{
+              width: 2,
+              height: 2,
+              borderRadius: "50%",
+              background: "#c8c6bf",
+              flexShrink: 0,
+            }}
+          />
+        ) : null}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+            <title>Tempo</title>
+            <circle cx="12" cy="12" r="9" stroke="#8a8a85" strokeWidth="1.6" />
+            <path
+              d="M12 7v5l3 2"
+              stroke="#8a8a85"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
+          há {formatRelativeTime(published)}
+        </span>
+      </div>
+    </>
+  );
+}
+
+export type JobCardProps = {
+  job: PublicJob;
+  adaptarHref: string;
+  showScore: boolean;
+  isLoggedIn: boolean;
+};
+
+// Card full-width: ring de score dominante à direita + breakdown inline +
+// chips de skill quando disponíveis. `showScore=false` cobre tanto anônimo
+// quanto vaga ainda não enriquecida (score null) — o card fica idêntico,
+// só sem a coluna de compatibilidade. Reaproveitado tal e qual em /vagas e
+// /vagas-salvas (mesmas informações, mesmo componente).
+export function JobCard({
+  job,
+  adaptarHref,
+  showScore,
+  isLoggedIn,
+}: JobCardProps) {
+  const bestAnalysisScore = job.existingApplication?.bestScore;
+  const hasAnalysis = typeof bestAnalysisScore === "number";
+  const hasScore = hasAnalysis || (showScore && typeof job.score === "number");
+  const displayScore = hasAnalysis ? bestAnalysisScore : job.score;
+  const adaptarUrl = adaptarHref.includes("?")
+    ? `${adaptarHref}&jobId=${job.id}`
+    : `${adaptarHref}?jobId=${job.id}`;
+
+  const topSkills = [
+    ...(job.matchedSkills ?? []).map((s) => ({ label: s, have: true })),
+    ...(job.missingSkills ?? []).map((s) => ({ label: s, have: false })),
+  ].slice(0, 6);
+
+  return (
+    <div
+      style={{
+        background: "#fafaf6",
+        border: "1px solid rgba(10,10,10,0.08)",
+        borderRadius: 14,
+        padding: "18px 20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+        boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+        fontFamily: GEIST,
+      }}
+    >
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+        <div style={{ display: "flex", gap: 14, flex: 1, minWidth: 0 }}>
+          <CompanyLogo name={job.company} websiteUrl={job.companyWebsiteUrl} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <JobMetaRow job={job} />
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 8,
+            flexShrink: 0,
+          }}
+        >
+          {hasScore && typeof displayScore === "number" ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <ScoreRing value={displayScore} size={64} />
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 9,
+                  fontWeight: 600,
+                  letterSpacing: 0.4,
+                  color: hasAnalysis ? "#1f7a34" : "#8a8a85",
+                }}
+              >
+                {hasAnalysis ? "Score Análise" : "Score Oportunidade"}
+              </span>
+            </div>
+          ) : (
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: "50%",
+                border: "1.5px dashed rgba(10,10,10,0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 10,
+                color: "#8a8a85",
+                fontFamily: MONO,
+                textAlign: "center",
+                lineHeight: 1.2,
+              }}
+            >
+              {showScore ? "em análise" : "—"}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {hasScore && job.breakdown && !hasAnalysis ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 12,
+            paddingTop: 12,
+            borderTop: "1px solid rgba(10,10,10,0.06)",
+          }}
+        >
+          <MiniBar
+            label="área"
+            value={breakdownPct("area", job.breakdown.area)}
+            compact
+          />
+          <MiniBar
+            label="skills"
+            value={breakdownPct("skills", job.breakdown.skills)}
+            compact
+          />
+          <MiniBar
+            label="senioridade"
+            value={breakdownPct("seniority", job.breakdown.seniority)}
+            compact
+          />
+          <MiniBar
+            label="tecnologias"
+            value={breakdownPct("technologies", job.breakdown.technologies)}
+            compact
+          />
+        </div>
+      ) : null}
+
+      {topSkills.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {topSkills.map((s) => (
+            <SkillChip key={s.label} label={s.label} have={s.have} />
+          ))}
+        </div>
+      ) : null}
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: 10,
+          paddingTop: topSkills.length > 0 ? 0 : 4,
+        }}
+      >
+        <SaveJobBtn
+          jobId={job.id}
+          initialSaved={!!job.isSaved}
+          isLoggedIn={isLoggedIn}
+        />
+        {hasAnalysis && job.existingApplication ? (
+          <AdaptBtn
+            href={`/candidaturas/${job.existingApplication.id}`}
+            score={bestAnalysisScore}
+            variant="view"
+          />
+        ) : (
+          <AdaptBtn href={adaptarUrl} score={hasScore ? job.score : null} />
+        )}
+      </div>
+    </div>
+  );
+}

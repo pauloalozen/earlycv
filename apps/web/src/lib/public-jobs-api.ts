@@ -11,6 +11,12 @@ export type MatchBreakdown = {
   workModel: number;
 };
 
+export type ExistingApplication = {
+  id: string;
+  status: string;
+  bestScore: number | null;
+} | null;
+
 export type PublicJob = {
   canonicalKey: string;
   company: string;
@@ -34,6 +40,8 @@ export type PublicJob = {
   breakdown?: MatchBreakdown | null;
   matchedSkills?: string[];
   missingSkills?: string[];
+  existingApplication?: ExistingApplication;
+  isSaved?: boolean;
 };
 
 export type PublicJobsPage = {
@@ -55,6 +63,7 @@ export type PublicJobsFilters = {
   minScore?: number;
   minSkillsPct?: number;
   sort?: "score_desc" | "score_asc" | "date_desc" | "date_asc";
+  excludeAnalyzed?: boolean;
 };
 
 export type FacetItem = { value: string; count: number };
@@ -92,6 +101,7 @@ export async function listPublicJobs(
   if (filters?.minSkillsPct)
     params.set("minSkillsPct", String(filters.minSkillsPct));
   if (filters?.sort) params.set("sort", filters.sort);
+  if (filters?.excludeAnalyzed) params.set("excludeAnalyzed", "true");
 
   const qs = params.toString();
   return requestPublicJobs<PublicJobsPage>(`/public/jobs${qs ? `?${qs}` : ""}`);

@@ -15,7 +15,7 @@ import {
   listPublicJobs,
   type PublicJob,
 } from "@/lib/public-jobs-api";
-import { getJobMatchScore } from "@/lib/radar-api";
+import { type ExistingApplicationDto, getJobMatchScore } from "@/lib/radar-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { AnalysisCtaButtons } from "../analysis-cta";
@@ -29,6 +29,7 @@ import {
   SkillChip,
   scoreColor,
 } from "../radar-ui";
+import { SaveJobTextBtn } from "../save-job-btn";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -89,7 +90,7 @@ function dimensionDescription(
   return "pouco alinhado com seu perfil";
 }
 
-function CompatHead() {
+function CompatHead({ isAnalysis = false }: { isAnalysis?: boolean }) {
   return (
     <div
       style={{
@@ -116,12 +117,12 @@ function CompatHead() {
             width: 6,
             height: 6,
             borderRadius: "50%",
-            background: "#c6ff3a",
+            background: isAnalysis ? "#4ade80" : "#c6ff3a",
             display: "inline-block",
             flexShrink: 0,
           }}
         />
-        OPORTUNIDADE
+        {isAnalysis ? "ANÁLISE" : "OPORTUNIDADE"}
       </span>
       <span
         style={{
@@ -131,7 +132,7 @@ function CompatHead() {
           letterSpacing: 0.3,
         }}
       >
-        Baseado no seu perfil
+        {isAnalysis ? "Baseado na sua candidatura" : "Baseado no seu perfil"}
       </span>
     </div>
   );
@@ -216,10 +217,48 @@ function CompatCardCta({
 function CompatCard({
   scoreState,
   match,
+  existingApplication,
 }: {
   scoreState: ScoreState;
   match: MatchData | null;
+  existingApplication: ExistingApplicationDto;
 }) {
+  if (
+    existingApplication &&
+    typeof existingApplication.bestScore === "number"
+  ) {
+    return (
+      <CompatCardShell>
+        <CompatHead isAnalysis />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            paddingBottom: 4,
+          }}
+        >
+          <ScoreRing value={existingApplication.bestScore} size={88} dark />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: "#4ade80",
+              }}
+            >
+              score da sua análise
+            </span>
+            <span style={{ fontSize: 11.5, color: "#a8a6a0" }}>
+              Calculado a partir do CV que você usou nesta candidatura.
+            </span>
+          </div>
+        </div>
+      </CompatCardShell>
+    );
+  }
+
   if (scoreState === "anonymous") {
     return (
       <CompatCardCta
@@ -510,6 +549,8 @@ export default async function JobPage({ params }: JobPageProps) {
   let hasCvMaster = false;
   let masterResumeId: string | null = null;
   let match: MatchData | null = null;
+  let existingApplication: ExistingApplicationDto = null;
+  let isSaved = false;
   if (user) {
     const [master, matchScore] = await Promise.all([
       getMyMasterResume().catch(() => null),
@@ -525,6 +566,8 @@ export default async function JobPage({ params }: JobPageProps) {
         missingSkills: matchScore.missingSkills,
       };
     }
+    existingApplication = matchScore?.existingApplication ?? null;
+    isSaved = !!matchScore?.isSaved;
   }
 
   const scoreState: ScoreState = !user
@@ -533,15 +576,13 @@ export default async function JobPage({ params }: JobPageProps) {
       ? "has-cv"
       : "no-cv";
 
+  const hasExistingAnalysisScore =
+    typeof existingApplication?.bestScore === "number";
+
   const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar";
   const adaptarJobHref = `${adaptarHref}${adaptarHref.includes("?") ? `&jobId=${job.id}` : `?jobId=${job.id}`}`;
 
   const sections = splitHtmlSections(job.descriptionHtml);
-
-  const isEarly =
-    !!job.publishedAtSource &&
-    new Date(job.firstSeenAt).getTime() <
-      new Date(job.publishedAtSource).getTime() + 6 * 3_600_000;
 
   const workModelLabel = job.workModel
     ? (WORK_MODEL_LABELS[job.workModel] ?? job.workModel)
@@ -732,13 +773,14 @@ export default async function JobPage({ params }: JobPageProps) {
             {workModelLabel ? (
               <span
                 style={{
-                  background: "rgba(198,255,58,0.22)",
+                  background: "#c6ff3a",
                   color: "#405410",
                   fontFamily: MONO,
                   fontSize: 10.5,
-                  padding: "4px 9px",
+                  padding: "4px 10px",
                   borderRadius: 5,
-                  fontWeight: 500,
+                  fontWeight: 600,
+                  letterSpacing: 0.2,
                 }}
               >
                 {workModelLabel}
@@ -771,29 +813,6 @@ export default async function JobPage({ params }: JobPageProps) {
                 }}
               >
                 {job.employmentType}
-              </span>
-            ) : null}
-            {isEarly ? (
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  background: "#c6ff3a",
-                  color: "#405410",
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  padding: "4px 10px",
-                  borderRadius: 5,
-                  fontWeight: 600,
-                  letterSpacing: 0.2,
-                }}
-              >
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="#405410">
-                  <title>Early</title>
-                  <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
-                </svg>
-                vaga nova — chegou ao EarlyCV antes do LinkedIn
               </span>
             ) : null}
           </div>
@@ -949,11 +968,17 @@ export default async function JobPage({ params }: JobPageProps) {
           {/* Sidebar */}
           <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {/* Compat card */}
-            <CompatCard scoreState={scoreState} match={match} />
+            <CompatCard
+              scoreState={scoreState}
+              match={match}
+              existingApplication={existingApplication}
+            />
 
-            {/* Distinção match (Radar) vs. análise (CV Adaptation) — texto
-                só aparece quando há score pra explicar, sem mudar layout */}
-            {match ? (
+            {/* Distinção match (Radar) vs. análise (CV Adaptation) — texto só
+                aparece quando há score de oportunidade pra explicar e ainda
+                não existe uma análise real (nesse caso o card já mostra o
+                score real, a distinção deixa de fazer sentido) */}
+            {match && !hasExistingAnalysisScore ? (
               <p
                 style={{
                   margin: 0,
@@ -989,14 +1014,44 @@ export default async function JobPage({ params }: JobPageProps) {
               >
                 CANDIDATURA
               </div>
-              <AnalysisCtaButtons
-                isLoggedIn={!!user}
-                masterResumeId={masterResumeId}
-                radarJobId={job.id}
-                jobDescriptionText={job.description}
-                score={match?.score}
-                secondaryHref={adaptarJobHref}
-              />
+              {hasExistingAnalysisScore && existingApplication ? (
+                <a
+                  href={`/candidaturas/${existingApplication.id}`}
+                  data-testid="view-application-btn"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    width: "100%",
+                    boxSizing: "border-box",
+                    background: "#0a0a0a",
+                    color: "#fafaf6",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "13px 18px",
+                    fontSize: 13.5,
+                    fontWeight: 500,
+                    textDecoration: "none",
+                    fontFamily: GEIST,
+                    marginBottom: 8,
+                  }}
+                >
+                  Ver minha candidatura
+                  <span style={{ opacity: 0.6, fontFamily: MONO }}>
+                    · {Math.round(existingApplication.bestScore as number)}%
+                  </span>
+                </a>
+              ) : (
+                <AnalysisCtaButtons
+                  isLoggedIn={!!user}
+                  masterResumeId={masterResumeId}
+                  radarJobId={job.id}
+                  jobDescriptionText={job.description}
+                  score={match?.score}
+                  secondaryHref={adaptarJobHref}
+                />
+              )}
               <a
                 href={job.sourceJobUrl}
                 target="_blank"
@@ -1020,34 +1075,11 @@ export default async function JobPage({ params }: JobPageProps) {
               >
                 Candidatar-se externamente ↗
               </a>
-              <button
-                type="button"
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 7,
-                  background: "transparent",
-                  color: "#6a6560",
-                  border: "none",
-                  padding: "8px",
-                  fontSize: 12,
-                  cursor: "pointer",
-                  fontFamily: GEIST,
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <title>Salvar</title>
-                  <path
-                    d="M6 3h12v18l-6-4-6 4V3z"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                salvar para depois
-              </button>
+              <SaveJobTextBtn
+                jobId={job.id}
+                initialSaved={isSaved}
+                isLoggedIn={!!user}
+              />
             </div>
 
             {/* Job details card */}

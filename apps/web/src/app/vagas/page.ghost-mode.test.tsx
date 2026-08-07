@@ -10,9 +10,13 @@ const mocks = vi.hoisted(() => ({
   getMyMasterResume: vi.fn(),
   listPublicJobs: vi.fn(),
   getMyRadarProfile: vi.fn(),
+  useRouter: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({ notFound: mocks.notFound }));
+vi.mock("next/navigation", () => ({
+  notFound: mocks.notFound,
+  useRouter: mocks.useRouter,
+}));
 vi.mock("@/components/public-footer", () => ({
   PublicFooter: () => <div>footer</div>,
 }));
@@ -24,6 +28,9 @@ vi.mock("./filters-bar", () => ({
 }));
 vi.mock("./carousel", () => ({
   Carousel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}));
+vi.mock("./save-job-btn", () => ({
+  SaveJobBtn: () => <button type="button">salvar</button>,
 }));
 vi.mock("./radar-ui", () => ({
   ScoreRing: (props: { value: number }) => (
@@ -76,6 +83,7 @@ describe("/vagas ghost mode access", () => {
     mocks.listPublicJobs.mockReset();
     mocks.getMyMasterResume.mockReset();
     mocks.getMyRadarProfile.mockReset();
+    mocks.useRouter.mockReturnValue({ push: vi.fn() });
 
     mocks.notFound.mockImplementation(() => {
       throw new Error("NEXT_NOT_FOUND");
@@ -201,6 +209,7 @@ describe("/vagas score badge (usuário logado com UserRadarProfile)", () => {
     mocks.listPublicJobs.mockReset();
     mocks.getMyMasterResume.mockReset();
     mocks.getMyRadarProfile.mockReset();
+    mocks.useRouter.mockReturnValue({ push: vi.fn() });
     mocks.getPublicJobFacets.mockResolvedValue({
       workModels: [],
       seniorityLevels: [],

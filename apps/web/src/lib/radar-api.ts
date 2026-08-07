@@ -19,6 +19,12 @@ export type RadarProfileDto = {
   updatedAt: string;
 };
 
+export type ExistingApplicationDto = {
+  id: string;
+  status: string;
+  bestScore: number | null;
+} | null;
+
 export type JobMatchScoreDto = {
   score: number | null;
   breakdown: {
@@ -31,6 +37,8 @@ export type JobMatchScoreDto = {
   } | null;
   matchedSkills: string[];
   missingSkills: string[];
+  existingApplication?: ExistingApplicationDto;
+  isSaved?: boolean;
 };
 
 export async function getMyRadarProfile(): Promise<RadarProfileDto | null> {

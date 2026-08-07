@@ -383,21 +383,27 @@ export function SkillChip({
   );
 }
 
-// ── Botão "Analisar meu CV" — com score embutido quando disponível ──
+// ── Botão "Analisar meu CV" — com score embutido quando disponível.
+// variant="view" cobre o caso em que já existe candidatura+análise pra essa
+// vaga: o CTA vira "Ver candidatura" apontando pro histórico já calculado,
+// em vez de convidar a analisar de novo. ──
 export function AdaptBtn({
   href,
   score,
   size = "md",
   fullWidth = false,
+  variant = "analyze",
 }: {
   href: string;
   score?: number | null;
   size?: "md" | "lg";
   fullWidth?: boolean;
+  variant?: "analyze" | "view";
 }) {
   const hasScore = typeof score === "number";
   const tier = hasScore ? scoreTier(score) : null;
   const big = size === "lg";
+  const isView = variant === "view";
   return (
     <a
       href={href}
@@ -408,8 +414,8 @@ export function AdaptBtn({
         gap: 6,
         width: fullWidth ? "100%" : undefined,
         boxSizing: "border-box",
-        background: "#0a0a0a",
-        color: "#fafaf6",
+        background: isView ? "#c6ff3a" : "#0a0a0a",
+        color: isView ? "#25330a" : "#fafaf6",
         border: "none",
         borderRadius: 8,
         padding: big ? "13px 18px" : "9px 13px",
@@ -419,28 +425,37 @@ export function AdaptBtn({
         fontFamily: GEIST,
         whiteSpace: "nowrap",
         textDecoration: "none",
-        boxShadow:
-          hasScore && tier === "high"
+        boxShadow: isView
+          ? "0 4px 14px rgba(198,255,58,0.35)"
+          : hasScore && tier === "high"
             ? "0 0 0 1.5px rgba(47,168,76,0.4), 0 4px 14px rgba(0,0,0,0.14)"
             : "none",
       }}
     >
-      <svg
-        aria-hidden
-        width="11"
-        height="11"
-        viewBox="0 0 24 24"
-        fill="#c6ff3a"
-      >
-        <title>Adaptar</title>
-        <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
-      </svg>
-      Analisar meu CV
-      {hasScore ? (
-        <span style={{ opacity: 0.5, fontFamily: MONO }}>
-          · {Math.round(score)}%
-        </span>
-      ) : null}
+      {isView ? (
+        <svg aria-hidden width="11" height="11" viewBox="0 0 24 24" fill="none">
+          <title>Ver candidatura</title>
+          <path
+            d="M5 12l5 5L20 7"
+            stroke="#25330a"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <svg
+          aria-hidden
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="#c6ff3a"
+        >
+          <title>Adaptar</title>
+          <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
+        </svg>
+      )}
+      {isView ? "Ver candidatura" : "Analisar meu CV"}
     </a>
   );
 }

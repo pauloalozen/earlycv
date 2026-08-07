@@ -20,14 +20,8 @@ import { getAbsoluteUrl } from "@/lib/site";
 import { Carousel } from "./carousel";
 import { CompanyLogo } from "./company-logo";
 import { type ActiveFilters, FiltersBar } from "./filters-bar";
-import {
-  AdaptBtn,
-  breakdownPct,
-  MiniBar,
-  ScorePill,
-  ScoreRing,
-  SkillChip,
-} from "./radar-ui";
+import { JobCard, JobMetaRow } from "./job-card";
+import { AdaptBtn, ScorePill, ScoreRing, SkillChip } from "./radar-ui";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -40,29 +34,6 @@ const PUBLISHED_WITHIN_MAP = {
   "3dias": "3d",
   semana: "7d",
 } as const;
-
-const WORK_MODEL_LABELS: Record<string, string> = {
-  remote: "Remoto",
-  hybrid: "Híbrido",
-  "on-site": "Presencial",
-};
-
-const SENIORITY_LABELS: Record<string, string> = {
-  intern: "Estagiário",
-  junior: "Júnior",
-  junior_level: "Júnior",
-  jr: "Júnior",
-  mid: "Pleno",
-  mid_level: "Pleno",
-  pleno: "Pleno",
-  senior: "Sênior",
-  senior_level: "Sênior",
-  sr: "Sênior",
-  lead: "Lead",
-  tech_lead: "Tech Lead",
-  staff: "Staff",
-  principal: "Principal",
-};
 
 const RADAR_AREA_LABELS: Record<string, string> = {
   DATA_AI: "Dados & IA",
@@ -114,6 +85,7 @@ type SearchParams = {
   minSkillsPct?: string;
   sort?: string;
   page?: string;
+  excludeAnalyzed?: string;
 };
 
 export function generateMetadata(): Metadata {
@@ -140,26 +112,6 @@ export function generateMetadata(): Metadata {
   };
 }
 
-function isEarlyJob(job: PublicJob): boolean {
-  if (!job.publishedAtSource) return false;
-  const first = new Date(job.firstSeenAt).getTime();
-  const published = new Date(job.publishedAtSource).getTime();
-  return first < published + 6 * 3_600_000;
-}
-
-function formatRelativeTime(isoDate: string): string {
-  const diffMs = Date.now() - new Date(isoDate).getTime();
-  const diffH = Math.floor(diffMs / 3_600_000);
-  if (diffH < 1) return "< 1h";
-  if (diffH < 24) return `${diffH}h`;
-  const diffD = Math.floor(diffH / 24);
-  if (diffD === 1) return "1 dia";
-  if (diffD < 7) return `${diffD} dias`;
-  const diffW = Math.floor(diffD / 7);
-  if (diffW === 1) return "1 semana";
-  return `${diffW} semanas`;
-}
-
 function calibrationPhrase(
   areas: string[],
   seniority: string,
@@ -171,330 +123,6 @@ function calibrationPhrase(
     .join(" & ");
   const seniorityLabel = RADAR_SENIORITY_LABELS[seniority] || "";
   return { area: areaLabel, seniority: seniorityLabel };
-}
-
-function JobMetaRow({ job }: { job: PublicJob }) {
-  const early = isEarlyJob(job);
-  const published = job.publishedAtSource ?? job.firstSeenAt;
-  const workModelLabel = job.workModel
-    ? (WORK_MODEL_LABELS[job.workModel] ?? job.workModel)
-    : null;
-  const seniorityLabel = job.seniorityLevel
-    ? (SENIORITY_LABELS[job.seniorityLevel.toLowerCase()] ?? job.seniorityLevel)
-    : null;
-
-  return (
-    <>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 2,
-          flexWrap: "wrap",
-        }}
-      >
-        <Link
-          href={`/vagas/${job.slug}`}
-          style={{
-            fontSize: 15.5,
-            fontWeight: 500,
-            letterSpacing: -0.3,
-            color: "#0a0a0a",
-            textDecoration: "none",
-            lineHeight: 1.3,
-          }}
-        >
-          {job.title}
-        </Link>
-        {early ? (
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 3,
-              background: "#c6ff3a",
-              color: "#405410",
-              fontFamily: MONO,
-              fontSize: 9.5,
-              padding: "2px 6px",
-              borderRadius: 4,
-              fontWeight: 600,
-              letterSpacing: 0.4,
-              flexShrink: 0,
-            }}
-          >
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="#405410">
-              <title>Early</title>
-              <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
-            </svg>
-            early
-          </span>
-        ) : null}
-      </div>
-
-      <div style={{ fontSize: 12.5, color: "#6a6560", marginBottom: 10 }}>
-        {job.company}
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 5,
-          marginBottom: 10,
-        }}
-      >
-        {workModelLabel ? (
-          <span
-            style={{
-              background: "rgba(198,255,58,0.22)",
-              color: "#405410",
-              fontFamily: MONO,
-              fontSize: 10,
-              padding: "3px 8px",
-              borderRadius: 4,
-              letterSpacing: 0.2,
-              fontWeight: 500,
-            }}
-          >
-            {workModelLabel}
-          </span>
-        ) : null}
-        {seniorityLabel ? (
-          <span
-            style={{
-              background: "rgba(10,10,10,0.05)",
-              color: "#3a3a38",
-              fontFamily: MONO,
-              fontSize: 10,
-              padding: "3px 8px",
-              borderRadius: 4,
-              letterSpacing: 0.2,
-            }}
-          >
-            {seniorityLabel}
-          </span>
-        ) : null}
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          fontSize: 11.5,
-          color: "#6a6560",
-          flexWrap: "wrap",
-        }}
-      >
-        {job.location ? (
-          <span
-            style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-              <title>Local</title>
-              <circle
-                cx="12"
-                cy="10"
-                r="3.2"
-                stroke="#8a8a85"
-                strokeWidth="1.6"
-              />
-              <path
-                d="M19 10c0 5.5-7 12-7 12s-7-6.5-7-12a7 7 0 0 1 14 0z"
-                stroke="#8a8a85"
-                strokeWidth="1.6"
-              />
-            </svg>
-            {job.location}
-          </span>
-        ) : null}
-        {job.location ? (
-          <span
-            style={{
-              width: 2,
-              height: 2,
-              borderRadius: "50%",
-              background: "#c8c6bf",
-              flexShrink: 0,
-            }}
-          />
-        ) : null}
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-            <title>Tempo</title>
-            <circle cx="12" cy="12" r="9" stroke="#8a8a85" strokeWidth="1.6" />
-            <path
-              d="M12 7v5l3 2"
-              stroke="#8a8a85"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            />
-          </svg>
-          há {formatRelativeTime(published)}
-        </span>
-      </div>
-    </>
-  );
-}
-
-type JobCardProps = {
-  job: PublicJob;
-  adaptarHref: string;
-  showScore: boolean;
-};
-
-// Card full-width: ring de score dominante à direita + breakdown inline +
-// chips de skill quando disponíveis. `showScore=false` cobre tanto anônimo
-// quanto vaga ainda não enriquecida (score null) — o card fica idêntico,
-// só sem a coluna de compatibilidade.
-function JobCard({ job, adaptarHref, showScore }: JobCardProps) {
-  const hasScore = showScore && typeof job.score === "number";
-  const adaptarUrl = adaptarHref.includes("?")
-    ? `${adaptarHref}&jobId=${job.id}`
-    : `${adaptarHref}?jobId=${job.id}`;
-
-  const topSkills = [
-    ...(job.matchedSkills ?? []).map((s) => ({ label: s, have: true })),
-    ...(job.missingSkills ?? []).map((s) => ({ label: s, have: false })),
-  ].slice(0, 6);
-
-  return (
-    <div
-      style={{
-        background: "#fafaf6",
-        border: "1px solid rgba(10,10,10,0.08)",
-        borderRadius: 14,
-        padding: "18px 20px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 14,
-        boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-        fontFamily: GEIST,
-      }}
-    >
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-        <div style={{ display: "flex", gap: 14, flex: 1, minWidth: 0 }}>
-          <CompanyLogo name={job.company} websiteUrl={job.companyWebsiteUrl} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <JobMetaRow job={job} />
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 8,
-            flexShrink: 0,
-          }}
-        >
-          {hasScore && typeof job.score === "number" ? (
-            <ScoreRing value={job.score} size={64} />
-          ) : (
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: "50%",
-                border: "1.5px dashed rgba(10,10,10,0.15)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 10,
-                color: "#8a8a85",
-                fontFamily: MONO,
-                textAlign: "center",
-                lineHeight: 1.2,
-              }}
-            >
-              {showScore ? "em análise" : "—"}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {hasScore && job.breakdown ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 12,
-            paddingTop: 12,
-            borderTop: "1px solid rgba(10,10,10,0.06)",
-          }}
-        >
-          <MiniBar
-            label="área"
-            value={breakdownPct("area", job.breakdown.area)}
-            compact
-          />
-          <MiniBar
-            label="skills"
-            value={breakdownPct("skills", job.breakdown.skills)}
-            compact
-          />
-          <MiniBar
-            label="senioridade"
-            value={breakdownPct("seniority", job.breakdown.seniority)}
-            compact
-          />
-          <MiniBar
-            label="tecnologias"
-            value={breakdownPct("technologies", job.breakdown.technologies)}
-            compact
-          />
-        </div>
-      ) : null}
-
-      {topSkills.length > 0 ? (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {topSkills.map((s) => (
-            <SkillChip key={s.label} label={s.label} have={s.have} />
-          ))}
-        </div>
-      ) : null}
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          gap: 10,
-          paddingTop: topSkills.length > 0 ? 0 : 4,
-        }}
-      >
-        <button
-          type="button"
-          aria-label="Salvar vaga"
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 7,
-            background: "transparent",
-            border: "1px solid rgba(10,10,10,0.1)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <title>Salvar</title>
-            <path
-              d="M6 3h12v18l-6-4-6 4V3z"
-              stroke="#0a0a0a"
-              strokeWidth="1.7"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-        <AdaptBtn href={adaptarUrl} score={hasScore ? job.score : null} />
-      </div>
-    </div>
-  );
 }
 
 function JobCardLocked({ job }: { job: PublicJob }) {
@@ -563,6 +191,9 @@ function CarouselCard({
     ? `${adaptarHref}&jobId=${job.id}`
     : `${adaptarHref}?jobId=${job.id}`;
   if (typeof job.score !== "number") return null;
+  const bestAnalysisScore = job.existingApplication?.bestScore;
+  const hasAnalysis = typeof bestAnalysisScore === "number";
+  const displayScore = hasAnalysis ? bestAnalysisScore : job.score;
   const skills = (job.matchedSkills ?? []).slice(0, 3);
 
   return (
@@ -596,7 +227,7 @@ function CarouselCard({
           borderRadius={8}
           fontSize={11}
         />
-        <ScorePill value={job.score} format="label-first" />
+        <ScorePill value={displayScore} format="label-first" />
       </div>
       <div>
         <Link
@@ -638,7 +269,16 @@ function CarouselCard({
         </div>
       ) : null}
       <div style={{ marginTop: "auto", width: "100%" }}>
-        <AdaptBtn href={adaptarUrl} score={job.score} fullWidth />
+        {hasAnalysis && job.existingApplication ? (
+          <AdaptBtn
+            href={`/candidaturas/${job.existingApplication.id}`}
+            score={bestAnalysisScore}
+            variant="view"
+            fullWidth
+          />
+        ) : (
+          <AdaptBtn href={adaptarUrl} score={job.score} fullWidth />
+        )}
       </div>
     </div>
   );
@@ -669,6 +309,9 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
   const sort: SortValue = SORT_VALUES.includes(params.sort as SortValue)
     ? (params.sort as SortValue)
     : "score_desc";
+  // Checkbox vem marcado por padrão — só grava na URL quando desmarcado
+  // (excludeAnalyzed=false), então ausência do param == filtro ativo.
+  const excludeAnalyzed = params.excludeAnalyzed !== "false";
 
   let effectiveQ = q;
   let effectiveModalidade = modalidade;
@@ -696,6 +339,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
         ? Number.parseInt(minSkillsPct, 10)
         : undefined,
       sort,
+      excludeAnalyzed,
     }),
     getPublicJobFacets().catch(() => null),
   ]);
@@ -750,6 +394,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
     area,
     minSkillsPct,
     sort,
+    excludeAnalyzed: excludeAnalyzed ? undefined : "false",
   };
 
   function buildPageUrl(targetPage: number) {
@@ -762,6 +407,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
     if (area) p.set("area", area);
     if (minSkillsPct) p.set("minSkillsPct", minSkillsPct);
     if (sort) p.set("sort", sort);
+    if (!excludeAnalyzed) p.set("excludeAnalyzed", "false");
     p.set("page", String(targetPage));
     return `?${p.toString()}`;
   }
@@ -776,6 +422,22 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
     if (area) p.set("area", area);
     if (minSkillsPct) p.set("minSkillsPct", minSkillsPct);
     if (sortValue !== "score_desc") p.set("sort", sortValue);
+    if (!excludeAnalyzed) p.set("excludeAnalyzed", "false");
+    const qs = p.toString();
+    return `/vagas${qs ? `?${qs}` : ""}`;
+  }
+
+  function buildExcludeAnalyzedToggleUrl() {
+    const p = new URLSearchParams();
+    if (effectiveQ) p.set("q", effectiveQ);
+    if (effectiveModalidade) p.set("modalidade", effectiveModalidade);
+    if (senioridade) p.set("senioridade", senioridade);
+    if (empresa) p.set("empresa", empresa);
+    if (publicada) p.set("publicada", publicada);
+    if (area) p.set("area", area);
+    if (minSkillsPct) p.set("minSkillsPct", minSkillsPct);
+    if (sort) p.set("sort", sort);
+    if (excludeAnalyzed) p.set("excludeAnalyzed", "false");
     const qs = p.toString();
     return `/vagas${qs ? `?${qs}` : ""}`;
   }
@@ -881,7 +543,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
 
         {/* Hero */}
         <header style={{ marginBottom: 28 }}>
-          <div style={{ marginBottom: 26 }}>
+          <div style={{ marginBottom: 36 }}>
             <div
               style={{
                 display: "inline-flex",
@@ -916,7 +578,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                   fontWeight: 500,
                   letterSpacing: -1.4,
                   lineHeight: 1.08,
-                  margin: "0 0 20px",
+                  margin: "0 0 28px",
                   color: "#0a0a0a",
                 }}
               >
@@ -971,66 +633,27 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
             )}
 
             {scoreState === "has-cv" ? (
-              <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
-                <div>
-                  <div
-                    style={{
-                      fontSize: 26,
-                      fontWeight: 500,
-                      letterSpacing: -0.6,
-                      color: "#0a0a0a",
-                      lineHeight: 1,
-                    }}
-                  >
-                    {jobsResult.total}
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 10.5,
-                      color: "#8a8a85",
-                      letterSpacing: 0.2,
-                      marginTop: 5,
-                    }}
-                  >
-                    vagas analisadas
-                  </div>
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontSize: 26,
-                      fontWeight: 500,
-                      letterSpacing: -0.6,
-                      color: "#1f7a34",
-                      lineHeight: 1,
-                    }}
-                  >
-                    {highCompatCount}
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 10.5,
-                      color: "#8a8a85",
-                      letterSpacing: 0.2,
-                      marginTop: 5,
-                    }}
-                  >
-                    altamente compatíveis
-                  </div>
-                </div>
-                {radarProfile ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 16,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
                   <div>
                     <div
                       style={{
-                        fontSize: 15,
+                        fontSize: 26,
                         fontWeight: 500,
+                        letterSpacing: -0.6,
                         color: "#0a0a0a",
-                        lineHeight: 1.7,
+                        lineHeight: 1,
                       }}
                     >
-                      há {formatRelativeTime(radarProfile.updatedAt)}
+                      {jobsResult.total}
                     </div>
                     <div
                       style={{
@@ -1041,168 +664,172 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                         marginTop: 5,
                       }}
                     >
-                      última atualização
+                      vagas analisadas
+                    </div>
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 26,
+                        fontWeight: 500,
+                        letterSpacing: -0.6,
+                        color: "#1f7a34",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {highCompatCount}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10.5,
+                        color: "#8a8a85",
+                        letterSpacing: 0.2,
+                        marginTop: 5,
+                      }}
+                    >
+                      altamente compatíveis
+                    </div>
+                  </div>
+                </div>
+
+                {user ? (
+                  <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+                    <Link
+                      href="/vagas-salvas"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        height: 44,
+                        boxSizing: "border-box",
+                        background: "#fafaf6",
+                        color: "#3a3a38",
+                        border: "1px solid rgba(10,10,10,0.1)",
+                        borderRadius: 10,
+                        padding: "0 14px",
+                        fontSize: 12.5,
+                        fontWeight: 500,
+                        textDecoration: "none",
+                        fontFamily: GEIST,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                      >
+                        <title>Vagas salvas</title>
+                        <path
+                          d="M6 3h12v18l-6-4-6 4V3z"
+                          stroke="#3a3a38"
+                          strokeWidth="1.7"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      Ver Minhas Vagas
+                    </Link>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        height: 44,
+                        boxSizing: "border-box",
+                        background: "#fafaf6",
+                        border: "1px solid rgba(10,10,10,0.08)",
+                        borderRadius: 10,
+                        padding: "0 14px",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: "50%",
+                          background: "rgba(34,163,72,0.14)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <svg
+                          aria-hidden
+                          width="11"
+                          height="11"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                        >
+                          <title>CV calibrado</title>
+                          <path
+                            d="M5 12l5 5L20 7"
+                            stroke="#1f7a34"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
+                      <div>
+                        <div
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            color: "#0a0a0a",
+                            maxWidth: 180,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {cvFileName ?? "CV enviado"}
+                        </div>
+                        <div style={{ fontSize: 10.5, color: "#8a8a85" }}>
+                          CV calibrado
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ) : null}
               </div>
             ) : null}
-          </div>
 
-          {/* Search row + CV card, alinhados na mesma linha */}
-          <div style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
-            <form
-              method="GET"
-              action="/vagas"
-              aria-label="Buscar vagas"
-              style={{ flex: 1, display: "flex" }}
-            >
-              {effectiveModalidade && effectiveModalidade !== "remote" ? (
-                <input
-                  type="hidden"
-                  name="modalidade"
-                  value={effectiveModalidade}
-                />
-              ) : null}
-              {senioridade ? (
-                <input type="hidden" name="senioridade" value={senioridade} />
-              ) : null}
-              {empresa ? (
-                <input type="hidden" name="empresa" value={empresa} />
-              ) : null}
-              {publicada ? (
-                <input type="hidden" name="publicada" value={publicada} />
-              ) : null}
-              {minSkillsPct ? (
-                <input type="hidden" name="minSkillsPct" value={minSkillsPct} />
-              ) : null}
-              {sort ? <input type="hidden" name="sort" value={sort} /> : null}
-              <div
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  background: "#fafaf6",
-                  border: "1px solid rgba(10,10,10,0.1)",
-                  borderRadius: 10,
-                  padding: "12px 14px",
-                  boxSizing: "border-box",
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <title>Buscar</title>
-                  <circle
-                    cx="11"
-                    cy="11"
-                    r="7"
-                    stroke="#8a8a85"
-                    strokeWidth="1.7"
-                  />
-                  <path
-                    d="M20 20l-3.5-3.5"
-                    stroke="#8a8a85"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <input
-                  name="q"
-                  defaultValue={q}
-                  placeholder="Cargo, tecnologia, empresa…"
+            {scoreState !== "has-cv" && user ? (
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Link
+                  href="/vagas-salvas"
                   style={{
-                    flex: 1,
-                    border: "none",
-                    background: "transparent",
-                    fontSize: 14,
-                    fontFamily: GEIST,
-                    color: "#0a0a0a",
-                    outline: "none",
-                  }}
-                />
-              </div>
-              <button type="submit" style={{ display: "none" }}>
-                Buscar
-              </button>
-            </form>
-
-            {scoreState === "has-cv" ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  background: "#fafaf6",
-                  border: "1px solid rgba(10,10,10,0.08)",
-                  borderRadius: 10,
-                  padding: "0 14px",
-                  flexShrink: 0,
-                  boxSizing: "border-box",
-                }}
-              >
-                <div
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: "50%",
-                    background: "rgba(34,163,72,0.14)",
-                    display: "flex",
+                    display: "inline-flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
+                    gap: 6,
+                    background: "#fafaf6",
+                    color: "#3a3a38",
+                    border: "1px solid rgba(10,10,10,0.1)",
+                    borderRadius: 99,
+                    padding: "8px 14px",
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    textDecoration: "none",
+                    fontFamily: GEIST,
                   }}
                 >
-                  <svg
-                    aria-hidden
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <title>CV calibrado</title>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <title>Vagas salvas</title>
                     <path
-                      d="M5 12l5 5L20 7"
-                      stroke="#1f7a34"
-                      strokeWidth="3"
-                      strokeLinecap="round"
+                      d="M6 3h12v18l-6-4-6 4V3z"
+                      stroke="#3a3a38"
+                      strokeWidth="1.7"
                       strokeLinejoin="round"
                     />
                   </svg>
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: "#0a0a0a",
-                      maxWidth: 180,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {cvFileName ?? "CV enviado"}
-                  </div>
-                  <div style={{ fontSize: 10.5, color: "#8a8a85" }}>
-                    CV calibrado
-                  </div>
-                </div>
-                <a
-                  href="/cv-base"
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 11,
-                    color: "#3a3a38",
-                    textDecoration: "underline",
-                    textUnderlineOffset: 3,
-                    textDecorationColor: "rgba(10,10,10,0.2)",
-                    whiteSpace: "nowrap",
-                    marginLeft: 4,
-                  }}
-                >
-                  trocar CV
-                </a>
+                  Ver Minhas Vagas
+                </Link>
               </div>
             ) : null}
           </div>
@@ -1360,93 +987,150 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
           </div>
 
           {scoreState === "has-cv" ? (
-            <details
-              className="vagas-filter-dropdown"
-              style={{ position: "relative" }}
-            >
-              <style>{`
-                .vagas-filter-dropdown > summary::-webkit-details-marker { display: none; }
-              `}</style>
-              <summary
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <a
+                href={buildExcludeAnalyzedToggleUrl()}
                 style={{
-                  listStyle: "none",
-                  cursor: "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 7,
                   padding: "8px 12px",
                   borderRadius: 99,
-                  background: "#fafaf6",
-                  color: "#3a3a38",
-                  border: "1px solid rgba(10,10,10,0.1)",
+                  background: excludeAnalyzed ? "#0a0a0a" : "#fafaf6",
+                  color: excludeAnalyzed ? "#fafaf6" : "#3a3a38",
+                  border: `1px solid ${excludeAnalyzed ? "#0a0a0a" : "rgba(10,10,10,0.1)"}`,
                   fontSize: 12.5,
                   whiteSpace: "nowrap",
                   fontFamily: GEIST,
+                  textDecoration: "none",
                 }}
               >
                 <span
+                  aria-hidden
                   style={{
-                    fontFamily: MONO,
-                    fontSize: 9.5,
-                    letterSpacing: 0.4,
-                    color: "#8a8a85",
+                    width: 14,
+                    height: 14,
+                    borderRadius: 4,
+                    border: `1.5px solid ${excludeAnalyzed ? "#fafaf6" : "rgba(10,10,10,0.25)"}`,
+                    background: excludeAnalyzed ? "#fafaf6" : "transparent",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
                   }}
                 >
-                  ordenar por
+                  {excludeAnalyzed ? (
+                    <svg
+                      aria-hidden
+                      width="8"
+                      height="8"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <title>Ativo</title>
+                      <path
+                        d="M5 12l5 5L20 7"
+                        stroke="#0a0a0a"
+                        strokeWidth="3.4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : null}
                 </span>
-                <span style={{ fontWeight: 500 }}>{SORT_LABELS[sort]}</span>
-                <svg
-                  aria-hidden
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <title>Abrir</title>
-                  <path
-                    d="M6 9l6 6 6-6"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </summary>
-              <div
-                style={{
-                  position: "absolute",
-                  top: "calc(100% + 6px)",
-                  right: 0,
-                  background: "#fff",
-                  border: "1px solid rgba(10,10,10,0.1)",
-                  borderRadius: 10,
-                  padding: 6,
-                  zIndex: 20,
-                  minWidth: 240,
-                  boxShadow: "0 8px 28px rgba(0,0,0,0.1)",
-                }}
+                excluir vagas já analisadas
+              </a>
+
+              <details
+                className="vagas-filter-dropdown"
+                style={{ position: "relative" }}
               >
-                {SORT_VALUES.map((value) => (
-                  <a
-                    key={value}
-                    href={buildSortUrl(value)}
+                <style>{`
+                .vagas-filter-dropdown > summary::-webkit-details-marker { display: none; }
+              `}</style>
+                <summary
+                  style={{
+                    listStyle: "none",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 7,
+                    padding: "8px 12px",
+                    borderRadius: 99,
+                    background: "#fafaf6",
+                    color: "#3a3a38",
+                    border: "1px solid rgba(10,10,10,0.1)",
+                    fontSize: 12.5,
+                    whiteSpace: "nowrap",
+                    fontFamily: GEIST,
+                  }}
+                >
+                  <span
                     style={{
-                      display: "block",
-                      padding: "7px 10px",
-                      borderRadius: 7,
-                      fontSize: 13,
-                      color: sort === value ? "#0a0a0a" : "#3a3a38",
-                      fontWeight: sort === value ? 600 : 400,
-                      textDecoration: "none",
-                      background:
-                        sort === value ? "rgba(10,10,10,0.05)" : "transparent",
+                      fontFamily: MONO,
+                      fontSize: 9.5,
+                      letterSpacing: 0.4,
+                      color: "#8a8a85",
                     }}
                   >
-                    {SORT_LABELS[value]}
-                  </a>
-                ))}
-              </div>
-            </details>
+                    ordenar por
+                  </span>
+                  <span style={{ fontWeight: 500 }}>{SORT_LABELS[sort]}</span>
+                  <svg
+                    aria-hidden
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <title>Abrir</title>
+                    <path
+                      d="M6 9l6 6 6-6"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </summary>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 6px)",
+                    right: 0,
+                    background: "#fff",
+                    border: "1px solid rgba(10,10,10,0.1)",
+                    borderRadius: 10,
+                    padding: 6,
+                    zIndex: 20,
+                    minWidth: 240,
+                    boxShadow: "0 8px 28px rgba(0,0,0,0.1)",
+                  }}
+                >
+                  {SORT_VALUES.map((value) => (
+                    <a
+                      key={value}
+                      href={buildSortUrl(value)}
+                      style={{
+                        display: "block",
+                        padding: "7px 10px",
+                        borderRadius: 7,
+                        fontSize: 13,
+                        color: sort === value ? "#0a0a0a" : "#3a3a38",
+                        fontWeight: sort === value ? 600 : 400,
+                        textDecoration: "none",
+                        background:
+                          sort === value
+                            ? "rgba(10,10,10,0.05)"
+                            : "transparent",
+                      }}
+                    >
+                      {SORT_LABELS[value]}
+                    </a>
+                  ))}
+                </div>
+              </details>
+            </div>
           ) : null}
         </div>
 
@@ -1461,6 +1145,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                 job={job}
                 adaptarHref={adaptarHref}
                 showScore={scoreState === "has-cv"}
+                isLoggedIn={!!user}
               />
             ),
           )}
