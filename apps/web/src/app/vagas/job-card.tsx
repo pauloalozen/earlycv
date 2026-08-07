@@ -300,7 +300,7 @@ export function JobCard({
                 {hasAnalysis ? "Score Análise" : "Score Oportunidade"}
               </span>
             </div>
-          ) : (
+          ) : showScore ? (
             <div
               style={{
                 width: 64,
@@ -317,8 +317,55 @@ export function JobCard({
                 lineHeight: 1.2,
               }}
             >
-              {showScore ? "em análise" : "—"}
+              em análise
             </div>
+          ) : (
+            <a
+              href="/entrar?tab=cadastrar"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                width: 100,
+                padding: "10px 8px",
+                borderRadius: 12,
+                border: "1px solid rgba(10,10,10,0.1)",
+                background: "rgba(10,10,10,0.02)",
+                textDecoration: "none",
+                textAlign: "center",
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <title>Login necessário</title>
+                <rect
+                  x="5"
+                  y="10"
+                  width="14"
+                  height="10"
+                  rx="2"
+                  stroke="#8a8a85"
+                  strokeWidth="1.6"
+                />
+                <path
+                  d="M8 10V7a4 4 0 0 1 8 0v3"
+                  stroke="#8a8a85"
+                  strokeWidth="1.6"
+                />
+              </svg>
+              <span
+                style={{
+                  fontFamily: GEIST,
+                  fontSize: 10,
+                  fontWeight: 500,
+                  lineHeight: 1.35,
+                  color: "#5a5a56",
+                }}
+              >
+                Cadastre-se ou faça login para ver o seu fit com essa vaga
+              </span>
+            </a>
           )}
         </div>
       </div>
