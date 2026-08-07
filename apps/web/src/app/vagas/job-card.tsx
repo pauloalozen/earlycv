@@ -320,52 +320,48 @@ export function JobCard({
               em análise
             </div>
           ) : (
-            <a
-              href="/entrar?tab=cadastrar"
+            <div
               style={{
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                justifyContent: "center",
                 gap: 6,
-                width: 100,
-                padding: "10px 8px",
-                borderRadius: 12,
-                border: "1px solid rgba(10,10,10,0.1)",
-                background: "rgba(10,10,10,0.02)",
-                textDecoration: "none",
-                textAlign: "center",
               }}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                <title>Login necessário</title>
-                <rect
-                  x="5"
-                  y="10"
-                  width="14"
-                  height="10"
-                  rx="2"
-                  stroke="#8a8a85"
-                  strokeWidth="1.6"
-                />
-                <path
-                  d="M8 10V7a4 4 0 0 1 8 0v3"
-                  stroke="#8a8a85"
-                  strokeWidth="1.6"
-                />
-              </svg>
-              <span
+              <div
                 style={{
-                  fontFamily: GEIST,
-                  fontSize: 10,
-                  fontWeight: 500,
-                  lineHeight: 1.35,
-                  color: "#5a5a56",
+                  width: 64,
+                  height: 64,
+                  borderRadius: "50%",
+                  border: "1.5px dashed rgba(10,10,10,0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                Cadastre-se ou faça login para ver o seu fit com essa vaga
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <title>Enviar CV</title>
+                  <path
+                    d="M12 20V6M12 6l-5 5M12 6l5 5"
+                    stroke="#8a8a85"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 9,
+                  fontWeight: 600,
+                  letterSpacing: 0.4,
+                  color: "#8a8a85",
+                }}
+              >
+                envie seu CV
               </span>
-            </a>
+            </div>
           )}
         </div>
       </div>

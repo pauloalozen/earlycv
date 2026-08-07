@@ -300,7 +300,11 @@ describe("/vagas score badge (usuário logado com UserRadarProfile)", () => {
     const result = await VagasPage({ searchParams: Promise.resolve({}) });
     const rings = findScoreRingProps(result);
 
-    expect(rings).toHaveLength(0);
+    // O único ScoreRing permitido pro anônimo é o decorativo e fixo (92%)
+    // do card "É assim que fica" no hero de criar conta — não é o score de
+    // nenhuma vaga real, é só ilustração de como fica depois de criar conta.
+    const realJobRings = rings.filter((props) => props.value !== 92);
+    expect(realJobRings).toHaveLength(0);
     expect(mocks.getMyRadarProfile).not.toHaveBeenCalled();
   });
 });

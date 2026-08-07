@@ -21,7 +21,7 @@ import { Carousel } from "./carousel";
 import { CompanyLogo } from "./company-logo";
 import { type ActiveFilters, FiltersBar } from "./filters-bar";
 import { JobCard, JobMetaRow } from "./job-card";
-import { AdaptBtn, ScorePill, ScoreRing, SkillChip } from "./radar-ui";
+import { AdaptBtn, MiniBar, ScorePill, ScoreRing, SkillChip } from "./radar-ui";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -177,6 +177,173 @@ function JobCardLocked({ job }: { job: PublicJob }) {
             strokeWidth="1.6"
           />
         </svg>
+      </div>
+    </div>
+  );
+}
+
+// Card de hero pro visitante deslogado — sem conta não há CV pra guardar,
+// então ao contrário do card "ATIVE O RADAR" (scoreState "no-cv", que já tem
+// conta e só falta enviar o CV), aqui o CTA é criar conta, não enviar
+// arquivo. O preview à direita é ilustrativo (dado fixo, não vem da API) —
+// mostra o que a pessoa ganha depois de criar a conta e enviar o CV.
+function AnonymousHeroCard() {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 20,
+        marginBottom: 24,
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          border: "1px solid rgba(10,10,10,0.08)",
+          borderRadius: 14,
+          padding: "28px 24px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          textAlign: "center",
+          gap: 12,
+        }}
+      >
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: "50%",
+            background: "rgba(198,255,58,0.22)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <title>Criar conta</title>
+            <path
+              d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"
+              fill="#405410"
+            />
+          </svg>
+        </div>
+        <div>
+          <p
+            style={{
+              fontSize: 15,
+              fontWeight: 600,
+              color: "#0a0a0a",
+              margin: "0 0 4px",
+            }}
+          >
+            criar conta
+          </p>
+          <p style={{ fontSize: 13, color: "#5a5a55", margin: 0 }}>
+            para ver as melhores oportunidades pro seu perfil
+          </p>
+        </div>
+        <a
+          href="/entrar?tab=cadastrar"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            background: "#0a0a0a",
+            color: "#fafaf6",
+            borderRadius: 8,
+            padding: "10px 18px",
+            fontSize: 13,
+            fontWeight: 500,
+            textDecoration: "none",
+            fontFamily: GEIST,
+            marginTop: 4,
+          }}
+        >
+          Criar conta grátis →
+        </a>
+      </div>
+
+      <div
+        style={{
+          background: "#f5f4ef",
+          border: "1px solid rgba(10,10,10,0.06)",
+          borderRadius: 14,
+          padding: "22px",
+        }}
+      >
+        <p
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            letterSpacing: 0.4,
+            color: "#8a8a85",
+            margin: "0 0 12px",
+          }}
+        >
+          É ASSIM QUE FICA
+        </p>
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid rgba(10,10,10,0.08)",
+            borderRadius: 12,
+            padding: 16,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <CompanyLogo name="Itaú Unibanco" size={38} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: 500,
+                  color: "#0a0a0a",
+                  margin: "0 0 2px",
+                }}
+              >
+                Engenheira de software sênior
+              </p>
+              <p style={{ fontSize: 12, color: "#8a8a85", margin: 0 }}>
+                Itaú Unibanco
+              </p>
+            </div>
+            <ScoreRing value={92} size={52} />
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <SkillChip label="Java" have />
+            <SkillChip label="Kotlin" have />
+            <SkillChip label="PCI-DSS" have={false} />
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 12,
+              paddingTop: 8,
+              borderTop: "1px solid rgba(10,10,10,0.06)",
+            }}
+          >
+            <MiniBar label="Skills" value={88} compact />
+            <MiniBar label="Senioridade" value={94} compact />
+          </div>
+        </div>
+        <p
+          style={{
+            fontSize: 12,
+            color: "#8a8a85",
+            margin: "12px 0 0",
+            lineHeight: 1.4,
+          }}
+        >
+          Score, skills e breakdown completo — calculados assim que você cria
+          sua conta e envia o CV.
+        </p>
       </div>
     </div>
   );
@@ -844,6 +1011,8 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
             activeFilters={activeFilters}
           />
         </div>
+
+        {scoreState === "anonymous" ? <AnonymousHeroCard /> : null}
 
         {scoreState === "no-cv" ? (
           <div
