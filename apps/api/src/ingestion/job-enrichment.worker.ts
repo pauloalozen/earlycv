@@ -438,6 +438,27 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     },
     options?: { force?: boolean },
   ) {
+    // Captura falhou (Job sem descricao e/ou sem titulo, ex: detail fetch da
+    // Gupy devolveu payload sem conteudo) — nao ha nada real pra enriquecer,
+    // e mandar isso pro LLM so produz enrichment inventado. Vale mesmo com
+    // force=true: nao existe "forcar" um enriquecimento sem fonte.
+    if (
+      !enrichment.job.descriptionClean.trim() ||
+      !enrichment.job.title.trim()
+    ) {
+      await this.database.jobEnrichment.update({
+        where: { id: enrichment.id },
+        data: {
+          enrichmentStatus: "SKIPPED",
+          semanticFilterResult: "SKIP",
+          semanticFilterReason: !enrichment.job.descriptionClean.trim()
+            ? "empty_description"
+            : "empty_title",
+        },
+      });
+      return;
+    }
+
     await this.database.jobEnrichment.update({
       where: { id: enrichment.id },
       data: { enrichmentStatus: "PROCESSING" },

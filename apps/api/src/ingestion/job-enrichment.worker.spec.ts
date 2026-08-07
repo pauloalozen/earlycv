@@ -213,6 +213,7 @@ function createFixture() {
     batchRuns,
     enrichments,
     getEnrichCalls: () => enrichCalls,
+    jobs,
     lockRepository,
     seedEnrichment,
     setEnrich(impl: typeof enrichImpl) {
@@ -266,6 +267,69 @@ test("JobEnrichmentWorker skips LLM call when semantic filter returns SKIP", asy
   assert.equal(record.enrichmentStatus, "SKIPPED");
   assert.equal(record.semanticFilterResult, "SKIP");
   assert.equal(record.semanticFilterReason, "noise_signal:enfermeiro");
+});
+
+test("JobEnrichmentWorker skips enrichment (and never calls the semantic filter or LLM) when the job's description is empty — a failed capture", async () => {
+  const fixture = createFixture();
+  const record = fixture.seedEnrichment();
+  fixture.jobs.set(record.jobId, {
+    descriptionClean: "",
+    metadataJson: { department: "Tecnologia" },
+    normalizedTitle: "desenvolvedor backend",
+    title: "Desenvolvedor Backend",
+  });
+  fixture.setEvaluate(async () => {
+    throw new Error(
+      "semantic filter should not be called for empty description",
+    );
+  });
+
+  await fixture.worker.processPendingBatch();
+
+  assert.equal(fixture.getEnrichCalls(), 0);
+  const [updated] = fixture.enrichments.values();
+  assert.equal(updated.enrichmentStatus, "SKIPPED");
+  assert.equal(updated.semanticFilterResult, "SKIP");
+  assert.equal(updated.semanticFilterReason, "empty_description");
+});
+
+test("JobEnrichmentWorker skips enrichment when the job's title is empty — a failed capture", async () => {
+  const fixture = createFixture();
+  const record = fixture.seedEnrichment();
+  fixture.jobs.set(record.jobId, {
+    descriptionClean: "Descricao da vaga",
+    metadataJson: { department: "Tecnologia" },
+    normalizedTitle: "",
+    title: "",
+  });
+  fixture.setEvaluate(async () => {
+    throw new Error("semantic filter should not be called for empty title");
+  });
+
+  await fixture.worker.processPendingBatch();
+
+  assert.equal(fixture.getEnrichCalls(), 0);
+  const [updated] = fixture.enrichments.values();
+  assert.equal(updated.enrichmentStatus, "SKIPPED");
+  assert.equal(updated.semanticFilterResult, "SKIP");
+  assert.equal(updated.semanticFilterReason, "empty_title");
+});
+
+test("JobEnrichmentWorker skips enrichment even with force:true when the description is empty — nothing real to enrich", async () => {
+  const fixture = createFixture();
+  const record = fixture.seedEnrichment();
+  fixture.jobs.set(record.jobId, {
+    descriptionClean: "   ",
+    metadataJson: { department: "Tecnologia" },
+    normalizedTitle: "desenvolvedor backend",
+    title: "Desenvolvedor Backend",
+  });
+
+  await fixture.worker.processOne(record.id, { force: true });
+
+  assert.equal(fixture.getEnrichCalls(), 0);
+  const updated = fixture.enrichments.get(record.id);
+  assert.equal(updated?.enrichmentStatus, "SKIPPED");
 });
 
 test("JobEnrichmentWorker calls LLM and persists fields when semantic filter returns ENRICH", async () => {

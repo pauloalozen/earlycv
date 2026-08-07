@@ -37,6 +37,14 @@ const PUBLIC_JOB_SELECT = {
   workModel: true,
 } satisfies Prisma.JobSelect;
 
+// Captura falhou (ex: Gupy devolveu detail sem conteudo, ou payload sem
+// titulo) — a vaga fica visivel só pro admin (getById), nunca pro público,
+// mesmo que status siga "active". Reaproveitado em toda query pública.
+const PUBLIC_JOB_INTEGRITY_WHERE = {
+  descriptionClean: { not: "" },
+  title: { not: "" },
+} satisfies Prisma.JobWhereInput;
+
 function splitCsv(value: string): string[] {
   return value
     .split(",")
@@ -140,7 +148,7 @@ export class JobsService {
 
   listPublic() {
     return this.database.job.findMany({
-      where: { status: "active" },
+      where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
       orderBy: [{ lastSeenAt: "desc" }, { updatedAt: "desc" }],
       select: PUBLIC_JOB_SELECT,
     });
@@ -150,7 +158,7 @@ export class JobsService {
   // (veio do botão "Analisar meu CV" na listagem/detalhe), não o slug.
   async getPublicById(jobId: string) {
     return this.database.job.findFirst({
-      where: { id: jobId, status: "active" },
+      where: { id: jobId, status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
       select: PUBLIC_JOB_SELECT,
     });
   }
@@ -164,7 +172,10 @@ export class JobsService {
   }): Prisma.JobWhereInput {
     const { q, workModel, seniorityLevel, companyName, publishedWithin } =
       filters;
-    const where: Prisma.JobWhereInput = { status: "active" };
+    const where: Prisma.JobWhereInput = {
+      status: "active",
+      ...PUBLIC_JOB_INTEGRITY_WHERE,
+    };
 
     if (q) {
       where.OR = [
