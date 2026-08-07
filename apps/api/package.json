@@ -15,7 +15,8 @@
     "test:database": "sh -c 'env_file=../../.env.example; if [ -f ./.env.test ]; then env_file=./.env.test; fi; set -a && . \"$env_file\" && set +a && : \"${DATABASE_TEST_URL:?DATABASE_TEST_URL is required for API tests}\" && export DATABASE_URL=\"$DATABASE_TEST_URL\" && NODE_OPTIONS=\"--conditions=development\" tsx --test src/database/database.service.spec.ts'",
     "analysis:purge-retention": "NODE_OPTIONS='--conditions=development' tsx src/scripts/purge-analysis-retention.ts",
     "analysis:backfill-legacy-snapshots": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-legacy-analysis-snapshots.ts",
-    "templates:patch-docx-conditionals": "NODE_OPTIONS='--conditions=development' tsx src/scripts/patch-docx-template-conditionals.ts"
+    "templates:patch-docx-conditionals": "NODE_OPTIONS='--conditions=development' tsx src/scripts/patch-docx-template-conditionals.ts",
+    "jobs:backfill-slugs": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-job-slugs.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1024.0",
