@@ -484,52 +484,51 @@ export function ScoreBreakdownPanel({
         }
       `}</style>
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          margin: "18px 0 8px",
-          paddingTop: 16,
-          borderTop: "1px solid rgba(10,10,10,0.07)",
-        }}
-      >
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 9.5,
-            letterSpacing: 1.1,
-            textTransform: "uppercase",
-            color: "#8a8a85",
-          }}
-        >
-          Composição do score
-        </span>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 5,
-            fontSize: 11.5,
-            color: "#6a6560",
-            marginLeft: "auto",
-          }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-            <title>Dica</title>
-            <path
-              d="M9 11.5V8.2a3 3 0 116 0v3.3M6 11.5h12v8.3H6z"
-              stroke="#8a8a85"
-              strokeWidth="1.6"
-              strokeLinejoin="round"
-            />
-          </svg>
-          {"clique em uma dimensão para ver os termos encontrados"}
-        </span>
-      </div>
-
       {/* Desktop: grade 4 colunas */}
       <div className="score-bd-desktop">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            margin: "18px 0 8px",
+            paddingTop: 16,
+            borderTop: "1px solid rgba(10,10,10,0.07)",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 9.5,
+              letterSpacing: 1.1,
+              textTransform: "uppercase",
+              color: "#8a8a85",
+            }}
+          >
+            Composição do score
+          </span>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: 11.5,
+              color: "#6a6560",
+              marginLeft: "auto",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+              <title>Dica</title>
+              <path
+                d="M9 11.5V8.2a3 3 0 116 0v3.3M6 11.5h12v8.3H6z"
+                stroke="#8a8a85"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {"clique em uma dimensão para ver os termos encontrados"}
+          </span>
+        </div>
         <div
           style={{
             display: "grid",
@@ -565,6 +564,57 @@ export function ScoreBreakdownPanel({
 
       {/* Mobile: carrossel horizontal */}
       <div className="score-bd-mobile">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            margin: "14px 0 9px",
+            paddingTop: 13,
+            borderTop: "1px solid rgba(10,10,10,0.07)",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 9.5,
+              letterSpacing: 1.1,
+              textTransform: "uppercase",
+              color: "#8a8a85",
+            }}
+          >
+            Composição
+          </span>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 11,
+              color: "#6a6560",
+              marginLeft: "auto",
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+              <title>Toque pra detalhar</title>
+              <rect
+                x="5"
+                y="10"
+                width="14"
+                height="10"
+                rx="2"
+                stroke="#8a8a85"
+                strokeWidth="1.6"
+              />
+              <path
+                d="M8 10V7a4 4 0 0 1 8 0v3"
+                stroke="#8a8a85"
+                strokeWidth="1.6"
+              />
+            </svg>
+            toque para detalhar
+          </span>
+        </div>
         <div className="score-bd-mtabs">
           {dims.map((dim) => (
             <MobileDimTab

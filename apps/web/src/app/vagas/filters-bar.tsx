@@ -524,6 +524,7 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
         event.preventDefault();
         applyFilters();
       }}
+      className="vagas-filters-form"
       style={{
         display: "flex",
         alignItems: "center",
@@ -539,6 +540,16 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
       <style>{`
         .vagas-filter-dropdown > summary::-webkit-details-marker { display: none; }
         .vagas-filter-dropdown > summary { -webkit-tap-highlight-color: transparent; }
+        /* flexWrap:nowrap é proposital pro layout desktop (dropdowns
+        alinhados numa linha só) — sem espaço suficiente no mobile, isso
+        transbordaria a tela. Em vez de forçar quebra de linha (arriscaria
+        cortar/deslocar o menu suspenso de cada filtro), deixa a barra
+        inteira rolar na horizontal, um padrão comum pra barra de filtros
+        em telas estreitas. */
+        @media (max-width: 640px) {
+          .vagas-filters-form { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+          .vagas-filters-form::-webkit-scrollbar { display: none; }
+        }
       `}</style>
 
       <div

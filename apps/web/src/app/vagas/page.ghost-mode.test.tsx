@@ -45,6 +45,11 @@ vi.mock("./radar-ui", () => ({
   breakdownPct: (_key: string, value: number) => value,
   scoreTier: (value: number) =>
     value >= 70 ? "high" : value >= 40 ? "mid" : "low",
+  SCORE: {
+    high: { fg: "#1f7a34", bg: "rgba(34,163,72,0.14)", ring: "#2fa84c", label: "alta oportunidade" },
+    mid: { fg: "#966615", bg: "rgba(217,163,34,0.16)", ring: "#d9a322", label: "oportunidade média" },
+    low: { fg: "#c2410c", bg: "rgba(249,115,22,0.14)", ring: "#f97316", label: "oportunidade baixa" },
+  },
   RADAR_AREA_LABELS: { DATA_AI: "Dados & IA" },
   RADAR_SENIORITY_LABELS: { SENIOR: "sênior" },
 }));

@@ -1,7 +1,14 @@
 import Link from "next/link";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { CompanyLogo } from "./company-logo";
-import { AdaptBtn, breakdownPct, MiniBar, ScoreRing } from "./radar-ui";
+import {
+  AdaptBtn,
+  breakdownPct,
+  MiniBar,
+  SCORE,
+  ScoreRing,
+  scoreTier,
+} from "./radar-ui";
 import { SaveJobBtn } from "./save-job-btn";
 import { ScoreBreakdownPanel } from "./score-breakdown";
 
@@ -22,12 +29,16 @@ export function JobCardResponsiveStyles() {
       .jc-cluster { display: flex; align-items: center; gap: 20px; margin-left: auto; flex-shrink: 0; }
       .jc-badges { justify-content: flex-end; align-self: center; max-width: 220px; }
       .jc-actions { display: flex; align-items: center; gap: 10px; }
+      .jc-ringcol-mobile { display: none; }
       @media (max-width: 640px) {
         .jc-top { flex-direction: column; align-items: stretch; gap: 14px; }
         .jc-headtext { flex: 1 1 auto; width: 100%; align-items: flex-start; }
         .jc-cluster { margin-left: 0; width: 100%; flex-direction: column; align-items: stretch; gap: 14px; }
-        .jc-badges { justify-content: flex-start; align-self: flex-start; max-width: none; }
-        .jc-ringcol { justify-content: center; }
+        /* A referência de design (mCard) não mostra badges de tecnologia no
+        card mobile — só no desktop. */
+        .jc-badges { display: none; }
+        .jc-ringcol { display: none; }
+        .jc-ringcol-mobile { display: flex; }
         .jc-actions > :last-child { flex: 1; }
       }
     `}</style>
@@ -267,6 +278,173 @@ export function JobMetaRow({ job }: { job: PublicJob }) {
   );
 }
 
+// Desktop: anel em cima, legenda embaixo, empilhados e centralizados
+// (jc-ringcol). Mobile: anel ao lado do texto, igual ao mScoreRow da
+// referência — estrutura horizontal diferente o bastante da desktop pra não
+// dar pra resolver só com CSS, por isso os dois blocos de JSX (alternados
+// por .jc-ringcol / .jc-ringcol-mobile, mesmo padrão de
+// ScoreBreakdownPanel).
+function ScoreIndicator({
+  mobile,
+  hasScore,
+  displayScore,
+  hasAnalysis,
+  showScore,
+}: {
+  mobile: boolean;
+  hasScore: boolean;
+  displayScore: number | null | undefined;
+  hasAnalysis: boolean;
+  showScore: boolean;
+}) {
+  const ringSize = mobile ? 56 : 64;
+
+  if (hasScore && typeof displayScore === "number") {
+    const label = hasAnalysis ? "Score Análise" : "Score Oportunidade";
+    const labelColor = hasAnalysis ? "#1f7a34" : "#8a8a85";
+    const tier = SCORE[scoreTier(displayScore)];
+
+    if (mobile) {
+      return (
+        <>
+          <ScoreRing value={displayScore} size={ringSize} />
+          <div>
+            <div
+              style={{
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: "#0a0a0a",
+              }}
+            >
+              {label}
+            </div>
+            <div style={{ fontSize: 12, color: labelColor }}>
+              {tier.label}
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 4,
+        }}
+      >
+        <ScoreRing value={displayScore} size={ringSize} />
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 9,
+            fontWeight: 600,
+            letterSpacing: 0.4,
+            color: labelColor,
+          }}
+        >
+          {label}
+        </span>
+      </div>
+    );
+  }
+
+  if (showScore) {
+    return (
+      <div
+        style={{
+          width: ringSize,
+          height: ringSize,
+          borderRadius: "50%",
+          border: "1.5px dashed rgba(10,10,10,0.15)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 10,
+          color: "#8a8a85",
+          fontFamily: MONO,
+          textAlign: "center",
+          lineHeight: 1.2,
+          flexShrink: 0,
+        }}
+      >
+        em análise
+      </div>
+    );
+  }
+
+  const uploadIcon = (
+    <div
+      style={{
+        width: ringSize,
+        height: ringSize,
+        borderRadius: "50%",
+        border: "1.5px dashed rgba(10,10,10,0.15)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <title>Enviar CV</title>
+        <path
+          d="M12 20V6M12 6l-5 5M12 6l5 5"
+          stroke="#8a8a85"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
+
+  if (mobile) {
+    return (
+      <>
+        {uploadIcon}
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 9,
+            fontWeight: 600,
+            letterSpacing: 0.4,
+            color: "#8a8a85",
+          }}
+        >
+          envie seu CV
+        </span>
+      </>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 6,
+      }}
+    >
+      {uploadIcon}
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: 9,
+          fontWeight: 600,
+          letterSpacing: 0.4,
+          color: "#8a8a85",
+        }}
+      >
+        envie seu CV
+      </span>
+    </div>
+  );
+}
+
 export type JobCardProps = {
   job: PublicJob;
   adaptarHref: string;
@@ -334,91 +512,26 @@ export function JobCard({
               flexShrink: 0,
             }}
           >
-            {hasScore && typeof displayScore === "number" ? (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 4,
-              }}
-            >
-              <ScoreRing value={displayScore} size={64} />
-              <span
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 9,
-                  fontWeight: 600,
-                  letterSpacing: 0.4,
-                  color: hasAnalysis ? "#1f7a34" : "#8a8a85",
-                }}
-              >
-                {hasAnalysis ? "Score Análise" : "Score Oportunidade"}
-              </span>
-            </div>
-          ) : showScore ? (
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: "50%",
-                border: "1.5px dashed rgba(10,10,10,0.15)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 10,
-                color: "#8a8a85",
-                fontFamily: MONO,
-                textAlign: "center",
-                lineHeight: 1.2,
-              }}
-            >
-              em análise
-            </div>
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <div
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: "50%",
-                  border: "1.5px dashed rgba(10,10,10,0.15)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <title>Enviar CV</title>
-                  <path
-                    d="M12 20V6M12 6l-5 5M12 6l5 5"
-                    stroke="#8a8a85"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-              <span
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 9,
-                  fontWeight: 600,
-                  letterSpacing: 0.4,
-                  color: "#8a8a85",
-                }}
-              >
-                envie seu CV
-              </span>
-            </div>
-          )}
+            <ScoreIndicator
+              mobile={false}
+              hasScore={hasScore}
+              displayScore={displayScore}
+              hasAnalysis={hasAnalysis}
+              showScore={showScore}
+            />
+          </div>
+
+          <div
+            className="jc-ringcol-mobile"
+            style={{ alignItems: "center", gap: 12 }}
+          >
+            <ScoreIndicator
+              mobile
+              hasScore={hasScore}
+              displayScore={displayScore}
+              hasAnalysis={hasAnalysis}
+              showScore={showScore}
+            />
           </div>
 
           <div className="jc-actions">

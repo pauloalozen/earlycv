@@ -178,14 +178,13 @@ function JobCardLocked({ job }: { job: PublicJob }) {
 // mostra o que a pessoa ganha depois de criar a conta e enviar o CV.
 function AnonymousHeroCard() {
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: 20,
-        marginBottom: 24,
-      }}
-    >
+    <div className="anon-hero-grid" style={{ marginBottom: 24 }}>
+      <style>{`
+        .anon-hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 760px) {
+          .anon-hero-grid { grid-template-columns: 1fr; }
+        }
+      `}</style>
       <div
         style={{
           background: "#fff",

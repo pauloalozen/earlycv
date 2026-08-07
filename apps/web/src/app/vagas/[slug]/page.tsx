@@ -876,14 +876,13 @@ export default async function JobPage({ params }: JobPageProps) {
           </div>
 
           {/* Meta cards */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: 10,
-              width: "100%",
-            }}
-          >
+          <style>{`
+            .job-meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+            @media (max-width: 640px) {
+              .job-meta-grid { grid-template-columns: repeat(2, 1fr); }
+            }
+          `}</style>
+          <div className="job-meta-grid">
             {[
               {
                 k: "LOCALIZAÇÃO",
@@ -1296,13 +1295,13 @@ export default async function JobPage({ params }: JobPageProps) {
                 ver todas →
               </Link>
             </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 12,
-              }}
-            >
+            <style>{`
+              .job-similar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+              @media (max-width: 900px) {
+                .job-similar-grid { grid-template-columns: 1fr; }
+              }
+            `}</style>
+            <div className="job-similar-grid">
               {similarJobs.map((j) => (
                 <SimCard key={j.id} job={j} />
               ))}

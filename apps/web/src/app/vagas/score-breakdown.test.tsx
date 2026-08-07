@@ -43,7 +43,7 @@ describe("ScoreBreakdownPanel", () => {
     );
 
     const collapseWrappers = container.querySelectorAll<HTMLDivElement>(
-      ".score-bd-desktop > div:nth-child(2)",
+      ".score-bd-desktop > div:nth-child(3)",
     );
     const desktopCollapse = collapseWrappers[0];
     expect(desktopCollapse.style.gridTemplateRows).toBe("0fr");
