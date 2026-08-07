@@ -1,10 +1,24 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { afterEach, beforeEach, test } from "node:test";
 
 import sitemap from "./sitemap";
 
-test("sitemap includes /blog and published blog posts", () => {
-  const entries = sitemap();
+const originalFetch = globalThis.fetch;
+const previousGhost = process.env.NEXT_PUBLIC_JOBS_GHOST_MODE;
+
+beforeEach(() => {
+  process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "false";
+  globalThis.fetch = (async () =>
+    new Response("[]", { status: 200 })) as typeof fetch;
+});
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = previousGhost;
+});
+
+test("sitemap includes /blog and published blog posts", async () => {
+  const entries = await sitemap();
   const urls = entries.map((entry) => entry.url);
   const byPath = new Map(
     entries.map((entry) => [new URL(entry.url).pathname, entry]),
