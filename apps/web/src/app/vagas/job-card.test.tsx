@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ useRouter: mocks.useRouter }));
 
-import type { PublicJob } from "@/lib/public-jobs-api";
+import type { MatchBreakdownDetails, PublicJob } from "@/lib/public-jobs-api";
 import { JobCard } from "./job-card";
 
 function buildJob(overrides: Partial<PublicJob> = {}): PublicJob {
@@ -37,6 +37,24 @@ function buildJob(overrides: Partial<PublicJob> = {}): PublicJob {
   };
 }
 
+function buildDetails(
+  overrides: Partial<MatchBreakdownDetails> = {},
+): MatchBreakdownDetails {
+  return {
+    area: [{ label: "DATA_AI", ok: true }],
+    skills: [
+      { label: "python", ok: true },
+      { label: "docker", ok: false },
+    ],
+    seniority: [{ label: "SENIOR", ok: true }],
+    technologies: [
+      { label: "python", ok: true },
+      { label: "kubernetes", ok: false },
+    ],
+    ...overrides,
+  };
+}
+
 describe("JobCard keyword badges", () => {
   beforeEach(() => {
     mocks.useRouter.mockReturnValue({ push: vi.fn() });
@@ -46,53 +64,8 @@ describe("JobCard keyword badges", () => {
     cleanup();
   });
 
-  it("bottom skill chips mirror the same technologies shown in the top badges, colored by match", () => {
-    const job = buildJob({
-      score: 79,
-      matchedSkills: ["python", "openshift"],
-      missingSkills: ["docker", "terraform", "helm"],
-      breakdown: {
-        area: 100,
-        skills: 66,
-        seniority: 100,
-        technologies: 66,
-        language: 100,
-        workModel: 100,
-      },
-    });
-
-    const { container } = render(
-      <JobCard
-        job={job}
-        adaptarHref="/adaptar"
-        showScore
-        isLoggedIn
-      />,
-    );
-
-    const allSpans = Array.from(container.querySelectorAll("span"));
-    // SkillChip inclui um ícone com <title> dentro do span quando have=true
-    // (ex.: "Você tem" + "python" concatenados no textContent) — por isso
-    // comparação por sufixo, não igualdade exata.
-    const countChip = (tech: string) =>
-      allSpans.filter((el) => el.textContent?.trim().endsWith(tech)).length;
-
-    // "python", "kubernetes", "openshift" devem aparecer 2x cada — uma vez
-    // nos badges do topo, outra na fileira de baixo — nunca uma palavra
-    // diferente entre as duas (era o bug: baixo vinha de
-    // matchedSkills/missingSkills, um campo diferente de technologies).
-    expect(countChip("python")).toBe(2);
-    expect(countChip("kubernetes")).toBe(2);
-    expect(countChip("openshift")).toBe(2);
-    expect(countChip("docker")).toBe(0);
-    expect(countChip("terraform")).toBe(0);
-  });
-
-  it("does not render the bottom skill-chip row when there is no computed score", () => {
-    const job = buildJob({
-      matchedSkills: undefined,
-      missingSkills: undefined,
-    });
+  it("does not render a duplicate technologies row below the top badges when there is no computed score", () => {
+    const job = buildJob();
 
     const { container } = render(
       <JobCard
@@ -103,10 +76,36 @@ describe("JobCard keyword badges", () => {
       />,
     );
 
-    // Só os badges do topo devem existir — sem chips duplicados embaixo.
     const pythonMentions = Array.from(container.querySelectorAll("span")).filter(
       (el) => el.textContent === "python",
     );
     expect(pythonMentions).toHaveLength(1);
+  });
+
+  it("renders the clickable score breakdown panel when hasScore and breakdownDetails are present", () => {
+    const job = buildJob({
+      score: 79,
+      breakdown: {
+        area: 25,
+        skills: 15,
+        seniority: 20,
+        technologies: 8,
+        language: 5,
+        workModel: 5,
+      },
+      breakdownDetails: buildDetails(),
+    });
+
+    render(
+      <JobCard job={job} adaptarHref="/adaptar" showScore isLoggedIn />,
+    );
+
+    // Fechado por padrão — nenhum chip "docker"/"kubernetes" visível ainda.
+    expect(screen.queryByText("docker")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /skills/ }));
+
+    expect(screen.getByText("docker")).toBeInTheDocument();
+    expect(screen.getByText("1 de 2 no seu CV")).toBeInTheDocument();
   });
 });

@@ -1,6 +1,35 @@
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 
+// Labels de JobArea/SeniorityLevel (enums do Prisma) — usados tanto no
+// resumo de calibração do hero de /vagas quanto nos itens do painel de
+// breakdown clicável do card (ScoreBreakdownPanel).
+export const RADAR_AREA_LABELS: Record<string, string> = {
+  DATA_AI: "Dados & IA",
+  SOFTWARE_ENGINEERING: "Engenharia de Software",
+  CLOUD_DEVOPS: "Cloud & DevOps",
+  CYBERSECURITY: "Segurança da Informação",
+  PRODUCT: "Produto",
+  DESIGN_UX: "Design & UX",
+  QA_TEST: "QA & Testes",
+  PROJECT_AGILE: "Gestão de Projetos",
+  ARCHITECTURE: "Arquitetura",
+  LEADERSHIP: "Liderança",
+  OTHER: "Geral",
+};
+
+export const RADAR_SENIORITY_LABELS: Record<string, string> = {
+  INTERN: "estagiário",
+  JUNIOR: "júnior",
+  MID: "pleno",
+  SENIOR: "sênior",
+  LEAD: "lead",
+  STAFF: "staff",
+  MANAGER: "gerente",
+  DIRECTOR: "diretor",
+  UNKNOWN: "",
+};
+
 // Escala vermelho → laranja → amarelo → verde (0-100%), aplicada como cor
 // sólida por faixa — a mesma lógica usada nos anéis de score também vale
 // pra barras de breakdown. Cores dedicadas pro texto/anel em cima de fundo

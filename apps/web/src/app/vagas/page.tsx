@@ -21,7 +21,15 @@ import { Carousel } from "./carousel";
 import { CompanyLogo } from "./company-logo";
 import { type ActiveFilters, FiltersBar } from "./filters-bar";
 import { JobCard, JobKeywordBadges, JobMetaRow } from "./job-card";
-import { AdaptBtn, MiniBar, ScorePill, ScoreRing, SkillChip } from "./radar-ui";
+import {
+  AdaptBtn,
+  MiniBar,
+  RADAR_AREA_LABELS,
+  RADAR_SENIORITY_LABELS,
+  ScorePill,
+  ScoreRing,
+  SkillChip,
+} from "./radar-ui";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -34,32 +42,6 @@ const PUBLISHED_WITHIN_MAP = {
   "3dias": "3d",
   semana: "7d",
 } as const;
-
-const RADAR_AREA_LABELS: Record<string, string> = {
-  DATA_AI: "Dados & IA",
-  SOFTWARE_ENGINEERING: "Engenharia de Software",
-  CLOUD_DEVOPS: "Cloud & DevOps",
-  CYBERSECURITY: "Segurança da Informação",
-  PRODUCT: "Produto",
-  DESIGN_UX: "Design & UX",
-  QA_TEST: "QA & Testes",
-  PROJECT_AGILE: "Gestão de Projetos",
-  ARCHITECTURE: "Arquitetura",
-  LEADERSHIP: "Liderança",
-  OTHER: "Geral",
-};
-
-const RADAR_SENIORITY_LABELS: Record<string, string> = {
-  INTERN: "estagiário",
-  JUNIOR: "júnior",
-  MID: "pleno",
-  SENIOR: "sênior",
-  LEAD: "lead",
-  STAFF: "staff",
-  MANAGER: "gerente",
-  DIRECTOR: "diretor",
-  UNKNOWN: "",
-};
 
 const SORT_VALUES = [
   "score_desc",

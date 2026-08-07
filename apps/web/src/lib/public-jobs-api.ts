@@ -11,6 +11,15 @@ export type MatchBreakdown = {
   workModel: number;
 };
 
+export type MatchDetailItem = { label: string; ok: boolean };
+
+export type MatchBreakdownDetails = {
+  area: MatchDetailItem[];
+  skills: MatchDetailItem[];
+  seniority: MatchDetailItem[];
+  technologies: MatchDetailItem[];
+};
+
 export type ExistingApplication = {
   id: string;
   status: string;
@@ -39,6 +48,7 @@ export type PublicJob = {
   workModel: string | null;
   score?: number | null;
   breakdown?: MatchBreakdown | null;
+  breakdownDetails?: MatchBreakdownDetails | null;
   matchedSkills?: string[];
   missingSkills?: string[];
   existingApplication?: ExistingApplication;

@@ -1,14 +1,9 @@
 import Link from "next/link";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { CompanyLogo } from "./company-logo";
-import {
-  AdaptBtn,
-  breakdownPct,
-  MiniBar,
-  ScoreRing,
-  SkillChip,
-} from "./radar-ui";
+import { AdaptBtn, breakdownPct, MiniBar, ScoreRing } from "./radar-ui";
 import { SaveJobBtn } from "./save-job-btn";
+import { ScoreBreakdownPanel } from "./score-breakdown";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -274,19 +269,6 @@ export function JobCard({
     ? `${adaptarHref}&jobId=${job.id}`
     : `${adaptarHref}?jobId=${job.id}`;
 
-  // Mesma lista de tecnologias que já aparece nos badges do topo do card
-  // (JobKeywordBadges, job.technologies) — só com a cor de match aplicada.
-  // Antes vinha de matchedSkills/missingSkills (calculados a partir de
-  // requiredSkills no MatchingEngine), um campo diferente de technologies:
-  // mostrava um segundo conjunto de palavras-chave, às vezes bem diferente
-  // do primeiro, confuso pra quem via os dois ao mesmo tempo no card.
-  const matchedTechSet = new Set(
-    (job.matchedSkills ?? []).map((s) => s.toLowerCase()),
-  );
-  const topSkills = (job.technologies ?? []).slice(0, 3).map((tech) => ({
-    label: tech,
-    have: matchedTechSet.has(tech.toLowerCase()),
-  }));
 
   return (
     <div
@@ -447,7 +429,14 @@ export function JobCard({
         </div>
       </div>
 
-      {hasScore && job.breakdown && !hasAnalysis ? (
+      {hasScore && job.breakdown && job.breakdownDetails && !hasAnalysis ? (
+        <ScoreBreakdownPanel
+          breakdown={job.breakdown}
+          details={job.breakdownDetails}
+        />
+      ) : hasScore && job.breakdown && !hasAnalysis ? (
+        // Fallback pra respostas antigas de API sem breakdownDetails (ex:
+        // cache) — mantém a grade estática em vez de não mostrar nada.
         <div
           style={{
             display: "grid",
@@ -477,14 +466,6 @@ export function JobCard({
             value={breakdownPct("technologies", job.breakdown.technologies)}
             compact
           />
-        </div>
-      ) : null}
-
-      {hasScore && topSkills.length > 0 ? (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {topSkills.map((s) => (
-            <SkillChip key={s.label} label={s.label} have={s.have} />
-          ))}
         </div>
       ) : null}
     </div>

@@ -42,8 +42,11 @@ vi.mock("./radar-ui", () => ({
   MiniBar: () => <div>bar</div>,
   SkillChip: () => <span>chip</span>,
   AdaptBtn: () => <a href="#adaptar">adaptar</a>,
+  breakdownPct: (_key: string, value: number) => value,
   scoreTier: (value: number) =>
     value >= 70 ? "high" : value >= 40 ? "mid" : "low",
+  RADAR_AREA_LABELS: { DATA_AI: "Dados & IA" },
+  RADAR_SENIORITY_LABELS: { SENIOR: "sênior" },
 }));
 vi.mock("@/lib/app-session.server", () => ({
   getCurrentAppUserFromCookies: mocks.getCurrentAppUserFromCookies,
