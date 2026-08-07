@@ -27,8 +27,9 @@ export function JobCardResponsiveStyles() {
       .jc-top { display: flex; gap: 16px; align-items: center; }
       .jc-headtext { display: flex; gap: 14px; align-items: center; min-width: 0; flex: 0 1 320px; }
       .jc-cluster { display: flex; align-items: center; gap: 20px; margin-left: auto; flex-shrink: 0; }
-      .jc-badges { justify-content: flex-end; align-self: center; max-width: 220px; }
+      .jc-badges { display: flex; justify-content: flex-end; align-self: center; max-width: 220px; }
       .jc-actions { display: flex; align-items: center; gap: 10px; }
+      .jc-ringcol { display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; }
       .jc-ringcol-mobile { display: none; }
       @media (max-width: 640px) {
         .jc-top { flex-direction: column; align-items: stretch; gap: 14px; }
@@ -97,7 +98,6 @@ export function JobKeywordBadges({ job }: { job: PublicJob }) {
     <div
       className="jc-badges"
       style={{
-        display: "flex",
         flexWrap: "wrap",
         alignContent: "center",
         gap: 5,
@@ -502,16 +502,7 @@ export function JobCard({
         <div className="jc-cluster">
           <JobKeywordBadges job={job} />
 
-          <div
-            className="jc-ringcol"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 8,
-              flexShrink: 0,
-            }}
-          >
+          <div className="jc-ringcol">
             <ScoreIndicator
               mobile={false}
               hasScore={hasScore}

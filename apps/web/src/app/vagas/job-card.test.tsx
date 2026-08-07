@@ -82,6 +82,31 @@ describe("JobCard keyword badges", () => {
     );
   });
 
+  it("never sets inline display on elements the mobile CSS hides via .jc-badges/.jc-ringcol (inline display always wins over a class rule, breaking the @media toggle)", () => {
+    const job = buildJob({
+      score: 79,
+      breakdown: {
+        area: 25,
+        skills: 15,
+        seniority: 20,
+        technologies: 8,
+        language: 5,
+        workModel: 5,
+      },
+      breakdownDetails: buildDetails(),
+    });
+
+    const { container } = render(
+      <JobCard job={job} adaptarHref="/adaptar" showScore isLoggedIn />,
+    );
+
+    for (const selector of [".jc-badges", ".jc-ringcol"]) {
+      const el = container.querySelector<HTMLElement>(selector);
+      expect(el).toBeInTheDocument();
+      expect(el?.style.display).toBe("");
+    }
+  });
+
   it("does not render a duplicate technologies row below the top badges when there is no computed score", () => {
     const job = buildJob();
 
