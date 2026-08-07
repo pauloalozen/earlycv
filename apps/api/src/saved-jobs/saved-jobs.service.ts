@@ -96,6 +96,7 @@ export class SavedJobsService {
           breakdown: match?.breakdown ?? null,
           matchedSkills: match?.matchedSkills ?? [],
           missingSkills: match?.missingSkills ?? [],
+          breakdownDetails: match?.matchDetails ?? null,
           existingApplication: existing
             ? {
                 id: existing.applicationId,

@@ -238,11 +238,57 @@ test("list includes breakdown/matchedSkills/missingSkills per item", async () =>
     breakdown: Record<string, number> | null;
     matchedSkills: string[];
     missingSkills: string[];
+    breakdownDetails: {
+      area: Array<{ label: string; ok: boolean }>;
+      skills: Array<{ label: string; ok: boolean }>;
+      seniority: Array<{ label: string; ok: boolean }>;
+      technologies: Array<{ label: string; ok: boolean }>;
+    } | null;
   };
   assert.equal(typeof item.score, "number");
   assert.ok(item.breakdown);
   assert.deepEqual(item.matchedSkills.sort(), ["python", "sql"]);
   assert.deepEqual(item.missingSkills, []);
+  assert.ok(item.breakdownDetails);
+  assert.deepEqual(
+    item.breakdownDetails.skills.map((i) => i.label).sort(),
+    ["python", "sql"],
+  );
+  assert.ok(item.breakdownDetails.skills.every((i) => i.ok));
+});
+
+test("list sets breakdownDetails to null for jobs without a computable score", async () => {
+  const jobsService = {
+    listByIdsWithEnrichment: async () => [
+      buildJob({
+        id: "no-enrichment",
+        enrichment: {
+          enrichmentStatus: "PENDING",
+          dominantArea: "OTHER",
+          areas: [],
+          requiredSkills: [],
+          technologies: [],
+          seniority: null,
+          languageRequirements: [],
+        },
+      }),
+    ],
+  };
+  const userRadarProfileService = { getProfile: async () => PROFILE };
+  const controller = new PublicJobsController(
+    jobsService as never,
+    userRadarProfileService as never,
+    new MatchingEngine({} as never),
+    { getBestScoresByJobIds: async () => new Map() } as never,
+    { listSavedJobIds: async () => new Set<string>() } as never,
+  );
+
+  const result = await controller.list(undefined as never, USER);
+
+  assert.equal(
+    (result.data[0] as { breakdownDetails: unknown }).breakdownDetails,
+    null,
+  );
 });
 
 test("list attaches existingApplication for jobs already analyzed, null otherwise", async () => {

@@ -206,6 +206,64 @@ test("calculateScore treats empty language/workModel requirements as trivially s
   assert.equal(result.breakdown.workModel, 5);
 });
 
+test("calculateScore.matchDetails exposes matched/missing items per dimension, mirroring the breakdown percentages", () => {
+  const engine = new MatchingEngine({} as never);
+  const result = engine.calculateScore(
+    buildScorableJob({
+      dominantArea: "DATA_AI" as never,
+      areas: ["DATA_AI", "SOFTWARE_ENGINEERING"] as never,
+      requiredSkills: ["Python", "SQL", "Airflow"],
+      technologies: ["Python", "Kubernetes"],
+      seniority: "LEAD" as never,
+    }),
+    buildScorableProfile({
+      areas: ["SOFTWARE_ENGINEERING"] as never,
+      skills: ["python", "sql"],
+      technologies: ["python"],
+      seniority: "SENIOR" as never,
+    }),
+  );
+
+  assert.deepEqual(result.matchDetails.area, [
+    { label: "DATA_AI", ok: false },
+    { label: "SOFTWARE_ENGINEERING", ok: true },
+  ]);
+  assert.deepEqual(result.matchDetails.skills, [
+    { label: "Python", ok: true },
+    { label: "SQL", ok: true },
+    { label: "Airflow", ok: false },
+  ]);
+  assert.deepEqual(result.matchDetails.technologies, [
+    { label: "Python", ok: true },
+    { label: "Kubernetes", ok: false },
+  ]);
+  assert.deepEqual(result.matchDetails.seniority, [
+    { label: "LEAD", ok: false },
+  ]);
+});
+
+test("calculateScore.matchDetails.seniority is empty when the job has no seniority data", () => {
+  const engine = new MatchingEngine({} as never);
+  const result = engine.calculateScore(
+    buildScorableJob({ seniority: "UNKNOWN" as never }),
+    buildScorableProfile(),
+  );
+
+  assert.deepEqual(result.matchDetails.seniority, []);
+});
+
+test("calculateScore.matchDetails.seniority is ok:true when the job's level exactly matches the profile's", () => {
+  const engine = new MatchingEngine({} as never);
+  const result = engine.calculateScore(
+    buildScorableJob({ seniority: "SENIOR" as never }),
+    buildScorableProfile({ seniority: "SENIOR" as never }),
+  );
+
+  assert.deepEqual(result.matchDetails.seniority, [
+    { label: "SENIOR", ok: true },
+  ]);
+});
+
 test("calculateScore does not let an unclassified job (dominantArea OTHER, no extracted data) outrank a real match", () => {
   const engine = new MatchingEngine({} as never);
   const profile = buildScorableProfile({

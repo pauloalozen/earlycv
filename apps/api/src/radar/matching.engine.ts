@@ -19,12 +19,27 @@ export type ScoreBreakdown = {
   workModel: number;
 };
 
+export type MatchDetailItem = { label: string; ok: boolean };
+
+// Item-a-item por dimensão (área/skills/senioridade/tecnologias) — usado
+// pelo card de vaga pra mostrar exatamente quais termos bateram com o
+// perfil quando o usuário clica numa barra de composição do score. Só
+// cobre as 4 dimensões que o card expõe hoje; language/workModel não têm
+// painel clicável (ver Card Vaga - Breakdown Clicavel.html).
+export type MatchDetails = {
+  area: MatchDetailItem[];
+  skills: MatchDetailItem[];
+  seniority: MatchDetailItem[];
+  technologies: MatchDetailItem[];
+};
+
 export type MatchScore = {
   jobId: string;
   score: number;
   breakdown: ScoreBreakdown;
   matchedSkills: string[];
   missingSkills: string[];
+  matchDetails: MatchDetails;
 };
 
 // Vaga com apenas os campos necessários para o score — evita acoplar
@@ -257,6 +272,19 @@ export class MatchingEngine {
       workModel: workModelScore,
     };
 
+    const matchDetails: MatchDetails = {
+      area: this.buildAreaItems(job, profile),
+      skills: [
+        ...skillsResult.matched.map((label) => ({ label, ok: true })),
+        ...skillsResult.missing.map((label) => ({ label, ok: false })),
+      ],
+      seniority: this.buildSeniorityItems(job, profile),
+      technologies: [
+        ...technologiesResult.matched.map((label) => ({ label, ok: true })),
+        ...technologiesResult.missing.map((label) => ({ label, ok: false })),
+      ],
+    };
+
     return {
       jobId: job.jobId,
       score:
@@ -269,7 +297,42 @@ export class MatchingEngine {
       breakdown,
       matchedSkills: skillsResult.matched,
       missingSkills: skillsResult.missing,
+      matchDetails,
     };
+  }
+
+  // dominantArea primeiro (é o que decide a maior parte da pontuação de
+  // área), seguido das demais áreas da vaga sem repetir — cada uma marcada
+  // "ok" se está entre as áreas escolhidas no perfil do usuário.
+  private buildAreaItems(
+    job: ScorableJob,
+    profile: ScorableProfile,
+  ): MatchDetailItem[] {
+    const ordered = job.dominantArea
+      ? [job.dominantArea, ...job.areas.filter((a) => a !== job.dominantArea)]
+      : job.areas;
+    return ordered.map((area) => ({
+      label: area,
+      ok: profile.areas.includes(area),
+    }));
+  }
+
+  // Um item só: o nível de senioridade que a vaga pede, marcado "ok" quando
+  // é exatamente o nível do perfil (distância 0) — mesmo critério usado por
+  // scoreSeniority pra atribuir a pontuação máxima dessa dimensão.
+  private buildSeniorityItems(
+    job: ScorableJob,
+    profile: ScorableProfile,
+  ): MatchDetailItem[] {
+    if (!job.seniority || job.seniority === SeniorityLevel.UNKNOWN) {
+      return [];
+    }
+    return [
+      {
+        label: job.seniority,
+        ok: seniorityDistance(profile.seniority, job.seniority) === 0,
+      },
+    ];
   }
 
   private scoreArea(job: ScorableJob, profile: ScorableProfile): number {
