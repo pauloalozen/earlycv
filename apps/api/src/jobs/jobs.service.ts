@@ -49,6 +49,13 @@ const PUBLIC_JOB_INTEGRITY_WHERE = {
   // campo) ficam fora do público até o backfill rodar — evita link quebrado
   // /vagas/null-... antes do backfill manual.
   slug: { not: null },
+  // Vaga ainda PENDING/PROCESSING/FAILED/SKIPPED de enriquecimento não tem
+  // dominantArea/technologies/seniority — sem isso o Radar não calcula
+  // compatibilidade nenhuma pra ninguém, então ela não entra no portal até
+  // o enriquecimento terminar (worker assíncrono, ver
+  // ingestion.service.ts). Decisão de produto: vaga "crua" não é conteúdo
+  // publicável, nem pro anônimo nem pro logado.
+  enrichment: { enrichmentStatus: "COMPLETED" },
 } satisfies Prisma.JobWhereInput;
 
 function splitCsv(value: string): string[] {
@@ -322,7 +329,7 @@ export class JobsService {
 
   async listPublicFacets() {
     const jobs = await this.database.job.findMany({
-      where: { status: "active" },
+      where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
       select: {
         workModel: true,
         seniorityLevel: true,
