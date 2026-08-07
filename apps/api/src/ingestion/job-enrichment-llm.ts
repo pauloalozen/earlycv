@@ -170,9 +170,8 @@ export async function enrichJobWithLlm(
   model: string,
   input: JobEnrichmentLlmInput,
 ): Promise<JobEnrichmentLlmResult> {
-  const { buildSystemMessage, stripJsonCodeFence } = await import(
-    "@earlycv/ai"
-  );
+  const { buildDeepSeekExtraBody, buildSystemMessage, stripJsonCodeFence } =
+    await import("@earlycv/ai");
 
   const response = await client.chat.completions.create({
     model,
@@ -182,6 +181,7 @@ export async function enrichJobWithLlm(
     ],
     temperature: 0,
     response_format: { type: "json_object" },
+    ...buildDeepSeekExtraBody(model),
   });
 
   const content = response.choices[0]?.message.content;

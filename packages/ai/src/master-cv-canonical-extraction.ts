@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import type OpenAI from "openai";
 
 import { extractTextFromPdf } from "./pdf-parser.js";
-import { buildSystemMessage, stripJsonCodeFence } from "./prompt-cache.js";
+import {
+  buildDeepSeekExtraBody,
+  buildSystemMessage,
+  stripJsonCodeFence,
+} from "./prompt-cache.js";
 import type { AIProvider } from "./types.js";
 
 const MASTER_CV_MAX_CHARS = 24_000;
@@ -626,6 +630,7 @@ export async function extractMasterCvCanonicalProfile(
       { role: "user", content: prompt },
     ],
     response_format: { type: "json_object" },
+    ...buildDeepSeekExtraBody(model),
   });
 
   const content = response.choices[0]?.message.content;
