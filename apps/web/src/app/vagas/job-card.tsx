@@ -274,10 +274,19 @@ export function JobCard({
     ? `${adaptarHref}&jobId=${job.id}`
     : `${adaptarHref}?jobId=${job.id}`;
 
-  const topSkills = [
-    ...(job.matchedSkills ?? []).map((s) => ({ label: s, have: true })),
-    ...(job.missingSkills ?? []).map((s) => ({ label: s, have: false })),
-  ].slice(0, 6);
+  // Mesma lista de tecnologias que já aparece nos badges do topo do card
+  // (JobKeywordBadges, job.technologies) — só com a cor de match aplicada.
+  // Antes vinha de matchedSkills/missingSkills (calculados a partir de
+  // requiredSkills no MatchingEngine), um campo diferente de technologies:
+  // mostrava um segundo conjunto de palavras-chave, às vezes bem diferente
+  // do primeiro, confuso pra quem via os dois ao mesmo tempo no card.
+  const matchedTechSet = new Set(
+    (job.matchedSkills ?? []).map((s) => s.toLowerCase()),
+  );
+  const topSkills = (job.technologies ?? []).slice(0, 3).map((tech) => ({
+    label: tech,
+    have: matchedTechSet.has(tech.toLowerCase()),
+  }));
 
   return (
     <div
@@ -471,7 +480,7 @@ export function JobCard({
         </div>
       ) : null}
 
-      {topSkills.length > 0 ? (
+      {hasScore && topSkills.length > 0 ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {topSkills.map((s) => (
             <SkillChip key={s.label} label={s.label} have={s.have} />
