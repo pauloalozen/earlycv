@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { NotFoundException } from "@nestjs/common";
+
 import { MatchingEngine } from "../radar/matching.engine";
 import { PublicJobsController } from "./public-jobs.controller";
 
@@ -18,6 +20,7 @@ function buildJob(overrides: Record<string, unknown> = {}) {
     locationText: "Brasil",
     publishedAtSource: null,
     seniorityLevel: null,
+    slug: "vaga-acme-job-1",
     sourceJobUrl: "https://example.com/job",
     status: "active",
     title: "Vaga",
@@ -348,4 +351,70 @@ test("list falls back to unpersonalized listing when user has no UserRadarProfil
   assert.equal(result.total, 1);
   assert.equal((result.data[0] as { score?: unknown }).score, undefined);
   assert.equal(result.highCompatCount, undefined);
+});
+
+test("getBySlug resolves the job via a direct getPublicBySlug lookup (not listPublic + Array.find)", async () => {
+  let receivedSlug: string | undefined;
+  const jobsService = {
+    listPublic: async () => {
+      throw new Error("getBySlug must not load the full public job list");
+    },
+    getPublicBySlug: async (slug: string) => {
+      receivedSlug = slug;
+      return buildJob({ id: "job-1", slug: "vaga-acme-job-1" });
+    },
+  };
+  const savedJobsService = { listSavedJobIds: async () => new Set<string>() };
+  const controller = new PublicJobsController(
+    jobsService as never,
+    undefined as never,
+    new MatchingEngine({} as never),
+    undefined as never,
+    savedJobsService as never,
+  );
+
+  const result = await controller.getBySlug(
+    undefined as never,
+    "vaga-acme-job-1",
+  );
+
+  assert.equal(receivedSlug, "vaga-acme-job-1");
+  assert.equal(result.slug, "vaga-acme-job-1");
+});
+
+test("getBySlug throws NotFoundException when getPublicBySlug returns null", async () => {
+  const jobsService = { getPublicBySlug: async () => null };
+  const controller = new PublicJobsController(
+    jobsService as never,
+    undefined as never,
+    new MatchingEngine({} as never),
+    undefined as never,
+    undefined as never,
+  );
+
+  await assert.rejects(
+    () => controller.getBySlug(undefined as never, "nao-existe"),
+    NotFoundException,
+  );
+});
+
+test("getScore throws NotFoundException when getPublicBySlug returns null (slug-based lookup, no listPublic scan)", async () => {
+  const jobsService = {
+    listPublic: async () => {
+      throw new Error("getScore must not load the full public job list");
+    },
+    getPublicBySlug: async () => null,
+  };
+  const controller = new PublicJobsController(
+    jobsService as never,
+    undefined as never,
+    new MatchingEngine({} as never),
+    undefined as never,
+    undefined as never,
+  );
+
+  await assert.rejects(
+    () => controller.getScore(USER, "nao-existe"),
+    NotFoundException,
+  );
 });

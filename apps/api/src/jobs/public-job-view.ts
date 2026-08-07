@@ -11,6 +11,7 @@ type PublicJobInput = {
   publishedAtSource: Date | null;
   descriptionRaw: string;
   seniorityLevel: string | null;
+  slug: string | null;
   sourceJobUrl: string;
   status: string;
   title: string;
@@ -69,7 +70,10 @@ export function toPublicJobView(job: PublicJobInput): PublicJobView {
     location: job.locationText,
     publishedAtSource: job.publishedAtSource?.toISOString() ?? null,
     seniorityLevel: job.seniorityLevel,
-    slug: buildPublicJobSlug(job.id, job.title, job.company.name),
+    // Jobs sem slug (ainda não backfilled) nunca deveriam chegar aqui — as
+    // queries públicas filtram slug != null. Fallback vazio só evita quebra
+    // de tipo; se aparecer em produção é sinal de bug na query chamadora.
+    slug: job.slug ?? "",
     sourceJobUrl: job.sourceJobUrl,
     status: job.status,
     title: job.title,

@@ -28,12 +28,22 @@ function createIngestionServiceFixture(options?: {
 }) {
   const updatedJobs = new Map<
     string,
-    { id: string; canonicalKey: string; status: string; lastSeenAt: Date }
+    {
+      id: string;
+      canonicalKey: string;
+      status: string;
+      lastSeenAt: Date;
+      slug?: string;
+    }
   >();
   const createdJobs: Array<{
     canonicalKey: string;
     status: string;
     lastSeenAt: Date;
+  }> = [];
+  const rawJobUpdates: Array<{
+    where: { id: string };
+    data: Record<string, unknown>;
   }> = [];
   let staleUpdateManyCount = 0;
   let collectContext: IngestionCollectContext | undefined;
@@ -126,6 +136,7 @@ function createIngestionServiceFixture(options?: {
         where: { id: string };
         data: Record<string, unknown>;
       }) => {
+        rawJobUpdates.push({ where, data });
         updatedJobs.set(where.id, {
           id: where.id,
           canonicalKey: where.id.includes("reappear")
@@ -133,6 +144,7 @@ function createIngestionServiceFixture(options?: {
             : "job-a",
           status: String(data.status ?? "active"),
           lastSeenAt: (data.lastSeenAt as Date) ?? new Date(),
+          ...(typeof data.slug === "string" ? { slug: data.slug } : {}),
         });
         return { id: where.id };
       },
@@ -182,6 +194,7 @@ function createIngestionServiceFixture(options?: {
   return {
     collectContext: () => collectContext,
     createdJobs,
+    rawJobUpdates,
     service,
     setStaleCount(count: number) {
       staleUpdateManyCount = count;
@@ -466,6 +479,36 @@ test("IngestionService reactivates previously inactive job when it reappears", a
   const updated = fixture.updatedJobs.get("job-reappear-id");
   assert.ok(updated);
   assert.equal(updated.status, "active");
+});
+
+test("IngestionService persists a computed slug when creating a new job", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-slug-new", title: "Vaga Nova" }],
+  });
+
+  await fixture.service.runJobSource("source-1");
+
+  const updated = fixture.updatedJobs.get("created-job");
+  assert.ok(updated);
+  assert.equal(updated.slug, "vaga-nova-company-1-created-job");
+});
+
+test("IngestionService never touches slug when updating an existing job, even if the title changed at the source", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a", title: "Titulo Novo Da Fonte" }],
+  });
+
+  await fixture.service.runJobSource("source-1");
+
+  const jobAUpdate = fixture.rawJobUpdates.find(
+    (call) => call.where.id === "job-a-id",
+  );
+  assert.ok(jobAUpdate, "expected an update call for the existing job");
+  assert.equal(
+    Object.hasOwn(jobAUpdate.data, "slug"),
+    false,
+    "slug must never be part of the update payload for an existing job",
+  );
 });
 
 test("IngestionService keeps staleMarkedCount zero when no old jobs are found", async () => {

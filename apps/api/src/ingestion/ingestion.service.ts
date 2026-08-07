@@ -13,6 +13,7 @@ import type {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { buildPublicJobSlug } from "../jobs/public-job-view";
 import { CustomApiAdapter, CustomHtmlAdapter, GupyAdapter } from "./adapters";
 import { evaluate403CircuitBreaker } from "./circuit-breaker-policy";
 import { isForbiddenIngestionError } from "./errors";
@@ -638,6 +639,28 @@ export class IngestionService {
     );
   }
 
+  // O sufixo cuid do Job.id já torna buildPublicJobSlug globalmente único na
+  // prática (dois Jobs nunca compartilham id) — este loop é uma rede de
+  // segurança caso a estratégia de geração de id mude no futuro, não um
+  // caminho esperado em produção.
+  private async buildUniqueJobSlug(id: string, title: string, company: string) {
+    const base = buildPublicJobSlug(id, title, company);
+    let candidate = base;
+    let suffix = 2;
+
+    while (
+      await this.database.job.findUnique({
+        where: { slug: candidate },
+        select: { id: true },
+      })
+    ) {
+      candidate = `${base}_${suffix}`;
+      suffix += 1;
+    }
+
+    return candidate;
+  }
+
   private async upsertObservation(
     jobSource: JobSourceContext,
     observation: NormalizedJobObservation,
@@ -694,6 +717,20 @@ export class IngestionService {
           ...payload,
           canonicalKey: observation.canonicalKey,
         },
+      });
+
+      // Slug é calculado a partir do id só depois do create (o id é gerado
+      // pelo Prisma na hora do insert). Fica fixo daqui pra frente — updates
+      // subsequentes desta vaga (ver bloco abaixo) nunca recalculam o slug,
+      // mesmo que o título mude na fonte, pra não quebrar URLs já indexadas.
+      const slug = await this.buildUniqueJobSlug(
+        createdJob.id,
+        observation.title,
+        jobSource.company.name,
+      );
+      await this.database.job.update({
+        where: { id: createdJob.id },
+        data: { slug },
       });
 
       // Enriquecimento roda em worker assincrono (JobEnrichmentWorker) e

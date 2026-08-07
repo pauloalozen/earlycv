@@ -22,7 +22,7 @@ import { MatchingEngine } from "../radar/matching.engine";
 import { UserRadarProfileService } from "../radar/user-radar-profile.service";
 import { SavedJobsService } from "../saved-jobs/saved-jobs.service";
 import { JobsService } from "./jobs.service";
-import { buildPublicJobSlug, toPublicJobView } from "./public-job-view";
+import { toPublicJobView } from "./public-job-view";
 import { PublicJobsGhostModeGuard } from "./public-jobs-ghost-mode.guard";
 
 @Controller("public/jobs")
@@ -281,10 +281,7 @@ export class PublicJobsController {
   @InternalRoles("admin", "superadmin")
   @UseGuards(PublicJobsGhostModeGuard)
   async getBySlug(@Req() _request: Request, @Param("slug") slug: string) {
-    const jobs = await this.jobsService.listPublic();
-    const found = jobs.find(
-      (job) => buildPublicJobSlug(job.id, job.title, job.company.name) === slug,
-    );
+    const found = await this.jobsService.getPublicBySlug(slug);
 
     if (!found) {
       throw new NotFoundException("job not found");
@@ -299,10 +296,7 @@ export class PublicJobsController {
     @AuthenticatedUser() user: AuthenticatedRequestUser,
     @Param("slug") slug: string,
   ) {
-    const jobs = await this.jobsService.listPublic();
-    const found = jobs.find(
-      (job) => buildPublicJobSlug(job.id, job.title, job.company.name) === slug,
-    );
+    const found = await this.jobsService.getPublicBySlug(slug);
     if (!found) {
       throw new NotFoundException("job not found");
     }

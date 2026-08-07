@@ -31,6 +31,7 @@ const PUBLIC_JOB_SELECT = {
   locationText: true,
   publishedAtSource: true,
   seniorityLevel: true,
+  slug: true,
   sourceJobUrl: true,
   status: true,
   title: true,
@@ -43,6 +44,10 @@ const PUBLIC_JOB_SELECT = {
 const PUBLIC_JOB_INTEGRITY_WHERE = {
   descriptionClean: { not: "" },
   title: { not: "" },
+  // Vagas sem slug (ainda não backfilled após a migration que adicionou o
+  // campo) ficam fora do público até o backfill rodar — evita link quebrado
+  // /vagas/null-... antes do backfill manual.
+  slug: { not: null },
 } satisfies Prisma.JobWhereInput;
 
 function splitCsv(value: string): string[] {
@@ -163,6 +168,16 @@ export class JobsService {
     });
   }
 
+  // Usado por /vagas/[slug] e /vagas/[slug]/score — query direta pelo campo
+  // slug (indexado e único), no lugar de carregar listPublic() inteiro e
+  // fazer Array.find recalculando o slug de cada vaga.
+  async getPublicBySlug(slug: string) {
+    return this.database.job.findFirst({
+      where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE, slug },
+      select: PUBLIC_JOB_SELECT,
+    });
+  }
+
   private buildPublicJobsWhere(filters: {
     q?: string;
     workModel?: string;
@@ -235,6 +250,7 @@ export class JobsService {
       locationText: true,
       publishedAtSource: true,
       seniorityLevel: true,
+      slug: true,
       sourceJobUrl: true,
       status: true,
       title: true,
