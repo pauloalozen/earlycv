@@ -4,6 +4,7 @@ type PublicJobInput = {
   country: string | null;
   descriptionClean: string;
   employmentType: string | null;
+  enrichment: { technologies: string[] } | null;
   firstSeenAt: Date;
   id: string;
   lastSeenAt: Date;
@@ -35,6 +36,7 @@ export type PublicJobView = {
   descriptionHtml: string;
   sourceJobUrl: string;
   status: string;
+  technologies: string[];
   title: string;
   workModel: string | null;
 };
@@ -76,6 +78,7 @@ export function toPublicJobView(job: PublicJobInput): PublicJobView {
     slug: job.slug ?? "",
     sourceJobUrl: job.sourceJobUrl,
     status: job.status,
+    technologies: job.enrichment?.technologies ?? [],
     title: job.title,
     workModel: job.workModel,
   };

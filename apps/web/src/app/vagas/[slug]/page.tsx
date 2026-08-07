@@ -422,6 +422,25 @@ async function loadJob(slug: string) {
   }
 }
 
+// Valores normalizados pelos adapters de ingestão (ver
+// apps/api/src/ingestion/adapters/gupy.adapter.ts EMPLOYMENT_TYPE_MAP) —
+// não são "CLT"/"PJ" literais. talent_pool não é um tipo de contrato real
+// (é banco de talentos), por isso fica de fora do mapa e o campo é omitido.
+const SCHEMA_EMPLOYMENT_TYPE: Record<string, string> = {
+  full_time: "FULL_TIME",
+  contractor: "CONTRACTOR",
+  pj: "CONTRACTOR",
+  autonomous: "CONTRACTOR",
+  temporary: "TEMPORARY",
+  internship: "INTERN",
+  apprentice: "INTERN",
+};
+
+function toSchemaEmploymentType(value: string | null): string | undefined {
+  if (!value) return undefined;
+  return SCHEMA_EMPLOYMENT_TYPE[value];
+}
+
 export async function generateMetadata({
   params,
 }: JobPageProps): Promise<Metadata> {
@@ -436,8 +455,19 @@ export async function generateMetadata({
     };
   }
 
-  const title = `${job.title} na ${job.company} | EarlyCV`;
-  const description = `${job.title} na ${job.company} em ${job.location}. ${job.description.slice(0, 120)}`;
+  const techTags = (job.technologies ?? []).slice(0, 3).join(", ");
+
+  const title = `${job.title} — ${job.company} | EarlyCV`;
+  const description = [
+    `Vaga de ${job.title} na ${job.company}`,
+    job.location ? `em ${job.location}` : null,
+    job.workModel === "remote" ? "(Remoto)" : null,
+    techTags ? `· ${techTags}` : null,
+    "— Veja compatibilidade com seu perfil e adapte seu CV em segundos.",
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 160);
   const url = getAbsoluteUrl(`/vagas/${job.slug}`);
 
   return {
@@ -608,14 +638,29 @@ export default async function JobPage({ params }: JobPageProps) {
     .then((r) => r.data.filter((j) => j.slug !== job.slug).slice(0, 3))
     .catch(() => [] as PublicJob[]);
 
+  const validThrough = new Date(
+    new Date(job.lastSeenAt).getTime() + 30 * 86_400_000,
+  ).toISOString();
+
   const jobJsonLd = {
     "@context": "https://schema.org",
     "@type": "JobPosting",
     title: job.title,
-    description: job.description,
+    // Vaga sem descriptionClean nunca chega aqui em teoria — a query
+    // pública já exige título+descrição não vazios — mas o fallback evita
+    // um JobPosting com description: "" reprovando no Rich Results Test se
+    // essa premissa mudar.
+    description:
+      job.description.trim() ||
+      `Vaga de ${job.title} na ${job.company}. Candidate-se e adapte seu CV com IA.`,
     datePosted: job.publishedAtSource ?? job.firstSeenAt,
-    employmentType: job.employmentType ?? undefined,
-    hiringOrganization: { "@type": "Organization", name: job.company },
+    validThrough,
+    employmentType: toSchemaEmploymentType(job.employmentType),
+    hiringOrganization: {
+      "@type": "Organization",
+      name: job.company,
+      ...(job.companyWebsiteUrl ? { sameAs: job.companyWebsiteUrl } : {}),
+    },
     jobLocation: {
       "@type": "Place",
       address: {
@@ -624,6 +669,7 @@ export default async function JobPage({ params }: JobPageProps) {
         addressLocality: job.location,
       },
     },
+    ...(job.workModel === "remote" ? { jobLocationType: "TELECOMMUTE" } : {}),
     applicantLocationRequirements: { "@type": "Country", name: "Brasil" },
     directApply: true,
     url: getAbsoluteUrl(`/vagas/${job.slug}`),

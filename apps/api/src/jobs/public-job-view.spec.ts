@@ -18,6 +18,7 @@ test("toPublicJobView passes through the persisted slug instead of recomputing i
     descriptionClean: "desc",
     descriptionRaw: "<p>desc</p>",
     employmentType: null,
+    enrichment: { technologies: ["python", "sql"] },
     firstSeenAt: new Date("2026-01-01T00:00:00.000Z"),
     id: "cmp_job123",
     lastSeenAt: new Date("2026-01-02T00:00:00.000Z"),
@@ -33,9 +34,10 @@ test("toPublicJobView passes through the persisted slug instead of recomputing i
   });
 
   assert.equal(view.slug, "titulo-antigo-itau-cmp-job123");
+  assert.deepEqual(view.technologies, ["python", "sql"]);
 });
 
-test("toPublicJobView falls back to empty string when slug is null", () => {
+test("toPublicJobView falls back to empty string when slug is null, and to [] when enrichment is null", () => {
   const view = toPublicJobView({
     canonicalKey: "key-2",
     company: { name: "Itau", websiteUrl: null },
@@ -43,6 +45,7 @@ test("toPublicJobView falls back to empty string when slug is null", () => {
     descriptionClean: "desc",
     descriptionRaw: "<p>desc</p>",
     employmentType: null,
+    enrichment: null,
     firstSeenAt: new Date("2026-01-01T00:00:00.000Z"),
     id: "cmp_job456",
     lastSeenAt: new Date("2026-01-02T00:00:00.000Z"),
@@ -57,4 +60,5 @@ test("toPublicJobView falls back to empty string when slug is null", () => {
   });
 
   assert.equal(view.slug, "");
+  assert.deepEqual(view.technologies, []);
 });

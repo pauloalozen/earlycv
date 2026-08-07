@@ -89,25 +89,27 @@ type SearchParams = {
 };
 
 export function generateMetadata(): Metadata {
+  // export const metadata estático (como no rascunho original da spec)
+  // perderia essa condicional — Google indexaria /vagas mesmo com ghost mode
+  // ligado, contradizendo o robots.txt. generateMetadata() preserva o
+  // comportamento existente, só troca os textos.
   const isGhostMode = isJobsGhostModeEnabled();
   const url = getAbsoluteUrl("/vagas");
   return {
-    title: "Vagas de tecnologia e dados | EarlyCV",
+    title: "Vagas em Tech | Radar de Oportunidades — EarlyCV",
     description:
-      "Vagas em tecnologia, dados, produto e áreas digitais monitoradas pelo EarlyCV — chegam antes do LinkedIn.",
+      "Encontre vagas de tecnologia, dados e produto com score de compatibilidade personalizado. Adapte seu CV em segundos.",
     alternates: { canonical: url },
     robots: { index: !isGhostMode, follow: !isGhostMode },
     openGraph: {
-      title: "Vagas | EarlyCV",
-      description:
-        "Vagas monitoradas antes da divulgação pública. Tecnologia, dados, produto e áreas digitais.",
+      title: "Radar de Oportunidades — Vagas Tech | EarlyCV",
+      description: "Vagas de tech com score de compatibilidade para o seu perfil.",
       url,
       type: "website",
     },
     twitter: {
-      title: "Vagas | EarlyCV",
-      description:
-        "Vagas monitoradas antes da divulgação pública. Tecnologia, dados, produto e áreas digitais.",
+      title: "Radar de Oportunidades — Vagas Tech | EarlyCV",
+      description: "Vagas de tech com score de compatibilidade para o seu perfil.",
     },
   };
 }

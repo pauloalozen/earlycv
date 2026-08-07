@@ -34,6 +34,7 @@ export type PublicJob = {
   slug: string;
   sourceJobUrl: string;
   status: string;
+  technologies: string[];
   title: string;
   workModel: string | null;
   score?: number | null;
