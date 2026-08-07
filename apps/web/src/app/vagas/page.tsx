@@ -142,42 +142,60 @@ function JobCardLocked({ job }: { job: PublicJob }) {
         fontFamily: GEIST,
       }}
     >
-      <div style={{ display: "flex", gap: 14, flex: 1, minWidth: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 14,
+          alignItems: "center",
+          minWidth: 0,
+          flex: "0 1 320px",
+        }}
+      >
         <CompanyLogo name={job.company} websiteUrl={job.companyWebsiteUrl} />
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ minWidth: 0 }}>
           <JobMetaRow job={job} />
         </div>
       </div>
-      <JobKeywordBadges job={job} />
       <div
         style={{
-          width: 64,
-          height: 64,
-          borderRadius: "50%",
-          border: "1.5px dashed rgba(10,10,10,0.15)",
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
+          gap: 20,
+          marginLeft: "auto",
           flexShrink: 0,
         }}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <title>Bloqueado</title>
-          <rect
-            x="5"
-            y="10"
-            width="14"
-            height="10"
-            rx="2"
-            stroke="#a0a098"
-            strokeWidth="1.6"
-          />
-          <path
-            d="M8 10V7a4 4 0 0 1 8 0v3"
-            stroke="#a0a098"
-            strokeWidth="1.6"
-          />
-        </svg>
+        <JobKeywordBadges job={job} />
+        <div
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: "50%",
+            border: "1.5px dashed rgba(10,10,10,0.15)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <title>Bloqueado</title>
+            <rect
+              x="5"
+              y="10"
+              width="14"
+              height="10"
+              rx="2"
+              stroke="#a0a098"
+              strokeWidth="1.6"
+            />
+            <path
+              d="M8 10V7a4 4 0 0 1 8 0v3"
+              stroke="#a0a098"
+              strokeWidth="1.6"
+            />
+          </svg>
+        </div>
       </div>
     </div>
   );

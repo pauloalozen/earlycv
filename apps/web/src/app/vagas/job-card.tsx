@@ -293,26 +293,46 @@ export function JobCard({
         fontFamily: GEIST,
       }}
     >
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-        <div style={{ display: "flex", gap: 14, flex: 1, minWidth: 0 }}>
+      <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 14,
+            alignItems: "center",
+            minWidth: 0,
+            flex: "0 1 320px",
+          }}
+        >
           <CompanyLogo name={job.company} websiteUrl={job.companyWebsiteUrl} />
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ minWidth: 0 }}>
             <JobMetaRow job={job} />
           </div>
         </div>
 
-        <JobKeywordBadges job={job} />
-
+        {/* Badges + ring + ações agrupados à direita numa cluster só — evita
+        a segunda linha quase vazia que sobrava quando os botões ficavam num
+        row separado abaixo (nada pra preencher o espaço à esquerda deles). */}
         <div
           style={{
             display: "flex",
-            flexDirection: "column",
             alignItems: "center",
-            gap: 8,
+            gap: 20,
+            marginLeft: "auto",
             flexShrink: 0,
           }}
         >
-          {hasScore && typeof displayScore === "number" ? (
+          <JobKeywordBadges job={job} />
+
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 8,
+              flexShrink: 0,
+            }}
+          >
+            {hasScore && typeof displayScore === "number" ? (
             <div
               style={{
                 display: "flex",
@@ -397,6 +417,24 @@ export function JobCard({
               </span>
             </div>
           )}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <SaveJobBtn
+              jobId={job.id}
+              initialSaved={!!job.isSaved}
+              isLoggedIn={isLoggedIn}
+            />
+            {hasAnalysis && job.existingApplication ? (
+              <AdaptBtn
+                href={`/candidaturas/${job.existingApplication.id}`}
+                score={bestAnalysisScore}
+                variant="view"
+              />
+            ) : (
+              <AdaptBtn href={adaptarUrl} score={hasScore ? job.score : null} />
+            )}
+          </div>
         </div>
       </div>
 
@@ -440,31 +478,6 @@ export function JobCard({
           ))}
         </div>
       ) : null}
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          gap: 10,
-          paddingTop: topSkills.length > 0 ? 0 : 4,
-        }}
-      >
-        <SaveJobBtn
-          jobId={job.id}
-          initialSaved={!!job.isSaved}
-          isLoggedIn={isLoggedIn}
-        />
-        {hasAnalysis && job.existingApplication ? (
-          <AdaptBtn
-            href={`/candidaturas/${job.existingApplication.id}`}
-            score={bestAnalysisScore}
-            variant="view"
-          />
-        ) : (
-          <AdaptBtn href={adaptarUrl} score={hasScore ? job.score : null} />
-        )}
-      </div>
     </div>
   );
 }
