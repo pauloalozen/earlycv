@@ -101,11 +101,14 @@ describe("JobCard keyword badges", () => {
     );
 
     // Fechado por padrão — nenhum chip "docker"/"kubernetes" visível ainda.
-    expect(screen.queryByText("docker")).not.toBeInTheDocument();
+    expect(screen.queryAllByText("docker")).toHaveLength(0);
 
-    fireEvent.click(screen.getByRole("button", { name: /skills/ }));
+    // Desktop e mobile renderizam ambos no DOM (alternados só por CSS
+    // @media, sem detecção de viewport em JS) — pega o primeiro botão
+    // "skills" (o da grade desktop) pra não ambiguar a query.
+    fireEvent.click(screen.getAllByRole("button", { name: /skills/ })[0]);
 
-    expect(screen.getByText("docker")).toBeInTheDocument();
-    expect(screen.getByText("1 de 2 no seu CV")).toBeInTheDocument();
+    expect(screen.getAllByText("docker").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 de 2 no seu CV").length).toBeGreaterThan(0);
   });
 });

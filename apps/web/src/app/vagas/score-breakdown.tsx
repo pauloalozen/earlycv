@@ -14,7 +14,6 @@ import {
   scoreTier,
 } from "./radar-ui";
 
-const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 const LINE = "rgba(10,10,10,0.08)";
 
@@ -177,7 +176,104 @@ function DimBar({
   );
 }
 
-function DimPanel({ dim, items, pct }: { dim: DimKey; items: MatchDetailItem[]; pct: number }) {
+// Versão compacta da barra, pro carrossel horizontal mobile — sem a
+// contagem "X de Y" embaixo (não cabe no cartão estreito, ver mTab no
+// design de referência).
+function MobileDimTab({
+  dim,
+  pct,
+  open,
+  onToggle,
+}: {
+  dim: DimKey;
+  pct: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const t = SCORE[scoreTier(pct)];
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      style={{
+        flex: "0 0 auto",
+        minWidth: 124,
+        background: "#fafaf6",
+        border: `1px solid ${open ? "#0a0a0a" : LINE}`,
+        boxShadow: open ? "0 0 0 1px #0a0a0a" : "none",
+        borderRadius: 11,
+        padding: "9px 11px 10px",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        textAlign: "left",
+      }}
+    >
+      <span
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          marginBottom: 7,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            color: open ? "#0a0a0a" : "#3a3a38",
+            fontWeight: open ? 600 : 400,
+          }}
+        >
+          {DIM_LABEL[dim]}
+        </span>
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            fontWeight: 600,
+            marginLeft: "auto",
+            color: t.fg,
+          }}
+        >
+          {pct}%
+        </span>
+      </span>
+      <span
+        style={{
+          display: "block",
+          width: "100%",
+          height: 5,
+          borderRadius: 99,
+          background: "rgba(10,10,10,0.07)",
+          overflow: "hidden",
+        }}
+      >
+        <span
+          style={{
+            display: "block",
+            height: "100%",
+            width: `${pct}%`,
+            borderRadius: 99,
+            background: t.ring,
+          }}
+        />
+      </span>
+    </button>
+  );
+}
+
+function DimPanel({
+  dim,
+  items,
+  pct,
+  mobile,
+}: {
+  dim: DimKey;
+  items: MatchDetailItem[];
+  pct: number;
+  mobile?: boolean;
+}) {
   const t = SCORE[scoreTier(pct)];
   const found = items.filter((i) => i.ok).length;
 
@@ -185,13 +281,21 @@ function DimPanel({ dim, items, pct }: { dim: DimKey; items: MatchDetailItem[]; 
     <div
       style={{
         marginTop: 16,
-        background: "#fff",
+        background: mobile ? "#fafaf6" : "#fff",
         border: `1px solid ${LINE}`,
         borderRadius: 12,
-        padding: "15px 16px",
+        padding: mobile ? "13px 14px" : "15px 16px",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 9,
+          marginBottom: mobile ? 11 : 12,
+          flexWrap: "wrap",
+        }}
+      >
         <span style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: -0.15 }}>
           {DIM_TITLE[dim]}
         </span>
@@ -208,7 +312,15 @@ function DimPanel({ dim, items, pct }: { dim: DimKey; items: MatchDetailItem[]; 
         >
           {pct}%
         </span>
-        <span style={{ fontSize: 12, color: "#6a6560", marginLeft: "auto", textAlign: "right" }}>
+        <span
+          style={{
+            fontSize: mobile ? 11.5 : 12,
+            color: "#6a6560",
+            marginLeft: mobile ? 0 : "auto",
+            textAlign: mobile ? "left" : "right",
+            flexBasis: mobile ? "100%" : "auto",
+          }}
+        >
           {found} de {items.length} no seu CV
         </span>
       </div>
@@ -299,6 +411,33 @@ function DimPanel({ dim, items, pct }: { dim: DimKey; items: MatchDetailItem[]; 
   );
 }
 
+// Wrapper que anima abrir/fechar sem JS medindo altura: grid-template-rows
+// 0fr→1fr é uma técnica CSS pura que funciona com conteúdo de altura
+// variável (a técnica de max-height fixo cortaria conteúdo maior ou
+// deixaria "buraco" em conteúdo menor). `lastDim` (não `open`) decide o que
+// renderizar dentro — assim o conteúdo continua montado durante a animação
+// de fechamento em vez de sumir instantaneamente no frame em que `open`
+// vira null, o que faria a altura colapsar mas o conteúdo cortar seco.
+function AnimatedCollapse({
+  open,
+  children,
+}: {
+  open: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateRows: open ? "1fr" : "0fr",
+        transition: "grid-template-rows 0.28s ease",
+      }}
+    >
+      <div style={{ overflow: "hidden", minHeight: 0 }}>{children}</div>
+    </div>
+  );
+}
+
 // Grade de composição do score (área/skills/senioridade/tecnologias),
 // clicável — cada barra abre um painel mostrando quais termos da vaga
 // bateram com o perfil (verde) e quais não (cinza). Substitui a grade
@@ -306,6 +445,11 @@ function DimPanel({ dim, items, pct }: { dim: DimKey; items: MatchDetailItem[]; 
 // Breakdown Clicavel.html). Client component porque precisa de estado
 // local (qual dimensão está aberta) — o resto do card continua Server
 // Component.
+//
+// Duas versões no mesmo componente — grade de 4 colunas no desktop,
+// carrossel horizontal no mobile (mesmo design de referência) — alternadas
+// por @media query em vez de JS (evita hidration mismatch de detectar
+// viewport no client) via classes .score-bd-desktop/.score-bd-mobile.
 export function ScoreBreakdownPanel({
   breakdown,
   details,
@@ -314,11 +458,32 @@ export function ScoreBreakdownPanel({
   details: MatchBreakdownDetails;
 }) {
   const [open, setOpen] = useState<DimKey | null>(null);
+  const [lastDim, setLastDim] = useState<DimKey | null>(null);
 
   const dims: DimKey[] = ["area", "skills", "seniority", "technologies"];
 
+  const toggle = (dim: DimKey) => {
+    if (open === dim) {
+      setOpen(null);
+      return;
+    }
+    setLastDim(dim);
+    setOpen(dim);
+  };
+
   return (
     <div>
+      <style>{`
+        .score-bd-desktop { display: block; }
+        .score-bd-mobile { display: none; }
+        .score-bd-mtabs { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+        .score-bd-mtabs::-webkit-scrollbar { display: none; }
+        @media (max-width: 640px) {
+          .score-bd-desktop { display: none; }
+          .score-bd-mobile { display: block; }
+        }
+      `}</style>
+
       <div
         style={{
           display: "flex",
@@ -359,40 +524,91 @@ export function ScoreBreakdownPanel({
               strokeLinejoin="round"
             />
           </svg>
-          clique em uma dimensão para ver os termos encontrados
+          {"clique em uma dimensão para ver os termos encontrados"}
         </span>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 8,
-        }}
-      >
-        {dims.map((dim) => {
-          const items = details[dim];
-          const found = items.filter((i) => i.ok).length;
-          return (
-            <DimBar
+      {/* Desktop: grade 4 colunas */}
+      <div className="score-bd-desktop">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 8,
+          }}
+        >
+          {dims.map((dim) => {
+            const items = details[dim];
+            const found = items.filter((i) => i.ok).length;
+            return (
+              <DimBar
+                key={dim}
+                dim={dim}
+                pct={breakdownPct(dim, breakdown[dim])}
+                count={`${found} de ${items.length}`}
+                open={open === dim}
+                onToggle={() => toggle(dim)}
+              />
+            );
+          })}
+        </div>
+        <AnimatedCollapse open={open !== null}>
+          {lastDim ? (
+            <DimPanel
+              dim={lastDim}
+              items={details[lastDim]}
+              pct={breakdownPct(lastDim, breakdown[lastDim])}
+            />
+          ) : null}
+        </AnimatedCollapse>
+      </div>
+
+      {/* Mobile: carrossel horizontal */}
+      <div className="score-bd-mobile">
+        <div className="score-bd-mtabs">
+          {dims.map((dim) => (
+            <MobileDimTab
               key={dim}
               dim={dim}
               pct={breakdownPct(dim, breakdown[dim])}
-              count={`${found} de ${items.length}`}
               open={open === dim}
-              onToggle={() => setOpen((current) => (current === dim ? null : dim))}
+              onToggle={() => toggle(dim)}
             />
-          );
-        })}
+          ))}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontFamily: MONO,
+            fontSize: 9.5,
+            color: "#8a8a85",
+            marginTop: 8,
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+            <title>Arraste</title>
+            <path
+              d="M5 12h14M14 7l5 5-5 5"
+              stroke="#8a8a85"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+            />
+          </svg>
+          arraste para ver as 4 dimensões
+        </div>
+        <AnimatedCollapse open={open !== null}>
+          {lastDim ? (
+            <DimPanel
+              dim={lastDim}
+              items={details[lastDim]}
+              pct={breakdownPct(lastDim, breakdown[lastDim])}
+              mobile
+            />
+          ) : null}
+        </AnimatedCollapse>
       </div>
-
-      {open ? (
-        <DimPanel
-          dim={open}
-          items={details[open]}
-          pct={breakdownPct(open, breakdown[open])}
-        />
-      ) : null}
     </div>
   );
 }
