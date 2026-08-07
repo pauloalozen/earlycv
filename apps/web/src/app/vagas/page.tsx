@@ -20,7 +20,7 @@ import { getAbsoluteUrl } from "@/lib/site";
 import { Carousel } from "./carousel";
 import { CompanyLogo } from "./company-logo";
 import { type ActiveFilters, FiltersBar } from "./filters-bar";
-import { JobCard, JobMetaRow } from "./job-card";
+import { JobCard, JobKeywordBadges, JobMetaRow } from "./job-card";
 import { AdaptBtn, MiniBar, ScorePill, ScoreRing, SkillChip } from "./radar-ui";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -148,6 +148,7 @@ function JobCardLocked({ job }: { job: PublicJob }) {
           <JobMetaRow job={job} />
         </div>
       </div>
+      <JobKeywordBadges job={job} />
       <div
         style={{
           width: 64,

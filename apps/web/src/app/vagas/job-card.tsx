@@ -49,15 +49,74 @@ function formatRelativeTime(isoDate: string): string {
   return `${diffW} semanas`;
 }
 
+// Chips de tecnologia + senioridade — coluna própria à direita do bloco de
+// texto (título/empresa/meta), alinhada verticalmente ao centro, em vez de
+// quebrar linha abaixo da empresa (era assim antes; a referência de design
+// mostra os badges alinhados à direita, na mesma altura do card).
+export function JobKeywordBadges({ job }: { job: PublicJob }) {
+  const seniorityLabel = job.seniorityLevel
+    ? (SENIORITY_LABELS[job.seniorityLevel.toLowerCase()] ?? job.seniorityLevel)
+    : null;
+  const technologies = (job.technologies ?? []).slice(0, 3);
+
+  if (technologies.length === 0 && !seniorityLabel) return null;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignContent: "center",
+        alignSelf: "center",
+        justifyContent: "flex-end",
+        gap: 5,
+        maxWidth: 220,
+        flexShrink: 0,
+      }}
+    >
+      {technologies.map((tech) => (
+        <span
+          key={tech}
+          style={{
+            background: "rgba(10,10,10,0.05)",
+            color: "#3a3a38",
+            fontFamily: MONO,
+            fontSize: 10,
+            padding: "3px 8px",
+            borderRadius: 4,
+            letterSpacing: 0.2,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {tech}
+        </span>
+      ))}
+      {seniorityLabel ? (
+        <span
+          style={{
+            background: "rgba(10,10,10,0.05)",
+            color: "#3a3a38",
+            fontFamily: MONO,
+            fontSize: 10,
+            padding: "3px 8px",
+            borderRadius: 4,
+            letterSpacing: 0.2,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {seniorityLabel}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function JobMetaRow({ job }: { job: PublicJob }) {
   const alreadyAnalyzed =
     typeof job.existingApplication?.bestScore === "number";
   const published = job.publishedAtSource ?? job.firstSeenAt;
   const workModelLabel = job.workModel
     ? (WORK_MODEL_LABELS[job.workModel] ?? job.workModel)
-    : null;
-  const seniorityLabel = job.seniorityLevel
-    ? (SENIORITY_LABELS[job.seniorityLevel.toLowerCase()] ?? job.seniorityLevel)
     : null;
 
   return (
@@ -117,63 +176,6 @@ export function JobMetaRow({ job }: { job: PublicJob }) {
       <div
         style={{
           display: "flex",
-          flexWrap: "wrap",
-          gap: 5,
-          marginBottom: 10,
-        }}
-      >
-        {(job.technologies ?? []).slice(0, 4).map((tech) => (
-          <span
-            key={tech}
-            style={{
-              background: "rgba(10,10,10,0.05)",
-              color: "#3a3a38",
-              fontFamily: MONO,
-              fontSize: 10,
-              padding: "3px 8px",
-              borderRadius: 4,
-              letterSpacing: 0.2,
-            }}
-          >
-            {tech}
-          </span>
-        ))}
-        {workModelLabel ? (
-          <span
-            style={{
-              background: "rgba(198,255,58,0.22)",
-              color: "#405410",
-              fontFamily: MONO,
-              fontSize: 10,
-              padding: "3px 8px",
-              borderRadius: 4,
-              letterSpacing: 0.2,
-              fontWeight: 500,
-            }}
-          >
-            {workModelLabel}
-          </span>
-        ) : null}
-        {seniorityLabel ? (
-          <span
-            style={{
-              background: "rgba(10,10,10,0.05)",
-              color: "#3a3a38",
-              fontFamily: MONO,
-              fontSize: 10,
-              padding: "3px 8px",
-              borderRadius: 4,
-              letterSpacing: 0.2,
-            }}
-          >
-            {seniorityLabel}
-          </span>
-        ) : null}
-      </div>
-
-      <div
-        style={{
-          display: "flex",
           alignItems: "center",
           gap: 8,
           fontSize: 11.5,
@@ -213,6 +215,20 @@ export function JobMetaRow({ job }: { job: PublicJob }) {
               flexShrink: 0,
             }}
           />
+        ) : null}
+        {workModelLabel ? (
+          <>
+            <span>{workModelLabel.toLowerCase()}</span>
+            <span
+              style={{
+                width: 2,
+                height: 2,
+                borderRadius: "50%",
+                background: "#c8c6bf",
+                flexShrink: 0,
+              }}
+            />
+          </>
         ) : null}
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
@@ -284,6 +300,8 @@ export function JobCard({
             <JobMetaRow job={job} />
           </div>
         </div>
+
+        <JobKeywordBadges job={job} />
 
         <div
           style={{
