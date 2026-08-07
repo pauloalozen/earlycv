@@ -10,6 +10,7 @@ import { JobApplicationsModule } from "../job-applications/job-applications.modu
 import { JobSourcesModule } from "../job-sources/job-sources.module";
 import { RadarModule } from "../radar/radar.module";
 import { SavedJobsModule } from "../saved-jobs/saved-jobs.module";
+import { InternalJobsController } from "./internal-jobs.controller";
 import { JobsController } from "./jobs.controller";
 import { JobsService } from "./jobs.service";
 import { PublicJobsController } from "./public-jobs.controller";
@@ -25,7 +26,7 @@ import { PublicJobsGhostModeGuard } from "./public-jobs-ghost-mode.guard";
     RadarModule,
     SavedJobsModule,
   ],
-  controllers: [JobsController, PublicJobsController],
+  controllers: [JobsController, PublicJobsController, InternalJobsController],
   providers: [
     JobsService,
     JwtAuthGuard,

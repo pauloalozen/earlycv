@@ -159,6 +159,22 @@ export class JobsService {
     });
   }
 
+  // Usado pelo sitemap.ts do web app (GET /internal/jobs/sitemap-data).
+  // Mesmo critério de PUBLIC_JOB_INTEGRITY_WHERE das outras queries públicas
+  // — uma vaga que não aparece em /vagas ou /vagas/[slug] não deve aparecer
+  // no sitemap (senão o Google indexa uma URL que sempre 404).
+  async listSitemapData() {
+    const jobs = await this.database.job.findMany({
+      where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
+      select: { slug: true, lastSeenAt: true },
+      orderBy: { lastSeenAt: "desc" },
+    });
+
+    return jobs.filter(
+      (job): job is { slug: string; lastSeenAt: Date } => job.slug !== null,
+    );
+  }
+
   // Usado pelo fluxo de 1 clique (/adaptar?jobId=...) — o front só tem o id
   // (veio do botão "Analisar meu CV" na listagem/detalhe), não o slug.
   async getPublicById(jobId: string) {
