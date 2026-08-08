@@ -1005,16 +1005,15 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                 className="hero-cv-mobile"
                 style={{ flexDirection: "column", gap: 10 }}
               >
-                <div style={{ display: "flex", gap: 10 }}>
-                  <div
-                    style={{
-                      flex: 1,
-                      background: "#fff",
-                      border: "1px solid rgba(10,10,10,0.08)",
-                      borderRadius: 12,
-                      padding: "12px 14px",
-                    }}
-                  >
+                <div
+                  style={{
+                    display: "flex",
+                    background: "#fff",
+                    border: "1px solid rgba(10,10,10,0.08)",
+                    borderRadius: 12,
+                  }}
+                >
+                  <div style={{ flex: 1, padding: "12px 14px" }}>
                     <div
                       style={{
                         fontSize: 22,
@@ -1039,14 +1038,15 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                     </div>
                   </div>
                   <div
+                    aria-hidden
                     style={{
-                      flex: 1,
-                      background: "#fff",
-                      border: "1px solid rgba(10,10,10,0.08)",
-                      borderRadius: 12,
-                      padding: "12px 14px",
+                      width: 1,
+                      alignSelf: "stretch",
+                      background: "rgba(10,10,10,0.08)",
+                      flexShrink: 0,
                     }}
-                  >
+                  />
+                  <div style={{ flex: 1, padding: "12px 14px" }}>
                     <div
                       style={{
                         fontSize: 22,
@@ -1341,23 +1341,22 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                   : "vagas encontradas"}
               </span>
             </div>
-            {totalPages > 1 ? (
-              <p
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  color: "#8a8a85",
-                  margin: "4px 0 0",
-                  letterSpacing: 0.3,
-                }}
-              >
-                página {page} de {totalPages}
-              </p>
-            ) : null}
+            <p
+              style={{
+                fontFamily: MONO,
+                fontSize: 10.5,
+                color: "#8a8a85",
+                margin: "4px 0 0",
+                letterSpacing: 0.3,
+              }}
+            >
+              página {page} de {totalPages}
+            </p>
           </div>
 
           {scoreState === "has-cv" ? (
             <div
+              className="results-actions"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1365,18 +1364,25 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                 flexWrap: "wrap",
               }}
             >
+              <style>{`
+                .results-actions > a, .results-actions summary { padding: 8px 12px; font-size: 12.5px; }
+                @media (max-width: 400px) {
+                  .results-actions > a, .results-actions summary {
+                    padding: 7px 9px;
+                    font-size: 11.5px;
+                  }
+                }
+              `}</style>
               <a
                 href={buildExcludeAnalyzedToggleUrl()}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 7,
-                  padding: "8px 12px",
                   borderRadius: 99,
                   background: excludeAnalyzed ? "#0a0a0a" : "#fafaf6",
                   color: excludeAnalyzed ? "#fafaf6" : "#3a3a38",
                   border: `1px solid ${excludeAnalyzed ? "#0a0a0a" : "rgba(10,10,10,0.1)"}`,
-                  fontSize: 12.5,
                   whiteSpace: "nowrap",
                   fontFamily: GEIST,
                   textDecoration: "none",
@@ -1415,7 +1421,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                     </svg>
                   ) : null}
                 </span>
-                excluir vagas já analisadas
+                excluir analisadas
               </a>
 
               <details
@@ -1432,14 +1438,13 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                     display: "inline-flex",
                     alignItems: "center",
                     gap: 7,
-                    padding: "8px 12px",
                     borderRadius: 99,
                     background: "#fafaf6",
                     color: "#3a3a38",
                     border: "1px solid rgba(10,10,10,0.1)",
-                    fontSize: 12.5,
                     whiteSpace: "nowrap",
                     fontFamily: GEIST,
+                    minWidth: 0,
                   }}
                 >
                   <span
@@ -1448,11 +1453,22 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                       fontSize: 9.5,
                       letterSpacing: 0.4,
                       color: "#8a8a85",
+                      flexShrink: 0,
                     }}
                   >
                     ordenar por
                   </span>
-                  <span style={{ fontWeight: 500 }}>{SORT_LABELS[sort]}</span>
+                  <span
+                    style={{
+                      fontWeight: 500,
+                      maxWidth: 120,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {SORT_LABELS[sort]}
+                  </span>
                   <svg
                     aria-hidden
                     width="10"
