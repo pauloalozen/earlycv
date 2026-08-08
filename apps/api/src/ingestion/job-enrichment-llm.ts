@@ -1,9 +1,9 @@
 import { ContractType, JobArea, SeniorityLevel } from "@prisma/client";
 import type OpenAI from "openai";
 
-export const JOB_ENRICHMENT_PROMPT_VERSION = "2026-07-31.v2";
+export const JOB_ENRICHMENT_PROMPT_VERSION = "2026-08-08.v3";
 
-const DESCRIPTION_MAX_CHARS = 2000;
+const DESCRIPTION_MAX_CHARS = 6000;
 const CAREER_FINGERPRINT_MAX_ITEMS = 6;
 
 export type JobEnrichmentLlmInput = {
@@ -75,6 +75,8 @@ OTHER: qualquer coisa que não se encaixe nas categorias acima
   - cada item é uma única skill, ferramenta, framework, norma, certificação ou tecnologia (ex: "sox", "iso 27002", "lgpd", "kubernetes", "power bi")
   - nunca inclua verbos, conectores ou texto de contexto no item (nada de "conhecimento em", "experiência com", "capacidade de", "ter atuado em")
   - se um trecho da vaga cita várias skills juntas (ex: "conhecimento em normas e regulamentações SOX, ISO 27002 e LGPD"), quebre em um item por skill: ["sox", "iso 27002", "lgpd"] — nunca ["conhecimento em normas e regulamentações sox, iso 27002 e lgpd"]
+  - o mesmo vale para listas de alternativas ("X, Y ou Z") em qualquer seção da vaga, incluindo requisitos, diferenciais e responsabilidades — cada alternativa é um item separado, não é opcional escolher só uma: ex "Conhecimento em PowerShell, Shell Script ou Python para automação; Microsoft SQL Server, Oracle ou PostgreSQL" vira ["powershell", "shell script", "python", "microsoft sql server", "oracle", "postgresql"]
+  - varra a vaga inteira, incluindo seções de "diferenciais"/"desejável" — não pare de extrair após a primeira lista de tecnologias encontrada
   - trechos que descrevem responsabilidades/atividades genéricas sem citar uma skill/ferramenta/norma específica (ex: "ter atuado em empresas que promovem esse ambiente") NÃO viram item de requiredSkills — descarte-os
 - Normalize para lowercase em requiredSkills, optionalSkills, technologies
 - SeniorityLevel válidos: INTERN | JUNIOR | MID | SENIOR | LEAD | STAFF | MANAGER | DIRECTOR | UNKNOWN
