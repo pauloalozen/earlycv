@@ -11,53 +11,39 @@ import type {
 import { stripHtml } from "./strip-html";
 import { normalizeAdapterTitle } from "./title-normalization";
 
-type GreenhouseJob = {
-  absolute_url?: string | null;
-  content?: string | null;
-  departments?: Array<{ name?: string | null }> | null;
-  id: number | string;
-  location?: { name?: string | null } | null;
+type TeamtailorJobPostingAddress = {
+  addressCountry?: string | null;
+  addressLocality?: string | null;
+  addressRegion?: string | null;
+};
+
+type TeamtailorJobPosting = {
+  description?: string | null;
+  jobLocation?: Array<{ address?: TeamtailorJobPostingAddress | null } | null> | null;
+};
+
+type TeamtailorItem = {
+  _jobposting?: TeamtailorJobPosting | null;
+  content_html?: string | null;
+  date_published?: string | null;
+  id: string;
   title?: string | null;
-  updated_at?: string | null;
+  url?: string | null;
 };
 
-type GreenhouseJobsResponse = {
-  jobs?: GreenhouseJob[];
-  meta?: { total?: number };
-};
-
-type ParsedLocation = {
-  city?: string;
-  country?: string;
-  state?: string;
+// Formato JSON Feed (jsonfeed.org) — nao e um formato proprietario do
+// Teamtailor, e o que "{slug}.teamtailor.com/jobs.json" retorna.
+type TeamtailorJobsFeed = {
+  items?: TeamtailorItem[];
 };
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Greenhouse nao expoe city/state estruturados — so uma string livre por
-// vaga (ex: "Sao Paulo, SP, Brasil", "Remote", "Brazil"). Sem endereco
-// estruturado, esse parser por virgula e a unica forma de popular
-// city/state/country no NormalizedJobObservation.
-function parseLocation(location: string): ParsedLocation {
-  if (!location) return {};
-
-  const parts = location
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length >= 3) {
-    return { city: parts[0], state: parts[1], country: parts[2] };
-  }
-  if (parts.length === 2) {
-    return { city: parts[0], country: parts[1] };
-  }
-
-  return { country: parts[0] };
-}
-
+// Teamtailor nao expoe employmentType/department no feed publico, e a
+// localizacao vem estruturada mas sem heuristica de workModel — mesma
+// deteccao por palavra-chave usada no Greenhouse.
 function inferWorkModel(location: string, title: string, description: string) {
   const text = `${location} ${title} ${description.slice(0, 500)}`.toLowerCase();
 
@@ -79,10 +65,11 @@ function inferWorkModel(location: string, title: string, description: string) {
 }
 
 function extractSlug(sourceUrl: string) {
-  const match = sourceUrl.match(/\/boards\/([^/]+)\/jobs/);
+  const parsed = new URL(sourceUrl);
+  const match = parsed.hostname.toLowerCase().match(/^([a-z0-9-]+)\.teamtailor\.com$/);
   if (!match?.[1]) {
     throw new Error(
-      `Invalid Greenhouse sourceUrl: ${sourceUrl} (expected .../boards/{slug}/jobs)`,
+      `Invalid Teamtailor sourceUrl: ${sourceUrl} (expected {subdomain}.teamtailor.com)`,
     );
   }
   return match[1];
@@ -96,10 +83,10 @@ function normalizeDate(value?: string | null) {
 }
 
 @Injectable()
-export class GreenhouseAdapter implements IngestionSourceAdapter {
-  readonly sourceType = "greenhouse" as const;
+export class TeamtailorAdapter implements IngestionSourceAdapter {
+  readonly sourceType = "teamtailor" as const;
 
-  private readonly logger = new Logger(GreenhouseAdapter.name);
+  private readonly logger = new Logger(TeamtailorAdapter.name);
 
   constructor(
     @Inject(SemanticFilterService)
@@ -113,33 +100,32 @@ export class GreenhouseAdapter implements IngestionSourceAdapter {
     context?: IngestionCollectContext,
   ): Promise<NormalizedJobObservation[]> {
     const slug = extractSlug(jobSource.sourceUrl);
-    const url = new URL(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`);
-    url.searchParams.set("content", "true");
+    const url = new URL(`https://${slug}.teamtailor.com/jobs.json`);
 
     const response = await this.fetchWithRetry(url);
 
     if (response.status === 403) {
       throw new IngestionFetchError({
-        context: "greenhouse_board_api",
-        message: "Greenhouse board API request returned 403 forbidden",
+        context: "teamtailor_jobs_feed",
+        message: "Teamtailor jobs feed request returned 403 forbidden",
         statusCode: 403,
       });
     }
 
     if (!response.ok) {
       throw new IngestionFetchError({
-        context: "greenhouse_board_api",
-        message: `Greenhouse board API request returned HTTP ${response.status}`,
+        context: "teamtailor_jobs_feed",
+        message: `Teamtailor jobs feed request returned HTTP ${response.status}`,
         statusCode: response.status,
       });
     }
 
-    const data = (await response.json()) as GreenhouseJobsResponse;
-    const jobs = data.jobs ?? [];
+    const data = (await response.json()) as TeamtailorJobsFeed;
+    const items = data.items ?? [];
     const observations: NormalizedJobObservation[] = [];
 
-    for (const job of jobs) {
-      const canonicalKey = `greenhouse:${slug}:${String(job.id)}`;
+    for (const item of items) {
+      const canonicalKey = `teamtailor:${slug}:${item.id}`;
 
       let skipSemanticFilter = false;
       if (context) {
@@ -154,25 +140,25 @@ export class GreenhouseAdapter implements IngestionSourceAdapter {
       }
 
       if (!skipSemanticFilter) {
-        const normalizedTitle = normalizeAdapterTitle(job.title);
+        const normalizedTitle = normalizeAdapterTitle(item.title);
         const filterDecision = await this.semanticFilter.evaluate(normalizedTitle);
 
         if (filterDecision.result === "SKIP") {
           await this.saveDiscardedTitle({
             canonicalKey,
-            externalJobId: String(job.id),
+            externalJobId: item.id,
             filterReason: filterDecision.reason,
             filterVersion: filterDecision.configVersion,
             ingestionRunId: context?.ingestionRunId,
             jobSourceId: jobSource.id,
             normalizedTitle,
-            title: job.title ?? `Greenhouse job ${String(job.id)}`,
+            title: item.title ?? `Teamtailor job ${item.id}`,
           });
           continue;
         }
       }
 
-      observations.push(this.toObservation(slug, job, canonicalKey));
+      observations.push(this.toObservation(slug, item, canonicalKey));
     }
 
     return observations;
@@ -233,35 +219,40 @@ export class GreenhouseAdapter implements IngestionSourceAdapter {
 
   private toObservation(
     slug: string,
-    job: GreenhouseJob,
+    item: TeamtailorItem,
     canonicalKey: string,
   ): NormalizedJobObservation {
-    const title = job.title?.trim() || `Greenhouse job ${String(job.id)}`;
-    const locationText = job.location?.name?.trim() ?? "";
-    const { city, state, country } = parseLocation(locationText);
+    const title = item.title?.trim() || `Teamtailor job ${item.id}`;
+    const address = item._jobposting?.jobLocation?.[0]?.address ?? undefined;
+    const locationText = [
+      address?.addressLocality,
+      address?.addressRegion,
+      address?.addressCountry,
+    ]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value))
+      .join(", ");
 
-    const descriptionRaw = job.content ?? "";
+    const descriptionRaw = item.content_html ?? item._jobposting?.description ?? "";
     const descriptionClean = stripHtml(descriptionRaw) || title;
     const workModel = inferWorkModel(locationText, title, descriptionClean);
-    const publishedAt = normalizeDate(job.updated_at);
+    const publishedAt = normalizeDate(item.date_published);
 
     return {
       canonicalKey,
-      city,
-      country: country || "Brasil",
-      department: job.departments?.[0]?.name?.trim() || undefined,
+      city: address?.addressLocality?.trim() || undefined,
+      country: address?.addressCountry?.trim() || "Brasil",
       descriptionClean,
       descriptionRaw,
-      externalJobId: String(job.id),
+      externalJobId: item.id,
       firstSeenAt: publishedAt,
       lastSeenAt: publishedAt,
       locationText: locationText || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,
       sourceJobUrl:
-        job.absolute_url ??
-        `https://job-boards.greenhouse.io/${slug}/jobs/${String(job.id)}`,
-      state,
+        item.url ?? `https://${slug}.teamtailor.com/jobs/${item.id}`,
+      state: address?.addressRegion?.trim() || undefined,
       status: "active",
       title,
       workModel,

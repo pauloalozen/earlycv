@@ -189,8 +189,9 @@ export default async function JobSourceAdminPage({
                   <option value="custom_api">custom_api</option>
                   <option value="greenhouse">greenhouse</option>
                   <option value="lever">lever</option>
-                  <option value="ashby">ashby (sem adapter)</option>
-                  <option value="inhire">inhire (sem adapter)</option>
+                  <option value="ashby">ashby</option>
+                  <option value="inhire">inhire</option>
+                  <option value="teamtailor">teamtailor</option>
                   <option value="solides">solides (sem adapter)</option>
                   <option value="pandape">pandape (sem adapter)</option>
                 </select>

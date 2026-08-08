@@ -392,6 +392,7 @@ export function FontesTableClient({ initialData }: Props) {
           <option value="lever">lever</option>
           <option value="ashby">ashby</option>
           <option value="inhire">inhire</option>
+          <option value="teamtailor">teamtailor</option>
           <option value="solides">solides</option>
           <option value="pandape">pandape</option>
         </select>

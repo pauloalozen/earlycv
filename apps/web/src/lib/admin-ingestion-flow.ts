@@ -6,13 +6,14 @@ export type JobSourceTypeOption =
   | "lever"
   | "ashby"
   | "inhire"
+  | "teamtailor"
   | "solides"
   | "pandape";
 
-// Source types selectable in the admin UI. ashby/inhire/solides/pandape
-// don't have an adapter implemented yet — creating a source with one of
-// these types only tags the company for later; running it will fail until
-// the matching adapter ships.
+// Source types selectable in the admin UI. solides/pandape don't have an
+// adapter implemented yet — creating a source with one of these types only
+// tags the company for later; running it will fail until the matching
+// adapter ships.
 export const JOB_SOURCE_TYPE_OPTIONS: JobSourceTypeOption[] = [
   "gupy",
   "custom_html",
@@ -21,6 +22,7 @@ export const JOB_SOURCE_TYPE_OPTIONS: JobSourceTypeOption[] = [
   "lever",
   "ashby",
   "inhire",
+  "teamtailor",
   "solides",
   "pandape",
 ];
@@ -61,6 +63,9 @@ export const MANUAL_ADAPTER_TYPES = [
   "custom_api",
   "greenhouse",
   "lever",
+  "ashby",
+  "inhire",
+  "teamtailor",
 ] as const;
 
 export type ManualAdapterType = (typeof MANUAL_ADAPTER_TYPES)[number];
@@ -102,8 +107,6 @@ export function buildAdminRedirect(
 // gupy/custom_api, so crawlStrategy defaults to "api". They only exist so
 // companies can be tagged now; running them fails until the adapter ships.
 const UNIMPLEMENTED_API_SOURCE_TYPES: JobSourceTypeOption[] = [
-  "ashby",
-  "inhire",
   "solides",
   "pandape",
 ];
@@ -138,6 +141,30 @@ export function getSourceDefaults(sourceType: string): SourceDefaults {
       crawlStrategy: "api",
       parserKey: "lever",
       sourceType: "lever",
+    };
+  }
+
+  if (sourceType === "ashby") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "ashby",
+      sourceType: "ashby",
+    };
+  }
+
+  if (sourceType === "inhire") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "inhire",
+      sourceType: "inhire",
+    };
+  }
+
+  if (sourceType === "teamtailor") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "teamtailor",
+      sourceType: "teamtailor",
     };
   }
 

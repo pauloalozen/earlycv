@@ -8,6 +8,7 @@ import type {
   JobSourceContext,
   NormalizedJobObservation,
 } from "../types";
+import { stripHtml } from "./strip-html";
 import { normalizeAdapterTitle } from "./title-normalization";
 
 type LeverPosting = {
@@ -35,24 +36,6 @@ type ParsedLocation = {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function stripHtml(value: string) {
-  return value
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<li>/gi, "• ")
-    .replace(/<\/li>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 }
 
 // Lever tambem nao expoe city/state estruturados no payload publico — so

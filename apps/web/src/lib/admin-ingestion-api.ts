@@ -154,7 +154,10 @@ export type ManualAdapterType =
   | "custom_html"
   | "custom_api"
   | "greenhouse"
-  | "lever";
+  | "lever"
+  | "ashby"
+  | "inhire"
+  | "teamtailor";
 
 export type ManualRunStatus =
   | "queued"

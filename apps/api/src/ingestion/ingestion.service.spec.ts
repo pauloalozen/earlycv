@@ -192,6 +192,9 @@ function createIngestionServiceFixture(options?: {
     { sourceType: "gupy", collect: async () => [] } as never,
     { sourceType: "greenhouse", collect: async () => [] } as never,
     { sourceType: "lever", collect: async () => [] } as never,
+    { sourceType: "ashby", collect: async () => [] } as never,
+    { sourceType: "inhire", collect: async () => [] } as never,
+    { sourceType: "teamtailor", collect: async () => [] } as never,
   );
 
   return {
@@ -665,8 +668,68 @@ test("IngestionService dispatches to the lever adapter for lever sources", async
   assert.equal(collectCalls, 1);
 });
 
-test("IngestionService fails the run for a source type without a registered adapter", async () => {
+test("IngestionService dispatches to the ashby adapter for ashby sources", async () => {
   const fixture = createIngestionServiceFixture({ sourceType: "ashby" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "ashby",
+      {
+        sourceType: "ashby",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService dispatches to the inhire adapter for inhire sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "inhire" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "inhire",
+      {
+        sourceType: "inhire",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService dispatches to the teamtailor adapter for teamtailor sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "teamtailor" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "teamtailor",
+      {
+        sourceType: "teamtailor",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService fails the run for a source type without a registered adapter", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "solides" });
   fixture.service.adapters = new Map([
     ["custom_html", { sourceType: "custom_html", collect: async () => [] }],
   ]);
@@ -676,7 +739,7 @@ test("IngestionService fails the run for a source type without a registered adap
   assert.equal(result.status, "failed");
   assert.match(
     result.errorSummary ?? "",
-    /manual ingestion is not supported for source type ashby/,
+    /manual ingestion is not supported for source type solides/,
   );
 });
 

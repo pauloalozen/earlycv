@@ -6,6 +6,9 @@ const MANUAL_ADAPTER_TYPES = [
   "custom_api",
   "greenhouse",
   "lever",
+  "ashby",
+  "inhire",
+  "teamtailor",
 ] as const;
 
 export type ManualAdapterType = (typeof MANUAL_ADAPTER_TYPES)[number];

@@ -3,11 +3,14 @@ import { Module } from "@nestjs/common";
 import { createAiClientFromEnv } from "../common/ai-client-factory";
 import { DatabaseModule } from "../database/database.module";
 import {
+  AshbyAdapter,
   CustomApiAdapter,
   CustomHtmlAdapter,
   GreenhouseAdapter,
   GupyAdapter,
+  InHireAdapter,
   LeverAdapter,
+  TeamtailorAdapter,
 } from "./adapters";
 import { AdminIngestionImportService } from "./admin-ingestion-import.service";
 import { CrawlerDiscardController } from "./crawler-discard.controller";
@@ -73,6 +76,9 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
     GupyAdapter,
     GreenhouseAdapter,
     LeverAdapter,
+    AshbyAdapter,
+    InHireAdapter,
+    TeamtailorAdapter,
   ],
   exports: [IngestionService, SemanticFilterService],
 })

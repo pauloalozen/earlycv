@@ -8,81 +8,77 @@ import type {
   JobSourceContext,
   NormalizedJobObservation,
 } from "../types";
-import { stripHtml } from "./strip-html";
 import { normalizeAdapterTitle } from "./title-normalization";
 
-type GreenhouseJob = {
-  absolute_url?: string | null;
-  content?: string | null;
-  departments?: Array<{ name?: string | null }> | null;
-  id: number | string;
-  location?: { name?: string | null } | null;
+type AshbyJob = {
+  address?: {
+    postalAddress?: {
+      addressCountry?: string | null;
+      addressLocality?: string | null;
+      addressRegion?: string | null;
+    } | null;
+  } | null;
+  department?: string | null;
+  descriptionHtml?: string | null;
+  descriptionPlain?: string | null;
+  employmentType?: string | null;
+  id: string;
+  isRemote?: boolean | null;
+  jobUrl?: string | null;
+  location?: string | null;
+  publishedAt?: string | null;
+  team?: string | null;
   title?: string | null;
-  updated_at?: string | null;
+  workplaceType?: string | null;
 };
 
-type GreenhouseJobsResponse = {
-  jobs?: GreenhouseJob[];
-  meta?: { total?: number };
-};
-
-type ParsedLocation = {
-  city?: string;
-  country?: string;
-  state?: string;
+type AshbyBoardResponse = {
+  apiVersion?: string;
+  jobs?: AshbyJob[];
 };
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Greenhouse nao expoe city/state estruturados — so uma string livre por
-// vaga (ex: "Sao Paulo, SP, Brasil", "Remote", "Brazil"). Sem endereco
-// estruturado, esse parser por virgula e a unica forma de popular
-// city/state/country no NormalizedJobObservation.
-function parseLocation(location: string): ParsedLocation {
-  if (!location) return {};
-
-  const parts = location
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length >= 3) {
-    return { city: parts[0], state: parts[1], country: parts[2] };
-  }
-  if (parts.length === 2) {
-    return { city: parts[0], country: parts[1] };
-  }
-
-  return { country: parts[0] };
+// Ashby ja retorna texto puro em descriptionPlain — nao precisa de strip
+// de HTML, so aparar espacos e cair pro titulo se vier vazio.
+function cleanDescription(value: string | null | undefined, fallback: string) {
+  const trimmed = value?.trim();
+  return trimmed || fallback;
 }
 
-function inferWorkModel(location: string, title: string, description: string) {
-  const text = `${location} ${title} ${description.slice(0, 500)}`.toLowerCase();
+const EMPLOYMENT_TYPE_MAP: Record<string, string> = {
+  Apprenticeship: "apprentice",
+  Contract: "contract",
+  FullTime: "full_time",
+  Intern: "internship",
+  Internship: "internship",
+  PartTime: "part_time",
+  Temporary: "temporary",
+};
 
-  if (
-    text.includes("remote") ||
-    text.includes("remoto") ||
-    text.includes("telecommut")
-  ) {
-    return "remote";
-  }
-  if (text.includes("hibrido") || text.includes("hybrid")) {
-    return "hybrid";
-  }
-  if (text.includes("presencial") || text.includes("on-site") || text.includes("onsite")) {
-    return "onsite";
-  }
+function normalizeEmploymentType(value?: string | null) {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  return EMPLOYMENT_TYPE_MAP[raw] ?? raw;
+}
 
+function normalizeWorkModel(workplaceType?: string | null, isRemote?: boolean | null) {
+  if (isRemote) return "remote";
+
+  const normalized = workplaceType?.trim().toLowerCase();
+  if (normalized === "remote") return "remote";
+  if (normalized === "hybrid") return "hybrid";
+  if (normalized === "onsite" || normalized === "on-site") return "onsite";
   return undefined;
 }
 
 function extractSlug(sourceUrl: string) {
-  const match = sourceUrl.match(/\/boards\/([^/]+)\/jobs/);
+  const match = sourceUrl.match(/\/job-board\/([^/?]+)/);
   if (!match?.[1]) {
     throw new Error(
-      `Invalid Greenhouse sourceUrl: ${sourceUrl} (expected .../boards/{slug}/jobs)`,
+      `Invalid Ashby sourceUrl: ${sourceUrl} (expected .../posting-api/job-board/{slug})`,
     );
   }
   return match[1];
@@ -96,10 +92,10 @@ function normalizeDate(value?: string | null) {
 }
 
 @Injectable()
-export class GreenhouseAdapter implements IngestionSourceAdapter {
-  readonly sourceType = "greenhouse" as const;
+export class AshbyAdapter implements IngestionSourceAdapter {
+  readonly sourceType = "ashby" as const;
 
-  private readonly logger = new Logger(GreenhouseAdapter.name);
+  private readonly logger = new Logger(AshbyAdapter.name);
 
   constructor(
     @Inject(SemanticFilterService)
@@ -113,33 +109,32 @@ export class GreenhouseAdapter implements IngestionSourceAdapter {
     context?: IngestionCollectContext,
   ): Promise<NormalizedJobObservation[]> {
     const slug = extractSlug(jobSource.sourceUrl);
-    const url = new URL(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`);
-    url.searchParams.set("content", "true");
+    const url = new URL(`https://api.ashbyhq.com/posting-api/job-board/${slug}`);
 
     const response = await this.fetchWithRetry(url);
 
     if (response.status === 403) {
       throw new IngestionFetchError({
-        context: "greenhouse_board_api",
-        message: "Greenhouse board API request returned 403 forbidden",
+        context: "ashby_board_api",
+        message: "Ashby board API request returned 403 forbidden",
         statusCode: 403,
       });
     }
 
     if (!response.ok) {
       throw new IngestionFetchError({
-        context: "greenhouse_board_api",
-        message: `Greenhouse board API request returned HTTP ${response.status}`,
+        context: "ashby_board_api",
+        message: `Ashby board API request returned HTTP ${response.status}`,
         statusCode: response.status,
       });
     }
 
-    const data = (await response.json()) as GreenhouseJobsResponse;
+    const data = (await response.json()) as AshbyBoardResponse;
     const jobs = data.jobs ?? [];
     const observations: NormalizedJobObservation[] = [];
 
     for (const job of jobs) {
-      const canonicalKey = `greenhouse:${slug}:${String(job.id)}`;
+      const canonicalKey = `ashby:${slug}:${job.id}`;
 
       let skipSemanticFilter = false;
       if (context) {
@@ -160,13 +155,13 @@ export class GreenhouseAdapter implements IngestionSourceAdapter {
         if (filterDecision.result === "SKIP") {
           await this.saveDiscardedTitle({
             canonicalKey,
-            externalJobId: String(job.id),
+            externalJobId: job.id,
             filterReason: filterDecision.reason,
             filterVersion: filterDecision.configVersion,
             ingestionRunId: context?.ingestionRunId,
             jobSourceId: jobSource.id,
             normalizedTitle,
-            title: job.title ?? `Greenhouse job ${String(job.id)}`,
+            title: job.title ?? `Ashby job ${job.id}`,
           });
           continue;
         }
@@ -233,35 +228,34 @@ export class GreenhouseAdapter implements IngestionSourceAdapter {
 
   private toObservation(
     slug: string,
-    job: GreenhouseJob,
+    job: AshbyJob,
     canonicalKey: string,
   ): NormalizedJobObservation {
-    const title = job.title?.trim() || `Greenhouse job ${String(job.id)}`;
-    const locationText = job.location?.name?.trim() ?? "";
-    const { city, state, country } = parseLocation(locationText);
-
-    const descriptionRaw = job.content ?? "";
-    const descriptionClean = stripHtml(descriptionRaw) || title;
-    const workModel = inferWorkModel(locationText, title, descriptionClean);
-    const publishedAt = normalizeDate(job.updated_at);
+    const title = job.title?.trim() || `Ashby job ${job.id}`;
+    const postalAddress = job.address?.postalAddress ?? undefined;
+    const locationText = job.location?.trim() || "";
+    const descriptionClean = cleanDescription(job.descriptionPlain, title);
+    const workModel = normalizeWorkModel(job.workplaceType, job.isRemote);
+    const publishedAt = normalizeDate(job.publishedAt);
 
     return {
       canonicalKey,
-      city,
-      country: country || "Brasil",
-      department: job.departments?.[0]?.name?.trim() || undefined,
+      city: postalAddress?.addressLocality?.trim() || undefined,
+      country: postalAddress?.addressCountry?.trim() || "Brasil",
+      department: job.department?.trim() || job.team?.trim() || undefined,
       descriptionClean,
-      descriptionRaw,
-      externalJobId: String(job.id),
+      descriptionRaw: job.descriptionHtml ?? "",
+      employmentType: normalizeEmploymentType(job.employmentType),
+      employmentTypeRaw: job.employmentType?.trim() || undefined,
+      externalJobId: job.id,
       firstSeenAt: publishedAt,
       lastSeenAt: publishedAt,
       locationText: locationText || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,
       sourceJobUrl:
-        job.absolute_url ??
-        `https://job-boards.greenhouse.io/${slug}/jobs/${String(job.id)}`,
-      state,
+        job.jobUrl ?? `https://jobs.ashbyhq.com/${slug}/${job.id}`,
+      state: postalAddress?.addressRegion?.trim() || undefined,
       status: "active",
       title,
       workModel,

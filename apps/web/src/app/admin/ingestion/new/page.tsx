@@ -169,8 +169,9 @@ export default async function NewAdminSourcePage({
                       <option value="custom_api">custom_api</option>
                       <option value="greenhouse">greenhouse</option>
                       <option value="lever">lever</option>
-                      <option value="ashby">ashby (sem adapter)</option>
-                      <option value="inhire">inhire (sem adapter)</option>
+                      <option value="ashby">ashby</option>
+                      <option value="inhire">inhire</option>
+                      <option value="teamtailor">teamtailor</option>
                       <option value="solides">solides (sem adapter)</option>
                       <option value="pandape">pandape (sem adapter)</option>
                     </select>
@@ -210,7 +211,10 @@ export default async function NewAdminSourcePage({
                     <p className="text-xs text-stone-500">
                       gupy: https://[empresa].gupy.io/ · greenhouse:
                       https://boards-api.greenhouse.io/v1/boards/[empresa]/jobs
-                      · lever: https://api.lever.co/v0/postings/[empresa]
+                      · lever: https://api.lever.co/v0/postings/[empresa] ·
+                      ashby: https://api.ashbyhq.com/posting-api/job-board/[empresa]
+                      · teamtailor: https://[empresa].teamtailor.com/jobs.json
+                      · inhire: https://[empresa].inhire.app
                     </p>
                   </label>
 
@@ -388,8 +392,9 @@ export default async function NewAdminSourcePage({
                       <option value="custom_api">custom_api</option>
                       <option value="greenhouse">greenhouse</option>
                       <option value="lever">lever</option>
-                      <option value="ashby">ashby (sem adapter)</option>
-                      <option value="inhire">inhire (sem adapter)</option>
+                      <option value="ashby">ashby</option>
+                      <option value="inhire">inhire</option>
+                      <option value="teamtailor">teamtailor</option>
                       <option value="solides">solides (sem adapter)</option>
                       <option value="pandape">pandape (sem adapter)</option>
                     </select>
@@ -429,7 +434,10 @@ export default async function NewAdminSourcePage({
                     <p className="text-xs text-stone-500">
                       gupy: https://[empresa].gupy.io/ · greenhouse:
                       https://boards-api.greenhouse.io/v1/boards/[empresa]/jobs
-                      · lever: https://api.lever.co/v0/postings/[empresa]
+                      · lever: https://api.lever.co/v0/postings/[empresa] ·
+                      ashby: https://api.ashbyhq.com/posting-api/job-board/[empresa]
+                      · teamtailor: https://[empresa].teamtailor.com/jobs.json
+                      · inhire: https://[empresa].inhire.app
                     </p>
                   </label>
 

@@ -335,6 +335,9 @@ function CreateJobModal({
                       <option value="custom_api">custom_api</option>
                       <option value="greenhouse">greenhouse</option>
                       <option value="lever">lever</option>
+                      <option value="ashby">ashby</option>
+                      <option value="inhire">inhire</option>
+                      <option value="teamtailor">teamtailor</option>
                     </select>
                   )}
                 </label>
