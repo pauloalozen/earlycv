@@ -325,7 +325,74 @@ test("WorkdayAdapter retries once on 429 and succeeds", async () => {
     );
 
     assert.deepEqual(observations, []);
-    assert.equal(fetchMock.calls.length, 2);
+    // fetchWithRetry ja absorve o 429 (1 call extra); a lista vem vazia,
+    // entao o loop de paginacao ainda tenta 1x de novo antes de aceitar
+    // como fim de lista (protecao contra pagina vazia transitoria).
+    assert.equal(fetchMock.calls.length, 3);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
+// Achado real durante o smoke da Sprint 6C: o campo "total" do Workday
+// nao e confiavel — paginas depois da primeira as vezes voltam total:0
+// mesmo com jobPostings cheio, o que cortava a paginacao cedo (Santander:
+// 40 vagas processadas de 898; Natura: so 7). A paginacao agora ignora
+// "total" e usa o tamanho da pagina (< PAGE_LIMIT = ultima pagina).
+test("WorkdayAdapter keeps paginating even when the API returns an unreliable total:0 on later pages", async () => {
+  const fetchMock = createFetchMock([
+    {
+      json: {
+        total: 898,
+        jobPostings: Array.from({ length: 20 }, (_, i) => ({
+          title: `Vaga ${i}`,
+          externalPath: `/job/x/Vaga-${i}_Req${i}`,
+          bulletFields: [`Req${i}`],
+        })),
+      },
+    },
+    {
+      // pagina real do Workday: total volta 0 mesmo com vagas de verdade
+      json: {
+        total: 0,
+        jobPostings: Array.from({ length: 20 }, (_, i) => ({
+          title: `Vaga ${20 + i}`,
+          externalPath: `/job/x/Vaga-${20 + i}_Req${20 + i}`,
+          bulletFields: [`Req${20 + i}`],
+        })),
+      },
+    },
+    {
+      // pagina parcial (< PAGE_LIMIT) = fim real da lista
+      json: {
+        total: 0,
+        jobPostings: [
+          { title: "Vaga 40", externalPath: "/job/x/Vaga-40_Req40", bulletFields: ["Req40"] },
+        ],
+      },
+    },
+  ]);
+
+  try {
+    const { evaluatedTitles, semanticFilter } = createSemanticFilterMock({
+      configVersion: "v1",
+      reason: "noise_signal:mock",
+      result: "SKIP",
+    });
+    const { database } = createDatabaseMock();
+    const adapter = new WorkdayAdapter(semanticFilter, database);
+
+    await adapter.collect(
+      createJobSourceContext(
+        "https://santander.wd3.myworkdayjobs.com/pt-BR/SantanderCareers",
+      ),
+      { getExistingJobByCanonicalKey: async () => null },
+    );
+
+    // 3 chamadas de listagem (20 + 20 + 1 vagas), sem parar cedo por
+    // causa do total:0 nas paginas 2 e 3.
+    assert.equal(fetchMock.calls.length, 3);
+    assert.equal(evaluatedTitles.length, 41);
   } finally {
     fetchMock.restore();
   }

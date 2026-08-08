@@ -48,6 +48,7 @@ type ParsedLocation = {
 };
 
 const PAGE_LIMIT = 20;
+const MAX_LISTING_PAGES = 200;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -150,42 +151,58 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
     const baseUrl = `https://${tenant}.${instance}.myworkdayjobs.com`;
     const apiUrl = new URL(`${baseUrl}/wday/cxs/${tenant}/${site}/jobs`);
 
+    // O campo "total" da resposta do Workday nao e confiavel — testado ao
+    // vivo com Santander e Natura, ele volta 0 (ou null) em paginas depois
+    // da primeira mesmo com jobPostings cheio de vagas reais, e a propria
+    // primeira pagina as vezes volta vazia de forma transitoria. Por isso
+    // a paginacao aqui ignora "total" e usa so o tamanho da pagina: uma
+    // pagina parcial (< PAGE_LIMIT) e o sinal real de fim de lista, e uma
+    // pagina vazia leva 1 retry (com espera) antes de aceitar como fim,
+    // pra nao cortar a lista cedo por causa de uma resposta instavel.
     const allJobs: WorkdayListingJob[] = [];
     let offset = 0;
-    let total = Number.POSITIVE_INFINITY;
 
-    while (offset < total) {
-      const response = await this.fetchWithRetry(apiUrl, {
-        appliedFacets: {},
-        limit: PAGE_LIMIT,
-        offset,
-        searchText: "",
-      });
+    for (let page = 0; page < MAX_LISTING_PAGES; page += 1) {
+      let jobs: WorkdayListingJob[] = [];
 
-      if (response.status === 403) {
-        throw new IngestionFetchError({
-          context: "workday_jobs_api",
-          message: "Workday jobs API request returned 403 forbidden",
-          statusCode: 403,
+      for (let attempt = 0; attempt <= 1; attempt += 1) {
+        const response = await this.fetchWithRetry(apiUrl, {
+          appliedFacets: {},
+          limit: PAGE_LIMIT,
+          offset,
+          searchText: "",
         });
+
+        if (response.status === 403) {
+          throw new IngestionFetchError({
+            context: "workday_jobs_api",
+            message: "Workday jobs API request returned 403 forbidden",
+            statusCode: 403,
+          });
+        }
+
+        if (!response.ok) {
+          throw new IngestionFetchError({
+            context: "workday_jobs_api",
+            message: `Workday jobs API request returned HTTP ${response.status}`,
+            statusCode: response.status,
+          });
+        }
+
+        const data = (await response.json()) as WorkdayJobsResponse;
+        jobs = data.jobPostings ?? [];
+
+        if (jobs.length > 0 || attempt === 1) break;
+        await sleep(500);
       }
 
-      if (!response.ok) {
-        throw new IngestionFetchError({
-          context: "workday_jobs_api",
-          message: `Workday jobs API request returned HTTP ${response.status}`,
-          statusCode: response.status,
-        });
-      }
-
-      const data = (await response.json()) as WorkdayJobsResponse;
-      const jobs = data.jobPostings ?? [];
-      total = data.total ?? jobs.length;
+      if (jobs.length === 0) break;
 
       allJobs.push(...jobs);
       offset += jobs.length;
-      if (jobs.length === 0) break;
-      if (offset < total) await sleep(300);
+
+      if (jobs.length < PAGE_LIMIT) break;
+      await sleep(300);
     }
 
     const observations: NormalizedJobObservation[] = [];
