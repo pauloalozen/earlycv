@@ -524,62 +524,259 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
         event.preventDefault();
         applyFilters();
       }}
-      className="vagas-filters-form"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 16,
-        background: "#fff",
-        border: "1px solid rgba(10,10,10,0.08)",
-        borderRadius: 12,
-        padding: "10px 12px",
-        flexWrap: "nowrap",
-      }}
     >
       <style>{`
         .vagas-filter-dropdown > summary::-webkit-details-marker { display: none; }
         .vagas-filter-dropdown > summary { -webkit-tap-highlight-color: transparent; }
-        /* flexWrap:nowrap é proposital pro layout desktop (dropdowns
-        alinhados numa linha só) — sem espaço suficiente no mobile, isso
-        transbordaria a tela. Em vez de forçar quebra de linha (arriscaria
-        cortar/deslocar o menu suspenso de cada filtro), deixa a barra
-        inteira rolar na horizontal, um padrão comum pra barra de filtros
-        em telas estreitas. */
+        .vagas-filters-desktop { display: flex; }
+        .vagas-filters-mobile { display: none; }
+        .vagas-filters-mobile-pills { display: flex; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+        .vagas-filters-mobile-pills::-webkit-scrollbar { display: none; }
         @media (max-width: 640px) {
-          .vagas-filters-form { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-          .vagas-filters-form::-webkit-scrollbar { display: none; }
+          .vagas-filters-desktop { display: none; }
+          .vagas-filters-mobile { display: flex; }
         }
       `}</style>
 
+      {/* Desktop: uma linha só (busca + dropdowns + botões-ícone) */}
       <div
+        className="vagas-filters-desktop"
         style={{
-          display: "flex",
           alignItems: "center",
-          gap: 8,
+          justifyContent: "space-between",
+          gap: 16,
+          background: "#fff",
+          border: "1px solid rgba(10,10,10,0.08)",
+          borderRadius: 12,
+          padding: "10px 12px",
           flexWrap: "nowrap",
-          flex: 1,
-          minWidth: 0,
         }}
       >
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 10,
-            flex: "1 1 auto",
-            minWidth: 120,
-            padding: "8px 10px",
+            gap: 8,
+            flexWrap: "nowrap",
+            flex: 1,
+            minWidth: 0,
           }}
         >
-          <svg
-            aria-hidden
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            style={{ flexShrink: 0 }}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flex: "1 1 auto",
+              minWidth: 120,
+              padding: "8px 10px",
+            }}
           >
+            <svg
+              aria-hidden
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              style={{ flexShrink: 0 }}
+            >
+              <title>Buscar</title>
+              <circle cx="11" cy="11" r="7" stroke="#8a8a85" strokeWidth="1.7" />
+              <path
+                d="M20 20l-3.5-3.5"
+                stroke="#8a8a85"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+              />
+            </svg>
+            <input
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+              placeholder="Cargo, tecnologia, empresa…"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: "none",
+                background: "transparent",
+                fontSize: 14,
+                fontFamily: GEIST,
+                color: "#0a0a0a",
+                outline: "none",
+              }}
+            />
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                color: "#8a8a85",
+                background: "rgba(10,10,10,0.05)",
+                padding: "2px 6px",
+                borderRadius: 4,
+                flexShrink: 0,
+              }}
+            >
+              ⌘K
+            </span>
+          </div>
+
+          <div
+            aria-hidden
+            style={{
+              width: 1,
+              alignSelf: "stretch",
+              background: "rgba(10,10,10,0.08)",
+              flexShrink: 0,
+            }}
+          />
+
+          <MultiFilterDropdown
+            label="MODALIDADE"
+            allLabel="todas"
+            options={workModelItems}
+            selected={modalidade}
+            onToggle={(v) => toggle(modalidade, setModalidade, v)}
+            onClear={() => setModalidade([])}
+          />
+          <MultiFilterDropdown
+            label="SENIORIDADE"
+            allLabel="todas"
+            options={seniorityItems}
+            selected={senioridade}
+            onToggle={(v) => toggle(senioridade, setSenioridade, v)}
+            onClear={() => setSenioridade([])}
+          />
+          <MultiFilterDropdown
+            label="EMPRESA"
+            allLabel="todas"
+            options={companyItems}
+            selected={empresa}
+            onToggle={(v) => toggle(empresa, setEmpresa, v)}
+            onClear={() => setEmpresa([])}
+          />
+
+          <SingleFilterDropdown
+            label="PUBLICADO HÁ"
+            allLabel="qualquer período"
+            options={PUBLISHED_OPTIONS}
+            activeValue={publicada}
+            onSelect={setPublicada}
+          />
+        </div>
+
+        {/* Botões-ícone (com tooltip nativo via title) — largura fixa e bem
+            menor que os textos, então essa área nunca disputa espaço com os
+            pills à esquerda nem força a busca a encolher demais. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexShrink: 0,
+          }}
+        >
+          <button
+            type="button"
+            onClick={clearAll}
+            title={`limpar filtros (${pendingCount})`}
+            aria-label={`limpar filtros (${pendingCount})`}
+            aria-hidden={pendingCount === 0}
+            tabIndex={pendingCount === 0 ? -1 : 0}
+            style={{
+              width: 34,
+              height: 34,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 8,
+              background: "#fafaf6",
+              border: "1px solid rgba(10,10,10,0.1)",
+              color: "#3a3a38",
+              cursor: pendingCount > 0 ? "pointer" : "default",
+              visibility: pendingCount > 0 ? "visible" : "hidden",
+              pointerEvents: pendingCount > 0 ? "auto" : "none",
+              flexShrink: 0,
+            }}
+          >
+            <svg
+              aria-hidden
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <title>Limpar filtros</title>
+              <circle
+                cx="12"
+                cy="12"
+                r="9"
+                stroke="currentColor"
+                strokeWidth="1.7"
+              />
+              <path
+                d="M9 9l6 6M15 9l-6 6"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+
+          <button
+            type="submit"
+            disabled={!isDirty}
+            title="aplicar filtros"
+            aria-label="aplicar filtros"
+            style={{
+              width: 34,
+              height: 34,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: isDirty ? "#0a0a0a" : "rgba(10,10,10,0.08)",
+              color: isDirty ? "#fafaf6" : "#8a8a85",
+              border: "none",
+              borderRadius: 8,
+              cursor: isDirty ? "pointer" : "default",
+              flexShrink: 0,
+            }}
+          >
+            <svg
+              aria-hidden
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <title>Aplicar filtros</title>
+              <path
+                d="M5 12l5 5L20 7"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile: busca em card própria + pills roláveis + botão de aplicar
+      circular com contador — cabeçalho de filtros é o único lugar onde a
+      referência de design difere o bastante do desktop pra não dar pra
+      resolver só escondendo/mostrando elementos com CSS. */}
+      <div className="vagas-filters-mobile" style={{ flexDirection: "column", gap: 10 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            background: "#fff",
+            border: "1px solid rgba(10,10,10,0.08)",
+            borderRadius: 12,
+            padding: "12px 14px",
+          }}
+        >
+          <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none">
             <title>Buscar</title>
             <circle cx="11" cy="11" r="7" stroke="#8a8a85" strokeWidth="1.7" />
             <path
@@ -604,159 +801,103 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
               outline: "none",
             }}
           />
-          <span
-            style={{
-              fontFamily: MONO,
-              fontSize: 10,
-              color: "#8a8a85",
-              background: "rgba(10,10,10,0.05)",
-              padding: "2px 6px",
-              borderRadius: 4,
-              flexShrink: 0,
-            }}
-          >
-            ⌘K
-          </span>
         </div>
 
-        <div
-          aria-hidden
-          style={{
-            width: 1,
-            alignSelf: "stretch",
-            background: "rgba(10,10,10,0.08)",
-            flexShrink: 0,
-          }}
-        />
+        <div className="vagas-filters-mobile-pills">
+          <MultiFilterDropdown
+            label="MODALIDADE"
+            allLabel="todas"
+            options={workModelItems}
+            selected={modalidade}
+            onToggle={(v) => toggle(modalidade, setModalidade, v)}
+            onClear={() => setModalidade([])}
+          />
+          <MultiFilterDropdown
+            label="SENIORIDADE"
+            allLabel="todas"
+            options={seniorityItems}
+            selected={senioridade}
+            onToggle={(v) => toggle(senioridade, setSenioridade, v)}
+            onClear={() => setSenioridade([])}
+          />
+          <MultiFilterDropdown
+            label="EMPRESA"
+            allLabel="todas"
+            options={companyItems}
+            selected={empresa}
+            onToggle={(v) => toggle(empresa, setEmpresa, v)}
+            onClear={() => setEmpresa([])}
+          />
+          <SingleFilterDropdown
+            label="PUBLICADO HÁ"
+            allLabel="qualquer período"
+            options={PUBLISHED_OPTIONS}
+            activeValue={publicada}
+            onSelect={setPublicada}
+          />
 
-        <MultiFilterDropdown
-          label="MODALIDADE"
-          allLabel="todas"
-          options={workModelItems}
-          selected={modalidade}
-          onToggle={(v) => toggle(modalidade, setModalidade, v)}
-          onClear={() => setModalidade([])}
-        />
-        <MultiFilterDropdown
-          label="SENIORIDADE"
-          allLabel="todas"
-          options={seniorityItems}
-          selected={senioridade}
-          onToggle={(v) => toggle(senioridade, setSenioridade, v)}
-          onClear={() => setSenioridade([])}
-        />
-        <MultiFilterDropdown
-          label="EMPRESA"
-          allLabel="todas"
-          options={companyItems}
-          selected={empresa}
-          onToggle={(v) => toggle(empresa, setEmpresa, v)}
-          onClear={() => setEmpresa([])}
-        />
-
-        <SingleFilterDropdown
-          label="PUBLICADO HÁ"
-          allLabel="qualquer período"
-          options={PUBLISHED_OPTIONS}
-          activeValue={publicada}
-          onSelect={setPublicada}
-        />
-      </div>
-
-      {/* Botões-ícone (com tooltip nativo via title) — largura fixa e bem
-          menor que os textos, então essa área nunca disputa espaço com os
-          pills à esquerda nem força a busca a encolher demais. */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexShrink: 0,
-        }}
-      >
-        <button
-          type="button"
-          onClick={clearAll}
-          title={`limpar filtros (${pendingCount})`}
-          aria-label={`limpar filtros (${pendingCount})`}
-          aria-hidden={pendingCount === 0}
-          tabIndex={pendingCount === 0 ? -1 : 0}
-          style={{
-            width: 34,
-            height: 34,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 8,
-            background: "#fafaf6",
-            border: "1px solid rgba(10,10,10,0.1)",
-            color: "#3a3a38",
-            cursor: pendingCount > 0 ? "pointer" : "default",
-            visibility: pendingCount > 0 ? "visible" : "hidden",
-            pointerEvents: pendingCount > 0 ? "auto" : "none",
-            flexShrink: 0,
-          }}
-        >
-          <svg
-            aria-hidden
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
+          <button
+            type="submit"
+            disabled={!isDirty}
+            title="aplicar filtros"
+            aria-label={`aplicar filtros (${pendingCount})`}
+            style={{
+              position: "relative",
+              width: 44,
+              height: 44,
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: "50%",
+              background: isDirty ? "#0a0a0a" : "rgba(10,10,10,0.08)",
+              color: isDirty ? "#fafaf6" : "#8a8a85",
+              border: "none",
+              cursor: isDirty ? "pointer" : "default",
+            }}
           >
-            <title>Limpar filtros</title>
-            <circle
-              cx="12"
-              cy="12"
-              r="9"
-              stroke="currentColor"
-              strokeWidth="1.7"
-            />
-            <path
-              d="M9 9l6 6M15 9l-6 6"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-
-        <button
-          type="submit"
-          disabled={!isDirty}
-          title="aplicar filtros"
-          aria-label="aplicar filtros"
-          style={{
-            width: 34,
-            height: 34,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: isDirty ? "#0a0a0a" : "rgba(10,10,10,0.08)",
-            color: isDirty ? "#fafaf6" : "#8a8a85",
-            border: "none",
-            borderRadius: 8,
-            cursor: isDirty ? "pointer" : "default",
-            flexShrink: 0,
-          }}
-        >
-          <svg
-            aria-hidden
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-          >
-            <title>Aplicar filtros</title>
-            <path
-              d="M5 12l5 5L20 7"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
+            <svg
+              aria-hidden
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <title>Aplicar filtros</title>
+              <path
+                d="M5 12l5 5L20 7"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {pendingCount > 0 ? (
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  top: -3,
+                  right: -3,
+                  minWidth: 17,
+                  height: 17,
+                  borderRadius: "50%",
+                  background: "#c6ff3a",
+                  color: "#25330a",
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  border: "2px solid #efeee8",
+                }}
+              >
+                {pendingCount}
+              </span>
+            ) : null}
+          </button>
+        </div>
       </div>
     </form>
   );

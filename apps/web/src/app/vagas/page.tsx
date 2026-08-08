@@ -822,9 +822,20 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
             )}
 
             {scoreState === "has-cv" ? (
+              <style>{`
+                .hero-cv-desktop { display: flex; }
+                .hero-cv-mobile { display: none; }
+                @media (max-width: 640px) {
+                  .hero-cv-desktop { display: none; }
+                  .hero-cv-mobile { display: flex; }
+                }
+              `}</style>
+            ) : null}
+
+            {scoreState === "has-cv" ? (
               <div
+                className="hero-cv-desktop"
                 style={{
-                  display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
                   gap: 16,
@@ -985,6 +996,172 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                       </div>
                     </div>
                   </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {scoreState === "has-cv" ? (
+              <div
+                className="hero-cv-mobile"
+                style={{ flexDirection: "column", gap: 10 }}
+              >
+                <div style={{ display: "flex", gap: 10 }}>
+                  <div
+                    style={{
+                      flex: 1,
+                      background: "#fff",
+                      border: "1px solid rgba(10,10,10,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 22,
+                        fontWeight: 500,
+                        letterSpacing: -0.5,
+                        color: "#0a0a0a",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {jobsResult.total}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        color: "#8a8a85",
+                        letterSpacing: 0.2,
+                        marginTop: 5,
+                      }}
+                    >
+                      vagas analisadas
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      flex: 1,
+                      background: "#fff",
+                      border: "1px solid rgba(10,10,10,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 22,
+                        fontWeight: 500,
+                        letterSpacing: -0.5,
+                        color: "#1f7a34",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {highCompatCount}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        color: "#8a8a85",
+                        letterSpacing: 0.2,
+                        marginTop: 5,
+                      }}
+                    >
+                      altamente compatíveis
+                    </div>
+                  </div>
+                </div>
+
+                {user ? (
+                  <>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        background: "#fff",
+                        border: "1px solid rgba(10,10,10,0.08)",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: "50%",
+                          background: "rgba(34,163,72,0.14)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <svg
+                          aria-hidden
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                        >
+                          <title>CV calibrado</title>
+                          <path
+                            d="M5 12l5 5L20 7"
+                            stroke="#1f7a34"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 500,
+                            color: "#0a0a0a",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {cvFileName ?? "CV enviado"}
+                        </div>
+                        <div style={{ fontSize: 10.5, color: "#8a8a85" }}>
+                          CV calibrado
+                        </div>
+                      </div>
+                    </div>
+
+                    <Link
+                      href="/vagas-salvas"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        background: "#fff",
+                        border: "1px solid rgba(10,10,10,0.08)",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        color: "#3a3a38",
+                        textDecoration: "none",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        fontFamily: GEIST,
+                      }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                        <title>Vagas salvas</title>
+                        <path
+                          d="M6 3h12v18l-6-4-6 4V3z"
+                          stroke="#3a3a38"
+                          strokeWidth="1.7"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      Ver Minhas Vagas
+                    </Link>
+                  </>
                 ) : null}
               </div>
             ) : null}
