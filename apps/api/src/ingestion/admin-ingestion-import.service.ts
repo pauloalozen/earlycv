@@ -4,12 +4,38 @@ import { DatabaseService } from "../database/database.service";
 import { normalizeCompanyName } from "./name-normalization";
 import { canonicalizeSourceUrl } from "./url-normalization";
 
-const CSV_HEADER = ["nome", "setor", "site_url", "careers_url", "linkedin_url"];
+const LEGACY_CSV_HEADER = [
+  "nome",
+  "setor",
+  "site_url",
+  "careers_url",
+  "linkedin_url",
+];
+const CSV_HEADER = [...LEGACY_CSV_HEADER, "tipo_adapter"];
+
+// Tipos de adapter que a coluna tipo_adapter aceita explicitamente. Os
+// demais valores do enum JobSourceType (workday, kenoby, successfactors,
+// ashby, inhire, solides, pandape) ainda nao tem adapter implementado —
+// aceitar aqui so criaria fonte que nunca roda.
+const IMPORTABLE_ADAPTER_TYPES = [
+  "gupy",
+  "custom_html",
+  "custom_api",
+  "greenhouse",
+  "lever",
+] as const;
+type ImportableAdapterType = (typeof IMPORTABLE_ADAPTER_TYPES)[number];
+
+function isImportableAdapterType(
+  value: string,
+): value is ImportableAdapterType {
+  return (IMPORTABLE_ADAPTER_TYPES as readonly string[]).includes(value);
+}
 
 type ImportLineReport = {
   companyAction: "created" | "updated";
   companyName: string;
-  inferredAdapter: "custom_html" | "gupy";
+  inferredAdapter: ImportableAdapterType;
   line: number;
   message: string;
   sourceAction: "created" | "updated";
@@ -22,6 +48,14 @@ type ImportLineError = {
   message: string;
   status: "error";
 };
+
+function getAdapterDefaults(adapter: ImportableAdapterType) {
+  return {
+    crawlStrategy: adapter === "custom_html" ? "html" : "api",
+    isFallbackAdapter: adapter === "custom_html",
+    parserKey: adapter,
+  } as const;
+}
 
 export type CompanySourcesCsvImportReport = {
   lines: Array<ImportLineError | ImportLineReport>;
@@ -65,11 +99,16 @@ export class AdminIngestionImportService {
       ?.split(",")
       .map((value) => value.trim().toLowerCase());
 
-    if (
-      !header ||
-      header.length !== CSV_HEADER.length ||
-      header.some((item, index) => item !== CSV_HEADER[index])
-    ) {
+    const matchesHeader = (expected: string[]) =>
+      header?.length === expected.length &&
+      header.every((item, index) => item === expected[index]);
+
+    // Aceita o header legado (5 colunas, sem tipo_adapter) pra nao quebrar
+    // CSVs ja exportados antes dessa coluna existir — nesse caso o adapter
+    // continua sendo inferido pela URL, como sempre foi.
+    const hasAdapterColumn = matchesHeader(CSV_HEADER);
+
+    if (!hasAdapterColumn && !matchesHeader(LEGACY_CSV_HEADER)) {
       throw new BadRequestException(
         `invalid csv header, expected: ${CSV_HEADER.join(",")}`,
       );
@@ -90,9 +129,8 @@ export class AdminIngestionImportService {
 
     for (const [index, rawLine] of lines.slice(1).entries()) {
       const lineNumber = index + 2;
-      const [nome, setor, siteUrl, careersUrl, linkedinUrl] = rawLine
-        .split(",")
-        .map((value) => value.trim());
+      const [nome, setor, siteUrl, careersUrl, linkedinUrl, tipoAdapter] =
+        rawLine.split(",").map((value) => value.trim());
 
       if (!nome || !careersUrl) {
         report.lines.push({
@@ -133,9 +171,24 @@ export class AdminIngestionImportService {
         continue;
       }
 
-      const inferredAdapter = careersUrl.toLowerCase().includes("gupy")
-        ? "gupy"
-        : "custom_html";
+      const explicitAdapter = hasAdapterColumn ? tipoAdapter?.trim() : "";
+
+      if (explicitAdapter && !isImportableAdapterType(explicitAdapter)) {
+        report.lines.push({
+          companyName: nome,
+          line: lineNumber,
+          message: `invalid tipo_adapter "${explicitAdapter}", expected one of: ${IMPORTABLE_ADAPTER_TYPES.join(", ")}`,
+          status: "error",
+        });
+        report.summary.errorCount += 1;
+        continue;
+      }
+
+      const inferredAdapter: ImportableAdapterType = explicitAdapter
+        ? (explicitAdapter as ImportableAdapterType)
+        : careersUrl.toLowerCase().includes("gupy")
+          ? "gupy"
+          : "custom_html";
 
       try {
         const existingCompany = await this.database.company.findUnique({
@@ -179,17 +232,18 @@ export class AdminIngestionImportService {
         const sourceAction = existingSource ? "updated" : "created";
 
         if (!input.dryRun && companyId) {
+          const adapterDefaults = getAdapterDefaults(inferredAdapter);
           const sourcePayload = {
             checkIntervalMinutes: 30,
-            crawlStrategy: inferredAdapter === "gupy" ? "api" : "html",
+            crawlStrategy: adapterDefaults.crawlStrategy,
             isActive: true,
-            isFallbackAdapter: inferredAdapter !== "gupy",
-            parserKey: inferredAdapter === "gupy" ? "gupy" : "custom_html",
+            isFallbackAdapter: adapterDefaults.isFallbackAdapter,
+            parserKey: adapterDefaults.parserKey,
             scheduleEnabled: false,
             sourceName: `${nome} careers`,
             sourceType: inferredAdapter,
             sourceUrl: canonicalSourceUrl,
-          } as const;
+          };
 
           if (existingSource) {
             await this.database.jobSource.update({
@@ -256,6 +310,7 @@ export class AdminIngestionImportService {
         source.company.websiteUrl ?? "",
         source.sourceUrl,
         source.company.linkedinUrl ?? "",
+        source.sourceType,
       ]
         .map(escapeCsvField)
         .join(","),

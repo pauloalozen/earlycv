@@ -152,6 +152,92 @@ export async function createJobSourceAction(formData: FormData) {
   );
 }
 
+// Cria empresa e primeira JobSource num submit so, evitando o fluxo antigo
+// de 2 passos onde a empresa nascia sem tipo de adapter definido e so era
+// possivel escolher o adapter voltando pra tela de editar.
+export async function createCompanyAndSourceAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${NEW_SOURCE_REDIRECT_PATH}`,
+  );
+  const runAfterCreate = formData.get("runAfterCreate") === "on";
+
+  let company: Awaited<ReturnType<typeof createCompany>>;
+
+  try {
+    company = await createCompany(parseCompanyFormData(formData));
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+
+    const message =
+      error instanceof Error ? error.message : "Falha ao criar a empresa.";
+
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  formData.set("companyId", company.id);
+  formData.set("companyName", company.name);
+
+  let source: Awaited<ReturnType<typeof createJobSource>>;
+
+  try {
+    const payload = parseJobSourceFormData(formData);
+    source = await createJobSource(payload);
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+
+    // Empresa ja foi criada — nao perde o cadastro, manda pra tela da
+    // empresa (que tem CTA "Criar primeira fonte") pra completar so a
+    // parte que falhou.
+    const message =
+      error instanceof Error ? error.message : "Falha ao criar a fonte.";
+
+    redirect(
+      buildAdminRedirect(
+        `/admin/empresas/${company.id}`,
+        "error",
+        `Empresa "${company.name}" criada, mas a fonte falhou: ${message}. Complete o cadastro da fonte abaixo.`,
+      ),
+    );
+  }
+
+  if (runAfterCreate) {
+    try {
+      await runJobSourceAdHoc(source.id);
+    } catch (error) {
+      if (isRedirectControlFlowError(error)) {
+        throw error;
+      }
+
+      const message =
+        error instanceof Error
+          ? `Empresa e fonte criadas, mas o disparo manual falhou: ${error.message}`
+          : "Empresa e fonte criadas, mas o disparo manual falhou.";
+
+      redirect(buildAdminRedirect(ROOT_REDIRECT_PATH, "error", message));
+    }
+
+    redirect(
+      buildAdminRedirect(
+        ROOT_REDIRECT_PATH,
+        "success",
+        `Empresa "${company.name}" e fonte ${source.sourceName} criadas, job disparado. Acompanhe na aba Jobs.`,
+      ),
+    );
+  }
+
+  redirect(
+    buildAdminRedirect(
+      ROOT_REDIRECT_PATH,
+      "success",
+      `Empresa "${company.name}" e fonte ${source.sourceName} criadas com sucesso.`,
+    ),
+  );
+}
+
 export async function importCompanySourcesCsvAction(formData: FormData) {
   const redirectPath = String(
     formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
