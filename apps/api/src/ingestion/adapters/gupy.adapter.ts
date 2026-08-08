@@ -9,6 +9,7 @@ import type {
   JobSourceContext,
   NormalizedJobObservation,
 } from "../types";
+import { normalizeAdapterTitle } from "./title-normalization";
 
 type GupyApiJob = {
   addressCity?: string | null;
@@ -106,14 +107,6 @@ function normalizeEmploymentType(value?: string | null) {
   const raw = value?.trim();
   if (!raw) return undefined;
   return EMPLOYMENT_TYPE_MAP[raw] ?? raw;
-}
-
-function normalizeTitle(value?: string | null) {
-  return (value ?? "")
-    .normalize("NFKD")
-    .replace(/[^\w\s-]/g, "")
-    .trim()
-    .toLowerCase();
 }
 
 function getSubdomainFromSourceUrl(sourceUrl: string) {
@@ -285,7 +278,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
         }
 
         if (!existing) {
-          const normalizedTitle = normalizeTitle(boardJob.title);
+          const normalizedTitle = normalizeAdapterTitle(boardJob.title);
           const filterDecision =
             await this.semanticFilter.evaluate(normalizedTitle);
 
@@ -489,7 +482,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
       firstSeenAt: publishedAt,
       lastSeenAt: publishedAt,
       locationText: locationParts.join(", ") || "Remote",
-      normalizedTitle: normalizeTitle(title),
+      normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,
       seniorityLevel: undefined,
       sourceJobUrl: `https://${subdomain}.gupy.io/jobs/${String(job.id)}?jobBoardSource=gupy_public_page`,

@@ -9,10 +9,10 @@ export type JobSourceTypeOption =
   | "solides"
   | "pandape";
 
-// Source types selectable in the admin UI. greenhouse/lever/ashby/inhire/
-// solides/pandape don't have an adapter implemented yet — creating a
-// source with one of these types only tags the company for later; running
-// it will fail until the matching adapter ships.
+// Source types selectable in the admin UI. ashby/inhire/solides/pandape
+// don't have an adapter implemented yet — creating a source with one of
+// these types only tags the company for later; running it will fail until
+// the matching adapter ships.
 export const JOB_SOURCE_TYPE_OPTIONS: JobSourceTypeOption[] = [
   "gupy",
   "custom_html",
@@ -59,6 +59,8 @@ export const MANUAL_ADAPTER_TYPES = [
   "gupy",
   "custom_html",
   "custom_api",
+  "greenhouse",
+  "lever",
 ] as const;
 
 export type ManualAdapterType = (typeof MANUAL_ADAPTER_TYPES)[number];
@@ -100,8 +102,6 @@ export function buildAdminRedirect(
 // gupy/custom_api, so crawlStrategy defaults to "api". They only exist so
 // companies can be tagged now; running them fails until the adapter ships.
 const UNIMPLEMENTED_API_SOURCE_TYPES: JobSourceTypeOption[] = [
-  "greenhouse",
-  "lever",
   "ashby",
   "inhire",
   "solides",
@@ -122,6 +122,22 @@ export function getSourceDefaults(sourceType: string): SourceDefaults {
       crawlStrategy: "api",
       parserKey: "custom_api",
       sourceType: "custom_api",
+    };
+  }
+
+  if (sourceType === "greenhouse") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "greenhouse",
+      sourceType: "greenhouse",
+    };
+  }
+
+  if (sourceType === "lever") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "lever",
+      sourceType: "lever",
     };
   }
 

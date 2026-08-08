@@ -149,7 +149,12 @@ export type IngestionRunSummary = {
   updatedCount: number;
 };
 
-export type ManualAdapterType = "gupy" | "custom_html" | "custom_api";
+export type ManualAdapterType =
+  | "gupy"
+  | "custom_html"
+  | "custom_api"
+  | "greenhouse"
+  | "lever";
 
 export type ManualRunStatus =
   | "queued"

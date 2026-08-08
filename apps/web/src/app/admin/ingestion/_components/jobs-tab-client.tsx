@@ -333,6 +333,8 @@ function CreateJobModal({
                       <option value="gupy">gupy</option>
                       <option value="custom_html">custom_html</option>
                       <option value="custom_api">custom_api</option>
+                      <option value="greenhouse">greenhouse</option>
+                      <option value="lever">lever</option>
                     </select>
                   )}
                 </label>

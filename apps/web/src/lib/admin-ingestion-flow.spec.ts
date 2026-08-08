@@ -169,6 +169,8 @@ test("parseManualAdapterType accepts allowed adapter types", () => {
   assert.equal(parseManualAdapterType("gupy"), "gupy");
   assert.equal(parseManualAdapterType("custom_html"), "custom_html");
   assert.equal(parseManualAdapterType("custom_api"), "custom_api");
+  assert.equal(parseManualAdapterType("greenhouse"), "greenhouse");
+  assert.equal(parseManualAdapterType("lever"), "lever");
 });
 
 test("parseManualAdapterType rejects empty and unknown adapter values", () => {

@@ -25,6 +25,7 @@ function createIngestionServiceFixture(options?: {
     status?: "active" | "inactive" | "removed";
     title?: string;
   }>;
+  sourceType?: JobSourceType;
 }) {
   const updatedJobs = new Map<
     string,
@@ -81,7 +82,7 @@ function createIngestionServiceFixture(options?: {
       findUnique: async () => ({
         id: "source-1",
         companyId: "company-1",
-        sourceType: "custom_html" as JobSourceType,
+        sourceType: (options?.sourceType ?? "custom_html") as JobSourceType,
         sourceName: "Source 1",
         sourceUrl: "https://jobs.example.com",
         parserKey: "custom_html",
@@ -189,6 +190,8 @@ function createIngestionServiceFixture(options?: {
     adapter as never,
     { sourceType: "custom_api", collect: async () => [] } as never,
     { sourceType: "gupy", collect: async () => [] } as never,
+    { sourceType: "greenhouse", collect: async () => [] } as never,
+    { sourceType: "lever", collect: async () => [] } as never,
   );
 
   return {
@@ -620,6 +623,61 @@ test("IngestionService reports detailFetchSkippedCount from observations", async
 
   const result = await fixture.service.runJobSource("source-1");
   assert.equal(result.detailFetchSkippedCount, 1);
+});
+
+test("IngestionService dispatches to the greenhouse adapter for greenhouse sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "greenhouse" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "greenhouse",
+      {
+        sourceType: "greenhouse",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService dispatches to the lever adapter for lever sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "lever" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "lever",
+      {
+        sourceType: "lever",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService fails the run for a source type without a registered adapter", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "ashby" });
+  fixture.service.adapters = new Map([
+    ["custom_html", { sourceType: "custom_html", collect: async () => [] }],
+  ]);
+
+  const result = await fixture.service.runJobSource("source-1");
+
+  assert.equal(result.status, "failed");
+  assert.match(
+    result.errorSummary ?? "",
+    /manual ingestion is not supported for source type ashby/,
+  );
 });
 
 test("IngestionService.getRun attaches enrichment info to preview items", async () => {

@@ -21,16 +21,18 @@ function stripAccents(value: string) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
 }
 
-function stripGeographicSuffix(value: string) {
-  const dashIndex = value.indexOf(" - ");
-  if (dashIndex === -1) return value;
-  return value.slice(0, dashIndex);
-}
-
 function normalizeTitleForFilter(value: string) {
+  // Ate ago/2026 isso cortava tudo depois do primeiro " - ", supondo que
+  // sempre fosse um sufixo geografico ("Engenheiro - Sao Paulo"). Na
+  // pratica, boards do Greenhouse usam " - " tambem em prefixo de ID
+  // ("[Job - 30813] Senior Data Developer...") e em qualificador nao
+  // geografico ("Analista de Vulnerabilidades - Cyber"), e o corte
+  // truncava o titulo real antes mesmo do sinal aparecer. Como o match e
+  // por substring/token (nao exato), manter a string inteira nao piora a
+  // deteccao — so evita perder sinal.
   const withoutParens = value.replace(/\([^)]*\)/g, " ");
   const normalized = stripAccents(withoutParens).toLowerCase().trim();
-  return stripGeographicSuffix(normalized).replace(/\s+/g, " ").trim();
+  return normalized.replace(/\s+/g, " ").trim();
 }
 
 function escapeRegex(value: string) {

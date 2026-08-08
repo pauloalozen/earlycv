@@ -14,7 +14,13 @@ import type {
 
 import { DatabaseService } from "../database/database.service";
 import { buildPublicJobSlug } from "../jobs/public-job-view";
-import { CustomApiAdapter, CustomHtmlAdapter, GupyAdapter } from "./adapters";
+import {
+  CustomApiAdapter,
+  CustomHtmlAdapter,
+  GreenhouseAdapter,
+  GupyAdapter,
+  LeverAdapter,
+} from "./adapters";
 import { evaluate403CircuitBreaker } from "./circuit-breaker-policy";
 import { isForbiddenIngestionError } from "./errors";
 import { getStaleCutoff } from "./stale-policy";
@@ -94,11 +100,15 @@ export class IngestionService {
     @Inject(CustomHtmlAdapter) customHtmlAdapter: CustomHtmlAdapter,
     @Inject(CustomApiAdapter) customApiAdapter: CustomApiAdapter,
     @Inject(GupyAdapter) gupyAdapter: GupyAdapter,
+    @Inject(GreenhouseAdapter) greenhouseAdapter: GreenhouseAdapter,
+    @Inject(LeverAdapter) leverAdapter: LeverAdapter,
   ) {
     this.adapters = new Map<JobSource["sourceType"], IngestionSourceAdapter>([
       [customHtmlAdapter.sourceType, customHtmlAdapter],
       [customApiAdapter.sourceType, customApiAdapter],
       [gupyAdapter.sourceType, gupyAdapter],
+      [greenhouseAdapter.sourceType, greenhouseAdapter],
+      [leverAdapter.sourceType, leverAdapter],
     ]);
   }
 

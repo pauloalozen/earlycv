@@ -77,7 +77,7 @@ test("SemanticFilterService.evaluate returns SKIP with zona_cinza reason when no
   });
 });
 
-test("SemanticFilterService.evaluate removes geographic suffix before evaluating", async () => {
+test("SemanticFilterService.evaluate matches a signal regardless of a trailing ' - Location' suffix", async () => {
   const { database } = createDatabaseMock(createConfig());
   const service = new SemanticFilterService(database);
 
@@ -93,6 +93,46 @@ test("SemanticFilterService.evaluate removes geographic suffix before evaluating
   assert.deepEqual(decisionWithSignal, {
     configVersion: "v1",
     reason: "tech_signal:engenheiro",
+    result: "ENRICH",
+  });
+});
+
+// Achado real na Sprint 6A: o board da VTEX no Greenhouse usa " - " tanto
+// em prefixo de ID ("job - 30813 ...") quanto em qualificador nao
+// geografico ("... - cyber"). O corte antigo em normalizeTitleForFilter
+// truncava o titulo antes do sinal aparecer, jogando 32 vagas tecnicas
+// pra zona_cinza. matchesSignal e substring/token, entao manter a string
+// inteira nao deveria perder essas vagas.
+test("SemanticFilterService.evaluate does not lose the signal when ' - ' appears before it in the title", async () => {
+  const { database } = createDatabaseMock(
+    createConfig({ techSignals: ["developer", "cyber", "cloud"] }),
+  );
+  const service = new SemanticFilterService(database);
+
+  const idPrefixed = await service.evaluate(
+    "job - 30813 senior data developer databricks colombia",
+  );
+  assert.deepEqual(idPrefixed, {
+    configVersion: "v1",
+    reason: "tech_signal:developer",
+    result: "ENRICH",
+  });
+
+  const nonGeographicSuffix = await service.evaluate(
+    "analista de gestao de vulnerabilidades - cyber",
+  );
+  assert.deepEqual(nonGeographicSuffix, {
+    configVersion: "v1",
+    reason: "tech_signal:cyber",
+    result: "ENRICH",
+  });
+
+  const signalInsideSuffix = await service.evaluate(
+    "executivo de contas/vendas - solucoes em infraestrutura cloud hibrida",
+  );
+  assert.deepEqual(signalInsideSuffix, {
+    configVersion: "v1",
+    reason: "tech_signal:cloud",
     result: "ENRICH",
   });
 });

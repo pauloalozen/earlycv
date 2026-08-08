@@ -297,10 +297,8 @@ export default async function NewAdminSourcePage({
                       <option value="gupy">gupy</option>
                       <option value="custom_html">custom_html</option>
                       <option value="custom_api">custom_api</option>
-                      <option value="greenhouse">
-                        greenhouse (sem adapter)
-                      </option>
-                      <option value="lever">lever (sem adapter)</option>
+                      <option value="greenhouse">greenhouse</option>
+                      <option value="lever">lever</option>
                       <option value="ashby">ashby (sem adapter)</option>
                       <option value="inhire">inhire (sem adapter)</option>
                       <option value="solides">solides (sem adapter)</option>
@@ -339,6 +337,11 @@ export default async function NewAdminSourcePage({
                       required
                       type="url"
                     />
+                    <p className="text-xs text-stone-500">
+                      gupy: https://[empresa].gupy.io/ · greenhouse:
+                      https://boards-api.greenhouse.io/v1/boards/[empresa]/jobs
+                      · lever: https://api.lever.co/v0/postings/[empresa]
+                    </p>
                   </label>
 
                   <label className="flex items-center gap-3 md:col-span-2">
