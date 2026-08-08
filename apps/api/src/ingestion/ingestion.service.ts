@@ -22,7 +22,9 @@ import {
   GupyAdapter,
   InHireAdapter,
   LeverAdapter,
+  TalentbrewAdapter,
   TeamtailorAdapter,
+  WorkdayAdapter,
 } from "./adapters";
 import { evaluate403CircuitBreaker } from "./circuit-breaker-policy";
 import { isForbiddenIngestionError } from "./errors";
@@ -108,6 +110,8 @@ export class IngestionService {
     @Inject(AshbyAdapter) ashbyAdapter: AshbyAdapter,
     @Inject(InHireAdapter) inHireAdapter: InHireAdapter,
     @Inject(TeamtailorAdapter) teamtailorAdapter: TeamtailorAdapter,
+    @Inject(TalentbrewAdapter) talentbrewAdapter: TalentbrewAdapter,
+    @Inject(WorkdayAdapter) workdayAdapter: WorkdayAdapter,
   ) {
     this.adapters = new Map<JobSource["sourceType"], IngestionSourceAdapter>([
       [customHtmlAdapter.sourceType, customHtmlAdapter],
@@ -118,6 +122,8 @@ export class IngestionService {
       [ashbyAdapter.sourceType, ashbyAdapter],
       [inHireAdapter.sourceType, inHireAdapter],
       [teamtailorAdapter.sourceType, teamtailorAdapter],
+      [talentbrewAdapter.sourceType, talentbrewAdapter],
+      [workdayAdapter.sourceType, workdayAdapter],
     ]);
   }
 

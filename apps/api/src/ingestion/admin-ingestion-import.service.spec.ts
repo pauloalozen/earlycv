@@ -125,7 +125,7 @@ test("importCompanySourcesCsv honors an explicit tipo_adapter column over URL in
   assert.equal(source?.sourceType, "greenhouse");
 });
 
-test("importCompanySourcesCsv accepts ashby, inhire and teamtailor as explicit adapter types", async () => {
+test("importCompanySourcesCsv accepts ashby, inhire, teamtailor, talentbrew and workday as explicit adapter types", async () => {
   const { database, sources } = createDatabaseMock();
   const service = new AdminIngestionImportService(database);
 
@@ -134,6 +134,8 @@ test("importCompanySourcesCsv accepts ashby, inhire and teamtailor as explicit a
     "Nubank,Fintech,https://nubank.com.br,https://api.ashbyhq.com/posting-api/job-board/nubank,,ashby",
     "Cielo,Fintech,https://cielo.com.br,https://cielo.inhire.app,,inhire",
     "Loft,Proptech,https://loft.com.br,https://loft.teamtailor.com,,teamtailor",
+    "Itau,Bancos,https://itau.com.br,https://carreiras.itau.com.br,,talentbrew",
+    "Santander,Bancos,https://santander.com.br,https://santander.wd3.myworkdayjobs.com/pt-BR/SantanderCareers,,workday",
   ].join("\n");
 
   const report = await service.importCompanySourcesCsv({
@@ -146,11 +148,11 @@ test("importCompanySourcesCsv accepts ashby, inhire and teamtailor as explicit a
     report.lines.map(
       (line) => (line as { inferredAdapter: string }).inferredAdapter,
     ),
-    ["ashby", "inhire", "teamtailor"],
+    ["ashby", "inhire", "teamtailor", "talentbrew", "workday"],
   );
   assert.deepEqual(
     [...sources.values()].map((source) => source.sourceType),
-    ["ashby", "inhire", "teamtailor"],
+    ["ashby", "inhire", "teamtailor", "talentbrew", "workday"],
   );
 });
 
@@ -160,7 +162,7 @@ test("importCompanySourcesCsv rejects an unknown tipo_adapter value", async () =
 
   const csv = [
     "nome,setor,site_url,careers_url,linkedin_url,tipo_adapter",
-    "ACME,Tech,https://acme.dev,https://acme.gupy.io,,workday",
+    "ACME,Tech,https://acme.dev,https://acme.gupy.io,,solides",
   ].join("\n");
 
   const report = await service.importCompanySourcesCsv({

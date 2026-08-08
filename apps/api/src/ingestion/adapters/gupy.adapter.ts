@@ -10,6 +10,7 @@ import type {
   NormalizedJobObservation,
 } from "../types";
 import { normalizeAdapterTitle } from "./title-normalization";
+import { normalizeVacancyType } from "./vacancy-type";
 
 type GupyApiJob = {
   addressCity?: string | null;
@@ -90,23 +91,6 @@ function normalizeWorkModel(
   if (value === "on-site") return "onsite";
   if (value === "remote") return "remote";
   return undefined;
-}
-
-const EMPLOYMENT_TYPE_MAP: Record<string, string> = {
-  vacancy_type_effective: "full_time",
-  vacancy_type_internship: "internship",
-  vacancy_type_apprentice: "apprentice",
-  vacancy_type_temporary: "temporary",
-  vacancy_type_talent_pool: "talent_pool",
-  vacancy_legal_entity: "pj",
-  vacancy_type_autonomous: "autonomous",
-  full_time: "full_time",
-};
-
-function normalizeEmploymentType(value?: string | null) {
-  const raw = value?.trim();
-  if (!raw) return undefined;
-  return EMPLOYMENT_TYPE_MAP[raw] ?? raw;
 }
 
 function getSubdomainFromSourceUrl(sourceUrl: string) {
@@ -476,7 +460,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
       descriptionClean,
       descriptionRaw,
       detailFetchSkipped: options?.detailFetchSkipped,
-      employmentType: normalizeEmploymentType(job.type),
+      employmentType: normalizeVacancyType(job.type),
       employmentTypeRaw: job.type?.trim() || undefined,
       externalJobId: String(job.id),
       firstSeenAt: publishedAt,

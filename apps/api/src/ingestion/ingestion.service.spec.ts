@@ -195,6 +195,8 @@ function createIngestionServiceFixture(options?: {
     { sourceType: "ashby", collect: async () => [] } as never,
     { sourceType: "inhire", collect: async () => [] } as never,
     { sourceType: "teamtailor", collect: async () => [] } as never,
+    { sourceType: "talentbrew", collect: async () => [] } as never,
+    { sourceType: "workday", collect: async () => [] } as never,
   );
 
   return {
@@ -716,6 +718,46 @@ test("IngestionService dispatches to the teamtailor adapter for teamtailor sourc
       "teamtailor",
       {
         sourceType: "teamtailor",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService dispatches to the talentbrew adapter for talentbrew sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "talentbrew" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "talentbrew",
+      {
+        sourceType: "talentbrew",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService dispatches to the workday adapter for workday sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "workday" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "workday",
+      {
+        sourceType: "workday",
         collect: async () => {
           collectCalls += 1;
           return [];

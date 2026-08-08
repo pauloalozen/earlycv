@@ -172,6 +172,8 @@ export default async function NewAdminSourcePage({
                       <option value="ashby">ashby</option>
                       <option value="inhire">inhire</option>
                       <option value="teamtailor">teamtailor</option>
+                      <option value="talentbrew">talentbrew</option>
+                      <option value="workday">workday</option>
                       <option value="solides">solides (sem adapter)</option>
                       <option value="pandape">pandape (sem adapter)</option>
                     </select>
@@ -216,7 +218,10 @@ export default async function NewAdminSourcePage({
                       https://jobs.lever.co/[empresa] · ashby:
                       https://jobs.ashbyhq.com/[empresa] · teamtailor:
                       https://[empresa].teamtailor.com · inhire:
-                      https://[empresa].inhire.app
+                      https://[empresa].inhire.app · talentbrew:
+                      https://carreiras.[empresa].com.br · workday:
+                      https://[empresa].[instancia].myworkdayjobs.com/[site]
+                      (ex: pt-BR/SantanderCareers)
                     </p>
                   </label>
 
@@ -397,6 +402,8 @@ export default async function NewAdminSourcePage({
                       <option value="ashby">ashby</option>
                       <option value="inhire">inhire</option>
                       <option value="teamtailor">teamtailor</option>
+                      <option value="talentbrew">talentbrew</option>
+                      <option value="workday">workday</option>
                       <option value="solides">solides (sem adapter)</option>
                       <option value="pandape">pandape (sem adapter)</option>
                     </select>
@@ -441,7 +448,10 @@ export default async function NewAdminSourcePage({
                       https://jobs.lever.co/[empresa] · ashby:
                       https://jobs.ashbyhq.com/[empresa] · teamtailor:
                       https://[empresa].teamtailor.com · inhire:
-                      https://[empresa].inhire.app
+                      https://[empresa].inhire.app · talentbrew:
+                      https://carreiras.[empresa].com.br · workday:
+                      https://[empresa].[instancia].myworkdayjobs.com/[site]
+                      (ex: pt-BR/SantanderCareers)
                     </p>
                   </label>
 

@@ -55,6 +55,8 @@ test("getSourceDefaults maps implemented API adapters to their own parserKey", (
     "ashby",
     "inhire",
     "teamtailor",
+    "talentbrew",
+    "workday",
   ] as const) {
     assert.deepEqual(getSourceDefaults(type), {
       crawlStrategy: "api",
@@ -183,6 +185,8 @@ test("parseManualAdapterType accepts allowed adapter types", () => {
   assert.equal(parseManualAdapterType("ashby"), "ashby");
   assert.equal(parseManualAdapterType("inhire"), "inhire");
   assert.equal(parseManualAdapterType("teamtailor"), "teamtailor");
+  assert.equal(parseManualAdapterType("talentbrew"), "talentbrew");
+  assert.equal(parseManualAdapterType("workday"), "workday");
 });
 
 test("parseManualAdapterType rejects empty and unknown adapter values", () => {
@@ -191,7 +195,7 @@ test("parseManualAdapterType rejects empty and unknown adapter values", () => {
     /Informe o tipo de adaptador/,
   );
   assert.throws(
-    () => parseManualAdapterType("workday"),
+    () => parseManualAdapterType("solides"),
     /Tipo de adaptador invalido/,
   );
 });

@@ -10,7 +10,9 @@ import {
   GupyAdapter,
   InHireAdapter,
   LeverAdapter,
+  TalentbrewAdapter,
   TeamtailorAdapter,
+  WorkdayAdapter,
 } from "./adapters";
 import { AdminIngestionImportService } from "./admin-ingestion-import.service";
 import { CrawlerDiscardController } from "./crawler-discard.controller";
@@ -79,6 +81,8 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
     AshbyAdapter,
     InHireAdapter,
     TeamtailorAdapter,
+    TalentbrewAdapter,
+    WorkdayAdapter,
   ],
   exports: [IngestionService, SemanticFilterService],
 })

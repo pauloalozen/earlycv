@@ -157,7 +157,9 @@ export type ManualAdapterType =
   | "lever"
   | "ashby"
   | "inhire"
-  | "teamtailor";
+  | "teamtailor"
+  | "talentbrew"
+  | "workday";
 
 export type ManualRunStatus =
   | "queued"

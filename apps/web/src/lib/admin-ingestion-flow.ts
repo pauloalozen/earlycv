@@ -7,6 +7,8 @@ export type JobSourceTypeOption =
   | "ashby"
   | "inhire"
   | "teamtailor"
+  | "talentbrew"
+  | "workday"
   | "solides"
   | "pandape";
 
@@ -23,6 +25,8 @@ export const JOB_SOURCE_TYPE_OPTIONS: JobSourceTypeOption[] = [
   "ashby",
   "inhire",
   "teamtailor",
+  "talentbrew",
+  "workday",
   "solides",
   "pandape",
 ];
@@ -66,6 +70,8 @@ export const MANUAL_ADAPTER_TYPES = [
   "ashby",
   "inhire",
   "teamtailor",
+  "talentbrew",
+  "workday",
 ] as const;
 
 export type ManualAdapterType = (typeof MANUAL_ADAPTER_TYPES)[number];
@@ -165,6 +171,22 @@ export function getSourceDefaults(sourceType: string): SourceDefaults {
       crawlStrategy: "api",
       parserKey: "teamtailor",
       sourceType: "teamtailor",
+    };
+  }
+
+  if (sourceType === "talentbrew") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "talentbrew",
+      sourceType: "talentbrew",
+    };
+  }
+
+  if (sourceType === "workday") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "workday",
+      sourceType: "workday",
     };
   }
 

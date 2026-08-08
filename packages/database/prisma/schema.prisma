@@ -67,6 +67,7 @@ enum JobSourceType {
   solides
   pandape
   teamtailor
+  talentbrew
 }
 
 enum CrawlStrategy {

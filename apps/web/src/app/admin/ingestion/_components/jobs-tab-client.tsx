@@ -338,6 +338,8 @@ function CreateJobModal({
                       <option value="ashby">ashby</option>
                       <option value="inhire">inhire</option>
                       <option value="teamtailor">teamtailor</option>
+                      <option value="talentbrew">talentbrew</option>
+                      <option value="workday">workday</option>
                     </select>
                   )}
                 </label>

@@ -14,9 +14,9 @@ const LEGACY_CSV_HEADER = [
 const CSV_HEADER = [...LEGACY_CSV_HEADER, "tipo_adapter"];
 
 // Tipos de adapter que a coluna tipo_adapter aceita explicitamente. Os
-// demais valores do enum JobSourceType (workday, kenoby, successfactors,
-// solides, pandape) ainda nao tem adapter implementado — aceitar aqui so
-// criaria fonte que nunca roda.
+// demais valores do enum JobSourceType (kenoby, successfactors, solides,
+// pandape) ainda nao tem adapter implementado — aceitar aqui so criaria
+// fonte que nunca roda.
 const IMPORTABLE_ADAPTER_TYPES = [
   "gupy",
   "custom_html",
@@ -26,6 +26,8 @@ const IMPORTABLE_ADAPTER_TYPES = [
   "ashby",
   "inhire",
   "teamtailor",
+  "talentbrew",
+  "workday",
 ] as const;
 type ImportableAdapterType = (typeof IMPORTABLE_ADAPTER_TYPES)[number];
 
