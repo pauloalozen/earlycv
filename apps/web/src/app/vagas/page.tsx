@@ -1323,7 +1323,13 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
             marginBottom: 14,
           }}
         >
-          <div>
+          <div className="results-count">
+            <style>{`
+              @media (max-width: 640px) {
+                .results-count { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px; width: 100%; }
+                .results-count > p { margin: 0; }
+              }
+            `}</style>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
               <span
                 style={{
