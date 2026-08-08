@@ -1361,7 +1361,8 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
-                flexWrap: "wrap",
+                flexWrap: "nowrap",
+                minWidth: 0,
               }}
             >
               <style>{`
@@ -1379,6 +1380,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 7,
+                  flexShrink: 0,
                   borderRadius: 99,
                   background: excludeAnalyzed ? "#0a0a0a" : "#fafaf6",
                   color: excludeAnalyzed ? "#fafaf6" : "#3a3a38",
@@ -1426,7 +1428,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
 
               <details
                 className="vagas-filter-dropdown"
-                style={{ position: "relative" }}
+                style={{ position: "relative", minWidth: 0, flex: "1 1 auto" }}
               >
                 <style>{`
                 .vagas-filter-dropdown > summary::-webkit-details-marker { display: none; }
@@ -1435,16 +1437,16 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                   style={{
                     listStyle: "none",
                     cursor: "pointer",
-                    display: "inline-flex",
+                    display: "flex",
                     alignItems: "center",
                     gap: 7,
                     borderRadius: 99,
                     background: "#fafaf6",
                     color: "#3a3a38",
                     border: "1px solid rgba(10,10,10,0.1)",
-                    whiteSpace: "nowrap",
                     fontFamily: GEIST,
                     minWidth: 0,
+                    boxSizing: "border-box",
                   }}
                 >
                   <span
@@ -1456,12 +1458,13 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                       flexShrink: 0,
                     }}
                   >
-                    ordenar por
+                    ordenar
                   </span>
                   <span
                     style={{
                       fontWeight: 500,
-                      maxWidth: 120,
+                      flex: "1 1 auto",
+                      minWidth: 0,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
@@ -1475,6 +1478,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                     height="10"
                     viewBox="0 0 24 24"
                     fill="none"
+                    style={{ flexShrink: 0 }}
                   >
                     <title>Abrir</title>
                     <path
