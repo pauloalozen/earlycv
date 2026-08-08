@@ -405,6 +405,36 @@ test("GreenhouseAdapter retries once on 429 and succeeds", async () => {
   }
 });
 
+test("GreenhouseAdapter extracts the slug from the public job-boards.greenhouse.io URL, not just the API URL", async () => {
+  const fetchMock = createFetchMock([
+    {
+      json: {
+        jobs: [{ id: 1, title: "Vaga", location: { name: "Remote" } }],
+        meta: { total: 1 },
+      },
+    },
+  ]);
+
+  try {
+    const adapter = new GreenhouseAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+    const observations = await adapter.collect(
+      createJobSourceContext("https://job-boards.greenhouse.io/vtex"),
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]?.canonicalKey, "greenhouse:vtex:1");
+    assert.equal(
+      fetchMock.calls[0]?.toString(),
+      "https://boards-api.greenhouse.io/v1/boards/vtex/jobs?content=true",
+    );
+  } finally {
+    fetchMock.restore();
+  }
+});
+
 test("GreenhouseAdapter throws an actionable error for an invalid sourceUrl", async () => {
   const adapter = new GreenhouseAdapter(
     createSemanticFilterMock().semanticFilter,

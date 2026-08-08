@@ -74,14 +74,26 @@ function normalizeWorkModel(workplaceType?: string | null, isRemote?: boolean | 
   return undefined;
 }
 
+// Aceita tanto a URL da API (api.ashbyhq.com/posting-api/job-board/{slug})
+// quanto a pagina publica que a pessoa encontra e cola no cadastro
+// (jobs.ashbyhq.com/{slug}) — mesmo slug, muda so onde ele aparece na URL.
 function extractSlug(sourceUrl: string) {
-  const match = sourceUrl.match(/\/job-board\/([^/?]+)/);
-  if (!match?.[1]) {
-    throw new Error(
-      `Invalid Ashby sourceUrl: ${sourceUrl} (expected .../posting-api/job-board/{slug})`,
-    );
+  const apiMatch = sourceUrl.match(/\/job-board\/([^/?]+)/);
+  if (apiMatch?.[1]) return apiMatch[1];
+
+  try {
+    const parsed = new URL(sourceUrl);
+    if (parsed.hostname.toLowerCase() === "jobs.ashbyhq.com") {
+      const [slug] = parsed.pathname.split("/").filter(Boolean);
+      if (slug) return slug;
+    }
+  } catch {
+    // cai no throw abaixo
   }
-  return match[1];
+
+  throw new Error(
+    `Invalid Ashby sourceUrl: ${sourceUrl} (expected .../posting-api/job-board/{slug} or jobs.ashbyhq.com/{slug})`,
+  );
 }
 
 function normalizeDate(value?: string | null) {

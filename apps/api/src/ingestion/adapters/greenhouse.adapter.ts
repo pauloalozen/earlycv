@@ -78,14 +78,28 @@ function inferWorkModel(location: string, title: string, description: string) {
   return undefined;
 }
 
+// Aceita tanto a URL da API (boards-api.greenhouse.io/v1/boards/{slug}/jobs)
+// quanto a pagina publica que a pessoa realmente encontra e cola no
+// cadastro (job-boards.greenhouse.io/{slug} ou boards.greenhouse.io/{slug})
+// — o slug e o mesmo nos dois casos, so muda onde ele aparece na URL.
 function extractSlug(sourceUrl: string) {
-  const match = sourceUrl.match(/\/boards\/([^/]+)\/jobs/);
-  if (!match?.[1]) {
-    throw new Error(
-      `Invalid Greenhouse sourceUrl: ${sourceUrl} (expected .../boards/{slug}/jobs)`,
-    );
+  const apiMatch = sourceUrl.match(/\/boards\/([^/]+)\/jobs/);
+  if (apiMatch?.[1]) return apiMatch[1];
+
+  try {
+    const parsed = new URL(sourceUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === "job-boards.greenhouse.io" || hostname === "boards.greenhouse.io") {
+      const [slug] = parsed.pathname.split("/").filter(Boolean);
+      if (slug) return slug;
+    }
+  } catch {
+    // cai no throw abaixo
   }
-  return match[1];
+
+  throw new Error(
+    `Invalid Greenhouse sourceUrl: ${sourceUrl} (expected .../boards/{slug}/jobs or job-boards.greenhouse.io/{slug})`,
+  );
 }
 
 function normalizeDate(value?: string | null) {

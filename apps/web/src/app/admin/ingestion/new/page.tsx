@@ -209,12 +209,14 @@ export default async function NewAdminSourcePage({
                       type="url"
                     />
                     <p className="text-xs text-stone-500">
-                      gupy: https://[empresa].gupy.io/ · greenhouse:
-                      https://boards-api.greenhouse.io/v1/boards/[empresa]/jobs
-                      · lever: https://api.lever.co/v0/postings/[empresa] ·
-                      ashby: https://api.ashbyhq.com/posting-api/job-board/[empresa]
-                      · teamtailor: https://[empresa].teamtailor.com/jobs.json
-                      · inhire: https://[empresa].inhire.app
+                      Pode colar a URL publica que voce encontra navegando —
+                      o slug da empresa e extraido automaticamente. gupy:
+                      https://[empresa].gupy.io/ · greenhouse:
+                      https://job-boards.greenhouse.io/[empresa] · lever:
+                      https://jobs.lever.co/[empresa] · ashby:
+                      https://jobs.ashbyhq.com/[empresa] · teamtailor:
+                      https://[empresa].teamtailor.com · inhire:
+                      https://[empresa].inhire.app
                     </p>
                   </label>
 
@@ -432,12 +434,14 @@ export default async function NewAdminSourcePage({
                       type="url"
                     />
                     <p className="text-xs text-stone-500">
-                      gupy: https://[empresa].gupy.io/ · greenhouse:
-                      https://boards-api.greenhouse.io/v1/boards/[empresa]/jobs
-                      · lever: https://api.lever.co/v0/postings/[empresa] ·
-                      ashby: https://api.ashbyhq.com/posting-api/job-board/[empresa]
-                      · teamtailor: https://[empresa].teamtailor.com/jobs.json
-                      · inhire: https://[empresa].inhire.app
+                      Pode colar a URL publica que voce encontra navegando —
+                      o slug da empresa e extraido automaticamente. gupy:
+                      https://[empresa].gupy.io/ · greenhouse:
+                      https://job-boards.greenhouse.io/[empresa] · lever:
+                      https://jobs.lever.co/[empresa] · ashby:
+                      https://jobs.ashbyhq.com/[empresa] · teamtailor:
+                      https://[empresa].teamtailor.com · inhire:
+                      https://[empresa].inhire.app
                     </p>
                   </label>
 

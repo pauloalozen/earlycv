@@ -373,6 +373,31 @@ test("AshbyAdapter retries once on 429 and succeeds", async () => {
   }
 });
 
+test("AshbyAdapter extracts the slug from the public jobs.ashbyhq.com URL, not just the API URL", async () => {
+  const fetchMock = createFetchMock([
+    { json: { jobs: [{ id: "1", title: "Vaga" }] } },
+  ]);
+
+  try {
+    const adapter = new AshbyAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+    const observations = await adapter.collect(
+      createJobSourceContext("https://jobs.ashbyhq.com/nubank"),
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]?.canonicalKey, "ashby:nubank:1");
+    assert.equal(
+      fetchMock.calls[0]?.toString(),
+      "https://api.ashbyhq.com/posting-api/job-board/nubank",
+    );
+  } finally {
+    fetchMock.restore();
+  }
+});
+
 test("AshbyAdapter throws an actionable error for an invalid sourceUrl", async () => {
   const adapter = new AshbyAdapter(
     createSemanticFilterMock().semanticFilter,
