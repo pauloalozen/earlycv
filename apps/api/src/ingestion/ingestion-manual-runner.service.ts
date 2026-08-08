@@ -263,6 +263,20 @@ export class IngestionManualRunnerService {
 
       let sourceFailed = false;
 
+      // Uma fonte grande (ex: Workday paginando centenas de vagas) pode
+      // levar bem mais que o TTL do lock externo (5min) pra terminar um
+      // unico item — sem renovar durante a espera, o lock expira no meio,
+      // um outro tick do cron assume o batch e finaliza cedo (ver guarda
+      // de itens em andamento logo abaixo, que cobre o caso residual).
+      // Isso aqui evita que a corrida aconteca na maioria das vezes.
+      const lockHeartbeat = setInterval(() => {
+        void this.lockRepository.acquire(
+          MANUAL_RUNNER_LOCK_ID,
+          owner,
+          MANUAL_RUNNER_LOCK_TTL_MS,
+        );
+      }, Math.floor(MANUAL_RUNNER_LOCK_TTL_MS / 2));
+
       try {
         const result = await this.ingestionService.runJobSource(
           item.jobSourceId,
@@ -333,6 +347,7 @@ export class IngestionManualRunnerService {
           `manual ingestion item failed ${item.id}: ${error instanceof Error ? error.message : "unknown"}`,
         );
       } finally {
+        clearInterval(lockHeartbeat);
         await this.lockRepository.release(itemLockId, itemOwner);
       }
 
@@ -356,6 +371,21 @@ export class IngestionManualRunnerService {
 
     if (latestRun.cancelRequestedAt || latestRun.status === "cancelling") {
       await this.finalizeCancelledRun(batchRunId, latestRun.id);
+      return;
+    }
+
+    // Essa invocacao pode ter rodado com o lock externo ja expirado (ver
+    // heartbeat acima) enquanto outra ainda segura um item "running" de
+    // verdade — o for loop so pula itens que nao consegue reivindicar, ele
+    // nunca espera o dono real terminar. Fechar o lote aqui contaria tudo
+    // como 0 mesmo com trabalho em andamento (bug real visto na Sprint
+    // 6C: Workday demorando mais que o TTL do lock). Quem de fato
+    // terminar o ultimo item vai cair nesse mesmo trecho depois e
+    // finalizar com a contagem certa.
+    const inFlightCount = await this.database.ingestionBatchItem.count({
+      where: { batchRunId, status: { in: ["queued", "running"] } },
+    });
+    if (inFlightCount > 0) {
       return;
     }
 

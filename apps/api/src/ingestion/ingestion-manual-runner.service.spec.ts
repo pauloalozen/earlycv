@@ -152,6 +152,20 @@ function createServiceFixture(
             );
           })
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
+      count: async ({
+        where,
+      }: {
+        where: { batchRunId: string; status?: { in: string[] } | string };
+      }) =>
+        Array.from(items.values())
+          .filter((item) => item.batchRunId === where.batchRunId)
+          .filter((item) => {
+            if (!where.status) return true;
+            if (typeof where.status === "string") {
+              return item.status === where.status;
+            }
+            return where.status.in.includes(item.status);
+          }).length,
       update: async ({
         where,
         data,
@@ -192,6 +206,8 @@ function createServiceFixture(
     },
   };
 
+  const slowJobResolvers = new Map<string, () => void>();
+
   const ingestionService = {
     runJobSource: async (jobSourceId: string) => {
       runJobSourceCalls.push(jobSourceId);
@@ -204,6 +220,12 @@ function createServiceFixture(
           id: `run-${jobSourceId}`,
           status: "failed" as const,
         };
+      }
+      if (jobSourceId.startsWith("source-slow")) {
+        await new Promise<void>((resolve) => {
+          slowJobResolvers.set(jobSourceId, resolve);
+        });
+        return { id: `run-${jobSourceId}`, status: "completed" as const };
       }
       const run = runs.get("batch-cancel");
       if (run && jobSourceId === "source-cancel-1") {
@@ -231,6 +253,9 @@ function createServiceFixture(
   return {
     items,
     lockRepository,
+    resolveSlowJob(jobSourceId: string) {
+      slowJobResolvers.get(jobSourceId)?.();
+    },
     runJobSourceCalls,
     runs,
     service,
@@ -679,10 +704,85 @@ test("runner does not re-mark already running item that started recently", async
   assert.equal(item?.status, "running");
   assert.equal(item?.startedAt?.toISOString(), startedAt.toISOString());
   assert.deepEqual(runJobSourceCalls, []);
-  assert.equal(run?.status, "completed");
+  // Bug real da Sprint 6C: essa invocacao nao conseguiu reivindicar o
+  // item (genuinamente em andamento em outro processo), mas finalizava o
+  // lote como "completed" com contagem 0 mesmo assim. O lote precisa
+  // ficar em aberto ate quem realmente estiver terminando o item chegar
+  // la e finalizar com a contagem certa.
+  assert.equal(run?.status, "running");
   assert.equal(run?.succeededCount, 0);
   assert.equal(run?.failedCount, 0);
   assert.equal(run?.skippedCount, 0);
+});
+
+// Reproduz o bug real da Sprint 6C: o Workday passou a demorar mais que
+// o TTL do lock externo (5min) pra processar uma fonte grande. O lock
+// expirava no meio do item, um tick concorrente do cron assumia o lote,
+// via o item "running" (nao conseguia reivindicar) e mesmo assim fechava
+// o lote como "completed" com contagem 0 — a vaga era ingerida de
+// verdade minutos depois, mas a UI ja mostrava o lote errado havia tempo.
+test("runner does not close the batch as completed while another invocation is still mid-item", async () => {
+  const {
+    items,
+    resolveSlowJob,
+    runJobSourceCalls,
+    runs,
+    service,
+    setBeforeMarkRunning,
+  } = createServiceFixture();
+
+  runs.set("batch-slow-race", {
+    id: "batch-slow-race",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-slow", {
+    id: "item-slow",
+    batchRunId: "batch-slow-race",
+    jobSourceId: "source-slow-1",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  let overlapFired = false;
+  let overlapPromise: Promise<void> | undefined;
+  setBeforeMarkRunning(() => {
+    if (overlapFired) return;
+    overlapFired = true;
+    // Simula o tick do cron que chega enquanto o item ainda esta sendo
+    // processado pela primeira invocacao (lock externo ja expirado).
+    overlapPromise = service.processNextBatchRun();
+  });
+
+  const firstRun = service.processNextBatchRun();
+
+  // Deixa a invocacao concorrente rodar ate o fim antes de liberar o job
+  // "lento" — ela precisa desistir de fechar o lote.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await overlapPromise;
+
+  assert.equal(runs.get("batch-slow-race")?.status, "running");
+  assert.equal(runs.get("batch-slow-race")?.succeededCount, 0);
+  assert.equal(items.get("item-slow")?.status, "running");
+
+  resolveSlowJob("source-slow-1");
+  await firstRun;
+
+  assert.deepEqual(runJobSourceCalls, ["source-slow-1"]);
+  assert.equal(items.get("item-slow")?.status, "completed");
+  assert.equal(runs.get("batch-slow-race")?.status, "completed");
+  assert.equal(runs.get("batch-slow-race")?.succeededCount, 1);
+  assert.equal(runs.get("batch-slow-race")?.failedCount, 0);
 });
 
 test("runner recovers an item stuck running from a dead process and reprocesses it", async () => {
