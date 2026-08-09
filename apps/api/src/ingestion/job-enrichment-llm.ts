@@ -1,7 +1,7 @@
 import { ContractType, JobArea, SeniorityLevel } from "@prisma/client";
 import type OpenAI from "openai";
 
-export const JOB_ENRICHMENT_PROMPT_VERSION = "2026-08-08.v3";
+export const JOB_ENRICHMENT_PROMPT_VERSION = "2026-08-08.v4";
 
 const DESCRIPTION_MAX_CHARS = 6000;
 const CAREER_FINGERPRINT_MAX_ITEMS = 6;
@@ -29,7 +29,7 @@ export type JobEnrichmentLlmResult = {
   travelRequired: boolean;
 };
 
-const SYSTEM_PROMPT = `Você é um sistema de classificação de vagas de emprego para um radar de oportunidades tech.
+export const SYSTEM_PROMPT = `Você é um sistema de classificação de vagas de emprego para um radar de oportunidades tech.
 
 Analise a vaga abaixo e retorne EXCLUSIVAMENTE um JSON válido no formato especificado.
 
@@ -44,7 +44,26 @@ QA_TEST: QA, quality assurance, teste, automação de testes
 PROJECT_AGILE: scrum master, agile coach, gestão de projetos tech, PMO tech
 ARCHITECTURE: arquiteto de software, solutions architect, enterprise architect
 LEADERSHIP: tech lead com gestão, engineering manager, head, CTO, CIO, diretor tech
+GROWTH_MARKETING: growth hacker, growth analyst, performance marketing, SEO specialist,
+SEM, CRO, CRM analyst, marketing ops, marketing digital, lifecycle marketing,
+retention specialist, SDR (Sales Development Representative), BDR,
+inbound/outbound sales em empresa tech, revenue operations, demand generation
+BUSINESS_ANALYTICS: business analyst, business intelligence analyst, revenue ops,
+pricing analyst, market intelligence, strategic analyst, planning analyst,
+commercial analyst, sales ops, go-to-market analyst
+CX_DIGITAL: customer experience designer, CX analyst, conversational designer,
+UX researcher, service designer, customer success (em contexto de produto digital),
+voice of customer analyst
 OTHER: qualquer coisa que não se encaixe nas categorias acima
+
+## Regras de classificação para casos ambíguos
+- SDR/BDR: só classifica como GROWTH_MARKETING se for em empresa tech/digital.
+  Em empresa tradicional (banco, indústria), classifica como OTHER.
+- Business Analyst: se focado em dados/produto → BUSINESS_ANALYTICS.
+  Se focado em requisitos de software → SOFTWARE_ENGINEERING.
+  Se focado em processos de negócio tradicionais → OTHER.
+- Customer Success: só CX_DIGITAL se o trabalho envolve produto digital diretamente.
+  CS comercial/vendas em empresa não-tech → OTHER.
 
 ## Formato de resposta (JSON estrito, sem texto fora do JSON)
 {
