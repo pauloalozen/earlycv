@@ -6,6 +6,7 @@ import {
   HttpCode,
   Inject,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -17,6 +18,7 @@ import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import { IngestionService } from "../ingestion/ingestion.service";
+import { BulkUpdateScheduleDto } from "./dto/bulk-update-schedule.dto";
 import { CreateJobSourceDto } from "./dto/create-job-source.dto";
 // biome-ignore lint/style/useImportType: DTO precisa de import em runtime para reflection do NestJS ValidationPipe
 import { ListJobSourcesDto } from "./dto/list-job-sources.dto";
@@ -74,6 +76,20 @@ export class JobSourcesController {
     dto: ListJobSourcesDto,
   ) {
     return this.jobSourcesService.listPaginated(dto);
+  }
+
+  @Patch("bulk-schedule")
+  @HttpCode(200)
+  bulkUpdateSchedule(
+    @Body(
+      new ValidationPipe({
+        ...jobSourcesValidationOptions,
+        expectedType: BulkUpdateScheduleDto,
+      }),
+    )
+    dto: BulkUpdateScheduleDto,
+  ) {
+    return this.jobSourcesService.bulkUpdateSchedule(dto);
   }
 
   @Get(":id")

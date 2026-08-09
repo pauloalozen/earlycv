@@ -37,6 +37,7 @@ type SearchParams = Promise<{
   enrichStatus?: string;
   search?: string;
   sourceId?: string;
+  sourceType?: string;
 }>;
 
 type AdminIngestionPageProps = {
@@ -104,6 +105,7 @@ export default async function AdminIngestionPage({
     message,
     search,
     sourceId,
+    sourceType,
     status,
     tab,
     vagaQuery,
@@ -133,7 +135,9 @@ export default async function AdminIngestionPage({
   try {
     const [sourcesResult, sourcesFirstPageResult] = await Promise.all([
       listJobSources().catch((e: unknown) => e),
-      listJobSourcesPaginated({ pageSize: 50 }).catch((e: unknown) => e),
+      listJobSourcesPaginated({ pageSize: 50, typeFilter: sourceType }).catch(
+        (e: unknown) => e,
+      ),
     ]);
 
     const sources =
@@ -231,7 +235,10 @@ export default async function AdminIngestionPage({
             )}
             <IngestionDashboardCards />
             {sourcesFirstPage && (
-              <FontesTableClient initialData={sourcesFirstPage} />
+              <FontesTableClient
+                initialData={sourcesFirstPage}
+                initialTypeFilter={sourceType}
+              />
             )}
           </div>
         )}

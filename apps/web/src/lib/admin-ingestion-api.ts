@@ -580,6 +580,23 @@ export async function updateJobSource(
   });
 }
 
+export async function bulkUpdateJobSourceSchedule(
+  payload: { sourceType: string; scheduleEnabled: boolean },
+  token?: string,
+) {
+  return apiRequest<{
+    count: number;
+    scheduleEnabled: boolean;
+    sourceType: string;
+  }>("/job-sources/bulk-schedule", token, {
+    body: JSON.stringify(payload),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "PATCH",
+  });
+}
+
 export async function deleteCompany(companyId: string, token?: string) {
   return apiRequest<{ ok: true }>(`/companies/${companyId}`, token, {
     method: "DELETE",

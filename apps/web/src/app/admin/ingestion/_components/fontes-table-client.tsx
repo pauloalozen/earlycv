@@ -12,6 +12,7 @@ import {
   AT,
 } from "@/app/admin/_components/admin-primitives";
 import {
+  bulkToggleScheduleEnabledAction,
   deleteJobSourceAction,
   importCompanySourcesCsvAction,
   runJobSourceAction,
@@ -48,6 +49,7 @@ type PagedResult = {
 
 type Props = {
   initialData: PagedResult;
+  initialTypeFilter?: string;
 };
 
 type SortBy =
@@ -192,21 +194,22 @@ function RunStatusBadge({ run }: { run?: IngestionRunSummary | null }) {
   return <AdminPill tone="danger">falhou</AdminPill>;
 }
 
-export function FontesTableClient({ initialData }: Props) {
+export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState(initialTypeFilter ?? "");
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<SortBy | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [result, setResult] = useState<PagedResult>(initialData);
   const [togglePending, setTogglePending] = useState(false);
+  const [bulkPending, setBulkPending] = useState(false);
 
   const isFirstRender = useRef(true);
   const paramsRef = useRef({
     search: "",
     statusFilter: "",
-    typeFilter: "",
+    typeFilter: initialTypeFilter ?? "",
     page: 1,
     sortBy: null as SortBy | null,
     sortDir: "asc" as SortDir,
@@ -305,6 +308,32 @@ export function FontesTableClient({ initialData }: Props) {
     setPage(1);
   }
 
+  async function handleBulkToggle(nextEnabled: boolean) {
+    if (!typeFilter) return;
+    const verb = nextEnabled ? "ativar" : "desativar";
+    const confirmed = window.confirm(
+      `Isso vai ${verb} o agendamento de ${total} fonte(s) do adapter "${typeFilter}". Confirma?`,
+    );
+    if (!confirmed) return;
+
+    setBulkPending(true);
+    try {
+      const fd = new FormData();
+      fd.set("sourceType", typeFilter);
+      fd.set("scheduleEnabled", String(nextEnabled));
+      fd.set("redirectPath", redirectPath);
+      const response = await bulkToggleScheduleEnabledAction(fd);
+      if (response) {
+        window.alert(
+          `Agendamento ${nextEnabled ? "ativado" : "desativado"} em ${response.count} fonte(s) do adapter "${typeFilter}".`,
+        );
+      }
+      await fetchSources(paramsRef.current);
+    } finally {
+      setBulkPending(false);
+    }
+  }
+
   function handleSort(column: SortBy) {
     const nextDir = sortBy === column && sortDir === "asc" ? "desc" : "asc";
     setSortDir(nextDir);
@@ -398,6 +427,26 @@ export function FontesTableClient({ initialData }: Props) {
           <option value="solides">solides</option>
           <option value="pandape">pandape</option>
         </select>
+        {typeFilter && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              type="button"
+              disabled={bulkPending}
+              onClick={() => handleBulkToggle(true)}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              Ativar agendamento ({typeFilter})
+            </button>
+            <button
+              type="button"
+              disabled={bulkPending}
+              onClick={() => handleBulkToggle(false)}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              Desativar agendamento ({typeFilter})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Counter + CSV import */}
