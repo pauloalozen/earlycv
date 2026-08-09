@@ -117,6 +117,9 @@ const AREA_KEYWORDS: Record<JobArea, string[]> = {
   [JobArea.PROJECT_AGILE]: [],
   [JobArea.ARCHITECTURE]: [],
   [JobArea.LEADERSHIP]: [],
+  [JobArea.GROWTH_MARKETING]: [],
+  [JobArea.BUSINESS_ANALYTICS]: [],
+  [JobArea.CX_DIGITAL]: [],
   [JobArea.OTHER]: [],
 };
 
