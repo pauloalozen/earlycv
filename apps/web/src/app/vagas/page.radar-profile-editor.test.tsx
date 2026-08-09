@@ -144,7 +144,7 @@ function containsTestId(node: unknown, testId: string): boolean {
   return false;
 }
 
-describe("/vagas — card de edição de perfil no Radar", () => {
+describe("/vagas — botão de ajuste de perfil do Radar (abre modal)", () => {
   const previousGhost = process.env.NEXT_PUBLIC_JOBS_GHOST_MODE;
 
   beforeEach(() => {
@@ -175,7 +175,7 @@ describe("/vagas — card de edição de perfil no Radar", () => {
     process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = previousGhost;
   });
 
-  it("aparece para usuário logado com UserRadarProfile existente", async () => {
+  it("botão de ajuste de áreas aparece para usuário logado com UserRadarProfile existente", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
     mocks.getMyRadarProfile.mockResolvedValue(buildRadarProfile());
 

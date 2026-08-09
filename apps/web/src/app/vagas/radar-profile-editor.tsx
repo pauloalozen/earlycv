@@ -1,11 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { updateMyRadarProfile } from "@/lib/radar-api";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
-const MONO = "var(--font-geist-mono), monospace";
 
 // Os 13 valores editáveis do enum JobArea — OTHER fica de fora porque não
 // faz sentido o usuário se autodeclarar "geral".
@@ -46,7 +46,7 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
         bottom: 20,
         left: "50%",
         transform: "translateX(-50%)",
-        zIndex: 100,
+        zIndex: 220,
         background: "#0a0a0a",
         color: "#fafaf6",
         borderRadius: 10,
@@ -88,12 +88,101 @@ export function RadarProfileEditor({
   initialSeniority: string;
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+  const [shouldRender, setShouldRender] = useState(false);
+  const [visible, setVisible] = useState(false);
   const [areas, setAreas] = useState<string[]>(initialAreas);
   const [seniority, setSeniority] = useState(
     initialSeniority in SENIORITY_LABELS ? initialSeniority : "UNKNOWN",
   );
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
+  const headingId = useId();
+  const descriptionId = useId();
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      setShouldRender(true);
+      const timeout = setTimeout(() => setVisible(true), 10);
+      return () => clearTimeout(timeout);
+    }
+    setVisible(false);
+    const timeout = setTimeout(() => setShouldRender(false), 220);
+    return () => clearTimeout(timeout);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeModal();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (!isClient || !open || !visible) return;
+    lastFocusedRef.current = document.activeElement as HTMLElement | null;
+    const root = dialogRef.current;
+    if (!root) return;
+    const first = root.querySelector<HTMLElement>(
+      "button:not([disabled]), input:not([disabled]), select:not([disabled])",
+    );
+    first?.focus();
+  }, [isClient, open, visible]);
+
+  useEffect(() => {
+    if (!isClient || !open || !visible) return;
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const root = dialogRef.current;
+      if (!root) return;
+      const focusables = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleTab);
+    return () => document.removeEventListener("keydown", handleTab);
+  }, [isClient, open, visible]);
+
+  useEffect(() => {
+    if (open) return;
+    const prevFocused = lastFocusedRef.current;
+    if (prevFocused?.isConnected) prevFocused.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!isClient || !open) return;
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+    };
+  }, [isClient, open]);
 
   function toggleArea(area: string) {
     setAreas((prev) =>
@@ -101,142 +190,274 @@ export function RadarProfileEditor({
     );
   }
 
-  function handleSave() {
-    startTransition(async () => {
-      const ok = await updateMyRadarProfile({ areas, seniority });
-      if (ok) {
-        setToast("Perfil atualizado");
-        router.refresh();
-      } else {
-        setToast("Não foi possível salvar. Tente novamente.");
-      }
-    });
+  function openModal() {
+    setAreas(initialAreas);
+    setSeniority(
+      initialSeniority in SENIORITY_LABELS ? initialSeniority : "UNKNOWN",
+    );
+    setOpen(true);
+  }
+
+  function closeModal() {
+    if (pending) return;
+    setOpen(false);
+  }
+
+  async function handleSave() {
+    setPending(true);
+    const ok = await updateMyRadarProfile({ areas, seniority });
+    setPending(false);
+    if (ok) {
+      setOpen(false);
+      setToast("Radar recalibrado");
+      router.refresh();
+    } else {
+      setToast("Não foi possível salvar. Tente novamente.");
+    }
   }
 
   return (
-    <div
-      data-testid="radar-profile-editor"
-      style={{
-        background: "#fafaf6",
-        border: "1px solid rgba(10,10,10,0.08)",
-        borderRadius: 14,
-        padding: "20px 22px",
-        marginBottom: 24,
-        fontFamily: GEIST,
-      }}
-    >
-      <p
-        style={{
-          fontFamily: MONO,
-          fontSize: 10.5,
-          color: "#8a8a85",
-          letterSpacing: 0.4,
-          margin: "0 0 14px",
-        }}
-      >
-        SEU PERFIL NO RADAR
-      </p>
-
-      <p
-        style={{
-          fontSize: 12,
-          fontWeight: 500,
-          color: "#3a3a38",
-          margin: "0 0 8px",
-        }}
-      >
-        Áreas
-      </p>
-      <div
-        style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}
-      >
-        {Object.entries(AREA_LABELS).map(([value, label]) => {
-          const selected = areas.includes(value);
-          return (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => toggleArea(value)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                background: selected ? "#0a0a0a" : "#fff",
-                color: selected ? "#fafaf6" : "#3a3a38",
-                border: `1px solid ${selected ? "#0a0a0a" : "rgba(10,10,10,0.12)"}`,
-                borderRadius: 99,
-                padding: "6px 12px",
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: "pointer",
-                fontFamily: GEIST,
-              }}
-            >
-              {label}
-              {selected ? <span aria-hidden>×</span> : null}
-            </button>
-          );
-        })}
-      </div>
-
-      <p
-        style={{
-          fontSize: 12,
-          fontWeight: 500,
-          color: "#3a3a38",
-          margin: "0 0 8px",
-        }}
-      >
-        Senioridade
-      </p>
-      <select
-        aria-label="Senioridade"
-        value={seniority}
-        onChange={(e) => setSeniority(e.target.value)}
-        style={{
-          display: "block",
-          width: "100%",
-          maxWidth: 240,
-          background: "#fff",
-          border: "1px solid rgba(10,10,10,0.12)",
-          borderRadius: 8,
-          padding: "9px 12px",
-          fontSize: 13,
-          color: "#0a0a0a",
-          fontFamily: GEIST,
-          marginBottom: 18,
-        }}
-      >
-        {Object.entries(SENIORITY_LABELS).map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </select>
-
+    <>
       <button
         type="button"
-        data-testid="radar-profile-save-btn"
-        onClick={handleSave}
-        disabled={pending}
+        data-testid="radar-profile-trigger-btn"
+        onClick={openModal}
         style={{
-          background: "#0a0a0a",
-          color: "#fafaf6",
-          border: "none",
-          borderRadius: 8,
-          padding: "10px 18px",
-          fontSize: 13,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          background: "transparent",
+          color: "#5a5a55",
+          border: "1px solid rgba(10,10,10,0.12)",
+          borderRadius: 99,
+          padding: "6px 12px",
+          fontSize: 12,
           fontWeight: 500,
-          cursor: pending ? "default" : "pointer",
-          opacity: pending ? 0.7 : 1,
+          cursor: "pointer",
           fontFamily: GEIST,
         }}
       >
-        {pending ? "Salvando..." : "Salvar preferências"}
+        <span aria-hidden>⚙</span>
+        Ajustar áreas de oportunidade
       </button>
 
+      {isClient && shouldRender
+        ? createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={headingId}
+              aria-describedby={descriptionId}
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 200,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "16px",
+                opacity: visible ? 1 : 0,
+                transition: "opacity 200ms ease",
+                pointerEvents: visible ? "auto" : "none",
+              }}
+            >
+              <div
+                aria-hidden
+                onClick={closeModal}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "rgba(10,10,10,0.45)",
+                  backdropFilter: "blur(4px)",
+                }}
+              />
+
+              <div
+                ref={dialogRef}
+                data-testid="radar-profile-modal"
+                tabIndex={-1}
+                style={{
+                  position: "relative",
+                  zIndex: 1,
+                  background: "#fafaf6",
+                  border: "1px solid rgba(10,10,10,0.10)",
+                  borderRadius: 18,
+                  padding: "24px 26px 22px",
+                  width: "100%",
+                  maxWidth: 480,
+                  boxShadow: "0 32px 80px -20px rgba(10,10,10,0.5)",
+                  transform: visible
+                    ? "translateY(0) scale(1)"
+                    : "translateY(6px) scale(0.98)",
+                  transition:
+                    "transform 240ms cubic-bezier(0.22,1,0.36,1), opacity 200ms ease",
+                  maxHeight: "90dvh",
+                  overflowY: "auto",
+                  fontFamily: GEIST,
+                }}
+              >
+                <p
+                  id={headingId}
+                  style={{
+                    margin: "0 0 4px",
+                    fontSize: 20,
+                    fontWeight: 500,
+                    letterSpacing: -0.6,
+                    color: "#0a0a0a",
+                  }}
+                >
+                  Filtros de oportunidade
+                </p>
+                <p
+                  id={descriptionId}
+                  style={{
+                    margin: "0 0 20px",
+                    fontSize: 12.5,
+                    color: "#8a8a85",
+                  }}
+                >
+                  Defina suas áreas de interesse para calibrar o Radar
+                </p>
+
+                <p
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: "#3a3a38",
+                    margin: "0 0 8px",
+                  }}
+                >
+                  Áreas
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 6,
+                    marginBottom: 18,
+                  }}
+                >
+                  {Object.entries(AREA_LABELS).map(([value, label]) => {
+                    const selected = areas.includes(value);
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => toggleArea(value)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          background: selected ? "#0a0a0a" : "#fff",
+                          color: selected ? "#fafaf6" : "#3a3a38",
+                          border: `1px solid ${selected ? "#0a0a0a" : "rgba(10,10,10,0.12)"}`,
+                          borderRadius: 99,
+                          padding: "6px 12px",
+                          fontSize: 12,
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          fontFamily: GEIST,
+                        }}
+                      >
+                        {label}
+                        {selected ? <span aria-hidden>×</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: "#3a3a38",
+                    margin: "0 0 8px",
+                  }}
+                >
+                  Senioridade
+                </p>
+                <select
+                  aria-label="Senioridade"
+                  value={seniority}
+                  onChange={(e) => setSeniority(e.target.value)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    background: "#fff",
+                    border: "1px solid rgba(10,10,10,0.12)",
+                    borderRadius: 8,
+                    padding: "9px 12px",
+                    fontSize: 13,
+                    color: "#0a0a0a",
+                    fontFamily: GEIST,
+                    marginBottom: 22,
+                  }}
+                >
+                  {Object.entries(SENIORITY_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: 10,
+                    paddingTop: 14,
+                    borderTop: "1px solid rgba(10,10,10,0.08)",
+                  }}
+                >
+                  <button
+                    type="button"
+                    data-testid="radar-profile-cancel-btn"
+                    onClick={closeModal}
+                    disabled={pending}
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: 10,
+                      border: "none",
+                      background: "transparent",
+                      color: "#5a5a55",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      cursor: pending ? "default" : "pointer",
+                      fontFamily: GEIST,
+                      opacity: pending ? 0.5 : 1,
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="radar-profile-save-btn"
+                    onClick={() => void handleSave()}
+                    disabled={pending}
+                    style={{
+                      background: "#0a0a0a",
+                      color: "#fafaf6",
+                      border: "none",
+                      borderRadius: 10,
+                      padding: "10px 18px",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      cursor: pending ? "default" : "pointer",
+                      opacity: pending ? 0.7 : 1,
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    {pending ? "Salvando..." : "Salvar"}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
       {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
-    </div>
+    </>
   );
 }

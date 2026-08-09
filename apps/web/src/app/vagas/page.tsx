@@ -762,29 +762,45 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
             </div>
 
             {scoreState === "has-cv" && calibration ? (
-              <h1
+              <div
                 style={{
-                  fontSize: "clamp(1.75rem,4.5vw,2.75rem)",
-                  fontWeight: 500,
-                  letterSpacing: -1.4,
-                  lineHeight: 1.08,
-                  margin: "0 0 28px",
-                  color: "#0a0a0a",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 12,
+                  marginBottom: 28,
                 }}
               >
-                Calibrado para{" "}
-                <em
+                <h1
                   style={{
-                    fontFamily: SERIF,
-                    fontWeight: 400,
-                    fontStyle: "italic",
-                    color: "#3a3a38",
+                    fontSize: "clamp(1.75rem,4.5vw,2.75rem)",
+                    fontWeight: 500,
+                    letterSpacing: -1.4,
+                    lineHeight: 1.08,
+                    margin: 0,
+                    color: "#0a0a0a",
                   }}
                 >
-                  {calibration.area}
-                </em>
-                {calibration.seniority ? ` · ${calibration.seniority}` : null}
-              </h1>
+                  Calibrado para{" "}
+                  <em
+                    style={{
+                      fontFamily: SERIF,
+                      fontWeight: 400,
+                      fontStyle: "italic",
+                      color: "#3a3a38",
+                    }}
+                  >
+                    {calibration.area}
+                  </em>
+                  {calibration.seniority ? ` · ${calibration.seniority}` : null}
+                </h1>
+                {user && radarProfile ? (
+                  <RadarProfileEditor
+                    initialAreas={radarProfile.areas}
+                    initialSeniority={radarProfile.seniority}
+                  />
+                ) : null}
+              </div>
             ) : (
               <>
                 <h1
@@ -1201,13 +1217,6 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
             ) : null}
           </div>
         </header>
-
-        {user && radarProfile ? (
-          <RadarProfileEditor
-            initialAreas={radarProfile.areas}
-            initialSeniority={radarProfile.seniority}
-          />
-        ) : null}
 
         <div style={{ marginBottom: 24 }}>
           <FiltersBar
