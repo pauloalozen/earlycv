@@ -15,6 +15,9 @@ export const RADAR_AREA_LABELS: Record<string, string> = {
   PROJECT_AGILE: "Gestão de Projetos",
   ARCHITECTURE: "Arquitetura",
   LEADERSHIP: "Liderança",
+  GROWTH_MARKETING: "Growth & Marketing Digital",
+  BUSINESS_ANALYTICS: "Business Analytics",
+  CX_DIGITAL: "CX Digital",
   OTHER: "Geral",
 };
 

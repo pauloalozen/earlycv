@@ -15,6 +15,7 @@ import {
   type PublicJob,
 } from "@/lib/public-jobs-api";
 import { getMyRadarProfile } from "@/lib/radar-api";
+import { RadarProfileEditor } from "./radar-profile-editor";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { Carousel } from "./carousel";
@@ -1200,6 +1201,13 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
             ) : null}
           </div>
         </header>
+
+        {user && radarProfile ? (
+          <RadarProfileEditor
+            initialAreas={radarProfile.areas}
+            initialSeniority={radarProfile.seniority}
+          />
+        ) : null}
 
         <div style={{ marginBottom: 24 }}>
           <FiltersBar

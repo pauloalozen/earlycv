@@ -52,6 +52,18 @@ export async function getMyRadarProfile(): Promise<RadarProfileDto | null> {
   }
 }
 
+export async function updateMyRadarProfile(input: {
+  areas: string[];
+  seniority: string;
+}): Promise<boolean> {
+  try {
+    const response = await apiRequest("PUT", "/radar/profile", input);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function getJobMatchScore(
   slug: string,
 ): Promise<JobMatchScoreDto | null> {
