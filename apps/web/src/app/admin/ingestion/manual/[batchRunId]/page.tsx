@@ -11,6 +11,7 @@ import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { RefreshButton } from "../../_components/refresh-button";
 import { cancelManualRunAction } from "../../actions";
+import { ManualRunItemsTable } from "./_components/manual-run-items-table";
 
 export const metadata = buildAdminMetadata("Logs manual ingestion");
 
@@ -113,58 +114,7 @@ export default async function ManualRunDetailPage({
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-            <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-stone-200 bg-stone-50 text-stone-600">
-                <tr>
-                  <th className="px-4 py-3">Empresa</th>
-                  <th className="px-4 py-3">Fonte</th>
-                  <th className="px-4 py-3">Adapter</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Inicio</th>
-                  <th className="px-4 py-3">Fim</th>
-                  <th className="px-4 py-3">Vagas lidas</th>
-                  <th className="px-4 py-3">Erro</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => {
-                  const run = item.ingestionRun;
-                  const jobsRead = run
-                    ? run.newCount +
-                      run.updatedCount +
-                      run.skippedCount +
-                      run.failedCount
-                    : null;
-
-                  return (
-                    <tr className="border-t border-stone-200" key={item.id}>
-                      <td className="px-4 py-3">{item.companyName}</td>
-                      <td className="px-4 py-3">{item.sourceName}</td>
-                      <td className="px-4 py-3">{item.sourceType}</td>
-                      <td className="px-4 py-3">{item.status}</td>
-                      <td className="px-4 py-3">
-                        {item.startedAt
-                          ? new Date(item.startedAt).toLocaleString("pt-BR")
-                          : "-"}
-                      </td>
-                      <td className="px-4 py-3">
-                        {item.finishedAt
-                          ? new Date(item.finishedAt).toLocaleString("pt-BR")
-                          : "-"}
-                      </td>
-                      <td className="px-4 py-3">
-                        {jobsRead === null
-                          ? "-"
-                          : `${jobsRead} (novas ${run?.newCount} / atualizadas ${run?.updatedCount} / falhas ${run?.failedCount})`}
-                      </td>
-                      <td className="px-4 py-3">{item.errorMessage ?? "-"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <ManualRunItemsTable items={items} />
         </div>
       </main>
     );
