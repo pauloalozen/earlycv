@@ -98,8 +98,15 @@ function matchesMultiWordSignal(title: string, signal: string) {
 // substring simples, que ja funciona bem pra termos como
 // "desenvolvedor"/"engenheiro" e cobre variacoes (plural, prefixos) sem
 // precisar de boundary.
+// `title` chega aqui já sem acento (normalizeTitleForFilter roda antes, em
+// evaluate()) — sem stripAccents aqui também, um sinal acentuado (ex:
+// "segurança", "automação", "inteligência artificial") nunca bate com
+// título nenhum, porque a comparação vira sempre "acentuado" vs
+// "sem-acento". Bug real: 6 sinais tech (segurança, automação, automação de
+// testes, inteligência artificial, arquitetura de soluções, suporte
+// técnico ti) nunca disparavam, empurrando vaga de tech pra "zona_cinza".
 function matchesSignal(title: string, signal: string) {
-  const normalizedSignal = signal.trim().toLowerCase();
+  const normalizedSignal = stripAccents(signal.trim().toLowerCase());
   if (!normalizedSignal) return false;
 
   if (normalizedSignal.includes(" ")) {

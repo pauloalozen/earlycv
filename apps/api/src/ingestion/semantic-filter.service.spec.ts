@@ -239,6 +239,60 @@ test("SemanticFilterService respects cache TTL and does not hit the database on 
   assert.equal(getFindFirstCalls(), 2);
 });
 
+// Achado auditando descartes reais da v17: normalizeTitleForFilter tira
+// acento do titulo antes de comparar, mas matchesSignal nao tirava acento
+// do sinal — "segurança"/"automação"/"inteligência artificial" nunca
+// batiam com titulo nenhum (com ou sem acento na fonte), empurrando vaga de
+// tech pra zona_cinza (ex: "Especialista de Arquitetura de Soluções",
+// "ANALISTA INTELIGENCIA ARTIFICIAL PL", "ANALISTA AUTOMACAO PL").
+test("SemanticFilterService.evaluate matches an accented signal against a title with or without accents", async () => {
+  const { database } = createDatabaseMock(
+    createConfig({
+      techSignals: [
+        "segurança",
+        "automação",
+        "inteligência artificial",
+        "arquitetura de soluções",
+      ],
+    }),
+  );
+  const service = new SemanticFilterService(database);
+
+  const accentedTitle = await service.evaluate(
+    "Analista de Segurança da Informação",
+  );
+  assert.deepEqual(accentedTitle, {
+    configVersion: "v1",
+    reason: "tech_signal:segurança",
+    result: "ENRICH",
+  });
+
+  const unaccentedTitle = await service.evaluate("ANALISTA AUTOMACAO PL");
+  assert.deepEqual(unaccentedTitle, {
+    configVersion: "v1",
+    reason: "tech_signal:automação",
+    result: "ENRICH",
+  });
+
+  const multiWordAccented = await service.evaluate(
+    "ANALISTA INTELIGENCIA ARTIFICIAL PL",
+  );
+  assert.deepEqual(multiWordAccented, {
+    configVersion: "v1",
+    reason: "tech_signal:inteligência artificial",
+    result: "ENRICH",
+  });
+
+  const composedSignal = await service.evaluate(
+    "Especialista de Arquitetura de Soluções",
+  );
+  assert.deepEqual(composedSignal, {
+    configVersion: "v1",
+    reason: "tech_signal:arquitetura de soluções",
+    result: "ENRICH",
+  });
+});
+
 test("SemanticFilterService.getActiveConfig throws when no active config exists", async () => {
   const { database } = createDatabaseMock(null);
   const service = new SemanticFilterService(database);
