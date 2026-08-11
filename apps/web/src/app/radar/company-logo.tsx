@@ -1,4 +1,15 @@
+"use client";
+
+import { useState } from "react";
+
 const MONO = "var(--font-geist-mono), monospace";
+
+// Abaixo disso, o favicon devolvido pelo serviço do Google é o ícone
+// genérico (globo cinza) que ele usa quando o domínio não tem favicon de
+// verdade, ou uma imagem tão pequena que fica borrada esticada pro
+// tamanho do card — em ambos os casos preferível cair no quadrado
+// colorido do que mostrar um logo feio.
+const MIN_GOOD_LOGO_SIZE = 64;
 
 const COMPANY_COLORS = [
   "#3a7ff6",
@@ -32,8 +43,10 @@ type Props = {
 };
 
 // Favicon real da empresa (via serviço público de favicons, a partir de
-// Company.websiteUrl) quando disponível; senão volta pro quadrado colorido
-// com a inicial do nome — mesmo fallback visual de antes.
+// Company.websiteUrl) quando disponível E com resolução boa (ver
+// MIN_GOOD_LOGO_SIZE); senão volta pro quadrado colorido com a inicial do
+// nome — tanto pra URL inválida/erro de load quanto pra favicon
+// genérico/pequeno demais.
 export function CompanyLogo({
   name,
   websiteUrl,
@@ -42,8 +55,9 @@ export function CompanyLogo({
   fontSize = 13,
 }: Props) {
   const src = websiteUrl ? faviconUrl(websiteUrl) : null;
+  const [isBadLogo, setIsBadLogo] = useState(false);
 
-  if (src) {
+  if (src && !isBadLogo) {
     return (
       // biome-ignore lint/performance/noImgElement: favicon de domínio externo, sem otimização do next/image
       <img
@@ -57,6 +71,16 @@ export function CompanyLogo({
           borderRadius,
           flexShrink: 0,
           objectFit: "contain",
+        }}
+        onError={() => setIsBadLogo(true)}
+        onLoad={(event) => {
+          const img = event.currentTarget;
+          if (
+            img.naturalWidth < MIN_GOOD_LOGO_SIZE ||
+            img.naturalHeight < MIN_GOOD_LOGO_SIZE
+          ) {
+            setIsBadLogo(true);
+          }
         }}
       />
     );
