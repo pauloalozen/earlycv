@@ -15,6 +15,8 @@ function createServiceFixture(
     string,
     {
       id: string;
+      scopeType?: string;
+      scopeValue?: string;
       status:
         | "queued"
         | "running"
@@ -72,14 +74,18 @@ function createServiceFixture(
 
   const database = {
     ingestionBatchRun: {
-      findFirst: async () => {
-        const candidates = Array.from(runs.values())
-          .filter((run) =>
-            ["queued", "running", "cancelling"].includes(run.status),
-          )
-          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-        return candidates[0] ?? null;
-      },
+      findMany: async ({
+        where,
+      }: {
+        where: { status: { in: string[] } };
+      }) =>
+        Array.from(runs.values())
+          .filter((run) => where.status.in.includes(run.status))
+          .sort(
+            (a, b) =>
+              a.createdAt.getTime() - b.createdAt.getTime() ||
+              a.id.localeCompare(b.id),
+          ),
       findUnique: async ({ where }: { where: { id: string } }) =>
         runs.get(where.id) ?? null,
       update: async ({
@@ -126,6 +132,24 @@ function createServiceFixture(
       },
     },
     ingestionBatchItem: {
+      findFirst: async ({
+        where,
+        orderBy: _orderBy,
+      }: {
+        where: { batchRunId: string; status?: { in: string[] } | string };
+        orderBy?: unknown;
+      }) =>
+        Array.from(items.values())
+          .filter((item) => item.batchRunId === where.batchRunId)
+          .filter((item) => {
+            if (!where.status) return true;
+            if (typeof where.status === "string") {
+              return item.status === where.status;
+            }
+            return where.status.in.includes(item.status);
+          })
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ??
+        null,
       findMany: async ({
         where,
       }: {
@@ -217,6 +241,22 @@ function createServiceFixture(
       if (jobSourceId === "source-partial-fail") {
         return {
           errorSummary: "2 item(s) failed during ingestion.",
+          id: `run-${jobSourceId}`,
+          status: "failed" as const,
+        };
+      }
+      if (jobSourceId === "source-structural-fail") {
+        return {
+          currentConsecutive403: 0,
+          errorSummary: "gupy board is unavailable at https://x.gupy.io/jobs",
+          id: `run-${jobSourceId}`,
+          status: "failed" as const,
+        };
+      }
+      if (jobSourceId === "source-blocked-fail") {
+        return {
+          currentConsecutive403: 1,
+          errorSummary: "Gupy board API request returned 403 forbidden",
           id: `run-${jobSourceId}`,
           status: "failed" as const,
         };
@@ -371,6 +411,106 @@ test("runner waits a jittered delay between sources instead of running them back
   assert.equal(runs.get("batch-delay")?.status, "completed");
 });
 
+test("runner uses normalDelayMs (not errorDelayMs) after a structural failure", async () => {
+  const { items, runs, service } = createServiceFixture({
+    errorDelayMs: 500,
+    normalDelayMs: 100,
+  });
+  runs.set("batch-structural-delay", {
+    id: "batch-structural-delay",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 2,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-structural-1", {
+    id: "item-structural-1",
+    batchRunId: "batch-structural-delay",
+    jobSourceId: "source-structural-fail",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-structural-2", {
+    id: "item-structural-2",
+    batchRunId: "batch-structural-delay",
+    jobSourceId: "source-2",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:01.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  const startedAt = Date.now();
+  await service.processNextBatchRun();
+  const elapsedMs = Date.now() - startedAt;
+
+  // A falha estrutural (URL de board fora do ar) nao deve escalar pra
+  // errorDelayMs (500ms) — se escalasse, o loop levaria >=350ms (jitter
+  // minimo 0.7x). Deve ficar perto do normalDelayMs (100ms, minimo ~70ms).
+  assert.ok(
+    elapsedMs < 350,
+    `expected normalDelayMs pacing after structural failure, got ${elapsedMs}ms`,
+  );
+});
+
+test("runner uses errorDelayMs after a confirmed 403 block", async () => {
+  const { items, runs, service } = createServiceFixture({
+    errorDelayMs: 200,
+    normalDelayMs: 0,
+  });
+  runs.set("batch-blocked-delay", {
+    id: "batch-blocked-delay",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 2,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-blocked-1", {
+    id: "item-blocked-1",
+    batchRunId: "batch-blocked-delay",
+    jobSourceId: "source-blocked-fail",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-blocked-2", {
+    id: "item-blocked-2",
+    batchRunId: "batch-blocked-delay",
+    jobSourceId: "source-2",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:01.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  const startedAt = Date.now();
+  await service.processNextBatchRun();
+  const elapsedMs = Date.now() - startedAt;
+
+  // 403 confirmado deve escalar pra errorDelayMs (200ms, minimo ~140ms).
+  assert.ok(
+    elapsedMs >= 140,
+    `expected errorDelayMs pacing after a 403 block, got ${elapsedMs}ms`,
+  );
+});
+
 test("runner marks failed item and batch as failed", async () => {
   const { items, runs, service } = createServiceFixture();
   runs.set("batch-2", {
@@ -483,6 +623,157 @@ test("runner stops scheduling remaining items when cancellation is requested", a
   assert.equal(items.get("item-cancel-1")?.status, "completed");
   assert.equal(items.get("item-cancel-2")?.status, "cancelled");
   assert.deepEqual(runJobSourceCalls, ["source-cancel-1"]);
+});
+
+test("runner interleaves items across active runs instead of draining one run before the next (fairness)", async () => {
+  const { items, runJobSourceCalls, runs, service } = createServiceFixture({
+    errorDelayMs: 80,
+    normalDelayMs: 80,
+  });
+  // Run A criado primeiro, com 3 itens — simula um adapter grande (ex:
+  // Gupy com centenas de empresas) monopolizando o worker.
+  runs.set("run-a", {
+    id: "run-a",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 3,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  // Run B criado um pouco depois, com 1 item so — representa outro
+  // adapter que, no bug original, ficava parado na fila ate o run A
+  // inteiro terminar.
+  runs.set("run-b", {
+    id: "run-b",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:05.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-a1", {
+    id: "item-a1",
+    batchRunId: "run-a",
+    jobSourceId: "source-a1",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-a2", {
+    id: "item-a2",
+    batchRunId: "run-a",
+    jobSourceId: "source-a2",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:01.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-a3", {
+    id: "item-a3",
+    batchRunId: "run-a",
+    jobSourceId: "source-a3",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:02.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-b1", {
+    id: "item-b1",
+    batchRunId: "run-b",
+    jobSourceId: "source-b1",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:05.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  assert.equal(runs.get("run-a")?.status, "completed");
+  assert.equal(runs.get("run-b")?.status, "completed");
+  // O ponto central: run-b (criado depois, so 1 item) e atendido entre os
+  // itens do run-a em vez de esperar o run-a inteiro (3 itens) terminar
+  // primeiro — sem isso, source-b1 so apareceria depois de source-a3.
+  const indexB1 = runJobSourceCalls.indexOf("source-b1");
+  const indexA3 = runJobSourceCalls.indexOf("source-a3");
+  assert.ok(indexB1 !== -1 && indexA3 !== -1);
+  assert.ok(
+    indexB1 < indexA3,
+    `expected source-b1 to be serviced before run-a drains fully, order was ${runJobSourceCalls.join(",")}`,
+  );
+});
+
+test("runner runs up to 2 gupy items concurrently, staggered, instead of one at a time", async () => {
+  const { items, resolveSlowJob, runJobSourceCalls, runs, service } =
+    createServiceFixture({ errorDelayMs: 0, normalDelayMs: 0 });
+  runs.set("run-gupy", {
+    id: "run-gupy",
+    scopeType: "adapter",
+    scopeValue: "gupy",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 2,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-gupy-1", {
+    id: "item-gupy-1",
+    batchRunId: "run-gupy",
+    jobSourceId: "source-slow-gupy-1",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-gupy-2", {
+    id: "item-gupy-2",
+    batchRunId: "run-gupy",
+    jobSourceId: "source-slow-gupy-2",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:01.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  const runPromise = service.processNextBatchRun();
+
+  // Da tempo do loop lancar a 1a vaga, esperar o stagger com jitter, e
+  // lancar a 2a — sem resolver nenhuma delas ainda (ambas ficam "lentas"
+  // ate resolveSlowJob ser chamado).
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.deepEqual(runJobSourceCalls, [
+    "source-slow-gupy-1",
+    "source-slow-gupy-2",
+  ]);
+  assert.equal(items.get("item-gupy-1")?.status, "running");
+  assert.equal(items.get("item-gupy-2")?.status, "running");
+
+  resolveSlowJob("source-slow-gupy-1");
+  resolveSlowJob("source-slow-gupy-2");
+  await runPromise;
+
+  assert.equal(runs.get("run-gupy")?.status, "completed");
+  assert.equal(runs.get("run-gupy")?.succeededCount, 2);
 });
 
 test("runner keeps cancelling run with no pending items as cancelled", async () => {
