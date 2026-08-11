@@ -138,7 +138,7 @@ export function PublicNavBar({
         <div className="hidden items-center gap-5 md:flex">
           {IS_JOBS_GHOST_MODE ? null : (
             <Link
-              href="/vagas"
+              href="/radar"
               style={{
                 fontSize: 13,
                 color: linkColor,
@@ -146,7 +146,7 @@ export function PublicNavBar({
                 textDecoration: "none",
               }}
             >
-              Vagas
+              Radar de Oportunidades
             </Link>
           )}
           <Link
@@ -238,11 +238,11 @@ export function PublicNavBar({
       >
         {IS_JOBS_GHOST_MODE ? null : (
           <Link
-            href="/vagas"
+            href="/radar"
             onClick={() => setIsMenuOpen(false)}
             className="public-mob-nav-item"
           >
-            Vagas
+            Radar de Oportunidades
           </Link>
         )}
         <Link

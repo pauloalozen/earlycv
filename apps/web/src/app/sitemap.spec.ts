@@ -25,18 +25,18 @@ afterEach(() => {
   process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = previousGhost;
 });
 
-test("sitemap includes /vagas when ghost mode is off", async () => {
+test("sitemap includes /radar when ghost mode is off", async () => {
   stubSitemapJobsResponse([]);
 
   const entries = await sitemap();
 
   assert.equal(
-    entries.some((entry) => entry.url.endsWith("/vagas")),
+    entries.some((entry) => entry.url.endsWith("/radar")),
     true,
   );
 });
 
-test("sitemap includes /vagas/[slug] for each active job with a slug", async () => {
+test("sitemap includes /radar/[slug] for each active job with a slug", async () => {
   stubSitemapJobsResponse([
     { slug: "vaga-a-empresa-a-id1", lastSeenAt: "2026-08-01T00:00:00.000Z" },
     { slug: "vaga-b-empresa-b-id2", lastSeenAt: "2026-08-02T00:00:00.000Z" },
@@ -45,14 +45,14 @@ test("sitemap includes /vagas/[slug] for each active job with a slug", async () 
   const entries = await sitemap();
   const jobUrls = entries
     .map((entry) => entry.url)
-    .filter((url) => url.includes("/vagas/"));
+    .filter((url) => url.includes("/radar/"));
 
   assert.equal(
-    jobUrls.some((url) => url.endsWith("/vagas/vaga-a-empresa-a-id1")),
+    jobUrls.some((url) => url.endsWith("/radar/vaga-a-empresa-a-id1")),
     true,
   );
   assert.equal(
-    jobUrls.some((url) => url.endsWith("/vagas/vaga-b-empresa-b-id2")),
+    jobUrls.some((url) => url.endsWith("/radar/vaga-b-empresa-b-id2")),
     true,
   );
 });
@@ -68,12 +68,12 @@ test("sitemap does not add jobs beyond what the sitemap-data endpoint returns (i
   const entries = await sitemap();
   const jobUrls = entries
     .map((entry) => entry.url)
-    .filter((url) => url.includes("/vagas/") && !url.endsWith("/vagas"));
+    .filter((url) => url.includes("/radar/") && !url.endsWith("/radar"));
 
   assert.equal(jobUrls.length, 1);
 });
 
-test("sitemap never includes /vagas or /vagas/[slug] when ghost mode is on", async () => {
+test("sitemap never includes /radar or /radar/[slug] when ghost mode is on", async () => {
   process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
   let fetchCalled = false;
   globalThis.fetch = (async () => {
@@ -84,7 +84,7 @@ test("sitemap never includes /vagas or /vagas/[slug] when ghost mode is on", asy
   const entries = await sitemap();
 
   assert.equal(
-    entries.some((entry) => entry.url.includes("/vagas")),
+    entries.some((entry) => entry.url.includes("/radar")),
     false,
   );
   assert.equal(fetchCalled, false);
@@ -102,7 +102,7 @@ test("sitemap tolerates the sitemap-data endpoint being unreachable (never break
     true,
   );
   assert.equal(
-    entries.some((entry) => entry.url.includes("/vagas/")),
+    entries.some((entry) => entry.url.includes("/radar/")),
     false,
   );
 });

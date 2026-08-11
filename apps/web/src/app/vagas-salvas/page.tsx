@@ -10,7 +10,7 @@ import {
 } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { listSavedJobs } from "@/lib/saved-jobs-api";
-import { JobCard } from "../vagas/job-card";
+import { JobCard } from "../radar/job-card";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -95,10 +95,10 @@ export default async function VagasSalvasPage({ searchParams }: Props) {
           }}
         >
           <Link
-            href="/vagas"
+            href="/radar"
             style={{ color: "#5a5a55", textDecoration: "none" }}
           >
-            Vagas
+            Radar
           </Link>
           <span style={{ color: "#c8c6bf" }}>›</span>
           <span style={{ color: "#0a0a0a" }}>Salvas</span>
@@ -128,7 +128,7 @@ export default async function VagasSalvasPage({ searchParams }: Props) {
             </h1>
             <p style={{ fontSize: 14, color: "#5a5a55", margin: 0 }}>
               {total === 0
-                ? "Vagas que você salvar em /vagas aparecem aqui."
+                ? "Vagas que você salvar no Radar aparecem aqui."
                 : `${total} ${total === 1 ? "vaga salva" : "vagas salvas"}.`}
             </p>
           </div>
@@ -238,7 +238,7 @@ export default async function VagasSalvasPage({ searchParams }: Props) {
               Você ainda não salvou nenhuma vaga.
             </p>
             <Link
-              href="/vagas"
+              href="/radar"
               style={{
                 display: "inline-flex",
                 alignItems: "center",

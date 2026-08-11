@@ -795,8 +795,8 @@ export function AppHeader({
                       ),
                     },
                     {
-                      href: "/vagas",
-                      label: "Vagas",
+                      href: "/radar",
+                      label: "Radar de Oportunidades",
                       icon: (
                         <>
                           <rect
@@ -869,7 +869,7 @@ export function AppHeader({
                       : []),
                   ]
                     .filter((item) =>
-                      item.href === "/vagas" ? canSeeJobsLink : true,
+                      item.href === "/radar" ? canSeeJobsLink : true,
                     )
                     .map((item) => (
                       <a
@@ -1179,8 +1179,8 @@ export function AppHeader({
                 ),
               },
               {
-                href: "/vagas",
-                label: "Vagas",
+                href: "/radar",
+                label: "Radar de Oportunidades",
                 icon: (
                   <>
                     <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
@@ -1240,7 +1240,7 @@ export function AppHeader({
                 : []),
             ]
               .filter((item) =>
-                item.href === "/vagas" ? canSeeJobsLink : true,
+                item.href === "/radar" ? canSeeJobsLink : true,
               )
               .map((item) => (
                 <a

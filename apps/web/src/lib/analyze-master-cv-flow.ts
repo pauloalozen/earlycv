@@ -6,7 +6,7 @@ export type AnalyzeMasterCvForJobResult =
   | { ok: true; adaptationId: string }
   | { ok: false; error: string };
 
-// Fluxo de 1 clique a partir do card de vaga (/vagas, /vagas/[slug]): usa o
+// Fluxo de 1 clique a partir do card de vaga (/radar, /radar/[slug]): usa o
 // CV Master do usuário logado direto, sem passar por /adaptar. Espelha a
 // orquestração (analisar -> poll -> salvar preview) que /adaptar já faz para
 // o caso "autenticado com masterResumeId", mas sem os outros modos de

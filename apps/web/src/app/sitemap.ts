@@ -10,7 +10,7 @@ const PRIMARY_PAGES_LAST_MODIFIED = new Date("2026-05-02");
 const LEGAL_PAGES_LAST_MODIFIED = new Date("2026-04-14");
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // Com ghost mode ligado, /vagas e /vagas/[slug] estão bloqueadas no
+  // Com ghost mode ligado, /radar e /radar/[slug] estão bloqueadas no
   // robots.txt e retornam notFound() pra quem não é admin — nunca submeter
   // essas URLs ao Google enquanto isso for verdade.
   const isGhostMode = isJobsGhostModeEnabled();
@@ -39,14 +39,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ? []
       : [
           {
-            url: getAbsoluteUrl("/vagas"),
+            url: getAbsoluteUrl("/radar"),
             lastModified: new Date(),
             changeFrequency: "daily" as const,
             priority: 0.8,
           },
         ]),
     ...jobs.map((job) => ({
-      url: getAbsoluteUrl(`/vagas/${job.slug}`),
+      url: getAbsoluteUrl(`/radar/${job.slug}`),
       lastModified: new Date(job.lastSeenAt),
       changeFrequency: "daily" as const,
       priority: 0.6,

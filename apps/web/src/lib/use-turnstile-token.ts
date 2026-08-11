@@ -43,7 +43,7 @@ function readTurnstileTokenFromDom() {
 
 // Extraído de /adaptar (fluxo original de análise) — widget invisível do
 // Turnstile compartilhado por qualquer fluxo de análise autenticada
-// (também usado pelo botão "Analisar meu CV" em /vagas/[slug]).
+// (também usado pelo botão "Analisar meu CV" em /radar/[slug]).
 export function useTurnstileToken() {
   const turnstileSiteKey = getTurnstileSiteKey();
   const containerRef = useRef<HTMLDivElement>(null);

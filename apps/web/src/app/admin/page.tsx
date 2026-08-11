@@ -12,7 +12,7 @@ import {
 } from "@/app/admin/_components/admin-primitives";
 import { DashboardAdapterTable } from "@/app/admin/_components/dashboard-adapter-table";
 import { DashboardAlertsRow } from "@/app/admin/_components/dashboard-alerts-row";
-import { RADAR_AREA_LABELS } from "@/app/vagas/radar-ui";
+import { RADAR_AREA_LABELS } from "@/app/radar/radar-ui";
 import {
   type EnrichmentSummary,
   getEnrichmentSummary,

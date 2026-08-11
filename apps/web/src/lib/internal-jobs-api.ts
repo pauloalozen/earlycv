@@ -17,7 +17,7 @@ function getApiBaseUrl() {
   return base.endsWith("/api") ? base : `${base}/api`;
 }
 
-// Endpoint sem auth (dado já público em /vagas) — usado só pelo sitemap.ts,
+// Endpoint sem auth (dado já público em /radar) — usado só pelo sitemap.ts,
 // que roda sem sessão de usuário. Nunca usar apiRequest() aqui: ele depende
 // de cookies(), que não existe no contexto de geração do sitemap.
 //

@@ -249,7 +249,7 @@ function AdaptarPageContent() {
     }
   }, []);
 
-  // Fluxo de 1 clique a partir do Radar (/vagas): jobId na URL carrega a
+  // Fluxo de 1 clique a partir do Radar (/radar): jobId na URL carrega a
   // descrição da vaga automaticamente. jobId inválido ou vaga indisponível
   // — getPublicJobById devolve null e isso vira falha silenciosa (campo
   // segue vazio, sem banner). setJobDescription usa forma funcional pra

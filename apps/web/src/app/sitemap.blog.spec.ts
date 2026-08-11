@@ -71,7 +71,7 @@ test("sitemap includes /blog and published blog posts", async () => {
   assert.equal(byPath.get("/termos-de-uso")?.changeFrequency, "yearly");
 
   assert.equal(
-    urls.some((url) => new URL(url).pathname.startsWith("/vagas/")),
+    urls.some((url) => new URL(url).pathname.startsWith("/radar/")),
     false,
   );
 });
