@@ -15,7 +15,6 @@ import {
   type PublicJob,
 } from "@/lib/public-jobs-api";
 import { getMyRadarProfile } from "@/lib/radar-api";
-import { RadarProfileEditor } from "./radar-profile-editor";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { Carousel } from "./carousel";
@@ -536,7 +535,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
       sort,
       excludeAnalyzed,
     }),
-    getPublicJobFacets().catch(() => null),
+    getPublicJobFacets({ state: estado }).catch(() => null),
   ]);
 
   let radarProfile: Awaited<ReturnType<typeof getMyRadarProfile>> = null;
@@ -807,12 +806,6 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                   </em>
                   {calibration.seniority ? ` · ${calibration.seniority}` : null}
                 </h1>
-                {user && radarProfile ? (
-                  <RadarProfileEditor
-                    initialAreas={radarProfile.areas}
-                    initialSeniority={radarProfile.seniority}
-                  />
-                ) : null}
               </div>
             ) : (
               <>
@@ -872,54 +865,59 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
                   flexWrap: "wrap",
                 }}
               >
-                <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
-                  <div>
-                    <div
+                <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+                    <b
                       style={{
-                        fontSize: 26,
-                        fontWeight: 500,
-                        letterSpacing: -0.6,
+                        fontSize: 19,
+                        fontWeight: 600,
+                        letterSpacing: -0.4,
                         color: "#0a0a0a",
                         lineHeight: 1,
                       }}
                     >
                       {jobsResult.total}
-                    </div>
-                    <div
+                    </b>
+                    <span
                       style={{
                         fontFamily: MONO,
                         fontSize: 10.5,
                         color: "#8a8a85",
-                        letterSpacing: 0.2,
-                        marginTop: 5,
                       }}
                     >
                       vagas analisadas
-                    </div>
+                    </span>
                   </div>
-                  <div>
-                    <div
+                  <div
+                    aria-hidden
+                    style={{
+                      width: 1,
+                      height: 16,
+                      background: "rgba(10,10,10,0.1)",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+                    <b
                       style={{
-                        fontSize: 26,
-                        fontWeight: 500,
-                        letterSpacing: -0.6,
+                        fontSize: 19,
+                        fontWeight: 600,
+                        letterSpacing: -0.4,
                         color: "#1f7a34",
                         lineHeight: 1,
                       }}
                     >
                       {highCompatCount}
-                    </div>
-                    <div
+                    </b>
+                    <span
                       style={{
                         fontFamily: MONO,
                         fontSize: 10.5,
                         color: "#8a8a85",
-                        letterSpacing: 0.2,
-                        marginTop: 5,
                       }}
                     >
                       altamente compatíveis
-                    </div>
+                    </span>
                   </div>
                 </div>
 

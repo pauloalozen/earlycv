@@ -32,8 +32,13 @@ vi.mock("./carousel", () => ({
 vi.mock("./save-job-btn", () => ({
   SaveJobBtn: () => <button type="button">salvar</button>,
 }));
-vi.mock("./radar-profile-editor", () => ({
-  RadarProfileEditor: () => <div>radar profile editor</div>,
+// CompanyLogo é client component (useState pro fallback de logo de baixa
+// resolução) — o helper findScoreRingProps abaixo anda pela árvore de
+// elementos chamando o `type` de cada um diretamente, fora do ciclo real
+// de render do React, o que quebra hooks. Mock evita isso, igual aos
+// outros subcomponentes visuais desta suíte.
+vi.mock("./company-logo", () => ({
+  CompanyLogo: () => <div>logo</div>,
 }));
 vi.mock("./radar-ui", () => ({
   ScoreRing: (props: { value: number }) => (

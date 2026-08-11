@@ -95,6 +95,146 @@ function CheckboxIcon({ checked }: { checked: boolean }) {
 
 type DropdownOption = { value: string; label: string; count?: number };
 
+// "pill" = pastilha horizontal (linha de filtros primários: área,
+// modalidade, senioridade). "field" = caixa vertical (label em cima,
+// valor+chevron embaixo) usada dentro do grid de "mais filtros".
+type DropdownVariant = "pill" | "field";
+
+function DropdownMenu({
+  children,
+  minWidth = 220,
+}: {
+  children: React.ReactNode;
+  minWidth?: number;
+}) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: "calc(100% + 6px)",
+        left: 0,
+        background: "#fff",
+        border: "1px solid rgba(10,10,10,0.1)",
+        borderRadius: 10,
+        padding: 6,
+        zIndex: 20,
+        minWidth,
+        maxHeight: 280,
+        overflowY: "auto",
+        boxShadow: "0 8px 28px rgba(0,0,0,0.1)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function DropdownTrigger({
+  variant,
+  label,
+  currentLabel,
+  isActive,
+}: {
+  variant: DropdownVariant;
+  label: string;
+  currentLabel: string;
+  isActive: boolean;
+}) {
+  if (variant === "field") {
+    return (
+      <summary
+        style={{
+          listStyle: "none",
+          cursor: "pointer",
+          display: "flex",
+          flexDirection: "column",
+          gap: 5,
+          background: "#fff",
+          border: `1px solid ${isActive ? "rgba(10,10,10,0.3)" : "rgba(10,10,10,0.1)"}`,
+          borderRadius: 10,
+          padding: "8px 11px",
+          width: "100%",
+          boxSizing: "border-box",
+        }}
+      >
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 9.5,
+            letterSpacing: 0.6,
+            textTransform: "uppercase",
+            color: "#8a8a85",
+          }}
+        >
+          {label}
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              flex: 1,
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#0a0a0a",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {currentLabel}
+          </span>
+          <span style={{ color: "#8a8a85", flexShrink: 0, display: "flex" }}>
+            <ChevronIcon />
+          </span>
+        </span>
+      </summary>
+    );
+  }
+
+  return (
+    <summary
+      style={{
+        listStyle: "none",
+        cursor: "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        padding: "7px 12px",
+        borderRadius: 999,
+        background: isActive ? "#fff" : "#fbfbf7",
+        color: "#3a3a38",
+        border: `1px solid ${isActive ? "#0a0a0a" : "rgba(10,10,10,0.1)"}`,
+        boxShadow: isActive ? "0 0 0 1px #0a0a0a" : "none",
+        fontSize: 12.5,
+        whiteSpace: "nowrap",
+        fontFamily: GEIST,
+      }}
+    >
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: 9.5,
+          letterSpacing: 0.6,
+          textTransform: "uppercase",
+          color: "#8a8a85",
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          fontSize: 12.5,
+          fontWeight: 600,
+          color: "#0a0a0a",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {currentLabel}
+      </span>
+      <ChevronIcon />
+    </summary>
+  );
+}
+
 type MultiFilterDropdownProps = {
   label: string;
   allLabel: string;
@@ -102,6 +242,7 @@ type MultiFilterDropdownProps = {
   selected: string[];
   onToggle: (value: string) => void;
   onClear: () => void;
+  variant?: DropdownVariant;
 };
 
 function MultiFilterDropdown({
@@ -111,6 +252,7 @@ function MultiFilterDropdown({
   selected,
   onToggle,
   onClear,
+  variant = "pill",
 }: MultiFilterDropdownProps) {
   if (options.length === 0) return null;
   const isActive = selected.length > 0;
@@ -125,69 +267,17 @@ function MultiFilterDropdown({
         : `${selected.length} selecionadas`;
 
   return (
-    <details className="vagas-filter-dropdown" style={{ position: "relative" }}>
-      <summary
-        style={{
-          listStyle: "none",
-          cursor: "pointer",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 7,
-          padding: "8px 12px",
-          borderRadius: 99,
-          background: "#fafaf6",
-          color: "#3a3a38",
-          border: `1.5px solid ${isActive ? "rgba(10,10,10,0.35)" : "rgba(10,10,10,0.1)"}`,
-          fontSize: 12.5,
-          whiteSpace: "nowrap",
-          fontFamily: GEIST,
-          width: 172,
-          boxSizing: "border-box",
-          flexShrink: 0,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 9.5,
-            letterSpacing: 0.4,
-            opacity: 0.6,
-            flexShrink: 0,
-          }}
-        >
-          {label}
-        </span>
-        <span
-          style={{
-            flex: 1,
-            fontWeight: isActive ? 600 : 500,
-            color: "#0a0a0a",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            minWidth: 0,
-          }}
-        >
-          {currentLabel}
-        </span>
-        <ChevronIcon />
-      </summary>
-      <div
-        style={{
-          position: "absolute",
-          top: "calc(100% + 6px)",
-          left: 0,
-          background: "#fff",
-          border: "1px solid rgba(10,10,10,0.1)",
-          borderRadius: 10,
-          padding: 6,
-          zIndex: 20,
-          minWidth: 220,
-          maxHeight: 280,
-          overflowY: "auto",
-          boxShadow: "0 8px 28px rgba(0,0,0,0.1)",
-        }}
-      >
+    <details
+      className="vagas-filter-dropdown"
+      style={{ position: "relative", width: variant === "field" ? "100%" : undefined }}
+    >
+      <DropdownTrigger
+        variant={variant}
+        label={label}
+        currentLabel={currentLabel}
+        isActive={isActive}
+      />
+      <DropdownMenu>
         <button
           type="button"
           onClick={onClear}
@@ -245,7 +335,7 @@ function MultiFilterDropdown({
             </button>
           );
         })}
-      </div>
+      </DropdownMenu>
     </details>
   );
 }
@@ -256,6 +346,7 @@ type SingleFilterDropdownProps = {
   options: DropdownOption[];
   activeValue: string;
   onSelect: (value: string) => void;
+  variant?: DropdownVariant;
 };
 
 function SingleFilterDropdown({
@@ -264,6 +355,7 @@ function SingleFilterDropdown({
   options,
   activeValue,
   onSelect,
+  variant = "pill",
 }: SingleFilterDropdownProps) {
   if (options.length === 0) return null;
   const isActive = !!activeValue;
@@ -272,67 +364,17 @@ function SingleFilterDropdown({
     : allLabel;
 
   return (
-    <details className="vagas-filter-dropdown" style={{ position: "relative" }}>
-      <summary
-        style={{
-          listStyle: "none",
-          cursor: "pointer",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 7,
-          padding: "8px 12px",
-          borderRadius: 99,
-          background: "#fafaf6",
-          color: "#3a3a38",
-          border: `1.5px solid ${isActive ? "rgba(10,10,10,0.35)" : "rgba(10,10,10,0.1)"}`,
-          fontSize: 12.5,
-          whiteSpace: "nowrap",
-          fontFamily: GEIST,
-          width: 208,
-          boxSizing: "border-box",
-          flexShrink: 0,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 9.5,
-            letterSpacing: 0.4,
-            opacity: 0.6,
-            flexShrink: 0,
-          }}
-        >
-          {label}
-        </span>
-        <span
-          style={{
-            flex: 1,
-            fontWeight: isActive ? 600 : 500,
-            color: "#0a0a0a",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            minWidth: 0,
-          }}
-        >
-          {currentLabel}
-        </span>
-        <ChevronIcon />
-      </summary>
-      <div
-        style={{
-          position: "absolute",
-          top: "calc(100% + 6px)",
-          left: 0,
-          background: "#fff",
-          border: "1px solid rgba(10,10,10,0.1)",
-          borderRadius: 10,
-          padding: 6,
-          zIndex: 20,
-          minWidth: 200,
-          boxShadow: "0 8px 28px rgba(0,0,0,0.1)",
-        }}
-      >
+    <details
+      className="vagas-filter-dropdown"
+      style={{ position: "relative", width: variant === "field" ? "100%" : undefined }}
+    >
+      <DropdownTrigger
+        variant={variant}
+        label={label}
+        currentLabel={currentLabel}
+        isActive={isActive}
+      />
+      <DropdownMenu>
         <button
           type="button"
           onClick={() => onSelect("")}
@@ -377,7 +419,7 @@ function SingleFilterDropdown({
             {opt.label}
           </button>
         ))}
-      </div>
+      </DropdownMenu>
     </details>
   );
 }
@@ -402,6 +444,7 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
   const [estado, setEstado] = useState<string[]>(csv(activeFilters.estado));
   const [cidade, setCidade] = useState<string[]>(csv(activeFilters.cidade));
   const [publicada, setPublicada] = useState(activeFilters.publicada ?? "");
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const workModelItems = facets
     ? facets.workModels.map((f) => ({
@@ -446,14 +489,16 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
     ? facets.cities.map((f) => ({ value: f.value, label: f.value, count: f.count }))
     : [];
 
+  // Contagem separada por seção: primária (sempre visível) vs adicional
+  // (dentro do painel "mais filtros") — o badge do botão "mais filtros" só
+  // reflete a segunda.
+  const additionalPendingCount =
+    estado.length + cidade.length + empresa.length + (publicada ? 1 : 0);
   const pendingCount =
     modalidade.length +
     senioridade.length +
     area.length +
-    empresa.length +
-    estado.length +
-    cidade.length +
-    (publicada ? 1 : 0) +
+    additionalPendingCount +
     (q.trim() ? 1 : 0);
 
   const isDirty =
@@ -470,6 +515,43 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
     set(
       list.includes(value) ? list.filter((v) => v !== value) : [...list, value],
     );
+  }
+
+  // Cidade é relacionada ao estado (facet de cidade já vem escopado pro
+  // estado aplicado, ver page.tsx/getPublicJobFacets) — qualquer mudança
+  // em estado antes de aplicar invalida a cidade já selecionada, então
+  // limpa junto pra nunca deixar uma combinação estado+cidade impossível
+  // na URL (ex: estado=RJ&cidade=Campinas, que nunca bate vaga nenhuma).
+  function toggleEstado(value: string) {
+    toggle(estado, setEstado, value);
+    setCidade([]);
+  }
+
+  function clearEstado() {
+    setEstado([]);
+    setCidade([]);
+  }
+
+  function buildAppliedParams(overrides: Partial<Record<string, string>>) {
+    const p = new URLSearchParams();
+    const base: Record<string, string | undefined> = {
+      q: activeFilters.q,
+      area: activeFilters.area,
+      modalidade: activeFilters.modalidade,
+      senioridade: activeFilters.senioridade,
+      empresa: activeFilters.empresa,
+      estado: activeFilters.estado,
+      cidade: activeFilters.cidade,
+      publicada: activeFilters.publicada,
+      sort: activeFilters.sort,
+      excludeAnalyzed:
+        activeFilters.excludeAnalyzed === "false" ? "false" : undefined,
+      ...overrides,
+    };
+    for (const [key, value] of Object.entries(base)) {
+      if (value) p.set(key, value);
+    }
+    return p;
   }
 
   function applyFilters() {
@@ -506,12 +588,43 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
     // com os filtros antigos até o usuário clicar em "aplicar filtros".
     // minSkillsPct também some: era derivado de um filtro que não existe
     // mais depois do clear. sort e excludeAnalyzed não são "filtros" desta
-    // barra, então continuam como estavam.
+        // barra, então continuam como estavam.
     const p = new URLSearchParams();
     if (activeFilters.sort) p.set("sort", activeFilters.sort);
     if (activeFilters.excludeAnalyzed === "false") {
       p.set("excludeAnalyzed", "false");
     }
+    const qs = p.toString();
+    router.push(`/radar${qs ? `?${qs}` : ""}`);
+  }
+
+  // Limpa só os 4 campos do painel "mais filtros" (local + já aplicado),
+  // preservando busca/área/modalidade/senioridade aplicados — mesmo padrão
+  // de "aplica na hora" que clearAll() já usa pro resto da barra.
+  function clearAdditional() {
+    setEstado([]);
+    setCidade([]);
+    setEmpresa([]);
+    setPublicada("");
+
+    const p = buildAppliedParams({
+      empresa: undefined,
+      estado: undefined,
+      cidade: undefined,
+      publicada: undefined,
+    });
+    const qs = p.toString();
+    router.push(`/radar${qs ? `?${qs}` : ""}`);
+  }
+
+  // Remove um único valor de um filtro já aplicado (clique no "x" de uma
+  // tag em "filtros ativos") e navega na hora — diferente do fluxo
+  // pendente-até-aplicar do resto da barra, porque aqui a tag já representa
+  // algo que está no ar; tirar ela devia ter efeito imediato.
+  function removeAppliedValue(key: keyof ActiveFilters, value?: string) {
+    const current = csv(activeFilters[key]);
+    const next = value ? current.filter((v) => v !== value) : [];
+    const p = buildAppliedParams({ [key]: next.length > 0 ? next.join(",") : undefined });
     const qs = p.toString();
     router.push(`/radar${qs ? `?${qs}` : ""}`);
   }
@@ -534,6 +647,76 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
+  const areaTags = csv(activeFilters.area).map((v) => ({
+    filterKey: "area" as const,
+    value: v,
+    filterLabel: "área",
+    valueLabel: RADAR_AREA_LABELS[v] ?? v,
+  }));
+  const modalidadeTags = csv(activeFilters.modalidade).map((v) => ({
+    filterKey: "modalidade" as const,
+    value: v,
+    filterLabel: "modalidade",
+    valueLabel: WORK_MODEL_LABELS[v] ?? v,
+  }));
+  const senioridadeTags = csv(activeFilters.senioridade).map((v) => ({
+    filterKey: "senioridade" as const,
+    value: v,
+    filterLabel: "senioridade",
+    valueLabel: RADAR_SENIORITY_LABELS[v] ?? v,
+  }));
+  const estadoTags = csv(activeFilters.estado).map((v) => ({
+    filterKey: "estado" as const,
+    value: v,
+    filterLabel: "estado",
+    valueLabel: stateItems.find((o) => o.value === v)?.label ?? v,
+  }));
+  const cidadeTags = csv(activeFilters.cidade).map((v) => ({
+    filterKey: "cidade" as const,
+    value: v,
+    filterLabel: "cidade",
+    valueLabel: v,
+  }));
+  const empresaTags = csv(activeFilters.empresa).map((v) => ({
+    filterKey: "empresa" as const,
+    value: v,
+    filterLabel: "empresa",
+    valueLabel: v,
+  }));
+  const publicadaTags = activeFilters.publicada
+    ? [
+        {
+          filterKey: "publicada" as const,
+          value: undefined,
+          filterLabel: "publicado há",
+          valueLabel:
+            PUBLISHED_OPTIONS.find((o) => o.value === activeFilters.publicada)
+              ?.label ?? activeFilters.publicada,
+        },
+      ]
+    : [];
+  const qTag = activeFilters.q
+    ? [
+        {
+          filterKey: "q" as const,
+          value: undefined,
+          filterLabel: "busca",
+          valueLabel: activeFilters.q,
+        },
+      ]
+    : [];
+
+  const activeTags = [
+    ...qTag,
+    ...areaTags,
+    ...modalidadeTags,
+    ...senioridadeTags,
+    ...estadoTags,
+    ...cidadeTags,
+    ...empresaTags,
+    ...publicadaTags,
+  ];
+
   return (
     <form
       onSubmit={(event) => {
@@ -544,425 +727,464 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
       <style>{`
         .vagas-filter-dropdown > summary::-webkit-details-marker { display: none; }
         .vagas-filter-dropdown > summary { -webkit-tap-highlight-color: transparent; }
-        .vagas-filters-desktop { display: flex; }
-        .vagas-filters-mobile { display: none; }
-        .vagas-filters-mobile-pills { display: flex; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; }
-        .vagas-filters-mobile-pills::-webkit-scrollbar { display: none; }
+        .radar-filters-primary { flex-wrap: wrap; }
+        .radar-filters-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
         @media (max-width: 640px) {
-          .vagas-filters-desktop { display: none; }
-          .vagas-filters-mobile { display: flex; }
+          .radar-filters-grid { grid-template-columns: repeat(2, 1fr); }
         }
       `}</style>
 
-      {/* Desktop: uma linha só (busca + dropdowns + botões-ícone) */}
       <div
-        className="vagas-filters-desktop"
         style={{
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
           background: "#fff",
           border: "1px solid rgba(10,10,10,0.08)",
-          borderRadius: 12,
-          padding: "10px 12px",
-          flexWrap: "nowrap",
+          borderRadius: 14,
+          overflow: "hidden",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flexWrap: "nowrap",
-            flex: 1,
-            minWidth: 0,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              flex: "1 1 auto",
-              minWidth: 120,
-              padding: "8px 10px",
-            }}
-          >
-            <svg
-              aria-hidden
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              style={{ flexShrink: 0 }}
-            >
-              <title>Buscar</title>
-              <circle cx="11" cy="11" r="7" stroke="#8a8a85" strokeWidth="1.7" />
-              <path
-                d="M20 20l-3.5-3.5"
-                stroke="#8a8a85"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-              />
-            </svg>
-            <input
-              value={q}
-              onChange={(event) => setQ(event.target.value)}
-              placeholder="Cargo, tecnologia, empresa…"
-              style={{
-                flex: 1,
-                minWidth: 0,
-                border: "none",
-                background: "transparent",
-                fontSize: 14,
-                fontFamily: GEIST,
-                color: "#0a0a0a",
-                outline: "none",
-              }}
-            />
-            <span
-              style={{
-                fontFamily: MONO,
-                fontSize: 10,
-                color: "#8a8a85",
-                background: "rgba(10,10,10,0.05)",
-                padding: "2px 6px",
-                borderRadius: 4,
-                flexShrink: 0,
-              }}
-            >
-              ⌘K
-            </span>
-          </div>
-
-          <div
-            aria-hidden
-            style={{
-              width: 1,
-              alignSelf: "stretch",
-              background: "rgba(10,10,10,0.08)",
-              flexShrink: 0,
-            }}
-          />
-
-          <MultiFilterDropdown
-            label="ÁREA"
-            allLabel="todas"
-            options={areaItems}
-            selected={area}
-            onToggle={(v) => toggle(area, setArea, v)}
-            onClear={() => setArea([])}
-          />
-          <MultiFilterDropdown
-            label="MODALIDADE"
-            allLabel="todas"
-            options={workModelItems}
-            selected={modalidade}
-            onToggle={(v) => toggle(modalidade, setModalidade, v)}
-            onClear={() => setModalidade([])}
-          />
-          <MultiFilterDropdown
-            label="SENIORIDADE"
-            allLabel="todas"
-            options={seniorityItems}
-            selected={senioridade}
-            onToggle={(v) => toggle(senioridade, setSenioridade, v)}
-            onClear={() => setSenioridade([])}
-          />
-          <MultiFilterDropdown
-            label="ESTADO"
-            allLabel="todos"
-            options={stateItems}
-            selected={estado}
-            onToggle={(v) => toggle(estado, setEstado, v)}
-            onClear={() => setEstado([])}
-          />
-          <MultiFilterDropdown
-            label="CIDADE"
-            allLabel="todas"
-            options={cityItems}
-            selected={cidade}
-            onToggle={(v) => toggle(cidade, setCidade, v)}
-            onClear={() => setCidade([])}
-          />
-          <MultiFilterDropdown
-            label="EMPRESA"
-            allLabel="todas"
-            options={companyItems}
-            selected={empresa}
-            onToggle={(v) => toggle(empresa, setEmpresa, v)}
-            onClear={() => setEmpresa([])}
-          />
-
-          <SingleFilterDropdown
-            label="PUBLICADO HÁ"
-            allLabel="qualquer período"
-            options={PUBLISHED_OPTIONS}
-            activeValue={publicada}
-            onSelect={setPublicada}
-          />
-        </div>
-
-        {/* Botões-ícone (com tooltip nativo via title) — largura fixa e bem
-            menor que os textos, então essa área nunca disputa espaço com os
-            pills à esquerda nem força a busca a encolher demais. */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flexShrink: 0,
-          }}
-        >
-          <button
-            type="button"
-            onClick={clearAll}
-            title={`limpar filtros (${pendingCount})`}
-            aria-label={`limpar filtros (${pendingCount})`}
-            aria-hidden={pendingCount === 0}
-            tabIndex={pendingCount === 0 ? -1 : 0}
-            style={{
-              width: 34,
-              height: 34,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 8,
-              background: "#fafaf6",
-              border: "1px solid rgba(10,10,10,0.1)",
-              color: "#3a3a38",
-              cursor: pendingCount > 0 ? "pointer" : "default",
-              visibility: pendingCount > 0 ? "visible" : "hidden",
-              pointerEvents: pendingCount > 0 ? "auto" : "none",
-              flexShrink: 0,
-            }}
-          >
-            <svg
-              aria-hidden
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <title>Limpar filtros</title>
-              <circle
-                cx="12"
-                cy="12"
-                r="9"
-                stroke="currentColor"
-                strokeWidth="1.7"
-              />
-              <path
-                d="M9 9l6 6M15 9l-6 6"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-
-          <button
-            type="submit"
-            disabled={!isDirty}
-            title="aplicar filtros"
-            aria-label="aplicar filtros"
-            style={{
-              width: 34,
-              height: 34,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: isDirty ? "#0a0a0a" : "rgba(10,10,10,0.08)",
-              color: isDirty ? "#fafaf6" : "#8a8a85",
-              border: "none",
-              borderRadius: 8,
-              cursor: isDirty ? "pointer" : "default",
-              flexShrink: 0,
-            }}
-          >
-            <svg
-              aria-hidden
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <title>Aplicar filtros</title>
-              <path
-                d="M5 12l5 5L20 7"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile: busca em card própria + pills roláveis + botão de aplicar
-      circular com contador — cabeçalho de filtros é o único lugar onde a
-      referência de design difere o bastante do desktop pra não dar pra
-      resolver só escondendo/mostrando elementos com CSS. */}
-      <div className="vagas-filters-mobile" style={{ flexDirection: "column", gap: 10 }}>
+        {/* Linha principal: busca + pills primárias (área/modalidade/
+        senioridade) + botão "mais filtros" + ações de aplicar/limpar. */}
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: 10,
-            background: "#fff",
-            border: "1px solid rgba(10,10,10,0.08)",
-            borderRadius: 12,
-            padding: "12px 14px",
+            padding: "10px 12px 10px 16px",
+            flexWrap: "wrap",
           }}
         >
-          <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none">
-            <title>Buscar</title>
-            <circle cx="11" cy="11" r="7" stroke="#8a8a85" strokeWidth="1.7" />
-            <path
-              d="M20 20l-3.5-3.5"
-              stroke="#8a8a85"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-            />
-          </svg>
-          <input
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
-            placeholder="Cargo, tecnologia, empresa…"
+          <div
+            className="radar-filters-primary"
             style={{
-              flex: 1,
-              minWidth: 0,
-              border: "none",
-              background: "transparent",
-              fontSize: 14,
-              fontFamily: GEIST,
-              color: "#0a0a0a",
-              outline: "none",
-            }}
-          />
-        </div>
-
-        <div className="vagas-filters-mobile-pills">
-          <MultiFilterDropdown
-            label="ÁREA"
-            allLabel="todas"
-            options={areaItems}
-            selected={area}
-            onToggle={(v) => toggle(area, setArea, v)}
-            onClear={() => setArea([])}
-          />
-          <MultiFilterDropdown
-            label="MODALIDADE"
-            allLabel="todas"
-            options={workModelItems}
-            selected={modalidade}
-            onToggle={(v) => toggle(modalidade, setModalidade, v)}
-            onClear={() => setModalidade([])}
-          />
-          <MultiFilterDropdown
-            label="SENIORIDADE"
-            allLabel="todas"
-            options={seniorityItems}
-            selected={senioridade}
-            onToggle={(v) => toggle(senioridade, setSenioridade, v)}
-            onClear={() => setSenioridade([])}
-          />
-          <MultiFilterDropdown
-            label="ESTADO"
-            allLabel="todos"
-            options={stateItems}
-            selected={estado}
-            onToggle={(v) => toggle(estado, setEstado, v)}
-            onClear={() => setEstado([])}
-          />
-          <MultiFilterDropdown
-            label="CIDADE"
-            allLabel="todas"
-            options={cityItems}
-            selected={cidade}
-            onToggle={(v) => toggle(cidade, setCidade, v)}
-            onClear={() => setCidade([])}
-          />
-          <MultiFilterDropdown
-            label="EMPRESA"
-            allLabel="todas"
-            options={companyItems}
-            selected={empresa}
-            onToggle={(v) => toggle(empresa, setEmpresa, v)}
-            onClear={() => setEmpresa([])}
-          />
-          <SingleFilterDropdown
-            label="PUBLICADO HÁ"
-            allLabel="qualquer período"
-            options={PUBLISHED_OPTIONS}
-            activeValue={publicada}
-            onSelect={setPublicada}
-          />
-
-          <button
-            type="submit"
-            disabled={!isDirty}
-            title="aplicar filtros"
-            aria-label={`aplicar filtros (${pendingCount})`}
-            style={{
-              position: "relative",
-              width: 44,
-              height: 44,
-              flexShrink: 0,
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              borderRadius: "50%",
-              background: isDirty ? "#0a0a0a" : "rgba(10,10,10,0.08)",
-              color: isDirty ? "#fafaf6" : "#8a8a85",
-              border: "none",
-              cursor: isDirty ? "pointer" : "default",
+              gap: 8,
+              flex: "1 1 auto",
+              minWidth: 0,
             }}
           >
-            <svg
-              aria-hidden
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                flex: "1 1 220px",
+                minWidth: 120,
+                padding: "8px 10px",
+              }}
             >
-              <title>Aplicar filtros</title>
-              <path
-                d="M5 12l5 5L20 7"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+              <svg
+                aria-hidden
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                style={{ flexShrink: 0 }}
+              >
+                <title>Buscar</title>
+                <circle cx="11" cy="11" r="7" stroke="#8a8a85" strokeWidth="1.7" />
+                <path
+                  d="M20 20l-3.5-3.5"
+                  stroke="#8a8a85"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <input
+                value={q}
+                onChange={(event) => setQ(event.target.value)}
+                placeholder="Cargo, tecnologia, empresa…"
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  border: "none",
+                  background: "transparent",
+                  fontSize: 14,
+                  fontFamily: GEIST,
+                  color: "#0a0a0a",
+                  outline: "none",
+                }}
               />
-            </svg>
-            {pendingCount > 0 ? (
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  color: "#8a8a85",
+                  background: "rgba(10,10,10,0.05)",
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  flexShrink: 0,
+                }}
+              >
+                ⌘K
+              </span>
+            </div>
+
+            <div
+              aria-hidden
+              style={{
+                width: 1,
+                alignSelf: "stretch",
+                background: "rgba(10,10,10,0.08)",
+                flexShrink: 0,
+              }}
+            />
+
+            <MultiFilterDropdown
+              label="ÁREA"
+              allLabel="todas"
+              options={areaItems}
+              selected={area}
+              onToggle={(v) => toggle(area, setArea, v)}
+              onClear={() => setArea([])}
+            />
+            <MultiFilterDropdown
+              label="SENIORIDADE"
+              allLabel="todas"
+              options={seniorityItems}
+              selected={senioridade}
+              onToggle={(v) => toggle(senioridade, setSenioridade, v)}
+              onClear={() => setSenioridade([])}
+            />
+            <MultiFilterDropdown
+              label="MODALIDADE"
+              allLabel="todas"
+              options={workModelItems}
+              selected={modalidade}
+              onToggle={(v) => toggle(modalidade, setModalidade, v)}
+              onClear={() => setModalidade([])}
+            />
+
+            <button
+              type="button"
+              onClick={() => setPanelOpen((v) => !v)}
+              aria-expanded={panelOpen}
+              aria-controls="radar-more-filters-panel"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                background: panelOpen ? "#fff" : "#fbfbf7",
+                border: `1px solid ${panelOpen ? "#0a0a0a" : "rgba(10,10,10,0.1)"}`,
+                boxShadow: panelOpen ? "0 0 0 1px #0a0a0a" : "none",
+                borderRadius: 999,
+                padding: "7px 13px",
+                fontFamily: GEIST,
+                fontSize: 12.5,
+                fontWeight: 500,
+                color: "#3a3a38",
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <title>Mais filtros</title>
+                <path
+                  d="M4 6h16M7 12h10M10 18h4"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                  strokeLinecap="round"
+                />
+              </svg>
+              mais filtros
+              {additionalPendingCount > 0 ? (
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    background: "#0a0a0a",
+                    color: "#c6ff3a",
+                    borderRadius: 99,
+                    minWidth: 16,
+                    height: 16,
+                    display: "grid",
+                    placeItems: "center",
+                    padding: "0 4px",
+                  }}
+                >
+                  {additionalPendingCount}
+                </span>
+              ) : null}
               <span
                 aria-hidden
                 style={{
-                  position: "absolute",
-                  top: -3,
-                  right: -3,
-                  minWidth: 17,
-                  height: 17,
-                  borderRadius: "50%",
-                  background: "#c6ff3a",
-                  color: "#25330a",
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  fontWeight: 700,
                   display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  border: "2px solid #efeee8",
+                  transition: "transform .18s",
+                  transform: panelOpen ? "rotate(180deg)" : "none",
                 }}
               >
-                {pendingCount}
+                <ChevronIcon />
               </span>
-            ) : null}
-          </button>
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexShrink: 0,
+            }}
+          >
+            <button
+              type="button"
+              onClick={clearAll}
+              title={`limpar filtros (${pendingCount})`}
+              aria-label={`limpar filtros (${pendingCount})`}
+              aria-hidden={pendingCount === 0}
+              tabIndex={pendingCount === 0 ? -1 : 0}
+              style={{
+                width: 34,
+                height: 34,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 8,
+                background: "#fafaf6",
+                border: "1px solid rgba(10,10,10,0.1)",
+                color: "#3a3a38",
+                cursor: pendingCount > 0 ? "pointer" : "default",
+                visibility: pendingCount > 0 ? "visible" : "hidden",
+                pointerEvents: pendingCount > 0 ? "auto" : "none",
+                flexShrink: 0,
+              }}
+            >
+              <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <title>Limpar filtros</title>
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
+                <path
+                  d="M9 9l6 6M15 9l-6 6"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+
+            <button
+              type="submit"
+              disabled={!isDirty}
+              title="aplicar filtros"
+              aria-label="aplicar filtros"
+              style={{
+                width: 34,
+                height: 34,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: isDirty ? "#0a0a0a" : "rgba(10,10,10,0.08)",
+                color: isDirty ? "#fafaf6" : "#8a8a85",
+                border: "none",
+                borderRadius: 8,
+                cursor: isDirty ? "pointer" : "default",
+                flexShrink: 0,
+              }}
+            >
+              <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <title>Aplicar filtros</title>
+                <path
+                  d="M5 12l5 5L20 7"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Painel "mais filtros": estado/cidade/empresa/publicado há, em
+        grid — só some quando o usuário fecha ou já aplicou. */}
+        <div
+          id="radar-more-filters-panel"
+          hidden={!panelOpen}
+          style={{
+            borderTop: "1px solid rgba(10,10,10,0.06)",
+            background: "#fbfbf7",
+            padding: 16,
+          }}
+        >
+          <div className="radar-filters-grid">
+            <MultiFilterDropdown
+              label="ESTADO"
+              allLabel="todos"
+              options={stateItems}
+              selected={estado}
+              onToggle={toggleEstado}
+              onClear={clearEstado}
+              variant="field"
+            />
+            <MultiFilterDropdown
+              label="CIDADE"
+              allLabel="todas"
+              options={cityItems}
+              selected={cidade}
+              onToggle={(v) => toggle(cidade, setCidade, v)}
+              onClear={() => setCidade([])}
+              variant="field"
+            />
+            <MultiFilterDropdown
+              label="EMPRESA"
+              allLabel="todas"
+              options={companyItems}
+              selected={empresa}
+              onToggle={(v) => toggle(empresa, setEmpresa, v)}
+              onClear={() => setEmpresa([])}
+              variant="field"
+            />
+            <SingleFilterDropdown
+              label="PUBLICADO HÁ"
+              allLabel="qualquer período"
+              options={PUBLISHED_OPTIONS}
+              activeValue={publicada}
+              onSelect={setPublicada}
+              variant="field"
+            />
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              marginTop: 14,
+              paddingTop: 13,
+              borderTop: "1px solid rgba(10,10,10,0.08)",
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ fontFamily: MONO, fontSize: 10, color: "#8a8a85" }}>
+              {additionalPendingCount > 0
+                ? `${additionalPendingCount} filtro${additionalPendingCount > 1 ? "s" : ""} adicional${additionalPendingCount > 1 ? "is" : ""} ativo${additionalPendingCount > 1 ? "s" : ""}`
+                : "nenhum filtro adicional ativo"}
+            </span>
+            <button
+              type="button"
+              onClick={clearAdditional}
+              style={{
+                background: "transparent",
+                border: "none",
+                fontFamily: GEIST,
+                fontSize: 12.5,
+                color: "#6a6560",
+                cursor: "pointer",
+                textDecoration: "underline",
+                textUnderlineOffset: 3,
+              }}
+            >
+              limpar adicionais
+            </button>
+            <button
+              type="submit"
+              style={{
+                marginLeft: "auto",
+                background: "#0a0a0a",
+                color: "#fafaf6",
+                border: "none",
+                borderRadius: 9,
+                padding: "9px 18px",
+                fontFamily: GEIST,
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: "pointer",
+              }}
+            >
+              aplicar filtros
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Filtros ativos: reflete o que já está aplicado (activeFilters),
+      não o estado pendente acima — cada tag remove só aquele valor e
+      navega na hora. */}
+      {activeTags.length > 0 ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            marginTop: 12,
+          }}
+        >
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 9.5,
+              letterSpacing: 0.8,
+              textTransform: "uppercase",
+              color: "#8a8a85",
+              marginRight: 2,
+            }}
+          >
+            filtros ativos
+          </span>
+          {activeTags.map((tag) => (
+            <span
+              key={`${tag.filterKey}:${tag.value ?? ""}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                background: "#fff",
+                border: "1px solid rgba(10,10,10,0.1)",
+                borderRadius: 999,
+                padding: "5px 8px 5px 11px",
+                fontSize: 12,
+                color: "#3a3a38",
+              }}
+            >
+              {tag.filterLabel}: <b style={{ fontWeight: 600, color: "#0a0a0a" }}>{tag.valueLabel}</b>
+              <button
+                type="button"
+                onClick={() => removeAppliedValue(tag.filterKey, tag.value)}
+                aria-label={`remover filtro ${tag.filterLabel}: ${tag.valueLabel}`}
+                style={{
+                  width: 15,
+                  height: 15,
+                  borderRadius: "50%",
+                  background: "#f0efe8",
+                  border: "none",
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  padding: 0,
+                }}
+              >
+                <svg aria-hidden width="8" height="8" viewBox="0 0 24 24" fill="none">
+                  <title>Remover</title>
+                  <path
+                    d="M6 6l12 12M18 6L6 18"
+                    stroke="#6a6560"
+                    strokeWidth="2.6"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={clearAll}
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              color: "#8a8a85",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              textDecoration: "underline",
+              textUnderlineOffset: 3,
+            }}
+          >
+            limpar tudo
+          </button>
+        </div>
+      ) : null}
     </form>
   );
 }
