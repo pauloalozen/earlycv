@@ -301,6 +301,8 @@ enum JobArea {
   GROWTH_MARKETING
   BUSINESS_ANALYTICS
   CX_DIGITAL
+  IT_SUPPORT
+  ERP_FUNCTIONAL
   OTHER
 }
 
@@ -1019,8 +1021,8 @@ model IngestionSchedulerConfig {
   enabled       Boolean @default(false)
   globalCron    String?
   timezone      String  @default("America/Sao_Paulo")
-  normalDelayMs Int     @default(45000)
-  errorDelayMs  Int     @default(90000)
+  normalDelayMs Int     @default(22000)
+  errorDelayMs  Int     @default(45000)
 
   // Radar de Oportunidades: config do JobEnrichmentWorker, lida com cache
   // de 60s (EnrichmentConfigService) em vez de env var — ver

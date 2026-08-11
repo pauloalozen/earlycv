@@ -1,7 +1,7 @@
 import { ContractType, JobArea, SeniorityLevel } from "@prisma/client";
 import type OpenAI from "openai";
 
-export const JOB_ENRICHMENT_PROMPT_VERSION = "2026-08-08.v4";
+export const JOB_ENRICHMENT_PROMPT_VERSION = "2026-08-11.v5";
 
 const DESCRIPTION_MAX_CHARS = 6000;
 const CAREER_FINGERPRINT_MAX_ITEMS = 6;
@@ -54,6 +54,16 @@ commercial analyst, sales ops, go-to-market analyst
 CX_DIGITAL: customer experience designer, CX analyst, conversational designer,
 UX researcher, service designer, customer success (em contexto de produto digital),
 voice of customer analyst
+IT_SUPPORT: suporte técnico, service desk, help desk, suporte N1/N2/N3,
+analista de suporte, técnico de suporte, infraestrutura de TI (nível
+operacional: instalação/configuração/manutenção de equipamentos, redes,
+microinformática), técnico de redes, técnico de telecom, analista de
+governança/gestão de ativos de TI, analista de implantação de TI
+ERP_FUNCTIONAL: consultor(a) funcional ou técnico de ERP (SAP — qualquer
+módulo: FI, CO, MM, SD, HCM, BASIS, SuccessFactors, BRIM etc; Oracle
+Cloud/Fusion — Financials, SCM, HCM, EPM etc; outros ERPs), analista de
+sistemas com foco em SAP/Oracle/ERP, analista de negócios de TI cujo
+trabalho é mapear/especificar impacto em sistemas ERP/corporativos
 OTHER: qualquer coisa que não se encaixe nas categorias acima
 
 ## Regras de classificação para casos ambíguos
@@ -64,6 +74,19 @@ OTHER: qualquer coisa que não se encaixe nas categorias acima
   Se focado em processos de negócio tradicionais → OTHER.
 - Customer Success: só CX_DIGITAL se o trabalho envolve produto digital diretamente.
   CS comercial/vendas em empresa não-tech → OTHER.
+- "Analista/Técnico de Suporte" sem outro qualificador: por padrão é
+  IT_SUPPORT (suporte de TI/sistemas). Só é OTHER se a descrição deixar claro
+  que é suporte comercial/vendas/atendimento ao cliente sem nenhum
+  componente de TI (ex: "suporte comercial em loja", "suporte ao paciente").
+- "Analista/Consultor de Produtos" em empresa não-nativamente-tech (varejo,
+  indústria, banco tradicional): só classifica como PRODUCT/CX_DIGITAL se a
+  descrição deixar claro que o produto é digital/software (ex: menciona
+  "produto digital", "contas digitais", "transformação digital", "solução
+  tecnológica", time/squad de produto digital). Produto físico/financeiro
+  tradicional sem menção a componente digital explícito → OTHER, mesmo que o
+  título use a palavra "produto".
+- "Segurança do Trabalho"/"Engenheiro de Segurança do Trabalho": é segurança
+  ocupacional/industrial, NUNCA CYBERSECURITY — classifica como OTHER.
 
 ## Formato de resposta (JSON estrito, sem texto fora do JSON)
 {

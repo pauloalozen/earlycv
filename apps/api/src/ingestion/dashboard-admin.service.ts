@@ -18,6 +18,8 @@ const AREA_LABELS: Record<string, string> = {
   GROWTH_MARKETING: "Growth & Marketing Digital",
   BUSINESS_ANALYTICS: "Business Analytics",
   CX_DIGITAL: "CX Digital",
+  IT_SUPPORT: "Suporte & Infraestrutura TI",
+  ERP_FUNCTIONAL: "SAP & ERP Funcional",
   OTHER: "Geral",
 };
 
