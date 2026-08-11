@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DatabaseService } from "../../database/database.service";
+import { normalizeCity, normalizeState } from "../../jobs/geo-normalizer";
 import { shouldSkipDetailFetch } from "../dedup-policy";
 import { IngestionFetchError } from "../errors";
 import { SemanticFilterService } from "../semantic-filter.service";
@@ -384,11 +385,16 @@ export class TalentbrewAdapter implements IngestionSourceAdapter {
     const descriptionClean = stripHtml(descriptionRaw) || title;
     const workModel = inferWorkModel(locationText || card.location, title, descriptionClean);
     const publishedAt = normalizeDate(jobPosting.datePosted);
+    const state =
+      normalizeState(address?.addressRegion)?.sigla ??
+      address?.addressRegion?.trim();
 
     return {
       canonicalKey,
-      city: address?.addressLocality?.trim() || undefined,
-      country: address?.addressCountry?.trim() || "Brasil",
+      city: normalizeCity(address?.addressLocality) ?? undefined,
+      // Sem fallback "Brasil" de propósito — ver isForeignLocation() em
+      // ingestion.service.ts, que usa o vazio como sinal.
+      country: address?.addressCountry?.trim(),
       department: jobPosting.industry?.trim() || undefined,
       descriptionClean,
       descriptionRaw,
@@ -396,12 +402,12 @@ export class TalentbrewAdapter implements IngestionSourceAdapter {
       employmentTypeRaw: jobPosting.employmentType?.trim() || undefined,
       externalJobId: card.jobId,
       firstSeenAt: publishedAt,
-      lastSeenAt: publishedAt,
+      lastSeenAt: new Date().toISOString(),
       locationText: locationText || card.location || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,
       sourceJobUrl: jobPosting.url?.trim() || `${origin}${card.href}`,
-      state: address?.addressRegion?.trim() || undefined,
+      state,
       status: "active",
       title,
       workModel,

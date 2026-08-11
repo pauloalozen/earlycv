@@ -96,3 +96,66 @@ test("listPublicFacets requires enrichment.enrichmentStatus === COMPLETED", asyn
   const where = calls[0]?.where as { enrichment?: { enrichmentStatus?: string } };
   assert.equal(where.enrichment?.enrichmentStatus, "COMPLETED");
 });
+
+function buildFacetsDatabaseStub(
+  jobs: Array<{
+    workModel: string | null;
+    state: string | null;
+    city: string | null;
+    company: { name: string };
+    enrichment: { dominantArea: string | null; seniority: string | null } | null;
+  }>,
+) {
+  return {
+    job: {
+      findMany: async () => jobs,
+    },
+  };
+}
+
+test("listPublicFacets returns cities from every state when no state filter is applied", async () => {
+  const database = buildFacetsDatabaseStub([
+    { workModel: null, state: "SP", city: "São Paulo", company: { name: "A" }, enrichment: null },
+    { workModel: null, state: "RJ", city: "Rio de Janeiro", company: { name: "B" }, enrichment: null },
+  ]);
+  const service = new JobsService(database as never, undefined as never, undefined as never);
+
+  const facets = await service.listPublicFacets();
+
+  assert.deepEqual(
+    facets.cities.map((c) => c.value).sort(),
+    ["Rio de Janeiro", "São Paulo"],
+  );
+});
+
+test("listPublicFacets scopes cities to the selected state (cascade) — accepts sigla, nome por extenso e caixa misturada como o mesmo estado", async () => {
+  const database = buildFacetsDatabaseStub([
+    { workModel: null, state: "SP", city: "São Paulo", company: { name: "A" }, enrichment: null },
+    { workModel: null, state: "São Paulo", city: "Campinas", company: { name: "B" }, enrichment: null },
+    { workModel: null, state: "SAO PAULO", city: "Jaguariúna", company: { name: "C" }, enrichment: null },
+    { workModel: null, state: "RJ", city: "Rio de Janeiro", company: { name: "D" }, enrichment: null },
+  ]);
+  const service = new JobsService(database as never, undefined as never, undefined as never);
+
+  const facets = await service.listPublicFacets({ state: "SP" });
+
+  assert.deepEqual(
+    facets.cities.map((c) => c.value).sort(),
+    ["Campinas", "Jaguariúna", "São Paulo"],
+  );
+});
+
+test("listPublicFacets excludes jobs with an unrecognized/foreign state from the scoped city facet", async () => {
+  const database = buildFacetsDatabaseStub([
+    { workModel: null, state: "SP", city: "São Paulo", company: { name: "A" }, enrichment: null },
+    { workModel: null, state: "CA", city: "San Francisco", company: { name: "B" }, enrichment: null },
+  ]);
+  const service = new JobsService(database as never, undefined as never, undefined as never);
+
+  const facets = await service.listPublicFacets({ state: "SP" });
+
+  assert.deepEqual(
+    facets.cities.map((c) => c.value),
+    ["São Paulo"],
+  );
+});

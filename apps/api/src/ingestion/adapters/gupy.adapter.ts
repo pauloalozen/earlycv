@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DatabaseService } from "../../database/database.service";
+import { normalizeCity, normalizeState } from "../../jobs/geo-normalizer";
 import { shouldSkipDetailFetch } from "../dedup-policy";
 import { IngestionFetchError } from "../errors";
 import { SemanticFilterService } from "../semantic-filter.service";
@@ -451,10 +452,12 @@ export class GupyAdapter implements IngestionSourceAdapter {
       .join("\n");
     const descriptionClean = stripHtml(descriptionRaw);
     const title = job.name?.trim() || `Gupy job ${String(job.id)}`;
+    const state =
+      normalizeState(job.addressState)?.sigla ?? job.addressState?.trim();
 
     return {
       canonicalKey: `gupy:${subdomain}:${String(job.id)}`,
-      city: job.addressCity?.trim() || undefined,
+      city: normalizeCity(job.addressCity) ?? undefined,
       country: job.addressCountry?.trim() || undefined,
       department: job.departmentName?.trim() || undefined,
       descriptionClean,
@@ -464,13 +467,13 @@ export class GupyAdapter implements IngestionSourceAdapter {
       employmentTypeRaw: job.type?.trim() || undefined,
       externalJobId: String(job.id),
       firstSeenAt: publishedAt,
-      lastSeenAt: publishedAt,
+      lastSeenAt: new Date().toISOString(),
       locationText: locationParts.join(", ") || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,
       seniorityLevel: undefined,
       sourceJobUrl: `https://${subdomain}.gupy.io/jobs/${String(job.id)}?jobBoardSource=gupy_public_page`,
-      state: job.addressState?.trim() || undefined,
+      state,
       status: "active",
       title,
       workModel: normalizeWorkModel(job.workplaceType, job.remoteWorking),

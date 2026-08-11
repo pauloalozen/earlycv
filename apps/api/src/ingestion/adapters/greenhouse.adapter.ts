@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DatabaseService } from "../../database/database.service";
+import { normalizeCity, normalizeState } from "../../jobs/geo-normalizer";
 import { IngestionFetchError } from "../errors";
 import { SemanticFilterService } from "../semantic-filter.service";
 import type {
@@ -252,7 +253,11 @@ export class GreenhouseAdapter implements IngestionSourceAdapter {
   ): NormalizedJobObservation {
     const title = job.title?.trim() || `Greenhouse job ${String(job.id)}`;
     const locationText = job.location?.name?.trim() ?? "";
-    const { city, state, country } = parseLocation(locationText);
+    const parsedLocation = parseLocation(locationText);
+    const country = parsedLocation.country;
+    const city = normalizeCity(parsedLocation.city) ?? undefined;
+    const state =
+      normalizeState(parsedLocation.state)?.sigla ?? parsedLocation.state;
 
     const descriptionRaw = job.content ?? "";
     const descriptionClean = stripHtml(descriptionRaw) || title;
@@ -262,13 +267,15 @@ export class GreenhouseAdapter implements IngestionSourceAdapter {
     return {
       canonicalKey,
       city,
-      country: country || "Brasil",
+      // Sem fallback "Brasil" de propósito — ver isForeignLocation() em
+      // ingestion.service.ts, que usa o vazio como sinal.
+      country,
       department: job.departments?.[0]?.name?.trim() || undefined,
       descriptionClean,
       descriptionRaw,
       externalJobId: String(job.id),
       firstSeenAt: publishedAt,
-      lastSeenAt: publishedAt,
+      lastSeenAt: new Date().toISOString(),
       locationText: locationText || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,

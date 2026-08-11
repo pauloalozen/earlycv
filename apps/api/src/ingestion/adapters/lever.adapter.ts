@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DatabaseService } from "../../database/database.service";
+import { normalizeCity, normalizeState } from "../../jobs/geo-normalizer";
 import { IngestionFetchError } from "../errors";
 import { SemanticFilterService } from "../semantic-filter.service";
 import type {
@@ -261,7 +262,11 @@ export class LeverAdapter implements IngestionSourceAdapter {
   ): NormalizedJobObservation {
     const title = posting.text?.trim() || `Lever posting ${posting.id}`;
     const locationText = posting.categories?.location?.trim() ?? "";
-    const { city, state, country } = parseLocation(locationText);
+    const parsedLocation = parseLocation(locationText);
+    const country = parsedLocation.country;
+    const city = normalizeCity(parsedLocation.city) ?? undefined;
+    const state =
+      normalizeState(parsedLocation.state)?.sigla ?? parsedLocation.state;
 
     const descriptionRaw = [
       posting.description ?? "",
@@ -294,14 +299,16 @@ export class LeverAdapter implements IngestionSourceAdapter {
     return {
       canonicalKey,
       city,
-      country: posting.country || country || "Brasil",
+      // Sem fallback "Brasil" de propósito — ver isForeignLocation() em
+      // ingestion.service.ts, que usa o vazio como sinal.
+      country: posting.country || country,
       department: posting.categories?.department?.trim() || undefined,
       descriptionClean,
       descriptionRaw,
       employmentType: posting.categories?.commitment?.trim() || undefined,
       externalJobId: posting.id,
       firstSeenAt: publishedAt,
-      lastSeenAt: publishedAt,
+      lastSeenAt: new Date().toISOString(),
       locationText: locationText || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,

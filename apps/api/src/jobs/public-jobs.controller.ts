@@ -61,6 +61,10 @@ export class PublicJobsController {
     @Query("minSkillsPct") minSkillsPctRaw?: string,
     @Query("sort") sort?: string,
     @Query("excludeAnalyzed") excludeAnalyzedRaw?: string,
+    @Query("area") area?: string,
+    @Query("seniority") seniority?: string,
+    @Query("state") state?: string,
+    @Query("city") city?: string,
   ) {
     const validPublishedWithin = ["24h", "3d", "7d"].includes(
       publishedWithin ?? "",
@@ -84,6 +88,10 @@ export class PublicJobsController {
       seniorityLevel,
       companyName,
       publishedWithin: validPublishedWithin,
+      area,
+      seniority,
+      state,
+      city,
     };
 
     const radarProfile = user
@@ -257,8 +265,11 @@ export class PublicJobsController {
   @Get("facets")
   @InternalRoles("admin", "superadmin")
   @UseGuards(PublicJobsGhostModeGuard)
-  async getFacets(@Req() _request: Request) {
-    return this.jobsService.listPublicFacets();
+  async getFacets(
+    @Req() _request: Request,
+    @Query("state") state?: string,
+  ) {
+    return this.jobsService.listPublicFacets({ state });
   }
 
   // Precisa vir antes de ":slug" — "by-id" tem 2 segmentos e não colide,

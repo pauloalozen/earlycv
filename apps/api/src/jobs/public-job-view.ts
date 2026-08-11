@@ -1,5 +1,6 @@
 type PublicJobInput = {
   canonicalKey: string;
+  city: string | null;
   company: { name: string; websiteUrl: string | null };
   country: string | null;
   descriptionClean: string;
@@ -14,6 +15,7 @@ type PublicJobInput = {
   seniorityLevel: string | null;
   slug: string | null;
   sourceJobUrl: string;
+  state: string | null;
   status: string;
   title: string;
   workModel: string | null;
@@ -21,6 +23,7 @@ type PublicJobInput = {
 
 export type PublicJobView = {
   canonicalKey: string;
+  city: string | null;
   company: string;
   companyWebsiteUrl: string | null;
   country: string | null;
@@ -35,6 +38,7 @@ export type PublicJobView = {
   slug: string;
   descriptionHtml: string;
   sourceJobUrl: string;
+  state: string | null;
   status: string;
   technologies: string[];
   title: string;
@@ -60,6 +64,7 @@ export function buildPublicJobSlug(id: string, title: string, company: string) {
 export function toPublicJobView(job: PublicJobInput): PublicJobView {
   return {
     canonicalKey: job.canonicalKey,
+    city: job.city,
     company: job.company.name,
     companyWebsiteUrl: job.company.websiteUrl,
     country: job.country,
@@ -77,6 +82,7 @@ export function toPublicJobView(job: PublicJobInput): PublicJobView {
     // de tipo; se aparecer em produção é sinal de bug na query chamadora.
     slug: job.slug ?? "",
     sourceJobUrl: job.sourceJobUrl,
+    state: job.state,
     status: job.status,
     technologies: job.enrichment?.technologies ?? [],
     title: job.title,

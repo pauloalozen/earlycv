@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DatabaseService } from "../../database/database.service";
+import { normalizeCity, normalizeState } from "../../jobs/geo-normalizer";
 import { shouldSkipDetailFetch } from "../dedup-policy";
 import { IngestionFetchError } from "../errors";
 import { SemanticFilterService } from "../semantic-filter.service";
@@ -402,7 +403,10 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
       detail.location?.trim() ||
       listingJob.locationsText?.trim() ||
       "";
-    const { city, state } = parseLocation(locationText);
+    const parsedLocation = parseLocation(locationText);
+    const city = normalizeCity(parsedLocation.city) ?? undefined;
+    const state =
+      normalizeState(parsedLocation.state)?.sigla ?? parsedLocation.state;
     const country = detail.country?.descriptor?.trim();
 
     const descriptionRaw = detail.jobDescription ?? "";
@@ -413,14 +417,16 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
     return {
       canonicalKey,
       city,
-      country: country || "Brasil",
+      // Sem fallback "Brasil" de propósito — ver isForeignLocation() em
+      // ingestion.service.ts, que usa o vazio como sinal.
+      country,
       descriptionClean,
       descriptionRaw,
       employmentType: detail.timeType?.trim() || undefined,
       employmentTypeRaw: detail.timeType?.trim() || undefined,
       externalJobId,
       firstSeenAt: publishedAt,
-      lastSeenAt: publishedAt,
+      lastSeenAt: new Date().toISOString(),
       locationText: locationText || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,

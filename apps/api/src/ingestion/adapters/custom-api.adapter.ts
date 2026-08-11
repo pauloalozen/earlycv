@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
+import { normalizeCity, normalizeState } from "../../jobs/geo-normalizer";
 import type {
   IngestionSourceAdapter,
   JobSourceContext,
@@ -29,7 +30,7 @@ export class CustomApiAdapter implements IngestionSourceAdapter {
     return [
       {
         canonicalKey: `${companySlug}:${sourceSlug}:data-platform-analyst`,
-        city: "Campinas",
+        city: normalizeCity("Campinas") ?? undefined,
         country: "Brasil",
         descriptionClean:
           "Analise de qualidade da base de vagas e monitoramento de catalogo.",
@@ -44,7 +45,7 @@ export class CustomApiAdapter implements IngestionSourceAdapter {
         publishedAtSource: now,
         seniorityLevel: "pleno",
         sourceJobUrl: `${jobSource.sourceUrl.replace(/\/+$/, "")}/data-platform-analyst`,
-        state: "SP",
+        state: normalizeState("SP")?.sigla ?? "SP",
         status: "active",
         title: "Data Platform Analyst",
         workModel: "onsite",

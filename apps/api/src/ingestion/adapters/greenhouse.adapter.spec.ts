@@ -133,7 +133,7 @@ test("GreenhouseAdapter maps observation fields from the board API", async () =>
       observations[0]?.sourceJobUrl,
       "https://job-boards.greenhouse.io/vtex/jobs/6100504004",
     );
-    assert.equal(observations[0]?.city, "Sao Paulo");
+    assert.equal(observations[0]?.city, "São Paulo");
     assert.equal(observations[0]?.state, "SP");
     assert.equal(observations[0]?.country, "Brasil");
     assert.equal(observations[0]?.department, "Tech");
@@ -249,7 +249,7 @@ test("GreenhouseAdapter parses 'Sao Paulo, SP, Brasil' into city/state/country",
       ),
     );
 
-    assert.equal(observations[0]?.city, "Sao Paulo");
+    assert.equal(observations[0]?.city, "São Paulo");
     assert.equal(observations[0]?.state, "SP");
     assert.equal(observations[0]?.country, "Brasil");
   } finally {

@@ -145,7 +145,7 @@ test("TeamtailorAdapter maps observation fields from the jobs.json feed", async 
       observations[0]?.sourceJobUrl,
       "https://loft.teamtailor.com/jobs/8194079-analista-de-suporte",
     );
-    assert.equal(observations[0]?.city, "Sao Paulo");
+    assert.equal(observations[0]?.city, "São Paulo");
     assert.equal(observations[0]?.state, "Sao Paulo - SP");
     assert.equal(observations[0]?.country, "BR");
     assert.equal(observations[0]?.descriptionClean.includes("Descricao"), true);

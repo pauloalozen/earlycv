@@ -13,6 +13,7 @@ import type {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { isForeignLocation } from "../jobs/geo-normalizer";
 import { buildPublicJobSlug } from "../jobs/public-job-view";
 import {
   AshbyAdapter,
@@ -690,6 +691,25 @@ export class IngestionService {
     jobSource: JobSourceContext,
     observation: NormalizedJobObservation,
   ) {
+    // Vagas de boards globais (Workday/Greenhouse/Ashby de empresas com
+    // operação Brasil, mas board único mundial) trazem vaga de qualquer
+    // país junto com as brasileiras. isForeignLocation() usa o country
+    // real da fonte (sem o fallback "Brasil" que os adapters aplicavam
+    // antes — ver comentário em cada adapter) e, quando ele vem vazio, cai
+    // pro state batendo com estado americano/país estrangeiro reconhecido.
+    // Rejeitada aqui, a vaga nunca chega a ser criada/atualizada — não tem
+    // Job nem JobEnrichment, então nunca aparece pro público.
+    if (isForeignLocation(observation.country, observation.state)) {
+      return {
+        previewItem: {
+          action: "skipped",
+          canonicalKey: observation.canonicalKey,
+          message: `Skipped non-Brazilian job location (country=${observation.country ?? "null"}, state=${observation.state ?? "null"}).`,
+          title: observation.title,
+        } satisfies IngestionPreviewItem,
+      };
+    }
+
     const existingJob = await this.database.job.findUnique({
       where: { canonicalKey: observation.canonicalKey },
     });
@@ -712,7 +732,11 @@ export class IngestionService {
     const payload = {
       city: observation.city,
       companyId: jobSource.company.id,
-      country: observation.country,
+      // Default aplicado só depois do filtro isForeignLocation() já ter
+      // rodado (acima) — nesse ponto, um country vazio já foi confirmado
+      // como "não é sinal de vaga estrangeira", então assumir Brasil aqui
+      // é seguro.
+      country: observation.country ?? "Brasil",
       descriptionClean: observation.descriptionClean,
       descriptionRaw: observation.descriptionRaw,
       employmentType: observation.employmentType,

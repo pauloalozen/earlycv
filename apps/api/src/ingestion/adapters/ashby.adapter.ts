@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DatabaseService } from "../../database/database.service";
+import { normalizeCity, normalizeState } from "../../jobs/geo-normalizer";
 import { IngestionFetchError } from "../errors";
 import { SemanticFilterService } from "../semantic-filter.service";
 import type {
@@ -250,10 +251,16 @@ export class AshbyAdapter implements IngestionSourceAdapter {
     const workModel = normalizeWorkModel(job.workplaceType, job.isRemote);
     const publishedAt = normalizeDate(job.publishedAt);
 
+    const state =
+      normalizeState(postalAddress?.addressRegion)?.sigla ??
+      postalAddress?.addressRegion?.trim();
+
     return {
       canonicalKey,
-      city: postalAddress?.addressLocality?.trim() || undefined,
-      country: postalAddress?.addressCountry?.trim() || "Brasil",
+      city: normalizeCity(postalAddress?.addressLocality) ?? undefined,
+      // Sem fallback "Brasil" de propósito — ver isForeignLocation() em
+      // ingestion.service.ts, que usa o vazio como sinal.
+      country: postalAddress?.addressCountry?.trim(),
       department: job.department?.trim() || job.team?.trim() || undefined,
       descriptionClean,
       descriptionRaw: job.descriptionHtml ?? "",
@@ -261,13 +268,13 @@ export class AshbyAdapter implements IngestionSourceAdapter {
       employmentTypeRaw: job.employmentType?.trim() || undefined,
       externalJobId: job.id,
       firstSeenAt: publishedAt,
-      lastSeenAt: publishedAt,
+      lastSeenAt: new Date().toISOString(),
       locationText: locationText || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,
       sourceJobUrl:
         job.jobUrl ?? `https://jobs.ashbyhq.com/${slug}/${job.id}`,
-      state: postalAddress?.addressRegion?.trim() || undefined,
+      state,
       status: "active",
       title,
       workModel,

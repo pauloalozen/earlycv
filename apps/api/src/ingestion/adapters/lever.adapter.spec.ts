@@ -278,7 +278,7 @@ test("LeverAdapter parses 'Sao Paulo, Brasil' location into city/country", async
       createJobSourceContext("https://api.lever.co/v0/postings/neon"),
     );
 
-    assert.equal(observations[0]?.city, "Sao Paulo");
+    assert.equal(observations[0]?.city, "São Paulo");
     assert.equal(observations[0]?.country, "Brasil");
   } finally {
     fetchMock.restore();

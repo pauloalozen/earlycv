@@ -28,6 +28,7 @@ export type ExistingApplication = {
 
 export type PublicJob = {
   canonicalKey: string;
+  city: string | null;
   company: string;
   companyWebsiteUrl: string | null;
   country: string | null;
@@ -42,6 +43,7 @@ export type PublicJob = {
   seniorityLevel: string | null;
   slug: string;
   sourceJobUrl: string;
+  state: string | null;
   status: string;
   technologies: string[];
   title: string;
@@ -75,14 +77,27 @@ export type PublicJobsFilters = {
   minSkillsPct?: number;
   sort?: "score_desc" | "score_asc" | "date_desc" | "date_asc";
   excludeAnalyzed?: boolean;
+  area?: string;
+  seniority?: string;
+  state?: string;
+  city?: string;
 };
 
 export type FacetItem = { value: string; count: number };
 
+// state (sigla, ex: "SP") difere de label (nome por extenso, ex: "São
+// Paulo") — geo-normalizer.ts resolve as duas grafias sujas ("SP"/"São
+// Paulo"/"SAO PAULO") num único facet. value é o que vai na URL/filtro,
+// label é o que aparece no dropdown.
+export type StateFacetItem = { value: string; label: string; count: number };
+
 export type PublicJobFacets = {
   workModels: FacetItem[];
-  seniorityLevels: FacetItem[];
+  areas: FacetItem[];
+  seniorities: FacetItem[];
   companies: FacetItem[];
+  states: StateFacetItem[];
+  cities: FacetItem[];
 };
 
 async function requestPublicJobs<T>(path: string) {
@@ -113,6 +128,10 @@ export async function listPublicJobs(
     params.set("minSkillsPct", String(filters.minSkillsPct));
   if (filters?.sort) params.set("sort", filters.sort);
   if (filters?.excludeAnalyzed) params.set("excludeAnalyzed", "true");
+  if (filters?.area) params.set("area", filters.area);
+  if (filters?.seniority) params.set("seniority", filters.seniority);
+  if (filters?.state) params.set("state", filters.state);
+  if (filters?.city) params.set("city", filters.city);
 
   const qs = params.toString();
   return requestPublicJobs<PublicJobsPage>(`/public/jobs${qs ? `?${qs}` : ""}`);
@@ -122,6 +141,13 @@ export async function getPublicJobBySlug(slug: string) {
   return requestPublicJobs<PublicJob>(`/public/jobs/${slug}`);
 }
 
-export async function getPublicJobFacets(): Promise<PublicJobFacets> {
-  return requestPublicJobs<PublicJobFacets>("/public/jobs/facets");
+export async function getPublicJobFacets(filters?: {
+  state?: string;
+}): Promise<PublicJobFacets> {
+  const params = new URLSearchParams();
+  if (filters?.state) params.set("state", filters.state);
+  const qs = params.toString();
+  return requestPublicJobs<PublicJobFacets>(
+    `/public/jobs/facets${qs ? `?${qs}` : ""}`,
+  );
 }

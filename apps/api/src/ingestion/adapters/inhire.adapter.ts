@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DatabaseService } from "../../database/database.service";
+import { normalizeCity, normalizeState } from "../../jobs/geo-normalizer";
 import { shouldSkipDetailFetch } from "../dedup-policy";
 import { IngestionFetchError } from "../errors";
 import { SemanticFilterService } from "../semantic-filter.service";
@@ -271,7 +272,11 @@ export class InHireAdapter implements IngestionSourceAdapter {
   ): NormalizedJobObservation {
     const title = job.displayName?.trim() || `InHire job ${job.jobId}`;
     const locationText = job.location?.trim() || "";
-    const { city, state, country } = parseLocation(locationText);
+    const parsedLocation = parseLocation(locationText);
+    const country = parsedLocation.country;
+    const city = normalizeCity(parsedLocation.city) ?? undefined;
+    const state =
+      normalizeState(parsedLocation.state)?.sigla ?? parsedLocation.state;
     const now = new Date().toISOString();
 
     return {
@@ -305,7 +310,12 @@ export class InHireAdapter implements IngestionSourceAdapter {
       .map((value) => value?.trim())
       .filter((value): value is string => Boolean(value))
       .join(" - ");
-    const { city, state, country } = parseLocation(detail.location?.trim() ?? "");
+    const parsedDetailLocation = parseLocation(detail.location?.trim() ?? "");
+    const country = parsedDetailLocation.country;
+    const city = normalizeCity(parsedDetailLocation.city) ?? undefined;
+    const state =
+      normalizeState(parsedDetailLocation.state)?.sigla ??
+      parsedDetailLocation.state;
 
     const descriptionRaw = detail.description ?? "";
     const descriptionClean = stripHtml(descriptionRaw) || title;
@@ -314,14 +324,18 @@ export class InHireAdapter implements IngestionSourceAdapter {
     return {
       canonicalKey,
       city,
-      country: country || "Brasil",
+      // Sem fallback "Brasil" aqui de propósito — country vazio/undefined
+      // é sinal usado por isForeignLocation() (ingestion.service.ts) pra
+      // decidir se a vaga é de fora do Brasil. O default só é aplicado
+      // depois desse filtro rodar, no upsertObservation.
+      country,
       descriptionClean,
       descriptionRaw,
       employmentType: detail.contractType?.[0]?.toLowerCase() || undefined,
       employmentTypeRaw: detail.contractType?.join(", ") || undefined,
       externalJobId: detail.jobId,
       firstSeenAt: publishedAt,
-      lastSeenAt: publishedAt,
+      lastSeenAt: new Date().toISOString(),
       locationText: locationText || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,

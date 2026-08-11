@@ -164,7 +164,7 @@ test("TalentbrewAdapter paginates listing pages, stops when a page has no cards,
     );
     assert.equal(observations[0]?.title, "Analista Pleno Validação de Risco");
     assert.equal(observations[0]?.city, "São Paulo");
-    assert.equal(observations[0]?.state, "São Paulo");
+    assert.equal(observations[0]?.state, "SP");
     assert.equal(observations[0]?.country, "Brasil");
     assert.equal(observations[0]?.department, "Riscos");
     assert.equal(observations[0]?.employmentType, "full_time");

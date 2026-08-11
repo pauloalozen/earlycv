@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DatabaseService } from "../../database/database.service";
+import { normalizeCity, normalizeState } from "../../jobs/geo-normalizer";
 import { IngestionFetchError } from "../errors";
 import { SemanticFilterService } from "../semantic-filter.service";
 import type {
@@ -237,22 +238,27 @@ export class TeamtailorAdapter implements IngestionSourceAdapter {
     const descriptionClean = stripHtml(descriptionRaw) || title;
     const workModel = inferWorkModel(locationText, title, descriptionClean);
     const publishedAt = normalizeDate(item.date_published);
+    const state =
+      normalizeState(address?.addressRegion)?.sigla ??
+      address?.addressRegion?.trim();
 
     return {
       canonicalKey,
-      city: address?.addressLocality?.trim() || undefined,
-      country: address?.addressCountry?.trim() || "Brasil",
+      city: normalizeCity(address?.addressLocality) ?? undefined,
+      // Sem fallback "Brasil" de propósito — ver isForeignLocation() em
+      // ingestion.service.ts, que usa o vazio como sinal.
+      country: address?.addressCountry?.trim(),
       descriptionClean,
       descriptionRaw,
       externalJobId: item.id,
       firstSeenAt: publishedAt,
-      lastSeenAt: publishedAt,
+      lastSeenAt: new Date().toISOString(),
       locationText: locationText || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,
       sourceJobUrl:
         item.url ?? `https://${slug}.teamtailor.com/jobs/${item.id}`,
-      state: address?.addressRegion?.trim() || undefined,
+      state,
       status: "active",
       title,
       workModel,

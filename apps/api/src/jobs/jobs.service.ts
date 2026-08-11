@@ -5,16 +5,18 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { JobArea, Prisma, SeniorityLevel } from "@prisma/client";
 
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
 import { JobSourcesService } from "../job-sources/job-sources.service";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
+import { normalizeState } from "./geo-normalizer";
 
 const PUBLIC_JOB_SELECT = {
   canonicalKey: true,
+  city: true,
   company: {
     select: {
       name: true,
@@ -34,6 +36,7 @@ const PUBLIC_JOB_SELECT = {
   seniorityLevel: true,
   slug: true,
   sourceJobUrl: true,
+  state: true,
   status: true,
   title: true,
   workModel: true,
@@ -63,6 +66,96 @@ function splitCsv(value: string): string[] {
     .split(",")
     .map((v) => v.trim())
     .filter(Boolean);
+}
+
+// Query params de área/senioridade chegam como texto livre (URL) — só os
+// valores que batem com o enum do Prisma entram no WHERE, o resto é
+// ignorado silenciosamente (evita 500 por enum inválido vindo de um link
+// externo desatualizado ou digitação manual na URL).
+function splitEnumCsv<T extends string>(
+  value: string,
+  allowed: readonly T[],
+): T[] {
+  const allowedSet = new Set<string>(allowed);
+  return splitCsv(value).filter((v): v is T => allowedSet.has(v));
+}
+
+const JOB_AREA_VALUES = Object.values(JobArea);
+const SENIORITY_LEVEL_VALUES = Object.values(SeniorityLevel);
+
+// Localidade (Job.state/Job.city) é texto livre vindo direto do crawler —
+// sem normalização geográfica (Job.city — o ingestion normaliza pra
+// title-case a partir de agora, mas vagas antigas ainda têm grafia crua até
+// serem re-crawladas). Agrupa só por case (trim + lowercase) pra não listar
+// "São Paulo" e "SAO PAULO" como duas facetas diferentes; o filtro em si
+// compara com mode "insensitive", então qualquer variante de caixa do mesmo
+// texto ainda combina, mesmo que a faceta mostrada seja só uma das grafias.
+function groupLocationValues(
+  values: Array<string | null>,
+): Array<{ value: string; count: number }> {
+  const groups = new Map<string, Map<string, number>>();
+
+  for (const raw of values) {
+    const trimmed = raw?.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    const originals = groups.get(key) ?? new Map<string, number>();
+    originals.set(trimmed, (originals.get(trimmed) ?? 0) + 1);
+    groups.set(key, originals);
+  }
+
+  return [...groups.values()]
+    .map((originals) => {
+      const [display] = [...originals.entries()].sort((a, b) => b[1] - a[1])[0] as [
+        string,
+        number,
+      ];
+      const total = [...originals.values()].reduce((a, b) => a + b, 0);
+      return { value: display, count: total };
+    })
+    .sort((a, b) => b.count - a.count);
+}
+
+// Job.state guarda a sigla como valor canônico a partir da normalização de
+// geo-normalizer.ts, mas vagas antigas (ainda não re-crawladas) podem ter
+// "São Paulo", "SAO PAULO" ou "SP" convivendo — normalizeState reconhece
+// todas essas grafias e agrupa as três num único facet { value: "SP", label:
+// "São Paulo" }. Estado que não bate com nenhuma das 27 UFs (de fora do
+// Brasil, ou lixo de dado) cai no fallback de groupLocationValues — mesma
+// faceta "melhor esforço" de antes, sem nome por extenso.
+function buildStateFacets(
+  values: Array<string | null>,
+): Array<{ value: string; label: string; count: number }> {
+  const known = new Map<string, { nome: string; count: number }>();
+  const unknown: Array<string | null> = [];
+
+  for (const raw of values) {
+    const trimmed = raw?.trim();
+    if (!trimmed) continue;
+    const normalized = normalizeState(trimmed);
+    if (!normalized) {
+      unknown.push(trimmed);
+      continue;
+    }
+    const existing = known.get(normalized.sigla);
+    known.set(normalized.sigla, {
+      nome: normalized.nome,
+      count: (existing?.count ?? 0) + 1,
+    });
+  }
+
+  const knownFacets = [...known.entries()].map(([sigla, { nome, count }]) => ({
+    value: sigla,
+    label: nome,
+    count,
+  }));
+  const unknownFacets = groupLocationValues(unknown).map((f) => ({
+    value: f.value,
+    label: f.value,
+    count: f.count,
+  }));
+
+  return [...knownFacets, ...unknownFacets].sort((a, b) => b.count - a.count);
 }
 
 function normalizeSourceJobUrl(rawUrl: string) {
@@ -208,12 +301,34 @@ export class JobsService {
     seniorityLevel?: string;
     companyName?: string;
     publishedWithin?: "24h" | "3d" | "7d";
+    area?: string;
+    seniority?: string;
+    state?: string;
+    city?: string;
   }): Prisma.JobWhereInput {
-    const { q, workModel, seniorityLevel, companyName, publishedWithin } =
-      filters;
+    const {
+      q,
+      workModel,
+      seniorityLevel,
+      companyName,
+      publishedWithin,
+      area,
+      seniority,
+      state,
+      city,
+    } = filters;
+    // Construído à parte (em vez de remendar where.enrichment em cada if)
+    // porque o tipo gerado pelo Prisma pra relação 1:1 opcional (XOR entre
+    // o filtro de relação e o where do model relacionado) não dá pra
+    // espalhar/mesclar com segurança de tipos depois de já atribuído.
+    const enrichmentWhere: Prisma.JobEnrichmentWhereInput = {
+      ...PUBLIC_JOB_INTEGRITY_WHERE.enrichment,
+    };
+
     const where: Prisma.JobWhereInput = {
       status: "active",
       ...PUBLIC_JOB_INTEGRITY_WHERE,
+      enrichment: enrichmentWhere,
     };
 
     if (q) {
@@ -227,6 +342,10 @@ export class JobsService {
       where.workModel = { in: splitCsv(workModel) };
     }
 
+    // Campo legado (Job.seniorityLevel) — texto livre nunca preenchido pelo
+    // ingestion, mantido só por compatibilidade retroativa do query param.
+    // O filtro de senioridade real usado pelo /radar é `seniority`, abaixo,
+    // que aponta pro enum estruturado (JobEnrichment.seniority).
     if (seniorityLevel) {
       where.seniorityLevel = { in: splitCsv(seniorityLevel) };
     }
@@ -245,6 +364,28 @@ export class JobsService {
       where.publishedAtSource = { gte: cutoff };
     }
 
+    if (area) {
+      const values = splitEnumCsv(area, JOB_AREA_VALUES);
+      if (values.length > 0) {
+        enrichmentWhere.dominantArea = { in: values };
+      }
+    }
+
+    if (seniority) {
+      const values = splitEnumCsv(seniority, SENIORITY_LEVEL_VALUES);
+      if (values.length > 0) {
+        enrichmentWhere.seniority = { in: values };
+      }
+    }
+
+    if (state) {
+      where.state = { in: splitCsv(state), mode: "insensitive" };
+    }
+
+    if (city) {
+      where.city = { in: splitCsv(city), mode: "insensitive" };
+    }
+
     return where;
   }
 
@@ -254,6 +395,10 @@ export class JobsService {
     seniorityLevel?: string;
     companyName?: string;
     publishedWithin?: "24h" | "3d" | "7d";
+    area?: string;
+    seniority?: string;
+    state?: string;
+    city?: string;
     page: number;
     limit: number;
   }) {
@@ -263,6 +408,7 @@ export class JobsService {
 
     const select = {
       canonicalKey: true,
+      city: true,
       company: { select: { name: true, websiteUrl: true } },
       country: true,
       descriptionClean: true,
@@ -277,6 +423,7 @@ export class JobsService {
       seniorityLevel: true,
       slug: true,
       sourceJobUrl: true,
+      state: true,
       status: true,
       title: true,
       workModel: true,
@@ -312,6 +459,10 @@ export class JobsService {
       seniorityLevel?: string;
       companyName?: string;
       publishedWithin?: "24h" | "3d" | "7d";
+      area?: string;
+      seniority?: string;
+      state?: string;
+      city?: string;
     },
   ) {
     if (jobIds && jobIds.length === 0) {
@@ -327,19 +478,35 @@ export class JobsService {
     });
   }
 
-  async listPublicFacets() {
+  async listPublicFacets(filters?: { state?: string }) {
     const jobs = await this.database.job.findMany({
       where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
       select: {
         workModel: true,
-        seniorityLevel: true,
+        state: true,
+        city: true,
+        enrichment: { select: { dominantArea: true, seniority: true } },
         company: { select: { name: true } },
       },
     });
 
     const workModelMap = new Map<string, number>();
+    const areaMap = new Map<string, number>();
     const seniorityMap = new Map<string, number>();
     const companyMap = new Map<string, number>();
+    const states: Array<string | null> = [];
+    const cities: Array<string | null> = [];
+
+    // Cidade é relacionada ao estado selecionado (cascata): com filtro de
+    // estado ativo, só entram no facet de cidade as vagas cujo state
+    // normaliza pra uma das siglas selecionadas — os outros facets
+    // (área/senioridade/modalidade/empresa/estado) continuam globais, sem
+    // depender do que já está selecionado em outro dropdown.
+    const selectedStateSiglas = filters?.state
+      ? new Set(
+          splitCsv(filters.state).map((value) => value.trim().toUpperCase()),
+        )
+      : null;
 
     for (const job of jobs) {
       if (job.workModel) {
@@ -348,14 +515,33 @@ export class JobsService {
           (workModelMap.get(job.workModel) ?? 0) + 1,
         );
       }
-      if (job.seniorityLevel) {
+      if (job.enrichment?.dominantArea) {
+        areaMap.set(
+          job.enrichment.dominantArea,
+          (areaMap.get(job.enrichment.dominantArea) ?? 0) + 1,
+        );
+      }
+      // UNKNOWN é "senioridade avaliada e não determinável" (não "sem
+      // avaliação") — ainda assim não vira opção de filtro: filtrar por
+      // "não especificado" não ajuda o usuário a achar vaga nenhuma.
+      if (job.enrichment?.seniority && job.enrichment.seniority !== "UNKNOWN") {
         seniorityMap.set(
-          job.seniorityLevel,
-          (seniorityMap.get(job.seniorityLevel) ?? 0) + 1,
+          job.enrichment.seniority,
+          (seniorityMap.get(job.enrichment.seniority) ?? 0) + 1,
         );
       }
       const co = job.company.name;
       companyMap.set(co, (companyMap.get(co) ?? 0) + 1);
+      states.push(job.state);
+
+      if (!selectedStateSiglas) {
+        cities.push(job.city);
+      } else {
+        const jobStateSigla = normalizeState(job.state)?.sigla;
+        if (jobStateSigla && selectedStateSiglas.has(jobStateSigla)) {
+          cities.push(job.city);
+        }
+      }
     }
 
     const toSorted = (m: Map<string, number>) =>
@@ -365,8 +551,11 @@ export class JobsService {
 
     return {
       workModels: toSorted(workModelMap),
-      seniorityLevels: toSorted(seniorityMap),
+      areas: toSorted(areaMap),
+      seniorities: toSorted(seniorityMap),
       companies: toSorted(companyMap).slice(0, 20),
+      states: buildStateFacets(states).slice(0, 40),
+      cities: groupLocationValues(cities).slice(0, 40),
     };
   }
 
