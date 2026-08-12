@@ -75,6 +75,14 @@ vi.mock("./radar-ui", () => ({
   },
   RADAR_AREA_LABELS: { DATA_AI: "Dados & IA" },
   RADAR_SENIORITY_LABELS: { SENIOR: "sênior" },
+  BREAKDOWN_MAX: {
+    area: 25,
+    skills: 30,
+    seniority: 20,
+    technologies: 15,
+    language: 5,
+    workModel: 5,
+  },
 }));
 vi.mock("@/lib/app-session.server", () => ({
   getCurrentAppUserFromCookies: mocks.getCurrentAppUserFromCookies,
@@ -338,10 +346,10 @@ describe("/radar score badge (usuário logado com UserRadarProfile)", () => {
     const result = await VagasPage({ searchParams: Promise.resolve({}) });
     const rings = await findScoreRingProps(result);
 
-    // O único ScoreRing permitido pro anônimo é o decorativo e fixo (92%)
+    // O único ScoreRing permitido pro anônimo é o decorativo e fixo (84%)
     // do card "É assim que fica" no hero de criar conta — não é o score de
     // nenhuma vaga real, é só ilustração de como fica depois de criar conta.
-    const realJobRings = rings.filter((props) => props.value !== 92);
+    const realJobRings = rings.filter((props) => props.value !== 84);
     expect(realJobRings).toHaveLength(0);
     expect(mocks.getMyRadarProfile).not.toHaveBeenCalled();
   });

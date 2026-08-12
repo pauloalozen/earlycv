@@ -20,6 +20,7 @@ import {
 } from "./job-card";
 import {
   AdaptBtn,
+  BREAKDOWN_MAX,
   MiniBar,
   RADAR_AREA_LABELS,
   RADAR_SENIORITY_LABELS,
@@ -175,6 +176,25 @@ function JobCardLocked({ job }: { job: PublicJob }) {
 // conta e só falta enviar o CV), aqui o CTA é criar conta, não enviar
 // arquivo. O preview à direita é ilustrativo (dado fixo, não vem da API) —
 // mostra o que a pessoa ganha depois de criar a conta e enviar o CV.
+// Dado ilustrativo fixo (não vem da API) — score total calculado a partir
+// das 4 dimensões exibidas com os mesmos pesos de MatchingEngine
+// (BREAKDOWN_MAX), pra bater com o breakdown mostrado logo abaixo. Language
+// e workModel não aparecem no card (só cabem 4 dimensões no preview), então
+// assumimos match total nelas.
+const HERO_AREA_PCT = 100;
+const HERO_SKILLS_PCT = 62;
+const HERO_SENIORITY_PCT = 94;
+const HERO_TECHNOLOGIES_PCT = 80;
+const HERO_SCORE = Math.round(
+  (BREAKDOWN_MAX.area * HERO_AREA_PCT +
+    BREAKDOWN_MAX.skills * HERO_SKILLS_PCT +
+    BREAKDOWN_MAX.seniority * HERO_SENIORITY_PCT +
+    BREAKDOWN_MAX.technologies * HERO_TECHNOLOGIES_PCT +
+    BREAKDOWN_MAX.language * 100 +
+    BREAKDOWN_MAX.workModel * 100) /
+    100,
+);
+
 function AnonymousHeroCard() {
   return (
     <div className="anon-hero-grid" style={{ marginBottom: 24 }}>
@@ -392,7 +412,27 @@ function AnonymousHeroCard() {
                 earlyCV
               </p>
             </div>
-            <ScoreRing value={92} size={52} />
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <ScoreRing value={HERO_SCORE} size={52} />
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 8,
+                  fontWeight: 600,
+                  letterSpacing: 0.4,
+                  color: "#8a8a85",
+                }}
+              >
+                OPORTUNIDADE
+              </span>
+            </div>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             <SkillChip label="Java" have />
@@ -408,8 +448,14 @@ function AnonymousHeroCard() {
               borderTop: "1px solid rgba(10,10,10,0.06)",
             }}
           >
-            <MiniBar label="Skills" value={88} compact />
-            <MiniBar label="Senioridade" value={94} compact />
+            <MiniBar label="Área" value={HERO_AREA_PCT} compact />
+            <MiniBar label="Skills" value={HERO_SKILLS_PCT} compact />
+            <MiniBar label="Senioridade" value={HERO_SENIORITY_PCT} compact />
+            <MiniBar
+              label="Tecnologias"
+              value={HERO_TECHNOLOGIES_PCT}
+              compact
+            />
           </div>
         </div>
         <p
