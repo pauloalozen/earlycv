@@ -3,13 +3,14 @@
 import { redirect } from "next/navigation";
 
 import {
+  bulkUpdateJobSourceSchedule,
   cancelManualRun,
   createCompany,
   createJobSource,
   deleteJobSource,
   importCompanySourcesCsv,
   runGlobalSchedulerNow,
-  runJobSource,
+  runJobSourceAdHoc,
   startManualAdapterRun,
   updateGlobalSchedulerConfig,
   updateJobSource,
@@ -21,6 +22,7 @@ import {
   parseJobSourceFormData,
   parseManualAdapterType,
   parseManualBatchRunId,
+  parseUpdateJobSourceFormData,
 } from "@/lib/admin-ingestion-flow";
 
 const ROOT_REDIRECT_PATH = "/admin/ingestion";
@@ -37,14 +39,14 @@ export async function runJobSourceAction(formData: FormData) {
   }
 
   try {
-    await runJobSource(jobSourceId);
+    await runJobSourceAdHoc(jobSourceId);
   } catch (error) {
     if (isRedirectControlFlowError(error)) {
       throw error;
     }
 
     const message =
-      error instanceof Error ? error.message : "Falha ao executar ingestao.";
+      error instanceof Error ? error.message : "Falha ao disparar ingestao.";
 
     redirect(buildAdminRedirect(redirectPath, "error", message));
   }
@@ -53,7 +55,7 @@ export async function runJobSourceAction(formData: FormData) {
     buildAdminRedirect(
       redirectPath,
       "success",
-      "Ingestao executada com sucesso.",
+      "Job disparado. Acompanhe o progresso na aba Jobs.",
     ),
   );
 }
@@ -119,7 +121,7 @@ export async function createJobSourceAction(formData: FormData) {
 
   if (runAfterCreate) {
     try {
-      await runJobSource(source.id);
+      await runJobSourceAdHoc(source.id);
     } catch (error) {
       if (isRedirectControlFlowError(error)) {
         throw error;
@@ -127,8 +129,8 @@ export async function createJobSourceAction(formData: FormData) {
 
       const message =
         error instanceof Error
-          ? `Fonte criada, mas a execucao manual falhou: ${error.message}`
-          : "Fonte criada, mas a execucao manual falhou.";
+          ? `Fonte criada, mas o disparo manual falhou: ${error.message}`
+          : "Fonte criada, mas o disparo manual falhou.";
 
       redirect(buildAdminRedirect(ROOT_REDIRECT_PATH, "error", message));
     }
@@ -137,7 +139,7 @@ export async function createJobSourceAction(formData: FormData) {
       buildAdminRedirect(
         ROOT_REDIRECT_PATH,
         "success",
-        `Fonte ${source.sourceName} criada e executada com sucesso.`,
+        `Fonte ${source.sourceName} criada e job disparado. Acompanhe na aba Jobs.`,
       ),
     );
   }
@@ -147,6 +149,92 @@ export async function createJobSourceAction(formData: FormData) {
       ROOT_REDIRECT_PATH,
       "success",
       `Fonte ${source.sourceName} criada com sucesso.`,
+    ),
+  );
+}
+
+// Cria empresa e primeira JobSource num submit so, evitando o fluxo antigo
+// de 2 passos onde a empresa nascia sem tipo de adapter definido e so era
+// possivel escolher o adapter voltando pra tela de editar.
+export async function createCompanyAndSourceAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${NEW_SOURCE_REDIRECT_PATH}`,
+  );
+  const runAfterCreate = formData.get("runAfterCreate") === "on";
+
+  let company: Awaited<ReturnType<typeof createCompany>>;
+
+  try {
+    company = await createCompany(parseCompanyFormData(formData));
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+
+    const message =
+      error instanceof Error ? error.message : "Falha ao criar a empresa.";
+
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  formData.set("companyId", company.id);
+  formData.set("companyName", company.name);
+
+  let source: Awaited<ReturnType<typeof createJobSource>>;
+
+  try {
+    const payload = parseJobSourceFormData(formData);
+    source = await createJobSource(payload);
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+
+    // Empresa ja foi criada — nao perde o cadastro, manda pra tela da
+    // empresa (que tem CTA "Criar primeira fonte") pra completar so a
+    // parte que falhou.
+    const message =
+      error instanceof Error ? error.message : "Falha ao criar a fonte.";
+
+    redirect(
+      buildAdminRedirect(
+        `/admin/empresas/${company.id}`,
+        "error",
+        `Empresa "${company.name}" criada, mas a fonte falhou: ${message}. Complete o cadastro da fonte abaixo.`,
+      ),
+    );
+  }
+
+  if (runAfterCreate) {
+    try {
+      await runJobSourceAdHoc(source.id);
+    } catch (error) {
+      if (isRedirectControlFlowError(error)) {
+        throw error;
+      }
+
+      const message =
+        error instanceof Error
+          ? `Empresa e fonte criadas, mas o disparo manual falhou: ${error.message}`
+          : "Empresa e fonte criadas, mas o disparo manual falhou.";
+
+      redirect(buildAdminRedirect(ROOT_REDIRECT_PATH, "error", message));
+    }
+
+    redirect(
+      buildAdminRedirect(
+        ROOT_REDIRECT_PATH,
+        "success",
+        `Empresa "${company.name}" e fonte ${source.sourceName} criadas, job disparado. Acompanhe na aba Jobs.`,
+      ),
+    );
+  }
+
+  redirect(
+    buildAdminRedirect(
+      ROOT_REDIRECT_PATH,
+      "success",
+      `Empresa "${company.name}" e fonte ${source.sourceName} criadas com sucesso.`,
     ),
   );
 }
@@ -164,11 +252,32 @@ export async function importCompanySourcesCsvAction(formData: FormData) {
 
   try {
     const report = await importCompanySourcesCsv({ dryRun, file: fileEntry });
+    const label = dryRun ? "Dry-run" : "Importacao";
+    const hasSuccess = report.summary.successCount > 0;
+
+    if (!hasSuccess && report.summary.errorCount > 0) {
+      const firstErrors = report.lines
+        .filter((line) => line.status === "error")
+        .slice(0, 3)
+        .map(
+          (line) => `linha ${line.line} (${line.companyName}): ${line.message}`,
+        )
+        .join("; ");
+
+      redirect(
+        buildAdminRedirect(
+          redirectPath,
+          "error",
+          `${label} falhou: ${report.summary.errorCount} erro(s), 0 sucesso(s). ${firstErrors}`,
+        ),
+      );
+    }
+
     redirect(
       buildAdminRedirect(
         redirectPath,
         "success",
-        `${dryRun ? "Dry-run" : "Importacao"} concluido: ${report.summary.successCount} sucesso(s), ${report.summary.errorCount} erro(s).`,
+        `${label} concluido: ${report.summary.successCount} sucesso(s), ${report.summary.errorCount} erro(s).`,
       ),
     );
   } catch (error) {
@@ -257,6 +366,37 @@ export async function updateJobSourceScheduleAction(formData: FormData) {
   );
 }
 
+export async function updateJobSourceAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const jobSourceId = String(formData.get("jobSourceId") ?? "").trim();
+
+  if (!jobSourceId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe a fonte."));
+  }
+
+  try {
+    const payload = parseUpdateJobSourceFormData(formData);
+    await updateJobSource(jobSourceId, payload);
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error ? error.message : "Falha ao atualizar a fonte.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  redirect(
+    buildAdminRedirect(
+      redirectPath,
+      "success",
+      "Fonte atualizada com sucesso.",
+    ),
+  );
+}
+
 export async function runGlobalSchedulerNowAction(formData: FormData) {
   const redirectPath = String(
     formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
@@ -268,7 +408,7 @@ export async function runGlobalSchedulerNowAction(formData: FormData) {
       buildAdminRedirect(
         redirectPath,
         "success",
-        `Execucao global: ${result.status}.`,
+        `Execucao global enfileirada (${result.totalSources} fonte(s) com agendamento ativo). Acompanhe em Execucoes manuais.`,
       ),
     );
   } catch (error) {
@@ -367,6 +507,31 @@ export async function toggleScheduleEnabledAction(formData: FormData) {
       error instanceof Error
         ? error.message
         : "Falha ao atualizar agendamento.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+}
+
+export async function bulkToggleScheduleEnabledAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const sourceType = String(formData.get("sourceType") ?? "").trim();
+  const scheduleEnabled = String(formData.get("scheduleEnabled")) === "true";
+
+  if (!sourceType) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe o adapter."));
+  }
+
+  try {
+    return await bulkUpdateJobSourceSchedule({ sourceType, scheduleEnabled });
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Falha ao atualizar agendamento em massa.";
     redirect(buildAdminRedirect(redirectPath, "error", message));
   }
 }

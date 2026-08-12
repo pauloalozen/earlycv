@@ -1,6 +1,10 @@
 import type OpenAI from "openai";
 
-import { buildSystemMessage, stripJsonCodeFence } from "./prompt-cache.js";
+import {
+  buildDeepSeekExtraBody,
+  buildSystemMessage,
+  stripJsonCodeFence,
+} from "./prompt-cache.js";
 
 const ALLOWED_WORK_MODES = ["remote", "hybrid", "onsite", null] as const;
 const ALLOWED_EMPLOYMENT_TYPES = [
@@ -259,6 +263,7 @@ export async function canonicalizeJobDescription(
     ],
     temperature: 0,
     response_format: { type: "json_object" },
+    ...buildDeepSeekExtraBody(model),
   });
 
   const content = response.choices[0]?.message.content;

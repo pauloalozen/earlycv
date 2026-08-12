@@ -9,3 +9,10 @@ test("canonicalizeSourceUrl removes query and hash and normalizes host", () => {
     "https://example.com/careers",
   );
 });
+
+test("canonicalizeSourceUrl prepends https:// when the scheme is missing", () => {
+  assert.equal(
+    canonicalizeSourceUrl("company.gupy.io"),
+    "https://company.gupy.io/",
+  );
+});

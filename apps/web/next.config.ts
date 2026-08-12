@@ -98,6 +98,20 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: "/vagas",
+        destination: "/radar",
+        permanent: false,
+      },
+      {
+        source: "/vagas/:slug*",
+        destination: "/radar/:slug*",
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
       {

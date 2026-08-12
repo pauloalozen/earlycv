@@ -1,0 +1,24 @@
+nome,setor,site_url,careers_url,linkedin_url,tipo_adapter
+iFood,Foodtech,https://ifood.com.br,https://boards-api.greenhouse.io/v1/boards/ifoodcarreiras/jobs,,greenhouse
+Nubank,Fintech,https://nubank.com.br,https://jobs.ashbyhq.com/nubank,,ashby
+Santander,Banco,https://santander.com.br,https://santander.wd3.myworkdayjobs.com/pt-BR/SantanderCareers,,workday
+Natura,Cosméticos Tech,https://natura.com.br,https://natura.wd501.myworkdayjobs.com/pt-BR/NaturaCarreiras,,workday
+Cielo,Fintech,https://cielo.com.br,https://cielo.inhire.app/vagas,,inhire
+Loft,Proptech,https://loft.com.br,https://loft.teamtailor.com,,teamtailor
+CI&T,Tech Consulting,https://ciandt.com,https://api.lever.co/v0/postings/ciandt,,lever
+CloudWalk,Fintech,https://cloudwalk.io,https://api.lever.co/v0/postings/cloudwalk,,lever
+Banco BV,Banco digital,https://bv.com.br,https://api.lever.co/v0/postings/bv,,lever
+Neon,Fintech,https://neon.com.br,https://api.lever.co/v0/postings/neon,,lever
+VTEX,E-commerce Tech,https://vtex.com,https://boards-api.greenhouse.io/v1/boards/vtex/jobs,,greenhouse
+QuintoAndar,Proptech,https://quintoandar.com.br,https://boards-api.greenhouse.io/v1/boards/quintoandar/jobs,,greenhouse
+Stone,Fintech,https://stone.com.br,https://boards-api.greenhouse.io/v1/boards/stone/jobs,,greenhouse
+Pismo,Fintech B2B,https://pismo.io,https://careers.smartrecruiters.com/Visa/careers-at-pismo,,custom_html
+Zup Innovation,Tech,https://zup.com.br,https://boards-api.greenhouse.io/v1/boards/zupinnovation/jobs,,greenhouse
+BEES (Ambev Tech),Retail Tech,https://bees.com,https://boards-api.greenhouse.io/v1/boards/bees/jobs,,greenhouse
+Creditas,Fintech,https://creditas.com,https://creditas.gupy.io/,,gupy
+Dock,Fintech B2B,https://dock.tech,https://dock.gupy.io/,,gupy
+Olist,Marketplace Tech,https://olist.com,https://olist.inhire.app/vagas,,inhire
+Nuvemshop,E-commerce Tech,https://nuvemshop.com.br,https://boards-api.greenhouse.io/v1/boards/nuvem/jobs,,greenhouse
+Stark Bank,Fintech B2B,https://starkbank.com,https://api.lever.co/v0/postings/starkbank,,lever
+Unico,Identity Tech,https://unico.io,https://api.lever.co/v0/postings/unico,,lever
+Itaú,Banco,https://itau.com.br,https://carreiras.itau.com.br/busca-de-vagas,,talentbrew

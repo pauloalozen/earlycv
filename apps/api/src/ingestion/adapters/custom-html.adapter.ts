@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
+import { normalizeCity, normalizeState } from "../../jobs/geo-normalizer";
 import type {
   IngestionSourceAdapter,
   JobSourceContext,
@@ -29,7 +30,7 @@ export class CustomHtmlAdapter implements IngestionSourceAdapter {
     return [
       {
         canonicalKey: `${companySlug}:${sourceSlug}:platform-engineer`,
-        city: "Sao Paulo",
+        city: normalizeCity("Sao Paulo") ?? undefined,
         country: "Brasil",
         descriptionClean:
           "Responsavel por evoluir APIs, observabilidade e pipelines internos.",
@@ -43,14 +44,14 @@ export class CustomHtmlAdapter implements IngestionSourceAdapter {
         publishedAtSource: now,
         seniorityLevel: "pleno",
         sourceJobUrl: `${jobSource.sourceUrl.replace(/\/+$/, "")}/platform-engineer`,
-        state: "SP",
+        state: normalizeState("SP")?.sigla ?? "SP",
         status: "active",
         title: "Platform Engineer",
         workModel: "hybrid",
       },
       {
         canonicalKey: `${companySlug}:${sourceSlug}:backend-engineer`,
-        city: "Remoto",
+        city: normalizeCity("Remoto") ?? undefined,
         country: "Brasil",
         descriptionClean:
           "Construcao de servicos de ingestao e distribuicao de dados de vagas.",
@@ -64,7 +65,7 @@ export class CustomHtmlAdapter implements IngestionSourceAdapter {
         publishedAtSource: now,
         seniorityLevel: "senior",
         sourceJobUrl: `${jobSource.sourceUrl.replace(/\/+$/, "")}/backend-engineer`,
-        state: "BR",
+        state: normalizeState("BR")?.sigla ?? "BR",
         status: "active",
         title: "Backend Engineer",
         workModel: "remote",

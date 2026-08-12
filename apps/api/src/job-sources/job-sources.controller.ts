@@ -6,16 +6,19 @@ import {
   HttpCode,
   Inject,
   Param,
+  Patch,
   Post,
   Put,
   Query,
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
+import { SkipThrottle } from "@nestjs/throttler";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import { IngestionService } from "../ingestion/ingestion.service";
+import { BulkUpdateScheduleDto } from "./dto/bulk-update-schedule.dto";
 import { CreateJobSourceDto } from "./dto/create-job-source.dto";
 // biome-ignore lint/style/useImportType: DTO precisa de import em runtime para reflection do NestJS ValidationPipe
 import { ListJobSourcesDto } from "./dto/list-job-sources.dto";
@@ -28,6 +31,10 @@ const jobSourcesValidationOptions = {
   forbidNonWhitelisted: true,
 } as const;
 
+// Already gated behind JWT + admin/superadmin role, so the public
+// throttler adds no real protection here — it just breaks the admin
+// panel's 5s polling table + bulk schedule toggles with 429s.
+@SkipThrottle()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @InternalRoles("admin", "superadmin")
 @Controller("job-sources")
@@ -69,6 +76,20 @@ export class JobSourcesController {
     dto: ListJobSourcesDto,
   ) {
     return this.jobSourcesService.listPaginated(dto);
+  }
+
+  @Patch("bulk-schedule")
+  @HttpCode(200)
+  bulkUpdateSchedule(
+    @Body(
+      new ValidationPipe({
+        ...jobSourcesValidationOptions,
+        expectedType: BulkUpdateScheduleDto,
+      }),
+    )
+    dto: BulkUpdateScheduleDto,
+  ) {
+    return this.jobSourcesService.bulkUpdateSchedule(dto);
   }
 
   @Get(":id")

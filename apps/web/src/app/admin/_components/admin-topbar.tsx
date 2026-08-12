@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { id: "pagamentos", label: "Pagamentos", href: "/admin/pagamentos" },
   { id: "recuperacao", label: "Recuperação", href: "/admin/payment-recovery" },
   { id: "liberacoes", label: "Liberações", href: "/admin/liberacoes-cv" },
-  { id: "ingestao", label: "Ingestão", href: "/admin/ingestion" },
+  { id: "ingestao", label: "Radar Oportunidades", href: "/admin/ingestion" },
   { id: "templates", label: "Templates", href: "/admin/templates" },
   { id: "cv-benchmark", label: "CV Benchmark", href: "/admin/cv-benchmark" },
   {

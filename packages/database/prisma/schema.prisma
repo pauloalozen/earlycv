@@ -62,6 +62,12 @@ enum JobSourceType {
   successfactors
   custom_html
   custom_api
+  ashby
+  inhire
+  solides
+  pandape
+  teamtailor
+  talentbrew
 }
 
 enum CrawlStrategy {
@@ -281,6 +287,66 @@ enum AnalysisConfigRiskLevel {
   high
 }
 
+enum JobArea {
+  DATA_AI
+  SOFTWARE_ENGINEERING
+  CLOUD_DEVOPS
+  CYBERSECURITY
+  PRODUCT
+  DESIGN_UX
+  QA_TEST
+  PROJECT_AGILE
+  ARCHITECTURE
+  LEADERSHIP
+  GROWTH_MARKETING
+  BUSINESS_ANALYTICS
+  CX_DIGITAL
+  IT_SUPPORT
+  ERP_FUNCTIONAL
+  OTHER
+}
+
+enum SeniorityLevel {
+  INTERN
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+  STAFF
+  MANAGER
+  DIRECTOR
+  UNKNOWN
+}
+
+enum ContractType {
+  CLT
+  PJ
+  BOTH
+  UNKNOWN
+}
+
+enum EnrichmentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum SemanticFilterResult {
+  PENDING
+  ENRICH
+  SKIP
+}
+
+enum AutoApplyStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  RATE_LIMITED
+}
+
 model User {
   id                           String                        @id @default(cuid())
   email                        String                        @unique
@@ -321,6 +387,8 @@ model User {
   jobApplications              JobApplication[]
   masterCvCanonicalExtractions MasterCvCanonicalExtraction[]
   analysisJobs                 AnalysisJob[]
+  radarProfile                 UserRadarProfile?
+  savedJobs                    SavedJob[]
 }
 
 model UserDailyAnalysisUsage {
@@ -511,9 +579,36 @@ model UserProfile {
   profileFieldMetaJson   Json?
   profileSuggestionsJson Json?
   profileReadinessStatus ProfileReadinessStatus @default(empty)
+  radarAreas             JobArea[]
+  radarSeniority         SeniorityLevel?
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
   user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserRadarProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  areas             JobArea[]
+  seniority         SeniorityLevel @default(UNKNOWN)
+  skills            String[]
+  technologies      String[]
+  languages         String[]
+  certifications    String[]
+  careerFingerprint String[]
+
+  preferredWorkModels    String[]
+  preferredContractTypes ContractType[]
+  openToRelocation       Boolean        @default(false)
+  salaryExpectationMin   Int?
+
+  sourceResumeId String?
+  generatedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model AuthAccount {
@@ -576,6 +671,7 @@ model Resume {
   cvAdaptationsAsMaster        CvAdaptation[]                @relation("CvAdaptationMaster")
   cvAdaptationAsResult         CvAdaptation?                 @relation("CvAdaptationResult")
   masterCvCanonicalExtractions MasterCvCanonicalExtraction[]
+  jobApplicationsAsResumeUsed  JobApplication[]              @relation("JobApplicationResume")
 
   @@index([userId])
   @@index([basedOnResumeId])
@@ -883,20 +979,60 @@ model JobSource {
   jobs                 Job[]
   ingestionRuns        IngestionRun[]
   ingestionBatchItems  IngestionBatchItem[]
+  discardedTitles      CrawlerDiscardedTitle[]
+  ingestionJobs        IngestionJob[]
 
   @@unique([companyId, sourceUrl])
   @@index([companyId])
 }
 
+model CrawlerDiscardedTitle {
+  id              String        @id @default(cuid())
+  jobSourceId     String
+  jobSource       JobSource     @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+
+  title           String
+  normalizedTitle String
+  externalJobId   String?
+  canonicalKey    String
+
+  filterReason    String
+  filterVersion   String
+
+  // Run em que o titulo foi descartado (ou re-descartado, no re-crawl) —
+  // canonicalKey e @unique, entao upsert atualiza esse campo a cada
+  // ocorrencia, permitindo contar "descartados por essa run" sem depender
+  // de janela de tempo.
+  ingestionRunId String?
+  ingestionRun    IngestionRun? @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
+
+  discardedAt     DateTime  @default(now())
+  whitelistedAt   DateTime?
+
+  @@unique([canonicalKey])
+  @@index([jobSourceId])
+  @@index([filterReason])
+  @@index([discardedAt])
+  @@index([ingestionRunId])
+}
+
 model IngestionSchedulerConfig {
-  id            String   @id
-  enabled       Boolean  @default(false)
+  id            String  @id
+  enabled       Boolean @default(false)
   globalCron    String?
-  timezone      String   @default("America/Sao_Paulo")
-  normalDelayMs Int      @default(45000)
-  errorDelayMs  Int      @default(90000)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  timezone      String  @default("America/Sao_Paulo")
+  normalDelayMs Int     @default(22000)
+  errorDelayMs  Int     @default(45000)
+
+  // Radar de Oportunidades: config do JobEnrichmentWorker, lida com cache
+  // de 60s (EnrichmentConfigService) em vez de env var — ver
+  // docs/specs/2026-07-30-radar-oportunidades-sprint1-spec.md.
+  enrichmentEnabled        Boolean @default(true)
+  enrichmentCronExpression String  @default("*/10 * * * * *")
+  enrichmentBatchSize      Int     @default(10)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model IngestionSchedulerLock {
@@ -924,6 +1060,7 @@ model IngestionRun {
   updatedAt           DateTime             @updatedAt
   jobSource           JobSource            @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
   ingestionBatchItems IngestionBatchItem[]
+  crawlerDiscardedTitles CrawlerDiscardedTitle[]
 
   @@index([jobSourceId, createdAt])
 }
@@ -945,6 +1082,7 @@ model IngestionBatchRun {
   updatedAt         DateTime                @updatedAt
   requestedByUser   User?                   @relation("IngestionBatchRunRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: SetNull)
   items             IngestionBatchItem[]
+  jobRun            IngestionJobRun?
 
   @@index([status, createdAt])
   @@index([scopeType, scopeValue, createdAt])
@@ -977,6 +1115,110 @@ model IngestionBatchItem {
   @@index([jobSourceId])
   @@index([companyId])
   @@index([ingestionRunId])
+}
+
+model IngestionJob {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  jobType IngestionJobType
+
+  // Escopo (para CRAWL)
+  scopeType   IngestionJobScopeType?
+  adapterType JobSourceType?
+  jobSourceId String?
+  jobSource   JobSource?             @relation(fields: [jobSourceId], references: [id], onDelete: SetNull)
+
+  // Agendamento em linguagem humana (sem cron exposto ao usuario)
+  scheduleType       IngestionJobScheduleType
+  scheduleHour       Int?
+  scheduleMinute     Int                      @default(0)
+  scheduleInterval   Int?
+  scheduleDaysOfWeek Int[]
+
+  // Estado
+  isEnabled Boolean   @default(true)
+  lastRunAt DateTime?
+  nextRunAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  runs IngestionJobRun[]
+
+  @@index([jobType, isEnabled])
+  @@index([nextRunAt])
+}
+
+model IngestionJobRun {
+  id    String       @id @default(cuid())
+  jobId String
+  job   IngestionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  batchRunId String?            @unique
+  batchRun   IngestionBatchRun? @relation(fields: [batchRunId], references: [id], onDelete: SetNull)
+
+  status       IngestionJobRunStatus @default(QUEUED)
+  triggeredBy  IngestionJobTrigger   @default(SCHEDULE)
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  errorMessage String?
+  createdAt    DateTime              @default(now())
+
+  @@index([jobId, createdAt])
+  @@index([status])
+}
+
+// Rastreia execucoes do JobEnrichmentWorker (tick automatico de fundo ou
+// "Processar agora" manual) — antes disso, um lote processado nao deixava
+// nenhum registro em lugar nenhum, so o status individual de cada
+// JobEnrichment mudava. cancelRequestedAt permite parar um lote em
+// andamento entre um item e o proximo (mesmo padrao cooperativo do
+// IngestionBatchRun).
+model EnrichmentBatchRun {
+  id                String                @id @default(cuid())
+  status            IngestionJobRunStatus @default(QUEUED)
+  triggeredBy       IngestionJobTrigger   @default(SCHEDULE)
+  batchSize         Int
+  processedCount    Int                   @default(0)
+  cancelRequestedAt DateTime?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  errorMessage      String?
+  createdAt         DateTime              @default(now())
+
+  @@index([status, createdAt])
+}
+
+enum IngestionJobType {
+  CRAWL
+  ENRICHMENT
+}
+
+enum IngestionJobScopeType {
+  ADAPTER
+  SOURCE
+  ALL
+}
+
+enum IngestionJobScheduleType {
+  MANUAL
+  DAILY
+  EVERY_N_HOURS
+  WEEKLY
+}
+
+enum IngestionJobRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum IngestionJobTrigger {
+  SCHEDULE
+  MANUAL
 }
 
 model AffiliatePartner {
@@ -1224,12 +1466,13 @@ model BusinessFunnelStageMetric {
 }
 
 model Job {
-  id                String    @id @default(cuid())
+  id                String           @id @default(cuid())
   companyId         String
   jobSourceId       String
   externalJobId     String?
   sourceJobUrl      String
-  canonicalKey      String    @unique
+  canonicalKey      String           @unique
+  slug              String?          @unique
   title             String
   normalizedTitle   String
   descriptionRaw    String
@@ -1247,17 +1490,111 @@ model Job {
   publishedAtSource DateTime?
   firstSeenAt       DateTime
   lastSeenAt        DateTime
-  status            JobStatus @default(active)
+  // Só é atualizado quando title/descriptionClean mudam de verdade entre uma
+  // observação de crawler e outra — diferente de lastSeenAt/updatedAt, que
+  // são bumped em toda visita do crawler mesmo sem mudança real de
+  // conteúdo. Usado como lastModified do sitemap (ver ingestion.service.ts).
+  contentUpdatedAt DateTime?
+  status            JobStatus        @default(active)
   metadataJson      Json?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  jobSource         JobSource @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobSource         JobSource        @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
   targetResumes     Resume[]
+  enrichment        JobEnrichment?
+  applications      JobApplication[]
+  savedBy           SavedJob[]
 
   @@index([companyId])
   @@index([jobSourceId])
   @@index([firstSeenAt])
+  @@index([slug])
+}
+
+// Auditoria de chamadas à Google Indexing API (GoogleIndexingService) — uma
+// linha por notificação enviada (ou tentada), sucesso ou erro. Sem relação
+// com Job de propósito: o registro precisa sobreviver mesmo se a vaga for
+// deletada depois, e slug já é o identificador estável da URL notificada.
+model GoogleIndexingLog {
+  id        String   @id @default(cuid())
+  slug      String
+  type      String
+  status    String
+  errorMsg  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// Vaga salva/favoritada pelo usuário no Radar de Oportunidades — bookmark
+// simples, sem relação com o pipeline de candidatura/análise (JobApplication).
+// Botão "Salvar vaga" em /vagas e /vagas/[slug]; listagem em /vagas-salvas.
+model SavedJob {
+  id        String   @id @default(cuid())
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId])
+  @@index([userId, createdAt])
+}
+
+model JobEnrichment {
+  id    String @id @default(cuid())
+  jobId String @unique
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  // Taxonomia (output do LLM)
+  dominantArea         JobArea?
+  areas                JobArea[]
+  specialties          String[]
+  seniority            SeniorityLevel?
+  requiredSkills       String[]
+  optionalSkills       String[]
+  technologies         String[]
+  contractType         ContractType?
+  languageRequirements String[]
+  certifications       String[]
+  experienceYearsMin   Int?
+  managementRequired   Boolean         @default(false)
+  travelRequired       Boolean         @default(false)
+  careerFingerprint    String[]
+
+  // Filtro semântico (preenchido antes do LLM)
+  semanticFilterResult  SemanticFilterResult @default(PENDING)
+  semanticFilterReason  String?
+  semanticFilterVersion String?
+
+  // Metadados do enriquecimento
+  enrichmentStatus  EnrichmentStatus @default(PENDING)
+  enrichmentVersion String?
+  enrichmentModel   String?
+  enrichmentError   String?
+  enrichedAt        DateTime?
+  attempts          Int              @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enrichmentStatus])
+  @@index([semanticFilterResult])
+  @@index([dominantArea])
+  @@index([seniority])
+}
+
+model SemanticFilterConfig {
+  id           String   @id @default(cuid())
+  version      String   @unique
+  isActive     Boolean  @default(false)
+  techSignals  String[]
+  noiseSignals String[]
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model JobApplication {
@@ -1290,8 +1627,31 @@ model JobApplication {
   // (mantida em sync por upsertFromCvAdaptation) — fonte única de idioma
   // para todo o Kit de Candidatura.
   language              String?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+
+  // Radar de Oportunidades: FK opcional quando a candidatura tem origem
+  // numa vaga ingerida pelo Radar (não preenchido para candidaturas manuais).
+  jobId String?
+  job   Job?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  // v4.1 Auto Apply
+  autoApplyEnabled       Boolean          @default(false)
+  autoApplyStatus        AutoApplyStatus?
+  autoApplyAttemptedAt   DateTime?
+  autoApplyCompletedAt   DateTime?
+  autoApplyResultJson    Json?
+  externalApplicationId  String?
+  externalApplicationUrl String?
+
+  // v4.1 Auto Apply: CV master/base usado na candidatura automática.
+  // Diferente de currentCvAdaptationId (CV adaptado para a vaga específica).
+  resumeUsedId String?
+  resumeUsed   Resume? @relation("JobApplicationResume", fields: [resumeUsedId], references: [id], onDelete: SetNull)
+
+  matchScore        Int?
+  matchSnapshotJson Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user          User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
   cvAdaptations CvAdaptation[]
@@ -1302,6 +1662,8 @@ model JobApplication {
   @@index([userId, createdAt])
   @@index([userId, status])
   @@index([userId, normalizedCompanyName, normalizedJobTitle])
+  @@index([jobId])
+  @@index([resumeUsedId])
 }
 
 model JobApplicationEvent {
@@ -1362,10 +1724,10 @@ enum CoverLetterLengthMode {
 }
 
 model JobApplicationCoverLetter {
-  id                   String                 @id @default(cuid())
-  jobApplicationId     String                 @unique
+  id                   String                @id @default(cuid())
+  jobApplicationId     String                @unique
   cvAdaptationId       String?
-  status               CoverLetterStatus      @default(pending)
+  status               CoverLetterStatus     @default(pending)
   style                CoverLetterStyle
   lengthMode           CoverLetterLengthMode
   maxCharacters        Int?
@@ -1374,8 +1736,8 @@ model JobApplicationCoverLetter {
   generatedAt          DateTime?
   startedAt            DateTime?
   finishedAt           DateTime?
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
   jobApplication JobApplication @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
 }

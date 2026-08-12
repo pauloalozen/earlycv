@@ -21,6 +21,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.userProfile;
   }
 
+  get userRadarProfile() {
+    return this.prisma.userRadarProfile;
+  }
+
   get authAccount() {
     return this.prisma.authAccount;
   }
@@ -53,6 +57,18 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.job;
   }
 
+  get jobEnrichment() {
+    return this.prisma.jobEnrichment;
+  }
+
+  get semanticFilterConfig() {
+    return this.prisma.semanticFilterConfig;
+  }
+
+  get crawlerDiscardedTitle() {
+    return this.prisma.crawlerDiscardedTitle;
+  }
+
   get ingestionRun() {
     return this.prisma.ingestionRun;
   }
@@ -71,6 +87,18 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   get ingestionSchedulerLock() {
     return this.prisma.ingestionSchedulerLock;
+  }
+
+  get ingestionJob() {
+    return this.prisma.ingestionJob;
+  }
+
+  get ingestionJobRun() {
+    return this.prisma.ingestionJobRun;
+  }
+
+  get enrichmentBatchRun() {
+    return this.prisma.enrichmentBatchRun;
   }
 
   get cvAdaptation() {
@@ -163,6 +191,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   get jobApplicationCoverLetter() {
     return this.prisma.jobApplicationCoverLetter;
+  }
+
+  get savedJob() {
+    return this.prisma.savedJob;
+  }
+
+  get googleIndexingLog() {
+    return this.prisma.googleIndexingLog;
   }
 
   get $transaction() {

@@ -405,3 +405,101 @@ test("global ingestion run endpoints list and fetch run details across sources",
   await deleteUserByEmail(database, user.email);
   await app.close();
 });
+
+test("job-source paginated listing sorts by sourceName and by createdAt", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "job-source-sort");
+  await promoteToInternalAdmin(database, user.email);
+  const company = await database.company.create({
+    data: {
+      name: "EarlyCV Sort Demo",
+      normalizedName: `earlycv-sort-demo-${randomUUID()}`,
+      country: "BR",
+    },
+  });
+  const server = app.getHttpServer();
+  const suffix = randomUUID().slice(0, 8);
+
+  const alpha = await request(server)
+    .post("/api/job-sources")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({
+      companyId: company.id,
+      sourceName: `Alpha Careers ${suffix}`,
+      sourceType: "workday",
+      sourceUrl: `https://example.myworkdayjobs.com/${randomUUID()}`,
+      parserKey: "workday",
+      crawlStrategy: "html",
+      checkIntervalMinutes: 15,
+      isActive: true,
+    })
+    .expect(201);
+
+  const zeta = await request(server)
+    .post("/api/job-sources")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({
+      companyId: company.id,
+      sourceName: `Zeta Careers ${suffix}`,
+      sourceType: "workday",
+      sourceUrl: `https://example.myworkdayjobs.com/${randomUUID()}`,
+      parserKey: "workday",
+      crawlStrategy: "html",
+      checkIntervalMinutes: 15,
+      isActive: true,
+    })
+    .expect(201);
+
+  await request(server)
+    .get("/api/job-sources/paginated")
+    .query({
+      page: 1,
+      pageSize: 10,
+      search: suffix,
+      sortBy: "sourceName",
+      sortDir: "asc",
+    })
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      const ids = (body.rows as Array<{ id: string }>).map((row) => row.id);
+      assert.ok(ids.indexOf(alpha.body.id) < ids.indexOf(zeta.body.id));
+    });
+
+  await request(server)
+    .get("/api/job-sources/paginated")
+    .query({
+      page: 1,
+      pageSize: 10,
+      search: suffix,
+      sortBy: "sourceName",
+      sortDir: "desc",
+    })
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      const ids = (body.rows as Array<{ id: string }>).map((row) => row.id);
+      assert.ok(ids.indexOf(zeta.body.id) < ids.indexOf(alpha.body.id));
+    });
+
+  await request(server)
+    .get("/api/job-sources/paginated")
+    .query({
+      page: 1,
+      pageSize: 10,
+      search: suffix,
+      sortBy: "activeJobsCount",
+      sortDir: "desc",
+    })
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .expect(200)
+    .expect(({ body }) => {
+      assert.equal(Array.isArray(body.rows), true);
+      assert.ok(
+        body.rows.some((row: { id: string }) => row.id === alpha.body.id),
+      );
+    });
+
+  await deleteUserByEmail(database, user.email);
+  await app.close();
+});

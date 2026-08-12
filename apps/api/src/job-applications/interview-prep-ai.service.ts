@@ -205,9 +205,8 @@ export class InterviewPrepAiService {
 
     const model = getAiModel("INTERVIEW_PREP");
     const userPrompt = this.buildUserPrompt(context);
-    const { buildSystemMessage, stripJsonCodeFence } = await import(
-      "@earlycv/ai"
-    );
+    const { buildDeepSeekExtraBody, buildSystemMessage, stripJsonCodeFence } =
+      await import("@earlycv/ai");
 
     const response = await this.aiClient.chat.completions.create({
       model,
@@ -216,6 +215,7 @@ export class InterviewPrepAiService {
         { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },
+      ...buildDeepSeekExtraBody(model),
     });
 
     const raw = response.choices[0]?.message?.content ?? "{}";

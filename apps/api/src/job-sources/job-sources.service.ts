@@ -9,6 +9,7 @@ import { Prisma } from "@prisma/client";
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
 import { canonicalizeSourceUrl } from "../ingestion/url-normalization";
+import type { BulkUpdateScheduleDto } from "./dto/bulk-update-schedule.dto";
 import type { CreateJobSourceDto } from "./dto/create-job-source.dto";
 import type { ListJobSourcesDto } from "./dto/list-job-sources.dto";
 import type { UpdateJobSourceDto } from "./dto/update-job-source.dto";
@@ -78,11 +79,65 @@ export class JobSourcesService {
       },
     };
 
+    const sortDir = dto.sortDir ?? "asc";
+    const dbOrderBy: Prisma.JobSourceOrderByWithRelationInput[] =
+      dto.sortBy === "sourceName"
+        ? [{ sourceName: sortDir }]
+        : dto.sortBy === "company"
+          ? [{ company: { name: sortDir } }]
+          : dto.sortBy === "sourceType"
+            ? [{ sourceType: sortDir }]
+            : dto.sortBy === "createdAt"
+              ? [{ createdAt: sortDir }]
+              // Default is alphabetical by name — sorting by updatedAt
+              // made any toggle/run/edit jump that source to the top,
+              // reordering the table on every action.
+              : [{ sourceName: "asc" }];
+
+    // activeJobsCount is derived (not a column), so it can't be sorted at
+    // the database level — fetch every matching row, sort in memory, then
+    // paginate. Fine at this module's current scale (low hundreds of rows).
+    if (dto.sortBy === "activeJobsCount") {
+      const allRows = await this.database.jobSource.findMany({
+        where,
+        include: sourceInclude,
+      });
+
+      const allIds = allRows.map((s) => s.id);
+      const allCounts =
+        allIds.length > 0
+          ? await this.database.job.groupBy({
+              by: ["jobSourceId"],
+              where: { jobSourceId: { in: allIds }, status: "active" },
+              _count: { id: true },
+            })
+          : [];
+      const allCountMap = new Map(
+        allCounts.map((r) => [r.jobSourceId, r._count.id]),
+      );
+
+      const sorted = allRows
+        .map((r) => ({ ...r, activeJobsCount: allCountMap.get(r.id) ?? 0 }))
+        .sort((a, b) =>
+          sortDir === "asc"
+            ? a.activeJobsCount - b.activeJobsCount
+            : b.activeJobsCount - a.activeJobsCount,
+        );
+
+      return {
+        page,
+        pageSize,
+        rows: sorted.slice(skip, skip + pageSize),
+        total: sorted.length,
+        totalPages: Math.max(1, Math.ceil(sorted.length / pageSize)),
+      };
+    }
+
     const [rows, total] = await Promise.all([
       this.database.jobSource.findMany({
         where,
         include: sourceInclude,
-        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+        orderBy: dbOrderBy,
         skip,
         take: pageSize,
       }),
@@ -181,6 +236,15 @@ export class JobSourcesService {
     } catch (error) {
       this.rethrowKnownError(error);
     }
+  }
+
+  async bulkUpdateSchedule(dto: BulkUpdateScheduleDto) {
+    const { count } = await this.database.jobSource.updateMany({
+      where: { sourceType: dto.sourceType },
+      data: { scheduleEnabled: dto.scheduleEnabled },
+    });
+
+    return { count, scheduleEnabled: dto.scheduleEnabled, sourceType: dto.sourceType };
   }
 
   async remove(jobSourceId: string) {

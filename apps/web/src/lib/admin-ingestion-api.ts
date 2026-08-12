@@ -1,12 +1,38 @@
 import "server-only";
 
+import type { JobSourceTypeOption } from "./admin-ingestion-flow";
 import { getBackofficeSessionToken } from "./backoffice-session.server";
+
+// null = Job existe mas sem JobEnrichment (vaga antiga). undefined = campo
+// nao calculado por esse endpoint (so getIngestionRun/getIngestionRunById
+// preenchem).
+export type IngestionPreviewItemEnrichment = {
+  careerFingerprint: string[];
+  dominantArea: string | null;
+  enrichmentStatus:
+    | "PENDING"
+    | "PROCESSING"
+    | "COMPLETED"
+    | "SKIPPED"
+    | "FAILED";
+  id: string;
+  semanticFilterReason: string | null;
+} | null;
 
 export type IngestionPreviewItem = {
   action: "created" | "updated" | "skipped" | "failed";
   canonicalKey: string;
+  enrichment?: IngestionPreviewItemEnrichment;
   message: string;
   title: string;
+};
+
+export type RunEnrichmentSummary = {
+  completed: number;
+  failed: number;
+  pending: number;
+  skipped: number;
+  total: number;
 };
 
 export type CompanyRecord = {
@@ -52,14 +78,22 @@ export type CreateJobSourcePayload = {
   scheduleEnabled?: boolean;
   scheduleTimezone?: "America/Sao_Paulo";
   sourceName: string;
-  sourceType: "custom_api" | "custom_html" | "gupy";
+  sourceType: JobSourceTypeOption;
   sourceUrl: string;
 };
 
 export type UpdateJobSourcePayload = {
+  checkIntervalMinutes?: number;
+  crawlStrategy?: "api" | "html";
+  isActive?: boolean;
+  isFallbackAdapter?: boolean;
+  parserKey?: string;
   scheduleCron?: string | null;
   scheduleEnabled?: boolean;
   scheduleTimezone?: "America/Sao_Paulo";
+  sourceName?: string;
+  sourceType?: JobSourceTypeOption;
+  sourceUrl?: string;
 };
 
 export type JobSourcePagedResult = {
@@ -101,6 +135,8 @@ export type CsvImportReport = {
 };
 
 export type IngestionRunSummary = {
+  discardedByFilterCount?: number;
+  errorSummary: string | null;
   failedCount: number;
   finishedAt: string | null;
   id: string;
@@ -113,7 +149,17 @@ export type IngestionRunSummary = {
   updatedCount: number;
 };
 
-export type ManualAdapterType = "gupy" | "custom_html" | "custom_api";
+export type ManualAdapterType =
+  | "gupy"
+  | "custom_html"
+  | "custom_api"
+  | "greenhouse"
+  | "lever"
+  | "ashby"
+  | "inhire"
+  | "teamtailor"
+  | "talentbrew"
+  | "workday";
 
 export type ManualRunStatus =
   | "queued"
@@ -166,6 +212,13 @@ export type ManualRunItemRecord = {
   startedAt: string | null;
   finishedAt: string | null;
   errorMessage: string | null;
+  ingestionRun: {
+    errorSummary: string | null;
+    failedCount: number;
+    newCount: number;
+    skippedCount: number;
+    updatedCount: number;
+  } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -179,6 +232,7 @@ export type JobSourceRecord = {
   };
   companyId: string;
   consecutive403Count?: number;
+  createdAt: string;
   id: string;
   ingestionRuns?: IngestionRunSummary[];
   isActive: boolean;
@@ -221,11 +275,10 @@ async function resolveToken(token?: string) {
 
 async function apiRequest<T>(path: string, token?: string, init?: RequestInit) {
   const bearerToken = await resolveToken(token);
-  const isRead = !init?.method || init.method === "GET";
 
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
-    ...(isRead ? { next: { revalidate: 60 } } : { cache: "no-store" as const }),
+    cache: "no-store" as const,
     headers: {
       Authorization: `Bearer ${bearerToken}`,
       ...(init?.headers ?? {}),
@@ -243,6 +296,13 @@ export async function listJobSources(token?: string) {
   return apiRequest<JobSourceRecord[]>("/job-sources", token);
 }
 
+export type JobSourceSortBy =
+  | "sourceName"
+  | "company"
+  | "sourceType"
+  | "activeJobsCount"
+  | "createdAt";
+
 export async function listJobSourcesPaginated(
   params: {
     page?: number;
@@ -250,6 +310,8 @@ export async function listJobSourcesPaginated(
     search?: string;
     statusFilter?: string;
     typeFilter?: string;
+    sortBy?: JobSourceSortBy;
+    sortDir?: "asc" | "desc";
   },
   token?: string,
 ) {
@@ -259,6 +321,8 @@ export async function listJobSourcesPaginated(
   if (params.search) qs.set("search", params.search);
   if (params.statusFilter) qs.set("statusFilter", params.statusFilter);
   if (params.typeFilter) qs.set("typeFilter", params.typeFilter);
+  if (params.sortBy) qs.set("sortBy", params.sortBy);
+  if (params.sortDir) qs.set("sortDir", params.sortDir);
   return apiRequest<JobSourcePagedResult>(
     `/job-sources/paginated?${qs}`,
     token,
@@ -333,9 +397,32 @@ export async function getIngestionRunById(runId: string, token?: string) {
   return apiRequest<IngestionRunSummary>(`/runs/${runId}`, token);
 }
 
+export async function getRunEnrichmentSummary(runId: string, token?: string) {
+  return apiRequest<RunEnrichmentSummary>(
+    `/ingestion/runs/${runId}/enrichment-summary`,
+    token,
+  );
+}
+
 export async function runJobSource(jobSourceId: string, token?: string) {
   return apiRequest<IngestionRunSummary>(
     `/job-sources/${jobSourceId}/run`,
+    token,
+    {
+      method: "POST",
+    },
+  );
+}
+
+// Fire-and-forget: so cria/reaproveita o IngestionJob MANUAL da fonte e
+// enfileira o IngestionBatchRun — o crawl roda async via
+// IngestionManualRunnerService, essa chamada retorna quase
+// instantaneamente. Diferente de runJobSource() acima, que espera o
+// crawl inteiro terminar antes de responder (usado por outros
+// consumidores que ainda dependem do IngestionRunSummary sincrono).
+export async function runJobSourceAdHoc(jobSourceId: string, token?: string) {
+  return apiRequest<{ id: string; status: string }>(
+    `/ingestion/jobs/run-source/${jobSourceId}`,
     token,
     {
       method: "POST",
@@ -394,10 +481,9 @@ export async function updateGlobalSchedulerConfig(
 
 export async function runGlobalSchedulerNow(token?: string) {
   return apiRequest<{
-    failed?: number;
-    skipped?: number;
+    batchRunId: string;
     status: string;
-    succeeded?: number;
+    totalSources: number;
   }>("/runs/scheduler/global/run", token, {
     method: "POST",
   });
@@ -491,6 +577,23 @@ export async function updateJobSource(
       "Content-Type": "application/json",
     },
     method: "PUT",
+  });
+}
+
+export async function bulkUpdateJobSourceSchedule(
+  payload: { sourceType: string; scheduleEnabled: boolean },
+  token?: string,
+) {
+  return apiRequest<{
+    count: number;
+    scheduleEnabled: boolean;
+    sourceType: string;
+  }>("/job-sources/bulk-schedule", token, {
+    body: JSON.stringify(payload),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "PATCH",
   });
 }
 

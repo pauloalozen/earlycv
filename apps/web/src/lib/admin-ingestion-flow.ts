@@ -1,7 +1,40 @@
+export type JobSourceTypeOption =
+  | "custom_api"
+  | "custom_html"
+  | "gupy"
+  | "greenhouse"
+  | "lever"
+  | "ashby"
+  | "inhire"
+  | "teamtailor"
+  | "talentbrew"
+  | "workday"
+  | "solides"
+  | "pandape";
+
+// Source types selectable in the admin UI. solides/pandape don't have an
+// adapter implemented yet — creating a source with one of these types only
+// tags the company for later; running it will fail until the matching
+// adapter ships.
+export const JOB_SOURCE_TYPE_OPTIONS: JobSourceTypeOption[] = [
+  "gupy",
+  "custom_html",
+  "custom_api",
+  "greenhouse",
+  "lever",
+  "ashby",
+  "inhire",
+  "teamtailor",
+  "talentbrew",
+  "workday",
+  "solides",
+  "pandape",
+];
+
 export type SourceDefaults = {
   crawlStrategy: "api" | "html";
   parserKey: string;
-  sourceType: "custom_api" | "custom_html" | "gupy";
+  sourceType: JobSourceTypeOption;
 };
 
 export type CreateCompanyInput = {
@@ -24,7 +57,7 @@ export type CreateJobSourceInput = {
   scheduleEnabled?: boolean;
   scheduleTimezone?: "America/Sao_Paulo";
   sourceName: string;
-  sourceType: "custom_api" | "custom_html" | "gupy";
+  sourceType: JobSourceTypeOption;
   sourceUrl: string;
 };
 
@@ -32,6 +65,13 @@ export const MANUAL_ADAPTER_TYPES = [
   "gupy",
   "custom_html",
   "custom_api",
+  "greenhouse",
+  "lever",
+  "ashby",
+  "inhire",
+  "teamtailor",
+  "talentbrew",
+  "workday",
 ] as const;
 
 export type ManualAdapterType = (typeof MANUAL_ADAPTER_TYPES)[number];
@@ -69,6 +109,14 @@ export function buildAdminRedirect(
   return `${url.pathname}?${url.searchParams.toString()}`;
 }
 
+// ATS types without an adapter yet — API-based platforms, same shape as
+// gupy/custom_api, so crawlStrategy defaults to "api". They only exist so
+// companies can be tagged now; running them fails until the adapter ships.
+const UNIMPLEMENTED_API_SOURCE_TYPES: JobSourceTypeOption[] = [
+  "solides",
+  "pandape",
+];
+
 export function getSourceDefaults(sourceType: string): SourceDefaults {
   if (sourceType === "gupy") {
     return {
@@ -83,6 +131,73 @@ export function getSourceDefaults(sourceType: string): SourceDefaults {
       crawlStrategy: "api",
       parserKey: "custom_api",
       sourceType: "custom_api",
+    };
+  }
+
+  if (sourceType === "greenhouse") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "greenhouse",
+      sourceType: "greenhouse",
+    };
+  }
+
+  if (sourceType === "lever") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "lever",
+      sourceType: "lever",
+    };
+  }
+
+  if (sourceType === "ashby") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "ashby",
+      sourceType: "ashby",
+    };
+  }
+
+  if (sourceType === "inhire") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "inhire",
+      sourceType: "inhire",
+    };
+  }
+
+  if (sourceType === "teamtailor") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "teamtailor",
+      sourceType: "teamtailor",
+    };
+  }
+
+  if (sourceType === "talentbrew") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "talentbrew",
+      sourceType: "talentbrew",
+    };
+  }
+
+  if (sourceType === "workday") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "workday",
+      sourceType: "workday",
+    };
+  }
+
+  const unimplementedType = UNIMPLEMENTED_API_SOURCE_TYPES.find(
+    (type) => type === sourceType,
+  );
+  if (unimplementedType) {
+    return {
+      crawlStrategy: "api",
+      parserKey: unimplementedType,
+      sourceType: unimplementedType,
     };
   }
 
@@ -164,6 +279,50 @@ export function parseJobSourceFormData(
     sourceType: defaults.sourceType,
     sourceUrl,
     isFallbackAdapter: defaults.sourceType === "custom_html",
+  };
+}
+
+export type UpdateJobSourceInput = {
+  checkIntervalMinutes: number;
+  crawlStrategy: "api" | "html";
+  isActive: boolean;
+  isFallbackAdapter: boolean;
+  parserKey: string;
+  sourceName: string;
+  sourceType: JobSourceTypeOption;
+  sourceUrl: string;
+};
+
+export function parseUpdateJobSourceFormData(
+  formData: FormData,
+): UpdateJobSourceInput {
+  const sourceName = getTrimmedValue(formData, "sourceName");
+  const sourceType = getTrimmedValue(formData, "sourceType") ?? "custom_html";
+  const sourceUrl = getTrimmedValue(formData, "sourceUrl");
+  const intervalRaw = getTrimmedValue(formData, "checkIntervalMinutes");
+
+  if (!sourceName || !sourceUrl || !intervalRaw) {
+    throw new Error("Preencha os campos obrigatorios da fonte.");
+  }
+
+  const effectiveSourceType =
+    sourceUrl && inferGupySourceTypeFromUrl(sourceUrl) ? "gupy" : sourceType;
+  const defaults = getSourceDefaults(effectiveSourceType);
+  const checkIntervalMinutes = Number(intervalRaw);
+
+  if (!Number.isInteger(checkIntervalMinutes) || checkIntervalMinutes < 1) {
+    throw new Error("Informe um intervalo valido em minutos.");
+  }
+
+  return {
+    checkIntervalMinutes,
+    crawlStrategy: defaults.crawlStrategy,
+    isActive: formData.get("isActive") === "on",
+    isFallbackAdapter: defaults.sourceType === "custom_html",
+    parserKey: defaults.parserKey,
+    sourceName,
+    sourceType: defaults.sourceType,
+    sourceUrl,
   };
 }
 

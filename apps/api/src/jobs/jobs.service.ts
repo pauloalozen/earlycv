@@ -5,13 +5,168 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { JobArea, Prisma, SeniorityLevel } from "@prisma/client";
 
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
 import { JobSourcesService } from "../job-sources/job-sources.service";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
+import { normalizeState } from "./geo-normalizer";
+import { toCompanySlug } from "./public-job-view";
+
+const PUBLIC_JOB_SELECT = {
+  canonicalKey: true,
+  city: true,
+  company: {
+    select: {
+      name: true,
+      websiteUrl: true,
+    },
+  },
+  country: true,
+  descriptionClean: true,
+  descriptionRaw: true,
+  employmentType: true,
+  enrichment: { select: { technologies: true, dominantArea: true } },
+  externalJobId: true,
+  firstSeenAt: true,
+  id: true,
+  lastSeenAt: true,
+  locationText: true,
+  publishedAtSource: true,
+  seniorityLevel: true,
+  slug: true,
+  sourceJobUrl: true,
+  state: true,
+  status: true,
+  title: true,
+  workModel: true,
+} satisfies Prisma.JobSelect;
+
+// Captura falhou (ex: Gupy devolveu detail sem conteudo, ou payload sem
+// titulo) — a vaga fica visivel só pro admin (getById), nunca pro público,
+// mesmo que status siga "active". Reaproveitado em toda query pública.
+const PUBLIC_JOB_INTEGRITY_WHERE = {
+  descriptionClean: { not: "" },
+  title: { not: "" },
+  // Vagas sem slug (ainda não backfilled após a migration que adicionou o
+  // campo) ficam fora do público até o backfill rodar — evita link quebrado
+  // /vagas/null-... antes do backfill manual.
+  slug: { not: null },
+  // Vaga ainda PENDING/PROCESSING/FAILED/SKIPPED de enriquecimento não tem
+  // dominantArea/technologies/seniority — sem isso o Radar não calcula
+  // compatibilidade nenhuma pra ninguém, então ela não entra no portal até
+  // o enriquecimento terminar (worker assíncrono, ver
+  // ingestion.service.ts). Decisão de produto: vaga "crua" não é conteúdo
+  // publicável, nem pro anônimo nem pro logado.
+  //
+  // dominantArea=OTHER ("Geral" no filtro) é o catch-all do LLM pra vaga
+  // fora da taxonomia tech (RH, jurídico, engenharia não-tech etc.) — boards
+  // globais (Workday/Greenhouse) trazem essas vagas junto com as tech de
+  // verdade. Decisão de produto: não é o público do radar, nunca aparece no
+  // portal (nem listagem, nem facet, nem /radar/[slug] direto).
+  enrichment: {
+    enrichmentStatus: "COMPLETED",
+    dominantArea: { not: "OTHER" },
+  },
+} satisfies Prisma.JobWhereInput;
+
+function splitCsv(value: string): string[] {
+  return value
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+// Query params de área/senioridade chegam como texto livre (URL) — só os
+// valores que batem com o enum do Prisma entram no WHERE, o resto é
+// ignorado silenciosamente (evita 500 por enum inválido vindo de um link
+// externo desatualizado ou digitação manual na URL).
+function splitEnumCsv<T extends string>(
+  value: string,
+  allowed: readonly T[],
+): T[] {
+  const allowedSet = new Set<string>(allowed);
+  return splitCsv(value).filter((v): v is T => allowedSet.has(v));
+}
+
+const JOB_AREA_VALUES = Object.values(JobArea);
+const SENIORITY_LEVEL_VALUES = Object.values(SeniorityLevel);
+
+// Localidade (Job.state/Job.city) é texto livre vindo direto do crawler —
+// sem normalização geográfica (Job.city — o ingestion normaliza pra
+// title-case a partir de agora, mas vagas antigas ainda têm grafia crua até
+// serem re-crawladas). Agrupa só por case (trim + lowercase) pra não listar
+// "São Paulo" e "SAO PAULO" como duas facetas diferentes; o filtro em si
+// compara com mode "insensitive", então qualquer variante de caixa do mesmo
+// texto ainda combina, mesmo que a faceta mostrada seja só uma das grafias.
+function groupLocationValues(
+  values: Array<string | null>,
+): Array<{ value: string; count: number }> {
+  const groups = new Map<string, Map<string, number>>();
+
+  for (const raw of values) {
+    const trimmed = raw?.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    const originals = groups.get(key) ?? new Map<string, number>();
+    originals.set(trimmed, (originals.get(trimmed) ?? 0) + 1);
+    groups.set(key, originals);
+  }
+
+  return [...groups.values()]
+    .map((originals) => {
+      const [display] = [...originals.entries()].sort(
+        (a, b) => b[1] - a[1],
+      )[0] as [string, number];
+      const total = [...originals.values()].reduce((a, b) => a + b, 0);
+      return { value: display, count: total };
+    })
+    .sort((a, b) => b.count - a.count);
+}
+
+// Job.state guarda a sigla como valor canônico a partir da normalização de
+// geo-normalizer.ts, mas vagas antigas (ainda não re-crawladas) podem ter
+// "São Paulo", "SAO PAULO" ou "SP" convivendo — normalizeState reconhece
+// todas essas grafias e agrupa as três num único facet { value: "SP", label:
+// "São Paulo" }. Estado que não bate com nenhuma das 27 UFs (de fora do
+// Brasil, ou lixo de dado) cai no fallback de groupLocationValues — mesma
+// faceta "melhor esforço" de antes, sem nome por extenso.
+function buildStateFacets(
+  values: Array<string | null>,
+): Array<{ value: string; label: string; count: number }> {
+  const known = new Map<string, { nome: string; count: number }>();
+  const unknown: Array<string | null> = [];
+
+  for (const raw of values) {
+    const trimmed = raw?.trim();
+    if (!trimmed) continue;
+    const normalized = normalizeState(trimmed);
+    if (!normalized) {
+      unknown.push(trimmed);
+      continue;
+    }
+    const existing = known.get(normalized.sigla);
+    known.set(normalized.sigla, {
+      nome: normalized.nome,
+      count: (existing?.count ?? 0) + 1,
+    });
+  }
+
+  const knownFacets = [...known.entries()].map(([sigla, { nome, count }]) => ({
+    value: sigla,
+    label: nome,
+    count,
+  }));
+  const unknownFacets = groupLocationValues(unknown).map((f) => ({
+    value: f.value,
+    label: f.value,
+    count: f.count,
+  }));
+
+  return [...knownFacets, ...unknownFacets].sort((a, b) => b.count - a.count);
+}
 
 function normalizeSourceJobUrl(rawUrl: string) {
   const url = new URL(rawUrl.trim());
@@ -96,6 +251,7 @@ export class JobsService {
     const [jobs, total] = await Promise.all([
       this.database.job.findMany({
         where,
+        include: { company: { select: { name: true } } },
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
         skip,
         take: pageSize,
@@ -108,54 +264,158 @@ export class JobsService {
 
   listPublic() {
     return this.database.job.findMany({
-      where: { status: "active" },
-      orderBy: [{ firstSeenAt: "desc" }, { updatedAt: "desc" }],
-      select: {
-        canonicalKey: true,
-        company: {
-          select: {
-            name: true,
-          },
-        },
-        country: true,
-        descriptionClean: true,
-        descriptionRaw: true,
-        employmentType: true,
-        firstSeenAt: true,
-        id: true,
-        lastSeenAt: true,
-        locationText: true,
-        publishedAtSource: true,
-        seniorityLevel: true,
-        sourceJobUrl: true,
-        status: true,
-        title: true,
-        workModel: true,
-      },
+      where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
+      orderBy: [{ lastSeenAt: "desc" }, { updatedAt: "desc" }],
+      select: PUBLIC_JOB_SELECT,
     });
   }
 
-  async listPublicFiltered(filters: {
+  // Usado pelo sitemap.ts do web app (GET /internal/jobs/sitemap-data).
+  // Mesmo critério de PUBLIC_JOB_INTEGRITY_WHERE das outras queries públicas
+  // — uma vaga que não aparece em /vagas ou /vagas/[slug] não deve aparecer
+  // no sitemap (senão o Google indexa uma URL que sempre 404).
+  async listSitemapData() {
+    const jobs = await this.database.job.findMany({
+      where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
+      select: { slug: true, lastSeenAt: true, contentUpdatedAt: true },
+      orderBy: { lastSeenAt: "desc" },
+    });
+
+    return jobs.filter(
+      (
+        job,
+      ): job is {
+        slug: string;
+        lastSeenAt: Date;
+        contentUpdatedAt: Date | null;
+      } => job.slug !== null,
+    );
+  }
+
+  // Usado pelo fluxo de 1 clique (/adaptar?jobId=...) — o front só tem o id
+  // (veio do botão "Analisar meu CV" na listagem/detalhe), não o slug.
+  async getPublicById(jobId: string) {
+    return this.database.job.findFirst({
+      where: { id: jobId, status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
+      select: PUBLIC_JOB_SELECT,
+    });
+  }
+
+  // Usado por /radar/[slug] e /radar/[slug]/score — query direta pelo campo
+  // slug (indexado e único), no lugar de carregar listPublic() inteiro e
+  // fazer Array.find recalculando o slug de cada vaga.
+  async getPublicBySlug(slug: string) {
+    return this.database.job.findFirst({
+      where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE, slug },
+      select: PUBLIC_JOB_SELECT,
+    });
+  }
+
+  // Usado por /radar/empresa/[empresa]. Company não tem campo de slug
+  // persistido, então o casamento é feito em memória: pega o nome de cada
+  // empresa com pelo menos 1 vaga pública, computa o slug (toCompanySlug,
+  // mesma função usada pelo slug de vaga) e compara com o da URL. Só depois
+  // de achar a empresa é que a segunda query busca as vagas de verdade —
+  // evita escanear a tabela Company inteira (só quem tem vaga pública entra
+  // na primeira query).
+  async getPublicByCompanySlug(companySlug: string) {
+    const activeJobCompanies = await this.database.job.findMany({
+      where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
+      select: { companyId: true, company: { select: { name: true } } },
+      distinct: ["companyId"],
+    });
+
+    const match = activeJobCompanies.find(
+      (job) => toCompanySlug(job.company.name) === companySlug,
+    );
+
+    if (!match) {
+      return null;
+    }
+
+    const jobs = await this.database.job.findMany({
+      where: {
+        status: "active",
+        ...PUBLIC_JOB_INTEGRITY_WHERE,
+        companyId: match.companyId,
+      },
+      select: PUBLIC_JOB_SELECT,
+      orderBy: [{ lastSeenAt: "desc" }],
+    });
+
+    return { companyName: match.company.name, jobs };
+  }
+
+  // Usado por /radar/tecnologia/[tech]. Threshold de volume: só existe
+  // conteúdo publicável na landing page se houver pelo menos `minCount`
+  // vagas ativas com essa tecnologia — abaixo disso o chamador (route)
+  // decide fazer notFound(). requiredSkills/technologies do enrichment já
+  // chegam normalizados em lowercase (ver job-enrichment.worker.ts), e o
+  // controller já lowercasa o param da URL antes de chamar — `has` do
+  // Prisma em array Postgres é comparação exata, então sem isso o match
+  // seria case-sensitive.
+  async listPublicJobsByTech(tech: string, minCount: number) {
+    const enrichmentWhere: Prisma.JobEnrichmentWhereInput = {
+      ...PUBLIC_JOB_INTEGRITY_WHERE.enrichment,
+      OR: [{ requiredSkills: { has: tech } }, { technologies: { has: tech } }],
+    };
+    const where: Prisma.JobWhereInput = {
+      status: "active",
+      ...PUBLIC_JOB_INTEGRITY_WHERE,
+      enrichment: enrichmentWhere,
+    };
+
+    const total = await this.database.job.count({ where });
+    if (total < minCount) {
+      return { total, jobs: [] };
+    }
+
+    const jobs = await this.database.job.findMany({
+      where,
+      select: PUBLIC_JOB_SELECT,
+      orderBy: [{ lastSeenAt: "desc" }],
+    });
+
+    return { total, jobs };
+  }
+
+  private buildPublicJobsWhere(filters: {
     q?: string;
     workModel?: string;
     seniorityLevel?: string;
     companyName?: string;
     publishedWithin?: "24h" | "3d" | "7d";
-    page: number;
-    limit: number;
-  }) {
+    area?: string;
+    seniority?: string;
+    state?: string;
+    city?: string;
+    technology?: string;
+  }): Prisma.JobWhereInput {
     const {
       q,
       workModel,
       seniorityLevel,
       companyName,
       publishedWithin,
-      page,
-      limit,
+      area,
+      seniority,
+      state,
+      city,
+      technology,
     } = filters;
-    const skip = (page - 1) * limit;
+    // Construído à parte (em vez de remendar where.enrichment em cada if)
+    // porque o tipo gerado pelo Prisma pra relação 1:1 opcional (XOR entre
+    // o filtro de relação e o where do model relacionado) não dá pra
+    // espalhar/mesclar com segurança de tipos depois de já atribuído.
+    const enrichmentWhere: Prisma.JobEnrichmentWhereInput = {
+      ...PUBLIC_JOB_INTEGRITY_WHERE.enrichment,
+    };
 
-    const where: Prisma.JobWhereInput = { status: "active" };
+    const where: Prisma.JobWhereInput = {
+      status: "active",
+      ...PUBLIC_JOB_INTEGRITY_WHERE,
+      enrichment: enrichmentWhere,
+    };
 
     if (q) {
       where.OR = [
@@ -165,15 +425,21 @@ export class JobsService {
     }
 
     if (workModel) {
-      where.workModel = workModel;
+      where.workModel = { in: splitCsv(workModel) };
     }
 
+    // Campo legado (Job.seniorityLevel) — texto livre nunca preenchido pelo
+    // ingestion, mantido só por compatibilidade retroativa do query param.
+    // O filtro de senioridade real usado pelo /radar é `seniority`, abaixo,
+    // que aponta pro enum estruturado (JobEnrichment.seniority).
     if (seniorityLevel) {
-      where.seniorityLevel = seniorityLevel;
+      where.seniorityLevel = { in: splitCsv(seniorityLevel) };
     }
 
     if (companyName) {
-      where.company = { name: { contains: companyName, mode: "insensitive" } };
+      where.company = {
+        name: { in: splitCsv(companyName), mode: "insensitive" },
+      };
     }
 
     if (publishedWithin) {
@@ -184,20 +450,87 @@ export class JobsService {
       where.publishedAtSource = { gte: cutoff };
     }
 
+    if (area) {
+      // Filtra "OTHER" fora mesmo se vier explícito na query (?area=OTHER)
+      // — senão o `in: values` abaixo substitui o `not: "OTHER"` herdado de
+      // PUBLIC_JOB_INTEGRITY_WHERE.enrichment e reabriria a categoria só
+      // por causa da URL.
+      const values = splitEnumCsv(area, JOB_AREA_VALUES).filter(
+        (value) => value !== "OTHER",
+      );
+      if (values.length > 0) {
+        enrichmentWhere.dominantArea = { in: values };
+      }
+    }
+
+    if (seniority) {
+      const values = splitEnumCsv(seniority, SENIORITY_LEVEL_VALUES);
+      if (values.length > 0) {
+        enrichmentWhere.seniority = { in: values };
+      }
+    }
+
+    if (state) {
+      where.state = { in: splitCsv(state), mode: "insensitive" };
+    }
+
+    if (city) {
+      where.city = { in: splitCsv(city), mode: "insensitive" };
+    }
+
+    // Usado por /radar/tecnologia/[tech] (fixedFilters.technology, ver
+    // jobs-listing.tsx no web) — requiredSkills/technologies do enrichment
+    // já chegam normalizados em lowercase (job-enrichment.worker.ts), e o
+    // controller já lowercasa `technology` antes de chegar aqui, então o
+    // `has` do Prisma (comparação exata em array Postgres) funciona sem
+    // gambiarra de case-insensitivity.
+    if (technology) {
+      enrichmentWhere.OR = [
+        { requiredSkills: { has: technology } },
+        { technologies: { has: technology } },
+      ];
+    }
+
+    return where;
+  }
+
+  async listPublicFiltered(filters: {
+    q?: string;
+    workModel?: string;
+    seniorityLevel?: string;
+    companyName?: string;
+    publishedWithin?: "24h" | "3d" | "7d";
+    area?: string;
+    seniority?: string;
+    state?: string;
+    city?: string;
+    technology?: string;
+    page: number;
+    limit: number;
+  }) {
+    const { page, limit } = filters;
+    const skip = (page - 1) * limit;
+    const where = this.buildPublicJobsWhere(filters);
+
     const select = {
       canonicalKey: true,
-      company: { select: { name: true } },
+      city: true,
+      company: { select: { name: true, websiteUrl: true } },
       country: true,
       descriptionClean: true,
       descriptionRaw: true,
       employmentType: true,
+      enrichment: { select: { technologies: true, dominantArea: true } },
+      externalJobId: true,
       firstSeenAt: true,
       id: true,
       lastSeenAt: true,
       locationText: true,
       publishedAtSource: true,
       seniorityLevel: true,
+      slug: true,
       sourceJobUrl: true,
+      state: true,
       status: true,
       title: true,
       workModel: true,
@@ -206,7 +539,7 @@ export class JobsService {
     const [jobs, total] = await Promise.all([
       this.database.job.findMany({
         where,
-        orderBy: [{ firstSeenAt: "desc" }, { updatedAt: "desc" }],
+        orderBy: [{ lastSeenAt: "desc" }, { updatedAt: "desc" }],
         skip,
         take: limit,
         select,
@@ -217,19 +550,71 @@ export class JobsService {
     return { jobs, total, page, limit };
   }
 
-  async listPublicFacets() {
+  // Usado pelo Radar (usuário logado com UserRadarProfile): busca vagas
+  // ativas com os mesmos filtros de texto/empresa/data da listagem pública,
+  // com o enrichment incluído para permitir calcular score em memória. O
+  // Radar nunca esconde vagas do usuário — só prioriza por relevância — por
+  // isso `jobIds` é opcional: quando omitido, traz todas as vagas ativas
+  // que batem com os filtros (igual ao anônimo), sem restringir por
+  // compatibilidade de área/senioridade/etc. Sem paginação aqui — o score é
+  // calculado e ordenado em memória, a paginação acontece depois disso.
+  async listByIdsWithEnrichment(
+    jobIds: string[] | null,
+    filters: {
+      q?: string;
+      workModel?: string;
+      seniorityLevel?: string;
+      companyName?: string;
+      publishedWithin?: "24h" | "3d" | "7d";
+      area?: string;
+      seniority?: string;
+      state?: string;
+      city?: string;
+      technology?: string;
+    },
+  ) {
+    if (jobIds && jobIds.length === 0) {
+      return [];
+    }
+    const where = this.buildPublicJobsWhere(filters);
+    return this.database.job.findMany({
+      where: { ...where, ...(jobIds ? { id: { in: jobIds } } : {}) },
+      include: {
+        enrichment: true,
+        company: { select: { name: true, websiteUrl: true } },
+      },
+    });
+  }
+
+  async listPublicFacets(filters?: { state?: string }) {
     const jobs = await this.database.job.findMany({
-      where: { status: "active" },
+      where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
       select: {
         workModel: true,
-        seniorityLevel: true,
+        state: true,
+        city: true,
+        enrichment: { select: { dominantArea: true, seniority: true } },
         company: { select: { name: true } },
       },
     });
 
     const workModelMap = new Map<string, number>();
+    const areaMap = new Map<string, number>();
     const seniorityMap = new Map<string, number>();
     const companyMap = new Map<string, number>();
+    const states: Array<string | null> = [];
+    const cities: Array<string | null> = [];
+
+    // Cidade é relacionada ao estado selecionado (cascata): com filtro de
+    // estado ativo, só entram no facet de cidade as vagas cujo state
+    // normaliza pra uma das siglas selecionadas — os outros facets
+    // (área/senioridade/modalidade/empresa/estado) continuam globais, sem
+    // depender do que já está selecionado em outro dropdown.
+    const selectedStateSiglas = filters?.state
+      ? new Set(
+          splitCsv(filters.state).map((value) => value.trim().toUpperCase()),
+        )
+      : null;
 
     for (const job of jobs) {
       if (job.workModel) {
@@ -238,14 +623,33 @@ export class JobsService {
           (workModelMap.get(job.workModel) ?? 0) + 1,
         );
       }
-      if (job.seniorityLevel) {
+      if (job.enrichment?.dominantArea) {
+        areaMap.set(
+          job.enrichment.dominantArea,
+          (areaMap.get(job.enrichment.dominantArea) ?? 0) + 1,
+        );
+      }
+      // UNKNOWN é "senioridade avaliada e não determinável" (não "sem
+      // avaliação") — ainda assim não vira opção de filtro: filtrar por
+      // "não especificado" não ajuda o usuário a achar vaga nenhuma.
+      if (job.enrichment?.seniority && job.enrichment.seniority !== "UNKNOWN") {
         seniorityMap.set(
-          job.seniorityLevel,
-          (seniorityMap.get(job.seniorityLevel) ?? 0) + 1,
+          job.enrichment.seniority,
+          (seniorityMap.get(job.enrichment.seniority) ?? 0) + 1,
         );
       }
       const co = job.company.name;
       companyMap.set(co, (companyMap.get(co) ?? 0) + 1);
+      states.push(job.state);
+
+      if (!selectedStateSiglas) {
+        cities.push(job.city);
+      } else {
+        const jobStateSigla = normalizeState(job.state)?.sigla;
+        if (jobStateSigla && selectedStateSiglas.has(jobStateSigla)) {
+          cities.push(job.city);
+        }
+      }
     }
 
     const toSorted = (m: Map<string, number>) =>
@@ -255,8 +659,11 @@ export class JobsService {
 
     return {
       workModels: toSorted(workModelMap),
-      seniorityLevels: toSorted(seniorityMap),
+      areas: toSorted(areaMap),
+      seniorities: toSorted(seniorityMap),
       companies: toSorted(companyMap).slice(0, 20),
+      states: buildStateFacets(states).slice(0, 40),
+      cities: groupLocationValues(cities).slice(0, 40),
     };
   }
 
@@ -270,6 +677,13 @@ export class JobsService {
     }
 
     return job;
+  }
+
+  async getByIdWithEnrichment(jobId: string) {
+    return this.database.job.findUnique({
+      where: { id: jobId },
+      include: { enrichment: true },
+    });
   }
 
   async update(jobId: string, dto: UpdateJobDto) {

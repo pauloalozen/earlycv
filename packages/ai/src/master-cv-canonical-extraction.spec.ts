@@ -46,6 +46,11 @@ function createValidOutput(): MasterCvCanonicalExtractionOutput {
       certifications: [
         { name: "Google Data Analytics", issuer: "Google", year: "2023" },
       ],
+      radarProfile: {
+        areas: ["DATA_AI"],
+        seniority: "SENIOR",
+        careerFingerprint: ["Analista de Dados", "SQL", "Power BI"],
+      },
     },
     extractionCoverage: {
       identifiedFields: ["fullName", "email"],
@@ -331,5 +336,120 @@ describe("extractMasterCvCanonicalProfile", () => {
     );
 
     assert.deepEqual(output.evidence.fullName, ["Ana Silva"]);
+  });
+
+  it("returns radarProfile as-is when valid", async () => {
+    const mockClient = {
+      chat: {
+        completions: {
+          create: mockChatCompletion(JSON.stringify(createValidOutput())),
+        },
+      },
+    } as unknown as OpenAI;
+
+    const { output } = await extractMasterCvCanonicalProfile(
+      mockClient,
+      "gpt-4.1-mini",
+      { masterCvText: SAMPLE_CV_TEXT },
+    );
+
+    assert.deepEqual(output.canonicalProfile.radarProfile, {
+      areas: ["DATA_AI"],
+      seniority: "SENIOR",
+      careerFingerprint: ["Analista de Dados", "SQL", "Power BI"],
+    });
+  });
+
+  it("defaults radarProfile to empty when missing from the model response", async () => {
+    const invalidOutput = createValidOutput() as unknown as {
+      canonicalProfile: Record<string, unknown>;
+    };
+    invalidOutput.canonicalProfile.radarProfile = undefined;
+
+    const mockClient = {
+      chat: {
+        completions: {
+          create: mockChatCompletion(JSON.stringify(invalidOutput)),
+        },
+      },
+    } as unknown as OpenAI;
+
+    const { output } = await extractMasterCvCanonicalProfile(
+      mockClient,
+      "gpt-4.1-mini",
+      { masterCvText: SAMPLE_CV_TEXT },
+    );
+
+    assert.deepEqual(output.canonicalProfile.radarProfile, {
+      areas: [],
+      seniority: "UNKNOWN",
+      careerFingerprint: [],
+    });
+  });
+
+  it("drops unknown radarProfile.areas values and falls back seniority to UNKNOWN instead of failing", async () => {
+    const invalidOutput = createValidOutput() as unknown as {
+      canonicalProfile: {
+        radarProfile: { areas: unknown[]; seniority: unknown };
+      };
+    };
+    invalidOutput.canonicalProfile.radarProfile.areas = [
+      "DATA_AI",
+      "NOT_A_REAL_AREA",
+      "OTHER",
+    ];
+    invalidOutput.canonicalProfile.radarProfile.seniority = "EXPERT";
+
+    const mockClient = {
+      chat: {
+        completions: {
+          create: mockChatCompletion(JSON.stringify(invalidOutput)),
+        },
+      },
+    } as unknown as OpenAI;
+
+    const { output } = await extractMasterCvCanonicalProfile(
+      mockClient,
+      "gpt-4.1-mini",
+      { masterCvText: SAMPLE_CV_TEXT },
+    );
+
+    assert.deepEqual(output.canonicalProfile.radarProfile.areas, ["DATA_AI"]);
+    assert.equal(output.canonicalProfile.radarProfile.seniority, "UNKNOWN");
+  });
+
+  it("caps radarProfile.careerFingerprint at 5 labels", async () => {
+    const invalidOutput = createValidOutput();
+    invalidOutput.canonicalProfile.radarProfile.careerFingerprint = [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+      "f",
+      "g",
+    ];
+
+    const mockClient = {
+      chat: {
+        completions: {
+          create: mockChatCompletion(JSON.stringify(invalidOutput)),
+        },
+      },
+    } as unknown as OpenAI;
+
+    const { output } = await extractMasterCvCanonicalProfile(
+      mockClient,
+      "gpt-4.1-mini",
+      { masterCvText: SAMPLE_CV_TEXT },
+    );
+
+    assert.deepEqual(output.canonicalProfile.radarProfile.careerFingerprint, [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+    ]);
   });
 });

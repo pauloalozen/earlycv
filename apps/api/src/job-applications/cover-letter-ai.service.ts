@@ -116,9 +116,8 @@ export class CoverLetterAiService {
     }
 
     const model = getAiModel("COVER_LETTER");
-    const { buildSystemMessage, stripJsonCodeFence } = await import(
-      "@earlycv/ai"
-    );
+    const { buildDeepSeekExtraBody, buildSystemMessage, stripJsonCodeFence } =
+      await import("@earlycv/ai");
 
     const generateOnce = async (extraInstruction?: string) => {
       const userPrompt = this.buildUserPrompt(context, extraInstruction);
@@ -129,6 +128,7 @@ export class CoverLetterAiService {
           { role: "user", content: userPrompt },
         ],
         response_format: { type: "json_object" },
+        ...buildDeepSeekExtraBody(model),
       });
 
       const raw = response.choices[0]?.message?.content ?? "{}";

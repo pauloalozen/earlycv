@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import { JobArea, type Prisma, SeniorityLevel } from "@prisma/client";
 import type OpenAI from "openai";
 
 import { getActiveAiSupplier, getAiModel } from "../common/ai-client-factory";
@@ -13,6 +13,7 @@ import type {
 } from "../profiles/profile-canonical.types";
 import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merge.service";
 import { ProfileReadinessService } from "../profiles/profile-readiness.service";
+import { UserRadarProfileService } from "../radar/user-radar-profile.service";
 import { parseMasterCvCanonicalExtractionPayload } from "./master-cv-canonical-extraction.schema";
 import type {
   EnqueueMasterCvCanonicalExtractionInput,
@@ -47,6 +48,12 @@ export class MasterCvCanonicalExtractionService {
     >,
     @Inject("MASTERCV_AI_CLIENT") private readonly aiClient: OpenAI,
     @Optional() private readonly extractionClient?: ExtractionClient,
+    @Optional()
+    @Inject(UserRadarProfileService)
+    private readonly userRadarProfileService?: Pick<
+      UserRadarProfileService,
+      "refresh"
+    >,
   ) {}
 
   async enqueueFromMasterResumeUpload(
@@ -156,6 +163,23 @@ export class MasterCvCanonicalExtractionService {
         extractedAt: new Date().toISOString(),
       });
 
+      // Fire-and-forget: nunca aguardar aqui. UserRadarProfile.refresh() é
+      // um snapshot derivado que pode ser reconstruído a qualquer momento —
+      // não faz sentido prender esse background job (que já é assíncrono em
+      // relação ao request do usuário, ver enqueueFromMasterResumeUpload)
+      // esperando por ele.
+      this.userRadarProfileService
+        ?.refresh(extraction.userId, {
+          sourceResumeId: extraction.resumeId,
+          careerFingerprint: payload.canonicalProfile.radarProfile?.careerFingerprint,
+        })
+        .catch((error) => {
+          this.logger.error(
+            `[master-cv-canonical-extraction] radar profile refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+            { extractionId: extraction.id, userId: extraction.userId },
+          );
+        });
+
       return table.update({
         where: { id: extraction.id },
         data: {
@@ -250,6 +274,22 @@ export class MasterCvCanonicalExtractionService {
       certifications: merged.next.certifications ?? [],
     });
 
+    const radarMerge = this.mergeRadarClassification({
+      existingAreas: profile.radarAreas,
+      existingSeniority: profile.radarSeniority,
+      incoming: this.sanitizeRadarClassification(
+        input.payload.canonicalProfile.radarProfile,
+      ),
+      source: "base_cv_ai_extraction",
+      sourceCvId: input.resumeId,
+      fieldMeta: merged.fieldMeta,
+      suggestions: merged.suggestions,
+      extractionContext: {
+        confidence: input.payload.confidence,
+        extractedAt: input.extractedAt,
+      },
+    });
+
     await this.database.userProfile.update({
       where: { userId: input.userId },
       data: {
@@ -263,8 +303,11 @@ export class MasterCvCanonicalExtractionService {
         country: merged.next.country ?? profile.country,
         professionalSummary:
           merged.next.professionalSummary ?? profile.professionalSummary,
-        profileFieldMetaJson: merged.fieldMeta as Prisma.InputJsonValue,
-        profileSuggestionsJson: merged.suggestions as Prisma.InputJsonValue,
+        radarAreas: radarMerge.areas,
+        radarSeniority: radarMerge.seniority,
+        profileFieldMetaJson: radarMerge.fieldMeta as Prisma.InputJsonValue,
+        profileSuggestionsJson:
+          radarMerge.suggestions as Prisma.InputJsonValue,
         profileReadinessStatus: readiness,
         skillsJson: (merged.next.skills ?? {
           technical: [],
@@ -279,6 +322,133 @@ export class MasterCvCanonicalExtractionService {
           []) as Prisma.InputJsonValue,
       },
     });
+  }
+
+  // radarAreas/radarSeniority não fazem parte de CanonicalProfileData (esse
+  // tipo é compartilhado com o fluxo de adaptação de CV via
+  // ProfileCanonicalMergeService) — por isso o merge deles é resolvido aqui,
+  // localmente, em vez de estender o merge service compartilhado. Segue a
+  // mesma regra de não-sobrescrita de campo editado manualmente (via
+  // profileFieldMetaJson) que o merge service já aplica para os demais
+  // campos escalares.
+  private sanitizeRadarClassification(
+    radarProfile: MasterCvCanonicalExtractionOutput["canonicalProfile"]["radarProfile"],
+  ): { areas: JobArea[]; seniority: SeniorityLevel } {
+    const areas = Array.isArray(radarProfile?.areas)
+      ? radarProfile.areas.filter((item): item is JobArea =>
+          Object.values(JobArea).includes(item as JobArea),
+        )
+      : [];
+
+    const seniority = Object.values(SeniorityLevel).includes(
+      radarProfile?.seniority as SeniorityLevel,
+    )
+      ? (radarProfile?.seniority as SeniorityLevel)
+      : SeniorityLevel.UNKNOWN;
+
+    return { areas, seniority };
+  }
+
+  private mergeRadarClassification(input: {
+    existingAreas: JobArea[];
+    existingSeniority: SeniorityLevel | null;
+    incoming: { areas: JobArea[]; seniority: SeniorityLevel };
+    source: "base_cv_ai_extraction";
+    sourceCvId: string;
+    fieldMeta: Record<string, ProfileFieldMetaEntry>;
+    suggestions: ProfileSuggestion[];
+    extractionContext: { confidence?: Record<string, number>; extractedAt: string };
+  }): {
+    areas: JobArea[];
+    seniority: SeniorityLevel | null;
+    fieldMeta: Record<string, ProfileFieldMetaEntry>;
+    suggestions: ProfileSuggestion[];
+  } {
+    const fieldMeta = { ...input.fieldMeta };
+    const suggestions = [...input.suggestions];
+    const nowIso = new Date().toISOString();
+
+    let areas = input.existingAreas;
+    if (input.incoming.areas.length > 0) {
+      areas = this.mergeRadarScalarField({
+        fieldPath: "radarAreas",
+        currentValue: input.existingAreas,
+        incomingValue: input.incoming.areas,
+        source: input.source,
+        sourceCvId: input.sourceCvId,
+        fieldMeta,
+        suggestions,
+        nowIso,
+        extractionContext: input.extractionContext,
+      });
+    }
+
+    let seniority = input.existingSeniority;
+    if (input.incoming.seniority !== SeniorityLevel.UNKNOWN) {
+      seniority = this.mergeRadarScalarField({
+        fieldPath: "radarSeniority",
+        currentValue: input.existingSeniority ?? SeniorityLevel.UNKNOWN,
+        incomingValue: input.incoming.seniority,
+        source: input.source,
+        sourceCvId: input.sourceCvId,
+        fieldMeta,
+        suggestions,
+        nowIso,
+        extractionContext: input.extractionContext,
+      });
+    }
+
+    return { areas, seniority, fieldMeta, suggestions };
+  }
+
+  private mergeRadarScalarField<T>(input: {
+    fieldPath: "radarAreas" | "radarSeniority";
+    currentValue: T;
+    incomingValue: T;
+    source: "base_cv_ai_extraction";
+    sourceCvId: string;
+    fieldMeta: Record<string, ProfileFieldMetaEntry>;
+    suggestions: ProfileSuggestion[];
+    nowIso: string;
+    extractionContext: { confidence?: Record<string, number>; extractedAt: string };
+  }): T {
+    const isManuallyEdited =
+      input.fieldMeta[input.fieldPath]?.manuallyEdited === true;
+
+    if (isManuallyEdited) {
+      const alreadySuggested = input.suggestions.some(
+        (suggestion) =>
+          suggestion.status === "pending" &&
+          suggestion.fieldPath === input.fieldPath &&
+          JSON.stringify(suggestion.suggestedValue) ===
+            JSON.stringify(input.incomingValue) &&
+          suggestion.source === input.source,
+      );
+      if (!alreadySuggested) {
+        input.suggestions.push({
+          fieldPath: input.fieldPath,
+          currentValue: input.currentValue,
+          suggestedValue: input.incomingValue,
+          status: "pending",
+          source: input.source,
+          sourceCvId: input.sourceCvId,
+          createdAt: input.nowIso,
+        });
+      }
+      return input.currentValue;
+    }
+
+    const confidence =
+      input.extractionContext.confidence?.[`radarProfile.${input.fieldPath === "radarAreas" ? "areas" : "seniority"}`];
+    input.fieldMeta[input.fieldPath] = {
+      source: input.source,
+      sourceCvId: input.sourceCvId,
+      ...(typeof confidence === "number"
+        ? { sourceConfidence: confidence }
+        : {}),
+      sourceExtractedAt: input.extractionContext.extractedAt,
+    };
+    return input.incomingValue;
   }
 
   private mapExtractionToCanonicalData(

@@ -1,12 +1,17 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import { DatabaseService } from "../../database/database.service";
+import { normalizeCity, normalizeState } from "../../jobs/geo-normalizer";
 import { shouldSkipDetailFetch } from "../dedup-policy";
 import { IngestionFetchError } from "../errors";
+import { SemanticFilterService } from "../semantic-filter.service";
 import type {
   IngestionCollectContext,
   IngestionSourceAdapter,
   JobSourceContext,
   NormalizedJobObservation,
 } from "../types";
+import { normalizeAdapterTitle } from "./title-normalization";
+import { normalizeVacancyType } from "./vacancy-type";
 
 type GupyApiJob = {
   addressCity?: string | null;
@@ -89,14 +94,6 @@ function normalizeWorkModel(
   return undefined;
 }
 
-function normalizeTitle(value?: string | null) {
-  return (value ?? "")
-    .normalize("NFKD")
-    .replace(/[^\w\s-]/g, "")
-    .trim()
-    .toLowerCase();
-}
-
 function getSubdomainFromSourceUrl(sourceUrl: string) {
   const parsed = new URL(sourceUrl);
   const match = parsed.hostname.toLowerCase().match(/^([a-z0-9-]+)\.gupy\.io$/);
@@ -128,6 +125,13 @@ export class GupyAdapter implements IngestionSourceAdapter {
   private readonly logger = new Logger(GupyAdapter.name);
   private readonly limit = 10;
 
+  constructor(
+    @Inject(SemanticFilterService)
+    private readonly semanticFilter: SemanticFilterService,
+    @Inject(DatabaseService)
+    private readonly database: DatabaseService,
+  ) {}
+
   async collect(
     jobSource: JobSourceContext,
     context?: IngestionCollectContext,
@@ -143,7 +147,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
       const page = await this.fetchPage(baseUrl, offset);
       if (!page) {
         if (offset === 0) {
-          return this.collectFromBoardHtml(subdomain, context);
+          return this.collectFromBoardHtml(subdomain, jobSource.id, context);
         }
         break;
       }
@@ -193,6 +197,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
 
   private async collectFromBoardHtml(
     subdomain: string,
+    jobSourceId: string,
     context?: IngestionCollectContext,
   ) {
     const boardUrl = `https://${subdomain}.gupy.io/jobs`;
@@ -210,7 +215,10 @@ export class GupyAdapter implements IngestionSourceAdapter {
     }
 
     const boardHtml = await boardResponse.text();
-    const boardData = this.extractNextData<GupyDetailPayload>(boardHtml);
+    const boardData = this.extractNextData<GupyDetailPayload>(
+      boardHtml,
+      boardUrl,
+    );
     const boardJobs = boardData.props?.pageProps?.jobs ?? [];
     const observations: NormalizedJobObservation[] = [];
 
@@ -218,10 +226,11 @@ export class GupyAdapter implements IngestionSourceAdapter {
       try {
         const canonicalKey = `gupy:${subdomain}:${String(boardJob.id)}`;
         const now = new Date();
+        let existing: { lastSeenAt: Date | null } | null = null;
+
         if (context) {
           try {
-            const existing =
-              await context.getExistingJobByCanonicalKey(canonicalKey);
+            existing = await context.getExistingJobByCanonicalKey(canonicalKey);
             if (shouldSkipDetailFetch(existing?.lastSeenAt, now)) {
               observations.push(
                 this.toObservation(
@@ -253,6 +262,26 @@ export class GupyAdapter implements IngestionSourceAdapter {
           }
         }
 
+        if (!existing) {
+          const normalizedTitle = normalizeAdapterTitle(boardJob.title);
+          const filterDecision =
+            await this.semanticFilter.evaluate(normalizedTitle);
+
+          if (filterDecision.result === "SKIP") {
+            await this.saveDiscardedTitle({
+              canonicalKey,
+              externalJobId: String(boardJob.id),
+              filterReason: filterDecision.reason,
+              filterVersion: filterDecision.configVersion,
+              ingestionRunId: context?.ingestionRunId,
+              jobSourceId,
+              normalizedTitle,
+              title: boardJob.title ?? `Gupy job ${String(boardJob.id)}`,
+            });
+            continue;
+          }
+        }
+
         const detailUrl = `https://${subdomain}.gupy.io/jobs/${String(boardJob.id)}?jobBoardSource=gupy_public_page`;
         const detailResponse = await this.fetchWithRetry(new URL(detailUrl));
 
@@ -271,7 +300,10 @@ export class GupyAdapter implements IngestionSourceAdapter {
         }
 
         const detailHtml = await detailResponse.text();
-        const detailData = this.extractNextData<GupyDetailPayload>(detailHtml);
+        const detailData = this.extractNextData<GupyDetailPayload>(
+          detailHtml,
+          detailUrl,
+        );
         const detailJob = detailData.props?.pageProps?.job;
 
         if (!detailJob) {
@@ -320,6 +352,43 @@ export class GupyAdapter implements IngestionSourceAdapter {
     return observations;
   }
 
+  private async saveDiscardedTitle(data: {
+    canonicalKey: string;
+    externalJobId: string;
+    filterReason: string;
+    filterVersion: string;
+    ingestionRunId?: string;
+    jobSourceId: string;
+    normalizedTitle: string;
+    title: string;
+  }): Promise<void> {
+    try {
+      await this.database.crawlerDiscardedTitle.upsert({
+        where: { canonicalKey: data.canonicalKey },
+        create: {
+          canonicalKey: data.canonicalKey,
+          externalJobId: data.externalJobId,
+          filterReason: data.filterReason,
+          filterVersion: data.filterVersion,
+          ingestionRunId: data.ingestionRunId,
+          jobSourceId: data.jobSourceId,
+          normalizedTitle: data.normalizedTitle,
+          title: data.title,
+        },
+        update: {
+          discardedAt: new Date(),
+          filterReason: data.filterReason,
+          filterVersion: data.filterVersion,
+          ingestionRunId: data.ingestionRunId,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to save CrawlerDiscardedTitle for ${data.canonicalKey}: ${error instanceof Error ? error.message : "unknown"}`,
+      );
+    }
+  }
+
   private async fetchWithRetry(url: URL) {
     const requestInit: RequestInit = {
       headers: {
@@ -335,16 +404,29 @@ export class GupyAdapter implements IngestionSourceAdapter {
     return fetch(url, requestInit);
   }
 
-  private extractNextData<T>(html: string): T {
+  private extractNextData<T>(html: string, sourceUrl: string): T {
+    // Atributos do <script id="__NEXT_DATA__"> variam (a Gupy passou a
+    // adicionar nonce de CSP em ago/2026, quebrando um match exato em
+    // type="application/json">); [^>]* tolera qualquer atributo extra,
+    // em qualquer ordem, entre a abertura da tag e o >.
     const match = html.match(
-      /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/,
+      /<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/,
     );
 
     if (!match?.[1]) {
-      throw new Error("Unable to parse Gupy __NEXT_DATA__ payload");
+      const snippet = html.slice(0, 200).replace(/\s+/g, " ").trim();
+      throw new Error(
+        `Unable to find Gupy __NEXT_DATA__ script tag at ${sourceUrl} (html length ${html.length}, starts with: "${snippet}")`,
+      );
     }
 
-    return JSON.parse(match[1]) as T;
+    try {
+      return JSON.parse(match[1]) as T;
+    } catch (error) {
+      throw new Error(
+        `Unable to parse Gupy __NEXT_DATA__ JSON at ${sourceUrl}: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+    }
   }
 
   private toObservation(
@@ -370,24 +452,28 @@ export class GupyAdapter implements IngestionSourceAdapter {
       .join("\n");
     const descriptionClean = stripHtml(descriptionRaw);
     const title = job.name?.trim() || `Gupy job ${String(job.id)}`;
+    const state =
+      normalizeState(job.addressState)?.sigla ?? job.addressState?.trim();
 
     return {
       canonicalKey: `gupy:${subdomain}:${String(job.id)}`,
-      city: job.addressCity?.trim() || undefined,
+      city: normalizeCity(job.addressCity) ?? undefined,
       country: job.addressCountry?.trim() || undefined,
+      department: job.departmentName?.trim() || undefined,
       descriptionClean,
       descriptionRaw,
       detailFetchSkipped: options?.detailFetchSkipped,
-      employmentType: job.type?.trim() || undefined,
+      employmentType: normalizeVacancyType(job.type),
+      employmentTypeRaw: job.type?.trim() || undefined,
       externalJobId: String(job.id),
       firstSeenAt: publishedAt,
-      lastSeenAt: publishedAt,
+      lastSeenAt: new Date().toISOString(),
       locationText: locationParts.join(", ") || "Remote",
-      normalizedTitle: normalizeTitle(title),
+      normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,
       seniorityLevel: undefined,
       sourceJobUrl: `https://${subdomain}.gupy.io/jobs/${String(job.id)}?jobBoardSource=gupy_public_page`,
-      state: job.addressState?.trim() || undefined,
+      state,
       status: "active",
       title,
       workModel: normalizeWorkModel(job.workplaceType, job.remoteWorking),

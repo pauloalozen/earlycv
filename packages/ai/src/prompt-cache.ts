@@ -32,3 +32,13 @@ export function stripJsonCodeFence(content: string): string {
   const match = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i);
   return match ? match[1].trim() : trimmed;
 }
+
+// DeepSeek V4 roda em modo "thinking" (reasoning) por padrão: gera um
+// reasoning_content extenso antes da resposta final, o que multiplica o tempo
+// de geração sem ganho de qualidade mensurável nas nossas tarefas (saída
+// estruturada em JSON). Medido: ~131s vs ~16s pro mesmo prompt de análise —
+// estourava o timeout de 150s configurado em analysis-protection.facade.ts.
+// Desligado via extra_body; outros supliers ignoram esse campo se enviado.
+export function buildDeepSeekExtraBody(model: string): Record<string, unknown> {
+  return model.startsWith("deepseek") ? { thinking: { type: "disabled" } } : {};
+}

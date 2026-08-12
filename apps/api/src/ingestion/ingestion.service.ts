@@ -3,6 +3,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import type {
@@ -12,7 +13,21 @@ import type {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
-import { CustomApiAdapter, CustomHtmlAdapter, GupyAdapter } from "./adapters";
+import { GoogleIndexingService } from "../google-indexing/google-indexing.service";
+import { isForeignLocation } from "../jobs/geo-normalizer";
+import { buildPublicJobSlug } from "../jobs/public-job-view";
+import {
+  AshbyAdapter,
+  CustomApiAdapter,
+  CustomHtmlAdapter,
+  GreenhouseAdapter,
+  GupyAdapter,
+  InHireAdapter,
+  LeverAdapter,
+  TalentbrewAdapter,
+  TeamtailorAdapter,
+  WorkdayAdapter,
+} from "./adapters";
 import { evaluate403CircuitBreaker } from "./circuit-breaker-policy";
 import { isForbiddenIngestionError } from "./errors";
 import { getStaleCutoff } from "./stale-policy";
@@ -36,6 +51,15 @@ type IngestionRunRecord = IngestionRun & {
   previewJson: IngestionPreviewItem[] | null;
 };
 
+// runJobSource cria o IngestionRun com status "running" e so o fecha
+// (completed/failed) no fim do try/catch. Se o processo morrer no meio
+// disso (restart do nest --watch em dev, deploy, OOM em prod) o run fica
+// preso em "running" pra sempre — e como o findFirst({status:"running"})
+// no topo de runJobSource bloqueia nova execucao pra aquela fonte, a fonte
+// fica travada ate alguem mexer no banco na mao. Qualquer run "running" ha
+// mais tempo que isso e tratado como orfao.
+const STALE_RUN_THRESHOLD_MS = 20 * 60_000;
+
 function normalizeUrl(rawUrl: string) {
   const url = new URL(rawUrl.trim());
 
@@ -49,6 +73,7 @@ function normalizeUrl(rawUrl: string) {
 
 function toRunSummary(run: IngestionRunRecord): IngestionRunSummary {
   return {
+    errorSummary: run.errorSummary ?? null,
     failedCount: run.failedCount,
     finishedAt: run.finishedAt?.toISOString() ?? null,
     id: run.id,
@@ -71,6 +96,7 @@ function toRunSummary(run: IngestionRunRecord): IngestionRunSummary {
 
 @Injectable()
 export class IngestionService {
+  private readonly logger = new Logger(IngestionService.name);
   private readonly adapters: ReadonlyMap<
     JobSource["sourceType"],
     IngestionSourceAdapter
@@ -81,17 +107,64 @@ export class IngestionService {
     @Inject(CustomHtmlAdapter) customHtmlAdapter: CustomHtmlAdapter,
     @Inject(CustomApiAdapter) customApiAdapter: CustomApiAdapter,
     @Inject(GupyAdapter) gupyAdapter: GupyAdapter,
+    @Inject(GreenhouseAdapter) greenhouseAdapter: GreenhouseAdapter,
+    @Inject(LeverAdapter) leverAdapter: LeverAdapter,
+    @Inject(AshbyAdapter) ashbyAdapter: AshbyAdapter,
+    @Inject(InHireAdapter) inHireAdapter: InHireAdapter,
+    @Inject(TeamtailorAdapter) teamtailorAdapter: TeamtailorAdapter,
+    @Inject(TalentbrewAdapter) talentbrewAdapter: TalentbrewAdapter,
+    @Inject(WorkdayAdapter) workdayAdapter: WorkdayAdapter,
+    @Inject(GoogleIndexingService)
+    private readonly googleIndexingService: GoogleIndexingService,
   ) {
     this.adapters = new Map<JobSource["sourceType"], IngestionSourceAdapter>([
       [customHtmlAdapter.sourceType, customHtmlAdapter],
       [customApiAdapter.sourceType, customApiAdapter],
       [gupyAdapter.sourceType, gupyAdapter],
+      [greenhouseAdapter.sourceType, greenhouseAdapter],
+      [leverAdapter.sourceType, leverAdapter],
+      [ashbyAdapter.sourceType, ashbyAdapter],
+      [inHireAdapter.sourceType, inHireAdapter],
+      [teamtailorAdapter.sourceType, teamtailorAdapter],
+      [talentbrewAdapter.sourceType, talentbrewAdapter],
+      [workdayAdapter.sourceType, workdayAdapter],
     ]);
+  }
+
+  async recoverStaleRuns() {
+    const staleThreshold = new Date(Date.now() - STALE_RUN_THRESHOLD_MS);
+    const stuck = await this.database.ingestionRun.findMany({
+      where: { status: "running" },
+    });
+
+    let recovered = 0;
+    for (const run of stuck) {
+      if (run.startedAt >= staleThreshold) continue;
+
+      this.logger.warn(
+        `ingestion run ${run.id} (source ${run.jobSourceId}) recovered from stale "running"`,
+      );
+
+      await this.database.ingestionRun.update({
+        where: { id: run.id },
+        data: {
+          errorSummary:
+            "stale run recuperado pelo scheduler (processo provavelmente reiniciado durante a ingestao)",
+          failedCount: run.failedCount || 1,
+          finishedAt: new Date(),
+          status: "failed",
+        },
+      });
+      recovered += 1;
+    }
+
+    return recovered;
   }
 
   async runJobSource(jobSourceId: string) {
     const jobSource = await this.getJobSourceContext(jobSourceId);
     this.assertJobSourceNotPaused(jobSource);
+    await this.recoverStaleRuns();
     const runningRun = await this.database.ingestionRun.findFirst({
       where: {
         jobSourceId,
@@ -116,7 +189,7 @@ export class IngestionService {
     try {
       const observations = await this.getAdapter(jobSource.sourceType).collect(
         jobSource,
-        this.createCollectContext(),
+        this.createCollectContext(run.id),
       );
       const previewItems: IngestionPreviewItem[] = [];
       let newCount = 0;
@@ -253,7 +326,9 @@ export class IngestionService {
     }
   }
 
-  private createCollectContext(): IngestionCollectContext {
+  private createCollectContext(
+    ingestionRunId: string,
+  ): IngestionCollectContext {
     return {
       getExistingJobByCanonicalKey: async (canonicalKey: string) => {
         return this.database.job.findUnique({
@@ -261,6 +336,7 @@ export class IngestionService {
           select: { lastSeenAt: true },
         });
       },
+      ingestionRunId,
     };
   }
 
@@ -321,7 +397,114 @@ export class IngestionService {
       throw new NotFoundException("ingestion run not found");
     }
 
-    return toRunSummary(run as IngestionRunRecord);
+    const summary = toRunSummary(run as IngestionRunRecord);
+    const discardedByFilterCount =
+      await this.database.crawlerDiscardedTitle.count({
+        where: { ingestionRunId: run.id },
+      });
+
+    return {
+      ...summary,
+      discardedByFilterCount,
+      previewItems: await this.attachEnrichmentToPreviewItems(
+        summary.previewItems,
+      ),
+    };
+  }
+
+  // Job.canonicalKey e globalmente unico (gupy:subdominio:id externo), entao
+  // da pra resolver qual Job cada item do preview virou sem precisar de uma
+  // coluna de associacao run->job dedicada.
+  private async attachEnrichmentToPreviewItems(
+    items: IngestionPreviewItem[],
+  ): Promise<IngestionPreviewItem[]> {
+    if (items.length === 0) {
+      return items;
+    }
+
+    const canonicalKeys = items.map((item) => item.canonicalKey);
+    const jobs = await this.database.job.findMany({
+      where: { canonicalKey: { in: canonicalKeys } },
+      select: {
+        canonicalKey: true,
+        enrichment: {
+          select: {
+            careerFingerprint: true,
+            dominantArea: true,
+            enrichmentStatus: true,
+            id: true,
+            semanticFilterReason: true,
+          },
+        },
+      },
+    });
+
+    const enrichmentByCanonicalKey = new Map(
+      jobs.map((job) => [job.canonicalKey, job.enrichment]),
+    );
+
+    return items.map((item) => ({
+      ...item,
+      enrichment: enrichmentByCanonicalKey.get(item.canonicalKey) ?? null,
+    }));
+  }
+
+  // Resumo de enriquecimento das vagas NOVAS de uma run (action "created" no
+  // preview) — vagas so "updated"/"skipped"/"failed" nao disparam
+  // JobEnrichment novo nesta run, entao ficam fora da contagem.
+  async getRunEnrichmentSummary(runId: string) {
+    const run = await this.database.ingestionRun.findUnique({
+      where: { id: runId },
+    });
+
+    if (!run) {
+      throw new NotFoundException("ingestion run not found");
+    }
+
+    const createdCanonicalKeys = (
+      (run.previewJson as IngestionPreviewItem[] | null) ?? []
+    )
+      .filter((item) => item.action === "created")
+      .map((item) => item.canonicalKey);
+
+    if (createdCanonicalKeys.length === 0) {
+      return { completed: 0, failed: 0, pending: 0, skipped: 0, total: 0 };
+    }
+
+    const jobs = await this.database.job.findMany({
+      where: { canonicalKey: { in: createdCanonicalKeys } },
+      select: { id: true },
+    });
+    const jobIds = jobs.map((job) => job.id);
+
+    const grouped = await this.database.jobEnrichment.groupBy({
+      by: ["enrichmentStatus"],
+      where: { jobId: { in: jobIds } },
+      _count: { _all: true },
+    });
+
+    let completed = 0;
+    let skipped = 0;
+    let failed = 0;
+    // PENDING e PROCESSING contam juntos como "pendente" — nao ha slot
+    // separado pra PROCESSING no resumo (Parte 2.3 da spec).
+    let pending = 0;
+
+    for (const group of grouped) {
+      const count = group._count._all;
+      if (group.enrichmentStatus === "COMPLETED") completed += count;
+      else if (group.enrichmentStatus === "SKIPPED") skipped += count;
+      else if (group.enrichmentStatus === "FAILED") failed += count;
+      else pending += count;
+    }
+
+    // Jobs criados nesta run sem nenhum JobEnrichment (falha silenciosa na
+    // criacao do trigger) tambem contam como pendentes, pra completed +
+    // skipped + pending + failed sempre somar total.
+    const accounted = completed + skipped + failed + pending;
+    pending += Math.max(0, jobIds.length - accounted);
+
+    return { completed, failed, pending, skipped, total: jobIds.length };
   }
 
   async getDashboard() {
@@ -487,10 +670,51 @@ export class IngestionService {
     );
   }
 
+  // O sufixo cuid do Job.id já torna buildPublicJobSlug globalmente único na
+  // prática (dois Jobs nunca compartilham id) — este loop é uma rede de
+  // segurança caso a estratégia de geração de id mude no futuro, não um
+  // caminho esperado em produção.
+  private async buildUniqueJobSlug(id: string, title: string, company: string) {
+    const base = buildPublicJobSlug(id, title, company);
+    let candidate = base;
+    let suffix = 2;
+
+    while (
+      await this.database.job.findUnique({
+        where: { slug: candidate },
+        select: { id: true },
+      })
+    ) {
+      candidate = `${base}_${suffix}`;
+      suffix += 1;
+    }
+
+    return candidate;
+  }
+
   private async upsertObservation(
     jobSource: JobSourceContext,
     observation: NormalizedJobObservation,
   ) {
+    // Vagas de boards globais (Workday/Greenhouse/Ashby de empresas com
+    // operação Brasil, mas board único mundial) trazem vaga de qualquer
+    // país junto com as brasileiras. isForeignLocation() usa o country
+    // real da fonte (sem o fallback "Brasil" que os adapters aplicavam
+    // antes — ver comentário em cada adapter) e, quando ele vem vazio, cai
+    // pro state batendo com estado americano/país estrangeiro reconhecido.
+    // Rejeitada aqui, a vaga nunca chega a ser criada/atualizada — não tem
+    // Job nem JobEnrichment, então nunca aparece pro público.
+    if (isForeignLocation(observation.country, observation.state)) {
+      return {
+        previewItem: {
+          action: "skipped",
+          canonicalKey: observation.canonicalKey,
+          message: `Skipped non-Brazilian job location (country=${observation.country ?? "null"}, state=${observation.state ?? "null"}).`,
+          title: observation.title,
+        } satisfies IngestionPreviewItem,
+      };
+    }
+
     const existingJob = await this.database.job.findUnique({
       where: { canonicalKey: observation.canonicalKey },
     });
@@ -498,6 +722,34 @@ export class IngestionService {
     const firstSeenAt =
       existingJob?.firstSeenAt ?? new Date(observation.firstSeenAt);
     const nextLastSeenAt = new Date(observation.lastSeenAt);
+
+    // Observação "leve" (detailFetchSkipped, ver shouldSkipDetailFetch em
+    // dedup-policy.ts) só existe pra vaga que já foi vista com detalhe
+    // completo antes — gupy/inhire/talentbrew/workday mandam ela só pra
+    // manter lastSeenAt fresco sem gastar uma requisição cara de detalhe a
+    // cada crawl, e por isso ela vem com descriptionClean/descriptionRaw/
+    // locationText/etc degenerados (workday/inhire/talentbrew mandam
+    // descriptionClean=title, descriptionRaw=""; gupy manda os dois vazios).
+    // Sem essa guarda, todo recrawl "leve" — que é o caminho normal pra
+    // maioria das vagas dessas fontes — apagava a descrição real já salva,
+    // sem jeito de recuperar depois. Preserva os campos de detalhe da vaga
+    // já existente e só atualiza o que uma observação leve sabe de verdade
+    // (lastSeenAt/status/sourceJobUrl).
+    const preserveDetailFields =
+      observation.detailFetchSkipped === true && existingJob !== null;
+
+    // contentUpdatedAt só avança quando título/descrição mudam de verdade —
+    // diferente de lastSeenAt/updatedAt, que são bumped em toda observação
+    // do crawler mesmo sem mudança real de conteúdo (usado como
+    // lastModified do sitemap, ver jobs.service.ts#listSitemapData). Vaga
+    // nova conta como "conteúdo mudou" (primeira versão publicada).
+    // Observação leve nunca conta como mudança de conteúdo — ela não trouxe
+    // nenhum conteúdo real pra comparar.
+    const contentChanged =
+      !existingJob ||
+      (!preserveDetailFields &&
+        (existingJob.title !== observation.title ||
+          existingJob.descriptionClean !== observation.descriptionClean));
 
     if (existingJob && nextLastSeenAt < existingJob.lastSeenAt) {
       return {
@@ -513,7 +765,12 @@ export class IngestionService {
     const payload = {
       city: observation.city,
       companyId: jobSource.company.id,
-      country: observation.country,
+      // Default aplicado só depois do filtro isForeignLocation() já ter
+      // rodado (acima) — nesse ponto, um country vazio já foi confirmado
+      // como "não é sinal de vaga estrangeira", então assumir Brasil aqui
+      // é seguro.
+      contentUpdatedAt: contentChanged ? new Date() : undefined,
+      country: observation.country ?? "Brasil",
       descriptionClean: observation.descriptionClean,
       descriptionRaw: observation.descriptionRaw,
       employmentType: observation.employmentType,
@@ -522,6 +779,9 @@ export class IngestionService {
       jobSourceId: jobSource.id,
       lastSeenAt: nextLastSeenAt,
       locationText: observation.locationText,
+      metadataJson: observation.department
+        ? { department: observation.department }
+        : undefined,
       normalizedTitle: observation.normalizedTitle,
       publishedAtSource: observation.publishedAtSource
         ? new Date(observation.publishedAtSource)
@@ -534,13 +794,64 @@ export class IngestionService {
       workModel: observation.workModel,
     };
 
+    // Payload de fato usado no update — quando a observação é "leve"
+    // (preserveDetailFields), sobrescreve os campos de detalhe com
+    // `undefined` pra que o Prisma simplesmente não os toque, preservando o
+    // que já está salvo. `payload` acima continua com tudo preenchido pro
+    // create (vaga nova nunca chega com preserveDetailFields=true).
+    const updateData = preserveDetailFields
+      ? {
+          ...payload,
+          city: undefined,
+          country: undefined,
+          descriptionClean: undefined,
+          descriptionRaw: undefined,
+          employmentType: undefined,
+          locationText: undefined,
+          metadataJson: undefined,
+          normalizedTitle: undefined,
+          publishedAtSource: undefined,
+          seniorityLevel: undefined,
+          state: undefined,
+          title: undefined,
+          workModel: undefined,
+        }
+      : payload;
+
     if (!existingJob) {
-      await this.database.job.create({
+      const createdJob = await this.database.job.create({
         data: {
           ...payload,
           canonicalKey: observation.canonicalKey,
         },
       });
+
+      // Slug é calculado a partir do id só depois do create (o id é gerado
+      // pelo Prisma na hora do insert). Fica fixo daqui pra frente — updates
+      // subsequentes desta vaga (ver bloco abaixo) nunca recalculam o slug,
+      // mesmo que o título mude na fonte, pra não quebrar URLs já indexadas.
+      const slug = await this.buildUniqueJobSlug(
+        createdJob.id,
+        observation.title,
+        jobSource.company.name,
+      );
+      await this.database.job.update({
+        where: { id: createdJob.id },
+        data: { slug },
+      });
+
+      // Enriquecimento roda em worker assincrono (JobEnrichmentWorker) e
+      // nunca deve bloquear nem falhar a ingestao — a vaga ja esta salva e
+      // visivel no admin independente do enriquecimento acontecer.
+      try {
+        await this.database.jobEnrichment.create({
+          data: { jobId: createdJob.id },
+        });
+      } catch (error) {
+        this.logger.warn(
+          `failed to create JobEnrichment for job ${createdJob.id}: ${error instanceof Error ? error.message : "unknown"}`,
+        );
+      }
 
       return {
         previewItem: {
@@ -554,7 +865,7 @@ export class IngestionService {
 
     await this.database.job.update({
       where: { id: existingJob.id },
-      data: payload,
+      data: updateData,
     });
 
     return {
@@ -572,16 +883,31 @@ export class IngestionService {
     now: Date,
   ) {
     const cutoff = getStaleCutoff(now);
+    const where = {
+      jobSourceId,
+      status: "active" as const,
+      lastSeenAt: { lt: cutoff },
+    };
+
+    // Busca os slugs antes do updateMany — updateMany não devolve as linhas
+    // afetadas, e o Google Indexing API precisa saber qual URL cada vaga
+    // inativada tinha pra pedir a deindexação (ver notifyRemoval abaixo).
+    const staleJobs = await this.database.job.findMany({
+      where,
+      select: { slug: true },
+    });
+
     const result = await this.database.job.updateMany({
-      where: {
-        jobSourceId,
-        status: "active",
-        lastSeenAt: { lt: cutoff },
-      },
+      where,
       data: {
         status: "inactive",
       },
     });
+
+    for (const job of staleJobs) {
+      if (!job.slug) continue;
+      await this.googleIndexingService.notifyRemoval(job.slug);
+    }
 
     return result.count;
   }

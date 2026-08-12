@@ -3,13 +3,20 @@ import { test } from "node:test";
 
 import { IngestionManualRunnerService } from "./ingestion-manual-runner.service";
 
-function createServiceFixture() {
+function createServiceFixture(
+  config: { errorDelayMs: number; normalDelayMs: number } = {
+    errorDelayMs: 0,
+    normalDelayMs: 0,
+  },
+) {
   let beforeMarkRunning: ((itemId: string) => void) | undefined;
   let onAcquireItemLock: ((itemId: string) => boolean | undefined) | undefined;
   const runs = new Map<
     string,
     {
       id: string;
+      scopeType?: string;
+      scopeValue?: string;
       status:
         | "queued"
         | "running"
@@ -67,14 +74,18 @@ function createServiceFixture() {
 
   const database = {
     ingestionBatchRun: {
-      findFirst: async () => {
-        const candidates = Array.from(runs.values())
-          .filter((run) =>
-            ["queued", "running", "cancelling"].includes(run.status),
-          )
-          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-        return candidates[0] ?? null;
-      },
+      findMany: async ({
+        where,
+      }: {
+        where: { status: { in: string[] } };
+      }) =>
+        Array.from(runs.values())
+          .filter((run) => where.status.in.includes(run.status))
+          .sort(
+            (a, b) =>
+              a.createdAt.getTime() - b.createdAt.getTime() ||
+              a.id.localeCompare(b.id),
+          ),
       findUnique: async ({ where }: { where: { id: string } }) =>
         runs.get(where.id) ?? null,
       update: async ({
@@ -121,17 +132,64 @@ function createServiceFixture() {
       },
     },
     ingestionBatchItem: {
-      findMany: async ({
+      findFirst: async ({
         where,
+        orderBy: _orderBy,
       }: {
-        where: { batchRunId: string; status?: { in: string[] } };
+        where: { batchRunId: string; status?: { in: string[] } | string };
+        orderBy?: unknown;
       }) =>
         Array.from(items.values())
           .filter((item) => item.batchRunId === where.batchRunId)
-          .filter((item) =>
-            where.status?.in ? where.status.in.includes(item.status) : true,
-          )
+          .filter((item) => {
+            if (!where.status) return true;
+            if (typeof where.status === "string") {
+              return item.status === where.status;
+            }
+            return where.status.in.includes(item.status);
+          })
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ??
+        null,
+      findMany: async ({
+        where,
+      }: {
+        where: {
+          batchRunId: string;
+          status?: { in: string[] } | string;
+          startedAt?: { lt: Date };
+        };
+      }) =>
+        Array.from(items.values())
+          .filter((item) => item.batchRunId === where.batchRunId)
+          .filter((item) => {
+            if (!where.status) return true;
+            if (typeof where.status === "string") {
+              return item.status === where.status;
+            }
+            return where.status.in.includes(item.status);
+          })
+          .filter((item) => {
+            if (!where.startedAt) return true;
+            return Boolean(
+              item.startedAt &&
+                item.startedAt.getTime() < where.startedAt.lt.getTime(),
+            );
+          })
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
+      count: async ({
+        where,
+      }: {
+        where: { batchRunId: string; status?: { in: string[] } | string };
+      }) =>
+        Array.from(items.values())
+          .filter((item) => item.batchRunId === where.batchRunId)
+          .filter((item) => {
+            if (!where.status) return true;
+            if (typeof where.status === "string") {
+              return item.status === where.status;
+            }
+            return where.status.in.includes(item.status);
+          }).length,
       update: async ({
         where,
         data,
@@ -172,11 +230,42 @@ function createServiceFixture() {
     },
   };
 
+  const slowJobResolvers = new Map<string, () => void>();
+
   const ingestionService = {
     runJobSource: async (jobSourceId: string) => {
       runJobSourceCalls.push(jobSourceId);
       if (jobSourceId === "source-fail") {
         throw new Error("boom");
+      }
+      if (jobSourceId === "source-partial-fail") {
+        return {
+          errorSummary: "2 item(s) failed during ingestion.",
+          id: `run-${jobSourceId}`,
+          status: "failed" as const,
+        };
+      }
+      if (jobSourceId === "source-structural-fail") {
+        return {
+          currentConsecutive403: 0,
+          errorSummary: "gupy board is unavailable at https://x.gupy.io/jobs",
+          id: `run-${jobSourceId}`,
+          status: "failed" as const,
+        };
+      }
+      if (jobSourceId === "source-blocked-fail") {
+        return {
+          currentConsecutive403: 1,
+          errorSummary: "Gupy board API request returned 403 forbidden",
+          id: `run-${jobSourceId}`,
+          status: "failed" as const,
+        };
+      }
+      if (jobSourceId.startsWith("source-slow")) {
+        await new Promise<void>((resolve) => {
+          slowJobResolvers.set(jobSourceId, resolve);
+        });
+        return { id: `run-${jobSourceId}`, status: "completed" as const };
       }
       const run = runs.get("batch-cancel");
       if (run && jobSourceId === "source-cancel-1") {
@@ -186,18 +275,27 @@ function createServiceFixture() {
           status: "cancelling",
         });
       }
+      return { id: `run-${jobSourceId}`, status: "completed" as const };
     },
+  };
+
+  const globalConfigService = {
+    getConfig: async () => config,
   };
 
   const service = new IngestionManualRunnerService(
     database as never,
     ingestionService as never,
     lockRepository as never,
+    globalConfigService as never,
   );
 
   return {
     items,
     lockRepository,
+    resolveSlowJob(jobSourceId: string) {
+      slowJobResolvers.get(jobSourceId)?.();
+    },
     runJobSourceCalls,
     runs,
     service,
@@ -257,6 +355,162 @@ test("runner processes queued adapter batch sequentially", async () => {
   assert.equal(items.get("item-2")?.status, "completed");
 });
 
+test("runner waits a jittered delay between sources instead of running them back-to-back", async () => {
+  const { items, runs, service } = createServiceFixture({
+    errorDelayMs: 0,
+    normalDelayMs: 100,
+  });
+  runs.set("batch-delay", {
+    id: "batch-delay",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 2,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-delay-1", {
+    id: "item-delay-1",
+    batchRunId: "batch-delay",
+    jobSourceId: "source-delay-1",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-delay-2", {
+    id: "item-delay-2",
+    batchRunId: "batch-delay",
+    jobSourceId: "source-delay-2",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:01.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  const startedAt = Date.now();
+  await service.processNextBatchRun();
+  const elapsedMs = Date.now() - startedAt;
+
+  // normalDelayMs=100 with a 0.7-1.3x jitter window: at least one delay
+  // must have been applied between the two sources (min ~70ms), and none
+  // after the last item (so this stays well under 2x the base delay).
+  assert.ok(
+    elapsedMs >= 60,
+    `expected a delay between sources, got ${elapsedMs}ms`,
+  );
+  assert.ok(
+    elapsedMs < 300,
+    `expected no delay after the last item, got ${elapsedMs}ms`,
+  );
+  assert.equal(runs.get("batch-delay")?.status, "completed");
+});
+
+test("runner uses normalDelayMs (not errorDelayMs) after a structural failure", async () => {
+  const { items, runs, service } = createServiceFixture({
+    errorDelayMs: 500,
+    normalDelayMs: 100,
+  });
+  runs.set("batch-structural-delay", {
+    id: "batch-structural-delay",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 2,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-structural-1", {
+    id: "item-structural-1",
+    batchRunId: "batch-structural-delay",
+    jobSourceId: "source-structural-fail",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-structural-2", {
+    id: "item-structural-2",
+    batchRunId: "batch-structural-delay",
+    jobSourceId: "source-2",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:01.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  const startedAt = Date.now();
+  await service.processNextBatchRun();
+  const elapsedMs = Date.now() - startedAt;
+
+  // A falha estrutural (URL de board fora do ar) nao deve escalar pra
+  // errorDelayMs (500ms) — se escalasse, o loop levaria >=350ms (jitter
+  // minimo 0.7x). Deve ficar perto do normalDelayMs (100ms, minimo ~70ms).
+  assert.ok(
+    elapsedMs < 350,
+    `expected normalDelayMs pacing after structural failure, got ${elapsedMs}ms`,
+  );
+});
+
+test("runner uses errorDelayMs after a confirmed 403 block", async () => {
+  const { items, runs, service } = createServiceFixture({
+    errorDelayMs: 200,
+    normalDelayMs: 0,
+  });
+  runs.set("batch-blocked-delay", {
+    id: "batch-blocked-delay",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 2,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-blocked-1", {
+    id: "item-blocked-1",
+    batchRunId: "batch-blocked-delay",
+    jobSourceId: "source-blocked-fail",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-blocked-2", {
+    id: "item-blocked-2",
+    batchRunId: "batch-blocked-delay",
+    jobSourceId: "source-2",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:01.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  const startedAt = Date.now();
+  await service.processNextBatchRun();
+  const elapsedMs = Date.now() - startedAt;
+
+  // 403 confirmado deve escalar pra errorDelayMs (200ms, minimo ~140ms).
+  assert.ok(
+    elapsedMs >= 140,
+    `expected errorDelayMs pacing after a 403 block, got ${elapsedMs}ms`,
+  );
+});
+
 test("runner marks failed item and batch as failed", async () => {
   const { items, runs, service } = createServiceFixture();
   runs.set("batch-2", {
@@ -288,6 +542,42 @@ test("runner marks failed item and batch as failed", async () => {
   assert.equal(run?.status, "failed");
   assert.equal(run?.failedCount, 1);
   assert.equal(items.get("item-fail")?.status, "failed");
+});
+
+test("runner marks item and batch as failed when adapter run resolves with partial failures", async () => {
+  const { items, runs, service } = createServiceFixture();
+  runs.set("batch-partial-fail", {
+    id: "batch-partial-fail",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-partial-fail", {
+    id: "item-partial-fail",
+    batchRunId: "batch-partial-fail",
+    jobSourceId: "source-partial-fail",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  const run = runs.get("batch-partial-fail");
+  const item = items.get("item-partial-fail");
+  assert.equal(run?.status, "failed");
+  assert.equal(run?.failedCount, 1);
+  assert.equal(run?.succeededCount, 0);
+  assert.equal(item?.status, "failed");
+  assert.equal(item?.errorMessage, "2 item(s) failed during ingestion.");
 });
 
 test("runner stops scheduling remaining items when cancellation is requested", async () => {
@@ -333,6 +623,157 @@ test("runner stops scheduling remaining items when cancellation is requested", a
   assert.equal(items.get("item-cancel-1")?.status, "completed");
   assert.equal(items.get("item-cancel-2")?.status, "cancelled");
   assert.deepEqual(runJobSourceCalls, ["source-cancel-1"]);
+});
+
+test("runner interleaves items across active runs instead of draining one run before the next (fairness)", async () => {
+  const { items, runJobSourceCalls, runs, service } = createServiceFixture({
+    errorDelayMs: 80,
+    normalDelayMs: 80,
+  });
+  // Run A criado primeiro, com 3 itens — simula um adapter grande (ex:
+  // Gupy com centenas de empresas) monopolizando o worker.
+  runs.set("run-a", {
+    id: "run-a",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 3,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  // Run B criado um pouco depois, com 1 item so — representa outro
+  // adapter que, no bug original, ficava parado na fila ate o run A
+  // inteiro terminar.
+  runs.set("run-b", {
+    id: "run-b",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:05.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-a1", {
+    id: "item-a1",
+    batchRunId: "run-a",
+    jobSourceId: "source-a1",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-a2", {
+    id: "item-a2",
+    batchRunId: "run-a",
+    jobSourceId: "source-a2",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:01.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-a3", {
+    id: "item-a3",
+    batchRunId: "run-a",
+    jobSourceId: "source-a3",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:02.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-b1", {
+    id: "item-b1",
+    batchRunId: "run-b",
+    jobSourceId: "source-b1",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:05.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  assert.equal(runs.get("run-a")?.status, "completed");
+  assert.equal(runs.get("run-b")?.status, "completed");
+  // O ponto central: run-b (criado depois, so 1 item) e atendido entre os
+  // itens do run-a em vez de esperar o run-a inteiro (3 itens) terminar
+  // primeiro — sem isso, source-b1 so apareceria depois de source-a3.
+  const indexB1 = runJobSourceCalls.indexOf("source-b1");
+  const indexA3 = runJobSourceCalls.indexOf("source-a3");
+  assert.ok(indexB1 !== -1 && indexA3 !== -1);
+  assert.ok(
+    indexB1 < indexA3,
+    `expected source-b1 to be serviced before run-a drains fully, order was ${runJobSourceCalls.join(",")}`,
+  );
+});
+
+test("runner runs up to 2 gupy items concurrently, staggered, instead of one at a time", async () => {
+  const { items, resolveSlowJob, runJobSourceCalls, runs, service } =
+    createServiceFixture({ errorDelayMs: 0, normalDelayMs: 0 });
+  runs.set("run-gupy", {
+    id: "run-gupy",
+    scopeType: "adapter",
+    scopeValue: "gupy",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 2,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-gupy-1", {
+    id: "item-gupy-1",
+    batchRunId: "run-gupy",
+    jobSourceId: "source-slow-gupy-1",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-gupy-2", {
+    id: "item-gupy-2",
+    batchRunId: "run-gupy",
+    jobSourceId: "source-slow-gupy-2",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:01.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  const runPromise = service.processNextBatchRun();
+
+  // Da tempo do loop lancar a 1a vaga, esperar o stagger com jitter, e
+  // lancar a 2a — sem resolver nenhuma delas ainda (ambas ficam "lentas"
+  // ate resolveSlowJob ser chamado).
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.deepEqual(runJobSourceCalls, [
+    "source-slow-gupy-1",
+    "source-slow-gupy-2",
+  ]);
+  assert.equal(items.get("item-gupy-1")?.status, "running");
+  assert.equal(items.get("item-gupy-2")?.status, "running");
+
+  resolveSlowJob("source-slow-gupy-1");
+  resolveSlowJob("source-slow-gupy-2");
+  await runPromise;
+
+  assert.equal(runs.get("run-gupy")?.status, "completed");
+  assert.equal(runs.get("run-gupy")?.succeededCount, 2);
 });
 
 test("runner keeps cancelling run with no pending items as cancelled", async () => {
@@ -519,7 +960,7 @@ test("runner does not double count skipped when item is already cancelled", asyn
   assert.equal(run?.skippedCount, 1);
 });
 
-test("runner does not re-mark already running item", async () => {
+test("runner does not re-mark already running item that started recently", async () => {
   const { items, runJobSourceCalls, runs, service } = createServiceFixture();
   runs.set("batch-existing-running", {
     id: "batch-existing-running",
@@ -533,7 +974,9 @@ test("runner does not re-mark already running item", async () => {
     startedAt: null,
     finishedAt: null,
   });
-  const startedAt = new Date("2026-01-01T00:00:00.000Z");
+  // Comecou ha poucos segundos — ainda esta genuinamente em andamento em
+  // algum outro processo, nao deve ser tratado como preso/abandonado.
+  const startedAt = new Date(Date.now() - 5_000);
   items.set("item-existing-running", {
     id: "item-existing-running",
     batchRunId: "batch-existing-running",
@@ -552,10 +995,125 @@ test("runner does not re-mark already running item", async () => {
   assert.equal(item?.status, "running");
   assert.equal(item?.startedAt?.toISOString(), startedAt.toISOString());
   assert.deepEqual(runJobSourceCalls, []);
-  assert.equal(run?.status, "completed");
+  // Bug real da Sprint 6C: essa invocacao nao conseguiu reivindicar o
+  // item (genuinamente em andamento em outro processo), mas finalizava o
+  // lote como "completed" com contagem 0 mesmo assim. O lote precisa
+  // ficar em aberto ate quem realmente estiver terminando o item chegar
+  // la e finalizar com a contagem certa.
+  assert.equal(run?.status, "running");
   assert.equal(run?.succeededCount, 0);
   assert.equal(run?.failedCount, 0);
   assert.equal(run?.skippedCount, 0);
+});
+
+// Reproduz o bug real da Sprint 6C: o Workday passou a demorar mais que
+// o TTL do lock externo (5min) pra processar uma fonte grande. O lock
+// expirava no meio do item, um tick concorrente do cron assumia o lote,
+// via o item "running" (nao conseguia reivindicar) e mesmo assim fechava
+// o lote como "completed" com contagem 0 — a vaga era ingerida de
+// verdade minutos depois, mas a UI ja mostrava o lote errado havia tempo.
+test("runner does not close the batch as completed while another invocation is still mid-item", async () => {
+  const {
+    items,
+    resolveSlowJob,
+    runJobSourceCalls,
+    runs,
+    service,
+    setBeforeMarkRunning,
+  } = createServiceFixture();
+
+  runs.set("batch-slow-race", {
+    id: "batch-slow-race",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-slow", {
+    id: "item-slow",
+    batchRunId: "batch-slow-race",
+    jobSourceId: "source-slow-1",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  let overlapFired = false;
+  let overlapPromise: Promise<void> | undefined;
+  setBeforeMarkRunning(() => {
+    if (overlapFired) return;
+    overlapFired = true;
+    // Simula o tick do cron que chega enquanto o item ainda esta sendo
+    // processado pela primeira invocacao (lock externo ja expirado).
+    overlapPromise = service.processNextBatchRun();
+  });
+
+  const firstRun = service.processNextBatchRun();
+
+  // Deixa a invocacao concorrente rodar ate o fim antes de liberar o job
+  // "lento" — ela precisa desistir de fechar o lote.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await overlapPromise;
+
+  assert.equal(runs.get("batch-slow-race")?.status, "running");
+  assert.equal(runs.get("batch-slow-race")?.succeededCount, 0);
+  assert.equal(items.get("item-slow")?.status, "running");
+
+  resolveSlowJob("source-slow-1");
+  await firstRun;
+
+  assert.deepEqual(runJobSourceCalls, ["source-slow-1"]);
+  assert.equal(items.get("item-slow")?.status, "completed");
+  assert.equal(runs.get("batch-slow-race")?.status, "completed");
+  assert.equal(runs.get("batch-slow-race")?.succeededCount, 1);
+  assert.equal(runs.get("batch-slow-race")?.failedCount, 0);
+});
+
+test("runner recovers an item stuck running from a dead process and reprocesses it", async () => {
+  const { items, runJobSourceCalls, runs, service } = createServiceFixture();
+  runs.set("batch-stale-item", {
+    id: "batch-stale-item",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  // Comecou ha muito mais que o TTL do lock de item — o processo que
+  // marcou "running" morreu no meio (deploy, restart, crash) e nunca
+  // avancou o status. Sem recuperacao, o where clause de markRunning
+  // (status in ["queued"]) nunca casaria e esse item ficaria pulado pra
+  // sempre.
+  items.set("item-stale", {
+    id: "item-stale",
+    batchRunId: "batch-stale-item",
+    jobSourceId: "source-stale-recovery",
+    status: "running",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: new Date("2026-01-01T00:00:00.000Z"),
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  const item = items.get("item-stale");
+  const run = runs.get("batch-stale-item");
+  assert.deepEqual(runJobSourceCalls, ["source-stale-recovery"]);
+  assert.equal(item?.status, "completed");
+  assert.equal(run?.status, "completed");
+  assert.equal(run?.succeededCount, 1);
 });
 
 test("runner clamps aggregate counters to totalSources on finalize", async () => {

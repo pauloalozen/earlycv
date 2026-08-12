@@ -27,8 +27,10 @@ import { PaymentsModule } from "./payments/payments.module";
 import { PlansModule } from "./plans/plans.module";
 import { PosthogIntegrationModule } from "./posthog-integration/posthog-integration.module";
 import { ProfilesModule } from "./profiles/profiles.module";
+import { RadarModule } from "./radar/radar.module";
 import { ResumeTemplatesModule } from "./resume-templates/resume-templates.module";
 import { ResumesModule } from "./resumes/resumes.module";
+import { SavedJobsModule } from "./saved-jobs/saved-jobs.module";
 import { StorageModule } from "./storage/storage.module";
 import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.module";
 
@@ -58,11 +60,13 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     ...(process.env.MASTER_CV_CANONICAL_EXTRACTION_ENABLED === "true"
       ? [MasterCvCanonicalExtractionModule]
       : []),
+    RadarModule,
     AnalysisProtectionModule,
     AnalysisObservabilityModule,
     CvAdaptationModule,
     CvUnlocksModule,
     JobApplicationsModule,
+    SavedJobsModule,
     PlansModule,
     PaymentsModule,
     PaymentRecoveryModule,

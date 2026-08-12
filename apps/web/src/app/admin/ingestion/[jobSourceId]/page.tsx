@@ -6,8 +6,14 @@ import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { JobSourceScheduleForm } from "../_components/job-source-schedule-form";
+import { humanScheduleLabel } from "../_components/job-source-schedule-format";
 import { RunSourceSubmitButton } from "../_components/run-source-submit-button";
-import { runJobSourceAction, updateJobSourceScheduleAction } from "../actions";
+import {
+  runJobSourceAction,
+  updateJobSourceAction,
+  updateJobSourceScheduleAction,
+} from "../actions";
 
 export const metadata = buildAdminMetadata("Detalhe da ingestion");
 
@@ -138,6 +144,115 @@ export default async function JobSourceAdminPage({
             </Card>
           </div>
 
+          <Card className="space-y-4" id="editar-fonte" padding="lg">
+            <h2 className="text-lg font-bold tracking-tight">Editar fonte</h2>
+            <p className="text-sm text-stone-600">
+              Corrija nome, tipo de adaptador, URL ou frequencia quando a fonte
+              foi cadastrada com o adapter ou site errado.
+            </p>
+
+            <form
+              action={updateJobSourceAction}
+              className="grid gap-4 md:grid-cols-2"
+            >
+              <input name="jobSourceId" type="hidden" value={source.id} />
+              <input name="redirectPath" type="hidden" value={redirectPath} />
+
+              <label
+                className="space-y-2 md:col-span-2"
+                htmlFor="edit-source-name"
+              >
+                <span className="text-sm font-semibold text-stone-800">
+                  Nome da fonte
+                </span>
+                <input
+                  className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 outline-none focus:border-stone-400"
+                  defaultValue={source.sourceName}
+                  id="edit-source-name"
+                  name="sourceName"
+                  required
+                />
+              </label>
+
+              <label className="space-y-2" htmlFor="edit-source-type">
+                <span className="text-sm font-semibold text-stone-800">
+                  Tipo de fonte
+                </span>
+                <select
+                  className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 outline-none focus:border-stone-400"
+                  defaultValue={source.sourceType}
+                  id="edit-source-type"
+                  name="sourceType"
+                >
+                  <option value="gupy">gupy</option>
+                  <option value="custom_html">custom_html</option>
+                  <option value="custom_api">custom_api</option>
+                  <option value="greenhouse">greenhouse</option>
+                  <option value="lever">lever</option>
+                  <option value="ashby">ashby</option>
+                  <option value="inhire">inhire</option>
+                  <option value="teamtailor">teamtailor</option>
+                  <option value="talentbrew">talentbrew</option>
+                  <option value="workday">workday</option>
+                  <option value="solides">solides (sem adapter)</option>
+                  <option value="pandape">pandape (sem adapter)</option>
+                </select>
+              </label>
+
+              <label className="space-y-2" htmlFor="edit-source-interval">
+                <span className="text-sm font-semibold text-stone-800">
+                  Escalonamento (minutos)
+                </span>
+                <input
+                  className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 outline-none focus:border-stone-400"
+                  defaultValue={source.checkIntervalMinutes}
+                  id="edit-source-interval"
+                  min={1}
+                  name="checkIntervalMinutes"
+                  type="number"
+                />
+              </label>
+
+              <label
+                className="space-y-2 md:col-span-2"
+                htmlFor="edit-source-url"
+              >
+                <span className="text-sm font-semibold text-stone-800">
+                  URL da fonte
+                </span>
+                <input
+                  className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 outline-none focus:border-stone-400"
+                  defaultValue={source.sourceUrl}
+                  id="edit-source-url"
+                  name="sourceUrl"
+                  required
+                  type="url"
+                />
+              </label>
+
+              <label className="flex items-center gap-3 md:col-span-2">
+                <input
+                  className="size-4 accent-stone-700"
+                  defaultChecked={source.isActive}
+                  name="isActive"
+                  type="checkbox"
+                />
+                <span className="text-sm font-medium text-stone-700">
+                  Fonte ativa para o painel
+                </span>
+              </label>
+
+              <div className="md:col-span-2">
+                <button
+                  className={buttonVariants({ size: "sm" })}
+                  type="submit"
+                >
+                  Salvar fonte
+                </button>
+              </div>
+            </form>
+          </Card>
+
           <Card className="space-y-4" padding="lg">
             <h2 className="text-lg font-bold tracking-tight">Agendamento</h2>
             <div className="grid gap-3 text-sm text-stone-700 md:grid-cols-3">
@@ -148,9 +263,11 @@ export default async function JobSourceAdminPage({
                 </p>
               </div>
               <div className="space-y-1">
-                <p className="text-[11px] font-medium text-stone-400">Cron</p>
+                <p className="text-[11px] font-medium text-stone-400">
+                  Frequência
+                </p>
                 <p className="font-medium text-stone-900">
-                  {source.scheduleCron ?? "-"}
+                  {humanScheduleLabel(source.scheduleCron ?? null)}
                 </p>
               </div>
               <div className="space-y-1">
@@ -161,35 +278,13 @@ export default async function JobSourceAdminPage({
               </div>
             </div>
 
-            <form action={updateJobSourceScheduleAction} className="space-y-3">
-              <input name="jobSourceId" type="hidden" value={source.id} />
-              <input name="redirectPath" type="hidden" value={redirectPath} />
-
-              <label className="flex items-center gap-2 text-sm text-stone-700">
-                <input
-                  defaultChecked={Boolean(source.scheduleEnabled)}
-                  name="scheduleEnabled"
-                  type="checkbox"
-                />
-                Ativar agendamento da fonte
-              </label>
-
-              <label className="block space-y-1 text-sm text-stone-700">
-                <span className="text-[11px] font-medium text-stone-400">
-                  cron
-                </span>
-                <input
-                  className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 outline-none focus:border-stone-400"
-                  defaultValue={source.scheduleCron ?? "*/30 * * * *"}
-                  name="scheduleCron"
-                  placeholder="*/30 * * * *"
-                />
-              </label>
-
-              <button className={buttonVariants({ size: "sm" })} type="submit">
-                Salvar agendamento
-              </button>
-            </form>
+            <JobSourceScheduleForm
+              action={updateJobSourceScheduleAction}
+              initialCron={source.scheduleCron ?? null}
+              initialEnabled={Boolean(source.scheduleEnabled)}
+              jobSourceId={source.id}
+              redirectPath={redirectPath}
+            />
           </Card>
 
           <Card className="overflow-hidden p-0">

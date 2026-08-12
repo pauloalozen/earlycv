@@ -18,6 +18,10 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+
 vi.mock("@/lib/backoffice-session.server", () => ({
   getBackofficeSessionToken: mocks.getBackofficeSessionToken,
 }));

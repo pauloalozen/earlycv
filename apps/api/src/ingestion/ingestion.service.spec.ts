@@ -25,15 +25,26 @@ function createIngestionServiceFixture(options?: {
     status?: "active" | "inactive" | "removed";
     title?: string;
   }>;
+  sourceType?: JobSourceType;
 }) {
   const updatedJobs = new Map<
     string,
-    { id: string; canonicalKey: string; status: string; lastSeenAt: Date }
+    {
+      id: string;
+      canonicalKey: string;
+      status: string;
+      lastSeenAt: Date;
+      slug?: string;
+    }
   >();
   const createdJobs: Array<{
     canonicalKey: string;
     status: string;
     lastSeenAt: Date;
+  }> = [];
+  const rawJobUpdates: Array<{
+    where: { id: string };
+    data: Record<string, unknown>;
   }> = [];
   let staleUpdateManyCount = 0;
   let collectContext: IngestionCollectContext | undefined;
@@ -52,6 +63,7 @@ function createIngestionServiceFixture(options?: {
         createdAt: new Date("2026-06-01T12:00:00.000Z"),
       }),
       findFirst: async () => null,
+      findMany: async () => [],
       update: async ({ data }: { data: Record<string, unknown> }) => ({
         id: "run-1",
         jobSourceId: "source-1",
@@ -70,7 +82,7 @@ function createIngestionServiceFixture(options?: {
       findUnique: async () => ({
         id: "source-1",
         companyId: "company-1",
-        sourceType: "custom_html" as JobSourceType,
+        sourceType: (options?.sourceType ?? "custom_html") as JobSourceType,
         sourceName: "Source 1",
         sourceUrl: "https://jobs.example.com",
         parserKey: "custom_html",
@@ -103,6 +115,12 @@ function createIngestionServiceFixture(options?: {
             canonicalKey: "job-a",
             firstSeenAt: new Date("2026-05-01T10:00:00.000Z"),
             lastSeenAt: new Date("2026-05-20T10:00:00.000Z"),
+            // Casa com o título default (item.title ?? item.canonicalKey =
+            // "job-a") e a descriptionClean fixa do adapter mockado abaixo
+            // ("desc") — permite testar contentChanged nos dois sentidos
+            // sem precisar de outro fixture.
+            title: "job-a",
+            descriptionClean: "desc",
           };
         }
 
@@ -125,6 +143,7 @@ function createIngestionServiceFixture(options?: {
         where: { id: string };
         data: Record<string, unknown>;
       }) => {
+        rawJobUpdates.push({ where, data });
         updatedJobs.set(where.id, {
           id: where.id,
           canonicalKey: where.id.includes("reappear")
@@ -132,8 +151,19 @@ function createIngestionServiceFixture(options?: {
             : "job-a",
           status: String(data.status ?? "active"),
           lastSeenAt: (data.lastSeenAt as Date) ?? new Date(),
+          ...(typeof data.slug === "string" ? { slug: data.slug } : {}),
         });
         return { id: where.id };
+      },
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        const status = where.status;
+        const lastSeenAt = where.lastSeenAt as { lt?: Date } | undefined;
+        if (status === "active" && lastSeenAt?.lt) {
+          return Array.from({ length: staleUpdateManyCount }, (_, i) => ({
+            slug: `stale-job-${i}`,
+          }));
+        }
+        return [];
       },
       updateMany: async ({ where }: { where: Record<string, unknown> }) => {
         const status = where.status;
@@ -143,6 +173,17 @@ function createIngestionServiceFixture(options?: {
         }
         return { count: 0 };
       },
+    },
+  };
+
+  const indexingCalls: Array<{ slug: string; type: "indexing" | "removal" }> =
+    [];
+  const googleIndexingService = {
+    notifyIndexing: async (slug: string) => {
+      indexingCalls.push({ slug, type: "indexing" });
+    },
+    notifyRemoval: async (slug: string) => {
+      indexingCalls.push({ slug, type: "removal" });
     },
   };
 
@@ -176,11 +217,21 @@ function createIngestionServiceFixture(options?: {
     adapter as never,
     { sourceType: "custom_api", collect: async () => [] } as never,
     { sourceType: "gupy", collect: async () => [] } as never,
+    { sourceType: "greenhouse", collect: async () => [] } as never,
+    { sourceType: "lever", collect: async () => [] } as never,
+    { sourceType: "ashby", collect: async () => [] } as never,
+    { sourceType: "inhire", collect: async () => [] } as never,
+    { sourceType: "teamtailor", collect: async () => [] } as never,
+    { sourceType: "talentbrew", collect: async () => [] } as never,
+    { sourceType: "workday", collect: async () => [] } as never,
+    googleIndexingService as never,
   );
 
   return {
     collectContext: () => collectContext,
     createdJobs,
+    indexingCalls,
+    rawJobUpdates,
     service,
     setStaleCount(count: number) {
       staleUpdateManyCount = count;
@@ -238,6 +289,15 @@ test("IngestionService creates audited jobs for a manual custom_html source", as
     true,
   );
 
+  const enrichments = await database.jobEnrichment.findMany({
+    where: { jobId: { in: jobs.map((job) => job.id) } },
+  });
+  assert.equal(enrichments.length, 2);
+  assert.equal(
+    enrichments.every((entry) => entry.enrichmentStatus === "PENDING"),
+    true,
+  );
+
   await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
   await database.jobSource.delete({ where: { id: jobSource.id } });
   await database.company.delete({ where: { id: company.id } });
@@ -290,6 +350,15 @@ test("IngestionService preserves firstSeenAt and updates existing jobs on rerun"
   assert.equal(secondRun.updatedCount, 1);
   assert.equal(updatedJob.firstSeenAt.toISOString(), originalFirstSeenAt);
   assert.equal(updatedJob.lastSeenAt >= firstJob.lastSeenAt, true);
+
+  const enrichments = await database.jobEnrichment.findMany({
+    where: { jobId: updatedJob.id },
+  });
+  assert.equal(
+    enrichments.length,
+    1,
+    "rerun on an existing job must not create a second JobEnrichment row",
+  );
 
   await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
   await database.jobSource.delete({ where: { id: jobSource.id } });
@@ -354,6 +423,63 @@ test("IngestionService blocks starting a second run while one is running", async
   await moduleRef.close();
 });
 
+test("IngestionService recovers a stale running run and lets a new run start", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const company = await database.company.create({
+    data: {
+      name: "Stale Run Co",
+      normalizedName: `stale-run-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "html",
+      parserKey: "custom_html",
+      sourceName: "Stale Run Source",
+      sourceType: "custom_html",
+      sourceUrl: `https://stale.example.com/${randomUUID()}`,
+    },
+  });
+
+  const staleRun = await database.ingestionRun.create({
+    data: {
+      jobSourceId: jobSource.id,
+      startedAt: new Date(Date.now() - 60 * 60_000),
+      status: "running",
+    },
+  });
+
+  const result = await service.runJobSource(jobSource.id);
+
+  assert.equal(result.status, "completed");
+
+  const recovered = await database.ingestionRun.findUnique({
+    where: { id: staleRun.id },
+  });
+  assert.equal(recovered?.status, "failed");
+  assert.ok(recovered?.finishedAt);
+  assert.match(recovered?.errorSummary ?? "", /stale run/);
+
+  await database.ingestionRun.deleteMany({
+    where: { jobSourceId: jobSource.id },
+  });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
+});
+
 test("IngestionService marks stale jobs inactive after fully successful run", async () => {
   const fixture = createIngestionServiceFixture({
     observations: [{ canonicalKey: "job-a" }],
@@ -365,6 +491,24 @@ test("IngestionService marks stale jobs inactive after fully successful run", as
   assert.equal(result.status, "completed");
   assert.equal(result.failedCount, 0);
   assert.equal(result.staleMarkedCount, 2);
+});
+
+test("IngestionService notifies Google Indexing API removal for each job marked stale", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a" }],
+  });
+  fixture.setStaleCount(2);
+
+  await fixture.service.runJobSource("source-1");
+
+  const removals = fixture.indexingCalls.filter(
+    (call) => call.type === "removal",
+  );
+  assert.equal(removals.length, 2);
+  assert.deepEqual(removals.map((call) => call.slug).sort(), [
+    "stale-job-0",
+    "stale-job-1",
+  ]);
 });
 
 test("IngestionService does not mark stale jobs on global run failure", async () => {
@@ -390,6 +534,71 @@ test("IngestionService reactivates previously inactive job when it reappears", a
   const updated = fixture.updatedJobs.get("job-reappear-id");
   assert.ok(updated);
   assert.equal(updated.status, "active");
+});
+
+test("IngestionService persists a computed slug when creating a new job", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-slug-new", title: "Vaga Nova" }],
+  });
+
+  await fixture.service.runJobSource("source-1");
+
+  const updated = fixture.updatedJobs.get("created-job");
+  assert.ok(updated);
+  assert.equal(updated.slug, "vaga-nova-company-1-created-job");
+});
+
+test("IngestionService never touches slug when updating an existing job, even if the title changed at the source", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a", title: "Titulo Novo Da Fonte" }],
+  });
+
+  await fixture.service.runJobSource("source-1");
+
+  const jobAUpdate = fixture.rawJobUpdates.find(
+    (call) => call.where.id === "job-a-id",
+  );
+  assert.ok(jobAUpdate, "expected an update call for the existing job");
+  assert.equal(
+    Object.hasOwn(jobAUpdate.data, "slug"),
+    false,
+    "slug must never be part of the update payload for an existing job",
+  );
+});
+
+test("IngestionService omits contentUpdatedAt from the update payload when title/descriptionClean did not change", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a" }],
+  });
+
+  await fixture.service.runJobSource("source-1");
+
+  const jobAUpdate = fixture.rawJobUpdates.find(
+    (call) => call.where.id === "job-a-id",
+  );
+  assert.ok(jobAUpdate, "expected an update call for the existing job");
+  assert.equal(
+    jobAUpdate.data.contentUpdatedAt,
+    undefined,
+    "contentUpdatedAt must stay untouched when the observation matches the persisted title/description",
+  );
+});
+
+test("IngestionService sets contentUpdatedAt on the update payload when title changed at the source", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a", title: "Titulo Novo Da Fonte" }],
+  });
+
+  await fixture.service.runJobSource("source-1");
+
+  const jobAUpdate = fixture.rawJobUpdates.find(
+    (call) => call.where.id === "job-a-id",
+  );
+  assert.ok(jobAUpdate, "expected an update call for the existing job");
+  assert.ok(
+    jobAUpdate.data.contentUpdatedAt instanceof Date,
+    "contentUpdatedAt must be set when title diverges from what's persisted",
+  );
 });
 
 test("IngestionService keeps staleMarkedCount zero when no old jobs are found", async () => {
@@ -501,4 +710,528 @@ test("IngestionService reports detailFetchSkippedCount from observations", async
 
   const result = await fixture.service.runJobSource("source-1");
   assert.equal(result.detailFetchSkippedCount, 1);
+});
+
+// Regressão: gupy/inhire/talentbrew/workday mandam uma observação "leve"
+// (detailFetchSkipped=true) só pra manter lastSeenAt fresco sem repetir o
+// fetch caro de detalhe — mas ela vem com descriptionClean/descriptionRaw/
+// locationText degenerados (workday/inhire/talentbrew: descriptionClean=
+// title, descriptionRaw=""; gupy: os dois vazios). Sem essa guarda em
+// upsertObservation, todo recrawl "leve" apagava a descrição real já salva.
+test("IngestionService preserves the existing job's description/location when the observation is detailFetchSkipped", async () => {
+  const fixture = createIngestionServiceFixture();
+  fixture.service.adapters = new Map([
+    [
+      "custom_html",
+      {
+        sourceType: "custom_html",
+        collect: async () => [
+          {
+            canonicalKey: "job-a",
+            city: undefined,
+            country: "Brasil",
+            // Degenerado de propósito — igual ao que workday/inhire/
+            // talentbrew mandam numa observação leve.
+            descriptionClean: "job-a",
+            descriptionRaw: "",
+            detailFetchSkipped: true,
+            firstSeenAt: "2026-06-01T10:00:00.000Z",
+            lastSeenAt: "2026-06-02T10:00:00.000Z",
+            locationText: "Remote",
+            normalizedTitle: "job a",
+            sourceJobUrl: "https://jobs.example.com/job-a",
+            state: undefined,
+            status: "active",
+            title: "job-a",
+          },
+        ],
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+
+  const jobAUpdate = fixture.rawJobUpdates.find(
+    (call) => call.where.id === "job-a-id",
+  );
+  assert.ok(jobAUpdate, "expected an update call for the existing job");
+  assert.equal(
+    jobAUpdate.data.descriptionClean,
+    undefined,
+    "descriptionClean must stay untouched (not overwritten with the title)",
+  );
+  assert.equal(
+    jobAUpdate.data.descriptionRaw,
+    undefined,
+    "descriptionRaw must stay untouched",
+  );
+  assert.equal(
+    jobAUpdate.data.locationText,
+    undefined,
+    "locationText must stay untouched",
+  );
+  assert.equal(
+    jobAUpdate.data.contentUpdatedAt,
+    undefined,
+    "a detailFetchSkipped observation never counts as a real content change",
+  );
+  // lastSeenAt e status continuam sendo o motivo de existir dessa
+  // observação leve — isso sim precisa atualizar.
+  assert.ok(jobAUpdate.data.lastSeenAt instanceof Date);
+  assert.equal(
+    (jobAUpdate.data.lastSeenAt as Date).toISOString(),
+    "2026-06-02T10:00:00.000Z",
+  );
+});
+
+test("IngestionService dispatches to the greenhouse adapter for greenhouse sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "greenhouse" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "greenhouse",
+      {
+        sourceType: "greenhouse",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService dispatches to the lever adapter for lever sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "lever" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "lever",
+      {
+        sourceType: "lever",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService dispatches to the ashby adapter for ashby sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "ashby" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "ashby",
+      {
+        sourceType: "ashby",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService dispatches to the inhire adapter for inhire sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "inhire" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "inhire",
+      {
+        sourceType: "inhire",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService dispatches to the teamtailor adapter for teamtailor sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "teamtailor" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "teamtailor",
+      {
+        sourceType: "teamtailor",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService dispatches to the talentbrew adapter for talentbrew sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "talentbrew" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "talentbrew",
+      {
+        sourceType: "talentbrew",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService dispatches to the workday adapter for workday sources", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "workday" });
+  let collectCalls = 0;
+  fixture.service.adapters = new Map([
+    [
+      "workday",
+      {
+        sourceType: "workday",
+        collect: async () => {
+          collectCalls += 1;
+          return [];
+        },
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+  assert.equal(collectCalls, 1);
+});
+
+test("IngestionService fails the run for a source type without a registered adapter", async () => {
+  const fixture = createIngestionServiceFixture({ sourceType: "solides" });
+  fixture.service.adapters = new Map([
+    ["custom_html", { sourceType: "custom_html", collect: async () => [] }],
+  ]);
+
+  const result = await fixture.service.runJobSource("source-1");
+
+  assert.equal(result.status, "failed");
+  assert.match(
+    result.errorSummary ?? "",
+    /manual ingestion is not supported for source type solides/,
+  );
+});
+
+test("IngestionService.getRun attaches enrichment info to preview items", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const company = await database.company.create({
+    data: {
+      name: "Enrichment Preview Co",
+      normalizedName: `enrichment-preview-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "html",
+      parserKey: "custom_html",
+      sourceName: "Enrichment Preview Source",
+      sourceType: "custom_html",
+      sourceUrl: `https://manual.example.com/${randomUUID()}`,
+    },
+  });
+
+  const result = await service.runJobSource(jobSource.id);
+  const jobs = await database.job.findMany({
+    where: { jobSourceId: jobSource.id },
+    orderBy: { canonicalKey: "asc" },
+  });
+  assert.equal(jobs.length, 2);
+
+  const enrichments = await database.jobEnrichment.findMany({
+    where: { jobId: { in: jobs.map((job) => job.id) } },
+  });
+  await database.jobEnrichment.update({
+    where: { id: enrichments[0]?.id },
+    data: {
+      careerFingerprint: ["Desenvolvedor Backend", "Java"],
+      dominantArea: "SOFTWARE_ENGINEERING",
+      enrichmentStatus: "COMPLETED",
+    },
+  });
+  await database.jobEnrichment.update({
+    where: { id: enrichments[1]?.id },
+    data: {
+      enrichmentStatus: "SKIPPED",
+      semanticFilterReason: "zona_cinza",
+    },
+  });
+
+  const run = await service.getRun(jobSource.id, result.id);
+
+  assert.equal(run.previewItems.length, 2);
+  const byCanonicalKey = new Map(
+    run.previewItems.map((item) => [item.canonicalKey, item]),
+  );
+  const completedJob = jobs.find((job) => job.id === enrichments[0]?.jobId);
+  const skippedJob = jobs.find((job) => job.id === enrichments[1]?.jobId);
+  assert.deepEqual(
+    byCanonicalKey.get(completedJob?.canonicalKey ?? "")?.enrichment,
+    {
+      careerFingerprint: ["Desenvolvedor Backend", "Java"],
+      dominantArea: "SOFTWARE_ENGINEERING",
+      enrichmentStatus: "COMPLETED",
+      id: enrichments[0]?.id,
+      semanticFilterReason: null,
+    },
+  );
+  assert.deepEqual(
+    byCanonicalKey.get(skippedJob?.canonicalKey ?? "")?.enrichment,
+    {
+      careerFingerprint: [],
+      dominantArea: null,
+      enrichmentStatus: "SKIPPED",
+      id: enrichments[1]?.id,
+      semanticFilterReason: "zona_cinza",
+    },
+  );
+
+  await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
+});
+
+test("IngestionService.getRun reports how many titles the crawler filter discarded during that run", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const company = await database.company.create({
+    data: {
+      name: "Discard Count Co",
+      normalizedName: `discard-count-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "api",
+      parserKey: "gupy",
+      sourceName: "Discard Count Source",
+      sourceType: "gupy",
+      sourceUrl: `https://discard-count.gupy.io/${randomUUID()}`,
+    },
+  });
+  const run = await database.ingestionRun.create({
+    data: {
+      finishedAt: new Date(),
+      jobSourceId: jobSource.id,
+      status: "completed",
+    },
+  });
+  const otherRun = await database.ingestionRun.create({
+    data: {
+      finishedAt: new Date(),
+      jobSourceId: jobSource.id,
+      status: "completed",
+    },
+  });
+
+  await database.crawlerDiscardedTitle.createMany({
+    data: [
+      {
+        canonicalKey: `gupy:discard-count:${randomUUID()}`,
+        filterReason: "noise_signal:enfermeiro",
+        filterVersion: "v1",
+        ingestionRunId: run.id,
+        jobSourceId: jobSource.id,
+        normalizedTitle: "enfermeiro plantonista",
+        title: "Enfermeiro Plantonista",
+      },
+      {
+        canonicalKey: `gupy:discard-count:${randomUUID()}`,
+        filterReason: "zona_cinza",
+        filterVersion: "v1",
+        ingestionRunId: run.id,
+        jobSourceId: jobSource.id,
+        normalizedTitle: "assistente administrativo",
+        title: "Assistente Administrativo",
+      },
+      {
+        canonicalKey: `gupy:discard-count:${randomUUID()}`,
+        filterReason: "noise_signal:vendedor",
+        filterVersion: "v1",
+        ingestionRunId: otherRun.id,
+        jobSourceId: jobSource.id,
+        normalizedTitle: "vendedor",
+        title: "Vendedor",
+      },
+    ],
+  });
+
+  const result = await service.getRun(jobSource.id, run.id);
+
+  assert.equal(result.discardedByFilterCount, 2);
+
+  await database.crawlerDiscardedTitle.deleteMany({
+    where: { jobSourceId: jobSource.id },
+  });
+  await database.ingestionRun.deleteMany({
+    where: { jobSourceId: jobSource.id },
+  });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
+});
+
+test("IngestionService.getRunEnrichmentSummary counts new-job enrichment status", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const company = await database.company.create({
+    data: {
+      name: "Enrichment Summary Co",
+      normalizedName: `enrichment-summary-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "html",
+      parserKey: "custom_html",
+      sourceName: "Enrichment Summary Source",
+      sourceType: "custom_html",
+      sourceUrl: `https://manual.example.com/${randomUUID()}`,
+    },
+  });
+
+  const result = await service.runJobSource(jobSource.id);
+  const jobs = await database.job.findMany({
+    where: { jobSourceId: jobSource.id },
+  });
+  const enrichments = await database.jobEnrichment.findMany({
+    where: { jobId: { in: jobs.map((job) => job.id) } },
+  });
+
+  await database.jobEnrichment.update({
+    where: { id: enrichments[0]?.id },
+    data: { enrichmentStatus: "COMPLETED" },
+  });
+  await database.jobEnrichment.update({
+    where: { id: enrichments[1]?.id },
+    data: { enrichmentStatus: "SKIPPED" },
+  });
+
+  const summary = await service.getRunEnrichmentSummary(result.id);
+
+  assert.deepEqual(summary, {
+    completed: 1,
+    failed: 0,
+    pending: 0,
+    skipped: 1,
+    total: 2,
+  });
+
+  await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
+});
+
+test("IngestionService.getRunEnrichmentSummary returns zeros when the run created no jobs", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const company = await database.company.create({
+    data: {
+      name: "Enrichment Summary Empty Co",
+      normalizedName: `enrichment-summary-empty-co-${randomUUID()}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "html",
+      parserKey: "custom_html",
+      sourceName: "Enrichment Summary Empty Source",
+      sourceType: "custom_html",
+      sourceUrl: `https://manual.example.com/${randomUUID()}`,
+    },
+  });
+
+  await service.runJobSource(jobSource.id);
+  // segunda rodada: mesmos canonicalKeys, action vira "updated" (nao cria
+  // JobEnrichment novo).
+  const second = await service.runJobSource(jobSource.id);
+  assert.equal(second.newCount, 0);
+
+  const summary = await service.getRunEnrichmentSummary(second.id);
+
+  assert.deepEqual(summary, {
+    completed: 0,
+    failed: 0,
+    pending: 0,
+    skipped: 0,
+    total: 0,
+  });
+
+  await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
 });

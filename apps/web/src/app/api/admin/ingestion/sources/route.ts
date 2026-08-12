@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { listJobSourcesPaginated } from "@/lib/admin-ingestion-api";
+import {
+  type JobSourceSortBy,
+  listJobSourcesPaginated,
+} from "@/lib/admin-ingestion-api";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 export async function GET(req: NextRequest) {
@@ -18,10 +21,14 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get("search") ?? undefined;
   const statusFilter = searchParams.get("statusFilter") ?? undefined;
   const typeFilter = searchParams.get("typeFilter") ?? undefined;
+  const sortBy =
+    (searchParams.get("sortBy") as JobSourceSortBy | null) ?? undefined;
+  const sortDir =
+    (searchParams.get("sortDir") as "asc" | "desc" | null) ?? undefined;
 
   try {
     const result = await listJobSourcesPaginated(
-      { page, pageSize, search, statusFilter, typeFilter },
+      { page, pageSize, search, statusFilter, typeFilter, sortBy, sortDir },
       token,
     );
     return NextResponse.json(result);

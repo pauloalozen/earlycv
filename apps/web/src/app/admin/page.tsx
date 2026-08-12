@@ -3,13 +3,20 @@ import { Suspense } from "react";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
   AdminPageWrap,
-  AdminPill,
   AdminStatCard,
   AdminStatsRow,
+  AdminTable,
+  AdminTd,
+  AdminTh,
   AT,
 } from "@/app/admin/_components/admin-primitives";
-import { EmptyState } from "@/components/ui";
-import { buildPendingTypeLabel } from "@/lib/admin-operations";
+import { DashboardAdapterTable } from "@/app/admin/_components/dashboard-adapter-table";
+import { DashboardAlertsRow } from "@/app/admin/_components/dashboard-alerts-row";
+import { RADAR_AREA_LABELS } from "@/app/radar/radar-ui";
+import {
+  type EnrichmentSummary,
+  getEnrichmentSummary,
+} from "@/lib/admin-dashboard-api";
 import { listAdminPayments } from "@/lib/admin-payments-api";
 import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
@@ -63,6 +70,23 @@ function formatBRL(cents: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   });
+}
+
+function sectionLabel(text: string) {
+  return (
+    <div
+      style={{
+        fontFamily: '"Geist Mono", monospace',
+        fontSize: 10.5,
+        letterSpacing: 1.2,
+        color: AT.muted2,
+        fontWeight: 500,
+        margin: "4px 0 12px",
+      }}
+    >
+      {text}
+    </div>
+  );
 }
 
 type AdminOverviewPageProps = {
@@ -146,33 +170,9 @@ function OverviewSkeleton() {
           <div key={height} style={{ ...card, height }} />
         ))}
       </div>
-      <div
-        style={{
-          height: 18,
-          width: 180,
-          background: AT.borderSoft,
-          borderRadius: 4,
-          marginTop: 4,
-        }}
-      />
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 12,
-        }}
-      >
-        {[86, 87, 88].map((height) => (
-          <div key={height} style={{ ...card, height: 76 }} />
-        ))}
-      </div>
-      <div
-        className="admin-main-grid"
-        style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 16 }}
-      >
-        <div style={{ ...card, height: 280 }} />
-        <div style={{ ...card, height: 280 }} />
-      </div>
+      <div style={{ ...card, height: 200 }} />
+      <div style={{ ...card, height: 320 }} />
+      <div style={{ ...card, height: 260 }} />
     </div>
   );
 }
@@ -182,10 +182,12 @@ async function OverviewContent({ period }: { period: Period }) {
   const sinceIso = since.toISOString();
   const subLabel = periodSubLabel(period);
 
-  const [overviewDataResult, paymentsResult] = await Promise.all([
-    getPhaseOneAdminDataSafely(),
-    listAdminPayments({ from: sinceIso, limit: 1000 }).catch(() => null),
-  ]);
+  const [overviewDataResult, paymentsResult, enrichmentSummary] =
+    await Promise.all([
+      getPhaseOneAdminDataSafely(),
+      listAdminPayments({ from: sinceIso, limit: 1000 }).catch(() => null),
+      getEnrichmentSummary().catch(() => null),
+    ]);
 
   if (overviewDataResult.kind !== "ok") {
     const state = buildAdminStateModel(overviewDataResult.kind, "/admin");
@@ -197,25 +199,10 @@ async function OverviewContent({ period }: { period: Period }) {
     );
   }
 
-  const {
-    adminUsers,
-    adminUserViews,
-    companyViews,
-    companies,
-    orderedRuns,
-    pendingItems,
-    sourceViews,
-  } = overviewDataResult.data;
+  const { adminUsers, adminUserViews } = overviewDataResult.data;
 
   // ── Period-sensitive metrics ───────────────────────────────────
   const newUsers = adminUsers.filter((u) => u.createdAt >= sinceIso).length;
-  const runsInPeriod = orderedRuns.filter(
-    (r) => r.startedAt != null && r.startedAt >= sinceIso,
-  ).length;
-  const failedRunsInPeriod = orderedRuns.filter(
-    (r) =>
-      r.startedAt != null && r.startedAt >= sinceIso && r.status === "failed",
-  ).length;
 
   const approved =
     paymentsResult?.items.filter(
@@ -233,19 +220,10 @@ async function OverviewContent({ period }: { period: Period }) {
     (sum, u) => sum + u.adaptedResumeCount,
     0,
   );
-  const incompleteCompanies = companyViews.filter(
-    (item) => item.status.label !== "completa",
-  ).length;
-  const sourcesAwaitingRun = sourceViews.filter(
-    (item) => item.status.label === "aguardando primeiro run",
-  ).length;
-  const failedRunsTotal = orderedRuns.filter(
-    (r) => r.status === "failed",
-  ).length;
 
   return (
     <>
-      {/* ── Métricas por período ───────────────────────────────── */}
+      {/* ── Faixa 1: Negócio ───────────────────────────────────── */}
       <div
         style={{
           display: "flex",
@@ -285,17 +263,259 @@ async function OverviewContent({ period }: { period: Period }) {
           sub={subLabel}
         />
         <AdminStatCard
-          label="Runs executados"
-          value={String(runsInPeriod)}
-          sub={
-            failedRunsInPeriod > 0
-              ? `${failedRunsInPeriod} com falha`
-              : subLabel
-          }
+          label="CVs adaptados"
+          value={String(totalAdaptedResumes)}
+          sub="total acumulado"
         />
       </AdminStatsRow>
 
-      {/* ── Estado atual (snapshot) ────────────────────────────── */}
+      {sectionLabel("PRODUTO · ESTADO ATUAL")}
+      <AdminStatsRow cols={1}>
+        <AdminStatCard
+          label="Usuários cadastrados"
+          value={String(totalUsers)}
+          sub="total acumulado"
+        />
+      </AdminStatsRow>
+
+      {/* ── Faixa 2: Alertas operacionais ──────────────────────── */}
+      {sectionLabel("ALERTAS OPERACIONAIS")}
+      <DashboardAlertsRow />
+
+      {/* ── Faixa 3: Captura por adapter ───────────────────────── */}
+      {sectionLabel("CAPTURA · POR ADAPTER")}
+      <div style={{ marginBottom: 20 }}>
+        <DashboardAdapterTable />
+      </div>
+
+      {/* ── Faixa 4: Enriquecimento ─────────────────────────────── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          marginBottom: 12,
+        }}
+      >
+        {sectionLabel("ENRIQUECIMENTO · ÚLTIMAS 24H")}
+        <Link
+          href="/admin/ingestion/filter"
+          style={{
+            fontSize: 12,
+            color: AT.muted,
+            textDecoration: "none",
+            fontWeight: 500,
+          }}
+        >
+          ver enriquecimento →
+        </Link>
+      </div>
+      <EnrichmentSection summary={enrichmentSummary} />
+    </>
+  );
+}
+
+function EnrichmentSection({
+  summary,
+}: {
+  summary: EnrichmentSummary | null;
+}) {
+  return (
+    <>
+      <div
+        className="admin-main-grid"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 16,
+          marginBottom: 16,
+        }}
+      >
+        <EnrichmentMetricsCard summary={summary} />
+        <EnrichmentByAreaCard summary={summary} />
+      </div>
+      <PortalByAreaTable summary={summary} />
+    </>
+  );
+}
+
+function EnrichmentMetricsCard({
+  summary,
+}: {
+  summary: EnrichmentSummary | null;
+}) {
+  const last24h = summary?.last24h;
+  const tiles = [
+    { label: "Enriquecidas", value: last24h?.enriched },
+    { label: "Descartadas", value: last24h?.skipped },
+    {
+      label: "Taxa",
+      value:
+        last24h != null ? `${last24h.approvalRate.toFixed(1)}%` : undefined,
+    },
+    { label: "Pendentes", value: last24h?.pending },
+  ];
+
+  return (
+    <div
+      style={{
+        background: AT.card,
+        border: `1px solid ${AT.border}`,
+        borderRadius: 10,
+        padding: "18px",
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, 1fr)",
+          gap: 14,
+        }}
+      >
+        {tiles.map((tile) => (
+          <div key={tile.label}>
+            <div
+              style={{
+                fontFamily: '"Geist Mono", monospace',
+                fontSize: 10,
+                letterSpacing: 1.1,
+                color: AT.muted2,
+                fontWeight: 500,
+                textTransform: "uppercase",
+              }}
+            >
+              {tile.label}
+            </div>
+            <div
+              style={{
+                fontSize: 26,
+                fontWeight: 500,
+                letterSpacing: -1,
+                color: AT.ink2,
+                marginTop: 6,
+              }}
+            >
+              {tile.value ?? "—"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EnrichmentByAreaCard({
+  summary,
+}: {
+  summary: EnrichmentSummary | null;
+}) {
+  const byArea = summary?.byArea ?? [];
+  const top = byArea.slice(0, 5);
+  const restTotal = byArea
+    .slice(5)
+    .reduce((sum, item) => sum + item.count, 0);
+  const items = [
+    ...top.map((item) => ({
+      label: RADAR_AREA_LABELS[item.area] ?? item.area,
+      count: item.count,
+    })),
+    ...(restTotal > 0 ? [{ label: "Outros", count: restTotal }] : []),
+  ];
+  const max = Math.max(1, ...items.map((item) => item.count));
+
+  return (
+    <div
+      style={{
+        background: AT.card,
+        border: `1px solid ${AT.border}`,
+        borderRadius: 10,
+        padding: "18px",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: '"Geist Mono", monospace',
+          fontSize: 10,
+          letterSpacing: 1.1,
+          color: AT.muted2,
+          fontWeight: 500,
+          textTransform: "uppercase",
+          marginBottom: 12,
+        }}
+      >
+        Por área
+      </div>
+      {items.length === 0 ? (
+        <div style={{ fontSize: 13, color: AT.muted }}>
+          Sem vagas enriquecidas nas últimas 24h.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.map((item) => (
+            <div
+              key={item.label}
+              style={{ display: "flex", alignItems: "center", gap: 10 }}
+            >
+              <div
+                style={{ fontSize: 12, color: AT.ink2, width: 170, flexShrink: 0 }}
+              >
+                {item.label}
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  background: AT.borderSoft,
+                  borderRadius: 4,
+                  height: 8,
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.round((item.count / max) * 100)}%`,
+                    background: AT.ink2,
+                    height: "100%",
+                    borderRadius: 4,
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  fontFamily: '"Geist Mono", monospace',
+                  fontSize: 12,
+                  color: AT.muted,
+                  width: 28,
+                  textAlign: "right",
+                  flexShrink: 0,
+                }}
+              >
+                {item.count}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PortalByAreaTable({
+  summary,
+}: {
+  summary: EnrichmentSummary | null;
+}) {
+  const portalByArea = summary?.portalByArea ?? [];
+  const pendingEnrichment = summary?.pendingEnrichment ?? 0;
+
+  const totalActive = portalByArea.reduce((sum, row) => sum + row.active, 0);
+  const totalInactive = portalByArea.reduce(
+    (sum, row) => sum + row.inactive,
+    0,
+  );
+  const grandTotal = totalActive + totalInactive + pendingEnrichment;
+
+  return (
+    <div>
       <div
         style={{
           fontFamily: '"Geist Mono", monospace',
@@ -303,261 +523,79 @@ async function OverviewContent({ period }: { period: Period }) {
           letterSpacing: 1.2,
           color: AT.muted2,
           fontWeight: 500,
-          margin: "4px 0 12px",
+          margin: "16px 0 12px",
         }}
       >
-        PRODUTO · ESTADO ATUAL
+        VAGAS NO PORTAL · POR ÁREA
       </div>
-
-      <AdminStatsRow cols={3}>
-        <AdminStatCard
-          label="Usuários cadastrados"
-          value={String(totalUsers)}
-          sub="total acumulado"
-        />
-        <AdminStatCard
-          label="CVs adaptados"
-          value={String(totalAdaptedResumes)}
-          sub="total acumulado"
-        />
-        <AdminStatCard
-          label="Pendências abertas"
-          value={String(pendingItems.length)}
-          sub={pendingItems.length === 0 ? "tudo ok" : "requer atenção"}
-        />
-      </AdminStatsRow>
-
-      {/* ── Pendências + Sinais ────────────────────────────────── */}
-      <div
-        className="admin-main-grid"
-        style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 16 }}
-      >
-        {/* Pendências */}
-        <div
-          style={{
-            background: AT.card,
-            border: `1px solid ${AT.border}`,
-            borderRadius: 10,
-            padding: "18px 18px 14px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "baseline",
-              marginBottom: 14,
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontFamily: '"Geist Mono", monospace',
-                  fontSize: 10.5,
-                  letterSpacing: 1.2,
-                  color: AT.muted2,
-                  fontWeight: 500,
-                  marginBottom: 4,
-                }}
-              >
-                PENDÊNCIAS PRIORIZADAS · {pendingItems.length}
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: AT.ink2 }}>
-                Próximas ações operacionais
-              </div>
-            </div>
-            <Link
-              href="/admin/pendencias"
-              style={{
-                fontSize: 12,
-                color: AT.muted,
-                textDecoration: "none",
-                fontWeight: 500,
-              }}
-            >
-              abrir fila completa →
-            </Link>
-          </div>
-
-          {pendingItems.length === 0 ? (
-            <EmptyState
-              description="Nenhuma pendencia operacional aberta no momento."
-              title="Tudo sob controle"
-            />
+      <AdminTable>
+        <thead>
+          <tr>
+            <AdminTh>Área</AdminTh>
+            <AdminTh align="right">Ativas</AdminTh>
+            <AdminTh align="right">Inativas</AdminTh>
+            <AdminTh align="right">Aguard. enriq.</AdminTh>
+            <AdminTh align="right">Total</AdminTh>
+          </tr>
+        </thead>
+        <tbody>
+          {portalByArea.length === 0 ? (
+            <tr>
+              <AdminTd muted>Sem dados de enriquecimento ainda.</AdminTd>
+            </tr>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              {pendingItems.slice(0, 5).map((item, i) => (
-                <div
-                  key={`${item.type}:${item.entityId}`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 14,
-                    padding: "12px 0",
-                    borderTop: `1px solid ${i === 0 ? AT.border : AT.borderSoft}`,
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 8,
-                        alignItems: "center",
-                        marginBottom: 3,
-                      }}
-                    >
-                      <AdminPill tone="warn" mono>
-                        {buildPendingTypeLabel(item.type)}
-                      </AdminPill>
-                      <span
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: AT.ink2,
-                        }}
-                      >
-                        {item.title}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11.5,
-                        color: AT.muted,
-                        fontFamily: '"Geist Mono", monospace',
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {item.description}
-                    </div>
-                  </div>
-                  <Link
-                    className={buttonVariants({
-                      size: "sm",
-                      variant: "outline",
-                    })}
-                    href={item.href}
-                  >
-                    {item.cta}
-                  </Link>
-                </div>
-              ))}
-            </div>
+            portalByArea.map((row) => (
+              <tr key={row.area}>
+                <AdminTd>{row.areaLabel}</AdminTd>
+                <AdminTd align="right" mono>
+                  {row.active}
+                </AdminTd>
+                <AdminTd align="right" mono muted>
+                  {row.inactive}
+                </AdminTd>
+                <AdminTd align="right" mono muted>
+                  0
+                </AdminTd>
+                <AdminTd align="right" mono>
+                  {row.total}
+                </AdminTd>
+              </tr>
+            ))
           )}
-        </div>
-
-        {/* Sinais rápidos */}
-        <div
-          style={{
-            background: AT.card,
-            border: `1px solid ${AT.border}`,
-            borderRadius: 10,
-            padding: "18px 18px 8px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "baseline",
-              marginBottom: 14,
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontFamily: '"Geist Mono", monospace',
-                  fontSize: 10.5,
-                  letterSpacing: 1.2,
-                  color: AT.muted2,
-                  fontWeight: 500,
-                  marginBottom: 4,
-                }}
-              >
-                CAPTURA · SAÚDE
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: AT.ink2 }}>
-                Estado da ingestão
-              </div>
-            </div>
-            <Link
-              href="/admin/ingestion"
-              style={{
-                fontSize: 12,
-                color: AT.muted,
-                textDecoration: "none",
-                fontWeight: 500,
-              }}
-            >
-              ver ingestão →
-            </Link>
-          </div>
-
-          {[
-            {
-              label: "Empresas incompletas",
-              value: incompleteCompanies,
-              note: "sem dados completos",
-              alertIfNonZero: true,
-            },
-            {
-              label: "Fontes aguardando run",
-              value: sourcesAwaitingRun,
-              note: "agendamento pendente",
-              alertIfNonZero: true,
-            },
-            {
-              label: "Runs com falha (total)",
-              value: failedRunsTotal,
-              note: "verificar logs",
-              alertIfNonZero: true,
-            },
-            {
-              label: "Empresas configuradas",
-              value: companies.length,
-              note: "total",
-              alertIfNonZero: false,
-            },
-          ].map((s) => (
-            <div
-              key={s.label}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "baseline",
-                padding: "14px 0",
-                borderTop: `1px solid ${AT.borderSoft}`,
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: AT.ink2 }}>
-                  {s.label}
-                </div>
-                <div style={{ fontSize: 11.5, color: AT.muted2, marginTop: 2 }}>
-                  {s.note}
-                </div>
-              </div>
-              <div
-                style={{
-                  fontFamily: '"Geist", sans-serif',
-                  fontSize: 22,
-                  fontWeight: 500,
-                  letterSpacing: -0.8,
-                  color:
-                    s.alertIfNonZero && s.value > 0
-                      ? AT.warn
-                      : s.value === 0
-                        ? AT.ok
-                        : AT.ink2,
-                }}
-              >
-                {s.value}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
+          <tr>
+            <AdminTd muted>Sem classificação (aguardando enriquecimento)</AdminTd>
+            <AdminTd align="right" mono muted>
+              0
+            </AdminTd>
+            <AdminTd align="right" mono muted>
+              0
+            </AdminTd>
+            <AdminTd align="right" mono>
+              {pendingEnrichment}
+            </AdminTd>
+            <AdminTd align="right" mono>
+              {pendingEnrichment}
+            </AdminTd>
+          </tr>
+          <tr>
+            <AdminTd>
+              <strong>Total</strong>
+            </AdminTd>
+            <AdminTd align="right" mono>
+              <strong>{totalActive}</strong>
+            </AdminTd>
+            <AdminTd align="right" mono>
+              <strong>{totalInactive}</strong>
+            </AdminTd>
+            <AdminTd align="right" mono>
+              <strong>{pendingEnrichment}</strong>
+            </AdminTd>
+            <AdminTd align="right" mono>
+              <strong>{grandTotal}</strong>
+            </AdminTd>
+          </tr>
+        </tbody>
+      </AdminTable>
+    </div>
   );
 }

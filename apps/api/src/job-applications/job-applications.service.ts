@@ -27,6 +27,7 @@ type UpsertFromAdaptationInput = {
   scoreAfter?: number | null;
   targetStatus: JobApplicationStatus;
   origin: JobApplicationOrigin;
+  radarJobId?: string | null;
 };
 
 type CvState = "ready" | "locked" | "missing";
@@ -456,6 +457,57 @@ export class JobApplicationsService {
     };
   }
 
+  // Usado pelo Radar (/vagas e /vagas/[slug]) pra saber, em lote, se o
+  // usuário já tem candidatura+análise pra vagas específicas — nesse caso a
+  // UI mostra o score real da análise no lugar do score de oportunidade
+  // (match Radar). deletedAt: null porque candidatura deletada não deve
+  // reaparecer como "já analisada".
+  async getBestScoresByJobIds(
+    userId: string,
+    jobIds: string[],
+  ): Promise<
+    Map<string, { applicationId: string; status: JobApplicationStatus; bestScore: number | null }>
+  > {
+    if (jobIds.length === 0) {
+      return new Map();
+    }
+
+    const applications = await this.database.jobApplication.findMany({
+      where: { userId, jobId: { in: jobIds }, deletedAt: null },
+      include: {
+        cvAdaptations: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            adaptedResumeId: true,
+            isUnlocked: true,
+            adaptedContentJson: true,
+          },
+        },
+      },
+    });
+
+    const result = new Map<
+      string,
+      { applicationId: string; status: JobApplicationStatus; bestScore: number | null }
+    >();
+
+    for (const application of applications) {
+      if (!application.jobId) continue;
+      const { bestScore } = deriveSummaryFromAdaptations(
+        application.cvAdaptations as AdaptationSummaryView[],
+      );
+      result.set(application.jobId, {
+        applicationId: application.id,
+        status: application.status,
+        bestScore,
+      });
+    }
+
+    return result;
+  }
+
   async createManual(userId: string, dto: CreateJobApplicationDto) {
     const origin: JobApplicationOrigin = dto.origin ?? "manual";
 
@@ -872,6 +924,7 @@ export class JobApplicationsService {
       scoreAfter,
       targetStatus,
       origin,
+      radarJobId,
     } = input;
 
     if (!jobTitle || !companyName) {
@@ -1015,6 +1068,7 @@ export class JobApplicationsService {
             scoreBefore: resolvedScoreBefore,
             scoreAfter: resolvedScoreAfter,
             language: adaptation.language,
+            jobId: radarJobId ?? null,
           },
         });
 

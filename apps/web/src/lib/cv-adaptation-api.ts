@@ -470,6 +470,7 @@ export async function saveGuestPreview(payload: {
   file?: File;
   guestSessionPublicToken?: string;
   jobApplicationId?: string;
+  radarJobId?: string;
 }): Promise<CvAdaptationDto> {
   const body = (() => {
     const formData = new FormData();
@@ -495,6 +496,8 @@ export async function saveGuestPreview(payload: {
       formData.append("saveAsMaster", String(payload.saveAsMaster));
     if (payload.jobApplicationId)
       formData.append("jobApplicationId", payload.jobApplicationId);
+    if (payload.radarJobId)
+      formData.append("radarJobId", payload.radarJobId);
     return formData;
   })();
 

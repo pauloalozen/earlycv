@@ -1,5 +1,7 @@
 export function canonicalizeSourceUrl(rawUrl: string) {
-  const url = new URL(rawUrl.trim());
+  const trimmed = rawUrl.trim();
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const url = new URL(withScheme);
 
   url.hash = "";
   url.search = "";

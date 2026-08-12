@@ -9,6 +9,11 @@ vi.mock("next/navigation", () => ({
     push: vi.fn(),
     prefetch: vi.fn(),
   }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+vi.mock("@/lib/public-jobs-client-api", () => ({
+  getPublicJobById: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/components/app-header", () => ({
