@@ -2,6 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import {
+  AppHeaderUserMenu,
+  buildUserMenuItems,
+  LEARN_MENU_ITEMS,
+} from "@/components/app-header-user-menu";
+import type { AppInternalRole } from "@/lib/app-session";
 import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
 import { Logo } from "./logo";
 
@@ -12,13 +18,22 @@ const IS_JOBS_GHOST_MODE = isJobsGhostModeEnabled();
 export function PublicNavBar({
   dark = false,
   hideHowItWorksLink = false,
+  hideJobsLink = false,
   fixed = false,
+  userName = null,
+  userRole = null,
+  credits,
 }: {
   dark?: boolean;
   hideHowItWorksLink?: boolean;
+  hideJobsLink?: boolean;
   fixed?: boolean;
+  userName?: string | null;
+  userRole?: AppInternalRole | null;
+  credits?: number | "∞" | "—";
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuItems = buildUserMenuItems({ userRole });
   const bg = dark ? "#0a0a0a" : "transparent";
   const borderColor = dark ? "rgba(250,250,246,0.06)" : "rgba(0,0,0,0.04)";
   const linkColor = dark ? "#a0a098" : "#3a3a38";
@@ -136,7 +151,7 @@ export function PublicNavBar({
         </Link>
 
         <div className="hidden items-center gap-5 md:flex">
-          {IS_JOBS_GHOST_MODE ? null : (
+          {IS_JOBS_GHOST_MODE || hideJobsLink ? null : (
             <Link
               href="/radar"
               style={{
@@ -173,22 +188,30 @@ export function PublicNavBar({
               Como funciona
             </Link>
           )}
-          <Link
-            href="/adaptar"
-            style={{
-              background: dark ? "#fafaf6" : "#0a0a0a",
-              color: dark ? "#0a0a0a" : "#fff",
-              borderRadius: 8,
-              padding: "8px 14px",
-              fontSize: 12.5,
-              fontWeight: 500,
-              textDecoration: "none",
-              display: "inline-flex",
-              alignItems: "center",
-            }}
-          >
-            Adaptar meu CV →
-          </Link>
+          {userName ? (
+            <AppHeaderUserMenu
+              userName={userName}
+              items={menuItems}
+              credits={credits}
+            />
+          ) : (
+            <Link
+              href="/adaptar"
+              style={{
+                background: dark ? "#fafaf6" : "#0a0a0a",
+                color: dark ? "#0a0a0a" : "#fff",
+                borderRadius: 8,
+                padding: "8px 14px",
+                fontSize: 12.5,
+                fontWeight: 500,
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+            >
+              Adaptar meu CV →
+            </Link>
+          )}
         </div>
 
         <button
@@ -236,7 +259,7 @@ export function PublicNavBar({
       <div
         className={`public-mob-nav${isMenuOpen ? " public-mob-nav--open" : ""}`}
       >
-        {IS_JOBS_GHOST_MODE ? null : (
+        {IS_JOBS_GHOST_MODE || hideJobsLink ? null : (
           <Link
             href="/radar"
             onClick={() => setIsMenuOpen(false)}
@@ -261,13 +284,61 @@ export function PublicNavBar({
             Como funciona
           </Link>
         )}
-        <Link
-          href="/adaptar"
-          onClick={() => setIsMenuOpen(false)}
-          className="public-mob-nav-item public-mob-nav-item--cta"
-        >
-          Adaptar meu CV →
-        </Link>
+        {userName ? (
+          <>
+            {menuItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setIsMenuOpen(false)}
+                className="public-mob-nav-item"
+              >
+                {item.label}
+              </Link>
+            ))}
+            <Link
+              href="/contato"
+              onClick={() => setIsMenuOpen(false)}
+              className="public-mob-nav-item"
+            >
+              Contato
+            </Link>
+            {LEARN_MENU_ITEMS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setIsMenuOpen(false)}
+                className="public-mob-nav-item"
+              >
+                {item.label}
+              </Link>
+            ))}
+            <form action="/auth/logout" method="post">
+              <button
+                type="submit"
+                className="public-mob-nav-item"
+                style={{
+                  width: "100%",
+                  textAlign: "left",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#c0392b",
+                }}
+              >
+                Sair
+              </button>
+            </form>
+          </>
+        ) : (
+          <Link
+            href="/adaptar"
+            onClick={() => setIsMenuOpen(false)}
+            className="public-mob-nav-item public-mob-nav-item--cta"
+          >
+            Adaptar meu CV →
+          </Link>
+        )}
       </div>
     </nav>
   );

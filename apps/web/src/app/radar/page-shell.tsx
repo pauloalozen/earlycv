@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
+import type { AppInternalRole } from "@/lib/app-session";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const GRAIN = `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`;
@@ -15,9 +16,15 @@ const GRAIN = `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='ht
 export function RadarPageShell({
   children,
   extraHead,
+  userName,
+  userRole,
+  credits,
 }: {
   children: ReactNode;
   extraHead?: ReactNode;
+  userName?: string | null;
+  userRole?: AppInternalRole | null;
+  credits?: number | "∞" | "—";
 }) {
   return (
     <main
@@ -45,7 +52,14 @@ export function RadarPageShell({
         }}
       />
 
-      <PublicNavBar hideHowItWorksLink fixed />
+      <PublicNavBar
+        hideHowItWorksLink
+        hideJobsLink
+        fixed
+        userName={userName}
+        userRole={userRole}
+        credits={credits}
+      />
 
       <div
         style={{

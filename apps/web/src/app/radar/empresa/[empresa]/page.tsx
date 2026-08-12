@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getPublicJobsByCompanySlug } from "@/lib/internal-jobs-api";
 import {
   canAccessJobsInGhostMode,
   isJobsGhostModeEnabled,
 } from "@/lib/jobs-ghost-mode";
+import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "../../jobs-listing";
 import { RadarPageShell } from "../../page-shell";
@@ -51,6 +53,10 @@ export default async function RadarEmpresaPage({
     notFound();
   }
 
+  const availableCredits = user
+    ? toHeaderAvailableCredits(await getMyPlan().catch(() => null))
+    : undefined;
+
   const { empresa: companySlug } = await params;
   // Resolve o slug pra o nome de exibição real da empresa (Company.name não
   // tem slug persistido — ver getPublicByCompanySlug em jobs.service.ts) e
@@ -65,7 +71,11 @@ export default async function RadarEmpresaPage({
   const resolvedSearchParams = await searchParams;
 
   return (
-    <RadarPageShell>
+    <RadarPageShell
+      userName={user?.name}
+      userRole={user?.internalRole}
+      credits={availableCredits}
+    >
       <RadarJobsListing
         basePath={`/radar/empresa/${companySlug}`}
         user={user}

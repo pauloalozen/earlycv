@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getPublicJobsByTech } from "@/lib/internal-jobs-api";
 import {
   canAccessJobsInGhostMode,
   isJobsGhostModeEnabled,
 } from "@/lib/jobs-ghost-mode";
+import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "../../jobs-listing";
 import { RadarPageShell } from "../../page-shell";
@@ -58,6 +60,10 @@ export default async function RadarTecnologiaPage({
     notFound();
   }
 
+  const availableCredits = user
+    ? toHeaderAvailableCredits(await getMyPlan().catch(() => null))
+    : undefined;
+
   const { tech: techSlug } = await params;
   const tech = techSlug.toLowerCase();
   // Confirma o threshold de volume antes de renderizar qualquer coisa — a
@@ -71,7 +77,11 @@ export default async function RadarTecnologiaPage({
   const resolvedSearchParams = await searchParams;
 
   return (
-    <RadarPageShell>
+    <RadarPageShell
+      userName={user?.name}
+      userRole={user?.internalRole}
+      credits={availableCredits}
+    >
       <RadarJobsListing
         basePath={`/radar/tecnologia/${tech}`}
         user={user}

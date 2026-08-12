@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import {
   canAccessJobsInGhostMode,
   isJobsGhostModeEnabled,
 } from "@/lib/jobs-ghost-mode";
+import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "./jobs-listing";
 import { RadarPageShell } from "./page-shell";
@@ -50,6 +52,10 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
     notFound();
   }
 
+  const availableCredits = user
+    ? toHeaderAvailableCredits(await getMyPlan().catch(() => null))
+    : undefined;
+
   const params = await searchParams;
 
   const websiteJsonLd = {
@@ -66,6 +72,9 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
 
   return (
     <RadarPageShell
+      userName={user?.name}
+      userRole={user?.internalRole}
+      credits={availableCredits}
       extraHead={
         <script type="application/ld+json">
           {JSON.stringify(websiteJsonLd)}

@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import {
   canAccessJobsInGhostMode,
   isJobsGhostModeEnabled,
 } from "@/lib/jobs-ghost-mode";
+import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "../../jobs-listing";
 import { RadarPageShell } from "../../page-shell";
@@ -62,6 +64,10 @@ export default async function RadarAreaPage({
     notFound();
   }
 
+  const availableCredits = user
+    ? toHeaderAvailableCredits(await getMyPlan().catch(() => null))
+    : undefined;
+
   const { area: areaSlug } = await params;
   const areaEnum = resolveAreaEnum(areaSlug);
 
@@ -71,7 +77,11 @@ export default async function RadarAreaPage({
   const resolvedSearchParams = await searchParams;
 
   return (
-    <RadarPageShell>
+    <RadarPageShell
+      userName={user?.name}
+      userRole={user?.internalRole}
+      credits={availableCredits}
+    >
       <RadarJobsListing
         basePath={`/radar/area/${areaSlug}`}
         user={user}

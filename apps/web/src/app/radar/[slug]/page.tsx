@@ -7,10 +7,12 @@ import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toCompanySlug } from "@/lib/company-slug";
+import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import {
   canAccessJobsInGhostMode,
   isJobsGhostModeEnabled,
 } from "@/lib/jobs-ghost-mode";
+import { getMyPlan } from "@/lib/plans-api";
 import {
   getPublicJobBySlug,
   listPublicJobs,
@@ -583,10 +585,12 @@ export default async function JobPage({ params }: JobPageProps) {
   let match: MatchData | null = null;
   let existingApplication: ExistingApplicationDto = null;
   let isSaved = false;
+  let availableCredits: number | "∞" | "—" | undefined;
   if (user) {
-    const [master, matchScore] = await Promise.all([
+    const [master, matchScore, plan] = await Promise.all([
       getMyMasterResume().catch(() => null),
       getJobMatchScore(job.slug),
+      getMyPlan().catch(() => null),
     ]);
     hasCvMaster = !!master;
     masterResumeId = master?.id ?? null;
@@ -600,6 +604,7 @@ export default async function JobPage({ params }: JobPageProps) {
     }
     existingApplication = matchScore?.existingApplication ?? null;
     isSaved = !!matchScore?.isSaved;
+    availableCredits = toHeaderAvailableCredits(plan);
   }
 
   const scoreState: ScoreState = !user
@@ -762,7 +767,14 @@ export default async function JobPage({ params }: JobPageProps) {
         }}
       />
 
-      <PublicNavBar hideHowItWorksLink fixed />
+      <PublicNavBar
+        hideHowItWorksLink
+        hideJobsLink
+        fixed
+        userName={user?.name}
+        userRole={user?.internalRole}
+        credits={availableCredits}
+      />
 
       <div
         style={{
