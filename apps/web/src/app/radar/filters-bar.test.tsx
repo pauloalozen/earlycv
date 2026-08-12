@@ -43,21 +43,51 @@ describe("FiltersBar", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the mais filtros panel (estado/cidade/empresa/publicado há) hidden until toggled", () => {
+  it("keeps the mais filtros panel (estado/cidade/empresa/publicado há) collapsed until toggled", () => {
     const { container } = render(
       <FiltersBar facets={FACETS} activeFilters={{}} />,
     );
 
-    const panel = container.querySelector("#radar-more-filters-panel");
-    expect(panel).toHaveAttribute("hidden");
+    const panel = container.querySelector<HTMLElement>(
+      "#radar-more-filters-panel",
+    );
+    expect(panel?.style.gridTemplateRows).toBe("0fr");
 
     fireEvent.click(screen.getByRole("button", { name: /mais filtros/ }));
 
-    expect(panel).not.toHaveAttribute("hidden");
+    expect(panel?.style.gridTemplateRows).toBe("1fr");
     expect(screen.getByText("ESTADO")).toBeInTheDocument();
     expect(screen.getByText("CIDADE")).toBeInTheDocument();
     expect(screen.getByText("EMPRESA")).toBeInTheDocument();
     expect(screen.getByText("PUBLICADO HÁ")).toBeInTheDocument();
+  });
+
+  it("has exactly one apply button (icon, in the top row) — no second text button in the panel", () => {
+    render(<FiltersBar facets={FACETS} activeFilters={{}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /mais filtros/ }));
+
+    const applyButtons = screen.getAllByRole("button", {
+      name: "aplicar filtros",
+    });
+    expect(applyButtons).toHaveLength(1);
+  });
+
+  it("selecting a filter does not navigate immediately — only the apply button does", () => {
+    render(<FiltersBar facets={FACETS} activeFilters={{}} />);
+
+    fireEvent.click(screen.getByText("ÁREA"));
+    fireEvent.click(screen.getByText("Dados & IA"));
+
+    expect(push).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "aplicar filtros" }));
+
+    expect(push).toHaveBeenCalledTimes(1);
+    const url = push.mock.calls[0][0] as string;
+    expect(
+      new URL(url, "http://localhost").searchParams.get("area"),
+    ).toBe("DATA_AI");
   });
 
   it("shows a count badge on mais filtros only for additional filters (estado/cidade/empresa/publicada), not área/senioridade/modalidade", () => {

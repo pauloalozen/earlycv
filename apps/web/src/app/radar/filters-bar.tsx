@@ -192,13 +192,14 @@ function DropdownTrigger({
 
   return (
     <summary
+      title={currentLabel}
       style={{
         listStyle: "none",
         cursor: "pointer",
         display: "inline-flex",
         alignItems: "center",
-        gap: 7,
-        padding: "7px 12px",
+        gap: 6,
+        padding: "7px 10px",
         borderRadius: 999,
         background: isActive ? "#fff" : "#fbfbf7",
         color: "#3a3a38",
@@ -207,6 +208,12 @@ function DropdownTrigger({
         fontSize: 12.5,
         whiteSpace: "nowrap",
         fontFamily: GEIST,
+        // 100% pra acompanhar o <details> pai, que agora cresce (flex: 1 1
+        // 130px) pra ocupar o espaço sobrando na barra. O texto trunca com
+        // reticências (minWidth:0 no pai) e o valor completo aparece no
+        // title (tooltip nativo).
+        width: "100%",
+        boxSizing: "border-box",
       }}
     >
       <span
@@ -216,16 +223,21 @@ function DropdownTrigger({
           letterSpacing: 0.6,
           textTransform: "uppercase",
           color: "#8a8a85",
+          flexShrink: 0,
         }}
       >
         {label}
       </span>
       <span
         style={{
+          flex: 1,
           fontSize: 12.5,
           fontWeight: 600,
           color: "#0a0a0a",
           whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          minWidth: 0,
         }}
       >
         {currentLabel}
@@ -269,7 +281,15 @@ function MultiFilterDropdown({
   return (
     <details
       className="vagas-filter-dropdown"
-      style={{ position: "relative", width: variant === "field" ? "100%" : undefined }}
+      style={{
+        position: "relative",
+        width: variant === "field" ? "100%" : undefined,
+        // Cresce pra usar o espaço sobrando na barra em vez de deixar
+        // vazio depois do "mais filtros" — a base (130px) é só o piso
+        // mínimo antes de crescer, não o tamanho fixo final.
+        flex: variant === "pill" ? "1 1 130px" : undefined,
+        minWidth: variant === "pill" ? 0 : undefined,
+      }}
     >
       <DropdownTrigger
         variant={variant}
@@ -366,7 +386,15 @@ function SingleFilterDropdown({
   return (
     <details
       className="vagas-filter-dropdown"
-      style={{ position: "relative", width: variant === "field" ? "100%" : undefined }}
+      style={{
+        position: "relative",
+        width: variant === "field" ? "100%" : undefined,
+        // Cresce pra usar o espaço sobrando na barra em vez de deixar
+        // vazio depois do "mais filtros" — a base (130px) é só o piso
+        // mínimo antes de crescer, não o tamanho fixo final.
+        flex: variant === "pill" ? "1 1 130px" : undefined,
+        minWidth: variant === "pill" ? 0 : undefined,
+      }}
     >
       <DropdownTrigger
         variant={variant}
@@ -445,6 +473,13 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
   const [cidade, setCidade] = useState<string[]>(csv(activeFilters.cidade));
   const [publicada, setPublicada] = useState(activeFilters.publicada ?? "");
   const [panelOpen, setPanelOpen] = useState(false);
+  // Overflow do painel só fica "visible" depois que a animação de abertura
+  // termina — precisa ficar "hidden" durante a transição pra criar o efeito
+  // de deslizar (senão o conteúdo já apareceria inteiro por cima da caixa
+  // ainda "crescendo"), mas depois de aberto precisa virar "visible" pra
+  // não cortar os dropdowns de estado/cidade/empresa/publicado há, que são
+  // absolutamente posicionados dentro dele.
+  const [panelSettled, setPanelSettled] = useState(false);
 
   const workModelItems = facets
     ? facets.workModels.map((f) => ({
@@ -501,6 +536,9 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
     additionalPendingCount +
     (q.trim() ? 1 : 0);
 
+  // Filtros ficam pendentes até o botão de aplicar (ícone de check) ser
+  // clicado — nenhum toggle/seleção navega sozinho. `isDirty` decide se
+  // esse botão fica habilitado.
   const isDirty =
     q !== (activeFilters.q ?? "") ||
     !sameSet(modalidade, csv(activeFilters.modalidade)) ||
@@ -554,6 +592,8 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
     return p;
   }
 
+  // Único gatilho que de fato navega com o estado pendente: Enter na busca
+  // (via submit do form) ou o botão de check no topo da barra.
   function applyFilters() {
     const p = new URLSearchParams();
     if (q.trim()) p.set("q", q.trim());
@@ -584,11 +624,11 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
     setCidade([]);
     setPublicada("");
 
-    // Navega direto — só resetar o estado local deixa a busca (server-side)
-    // com os filtros antigos até o usuário clicar em "aplicar filtros".
-    // minSkillsPct também some: era derivado de um filtro que não existe
-    // mais depois do clear. sort e excludeAnalyzed não são "filtros" desta
-        // barra, então continuam como estavam.
+    // Navega direto — botões de "limpar" são ações decisivas, diferente dos
+    // toggles individuais, que ficam pendentes até aplicar. minSkillsPct
+    // some junto (era derivado de um filtro que não existe mais depois do
+    // clear); sort/excludeAnalyzed não são "filtros" desta barra e
+    // continuam como estavam.
     const p = new URLSearchParams();
     if (activeFilters.sort) p.set("sort", activeFilters.sort);
     if (activeFilters.excludeAnalyzed === "false") {
@@ -599,8 +639,8 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
   }
 
   // Limpa só os 4 campos do painel "mais filtros" (local + já aplicado),
-  // preservando busca/área/modalidade/senioridade aplicados — mesmo padrão
-  // de "aplica na hora" que clearAll() já usa pro resto da barra.
+  // preservando busca/área/modalidade/senioridade aplicados — mesma lógica
+  // "decisiva, navega na hora" de clearAll().
   function clearAdditional() {
     setEstado([]);
     setCidade([]);
@@ -618,9 +658,9 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
   }
 
   // Remove um único valor de um filtro já aplicado (clique no "x" de uma
-  // tag em "filtros ativos") e navega na hora — diferente do fluxo
-  // pendente-até-aplicar do resto da barra, porque aqui a tag já representa
-  // algo que está no ar; tirar ela devia ter efeito imediato.
+  // tag em "filtros ativos") e navega na hora — a tag representa algo que
+  // já está no ar, então tirar ela tem efeito imediato, diferente do resto
+  // da barra (que fica pendente até aplicar).
   function removeAppliedValue(key: keyof ActiveFilters, value?: string) {
     const current = csv(activeFilters[key]);
     const next = value ? current.filter((v) => v !== value) : [];
@@ -733,24 +773,30 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
           .radar-filters-grid { grid-template-columns: repeat(2, 1fr); }
         }
       `}</style>
-
+      {/* Sem overflow:hidden aqui — clipava os menus dos dropdowns (área/
+      senioridade/modalidade/estado/cidade/empresa/publicado há), que só
+      mostravam as primeiras opções em vez da lista inteira. Os cantos
+      arredondados de baixo do painel "mais filtros" são resolvidos
+      diretamente nele (ver mais abaixo), não por clipping do container. */}
       <div
         style={{
           background: "#fff",
           border: "1px solid rgba(10,10,10,0.08)",
           borderRadius: 14,
-          overflow: "hidden",
         }}
       >
         {/* Linha principal: busca + pills primárias (área/modalidade/
-        senioridade) + botão "mais filtros" + ações de aplicar/limpar. */}
+        senioridade) + botão "mais filtros" + ações de aplicar/limpar. Sem
+        wrap aqui de propósito — os botões de limpar/aplicar não podem cair
+        pra uma segunda linha; quem cede espaço em telas estreitas é o bloco
+        de pills (via .radar-filters-primary, que tem seu próprio wrap). */}
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 10,
+            gap: 8,
             padding: "10px 12px 10px 16px",
-            flexWrap: "wrap",
+            flexWrap: "nowrap",
           }}
         >
           <div
@@ -758,7 +804,7 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 8,
+              gap: 6,
               flex: "1 1 auto",
               minWidth: 0,
             }}
@@ -767,9 +813,11 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 10,
-                flex: "1 1 220px",
-                minWidth: 120,
+                gap: 8,
+                // Cresce mais que as pills (2 1 220px vs 1 1 130px delas) —
+                // é o campo mais usado da barra e não pode ficar comprimido.
+                flex: "2 1 220px",
+                minWidth: 140,
                 padding: "8px 10px",
               }}
             >
@@ -843,7 +891,9 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
               allLabel="todas"
               options={seniorityItems}
               selected={senioridade}
-              onToggle={(v) => toggle(senioridade, setSenioridade, v)}
+              onToggle={(v) =>
+                toggle(senioridade, setSenioridade, v)
+              }
               onClear={() => setSenioridade([])}
             />
             <MultiFilterDropdown
@@ -851,29 +901,38 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
               allLabel="todas"
               options={workModelItems}
               selected={modalidade}
-              onToggle={(v) => toggle(modalidade, setModalidade, v)}
+              onToggle={(v) =>
+                toggle(modalidade, setModalidade, v)
+              }
               onClear={() => setModalidade([])}
             />
 
             <button
               type="button"
-              onClick={() => setPanelOpen((v) => !v)}
+              onClick={() => {
+                setPanelOpen((v) => {
+                  const next = !v;
+                  if (!next) setPanelSettled(false);
+                  return next;
+                });
+              }}
               aria-expanded={panelOpen}
               aria-controls="radar-more-filters-panel"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 8,
+                gap: 6,
                 background: panelOpen ? "#fff" : "#fbfbf7",
                 border: `1px solid ${panelOpen ? "#0a0a0a" : "rgba(10,10,10,0.1)"}`,
                 boxShadow: panelOpen ? "0 0 0 1px #0a0a0a" : "none",
                 borderRadius: 999,
-                padding: "7px 13px",
+                padding: "7px 11px",
                 fontFamily: GEIST,
                 fontSize: 12.5,
                 fontWeight: 500,
                 color: "#3a3a38",
                 cursor: "pointer",
+                whiteSpace: "nowrap",
                 flexShrink: 0,
               }}
             >
@@ -996,16 +1055,42 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
         </div>
 
         {/* Painel "mais filtros": estado/cidade/empresa/publicado há, em
-        grid — só some quando o usuário fecha ou já aplicou. */}
+        grid — desliza suave ao abrir/fechar via grid-template-rows (0fr →
+        1fr), que anima com base na altura real do conteúdo em vez de um
+        max-height fixo (max-height fixo faz o "reveal" acontecer rápido
+        demais quando o alvo é bem maior que o conteúdo de verdade — a
+        transição inteira de 0→altura-real acontece só no começo da faixa
+        0→max-height). overflow só vira "visible" depois que a animação de
+        abertura termina (ver onTransitionEnd), pra não cortar os dropdowns
+        internos. */}
         <div
           id="radar-more-filters-panel"
-          hidden={!panelOpen}
           style={{
-            borderTop: "1px solid rgba(10,10,10,0.06)",
-            background: "#fbfbf7",
-            padding: 16,
+            display: "grid",
+            gridTemplateRows: panelOpen ? "1fr" : "0fr",
+            transition: "grid-template-rows 320ms ease",
+          }}
+          onTransitionEnd={(event) => {
+            if (event.propertyName === "grid-template-rows" && panelOpen) {
+              setPanelSettled(true);
+            }
           }}
         >
+          <div
+            style={{
+              overflow: panelSettled ? "visible" : "hidden",
+              minHeight: 0,
+            }}
+          >
+          <div
+            style={{
+              borderTop: "1px solid rgba(10,10,10,0.06)",
+              background: "#fbfbf7",
+              padding: 16,
+              borderBottomLeftRadius: 14,
+              borderBottomRightRadius: 14,
+            }}
+          >
           <div className="radar-filters-grid">
             <MultiFilterDropdown
               label="ESTADO"
@@ -1044,55 +1129,40 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
             />
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginTop: 14,
-              paddingTop: 13,
-              borderTop: "1px solid rgba(10,10,10,0.08)",
-              flexWrap: "wrap",
-            }}
-          >
-            <span style={{ fontFamily: MONO, fontSize: 10, color: "#8a8a85" }}>
-              {additionalPendingCount > 0
-                ? `${additionalPendingCount} filtro${additionalPendingCount > 1 ? "s" : ""} adicional${additionalPendingCount > 1 ? "is" : ""} ativo${additionalPendingCount > 1 ? "s" : ""}`
-                : "nenhum filtro adicional ativo"}
-            </span>
-            <button
-              type="button"
-              onClick={clearAdditional}
+          {additionalPendingCount > 0 ? (
+            <div
               style={{
-                background: "transparent",
-                border: "none",
-                fontFamily: GEIST,
-                fontSize: 12.5,
-                color: "#6a6560",
-                cursor: "pointer",
-                textDecoration: "underline",
-                textUnderlineOffset: 3,
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                marginTop: 14,
+                paddingTop: 13,
+                borderTop: "1px solid rgba(10,10,10,0.08)",
+                flexWrap: "wrap",
               }}
             >
-              limpar adicionais
-            </button>
-            <button
-              type="submit"
-              style={{
-                marginLeft: "auto",
-                background: "#0a0a0a",
-                color: "#fafaf6",
-                border: "none",
-                borderRadius: 9,
-                padding: "9px 18px",
-                fontFamily: GEIST,
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: "pointer",
-              }}
-            >
-              aplicar filtros
-            </button>
+              <span style={{ fontFamily: MONO, fontSize: 10, color: "#8a8a85" }}>
+                {`${additionalPendingCount} filtro${additionalPendingCount > 1 ? "s" : ""} adicional${additionalPendingCount > 1 ? "is" : ""} ativo${additionalPendingCount > 1 ? "s" : ""}`}
+              </span>
+              <button
+                type="button"
+                onClick={clearAdditional}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  fontFamily: GEIST,
+                  fontSize: 12.5,
+                  color: "#6a6560",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                  textUnderlineOffset: 3,
+                }}
+              >
+                limpar adicionais
+              </button>
+            </div>
+          ) : null}
+          </div>
           </div>
         </div>
       </div>
