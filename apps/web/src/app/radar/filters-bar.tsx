@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import type { PublicJobFacets } from "@/lib/public-jobs-api";
+import type { FacetItem, PublicJobFacets } from "@/lib/public-jobs-api";
 import { RADAR_AREA_LABELS, RADAR_SENIORITY_LABELS } from "./radar-ui";
 
 const MONO = "var(--font-geist-mono), monospace";
@@ -488,6 +488,14 @@ export function FiltersBar({
   const [empresa, setEmpresa] = useState<string[]>(csv(activeFilters.empresa));
   const [estado, setEstado] = useState<string[]>(csv(activeFilters.estado));
   const [cidade, setCidade] = useState<string[]>(csv(activeFilters.cidade));
+  // Cidade é escopada pro estado no backend (ver comentário em toggleEstado)
+  // — os facets vindos do server só refletem o estado já aplicado na URL,
+  // então qualquer seleção de estado ainda pendente teria cidades erradas
+  // (ou nenhum escopo) até confirmar. Busca as cidades certas assim que o
+  // estado pendente muda, sem esperar a navegação de "aplicar".
+  const [pendingCityFacets, setPendingCityFacets] = useState<
+    FacetItem[] | null
+  >(null);
   const [publicada, setPublicada] = useState(activeFilters.publicada ?? "");
   const [panelOpen, setPanelOpen] = useState(false);
   // Overflow do painel só fica "visible" depois que a animação de abertura
@@ -497,6 +505,28 @@ export function FiltersBar({
   // não cortar os dropdowns de estado/cidade/empresa/publicado há, que são
   // absolutamente posicionados dentro dele.
   const [panelSettled, setPanelSettled] = useState(false);
+
+  const cityFacetsRequestId = useRef(0);
+  useEffect(() => {
+    if (sameSet(estado, csv(activeFilters.estado))) {
+      // Estado pendente == estado já aplicado: os facets do server (via
+      // prop) já vêm escopados certos, não precisa buscar de novo.
+      setPendingCityFacets(null);
+      return;
+    }
+    const requestId = ++cityFacetsRequestId.current;
+    const qs =
+      estado.length > 0 ? `?state=${encodeURIComponent(estado.join(","))}` : "";
+    fetch(`/api/public/jobs/facets${qs}`)
+      .then((r) => (r.ok ? (r.json() as Promise<PublicJobFacets>) : null))
+      .then((data) => {
+        if (requestId !== cityFacetsRequestId.current) return;
+        setPendingCityFacets(data?.cities ?? []);
+      })
+      .catch(() => {
+        if (requestId === cityFacetsRequestId.current) setPendingCityFacets([]);
+      });
+  }, [estado, activeFilters.estado]);
 
   const workModelItems = facets
     ? facets.workModels.map((f) => ({
@@ -541,8 +571,9 @@ export function FiltersBar({
       }))
     : [];
 
-  const cityItems = facets
-    ? facets.cities.map((f) => ({
+  const cityFacetsSource = pendingCityFacets ?? facets?.cities ?? null;
+  const cityItems = cityFacetsSource
+    ? cityFacetsSource.map((f) => ({
         value: f.value,
         label: f.value,
         count: f.count,
