@@ -42,6 +42,7 @@
     "cron-parser": "^5.6.2",
     "docx": "^9.6.1",
     "docxtemplater": "^3.68.3",
+    "google-auth-library": "^11.0.1",
     "helmet": "^8.1.0",
     "mammoth": "^1.12.0",
     "mercadopago": "^2.12.0",

@@ -5,7 +5,8 @@ type PublicJobInput = {
   country: string | null;
   descriptionClean: string;
   employmentType: string | null;
-  enrichment: { technologies: string[] } | null;
+  enrichment: { technologies: string[]; dominantArea: string | null } | null;
+  externalJobId: string | null;
   firstSeenAt: Date;
   id: string;
   lastSeenAt: Date;
@@ -28,7 +29,9 @@ export type PublicJobView = {
   companyWebsiteUrl: string | null;
   country: string | null;
   description: string;
+  dominantArea: string | null;
   employmentType: string | null;
+  externalJobId: string | null;
   firstSeenAt: string;
   id: string;
   lastSeenAt: string;
@@ -56,6 +59,15 @@ function slugify(value: string) {
     .replace(/^-|-$/g, "");
 }
 
+// Usado por /internal/jobs/by-company/:companySlug (JobsService) pra casar
+// o slug da URL com Company.name — não existe campo de slug persistido em
+// Company, então o casamento é feito computando o slug de cada nome
+// candidato e comparando. Mesma função de slugify que já gera o slug de
+// vaga, só exposta com outro nome pra deixar claro o uso em company.
+export function toCompanySlug(name: string): string {
+  return slugify(name);
+}
+
 export function buildPublicJobSlug(id: string, title: string, company: string) {
   const safeId = id.replace(/[^a-zA-Z0-9-]/g, "-");
   return `${slugify(title)}-${slugify(company)}-${safeId}`;
@@ -70,7 +82,9 @@ export function toPublicJobView(job: PublicJobInput): PublicJobView {
     country: job.country,
     description: job.descriptionClean,
     descriptionHtml: job.descriptionRaw,
+    dominantArea: job.enrichment?.dominantArea ?? null,
     employmentType: job.employmentType,
+    externalJobId: job.externalJobId,
     firstSeenAt: job.firstSeenAt.toISOString(),
     id: job.id,
     lastSeenAt: job.lastSeenAt.toISOString(),

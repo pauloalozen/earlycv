@@ -13,6 +13,7 @@ import { JobSourcesService } from "../job-sources/job-sources.service";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
 import { normalizeState } from "./geo-normalizer";
+import { toCompanySlug } from "./public-job-view";
 
 const PUBLIC_JOB_SELECT = {
   canonicalKey: true,
@@ -27,7 +28,8 @@ const PUBLIC_JOB_SELECT = {
   descriptionClean: true,
   descriptionRaw: true,
   employmentType: true,
-  enrichment: { select: { technologies: true } },
+  enrichment: { select: { technologies: true, dominantArea: true } },
+  externalJobId: true,
   firstSeenAt: true,
   id: true,
   lastSeenAt: true,
@@ -106,10 +108,9 @@ function groupLocationValues(
 
   return [...groups.values()]
     .map((originals) => {
-      const [display] = [...originals.entries()].sort((a, b) => b[1] - a[1])[0] as [
-        string,
-        number,
-      ];
+      const [display] = [...originals.entries()].sort(
+        (a, b) => b[1] - a[1],
+      )[0] as [string, number];
       const total = [...originals.values()].reduce((a, b) => a + b, 0);
       return { value: display, count: total };
     })
@@ -267,12 +268,18 @@ export class JobsService {
   async listSitemapData() {
     const jobs = await this.database.job.findMany({
       where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
-      select: { slug: true, lastSeenAt: true },
+      select: { slug: true, lastSeenAt: true, contentUpdatedAt: true },
       orderBy: { lastSeenAt: "desc" },
     });
 
     return jobs.filter(
-      (job): job is { slug: string; lastSeenAt: Date } => job.slug !== null,
+      (
+        job,
+      ): job is {
+        slug: string;
+        lastSeenAt: Date;
+        contentUpdatedAt: Date | null;
+      } => job.slug !== null,
     );
   }
 
@@ -285,7 +292,7 @@ export class JobsService {
     });
   }
 
-  // Usado por /vagas/[slug] e /vagas/[slug]/score — query direta pelo campo
+  // Usado por /radar/[slug] e /radar/[slug]/score — query direta pelo campo
   // slug (indexado e único), no lugar de carregar listPublic() inteiro e
   // fazer Array.find recalculando o slug de cada vaga.
   async getPublicBySlug(slug: string) {
@@ -293,6 +300,74 @@ export class JobsService {
       where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE, slug },
       select: PUBLIC_JOB_SELECT,
     });
+  }
+
+  // Usado por /radar/empresa/[empresa]. Company não tem campo de slug
+  // persistido, então o casamento é feito em memória: pega o nome de cada
+  // empresa com pelo menos 1 vaga pública, computa o slug (toCompanySlug,
+  // mesma função usada pelo slug de vaga) e compara com o da URL. Só depois
+  // de achar a empresa é que a segunda query busca as vagas de verdade —
+  // evita escanear a tabela Company inteira (só quem tem vaga pública entra
+  // na primeira query).
+  async getPublicByCompanySlug(companySlug: string) {
+    const activeJobCompanies = await this.database.job.findMany({
+      where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
+      select: { companyId: true, company: { select: { name: true } } },
+      distinct: ["companyId"],
+    });
+
+    const match = activeJobCompanies.find(
+      (job) => toCompanySlug(job.company.name) === companySlug,
+    );
+
+    if (!match) {
+      return null;
+    }
+
+    const jobs = await this.database.job.findMany({
+      where: {
+        status: "active",
+        ...PUBLIC_JOB_INTEGRITY_WHERE,
+        companyId: match.companyId,
+      },
+      select: PUBLIC_JOB_SELECT,
+      orderBy: [{ lastSeenAt: "desc" }],
+    });
+
+    return { companyName: match.company.name, jobs };
+  }
+
+  // Usado por /radar/tecnologia/[tech]. Threshold de volume: só existe
+  // conteúdo publicável na landing page se houver pelo menos `minCount`
+  // vagas ativas com essa tecnologia — abaixo disso o chamador (route)
+  // decide fazer notFound(). requiredSkills/technologies do enrichment já
+  // chegam normalizados em lowercase (ver job-enrichment.worker.ts), e o
+  // controller já lowercasa o param da URL antes de chamar — `has` do
+  // Prisma em array Postgres é comparação exata, então sem isso o match
+  // seria case-sensitive.
+  async listPublicJobsByTech(tech: string, minCount: number) {
+    const enrichmentWhere: Prisma.JobEnrichmentWhereInput = {
+      ...PUBLIC_JOB_INTEGRITY_WHERE.enrichment,
+      OR: [{ requiredSkills: { has: tech } }, { technologies: { has: tech } }],
+    };
+    const where: Prisma.JobWhereInput = {
+      status: "active",
+      ...PUBLIC_JOB_INTEGRITY_WHERE,
+      enrichment: enrichmentWhere,
+    };
+
+    const total = await this.database.job.count({ where });
+    if (total < minCount) {
+      return { total, jobs: [] };
+    }
+
+    const jobs = await this.database.job.findMany({
+      where,
+      select: PUBLIC_JOB_SELECT,
+      orderBy: [{ lastSeenAt: "desc" }],
+    });
+
+    return { total, jobs };
   }
 
   private buildPublicJobsWhere(filters: {
@@ -305,6 +380,7 @@ export class JobsService {
     seniority?: string;
     state?: string;
     city?: string;
+    technology?: string;
   }): Prisma.JobWhereInput {
     const {
       q,
@@ -316,6 +392,7 @@ export class JobsService {
       seniority,
       state,
       city,
+      technology,
     } = filters;
     // Construído à parte (em vez de remendar where.enrichment em cada if)
     // porque o tipo gerado pelo Prisma pra relação 1:1 opcional (XOR entre
@@ -386,6 +463,19 @@ export class JobsService {
       where.city = { in: splitCsv(city), mode: "insensitive" };
     }
 
+    // Usado por /radar/tecnologia/[tech] (fixedFilters.technology, ver
+    // jobs-listing.tsx no web) — requiredSkills/technologies do enrichment
+    // já chegam normalizados em lowercase (job-enrichment.worker.ts), e o
+    // controller já lowercasa `technology` antes de chegar aqui, então o
+    // `has` do Prisma (comparação exata em array Postgres) funciona sem
+    // gambiarra de case-insensitivity.
+    if (technology) {
+      enrichmentWhere.OR = [
+        { requiredSkills: { has: technology } },
+        { technologies: { has: technology } },
+      ];
+    }
+
     return where;
   }
 
@@ -399,6 +489,7 @@ export class JobsService {
     seniority?: string;
     state?: string;
     city?: string;
+    technology?: string;
     page: number;
     limit: number;
   }) {
@@ -414,7 +505,8 @@ export class JobsService {
       descriptionClean: true,
       descriptionRaw: true,
       employmentType: true,
-      enrichment: { select: { technologies: true } },
+      enrichment: { select: { technologies: true, dominantArea: true } },
+      externalJobId: true,
       firstSeenAt: true,
       id: true,
       lastSeenAt: true,
@@ -463,6 +555,7 @@ export class JobsService {
       seniority?: string;
       state?: string;
       city?: string;
+      technology?: string;
     },
   ) {
     if (jobIds && jobIds.length === 0) {

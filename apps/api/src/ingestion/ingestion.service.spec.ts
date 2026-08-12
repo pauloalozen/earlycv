@@ -115,6 +115,12 @@ function createIngestionServiceFixture(options?: {
             canonicalKey: "job-a",
             firstSeenAt: new Date("2026-05-01T10:00:00.000Z"),
             lastSeenAt: new Date("2026-05-20T10:00:00.000Z"),
+            // Casa com o título default (item.title ?? item.canonicalKey =
+            // "job-a") e a descriptionClean fixa do adapter mockado abaixo
+            // ("desc") — permite testar contentChanged nos dois sentidos
+            // sem precisar de outro fixture.
+            title: "job-a",
+            descriptionClean: "desc",
           };
         }
 
@@ -149,6 +155,16 @@ function createIngestionServiceFixture(options?: {
         });
         return { id: where.id };
       },
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        const status = where.status;
+        const lastSeenAt = where.lastSeenAt as { lt?: Date } | undefined;
+        if (status === "active" && lastSeenAt?.lt) {
+          return Array.from({ length: staleUpdateManyCount }, (_, i) => ({
+            slug: `stale-job-${i}`,
+          }));
+        }
+        return [];
+      },
       updateMany: async ({ where }: { where: Record<string, unknown> }) => {
         const status = where.status;
         const lastSeenAt = where.lastSeenAt as { lt?: Date } | undefined;
@@ -157,6 +173,17 @@ function createIngestionServiceFixture(options?: {
         }
         return { count: 0 };
       },
+    },
+  };
+
+  const indexingCalls: Array<{ slug: string; type: "indexing" | "removal" }> =
+    [];
+  const googleIndexingService = {
+    notifyIndexing: async (slug: string) => {
+      indexingCalls.push({ slug, type: "indexing" });
+    },
+    notifyRemoval: async (slug: string) => {
+      indexingCalls.push({ slug, type: "removal" });
     },
   };
 
@@ -197,11 +224,13 @@ function createIngestionServiceFixture(options?: {
     { sourceType: "teamtailor", collect: async () => [] } as never,
     { sourceType: "talentbrew", collect: async () => [] } as never,
     { sourceType: "workday", collect: async () => [] } as never,
+    googleIndexingService as never,
   );
 
   return {
     collectContext: () => collectContext,
     createdJobs,
+    indexingCalls,
     rawJobUpdates,
     service,
     setStaleCount(count: number) {
@@ -464,6 +493,24 @@ test("IngestionService marks stale jobs inactive after fully successful run", as
   assert.equal(result.staleMarkedCount, 2);
 });
 
+test("IngestionService notifies Google Indexing API removal for each job marked stale", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a" }],
+  });
+  fixture.setStaleCount(2);
+
+  await fixture.service.runJobSource("source-1");
+
+  const removals = fixture.indexingCalls.filter(
+    (call) => call.type === "removal",
+  );
+  assert.equal(removals.length, 2);
+  assert.deepEqual(removals.map((call) => call.slug).sort(), [
+    "stale-job-0",
+    "stale-job-1",
+  ]);
+});
+
 test("IngestionService does not mark stale jobs on global run failure", async () => {
   const fixture = createIngestionServiceFixture({
     collectError: new Error("adapter failure"),
@@ -516,6 +563,41 @@ test("IngestionService never touches slug when updating an existing job, even if
     Object.hasOwn(jobAUpdate.data, "slug"),
     false,
     "slug must never be part of the update payload for an existing job",
+  );
+});
+
+test("IngestionService omits contentUpdatedAt from the update payload when title/descriptionClean did not change", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a" }],
+  });
+
+  await fixture.service.runJobSource("source-1");
+
+  const jobAUpdate = fixture.rawJobUpdates.find(
+    (call) => call.where.id === "job-a-id",
+  );
+  assert.ok(jobAUpdate, "expected an update call for the existing job");
+  assert.equal(
+    jobAUpdate.data.contentUpdatedAt,
+    undefined,
+    "contentUpdatedAt must stay untouched when the observation matches the persisted title/description",
+  );
+});
+
+test("IngestionService sets contentUpdatedAt on the update payload when title changed at the source", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a", title: "Titulo Novo Da Fonte" }],
+  });
+
+  await fixture.service.runJobSource("source-1");
+
+  const jobAUpdate = fixture.rawJobUpdates.find(
+    (call) => call.where.id === "job-a-id",
+  );
+  assert.ok(jobAUpdate, "expected an update call for the existing job");
+  assert.ok(
+    jobAUpdate.data.contentUpdatedAt instanceof Date,
+    "contentUpdatedAt must be set when title diverges from what's persisted",
   );
 });
 

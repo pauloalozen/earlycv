@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Res, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject, Query, Res, UseGuards } from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
 import type { Response } from "express";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
@@ -32,5 +32,18 @@ export class DashboardAdminController {
   async getAlerts(@Res({ passthrough: true }) response: Response) {
     response.setHeader("Cache-Control", "no-store");
     return this.dashboardAdminService.getAlerts();
+  }
+
+  @Get("indexing-log")
+  async getIndexingLog(
+    @Res({ passthrough: true }) response: Response,
+    @Query("limit") limitRaw?: string,
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+    const limit = Math.min(
+      200,
+      Math.max(1, Number.parseInt(limitRaw ?? "50", 10) || 50),
+    );
+    return this.dashboardAdminService.getIndexingLog(limit);
   }
 }

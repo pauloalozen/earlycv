@@ -34,7 +34,9 @@ export type PublicJob = {
   country: string | null;
   description: string;
   descriptionHtml: string;
+  dominantArea: string | null;
   employmentType: string | null;
+  externalJobId: string | null;
   firstSeenAt: string;
   id: string;
   lastSeenAt: string;
@@ -81,6 +83,7 @@ export type PublicJobsFilters = {
   seniority?: string;
   state?: string;
   city?: string;
+  technology?: string;
 };
 
 export type FacetItem = { value: string; count: number };
@@ -132,6 +135,7 @@ export async function listPublicJobs(
   if (filters?.seniority) params.set("seniority", filters.seniority);
   if (filters?.state) params.set("state", filters.state);
   if (filters?.city) params.set("city", filters.city);
+  if (filters?.technology) params.set("technology", filters.technology);
 
   const qs = params.toString();
   return requestPublicJobs<PublicJobsPage>(`/public/jobs${qs ? `?${qs}` : ""}`);

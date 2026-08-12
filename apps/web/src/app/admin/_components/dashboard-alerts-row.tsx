@@ -9,6 +9,7 @@ type Alerts = {
   sourcesWith403: number;
   driftSources: number;
   failedJobsToday: number;
+  indexingRemovalsLast24h: number;
 };
 
 type AlertCardConfig = {
@@ -64,67 +65,79 @@ export function DashboardAlertsRow() {
   }, [fetchAlerts]);
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr)",
-        gap: 10,
-        marginBottom: 20,
-      }}
-    >
-      {CARDS.map((card) => {
-        const value = data?.[card.key] ?? null;
-        const alert = value !== null && value > 0;
-        return (
-          <Link
-            key={card.key}
-            href={card.href}
-            style={{
-              display: "block",
-              background: alert ? AT.dangerBg : AT.card,
-              border: `1px solid ${alert ? "rgba(155,44,44,0.20)" : AT.border}`,
-              borderRadius: 10,
-              padding: "16px 18px",
-              textDecoration: "none",
-            }}
-          >
-            <div
+    <div style={{ marginBottom: 20 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 10,
+          marginBottom: 8,
+        }}
+      >
+        {CARDS.map((card) => {
+          const value = data?.[card.key] ?? null;
+          const alert = value !== null && value > 0;
+          return (
+            <Link
+              key={card.key}
+              href={card.href}
               style={{
-                fontFamily: '"Geist Mono", monospace',
-                fontSize: 10,
-                letterSpacing: 1.1,
-                color: AT.muted2,
-                fontWeight: 500,
-                textTransform: "uppercase",
+                display: "block",
+                background: alert ? AT.dangerBg : AT.card,
+                border: `1px solid ${alert ? "rgba(155,44,44,0.20)" : AT.border}`,
+                borderRadius: 10,
+                padding: "16px 18px",
+                textDecoration: "none",
               }}
             >
-              {card.label}
-            </div>
-            <div
-              style={{
-                fontSize: 30,
-                fontWeight: 500,
-                letterSpacing: -1.2,
-                color: alert ? AT.danger : AT.ink2,
-                lineHeight: 1,
-                marginTop: 8,
-              }}
-            >
-              {value === null ? "—" : value}
-            </div>
-            <div
-              style={{
-                fontSize: 11.5,
-                color: alert ? AT.danger : AT.muted,
-                marginTop: 6,
-                fontWeight: 500,
-              }}
-            >
-              {card.cta}
-            </div>
-          </Link>
-        );
-      })}
+              <div
+                style={{
+                  fontFamily: '"Geist Mono", monospace',
+                  fontSize: 10,
+                  letterSpacing: 1.1,
+                  color: AT.muted2,
+                  fontWeight: 500,
+                  textTransform: "uppercase",
+                }}
+              >
+                {card.label}
+              </div>
+              <div
+                style={{
+                  fontSize: 30,
+                  fontWeight: 500,
+                  letterSpacing: -1.2,
+                  color: alert ? AT.danger : AT.ink2,
+                  lineHeight: 1,
+                  marginTop: 8,
+                }}
+              >
+                {value === null ? "—" : value}
+              </div>
+              <div
+                style={{
+                  fontSize: 11.5,
+                  color: alert ? AT.danger : AT.muted,
+                  marginTop: 6,
+                  fontWeight: 500,
+                }}
+              >
+                {card.cta}
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+      <div
+        style={{
+          fontSize: 11.5,
+          color: AT.muted,
+          fontFamily: '"Geist Mono", monospace',
+        }}
+      >
+        {data?.indexingRemovalsLast24h ?? "—"} notificações de remoção
+        enviadas ao Google Indexing API (últimas 24h)
+      </div>
     </div>
   );
 }

@@ -197,6 +197,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.savedJob;
   }
 
+  get googleIndexingLog() {
+    return this.prisma.googleIndexingLog;
+  }
+
   get $transaction() {
     return this.prisma.$transaction.bind(this.prisma);
   }

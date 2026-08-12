@@ -203,13 +203,17 @@ function isElementLike(value: unknown): value is ElementLike {
 
 let scoreRingRef: unknown;
 
-function findScoreRingProps(
+// async porque RadarJobsListing (extraído de page.tsx pra ser reaproveitado
+// pelas landing pages do Radar) é um Server Component assíncrono — chamar
+// node.type(node.props) nesse caso devolve uma Promise, não a árvore de
+// elementos, então o walker precisa dar await antes de continuar descendo.
+async function findScoreRingProps(
   node: unknown,
   results: Record<string, unknown>[] = [],
-): Record<string, unknown>[] {
+): Promise<Record<string, unknown>[]> {
   if (!node || typeof node !== "object") return results;
   if (Array.isArray(node)) {
-    for (const item of node) findScoreRingProps(item, results);
+    for (const item of node) await findScoreRingProps(item, results);
     return results;
   }
   if (!isElementLike(node)) return results;
@@ -219,12 +223,14 @@ function findScoreRingProps(
       results.push(node.props ?? {});
       return results;
     }
-    const rendered = (node.type as (props: unknown) => unknown)(node.props);
-    findScoreRingProps(rendered, results);
+    const rendered = await (node.type as (props: unknown) => unknown)(
+      node.props,
+    );
+    await findScoreRingProps(rendered, results);
     return results;
   }
   if (node.props?.children) {
-    findScoreRingProps(node.props.children, results);
+    await findScoreRingProps(node.props.children, results);
   }
   return results;
 }
@@ -314,7 +320,7 @@ describe("/radar score badge (usuário logado com UserRadarProfile)", () => {
     });
 
     const result = await VagasPage({ searchParams: Promise.resolve({}) });
-    const rings = findScoreRingProps(result);
+    const rings = await findScoreRingProps(result);
     const cardRing = rings.find((props) => props.value === 87);
 
     expect(cardRing).toBeDefined();
@@ -330,7 +336,7 @@ describe("/radar score badge (usuário logado com UserRadarProfile)", () => {
     });
 
     const result = await VagasPage({ searchParams: Promise.resolve({}) });
-    const rings = findScoreRingProps(result);
+    const rings = await findScoreRingProps(result);
 
     // O único ScoreRing permitido pro anônimo é o decorativo e fixo (92%)
     // do card "É assim que fica" no hero de criar conta — não é o score de

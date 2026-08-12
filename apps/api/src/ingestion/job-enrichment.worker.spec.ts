@@ -24,6 +24,8 @@ type JobRecord = {
   descriptionClean: string;
   metadataJson: unknown;
   normalizedTitle: string;
+  slug: string | null;
+  status: string;
   title: string;
 };
 
@@ -168,11 +170,20 @@ function createFixture() {
   };
   let enrichCalls = 0;
 
+  const indexingCalls: string[] = [];
+  const googleIndexingService = {
+    notifyIndexing: async (slug: string) => {
+      indexingCalls.push(slug);
+    },
+    notifyRemoval: async () => {},
+  };
+
   const worker = new JobEnrichmentWorker(
     database as never,
     semanticFilterService as never,
     lockRepository as never,
     enrichmentConfigService as never,
+    googleIndexingService as never,
     undefined,
     {
       enrich: async (input) => {
@@ -204,6 +215,8 @@ function createFixture() {
       descriptionClean: "Descricao da vaga",
       metadataJson: { department: "Tecnologia" },
       normalizedTitle: "desenvolvedor backend",
+      slug: `${jobId}-slug`,
+      status: "active",
       title: "Desenvolvedor Backend",
     });
     return record;
@@ -213,6 +226,7 @@ function createFixture() {
     batchRuns,
     enrichments,
     getEnrichCalls: () => enrichCalls,
+    getIndexingCalls: () => indexingCalls,
     jobs,
     lockRepository,
     seedEnrichment,
@@ -277,6 +291,8 @@ test("JobEnrichmentWorker skips enrichment (and never calls the semantic filter 
     metadataJson: { department: "Tecnologia" },
     normalizedTitle: "desenvolvedor backend",
     title: "Desenvolvedor Backend",
+    slug: `${record.jobId}-slug`,
+    status: "active",
   });
   fixture.setEvaluate(async () => {
     throw new Error(
@@ -301,6 +317,8 @@ test("JobEnrichmentWorker skips enrichment when the job's title is empty — a f
     metadataJson: { department: "Tecnologia" },
     normalizedTitle: "",
     title: "",
+    slug: `${record.jobId}-slug`,
+    status: "active",
   });
   fixture.setEvaluate(async () => {
     throw new Error("semantic filter should not be called for empty title");
@@ -323,6 +341,8 @@ test("JobEnrichmentWorker skips enrichment even with force:true when the descrip
     metadataJson: { department: "Tecnologia" },
     normalizedTitle: "desenvolvedor backend",
     title: "Desenvolvedor Backend",
+    slug: `${record.jobId}-slug`,
+    status: "active",
   });
 
   await fixture.worker.processOne(record.id, { force: true });
@@ -348,6 +368,34 @@ test("JobEnrichmentWorker calls LLM and persists fields when semantic filter ret
   assert.ok(record.enrichedAt);
   assert.ok(record.enrichmentModel);
   assert.ok(record.enrichmentVersion);
+});
+
+test("JobEnrichmentWorker notifies Google Indexing API once enrichment completes for an active job", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  const record = fixture.seedEnrichment();
+
+  await fixture.worker.processPendingBatch();
+
+  assert.deepEqual(fixture.getIndexingCalls(), [`${record.jobId}-slug`]);
+});
+
+test("JobEnrichmentWorker does not notify Google Indexing API when the job was inactivated before enrichment finished", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  const record = fixture.seedEnrichment();
+  fixture.jobs.set(record.jobId, {
+    descriptionClean: "Descricao da vaga",
+    metadataJson: { department: "Tecnologia" },
+    normalizedTitle: "desenvolvedor backend",
+    title: "Desenvolvedor Backend",
+    slug: `${record.jobId}-slug`,
+    status: "inactive",
+  });
+
+  await fixture.worker.processPendingBatch();
+
+  assert.deepEqual(fixture.getIndexingCalls(), []);
 });
 
 test("JobEnrichmentWorker increments attempts on LLM failure and keeps PENDING below max attempts", async () => {

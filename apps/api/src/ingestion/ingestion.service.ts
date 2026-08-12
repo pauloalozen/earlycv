@@ -13,6 +13,7 @@ import type {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { GoogleIndexingService } from "../google-indexing/google-indexing.service";
 import { isForeignLocation } from "../jobs/geo-normalizer";
 import { buildPublicJobSlug } from "../jobs/public-job-view";
 import {
@@ -113,6 +114,8 @@ export class IngestionService {
     @Inject(TeamtailorAdapter) teamtailorAdapter: TeamtailorAdapter,
     @Inject(TalentbrewAdapter) talentbrewAdapter: TalentbrewAdapter,
     @Inject(WorkdayAdapter) workdayAdapter: WorkdayAdapter,
+    @Inject(GoogleIndexingService)
+    private readonly googleIndexingService: GoogleIndexingService,
   ) {
     this.adapters = new Map<JobSource["sourceType"], IngestionSourceAdapter>([
       [customHtmlAdapter.sourceType, customHtmlAdapter],
@@ -323,7 +326,9 @@ export class IngestionService {
     }
   }
 
-  private createCollectContext(ingestionRunId: string): IngestionCollectContext {
+  private createCollectContext(
+    ingestionRunId: string,
+  ): IngestionCollectContext {
     return {
       getExistingJobByCanonicalKey: async (canonicalKey: string) => {
         return this.database.job.findUnique({
@@ -718,6 +723,16 @@ export class IngestionService {
       existingJob?.firstSeenAt ?? new Date(observation.firstSeenAt);
     const nextLastSeenAt = new Date(observation.lastSeenAt);
 
+    // contentUpdatedAt só avança quando título/descrição mudam de verdade —
+    // diferente de lastSeenAt/updatedAt, que são bumped em toda observação
+    // do crawler mesmo sem mudança real de conteúdo (usado como
+    // lastModified do sitemap, ver jobs.service.ts#listSitemapData). Vaga
+    // nova conta como "conteúdo mudou" (primeira versão publicada).
+    const contentChanged =
+      !existingJob ||
+      existingJob.title !== observation.title ||
+      existingJob.descriptionClean !== observation.descriptionClean;
+
     if (existingJob && nextLastSeenAt < existingJob.lastSeenAt) {
       return {
         previewItem: {
@@ -736,6 +751,7 @@ export class IngestionService {
       // rodado (acima) — nesse ponto, um country vazio já foi confirmado
       // como "não é sinal de vaga estrangeira", então assumir Brasil aqui
       // é seguro.
+      contentUpdatedAt: contentChanged ? new Date() : undefined,
       country: observation.country ?? "Brasil",
       descriptionClean: observation.descriptionClean,
       descriptionRaw: observation.descriptionRaw,
@@ -825,16 +841,31 @@ export class IngestionService {
     now: Date,
   ) {
     const cutoff = getStaleCutoff(now);
+    const where = {
+      jobSourceId,
+      status: "active" as const,
+      lastSeenAt: { lt: cutoff },
+    };
+
+    // Busca os slugs antes do updateMany — updateMany não devolve as linhas
+    // afetadas, e o Google Indexing API precisa saber qual URL cada vaga
+    // inativada tinha pra pedir a deindexação (ver notifyRemoval abaixo).
+    const staleJobs = await this.database.job.findMany({
+      where,
+      select: { slug: true },
+    });
+
     const result = await this.database.job.updateMany({
-      where: {
-        jobSourceId,
-        status: "active",
-        lastSeenAt: { lt: cutoff },
-      },
+      where,
       data: {
         status: "inactive",
       },
     });
+
+    for (const job of staleJobs) {
+      if (!job.slug) continue;
+      await this.googleIndexingService.notifyRemoval(job.slug);
+    }
 
     return result.count;
   }

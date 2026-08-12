@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { toCompanySlug } from "@/lib/company-slug";
 import {
   canAccessJobsInGhostMode,
   isJobsGhostModeEnabled,
@@ -24,6 +25,7 @@ import {
   breakdownPct,
   type MatchBreakdown,
   type MatchData,
+  RADAR_AREA_LABELS,
   ScorePill,
   ScoreRing,
   SkillChip,
@@ -642,6 +644,23 @@ export default async function JobPage({ params }: JobPageProps) {
     new Date(job.lastSeenAt).getTime() + 30 * 86_400_000,
   ).toISOString();
 
+  const internalLinks: Array<{ href: string; label: string }> = [];
+  if (job.dominantArea) {
+    internalLinks.push({
+      href: `/radar/area/${job.dominantArea.toLowerCase()}`,
+      label: `← Todas as vagas de ${RADAR_AREA_LABELS[job.dominantArea] ?? job.dominantArea}`,
+    });
+  }
+  if (job.company) {
+    internalLinks.push({
+      href: `/radar/empresa/${toCompanySlug(job.company)}`,
+      label: `Vagas na ${job.company}`,
+    });
+  }
+  if (job.workModel === "remote") {
+    internalLinks.push({ href: "/radar/remotas", label: "Ver vagas remotas" });
+  }
+
   // job.city/job.state já vêm normalizados (geo-normalizer.ts, na
   // ingestão) — city em title case, state como sigla de UF. addressCountry
   // fixo "BR" porque hoje 100% das vagas publicáveis são do Brasil. Sem
@@ -684,6 +703,34 @@ export default async function JobPage({ params }: JobPageProps) {
     applicantLocationRequirements: { "@type": "Country", name: "Brasil" },
     directApply: true,
     url: getAbsoluteUrl(`/radar/${job.slug}`),
+    ...(job.externalJobId
+      ? {
+          identifier: {
+            "@type": "PropertyValue",
+            name: "EarlyCV",
+            value: job.externalJobId,
+          },
+        }
+      : {}),
+  };
+
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Vagas",
+        item: getAbsoluteUrl("/radar"),
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: job.title,
+        item: getAbsoluteUrl(`/radar/${job.slug}`),
+      },
+    ],
   };
 
   return (
@@ -698,6 +745,9 @@ export default async function JobPage({ params }: JobPageProps) {
       }}
     >
       <script type="application/ld+json">{JSON.stringify(jobJsonLd)}</script>
+      <script type="application/ld+json">
+        {JSON.stringify(breadcrumbJsonLd)}
+      </script>
 
       <div
         aria-hidden
@@ -747,6 +797,39 @@ export default async function JobPage({ params }: JobPageProps) {
           <span style={{ color: "#c8c6bf" }}>›</span>
           <span style={{ color: "#0a0a0a" }}>{job.title}</span>
         </nav>
+
+        {/* Internal linking — discreto, contextual às landing pages de SEO
+        (área/empresa/remotas). job.dominantArea vem do enrichment
+        (JobEnrichment), pode ser null pra vagas ainda sem enriquecimento
+        completo — nesse caso o link de área simplesmente não entra na
+        lista. job.company é sempre preenchido, então o link de empresa
+        aparece pra toda vaga. */}
+        {internalLinks.length > 0 ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+              fontFamily: MONO,
+              fontSize: 11,
+              marginBottom: 20,
+              marginTop: -8,
+            }}
+          >
+            {internalLinks.map((link, index) => (
+              <Fragment key={link.href}>
+                {index > 0 ? <span style={{ color: "#c8c6bf" }}>|</span> : null}
+                <Link
+                  href={link.href}
+                  style={{ color: "#6a6560", textDecoration: "none" }}
+                >
+                  {link.label}
+                </Link>
+              </Fragment>
+            ))}
+          </div>
+        ) : null}
 
         {/* Job header */}
         <header style={{ marginBottom: 32 }}>

@@ -40,7 +40,8 @@ type AdapterRow = {
 export class DashboardAdminService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(IngestionService) private readonly ingestionService: IngestionService,
+    @Inject(IngestionService)
+    private readonly ingestionService: IngestionService,
   ) {}
 
   async getIngestionByAdapter(): Promise<{ adapters: AdapterRow[] }> {
@@ -78,9 +79,7 @@ export class DashboardAdminService {
         }),
       ]);
 
-    const sourceIdToType = new Map(
-      allSources.map((s) => [s.id, s.sourceType]),
-    );
+    const sourceIdToType = new Map(allSources.map((s) => [s.id, s.sourceType]));
 
     const byAdapter = new Map<string, AdapterRow>();
     const bucket = (adapterType: string) => {
@@ -168,7 +167,10 @@ export class DashboardAdminService {
       pendingEnrichment,
     ] = await Promise.all([
       this.database.jobEnrichment.count({
-        where: { enrichmentStatus: "COMPLETED", enrichedAt: { gte: cutoff24h } },
+        where: {
+          enrichmentStatus: "COMPLETED",
+          enrichedAt: { gte: cutoff24h },
+        },
       }),
       // SKIPPED e FAILED nao preenchem enrichedAt (worker so seta esse campo
       // em COMPLETED) — usamos updatedAt como proxy da janela de 24h.
@@ -185,7 +187,10 @@ export class DashboardAdminService {
       }),
       this.database.jobEnrichment.groupBy({
         by: ["dominantArea"],
-        where: { enrichmentStatus: "COMPLETED", enrichedAt: { gte: cutoff24h } },
+        where: {
+          enrichmentStatus: "COMPLETED",
+          enrichedAt: { gte: cutoff24h },
+        },
         _count: { _all: true },
       }),
       this.database.crawlerDiscardedTitle.count({
@@ -263,26 +268,43 @@ export class DashboardAdminService {
     const todayStart = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
     );
+    const cutoff24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const [pausedSources, sourcesWith403, dashboard, failedJobsToday] =
-      await Promise.all([
-        this.database.jobSource.count({
-          where: { pausedUntil: { gt: now } },
-        }),
-        this.database.jobSource.count({
-          where: { consecutive403Count: { gt: 0 }, pausedUntil: null },
-        }),
-        this.ingestionService.getDashboard(),
-        this.database.ingestionJobRun.count({
-          where: { status: "FAILED", createdAt: { gte: todayStart } },
-        }),
-      ]);
+    const [
+      pausedSources,
+      sourcesWith403,
+      dashboard,
+      failedJobsToday,
+      indexingRemovalsLast24h,
+    ] = await Promise.all([
+      this.database.jobSource.count({
+        where: { pausedUntil: { gt: now } },
+      }),
+      this.database.jobSource.count({
+        where: { consecutive403Count: { gt: 0 }, pausedUntil: null },
+      }),
+      this.ingestionService.getDashboard(),
+      this.database.ingestionJobRun.count({
+        where: { status: "FAILED", createdAt: { gte: todayStart } },
+      }),
+      this.database.googleIndexingLog.count({
+        where: { type: "URL_DELETED", createdAt: { gte: cutoff24h } },
+      }),
+    ]);
 
     return {
       pausedSources,
       sourcesWith403,
       driftSources: dashboard.driftSources.length,
       failedJobsToday,
+      indexingRemovalsLast24h,
     };
+  }
+
+  async getIndexingLog(limit: number) {
+    return this.database.googleIndexingLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
   }
 }

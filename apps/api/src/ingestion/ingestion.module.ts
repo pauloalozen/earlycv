@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { createAiClientFromEnv } from "../common/ai-client-factory";
 import { DatabaseModule } from "../database/database.module";
+import { GoogleIndexingModule } from "../google-indexing/google-indexing.module";
 import {
   AshbyAdapter,
   CustomApiAdapter,
@@ -44,7 +45,7 @@ import { SemanticFilterService } from "./semantic-filter.service";
 import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, GoogleIndexingModule],
   controllers: [
     IngestionController,
     IngestionJobController,

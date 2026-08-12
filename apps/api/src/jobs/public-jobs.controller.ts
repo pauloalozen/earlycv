@@ -65,6 +65,7 @@ export class PublicJobsController {
     @Query("seniority") seniority?: string,
     @Query("state") state?: string,
     @Query("city") city?: string,
+    @Query("technology") technology?: string,
   ) {
     const validPublishedWithin = ["24h", "3d", "7d"].includes(
       publishedWithin ?? "",
@@ -92,6 +93,7 @@ export class PublicJobsController {
       seniority,
       state,
       city,
+      technology,
     };
 
     const radarProfile = user

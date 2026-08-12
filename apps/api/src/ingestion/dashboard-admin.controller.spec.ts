@@ -81,13 +81,14 @@ test("GET enrichment-summary returns last24h and byArea", async () => {
   assert.equal(response.headers["Cache-Control"], "no-store");
 });
 
-test("GET alerts returns the 4 counters", async () => {
+test("GET alerts returns the 5 counters", async () => {
   const controller = new DashboardAdminController({
     getAlerts: async () => ({
       pausedSources: 2,
       sourcesWith403: 1,
       driftSources: 0,
       failedJobsToday: 3,
+      indexingRemovalsLast24h: 5,
     }),
   } as never);
 
@@ -98,5 +99,56 @@ test("GET alerts returns the 4 counters", async () => {
   assert.equal(result.sourcesWith403, 1);
   assert.equal(result.driftSources, 0);
   assert.equal(result.failedJobsToday, 3);
+  assert.equal(result.indexingRemovalsLast24h, 5);
   assert.equal(response.headers["Cache-Control"], "no-store");
+});
+
+test("GET indexing-log returns the log rows from the service, defaulting limit to 50", async () => {
+  let receivedLimit: number | undefined;
+  const controller = new DashboardAdminController({
+    getIndexingLog: async (limit: number) => {
+      receivedLimit = limit;
+      return [
+        {
+          id: "log-1",
+          slug: "vaga-a",
+          type: "URL_UPDATED",
+          status: "SUCCESS",
+          errorMsg: null,
+          createdAt: "2026-08-12T10:00:00.000Z",
+        },
+      ];
+    },
+  } as never);
+
+  const response = fakeResponse();
+  const result = await controller.getIndexingLog(response as never);
+
+  assert.equal(receivedLimit, 50);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.slug, "vaga-a");
+  assert.equal(response.headers["Cache-Control"], "no-store");
+});
+
+test("GET indexing-log clamps limit to [1, 200] and passes through valid values", async () => {
+  let receivedLimit: number | undefined;
+  const controller = new DashboardAdminController({
+    getIndexingLog: async (limit: number) => {
+      receivedLimit = limit;
+      return [];
+    },
+  } as never);
+
+  await controller.getIndexingLog(fakeResponse() as never, "999");
+  assert.equal(receivedLimit, 200);
+
+  // "0" é falsy em JS — `Number.parseInt("0", 10) || 50` cai no default 50,
+  // mesmo padrão já usado em outros controllers paginados do projeto (ex.:
+  // page em public-jobs.controller.ts). Não é clamp pro piso 1, é "input
+  // inválido vira default".
+  await controller.getIndexingLog(fakeResponse() as never, "0");
+  assert.equal(receivedLimit, 50);
+
+  await controller.getIndexingLog(fakeResponse() as never, "10");
+  assert.equal(receivedLimit, 10);
 });

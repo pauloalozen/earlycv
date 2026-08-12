@@ -1490,6 +1490,11 @@ model Job {
   publishedAtSource DateTime?
   firstSeenAt       DateTime
   lastSeenAt        DateTime
+  // Só é atualizado quando title/descriptionClean mudam de verdade entre uma
+  // observação de crawler e outra — diferente de lastSeenAt/updatedAt, que
+  // são bumped em toda visita do crawler mesmo sem mudança real de
+  // conteúdo. Usado como lastModified do sitemap (ver ingestion.service.ts).
+  contentUpdatedAt DateTime?
   status            JobStatus        @default(active)
   metadataJson      Json?
   createdAt         DateTime         @default(now())
@@ -1505,6 +1510,21 @@ model Job {
   @@index([jobSourceId])
   @@index([firstSeenAt])
   @@index([slug])
+}
+
+// Auditoria de chamadas à Google Indexing API (GoogleIndexingService) — uma
+// linha por notificação enviada (ou tentada), sucesso ou erro. Sem relação
+// com Job de propósito: o registro precisa sobreviver mesmo se a vaga for
+// deletada depois, e slug já é o identificador estável da URL notificada.
+model GoogleIndexingLog {
+  id        String   @id @default(cuid())
+  slug      String
+  type      String
+  status    String
+  errorMsg  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 // Vaga salva/favoritada pelo usuário no Radar de Oportunidades — bookmark

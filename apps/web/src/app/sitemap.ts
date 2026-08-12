@@ -47,7 +47,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         ]),
     ...jobs.map((job) => ({
       url: getAbsoluteUrl(`/radar/${job.slug}`),
-      lastModified: new Date(job.lastSeenAt),
+      lastModified: new Date(job.contentUpdatedAt ?? job.lastSeenAt),
       changeFrequency: "daily" as const,
       priority: 0.6,
     })),

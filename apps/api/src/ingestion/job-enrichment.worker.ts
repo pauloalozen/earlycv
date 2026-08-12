@@ -13,6 +13,7 @@ import type OpenAI from "openai";
 
 import { getAiModel } from "../common/ai-client-factory";
 import { DatabaseService } from "../database/database.service";
+import { GoogleIndexingService } from "../google-indexing/google-indexing.service";
 import { doesSecondsCronMatchDate } from "./cron-utils";
 import { EnrichmentConfigService } from "./enrichment-config.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
@@ -78,6 +79,8 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     private readonly lockRepository: IngestionLockRepository,
     @Inject(EnrichmentConfigService)
     private readonly enrichmentConfigService: EnrichmentConfigService,
+    @Inject(GoogleIndexingService)
+    private readonly googleIndexingService: GoogleIndexingService,
     @Optional()
     @Inject(JOB_ENRICHMENT_AI_CLIENT)
     aiClient?: OpenAI,
@@ -217,6 +220,8 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
               descriptionClean: true,
               metadataJson: true,
               normalizedTitle: true,
+              slug: true,
+              status: true,
               title: true,
             },
           },
@@ -311,6 +316,8 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
             descriptionClean: true,
             metadataJson: true,
             normalizedTitle: true,
+            slug: true,
+            status: true,
             title: true,
           },
         },
@@ -433,6 +440,8 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
         descriptionClean: string;
         metadataJson: unknown;
         normalizedTitle: string;
+        slug: string | null;
+        status: string;
         title: string;
       };
     },
@@ -528,6 +537,16 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
           enrichmentVersion: JOB_ENRICHMENT_PROMPT_VERSION,
         },
       });
+
+      // Só agora a vaga passa a satisfazer PUBLIC_JOB_INTEGRITY_WHERE (exige
+      // enrichment.enrichmentStatus === COMPLETED) e fica de fato visível em
+      // /radar/[slug] — notificar o Google antes disso (ex.: logo após
+      // Job.create, como fazia antes) arriscava mandar uma URL que ainda
+      // 404ava. status !== "active" cobre o caso de "Forçar LLM" reprocessar
+      // manualmente uma vaga já inativada.
+      if (enrichment.job.slug && enrichment.job.status === "active") {
+        await this.googleIndexingService.notifyIndexing(enrichment.job.slug);
+      }
     } catch (error) {
       const attempts = enrichment.attempts + 1;
       const failed = attempts >= this.maxAttempts;

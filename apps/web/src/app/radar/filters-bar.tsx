@@ -455,9 +455,26 @@ function SingleFilterDropdown({
 type FiltersBarProps = {
   facets: PublicJobFacets | null;
   activeFilters: ActiveFilters;
+  // Base pras navegações desta barra (aplicar/limpar/remover tag). Default
+  // "/radar" preserva o comportamento original. Landing pages (ex.:
+  // /radar/area/data_ai) passam seu próprio basePath.
+  basePath?: string;
+  // Filtros cujo controle (pill + tag em "filtros ativos") não deve
+  // aparecer — usado quando a landing page já fixa aquela dimensão pelo
+  // path (ex.: /radar/area/data_ai nunca mostra o dropdown de ÁREA nem um
+  // chip pra ele; o contexto é comunicado pelo h1 da página, não por um
+  // chip bloqueado ou removível). O valor fixo em si não passa por aqui —
+  // quem decide o filtro fixo é a camada de dados (RadarJobsListing); esta
+  // prop só esconde o controle.
+  hiddenFilters?: Array<"area" | "modalidade" | "senioridade" | "empresa">;
 };
 
-export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
+export function FiltersBar({
+  facets,
+  activeFilters,
+  basePath = "/radar",
+  hiddenFilters = [],
+}: FiltersBarProps) {
   const router = useRouter();
 
   const [q, setQ] = useState(activeFilters.q ?? "");
@@ -517,11 +534,19 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
     : [];
 
   const stateItems = facets
-    ? facets.states.map((f) => ({ value: f.value, label: f.label, count: f.count }))
+    ? facets.states.map((f) => ({
+        value: f.value,
+        label: f.label,
+        count: f.count,
+      }))
     : [];
 
   const cityItems = facets
-    ? facets.cities.map((f) => ({ value: f.value, label: f.value, count: f.count }))
+    ? facets.cities.map((f) => ({
+        value: f.value,
+        label: f.value,
+        count: f.count,
+      }))
     : [];
 
   // Contagem separada por seção: primária (sempre visível) vs adicional
@@ -611,7 +636,7 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
       p.set("excludeAnalyzed", "false");
     }
     const qs = p.toString();
-    router.push(`/radar${qs ? `?${qs}` : ""}`);
+    router.push(`${basePath}${qs ? `?${qs}` : ""}`);
   }
 
   function clearAll() {
@@ -635,7 +660,7 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
       p.set("excludeAnalyzed", "false");
     }
     const qs = p.toString();
-    router.push(`/radar${qs ? `?${qs}` : ""}`);
+    router.push(`${basePath}${qs ? `?${qs}` : ""}`);
   }
 
   // Limpa só os 4 campos do painel "mais filtros" (local + já aplicado),
@@ -654,7 +679,7 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
       publicada: undefined,
     });
     const qs = p.toString();
-    router.push(`/radar${qs ? `?${qs}` : ""}`);
+    router.push(`${basePath}${qs ? `?${qs}` : ""}`);
   }
 
   // Remove um único valor de um filtro já aplicado (clique no "x" de uma
@@ -664,9 +689,11 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
   function removeAppliedValue(key: keyof ActiveFilters, value?: string) {
     const current = csv(activeFilters[key]);
     const next = value ? current.filter((v) => v !== value) : [];
-    const p = buildAppliedParams({ [key]: next.length > 0 ? next.join(",") : undefined });
+    const p = buildAppliedParams({
+      [key]: next.length > 0 ? next.join(",") : undefined,
+    });
     const qs = p.toString();
-    router.push(`/radar${qs ? `?${qs}` : ""}`);
+    router.push(`${basePath}${qs ? `?${qs}` : ""}`);
   }
 
   // Fecha qualquer dropdown aberto (<details class="vagas-filter-dropdown">)
@@ -830,7 +857,13 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
                 style={{ flexShrink: 0 }}
               >
                 <title>Buscar</title>
-                <circle cx="11" cy="11" r="7" stroke="#8a8a85" strokeWidth="1.7" />
+                <circle
+                  cx="11"
+                  cy="11"
+                  r="7"
+                  stroke="#8a8a85"
+                  strokeWidth="1.7"
+                />
                 <path
                   d="M20 20l-3.5-3.5"
                   stroke="#8a8a85"
@@ -878,34 +911,36 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
               }}
             />
 
-            <MultiFilterDropdown
-              label="ÁREA"
-              allLabel="todas"
-              options={areaItems}
-              selected={area}
-              onToggle={(v) => toggle(area, setArea, v)}
-              onClear={() => setArea([])}
-            />
-            <MultiFilterDropdown
-              label="SENIORIDADE"
-              allLabel="todas"
-              options={seniorityItems}
-              selected={senioridade}
-              onToggle={(v) =>
-                toggle(senioridade, setSenioridade, v)
-              }
-              onClear={() => setSenioridade([])}
-            />
-            <MultiFilterDropdown
-              label="MODALIDADE"
-              allLabel="todas"
-              options={workModelItems}
-              selected={modalidade}
-              onToggle={(v) =>
-                toggle(modalidade, setModalidade, v)
-              }
-              onClear={() => setModalidade([])}
-            />
+            {hiddenFilters.includes("area") ? null : (
+              <MultiFilterDropdown
+                label="ÁREA"
+                allLabel="todas"
+                options={areaItems}
+                selected={area}
+                onToggle={(v) => toggle(area, setArea, v)}
+                onClear={() => setArea([])}
+              />
+            )}
+            {hiddenFilters.includes("senioridade") ? null : (
+              <MultiFilterDropdown
+                label="SENIORIDADE"
+                allLabel="todas"
+                options={seniorityItems}
+                selected={senioridade}
+                onToggle={(v) => toggle(senioridade, setSenioridade, v)}
+                onClear={() => setSenioridade([])}
+              />
+            )}
+            {hiddenFilters.includes("modalidade") ? null : (
+              <MultiFilterDropdown
+                label="MODALIDADE"
+                allLabel="todas"
+                options={workModelItems}
+                selected={modalidade}
+                onToggle={(v) => toggle(modalidade, setModalidade, v)}
+                onClear={() => setModalidade([])}
+              />
+            )}
 
             <button
               type="button"
@@ -936,7 +971,13 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
                 flexShrink: 0,
               }}
             >
-              <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <svg
+                aria-hidden
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
                 <title>Mais filtros</title>
                 <path
                   d="M4 6h16M7 12h10M10 18h4"
@@ -1009,9 +1050,21 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
                 flexShrink: 0,
               }}
             >
-              <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <svg
+                aria-hidden
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
                 <title>Limpar filtros</title>
-                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                />
                 <path
                   d="M9 9l6 6M15 9l-6 6"
                   stroke="currentColor"
@@ -1040,7 +1093,13 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
                 flexShrink: 0,
               }}
             >
-              <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <svg
+                aria-hidden
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
                 <title>Aplicar filtros</title>
                 <path
                   d="M5 12l5 5L20 7"
@@ -1082,87 +1141,91 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
               minHeight: 0,
             }}
           >
-          <div
-            style={{
-              borderTop: "1px solid rgba(10,10,10,0.06)",
-              background: "#fbfbf7",
-              padding: 16,
-              borderBottomLeftRadius: 14,
-              borderBottomRightRadius: 14,
-            }}
-          >
-          <div className="radar-filters-grid">
-            <MultiFilterDropdown
-              label="ESTADO"
-              allLabel="todos"
-              options={stateItems}
-              selected={estado}
-              onToggle={toggleEstado}
-              onClear={clearEstado}
-              variant="field"
-            />
-            <MultiFilterDropdown
-              label="CIDADE"
-              allLabel="todas"
-              options={cityItems}
-              selected={cidade}
-              onToggle={(v) => toggle(cidade, setCidade, v)}
-              onClear={() => setCidade([])}
-              variant="field"
-            />
-            <MultiFilterDropdown
-              label="EMPRESA"
-              allLabel="todas"
-              options={companyItems}
-              selected={empresa}
-              onToggle={(v) => toggle(empresa, setEmpresa, v)}
-              onClear={() => setEmpresa([])}
-              variant="field"
-            />
-            <SingleFilterDropdown
-              label="PUBLICADO HÁ"
-              allLabel="qualquer período"
-              options={PUBLISHED_OPTIONS}
-              activeValue={publicada}
-              onSelect={setPublicada}
-              variant="field"
-            />
-          </div>
-
-          {additionalPendingCount > 0 ? (
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                marginTop: 14,
-                paddingTop: 13,
-                borderTop: "1px solid rgba(10,10,10,0.08)",
-                flexWrap: "wrap",
+                borderTop: "1px solid rgba(10,10,10,0.06)",
+                background: "#fbfbf7",
+                padding: 16,
+                borderBottomLeftRadius: 14,
+                borderBottomRightRadius: 14,
               }}
             >
-              <span style={{ fontFamily: MONO, fontSize: 10, color: "#8a8a85" }}>
-                {`${additionalPendingCount} filtro${additionalPendingCount > 1 ? "s" : ""} adicional${additionalPendingCount > 1 ? "is" : ""} ativo${additionalPendingCount > 1 ? "s" : ""}`}
-              </span>
-              <button
-                type="button"
-                onClick={clearAdditional}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  fontFamily: GEIST,
-                  fontSize: 12.5,
-                  color: "#6a6560",
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                  textUnderlineOffset: 3,
-                }}
-              >
-                limpar adicionais
-              </button>
+              <div className="radar-filters-grid">
+                <MultiFilterDropdown
+                  label="ESTADO"
+                  allLabel="todos"
+                  options={stateItems}
+                  selected={estado}
+                  onToggle={toggleEstado}
+                  onClear={clearEstado}
+                  variant="field"
+                />
+                <MultiFilterDropdown
+                  label="CIDADE"
+                  allLabel="todas"
+                  options={cityItems}
+                  selected={cidade}
+                  onToggle={(v) => toggle(cidade, setCidade, v)}
+                  onClear={() => setCidade([])}
+                  variant="field"
+                />
+                {hiddenFilters.includes("empresa") ? null : (
+                  <MultiFilterDropdown
+                    label="EMPRESA"
+                    allLabel="todas"
+                    options={companyItems}
+                    selected={empresa}
+                    onToggle={(v) => toggle(empresa, setEmpresa, v)}
+                    onClear={() => setEmpresa([])}
+                    variant="field"
+                  />
+                )}
+                <SingleFilterDropdown
+                  label="PUBLICADO HÁ"
+                  allLabel="qualquer período"
+                  options={PUBLISHED_OPTIONS}
+                  activeValue={publicada}
+                  onSelect={setPublicada}
+                  variant="field"
+                />
+              </div>
+
+              {additionalPendingCount > 0 ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    marginTop: 14,
+                    paddingTop: 13,
+                    borderTop: "1px solid rgba(10,10,10,0.08)",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span
+                    style={{ fontFamily: MONO, fontSize: 10, color: "#8a8a85" }}
+                  >
+                    {`${additionalPendingCount} filtro${additionalPendingCount > 1 ? "s" : ""} adicional${additionalPendingCount > 1 ? "is" : ""} ativo${additionalPendingCount > 1 ? "s" : ""}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearAdditional}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      fontFamily: GEIST,
+                      fontSize: 12.5,
+                      color: "#6a6560",
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      textUnderlineOffset: 3,
+                    }}
+                  >
+                    limpar adicionais
+                  </button>
+                </div>
+              ) : null}
             </div>
-          ) : null}
-          </div>
           </div>
         </div>
       </div>
@@ -1207,7 +1270,10 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
                 color: "#3a3a38",
               }}
             >
-              {tag.filterLabel}: <b style={{ fontWeight: 600, color: "#0a0a0a" }}>{tag.valueLabel}</b>
+              {tag.filterLabel}:{" "}
+              <b style={{ fontWeight: 600, color: "#0a0a0a" }}>
+                {tag.valueLabel}
+              </b>
               <button
                 type="button"
                 onClick={() => removeAppliedValue(tag.filterKey, tag.value)}
@@ -1225,7 +1291,13 @@ export function FiltersBar({ facets, activeFilters }: FiltersBarProps) {
                   padding: 0,
                 }}
               >
-                <svg aria-hidden width="8" height="8" viewBox="0 0 24 24" fill="none">
+                <svg
+                  aria-hidden
+                  width="8"
+                  height="8"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
                   <title>Remover</title>
                   <path
                     d="M6 6l12 12M18 6L6 18"
