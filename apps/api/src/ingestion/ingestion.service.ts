@@ -723,15 +723,33 @@ export class IngestionService {
       existingJob?.firstSeenAt ?? new Date(observation.firstSeenAt);
     const nextLastSeenAt = new Date(observation.lastSeenAt);
 
+    // Observação "leve" (detailFetchSkipped, ver shouldSkipDetailFetch em
+    // dedup-policy.ts) só existe pra vaga que já foi vista com detalhe
+    // completo antes — gupy/inhire/talentbrew/workday mandam ela só pra
+    // manter lastSeenAt fresco sem gastar uma requisição cara de detalhe a
+    // cada crawl, e por isso ela vem com descriptionClean/descriptionRaw/
+    // locationText/etc degenerados (workday/inhire/talentbrew mandam
+    // descriptionClean=title, descriptionRaw=""; gupy manda os dois vazios).
+    // Sem essa guarda, todo recrawl "leve" — que é o caminho normal pra
+    // maioria das vagas dessas fontes — apagava a descrição real já salva,
+    // sem jeito de recuperar depois. Preserva os campos de detalhe da vaga
+    // já existente e só atualiza o que uma observação leve sabe de verdade
+    // (lastSeenAt/status/sourceJobUrl).
+    const preserveDetailFields =
+      observation.detailFetchSkipped === true && existingJob !== null;
+
     // contentUpdatedAt só avança quando título/descrição mudam de verdade —
     // diferente de lastSeenAt/updatedAt, que são bumped em toda observação
     // do crawler mesmo sem mudança real de conteúdo (usado como
     // lastModified do sitemap, ver jobs.service.ts#listSitemapData). Vaga
     // nova conta como "conteúdo mudou" (primeira versão publicada).
+    // Observação leve nunca conta como mudança de conteúdo — ela não trouxe
+    // nenhum conteúdo real pra comparar.
     const contentChanged =
       !existingJob ||
-      existingJob.title !== observation.title ||
-      existingJob.descriptionClean !== observation.descriptionClean;
+      (!preserveDetailFields &&
+        (existingJob.title !== observation.title ||
+          existingJob.descriptionClean !== observation.descriptionClean));
 
     if (existingJob && nextLastSeenAt < existingJob.lastSeenAt) {
       return {
@@ -775,6 +793,30 @@ export class IngestionService {
       title: observation.title,
       workModel: observation.workModel,
     };
+
+    // Payload de fato usado no update — quando a observação é "leve"
+    // (preserveDetailFields), sobrescreve os campos de detalhe com
+    // `undefined` pra que o Prisma simplesmente não os toque, preservando o
+    // que já está salvo. `payload` acima continua com tudo preenchido pro
+    // create (vaga nova nunca chega com preserveDetailFields=true).
+    const updateData = preserveDetailFields
+      ? {
+          ...payload,
+          city: undefined,
+          country: undefined,
+          descriptionClean: undefined,
+          descriptionRaw: undefined,
+          employmentType: undefined,
+          locationText: undefined,
+          metadataJson: undefined,
+          normalizedTitle: undefined,
+          publishedAtSource: undefined,
+          seniorityLevel: undefined,
+          state: undefined,
+          title: undefined,
+          workModel: undefined,
+        }
+      : payload;
 
     if (!existingJob) {
       const createdJob = await this.database.job.create({
@@ -823,7 +865,7 @@ export class IngestionService {
 
     await this.database.job.update({
       where: { id: existingJob.id },
-      data: payload,
+      data: updateData,
     });
 
     return {

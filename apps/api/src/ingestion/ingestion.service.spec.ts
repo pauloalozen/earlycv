@@ -712,6 +712,78 @@ test("IngestionService reports detailFetchSkippedCount from observations", async
   assert.equal(result.detailFetchSkippedCount, 1);
 });
 
+// Regressão: gupy/inhire/talentbrew/workday mandam uma observação "leve"
+// (detailFetchSkipped=true) só pra manter lastSeenAt fresco sem repetir o
+// fetch caro de detalhe — mas ela vem com descriptionClean/descriptionRaw/
+// locationText degenerados (workday/inhire/talentbrew: descriptionClean=
+// title, descriptionRaw=""; gupy: os dois vazios). Sem essa guarda em
+// upsertObservation, todo recrawl "leve" apagava a descrição real já salva.
+test("IngestionService preserves the existing job's description/location when the observation is detailFetchSkipped", async () => {
+  const fixture = createIngestionServiceFixture();
+  fixture.service.adapters = new Map([
+    [
+      "custom_html",
+      {
+        sourceType: "custom_html",
+        collect: async () => [
+          {
+            canonicalKey: "job-a",
+            city: undefined,
+            country: "Brasil",
+            // Degenerado de propósito — igual ao que workday/inhire/
+            // talentbrew mandam numa observação leve.
+            descriptionClean: "job-a",
+            descriptionRaw: "",
+            detailFetchSkipped: true,
+            firstSeenAt: "2026-06-01T10:00:00.000Z",
+            lastSeenAt: "2026-06-02T10:00:00.000Z",
+            locationText: "Remote",
+            normalizedTitle: "job a",
+            sourceJobUrl: "https://jobs.example.com/job-a",
+            state: undefined,
+            status: "active",
+            title: "job-a",
+          },
+        ],
+      },
+    ],
+  ]);
+
+  await fixture.service.runJobSource("source-1");
+
+  const jobAUpdate = fixture.rawJobUpdates.find(
+    (call) => call.where.id === "job-a-id",
+  );
+  assert.ok(jobAUpdate, "expected an update call for the existing job");
+  assert.equal(
+    jobAUpdate.data.descriptionClean,
+    undefined,
+    "descriptionClean must stay untouched (not overwritten with the title)",
+  );
+  assert.equal(
+    jobAUpdate.data.descriptionRaw,
+    undefined,
+    "descriptionRaw must stay untouched",
+  );
+  assert.equal(
+    jobAUpdate.data.locationText,
+    undefined,
+    "locationText must stay untouched",
+  );
+  assert.equal(
+    jobAUpdate.data.contentUpdatedAt,
+    undefined,
+    "a detailFetchSkipped observation never counts as a real content change",
+  );
+  // lastSeenAt e status continuam sendo o motivo de existir dessa
+  // observação leve — isso sim precisa atualizar.
+  assert.ok(jobAUpdate.data.lastSeenAt instanceof Date);
+  assert.equal(
+    (jobAUpdate.data.lastSeenAt as Date).toISOString(),
+    "2026-06-02T10:00:00.000Z",
+  );
+});
+
 test("IngestionService dispatches to the greenhouse adapter for greenhouse sources", async () => {
   const fixture = createIngestionServiceFixture({ sourceType: "greenhouse" });
   let collectCalls = 0;
