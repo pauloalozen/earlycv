@@ -60,7 +60,16 @@ const PUBLIC_JOB_INTEGRITY_WHERE = {
   // o enriquecimento terminar (worker assíncrono, ver
   // ingestion.service.ts). Decisão de produto: vaga "crua" não é conteúdo
   // publicável, nem pro anônimo nem pro logado.
-  enrichment: { enrichmentStatus: "COMPLETED" },
+  //
+  // dominantArea=OTHER ("Geral" no filtro) é o catch-all do LLM pra vaga
+  // fora da taxonomia tech (RH, jurídico, engenharia não-tech etc.) — boards
+  // globais (Workday/Greenhouse) trazem essas vagas junto com as tech de
+  // verdade. Decisão de produto: não é o público do radar, nunca aparece no
+  // portal (nem listagem, nem facet, nem /radar/[slug] direto).
+  enrichment: {
+    enrichmentStatus: "COMPLETED",
+    dominantArea: { not: "OTHER" },
+  },
 } satisfies Prisma.JobWhereInput;
 
 function splitCsv(value: string): string[] {
@@ -442,7 +451,13 @@ export class JobsService {
     }
 
     if (area) {
-      const values = splitEnumCsv(area, JOB_AREA_VALUES);
+      // Filtra "OTHER" fora mesmo se vier explícito na query (?area=OTHER)
+      // — senão o `in: values` abaixo substitui o `not: "OTHER"` herdado de
+      // PUBLIC_JOB_INTEGRITY_WHERE.enrichment e reabriria a categoria só
+      // por causa da URL.
+      const values = splitEnumCsv(area, JOB_AREA_VALUES).filter(
+        (value) => value !== "OTHER",
+      );
       if (values.length > 0) {
         enrichmentWhere.dominantArea = { in: values };
       }

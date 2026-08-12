@@ -108,6 +108,63 @@ test("listPublicFiltered requires enrichment.enrichmentStatus === COMPLETED", as
   assert.equal(where.enrichment?.enrichmentStatus, "COMPLETED");
 });
 
+// dominantArea=OTHER (label "Geral" no filtro) é o catch-all do LLM pra
+// vaga fora da taxonomia tech — boards globais trazem RH/jurídico/
+// engenharia não-tech junto com a vaga tech de verdade. Decisão de
+// produto: nunca aparece no portal, nem por default nem via ?area=OTHER
+// explícito.
+test("listPublicFiltered excludes dominantArea=OTHER by default", async () => {
+  const { database, calls } = buildWhereCapturingDatabaseStub();
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  await service.listPublicFiltered({ page: 1, limit: 20 });
+
+  const where = calls[0]?.where as {
+    enrichment?: { dominantArea?: { not?: string } };
+  };
+  assert.deepEqual(where.enrichment?.dominantArea, { not: "OTHER" });
+});
+
+test("listPublicFiltered keeps dominantArea=OTHER excluded even when ?area=OTHER is passed explicitly", async () => {
+  const { database, calls } = buildWhereCapturingDatabaseStub();
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  await service.listPublicFiltered({ page: 1, limit: 20, area: "OTHER" });
+
+  const where = calls[0]?.where as {
+    enrichment?: { dominantArea?: { not?: string; in?: string[] } };
+  };
+  assert.deepEqual(where.enrichment?.dominantArea, { not: "OTHER" });
+});
+
+test("listPublicFiltered strips OTHER out of a mixed ?area filter, keeping the rest", async () => {
+  const { database, calls } = buildWhereCapturingDatabaseStub();
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  await service.listPublicFiltered({
+    page: 1,
+    limit: 20,
+    area: "OTHER,DATA_AI",
+  });
+
+  const where = calls[0]?.where as {
+    enrichment?: { dominantArea?: { in?: string[] } };
+  };
+  assert.deepEqual(where.enrichment?.dominantArea, { in: ["DATA_AI"] });
+});
+
 test("listPublicFiltered filters by technology via requiredSkills OR technologies", async () => {
   const { database, calls } = buildWhereCapturingDatabaseStub();
   const service = new JobsService(

@@ -17,9 +17,13 @@ import { RADAR_AREA_LABELS } from "../../radar-ui";
 // RADAR_AREA_LABELS são os valores do enum JobArea, em upper case
 // (DATA_AI). RADAR_AREA_LABELS é a fonte única da verdade aqui: qualquer
 // área nova adicionada lá já habilita a landing page correspondente, sem
-// precisar duplicar a lista de valores válidos.
+// precisar duplicar a lista de valores válidos. OTHER ("Geral") é exceção
+// deliberada: o backend nunca retorna vaga com essa área pro público (ver
+// PUBLIC_JOB_INTEGRITY_WHERE em jobs.service.ts), então a landing page
+// dela ficaria sempre vazia — 404 em vez de página fantasma indexável.
 function resolveAreaEnum(slug: string): string | null {
   const candidate = slug.toUpperCase();
+  if (candidate === "OTHER") return null;
   return candidate in RADAR_AREA_LABELS ? candidate : null;
 }
 
