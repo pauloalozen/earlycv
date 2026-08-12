@@ -14,11 +14,8 @@ function createDatabaseMock() {
 
   const database = {
     company: {
-      findUnique: async ({
-        where,
-      }: {
-        where: { normalizedName: string };
-      }) => companies.get(where.normalizedName) ?? null,
+      findUnique: async ({ where }: { where: { normalizedName: string } }) =>
+        companies.get(where.normalizedName) ?? null,
       create: async ({
         data,
       }: {
@@ -35,9 +32,7 @@ function createDatabaseMock() {
         where: { id: string };
         data: Record<string, unknown>;
       }) => {
-        const existing = [...companies.values()].find(
-          (c) => c.id === where.id,
-        );
+        const existing = [...companies.values()].find((c) => c.id === where.id);
         Object.assign(existing as object, data);
         return existing;
       },
@@ -46,7 +41,9 @@ function createDatabaseMock() {
       findUnique: async ({
         where,
       }: {
-        where: { companyId_sourceUrl: { companyId: string; sourceUrl: string } };
+        where: {
+          companyId_sourceUrl: { companyId: string; sourceUrl: string };
+        };
       }) => {
         const key = `${where.companyId_sourceUrl.companyId}:${where.companyId_sourceUrl.sourceUrl}`;
         return sources.get(key) ?? null;
@@ -190,20 +187,27 @@ test("importCompanySourcesCsv rejects a header that doesn't match either the leg
   );
 });
 
-test("exportCompanySourcesCsv includes the tipo_adapter column with each source's sourceType", async () => {
+test("exportCompanySourcesCsv includes tipo_adapter and the operational config columns (ativa/escalonamento/agendamento)", async () => {
   const { database, sources } = createDatabaseMock();
-  sources.set("company-1:https://boards-api.greenhouse.io/v1/boards/vtex/jobs", {
-    id: "source-1",
-    companyId: "company-1",
-    sourceUrl: "https://boards-api.greenhouse.io/v1/boards/vtex/jobs",
-    sourceType: "greenhouse",
-  });
+  sources.set(
+    "company-1:https://boards-api.greenhouse.io/v1/boards/vtex/jobs",
+    {
+      id: "source-1",
+      companyId: "company-1",
+      sourceUrl: "https://boards-api.greenhouse.io/v1/boards/vtex/jobs",
+      sourceType: "greenhouse",
+    },
+  );
 
   (database.jobSource.findMany as unknown as () => Promise<unknown[]>) =
     async () => [
       {
         sourceUrl: "https://boards-api.greenhouse.io/v1/boards/vtex/jobs",
         sourceType: "greenhouse",
+        isActive: true,
+        checkIntervalMinutes: 45,
+        scheduleEnabled: true,
+        scheduleCron: "0 7 * * *",
         company: {
           name: "VTEX",
           industry: "Tech",
@@ -217,9 +221,66 @@ test("exportCompanySourcesCsv includes the tipo_adapter column with each source'
   const csv = await service.exportCompanySourcesCsv();
   const [header, row] = csv.split("\n");
 
-  assert.equal(header, "nome,setor,site_url,careers_url,linkedin_url,tipo_adapter");
+  assert.equal(
+    header,
+    "nome,setor,site_url,careers_url,linkedin_url,tipo_adapter,ativa,escalonamento_minutos,agendamento_ativo,agendamento_cron",
+  );
   assert.equal(
     row,
-    "VTEX,Tech,https://vtex.com,https://boards-api.greenhouse.io/v1/boards/vtex/jobs,,greenhouse",
+    "VTEX,Tech,https://vtex.com,https://boards-api.greenhouse.io/v1/boards/vtex/jobs,,greenhouse,true,45,true,0 7 * * *",
   );
+});
+
+test("importCompanySourcesCsv reads ativa/escalonamento/agendamento from the full header and applies them to a new source", async () => {
+  const { database, sources } = createDatabaseMock();
+  const service = new AdminIngestionImportService(database);
+
+  const csv = [
+    "nome,setor,site_url,careers_url,linkedin_url,tipo_adapter,ativa,escalonamento_minutos,agendamento_ativo,agendamento_cron",
+    "VTEX,Tech,https://vtex.com,https://boards-api.greenhouse.io/v1/boards/vtex/jobs,,greenhouse,false,45,true,0 7 * * *",
+  ].join("\n");
+
+  const report = await service.importCompanySourcesCsv({
+    csvText: csv,
+    dryRun: false,
+  });
+
+  assert.equal(report.summary.errorCount, 0);
+  const source = [...sources.values()][0] as unknown as {
+    isActive: boolean;
+    checkIntervalMinutes: number;
+    scheduleEnabled: boolean;
+    scheduleCron: string | null;
+  };
+  assert.equal(source.isActive, false);
+  assert.equal(source.checkIntervalMinutes, 45);
+  assert.equal(source.scheduleEnabled, true);
+  assert.equal(source.scheduleCron, "0 7 * * *");
+});
+
+test("importCompanySourcesCsv falls back to isActive=true/scheduleEnabled=false/checkIntervalMinutes=30 when the config columns are absent", async () => {
+  const { database, sources } = createDatabaseMock();
+  const service = new AdminIngestionImportService(database);
+
+  const csv = [
+    "nome,setor,site_url,careers_url,linkedin_url,tipo_adapter",
+    "VTEX,Tech,https://vtex.com,https://boards-api.greenhouse.io/v1/boards/vtex/jobs,,greenhouse",
+  ].join("\n");
+
+  const report = await service.importCompanySourcesCsv({
+    csvText: csv,
+    dryRun: false,
+  });
+
+  assert.equal(report.summary.errorCount, 0);
+  const source = [...sources.values()][0] as unknown as {
+    isActive: boolean;
+    checkIntervalMinutes: number;
+    scheduleEnabled: boolean;
+    scheduleCron: string | null;
+  };
+  assert.equal(source.isActive, true);
+  assert.equal(source.checkIntervalMinutes, 30);
+  assert.equal(source.scheduleEnabled, false);
+  assert.equal(source.scheduleCron, null);
 });

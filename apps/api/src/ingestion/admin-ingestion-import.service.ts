@@ -12,6 +12,17 @@ const LEGACY_CSV_HEADER = [
   "linkedin_url",
 ];
 const CSV_HEADER = [...LEGACY_CSV_HEADER, "tipo_adapter"];
+// Colunas de configuração operacional (toggle "ativa" do painel,
+// escalonamento, agendamento) — sem elas, todo import recriava a fonte com
+// os defaults de sempre (isActive=true, scheduleEnabled=false), obrigando a
+// reconfigurar cada fonte na mão de novo depois de subir pra produção.
+const FULL_CSV_HEADER = [
+  ...CSV_HEADER,
+  "ativa",
+  "escalonamento_minutos",
+  "agendamento_ativo",
+  "agendamento_cron",
+];
 
 // Tipos de adapter que a coluna tipo_adapter aceita explicitamente. Os
 // demais valores do enum JobSourceType (kenoby, successfactors, solides,
@@ -108,14 +119,18 @@ export class AdminIngestionImportService {
       header?.length === expected.length &&
       header.every((item, index) => item === expected[index]);
 
-    // Aceita o header legado (5 colunas, sem tipo_adapter) pra nao quebrar
-    // CSVs ja exportados antes dessa coluna existir — nesse caso o adapter
-    // continua sendo inferido pela URL, como sempre foi.
-    const hasAdapterColumn = matchesHeader(CSV_HEADER);
+    // Aceita os três formatos de header já exportados historicamente: o
+    // legado (5 colunas, sem tipo_adapter), o intermediário (+tipo_adapter)
+    // e o atual (+ativa/escalonamento/agendamento) — nos dois primeiros,
+    // adapter é inferido pela URL quando ausente, e a configuração
+    // operacional cai nos defaults de sempre (isActive=true,
+    // scheduleEnabled=false, checkIntervalMinutes=30).
+    const hasConfigColumns = matchesHeader(FULL_CSV_HEADER);
+    const hasAdapterColumn = hasConfigColumns || matchesHeader(CSV_HEADER);
 
     if (!hasAdapterColumn && !matchesHeader(LEGACY_CSV_HEADER)) {
       throw new BadRequestException(
-        `invalid csv header, expected: ${CSV_HEADER.join(",")}`,
+        `invalid csv header, expected: ${FULL_CSV_HEADER.join(",")}`,
       );
     }
 
@@ -134,8 +149,18 @@ export class AdminIngestionImportService {
 
     for (const [index, rawLine] of lines.slice(1).entries()) {
       const lineNumber = index + 2;
-      const [nome, setor, siteUrl, careersUrl, linkedinUrl, tipoAdapter] =
-        rawLine.split(",").map((value) => value.trim());
+      const [
+        nome,
+        setor,
+        siteUrl,
+        careersUrl,
+        linkedinUrl,
+        tipoAdapter,
+        ativa,
+        escalonamentoMinutos,
+        agendamentoAtivo,
+        agendamentoCron,
+      ] = rawLine.split(",").map((value) => value.trim());
 
       if (!nome || !careersUrl) {
         report.lines.push({
@@ -238,13 +263,22 @@ export class AdminIngestionImportService {
 
         if (!input.dryRun && companyId) {
           const adapterDefaults = getAdapterDefaults(inferredAdapter);
+          const parsedInterval = hasConfigColumns
+            ? Number.parseInt(escalonamentoMinutos ?? "", 10)
+            : Number.NaN;
           const sourcePayload = {
-            checkIntervalMinutes: 30,
+            checkIntervalMinutes: Number.isFinite(parsedInterval)
+              ? parsedInterval
+              : 30,
             crawlStrategy: adapterDefaults.crawlStrategy,
-            isActive: true,
+            isActive: hasConfigColumns ? parseCsvBoolean(ativa, true) : true,
             isFallbackAdapter: adapterDefaults.isFallbackAdapter,
             parserKey: adapterDefaults.parserKey,
-            scheduleEnabled: false,
+            scheduleCron:
+              hasConfigColumns && agendamentoCron ? agendamentoCron : null,
+            scheduleEnabled: hasConfigColumns
+              ? parseCsvBoolean(agendamentoAtivo, false)
+              : false,
             sourceName: `${nome} careers`,
             sourceType: inferredAdapter,
             sourceUrl: canonicalSourceUrl,
@@ -297,9 +331,11 @@ export class AdminIngestionImportService {
     return report;
   }
 
-  // Mesmo header do importCompanySourcesCsv (CSV_HEADER) — permite
+  // Mesmo header do importCompanySourcesCsv (FULL_CSV_HEADER) — permite
   // exportar de um ambiente (ex: homolog) e reimportar em outro (ex:
-  // producao) via POST /ingestion/import-csv sem transformacao manual.
+  // producao) via POST /ingestion/import-csv sem transformacao manual,
+  // já com a configuração operacional (ativa/escalonamento/agendamento)
+  // preservada, sem precisar reconfigurar fonte por fonte depois de subir.
   // Uma linha por JobSource (careers_url = JobSource.sourceUrl), nao por
   // Company, ja que uma empresa pode ter mais de uma fonte cadastrada.
   async exportCompanySourcesCsv(): Promise<string> {
@@ -316,12 +352,16 @@ export class AdminIngestionImportService {
         source.sourceUrl,
         source.company.linkedinUrl ?? "",
         source.sourceType,
+        String(source.isActive),
+        String(source.checkIntervalMinutes),
+        String(source.scheduleEnabled),
+        source.scheduleCron ?? "",
       ]
         .map(escapeCsvField)
         .join(","),
     );
 
-    return [CSV_HEADER.join(","), ...lines].join("\n");
+    return [FULL_CSV_HEADER.join(","), ...lines].join("\n");
   }
 }
 
@@ -330,4 +370,11 @@ function escapeCsvField(value: string): string {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
+}
+
+function parseCsvBoolean(value: string | undefined, fallback: boolean) {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  return fallback;
 }
