@@ -13,7 +13,7 @@ test("buildPublicJobSlug creates stable slug with job id suffix", () => {
 test("toPublicJobView passes through the persisted slug instead of recomputing it", () => {
   const view = toPublicJobView({
     canonicalKey: "key-1",
-    company: { name: "Itau", websiteUrl: null },
+    company: { name: "Itau", websiteUrl: null, logoUrl: null },
     country: "BR",
     descriptionClean: "desc",
     descriptionRaw: "<p>desc</p>",
@@ -40,7 +40,7 @@ test("toPublicJobView passes through the persisted slug instead of recomputing i
 test("toPublicJobView falls back to empty string when slug is null, and to [] when enrichment is null", () => {
   const view = toPublicJobView({
     canonicalKey: "key-2",
-    company: { name: "Itau", websiteUrl: null },
+    company: { name: "Itau", websiteUrl: null, logoUrl: null },
     country: "BR",
     descriptionClean: "desc",
     descriptionRaw: "<p>desc</p>",

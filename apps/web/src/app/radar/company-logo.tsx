@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type SyntheticEvent, useState } from "react";
 
 const MONO = "var(--font-geist-mono), monospace";
 
@@ -36,52 +36,78 @@ function faviconUrl(websiteUrl: string): string | null {
 
 type Props = {
   name: string;
+  logoUrl?: string | null;
   websiteUrl?: string | null;
   size?: number;
   borderRadius?: number;
   fontSize?: number;
 };
 
-// Favicon real da empresa (via serviço público de favicons, a partir de
-// Company.websiteUrl) quando disponível E com resolução boa (ver
-// MIN_GOOD_LOGO_SIZE); senão volta pro quadrado colorido com a inicial do
-// nome — tanto pra URL inválida/erro de load quanto pra favicon
-// genérico/pequeno demais.
+// 3 níveis, nessa ordem: 1) logo capturado da própria fonte de origem
+// (Gupy/Greenhouse/etc, via Company.logoUrl — CompanyLogoFetchService no
+// backend) quando disponível e com resolução boa; 2) favicon via serviço
+// público de favicons a partir de Company.websiteUrl, mesma checagem de
+// qualidade; 3) quadrado colorido com a inicial do nome — pra URL
+// inválida/erro de load ou logo/favicon genérico/pequeno demais em
+// qualquer um dos dois primeiros níveis.
 export function CompanyLogo({
   name,
+  logoUrl,
   websiteUrl,
   size = 42,
   borderRadius = 9,
   fontSize = 13,
 }: Props) {
-  const src = websiteUrl ? faviconUrl(websiteUrl) : null;
-  const [isBadLogo, setIsBadLogo] = useState(false);
+  const faviconSrc = websiteUrl ? faviconUrl(websiteUrl) : null;
+  const [isSourceLogoBad, setIsSourceLogoBad] = useState(false);
+  const [isFaviconBad, setIsFaviconBad] = useState(false);
 
-  if (src && !isBadLogo) {
+  const imgStyle = {
+    width: size,
+    height: size,
+    borderRadius,
+    flexShrink: 0,
+    objectFit: "contain" as const,
+  };
+
+  function handleLoad(setBad: (bad: boolean) => void) {
+    return (event: SyntheticEvent<HTMLImageElement>) => {
+      const img = event.currentTarget;
+      if (
+        img.naturalWidth < MIN_GOOD_LOGO_SIZE ||
+        img.naturalHeight < MIN_GOOD_LOGO_SIZE
+      ) {
+        setBad(true);
+      }
+    };
+  }
+
+  if (logoUrl && !isSourceLogoBad) {
     return (
-      // biome-ignore lint/performance/noImgElement: favicon de domínio externo, sem otimização do next/image
+      // biome-ignore lint/performance/noImgElement: logo de domínio externo, sem otimização do next/image
       <img
-        src={src}
+        src={logoUrl}
         alt=""
         width={size}
         height={size}
-        style={{
-          width: size,
-          height: size,
-          borderRadius,
-          flexShrink: 0,
-          objectFit: "contain",
-        }}
-        onError={() => setIsBadLogo(true)}
-        onLoad={(event) => {
-          const img = event.currentTarget;
-          if (
-            img.naturalWidth < MIN_GOOD_LOGO_SIZE ||
-            img.naturalHeight < MIN_GOOD_LOGO_SIZE
-          ) {
-            setIsBadLogo(true);
-          }
-        }}
+        style={imgStyle}
+        onError={() => setIsSourceLogoBad(true)}
+        onLoad={handleLoad(setIsSourceLogoBad)}
+      />
+    );
+  }
+
+  if (faviconSrc && !isFaviconBad) {
+    return (
+      // biome-ignore lint/performance/noImgElement: favicon de domínio externo, sem otimização do next/image
+      <img
+        src={faviconSrc}
+        alt=""
+        width={size}
+        height={size}
+        style={imgStyle}
+        onError={() => setIsFaviconBad(true)}
+        onLoad={handleLoad(setIsFaviconBad)}
       />
     );
   }

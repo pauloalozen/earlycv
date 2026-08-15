@@ -22,6 +22,7 @@ const PUBLIC_JOB_SELECT = {
     select: {
       name: true,
       websiteUrl: true,
+      logoUrl: true,
     },
   },
   country: true,
@@ -515,7 +516,7 @@ export class JobsService {
     const select = {
       canonicalKey: true,
       city: true,
-      company: { select: { name: true, websiteUrl: true } },
+      company: { select: { name: true, websiteUrl: true, logoUrl: true } },
       country: true,
       descriptionClean: true,
       descriptionRaw: true,
@@ -581,7 +582,7 @@ export class JobsService {
       where: { ...where, ...(jobIds ? { id: { in: jobIds } } : {}) },
       include: {
         enrichment: true,
-        company: { select: { name: true, websiteUrl: true } },
+        company: { select: { name: true, websiteUrl: true, logoUrl: true } },
       },
     });
   }

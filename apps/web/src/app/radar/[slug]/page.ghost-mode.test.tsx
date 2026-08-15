@@ -21,6 +21,8 @@ vi.mock("@/components/public-nav-bar", () => ({
 vi.mock("../radar-ui", () => ({
   ScoreRing: () => <div>ring</div>,
   ScorePill: () => <span>pill</span>,
+  OpportunityRing: () => <div>opportunity-ring</div>,
+  OpportunityBadge: () => <span>opportunity-badge</span>,
   SkillChip: () => <span>chip</span>,
   AdaptBtn: () => <a href="#adaptar">adaptar</a>,
   breakdownPct: (_key: string, value: number) => value,

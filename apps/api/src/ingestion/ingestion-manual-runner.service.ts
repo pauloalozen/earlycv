@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
+import type { JobSourceType } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { CompanyLogoFetchService } from "./company-logo/company-logo-fetch.service";
 import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
 import { IngestionService } from "./ingestion.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
@@ -123,9 +125,16 @@ function isMissingManualBatchTableError(error: unknown) {
 
 type ActiveBatchRun = {
   id: string;
+  runKind: "CRAWL" | "LOGO_FETCH";
   scopeType: string;
   scopeValue: string;
-  status: "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
+  status:
+    | "queued"
+    | "running"
+    | "cancelling"
+    | "completed"
+    | "failed"
+    | "cancelled";
   cancelRequestedAt: Date | null;
   createdAt: Date;
 };
@@ -143,6 +152,8 @@ export class IngestionManualRunnerService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(IngestionService)
     private readonly ingestionService: IngestionService,
+    @Inject(CompanyLogoFetchService)
+    private readonly companyLogoFetchService: CompanyLogoFetchService,
     @Inject(IngestionLockRepository)
     private readonly lockRepository: IngestionLockRepository,
     @Inject(GlobalSchedulerConfigService)
@@ -184,13 +195,16 @@ export class IngestionManualRunnerService {
     // — o TTL do lock externo (5min) so importa continuar renovado
     // enquanto o loop estiver vivo, nao importa qual run/item especifico
     // esta em andamento no momento.
-    const heartbeat = setInterval(() => {
-      void this.lockRepository.acquire(
-        MANUAL_RUNNER_LOCK_ID,
-        owner,
-        MANUAL_RUNNER_LOCK_TTL_MS,
-      );
-    }, Math.floor(MANUAL_RUNNER_LOCK_TTL_MS / 2));
+    const heartbeat = setInterval(
+      () => {
+        void this.lockRepository.acquire(
+          MANUAL_RUNNER_LOCK_ID,
+          owner,
+          MANUAL_RUNNER_LOCK_TTL_MS,
+        );
+      },
+      Math.floor(MANUAL_RUNNER_LOCK_TTL_MS / 2),
+    );
 
     try {
       await this.drainActiveRuns(owner);
@@ -369,6 +383,7 @@ export class IngestionManualRunnerService {
       let itemPromise!: Promise<unknown>;
       itemPromise = this.runClaimedItem(
         run.id,
+        run.runKind,
         item,
         owner,
         // O calculo do delay real (normal x error) precisa acontecer
@@ -435,7 +450,13 @@ export class IngestionManualRunnerService {
   // dois lançamentos pegarem o mesmo item.
   private async runClaimedItem(
     batchRunId: string,
-    item: { id: string; jobSourceId: string },
+    runKind: "CRAWL" | "LOGO_FETCH",
+    item: {
+      id: string;
+      jobSourceId: string;
+      companyId: string;
+      sourceType: JobSourceType;
+    },
     owner: string,
     onOutcomeKnown: (blocked: boolean) => void,
   ): Promise<ClaimedItemOutcome> {
@@ -465,9 +486,57 @@ export class IngestionManualRunnerService {
     let blocked = false;
 
     try {
-      const result = await this.ingestionService.runJobSource(
-        item.jobSourceId,
-      );
+      if (runKind === "LOGO_FETCH") {
+        const logoResult =
+          await this.companyLogoFetchService.fetchLogoForCompany(
+            item.companyId,
+            item.sourceType,
+          );
+
+        // "skipped" (empresa sem fonte suportada / adapter ainda sem
+        // extractor) nao e uma falha do processamento — conta como
+        // sucesso do item pra nao poluir o batch com "falhas" que sao na
+        // verdade "nada a fazer aqui".
+        onOutcomeKnown(false);
+        if (logoResult.status === "failed") {
+          const markFailedResult =
+            await this.database.ingestionBatchItem.updateMany({
+              where: { id: item.id, status: { in: ["queued", "running"] } },
+              data: {
+                errorMessage: logoResult.errorSummary,
+                finishedAt: new Date(),
+                status: "failed",
+              },
+            });
+          if (markFailedResult.count > 0) {
+            await this.database.ingestionBatchRun.update({
+              where: { id: batchRunId },
+              data: { failedCount: { increment: 1 } },
+            });
+          }
+        } else {
+          const markCompletedResult =
+            await this.database.ingestionBatchItem.updateMany({
+              where: { id: item.id, status: { in: ["queued", "running"] } },
+              data: {
+                errorMessage:
+                  logoResult.status === "skipped" ? logoResult.reason : null,
+                finishedAt: new Date(),
+                status: "completed",
+              },
+            });
+          if (markCompletedResult.count > 0) {
+            await this.database.ingestionBatchRun.update({
+              where: { id: batchRunId },
+              data: { succeededCount: { increment: 1 } },
+            });
+          }
+        }
+
+        return { blocked: false, outcome: "processed" };
+      }
+
+      const result = await this.ingestionService.runJobSource(item.jobSourceId);
 
       // runJobSource resolves even when individual job observations
       // failed inside an otherwise-successful adapter run (status

@@ -9,6 +9,7 @@ import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminStatusBadge } from "../_components/admin-status-badge";
 import { AdminTokenState } from "../_components/admin-token-state";
+import { FetchLogoButton } from "./_components/fetch-logo-button";
 
 export const metadata = buildAdminMetadata("Empresas");
 
@@ -109,13 +110,30 @@ export default async function AdminCompaniesPage({
             {filteredCompanies.map((company) => (
               <Card className="space-y-4" key={company.id}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="text-xl font-bold tracking-tight text-stone-950">
-                      {company.name}
-                    </p>
-                    <p className="text-sm text-stone-600">
-                      {company.relatedSources.length} fonte(s) conectada(s)
-                    </p>
+                  <div className="flex items-start gap-3">
+                    {company.logoUrl ? (
+                      // biome-ignore lint/performance/noImgElement: logo de domínio externo, sem otimização do next/image
+                      <img
+                        alt=""
+                        className="h-10 w-10 shrink-0 rounded-[9px] object-contain"
+                        src={company.logoUrl}
+                      />
+                    ) : (
+                      <div
+                        aria-hidden
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[9px] bg-[#0a0a0a] font-mono text-sm font-bold text-[#fafaf6]"
+                      >
+                        {company.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <p className="text-xl font-bold tracking-tight text-stone-950">
+                        {company.name}
+                      </p>
+                      <p className="text-sm text-stone-600">
+                        {company.relatedSources.length} fonte(s) conectada(s)
+                      </p>
+                    </div>
                   </div>
                   <AdminStatusBadge status={company.status} />
                 </div>
@@ -126,7 +144,7 @@ export default async function AdminCompaniesPage({
                   <p>Pais: {company.country ?? "nao informado"}</p>
                 </div>
 
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <Link
                     className={buttonVariants()}
                     href={`/admin/empresas/${company.id}`}
@@ -141,6 +159,7 @@ export default async function AdminCompaniesPage({
                       Criar primeira fonte
                     </Link>
                   ) : null}
+                  <FetchLogoButton companyId={company.id} />
                 </div>
               </Card>
             ))}

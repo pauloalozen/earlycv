@@ -22,10 +22,11 @@ import {
   AdaptBtn,
   BREAKDOWN_MAX,
   MiniBar,
+  OpportunityBadge,
+  OpportunityRing,
   RADAR_AREA_LABELS,
   RADAR_SENIORITY_LABELS,
   ScorePill,
-  ScoreRing,
   SkillChip,
 } from "./radar-ui";
 
@@ -129,7 +130,11 @@ function JobCardLocked({ job }: { job: PublicJob }) {
     >
       <JobCardResponsiveStyles />
       <div className="jc-headtext">
-        <CompanyLogo name={job.company} websiteUrl={job.companyWebsiteUrl} />
+        <CompanyLogo
+          name={job.company}
+          logoUrl={job.companyLogoUrl}
+          websiteUrl={job.companyWebsiteUrl}
+        />
         <div style={{ minWidth: 0 }}>
           <JobMetaRow job={job} />
         </div>
@@ -420,7 +425,7 @@ function AnonymousHeroCard() {
                 gap: 4,
               }}
             >
-              <ScoreRing value={HERO_SCORE} size={52} />
+              <OpportunityRing score={HERO_SCORE} size={52} />
               <span
                 style={{
                   fontFamily: MONO,
@@ -516,12 +521,17 @@ function CarouselCard({
       >
         <CompanyLogo
           name={job.company}
+          logoUrl={job.companyLogoUrl}
           websiteUrl={job.companyWebsiteUrl}
           size={32}
           borderRadius={8}
           fontSize={11}
         />
-        <ScorePill value={displayScore} format="label-first" />
+        {hasAnalysis ? (
+          <ScorePill value={displayScore} format="label-first" />
+        ) : (
+          <OpportunityBadge score={displayScore} />
+        )}
       </div>
       <div>
         <Link
@@ -1385,8 +1395,8 @@ export async function RadarJobsListing({
             </p>
             <p style={{ fontSize: 14.5, color: "#3a3a38", margin: "0 0 14px" }}>
               {cvFileName
-                ? "Seu CV está sendo processado. Assim que terminar, cada vaga abaixo ganha um score de oportunidade com seu perfil."
-                : "Envie seu CV e cada vaga abaixo ganha um score de oportunidade com seu perfil — sem precisar filtrar nada."}
+                ? "Seu CV está sendo processado. Assim que terminar, cada vaga abaixo ganha uma classificação de oportunidade com seu perfil."
+                : "Envie seu CV e cada vaga abaixo ganha uma classificação de oportunidade com seu perfil — sem precisar filtrar nada."}
             </p>
             <a
               href="/cv-base"
@@ -1407,7 +1417,7 @@ export async function RadarJobsListing({
               {cvFileName ? "Ver status" : "Enviar CV"} →
             </a>
           </div>
-          <ScoreRing value={68} size={72} />
+          <OpportunityRing score={68} size={72} />
         </div>
       ) : null}
 
@@ -1438,8 +1448,8 @@ export async function RadarJobsListing({
                 <span style={{ fontSize: 12.5, color: "#8a8a85" }}>
                   {carouselJobs.length}{" "}
                   {carouselJobs.length === 1
-                    ? "vaga acima de 70%"
-                    : "vagas acima de 70%"}
+                    ? "vaga com alta oportunidade"
+                    : "vagas com alta oportunidade"}
                 </span>
               </div>
             }

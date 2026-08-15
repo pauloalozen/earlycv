@@ -17,6 +17,7 @@ function buildJob(overrides: Partial<PublicJob> = {}): PublicJob {
     slug: "vaga-empresa-job-1",
     title: "Engenheiro de Dados",
     company: "EarlyCV",
+    companyLogoUrl: null,
     companyWebsiteUrl: null,
     location: "Brasil",
     city: null,

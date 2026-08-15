@@ -5,6 +5,8 @@ import {
   AdaptBtn,
   breakdownPct,
   MiniBar,
+  OpportunityRing,
+  opportunityLevel,
   SCORE,
   ScoreRing,
   scoreTier,
@@ -300,14 +302,62 @@ function ScoreIndicator({
   const ringSize = mobile ? 56 : 64;
 
   if (hasScore && typeof displayScore === "number") {
-    const label = hasAnalysis ? "Score Análise" : "Score Oportunidade";
-    const labelColor = hasAnalysis ? "#1f7a34" : "#8a8a85";
-    const tier = SCORE[scoreTier(displayScore)];
+    if (hasAnalysis) {
+      const tier = SCORE[scoreTier(displayScore)];
+
+      if (mobile) {
+        return (
+          <>
+            <ScoreRing value={displayScore} size={ringSize} />
+            <div>
+              <div
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: "#0a0a0a",
+                }}
+              >
+                Score Análise
+              </div>
+              <div style={{ fontSize: 12, color: "#1f7a34" }}>{tier.label}</div>
+            </div>
+          </>
+        );
+      }
+
+      return (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          <ScoreRing value={displayScore} size={ringSize} />
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 9,
+              fontWeight: 600,
+              letterSpacing: 0.4,
+              color: "#1f7a34",
+            }}
+          >
+            Score Análise
+          </span>
+        </div>
+      );
+    }
+
+    // Oportunidade: score numérico nunca é exibido — só o nível categórico
+    // derivado dele (ver opportunityLevel em radar-ui.tsx).
+    const level = opportunityLevel(displayScore);
 
     if (mobile) {
       return (
         <>
-          <ScoreRing value={displayScore} size={ringSize} />
+          <OpportunityRing score={displayScore} size={ringSize} />
           <div>
             <div
               style={{
@@ -316,11 +366,9 @@ function ScoreIndicator({
                 color: "#0a0a0a",
               }}
             >
-              {label}
+              Oportunidade
             </div>
-            <div style={{ fontSize: 12, color: labelColor }}>
-              {tier.label}
-            </div>
+            <div style={{ fontSize: 12, color: level.fg }}>{level.label}</div>
           </div>
         </>
       );
@@ -332,20 +380,32 @@ function ScoreIndicator({
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: 4,
+          gap: 3,
         }}
       >
-        <ScoreRing value={displayScore} size={ringSize} />
+        <OpportunityRing score={displayScore} size={ringSize} />
+        <span
+          style={{
+            fontSize: 11.5,
+            fontWeight: 600,
+            letterSpacing: -0.1,
+            color: level.fg,
+            textAlign: "center",
+          }}
+        >
+          {level.label}
+        </span>
         <span
           style={{
             fontFamily: MONO,
-            fontSize: 9,
+            fontSize: 8.5,
             fontWeight: 600,
             letterSpacing: 0.4,
-            color: labelColor,
+            textTransform: "uppercase",
+            color: "#8a8a85",
           }}
         >
-          {label}
+          Oportunidade
         </span>
       </div>
     );
@@ -471,7 +531,6 @@ export function JobCard({
     ? `${adaptarHref}&jobId=${job.id}`
     : `${adaptarHref}?jobId=${job.id}`;
 
-
   return (
     <div
       style={{
@@ -489,7 +548,11 @@ export function JobCard({
       <JobCardResponsiveStyles />
       <div className="jc-top">
         <div className="jc-headtext">
-          <CompanyLogo name={job.company} websiteUrl={job.companyWebsiteUrl} />
+          <CompanyLogo
+            name={job.company}
+            logoUrl={job.companyLogoUrl}
+            websiteUrl={job.companyWebsiteUrl}
+          />
           <div style={{ minWidth: 0 }}>
             <JobMetaRow job={job} />
           </div>

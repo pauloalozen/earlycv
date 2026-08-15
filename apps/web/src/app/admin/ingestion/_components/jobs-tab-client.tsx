@@ -14,7 +14,21 @@ import {
 
 type ScopeType = "ADAPTER" | "SOURCE" | "ALL";
 type ScheduleType = "MANUAL" | "DAILY" | "EVERY_N_HOURS" | "WEEKLY";
-type JobType = "CRAWL" | "ENRICHMENT";
+type JobType = "CRAWL" | "ENRICHMENT" | "LOGO_FETCH";
+
+// Adapters com extractor de logo implementado no backend (ver
+// LOGO_EXTRACTORS em apps/api/src/ingestion/company-logo/logo-extractors.ts)
+// — só esses aparecem no seletor de "carregar logo". Lista mantida à mão
+// aqui, mesmo padrão da lista de adapters do escopo CRAWL logo abaixo.
+const LOGO_FETCH_ADAPTER_OPTIONS = [
+  "gupy",
+  "inhire",
+  "greenhouse",
+  "lever",
+  "ashby",
+  "workday",
+  "teamtailor",
+];
 
 type IngestionJobRow = {
   id: string;
@@ -116,7 +130,9 @@ function scopeLabel(job: IngestionJobRow) {
       ? `${job.jobSource.company.name} · ${job.jobSource.sourceName}`
       : "Fonte específica";
   }
-  return "Todas as fontes ativas";
+  return job.jobType === "LOGO_FETCH"
+    ? "Todos os adapters implementados"
+    : "Todas as fontes ativas";
 }
 
 const RUN_STATUS_TONE: Record<
@@ -146,14 +162,31 @@ function CreateJobModal({
   const [name, setName] = useState(
     initialSourceLabel ? `Crawl — ${initialSourceLabel}` : "",
   );
-  // Unico tipo suportado hoje: enriquecimento tem granularidade
-  // incompativel com o sistema de Jobs (ver EnrichmentWorkerControls,
-  // que continua sendo o mecanismo real de enriquecimento continuo).
-  const jobType: JobType = "CRAWL";
+  // ENRICHMENT fica fora do seletor: granularidade incompativel com o
+  // sistema de Jobs (ver EnrichmentWorkerControls, que continua sendo o
+  // mecanismo real de enriquecimento continuo). CRAWL e LOGO_FETCH usam o
+  // mesmo escopo ADAPTER/SOURCE/ALL (LOGO_FETCH so nao oferece SOURCE, ver
+  // abaixo — logo e por Company, nao por JobSource individual).
+  const [jobType, setJobType] = useState<JobType>("CRAWL");
   const [scopeType, setScopeType] = useState<ScopeType>(
     initialSourceId ? "SOURCE" : "ALL",
   );
   const [adapterType, setAdapterType] = useState("gupy");
+
+  function handleJobTypeChange(next: JobType) {
+    setJobType(next);
+    // LOGO_FETCH nao oferece escopo SOURCE — se o usuario trocar de CRAWL
+    // (com SOURCE ja selecionado) pra LOGO_FETCH, cai pra ALL.
+    if (next === "LOGO_FETCH" && scopeType === "SOURCE") {
+      setScopeType("ALL");
+    }
+    if (
+      next === "LOGO_FETCH" &&
+      !LOGO_FETCH_ADAPTER_OPTIONS.includes(adapterType)
+    ) {
+      setAdapterType(LOGO_FETCH_ADAPTER_OPTIONS[0]);
+    }
+  }
   const [jobSourceId, setJobSourceId] = useState(initialSourceId ?? "");
   const [scheduleType, setScheduleType] = useState<ScheduleType>("DAILY");
   const [scheduleHour, setScheduleHour] = useState("7");
@@ -196,7 +229,7 @@ function CreateJobModal({
       scheduleType,
     };
 
-    if (jobType === "CRAWL") {
+    if (jobType === "CRAWL" || jobType === "LOGO_FETCH") {
       body.scopeType = scopeType;
       if (scopeType === "ADAPTER") body.adapterType = adapterType;
       if (scopeType === "SOURCE") body.jobSourceId = jobSourceId;
@@ -302,7 +335,47 @@ function CreateJobModal({
             />
           </div>
 
-          {jobType === "CRAWL" && (
+          <div>
+            <p style={{ color: AT.muted, fontSize: 11.5, marginBottom: 4 }}>
+              Tipo de job
+            </p>
+            <div style={{ display: "flex", gap: 14 }}>
+              <label
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  fontSize: 12.5,
+                  gap: 8,
+                }}
+              >
+                <input
+                  checked={jobType === "CRAWL"}
+                  name="jobType"
+                  onChange={() => handleJobTypeChange("CRAWL")}
+                  type="radio"
+                />
+                Carga de vagas
+              </label>
+              <label
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  fontSize: 12.5,
+                  gap: 8,
+                }}
+              >
+                <input
+                  checked={jobType === "LOGO_FETCH"}
+                  name="jobType"
+                  onChange={() => handleJobTypeChange("LOGO_FETCH")}
+                  type="radio"
+                />
+                Carregar logo
+              </label>
+            </div>
+          </div>
+
+          {(jobType === "CRAWL" || jobType === "LOGO_FETCH") && (
             <div>
               <p style={{ color: AT.muted, fontSize: 11.5, marginBottom: 4 }}>
                 Escopo
@@ -330,59 +403,73 @@ function CreateJobModal({
                       style={fieldStyle}
                       value={adapterType}
                     >
-                      <option value="gupy">gupy</option>
-                      <option value="custom_html">custom_html</option>
-                      <option value="custom_api">custom_api</option>
-                      <option value="greenhouse">greenhouse</option>
-                      <option value="lever">lever</option>
-                      <option value="ashby">ashby</option>
-                      <option value="inhire">inhire</option>
-                      <option value="teamtailor">teamtailor</option>
-                      <option value="talentbrew">talentbrew</option>
-                      <option value="workday">workday</option>
+                      {jobType === "LOGO_FETCH"
+                        ? LOGO_FETCH_ADAPTER_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))
+                        : [
+                            "gupy",
+                            "custom_html",
+                            "custom_api",
+                            "greenhouse",
+                            "lever",
+                            "ashby",
+                            "inhire",
+                            "teamtailor",
+                            "talentbrew",
+                            "workday",
+                          ].map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
                     </select>
                   )}
                 </label>
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                >
-                  <label
-                    style={{
-                      alignItems: "center",
-                      display: "flex",
-                      fontSize: 12.5,
-                      gap: 8,
-                    }}
+                {jobType === "CRAWL" && (
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 6 }}
                   >
-                    <input
-                      checked={scopeType === "SOURCE"}
-                      name="scopeType"
-                      onChange={() => setScopeType("SOURCE")}
-                      type="radio"
-                    />
-                    Fonte específica
-                  </label>
-                  {scopeType === "SOURCE" && (
-                    <select
-                      className="h-8 w-full rounded-md border px-2 text-[12.5px]"
-                      onChange={(e) => setJobSourceId(e.target.value)}
+                    <label
                       style={{
-                        ...fieldStyle,
-                        marginLeft: 24,
-                        maxWidth: "calc(100% - 24px)",
-                        minWidth: 0,
+                        alignItems: "center",
+                        display: "flex",
+                        fontSize: 12.5,
+                        gap: 8,
                       }}
-                      value={jobSourceId}
                     >
-                      <option value="">selecione...</option>
-                      {sources.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+                      <input
+                        checked={scopeType === "SOURCE"}
+                        name="scopeType"
+                        onChange={() => setScopeType("SOURCE")}
+                        type="radio"
+                      />
+                      Fonte específica
+                    </label>
+                    {scopeType === "SOURCE" && (
+                      <select
+                        className="h-8 w-full rounded-md border px-2 text-[12.5px]"
+                        onChange={(e) => setJobSourceId(e.target.value)}
+                        style={{
+                          ...fieldStyle,
+                          marginLeft: 24,
+                          maxWidth: "calc(100% - 24px)",
+                          minWidth: 0,
+                        }}
+                        value={jobSourceId}
+                      >
+                        <option value="">selecione...</option>
+                        {sources.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
                 <label
                   style={{
                     alignItems: "center",
@@ -397,7 +484,9 @@ function CreateJobModal({
                     onChange={() => setScopeType("ALL")}
                     type="radio"
                   />
-                  Todas as fontes ativas
+                  {jobType === "LOGO_FETCH"
+                    ? "Todos os adapters implementados"
+                    : "Todas as fontes ativas"}
                 </label>
               </div>
             </div>

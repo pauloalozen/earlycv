@@ -47,6 +47,31 @@ vi.mock("./radar-ui", () => ({
     </div>
   ),
   ScorePill: () => <span>pill</span>,
+  OpportunityRing: (props: { score: number }) => (
+    <div data-testid="opportunity-ring" data-value={props.score}>
+      ring
+    </div>
+  ),
+  OpportunityBadge: () => <span>badge</span>,
+  opportunityLevel: (score: number) => ({
+    level:
+      score >= 90
+        ? 5
+        : score >= 75
+          ? 4
+          : score >= 55
+            ? 3
+            : score >= 35
+              ? 2
+              : score >= 15
+                ? 1
+                : 0,
+    label: "nível",
+    fg: "#000",
+    bg: "#fff",
+    ring: "#000",
+    darkFg: "#fff",
+  }),
   MiniBar: () => <div>bar</div>,
   SkillChip: () => <span>chip</span>,
   AdaptBtn: () => <a href="#adaptar">adaptar</a>,
@@ -202,43 +227,44 @@ describe("/radar ghost mode access", () => {
 
 // Tree walker que "renderiza" a árvore de React elements retornada por
 // VagasPage() sem um renderer real (jsdom/RTL) — chama componentes função
-// manualmente até encontrar o ScoreRing mockado, capturando suas props.
+// manualmente até encontrar o OpportunityRing mockado (usado pro caminho de
+// Oportunidade, ver job-card.tsx ScoreIndicator), capturando suas props.
 type ElementLike = { type: unknown; props?: Record<string, unknown> };
 
 function isElementLike(value: unknown): value is ElementLike {
   return typeof value === "object" && value !== null && "type" in value;
 }
 
-let scoreRingRef: unknown;
+let opportunityRingRef: unknown;
 
 // async porque RadarJobsListing (extraído de page.tsx pra ser reaproveitado
 // pelas landing pages do Radar) é um Server Component assíncrono — chamar
 // node.type(node.props) nesse caso devolve uma Promise, não a árvore de
 // elementos, então o walker precisa dar await antes de continuar descendo.
-async function findScoreRingProps(
+async function findOpportunityRingProps(
   node: unknown,
   results: Record<string, unknown>[] = [],
 ): Promise<Record<string, unknown>[]> {
   if (!node || typeof node !== "object") return results;
   if (Array.isArray(node)) {
-    for (const item of node) await findScoreRingProps(item, results);
+    for (const item of node) await findOpportunityRingProps(item, results);
     return results;
   }
   if (!isElementLike(node)) return results;
 
   if (typeof node.type === "function") {
-    if (node.type === scoreRingRef) {
+    if (node.type === opportunityRingRef) {
       results.push(node.props ?? {});
       return results;
     }
     const rendered = await (node.type as (props: unknown) => unknown)(
       node.props,
     );
-    await findScoreRingProps(rendered, results);
+    await findOpportunityRingProps(rendered, results);
     return results;
   }
   if (node.props?.children) {
-    await findScoreRingProps(node.props.children, results);
+    await findOpportunityRingProps(node.props.children, results);
   }
   return results;
 }
@@ -262,7 +288,7 @@ describe("/radar score badge (usuário logado com UserRadarProfile)", () => {
     });
 
     const radarUiModule = await import("./radar-ui");
-    scoreRingRef = radarUiModule.ScoreRing;
+    opportunityRingRef = radarUiModule.OpportunityRing;
   });
 
   afterEach(() => {
@@ -294,7 +320,7 @@ describe("/radar score badge (usuário logado com UserRadarProfile)", () => {
     };
   }
 
-  it("usuário logado com UserRadarProfile e score vê o ring com o score real", async () => {
+  it("usuário logado com UserRadarProfile e score vê o ring de oportunidade com o score real", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
     mocks.getMyMasterResume.mockResolvedValue({
       id: "resume-1",
@@ -328,13 +354,13 @@ describe("/radar score badge (usuário logado com UserRadarProfile)", () => {
     });
 
     const result = await VagasPage({ searchParams: Promise.resolve({}) });
-    const rings = await findScoreRingProps(result);
-    const cardRing = rings.find((props) => props.value === 87);
+    const rings = await findOpportunityRingProps(result);
+    const cardRing = rings.find((props) => props.score === 87);
 
     expect(cardRing).toBeDefined();
   });
 
-  it("usuário anônimo não vê ring de score (nenhum ScoreRing com score real)", async () => {
+  it("usuário anônimo não vê ring de oportunidade com score real (nenhum OpportunityRing de vaga real)", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(null);
     mocks.listPublicJobs.mockResolvedValue({
       data: [buildJob()],
@@ -344,12 +370,13 @@ describe("/radar score badge (usuário logado com UserRadarProfile)", () => {
     });
 
     const result = await VagasPage({ searchParams: Promise.resolve({}) });
-    const rings = await findScoreRingProps(result);
+    const rings = await findOpportunityRingProps(result);
 
-    // O único ScoreRing permitido pro anônimo é o decorativo e fixo (84%)
-    // do card "É assim que fica" no hero de criar conta — não é o score de
-    // nenhuma vaga real, é só ilustração de como fica depois de criar conta.
-    const realJobRings = rings.filter((props) => props.value !== 84);
+    // O único OpportunityRing permitido pro anônimo é o decorativo e fixo
+    // (HERO_SCORE, hoje 84) do card "É assim que fica" no hero de criar
+    // conta — não é o score de nenhuma vaga real, é só ilustração de como
+    // fica depois de criar conta.
+    const realJobRings = rings.filter((props) => props.score !== 84);
     expect(realJobRings).toHaveLength(0);
     expect(mocks.getMyRadarProfile).not.toHaveBeenCalled();
   });

@@ -16,6 +16,7 @@ import {
   WorkdayAdapter,
 } from "./adapters";
 import { AdminIngestionImportService } from "./admin-ingestion-import.service";
+import { CompanyLogoFetchService } from "./company-logo/company-logo-fetch.service";
 import { CrawlerDiscardController } from "./crawler-discard.controller";
 import { CrawlerDiscardService } from "./crawler-discard.service";
 import { DashboardAdminController } from "./dashboard-admin.controller";
@@ -58,6 +59,7 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
   ],
   providers: [
     IngestionService,
+    CompanyLogoFetchService,
     DashboardAdminService,
     AdminIngestionImportService,
     CrawlerDiscardService,
@@ -89,6 +91,6 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
     TalentbrewAdapter,
     WorkdayAdapter,
   ],
-  exports: [IngestionService, SemanticFilterService],
+  exports: [IngestionService, SemanticFilterService, CompanyLogoFetchService],
 })
 export class IngestionModule {}

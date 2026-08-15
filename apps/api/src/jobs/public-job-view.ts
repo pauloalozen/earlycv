@@ -1,7 +1,7 @@
 type PublicJobInput = {
   canonicalKey: string;
   city: string | null;
-  company: { name: string; websiteUrl: string | null };
+  company: { name: string; websiteUrl: string | null; logoUrl: string | null };
   country: string | null;
   descriptionClean: string;
   employmentType: string | null;
@@ -26,6 +26,7 @@ export type PublicJobView = {
   canonicalKey: string;
   city: string | null;
   company: string;
+  companyLogoUrl: string | null;
   companyWebsiteUrl: string | null;
   country: string | null;
   description: string;
@@ -78,6 +79,7 @@ export function toPublicJobView(job: PublicJobInput): PublicJobView {
     canonicalKey: job.canonicalKey,
     city: job.city,
     company: job.company.name,
+    companyLogoUrl: job.company.logoUrl,
     companyWebsiteUrl: job.company.websiteUrl,
     country: job.country,
     description: job.descriptionClean,
