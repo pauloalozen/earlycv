@@ -21,7 +21,7 @@ const MONO = "var(--font-geist-mono), monospace";
 // fica lado a lado) — precisam viver em classes CSS porque inline style não
 // tem @media. Só as propriedades sensíveis ao breakpoint estão aqui; o
 // resto (cor, fonte, tamanho) continua inline. Renderizado uma vez por
-// JobCard/JobCardLocked — duplicar o texto do <style> por card na lista é
+// JobCard — duplicar o texto do <style> por card na lista é
 // aceitável (mesmo padrão já usado em ScoreBreakdownPanel).
 export function JobCardResponsiveStyles() {
   return (

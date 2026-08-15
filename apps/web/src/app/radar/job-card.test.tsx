@@ -73,7 +73,12 @@ describe("JobCard keyword badges", () => {
     const job = buildJob();
 
     const { container } = render(
-      <JobCard job={job} adaptarHref="/adaptar" showScore={false} isLoggedIn={false} />,
+      <JobCard
+        job={job}
+        adaptarHref="/adaptar"
+        showScore={false}
+        isLoggedIn={false}
+      />,
     );
 
     expect(container.querySelector(".jc-top")).toBeInTheDocument();
@@ -124,9 +129,9 @@ describe("JobCard keyword badges", () => {
       />,
     );
 
-    const pythonMentions = Array.from(container.querySelectorAll("span")).filter(
-      (el) => el.textContent === "python",
-    );
+    const pythonMentions = Array.from(
+      container.querySelectorAll("span"),
+    ).filter((el) => el.textContent === "python");
     expect(pythonMentions).toHaveLength(1);
   });
 
@@ -144,9 +149,7 @@ describe("JobCard keyword badges", () => {
       breakdownDetails: buildDetails(),
     });
 
-    render(
-      <JobCard job={job} adaptarHref="/adaptar" showScore isLoggedIn />,
-    );
+    render(<JobCard job={job} adaptarHref="/adaptar" showScore isLoggedIn />);
 
     // Fechado por padrão — nenhum chip "docker"/"kubernetes" visível ainda.
     expect(screen.queryAllByText("docker")).toHaveLength(0);
