@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { ActivityMetricsSection } from "@/app/admin/_components/activity-metrics-section";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
   AdminPageWrap,
@@ -269,6 +270,8 @@ async function OverviewContent({ period }: { period: Period }) {
         />
       </AdminStatsRow>
 
+      <ActivityMetricsSection />
+
       {sectionLabel("PRODUTO · ESTADO ATUAL")}
       <AdminStatsRow cols={1}>
         <AdminStatCard
@@ -315,11 +318,7 @@ async function OverviewContent({ period }: { period: Period }) {
   );
 }
 
-function EnrichmentSection({
-  summary,
-}: {
-  summary: EnrichmentSummary | null;
-}) {
+function EnrichmentSection({ summary }: { summary: EnrichmentSummary | null }) {
   return (
     <>
       <div
@@ -411,9 +410,7 @@ function EnrichmentByAreaCard({
 }) {
   const byArea = summary?.byArea ?? [];
   const top = byArea.slice(0, 5);
-  const restTotal = byArea
-    .slice(5)
-    .reduce((sum, item) => sum + item.count, 0);
+  const restTotal = byArea.slice(5).reduce((sum, item) => sum + item.count, 0);
   const items = [
     ...top.map((item) => ({
       label: RADAR_AREA_LABELS[item.area] ?? item.area,
@@ -457,7 +454,12 @@ function EnrichmentByAreaCard({
               style={{ display: "flex", alignItems: "center", gap: 10 }}
             >
               <div
-                style={{ fontSize: 12, color: AT.ink2, width: 170, flexShrink: 0 }}
+                style={{
+                  fontSize: 12,
+                  color: AT.ink2,
+                  width: 170,
+                  flexShrink: 0,
+                }}
               >
                 {item.label}
               </div>
@@ -499,11 +501,7 @@ function EnrichmentByAreaCard({
   );
 }
 
-function PortalByAreaTable({
-  summary,
-}: {
-  summary: EnrichmentSummary | null;
-}) {
+function PortalByAreaTable({ summary }: { summary: EnrichmentSummary | null }) {
   const portalByArea = summary?.portalByArea ?? [];
   const pendingEnrichment = summary?.pendingEnrichment ?? 0;
 
@@ -563,7 +561,9 @@ function PortalByAreaTable({
             ))
           )}
           <tr>
-            <AdminTd muted>Sem classificação (aguardando enriquecimento)</AdminTd>
+            <AdminTd muted>
+              Sem classificação (aguardando enriquecimento)
+            </AdminTd>
             <AdminTd align="right" mono muted>
               0
             </AdminTd>
