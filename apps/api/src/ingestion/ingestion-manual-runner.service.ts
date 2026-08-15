@@ -226,9 +226,34 @@ export class IngestionManualRunnerService {
   // + jitteredDelay), so que sem bloquear o loop inteiro — enquanto um run
   // esta "esperando" seu delay, outros runs elegiveis usam esse tempo.
   private async drainActiveRuns(owner: string) {
+    // Lida uma vez no inicio da execucao (nao a cada passada) — uma
+    // mudanca salva via /admin/ingestion (delay entre empresas) so entra
+    // em vigor na proxima vez que o loop for chamado do zero, nao no meio
+    // de um run ja em andamento.
     const delayConfig = await this.globalConfigService.getConfig();
-    const nextEligibleAt = new Map<string, number>();
+    // Um slot por vaga de concorrencia do run (Gupy = 2, todo o resto = 1)
+    // — nextEligibleAt e por SLOT, nao por run inteiro, senao a 2a vaga da
+    // Gupy nunca abre antes da 1a ja ter terminado (crawl rapido, delay
+    // configurado bem mais longo que a duracao real de um crawl), o que
+    // anula o concurrency=2 na pratica.
+    const nextEligibleAt = new Map<string, number[]>();
     const inFlight = new Set<Promise<unknown>>();
+
+    const getSlots = (runId: string, concurrency: number): number[] => {
+      let slots = nextEligibleAt.get(runId);
+      if (!slots) {
+        slots = new Array(concurrency).fill(0);
+        nextEligibleAt.set(runId, slots);
+      } else if (slots.length < concurrency) {
+        slots = [...slots, ...new Array(concurrency - slots.length).fill(0)];
+        nextEligibleAt.set(runId, slots);
+      }
+      return slots;
+    };
+    const earliestEligibleAt = (runId: string): number => {
+      const slots = nextEligibleAt.get(runId);
+      return slots && slots.length > 0 ? Math.min(...slots) : 0;
+    };
 
     for (;;) {
       const activeRuns = (await this.database.ingestionBatchRun.findMany({
@@ -285,7 +310,7 @@ export class IngestionManualRunnerService {
       const drained: ActiveBatchRun[] = [];
 
       for (const run of candidates) {
-        const eligibleAt = nextEligibleAt.get(run.id) ?? 0;
+        const eligibleAt = earliestEligibleAt(run.id);
         if (eligibleAt > now) continue;
 
         const runningCount = await this.database.ingestionBatchItem.count({
@@ -316,7 +341,7 @@ export class IngestionManualRunnerService {
           continue;
         }
         const pending = candidates
-          .map((run) => nextEligibleAt.get(run.id) ?? 0)
+          .map((run) => earliestEligibleAt(run.id))
           .filter((eligibleAt) => eligibleAt > now);
         if (pending.length === 0) return;
         const waitMs = Math.min(
@@ -331,8 +356,8 @@ export class IngestionManualRunnerService {
       // entra primeiro, por createdAt) — isso e o que evita a fome que
       // deixava outros adapters parados atras de um batch grande.
       launchable.sort((a, b) => {
-        const aEligible = nextEligibleAt.get(a.id) ?? -1;
-        const bEligible = nextEligibleAt.get(b.id) ?? -1;
+        const aEligible = earliestEligibleAt(a.id) || -1;
+        const bEligible = earliestEligibleAt(b.id) || -1;
         if (aEligible !== bEligible) return aEligible - bEligible;
         return a.createdAt.getTime() - b.createdAt.getTime();
       });
@@ -368,17 +393,18 @@ export class IngestionManualRunnerService {
       if (claimResult.count === 0) continue;
 
       const launchedAt = Date.now();
-      // Reserva otimista do proximo horario elegivel desse run JA no
-      // lancamento (nao so quando o item termina) — e o que garante o
-      // stagger entre a 1a e a 2a vaga concorrente da Gupy (concurrency=2):
-      // sem isso, a 2a vaga poderia ser lancada na proxima volta do loop
-      // sem nenhum espacamento, ja que a 1a ainda esta em voo. O valor real
-      // (normal x error delay) sobrescreve essa reserva assim que o item
-      // termina, mais abaixo.
-      nextEligibleAt.set(
-        run.id,
-        launchedAt + jitteredDelay(delayConfig.normalDelayMs),
-      );
+      // Reserva otimista do slot usado JA no lancamento (nao so quando o
+      // item termina) — e o que garante o stagger entre lancamentos que
+      // disputam o MESMO slot: sem isso, o proximo lancamento nesse slot
+      // poderia sair na proxima volta do loop sem nenhum espacamento. Cada
+      // slot pacinga independente, entao com concurrency=2 a 2a vaga usa o
+      // outro slot (que comeca livre) e roda de verdade em paralelo com a
+      // 1a, em vez de esperar ela terminar. O valor real (normal x error
+      // delay) sobrescreve essa reserva assim que o item termina, mais
+      // abaixo.
+      const slots = getSlots(run.id, this.concurrencyFor(run));
+      const slotIndex = slots.indexOf(Math.min(...slots));
+      slots[slotIndex] = launchedAt + jitteredDelay(delayConfig.normalDelayMs);
 
       let itemPromise!: Promise<unknown>;
       itemPromise = this.runClaimedItem(
@@ -397,17 +423,15 @@ export class IngestionManualRunnerService {
           const baseDelayMs = blocked
             ? delayConfig.errorDelayMs
             : delayConfig.normalDelayMs;
-          nextEligibleAt.set(run.id, launchedAt + jitteredDelay(baseDelayMs));
+          slots[slotIndex] = launchedAt + jitteredDelay(baseDelayMs);
         },
       )
         .catch((error) => {
           this.logger.warn(
             `unexpected error processing item ${item.id}: ${error instanceof Error ? error.message : "unknown"}`,
           );
-          nextEligibleAt.set(
-            run.id,
-            launchedAt + jitteredDelay(delayConfig.normalDelayMs),
-          );
+          slots[slotIndex] =
+            launchedAt + jitteredDelay(delayConfig.normalDelayMs);
         })
         .finally(() => {
           inFlight.delete(itemPromise);

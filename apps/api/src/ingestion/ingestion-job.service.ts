@@ -238,6 +238,7 @@ export class IngestionJobService {
             select: {
               cancelRequestedAt: true,
               failedCount: true,
+              finishedAt: true,
               scopeType: true,
               scopeValue: true,
               skippedCount: true,
@@ -271,6 +272,7 @@ export class IngestionJobService {
       status: IngestionJobRunStatus;
       batchRun: {
         cancelRequestedAt: Date | null;
+        finishedAt: Date | null;
         status: IngestionBatchRunStatus;
         updatedAt: Date;
       } | null;
@@ -288,7 +290,14 @@ export class IngestionJobService {
     const mappedStatus = TERMINAL_BATCH_STATUS[run.batchRun.status];
     if (mappedStatus) {
       const updated = await this.database.ingestionJobRun.update({
-        data: { finishedAt: new Date(), status: mappedStatus },
+        // batchRun.finishedAt e o momento real em que o crawl terminou —
+        // usar new Date() aqui carimbaria o horario em que essa leitura
+        // aconteceu (que pode ser horas depois, ja que a reconciliacao so
+        // roda quando alguem abre a lista), nao o horario real de termino.
+        data: {
+          finishedAt: run.batchRun.finishedAt ?? new Date(),
+          status: mappedStatus,
+        },
         where: { id: run.id },
       });
 
