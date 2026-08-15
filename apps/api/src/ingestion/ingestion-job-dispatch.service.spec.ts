@@ -142,6 +142,21 @@ test("dispatchJob CRAWL cria IngestionBatchRun e atualiza nextRunAt", async () =
   assert.ok(jobUpdates[0]?.data.nextRunAt instanceof Date);
 });
 
+test("dispatchJob grava jobName/jobType na IngestionJobRun (snapshot que sobrevive a exclusao do job)", async () => {
+  const { service, jobRuns } = createFixture();
+  const job = createJob({
+    jobType: "CRAWL",
+    name: "Gupy diario",
+    scopeType: "ALL",
+  });
+
+  const run = await service.dispatchJob(job, "SCHEDULE");
+
+  const stored = jobRuns.get(run.id);
+  assert.equal(stored?.jobName, "Gupy diario");
+  assert.equal(stored?.jobType, "CRAWL");
+});
+
 test("dispatchJob ENRICHMENT chama runNow() do worker e atualiza nextRunAt", async () => {
   const { service, getRunNowCalls, getJobUpdates } = createFixture();
   const job = createJob({

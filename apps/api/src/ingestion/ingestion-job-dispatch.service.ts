@@ -26,7 +26,13 @@ export class IngestionJobDispatchService {
 
   async dispatchJob(job: IngestionJob, trigger: IngestionJobTrigger) {
     const jobRun = await this.database.ingestionJobRun.create({
-      data: { jobId: job.id, status: "QUEUED", triggeredBy: trigger },
+      data: {
+        jobId: job.id,
+        jobName: job.name,
+        jobType: job.jobType,
+        status: "QUEUED",
+        triggeredBy: trigger,
+      },
     });
 
     try {

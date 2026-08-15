@@ -9,9 +9,10 @@ import type { IngestionJobDispatchService } from "./ingestion-job-dispatch.servi
 
 type FixtureJobRun = {
   id: string;
-  jobId: string;
+  jobId: string | null;
   batchRunId?: string | null;
   status: string;
+  triggeredBy?: string;
   finishedAt: Date | null;
   batchRun: {
     status: string;
@@ -20,6 +21,22 @@ type FixtureJobRun = {
   } | null;
   job: { id: string; jobType: string; name: string } | null;
 };
+
+function matchesRunWhere(
+  run: FixtureJobRun,
+  where?: { triggeredBy?: string; jobId?: string },
+) {
+  if (
+    where?.triggeredBy !== undefined &&
+    run.triggeredBy !== where.triggeredBy
+  ) {
+    return false;
+  }
+  if (where?.jobId !== undefined && run.jobId !== where.jobId) {
+    return false;
+  }
+  return true;
+}
 
 function createFixture(
   seed: IngestionJob[] = [],
@@ -70,7 +87,12 @@ function createFixture(
             job.scheduleType === where.scheduleType &&
             job.scopeType === where.scopeType,
         ) ?? null,
-      findMany: async () => Array.from(jobs.values()),
+      findMany: async ({ where }: { where?: { isAdHoc?: boolean } } = {}) =>
+        Array.from(jobs.values()).filter((job) =>
+          where?.isAdHoc === undefined
+            ? true
+            : Boolean((job as { isAdHoc?: boolean }).isAdHoc) === where.isAdHoc,
+        ),
       findUnique: async ({ where }: { where: { id: string } }) =>
         jobs.get(where.id) ?? null,
       update: async ({
@@ -104,8 +126,22 @@ function createFixture(
       },
     },
     ingestionJobRun: {
-      count: async () => jobRuns.size,
-      findMany: async () => Array.from(jobRuns.values()),
+      count: async ({
+        where,
+      }: {
+        where?: { triggeredBy?: string; jobId?: string };
+      } = {}) =>
+        Array.from(jobRuns.values()).filter((run) =>
+          matchesRunWhere(run, where),
+        ).length,
+      findMany: async ({
+        where,
+      }: {
+        where?: { triggeredBy?: string; jobId?: string };
+      } = {}) =>
+        Array.from(jobRuns.values()).filter((run) =>
+          matchesRunWhere(run, where),
+        ),
       update: async ({
         where,
         data,
@@ -303,21 +339,68 @@ test("listRuns marca abandonado como CANCELLED quando cancelamento ja tinha sido
   assert.equal(result.runs[0]?.status, "CANCELLED");
 });
 
-test("runSourceAdHoc cria um job MANUAL na primeira chamada e reaproveita nas seguintes", async () => {
+test("runSourceAdHoc cria um job MANUAL isAdHoc na primeira chamada e reaproveita nas seguintes", async () => {
   const { service, jobs, dispatchCalls } = createFixture();
 
   await service.runSourceAdHoc("source-1");
   assert.equal(jobs.size, 1);
-  const created = Array.from(jobs.values())[0];
+  const created = Array.from(jobs.values())[0] as IngestionJob & {
+    isAdHoc?: boolean;
+  };
   assert.equal(created?.scheduleType, "MANUAL");
   assert.equal(created?.scopeType, "SOURCE");
   assert.equal(created?.jobSourceId, "source-1");
   assert.equal(created?.name, "ACME · ACME Careers");
+  assert.equal(created?.isAdHoc, true);
 
   await service.runSourceAdHoc("source-1");
   assert.equal(jobs.size, 1, "nao deve criar um segundo job pra mesma fonte");
   assert.equal(dispatchCalls.length, 2);
   assert.ok(dispatchCalls.every((call) => call.trigger === "MANUAL"));
+});
+
+test("findAll esconde jobs isAdHoc, so mostra os criados pelo popup Criar job", async () => {
+  const { service, jobs } = createFixture();
+
+  await service.create(baseDto({ name: "Job explícito" }));
+  await service.runSourceAdHoc("source-1");
+  assert.equal(jobs.size, 2, "os 2 jobs existem de verdade no banco");
+
+  const visible = await service.findAll();
+
+  assert.equal(visible.length, 1);
+  assert.equal(visible[0]?.name, "Job explícito");
+});
+
+test("listRuns filtra por triggeredBy", async () => {
+  const { service } = createFixture(
+    [],
+    [
+      {
+        batchRun: null,
+        finishedAt: new Date(),
+        id: "run-scheduled",
+        job: { id: "job-1", jobType: "CRAWL", name: "Gupy" },
+        jobId: "job-1",
+        status: "COMPLETED",
+        triggeredBy: "SCHEDULE",
+      },
+      {
+        batchRun: null,
+        finishedAt: new Date(),
+        id: "run-manual",
+        job: { id: "job-1", jobType: "CRAWL", name: "Gupy" },
+        jobId: "job-1",
+        status: "COMPLETED",
+        triggeredBy: "MANUAL",
+      },
+    ],
+  );
+
+  const result = await service.listRuns({ triggeredBy: "MANUAL" } as never);
+
+  assert.equal(result.runs.length, 1);
+  assert.equal(result.runs[0]?.id, "run-manual");
 });
 
 test("runSourceAdHoc nao reaproveita um job com agendamento real da mesma fonte", async () => {

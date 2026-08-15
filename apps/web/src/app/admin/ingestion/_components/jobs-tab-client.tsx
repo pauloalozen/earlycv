@@ -54,8 +54,13 @@ type IngestionJobRow = {
 
 type IngestionJobRunRow = {
   id: string;
-  jobId: string;
+  jobId: string | null;
+  // job vira null quando o job original foi excluido — jobName/jobType
+  // sao o snapshot tirado no momento da execucao, sobrevivem a exclusao e
+  // sao o fallback usado pra exibicao (ver runJobLabel/runJobType).
   job: { id: string; name: string; jobType: JobType } | null;
+  jobName: string;
+  jobType: JobType;
   status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
   triggeredBy: "SCHEDULE" | "MANUAL";
   startedAt: string | null;
@@ -695,6 +700,9 @@ export function JobsTabClient({
   const [runsPage, setRunsPage] = useState(1);
   const [runsJobFilter, setRunsJobFilter] = useState("");
   const [runsStatusFilter, setRunsStatusFilter] = useState("");
+  const [runsTriggerFilter, setRunsTriggerFilter] = useState("");
+  const [runsDateFrom, setRunsDateFrom] = useState("");
+  const [runsDateTo, setRunsDateTo] = useState("");
   const historyRef = useRef<HTMLDivElement>(null);
 
   const fetchJobs = useCallback(async () => {
@@ -716,6 +724,11 @@ export function JobsTabClient({
         const qs = new URLSearchParams({ page: String(page), pageSize: "20" });
         if (runsJobFilter) qs.set("jobId", runsJobFilter);
         if (runsStatusFilter) qs.set("status", runsStatusFilter);
+        if (runsTriggerFilter) qs.set("triggeredBy", runsTriggerFilter);
+        if (runsDateFrom) qs.set("dateFrom", `${runsDateFrom}T00:00:00.000Z`);
+        // Fim do dia (23:59:59.999) — senao "ate 15/08" excluiria as
+        // execucoes do proprio dia 15 (a data pura vira meia-noite UTC).
+        if (runsDateTo) qs.set("dateTo", `${runsDateTo}T23:59:59.999Z`);
         const res = await fetch(
           `/api/admin/ingestion/ingestion-jobs/runs?${qs}`,
           {
@@ -727,7 +740,13 @@ export function JobsTabClient({
         setLoadingRuns(false);
       }
     },
-    [runsJobFilter, runsStatusFilter],
+    [
+      runsJobFilter,
+      runsStatusFilter,
+      runsTriggerFilter,
+      runsDateFrom,
+      runsDateTo,
+    ],
   );
 
   useEffect(() => {
@@ -988,6 +1007,53 @@ export function JobsTabClient({
             <option value="FAILED">FAILED</option>
             <option value="CANCELLED">CANCELLED</option>
           </select>
+          <select
+            className="h-9 rounded-md border px-3 text-[12.5px]"
+            onChange={(e) => {
+              setRunsTriggerFilter(e.target.value);
+              setRunsPage(1);
+            }}
+            style={{
+              background: AT.card,
+              borderColor: AT.border,
+              color: AT.ink2,
+            }}
+            value={runsTriggerFilter}
+          >
+            <option value="">Todos os disparos</option>
+            <option value="SCHEDULE">schedule</option>
+            <option value="MANUAL">manual</option>
+          </select>
+          <input
+            aria-label="Data inicial"
+            className="h-9 rounded-md border px-3 text-[12.5px]"
+            onChange={(e) => {
+              setRunsDateFrom(e.target.value);
+              setRunsPage(1);
+            }}
+            style={{
+              background: AT.card,
+              borderColor: AT.border,
+              color: AT.ink2,
+            }}
+            type="date"
+            value={runsDateFrom}
+          />
+          <input
+            aria-label="Data final"
+            className="h-9 rounded-md border px-3 text-[12.5px]"
+            onChange={(e) => {
+              setRunsDateTo(e.target.value);
+              setRunsPage(1);
+            }}
+            style={{
+              background: AT.card,
+              borderColor: AT.border,
+              color: AT.ink2,
+            }}
+            type="date"
+            value={runsDateTo}
+          />
         </div>
 
         <AdminTable>
@@ -1022,9 +1088,23 @@ export function JobsTabClient({
             )}
             {runsResult?.runs.map((run) => (
               <tr key={run.id}>
-                <AdminTd>{run.job?.name ?? "—"}</AdminTd>
+                <AdminTd>
+                  {run.job?.name ?? run.jobName}
+                  {!run.job ? (
+                    <span
+                      style={{
+                        color: AT.muted,
+                        fontSize: 10.5,
+                        marginLeft: 6,
+                      }}
+                      title="O job que gerou essa execução foi excluído — nome preservado do momento da execução."
+                    >
+                      (excluído)
+                    </span>
+                  ) : null}
+                </AdminTd>
                 <AdminTd mono muted>
-                  {run.job?.jobType ?? "—"}
+                  {run.job?.jobType ?? run.jobType}
                 </AdminTd>
                 <AdminTd mono muted>
                   {run.triggeredBy === "SCHEDULE" ? "schedule" : "manual"}

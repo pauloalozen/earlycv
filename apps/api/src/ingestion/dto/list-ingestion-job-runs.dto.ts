@@ -1,4 +1,4 @@
-import { IngestionJobRunStatus } from "@prisma/client";
+import { IngestionJobRunStatus, IngestionJobTrigger } from "@prisma/client";
 import { Transform, Type } from "class-transformer";
 import {
   IsEnum,
@@ -32,6 +32,10 @@ export class ListIngestionJobRunsDto {
   @IsOptional()
   @IsEnum(IngestionJobRunStatus)
   status?: IngestionJobRunStatus;
+
+  @IsOptional()
+  @IsEnum(IngestionJobTrigger)
+  triggeredBy?: IngestionJobTrigger;
 
   @IsOptional()
   @IsISO8601()
