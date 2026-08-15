@@ -65,6 +65,7 @@ type SearchableCompany = {
   careersUrl?: string | null;
   country?: string | null;
   id: string;
+  logoUrl?: string | null;
   name: string;
   relatedSources: Array<{ id: string }>;
   status: AdminStatus;
