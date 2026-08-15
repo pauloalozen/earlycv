@@ -55,6 +55,8 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   candidatura_deleted: "backend",
   candidatura_note_added: "backend",
   candidatura_rejection_feedback_submitted: "backend",
+  // Radar
+  radar_view: "frontend",
   // Interview Prep
   interview_prep_drawer_opened: "frontend",
   interview_prep_generate_clicked: "frontend",

@@ -47,6 +47,8 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   plan_selected: "plan_selected",
   site_exit_candidate: "site_exit_candidate",
   dashboard_viewed: "dashboard_viewed",
+  // Radar
+  radar_view: "radar_view",
   // Candidaturas
   candidaturas_page_viewed: "candidaturas_page_viewed",
   candidatura_created: "candidatura_created",

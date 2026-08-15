@@ -11,6 +11,7 @@ import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "./jobs-listing";
 import { RadarPageShell } from "./page-shell";
+import { RadarViewTracker } from "./radar-view-tracker";
 
 export function generateMetadata(): Metadata {
   // export const metadata estático (como no rascunho original da spec)
@@ -81,6 +82,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
         </script>
       }
     >
+      <RadarViewTracker />
       <RadarJobsListing basePath="/radar" user={user} searchParams={params} />
     </RadarPageShell>
   );

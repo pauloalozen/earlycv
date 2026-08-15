@@ -46,4 +46,29 @@ export class DashboardAdminController {
     );
     return this.dashboardAdminService.getIndexingLog(limit);
   }
+
+  @Get("activity-metrics")
+  async getActivityMetrics(
+    @Res({ passthrough: true }) response: Response,
+    @Query("from") fromRaw?: string,
+    @Query("to") toRaw?: string,
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+
+    const now = new Date();
+    const parsedTo = toRaw ? new Date(toRaw) : now;
+    const to = Number.isNaN(parsedTo.getTime()) ? now : parsedTo;
+
+    const defaultFrom = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const parsedFrom = fromRaw ? new Date(fromRaw) : defaultFrom;
+    let from = Number.isNaN(parsedFrom.getTime()) ? defaultFrom : parsedFrom;
+
+    // Limita a janela a 366 dias pra evitar consultas descontroladas.
+    const maxSpanMs = 366 * 24 * 60 * 60 * 1000;
+    if (to.getTime() - from.getTime() > maxSpanMs) {
+      from = new Date(to.getTime() - maxSpanMs);
+    }
+
+    return this.dashboardAdminService.getActivityMetrics(from, to);
+  }
 }
