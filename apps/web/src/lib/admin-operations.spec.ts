@@ -16,6 +16,7 @@ import {
 
 const company = {
   id: "cmp_1",
+  logoUrl: null,
   name: "ACME Labs",
 };
 
