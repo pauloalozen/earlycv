@@ -90,10 +90,16 @@ export class IngestionJobService {
     });
   }
 
+  // isAdHoc=false: a listagem so mostra jobs criados explicitamente pelo
+  // popup "Criar job" — o job MANUAL/SOURCE auto-criado por "Carregar
+  // vagas" direto na fonte (runSourceAdHoc) fica de fora, mesmo existindo
+  // de verdade no banco (precisa existir pra dar jobId as execucoes
+  // aparecerem no historico).
   findAll() {
     return this.database.ingestionJob.findMany({
       include: jobWithSourceInclude,
       orderBy: [{ createdAt: "desc" }],
+      where: { isAdHoc: false },
     });
   }
 
@@ -161,15 +167,14 @@ export class IngestionJobService {
     return this.dispatchService.dispatchJob(job, "MANUAL");
   }
 
-  // Disparo "Rodar" direto na fonte (aba Fontes / detalhe da fonte) —
-  // fire-and-forget: cria/reaproveita um IngestionJob MANUAL exclusivo
-  // dessa fonte (nunca reaproveita um job com agendamento real, pra nao
-  // adiantar/atrasar o proximo disparo agendado dele) e despacha via o
-  // mesmo dispatchService — que so cria o IngestionBatchRun e retorna,
-  // o crawl de fato roda async pelo IngestionManualRunnerService.
-  // Resultado aparece no historico de execucoes da aba Jobs, com o nome
-  // da fonte e disparo=MANUAL, em vez de ficar visivel so na tela da
-  // fonte.
+  // Disparo "Carregar vagas" direto na fonte (aba Fontes / detalhe da
+  // fonte) — fire-and-forget: cria/reaproveita um IngestionJob MANUAL
+  // exclusivo dessa fonte, marcado isAdHoc (nunca aparece na listagem de
+  // jobs, so existe pra dar jobId a execucao) e despacha via o mesmo
+  // dispatchService — que so cria o IngestionBatchRun e retorna, o crawl
+  // de fato roda async pelo IngestionManualRunnerService. Resultado
+  // aparece no historico de execucoes da aba Jobs, com o nome da fonte e
+  // disparo=MANUAL, sem poluir a listagem de jobs configurados.
   async runSourceAdHoc(jobSourceId: string) {
     const source = await this.database.jobSource.findUnique({
       include: { company: { select: { name: true } } },
@@ -191,6 +196,7 @@ export class IngestionJobService {
     if (!job) {
       job = await this.database.ingestionJob.create({
         data: {
+          isAdHoc: true,
           jobSourceId,
           jobType: "CRAWL",
           name: `${source.company.name} · ${source.sourceName}`,
@@ -222,6 +228,7 @@ export class IngestionJobService {
       },
       jobId: query.jobId,
       status: query.status,
+      triggeredBy: query.triggeredBy,
     };
 
     const [runs, total] = await Promise.all([

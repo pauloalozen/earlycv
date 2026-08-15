@@ -15,6 +15,7 @@ function createServiceFixture(
     string,
     {
       id: string;
+      runKind?: "CRAWL" | "LOGO_FETCH";
       scopeType?: string;
       scopeValue?: string;
       status:
@@ -40,6 +41,8 @@ function createServiceFixture(
       id: string;
       batchRunId: string;
       jobSourceId: string;
+      companyId?: string;
+      sourceType?: string;
       status:
         | "queued"
         | "running"
@@ -74,11 +77,7 @@ function createServiceFixture(
 
   const database = {
     ingestionBatchRun: {
-      findMany: async ({
-        where,
-      }: {
-        where: { status: { in: string[] } };
-      }) =>
+      findMany: async ({ where }: { where: { status: { in: string[] } } }) =>
         Array.from(runs.values())
           .filter((run) => where.status.in.includes(run.status))
           .sort(
@@ -283,14 +282,29 @@ function createServiceFixture(
     getConfig: async () => config,
   };
 
+  let logoFetchImpl: ((companyId: string) => Promise<unknown>) | undefined;
+  const companyLogoFetchCalls: string[] = [];
+  const companyLogoFetchService = {
+    fetchLogoForCompany: async (companyId: string) => {
+      companyLogoFetchCalls.push(companyId);
+      if (logoFetchImpl) return logoFetchImpl(companyId);
+      return {
+        status: "skipped" as const,
+        reason: "not used in this test",
+      };
+    },
+  };
+
   const service = new IngestionManualRunnerService(
     database as never,
     ingestionService as never,
+    companyLogoFetchService as never,
     lockRepository as never,
     globalConfigService as never,
   );
 
   return {
+    companyLogoFetchCalls,
     items,
     lockRepository,
     resolveSlowJob(jobSourceId: string) {
@@ -301,6 +315,9 @@ function createServiceFixture(
     service,
     setBeforeMarkRunning(callback: (itemId: string) => void) {
       beforeMarkRunning = callback;
+    },
+    setLogoFetchImpl(callback: (companyId: string) => Promise<unknown>) {
+      logoFetchImpl = callback;
     },
     setOnAcquireItemLock(callback: (itemId: string) => boolean | undefined) {
       onAcquireItemLock = callback;
@@ -1139,4 +1156,103 @@ test("runner clamps aggregate counters to totalSources on finalize", async () =>
     run.succeededCount + run.failedCount + run.skippedCount <= run.totalSources,
     true,
   );
+});
+
+test("runner processes a LOGO_FETCH batch via companyLogoFetchService instead of ingestionService.runJobSource", async () => {
+  const {
+    companyLogoFetchCalls,
+    items,
+    runJobSourceCalls,
+    runs,
+    service,
+    setLogoFetchImpl,
+  } = createServiceFixture();
+
+  setLogoFetchImpl(async (companyId) => {
+    assert.equal(companyId, "company-logo-1");
+    return {
+      status: "completed" as const,
+      logoUrl: "https://attachments.gupy.io/x/logo.png",
+    };
+  });
+
+  runs.set("batch-logo", {
+    id: "batch-logo",
+    runKind: "LOGO_FETCH",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-logo-1", {
+    id: "item-logo-1",
+    batchRunId: "batch-logo",
+    jobSourceId: "source-logo-1",
+    companyId: "company-logo-1",
+    sourceType: "gupy",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  assert.deepEqual(runJobSourceCalls, []);
+  assert.deepEqual(companyLogoFetchCalls, ["company-logo-1"]);
+  const run = runs.get("batch-logo");
+  assert.equal(run?.status, "completed");
+  assert.equal(run?.succeededCount, 1);
+  const item = items.get("item-logo-1");
+  assert.equal(item?.status, "completed");
+});
+
+test("runner marks a LOGO_FETCH item as failed when the logo isn't found", async () => {
+  const { items, runs, service, setLogoFetchImpl } = createServiceFixture();
+
+  setLogoFetchImpl(async () => ({
+    status: "failed" as const,
+    errorSummary: "logo não encontrado na página de carreira",
+  }));
+
+  runs.set("batch-logo-fail", {
+    id: "batch-logo-fail",
+    runKind: "LOGO_FETCH",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-logo-fail", {
+    id: "item-logo-fail",
+    batchRunId: "batch-logo-fail",
+    jobSourceId: "source-logo-fail",
+    companyId: "company-logo-fail",
+    sourceType: "gupy",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  const run = runs.get("batch-logo-fail");
+  assert.equal(run?.status, "failed");
+  assert.equal(run?.failedCount, 1);
+  const item = items.get("item-logo-fail");
+  assert.equal(item?.status, "failed");
+  assert.equal(item?.errorMessage, "logo não encontrado na página de carreira");
 });

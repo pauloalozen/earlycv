@@ -8,7 +8,6 @@ import { useTurnstileToken } from "@/lib/use-turnstile-token";
 import { scoreTier } from "./radar-ui";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
-const MONO = "var(--font-geist-mono), monospace";
 
 function Spinner() {
   return (
@@ -200,11 +199,6 @@ export function AnalysisCtaButtons({
             </svg>
           )}
           {loading ? "Analisando..." : "Analisar meu CV"}
-          {!loading && hasScore ? (
-            <span style={{ opacity: 0.5, fontFamily: MONO }}>
-              · {Math.round(score)}%
-            </span>
-          ) : null}
         </button>
       ) : null}
 

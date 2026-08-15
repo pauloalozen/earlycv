@@ -37,7 +37,7 @@ export class CreateIngestionJobDto {
   @IsEnum(IngestionJobType)
   jobType!: IngestionJobType;
 
-  @ValidateIf((dto) => dto.jobType === "CRAWL")
+  @ValidateIf((dto) => dto.jobType === "CRAWL" || dto.jobType === "LOGO_FETCH")
   @IsEnum(IngestionJobScopeType)
   scopeType?: IngestionJobScopeType;
 

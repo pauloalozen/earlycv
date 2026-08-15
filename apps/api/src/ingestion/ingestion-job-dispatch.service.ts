@@ -9,8 +9,9 @@ import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.reposit
 // Logica de disparo compartilhada entre o tick agendado
 // (IngestionJobSchedulerService) e o disparo manual
 // (IngestionJobService.runNow) — um unico lugar decide como um
-// IngestionJob vira um IngestionBatchRun (CRAWL) ou um ciclo do worker de
-// enriquecimento (ENRICHMENT), e como a proxima execucao e recalculada.
+// IngestionJob vira um IngestionBatchRun (CRAWL ou LOGO_FETCH, drenados por
+// IngestionManualRunnerService) ou um ciclo do worker de enriquecimento
+// (ENRICHMENT), e como a proxima execucao e recalculada.
 @Injectable()
 export class IngestionJobDispatchService {
   private readonly logger = new Logger(IngestionJobDispatchService.name);
@@ -25,12 +26,21 @@ export class IngestionJobDispatchService {
 
   async dispatchJob(job: IngestionJob, trigger: IngestionJobTrigger) {
     const jobRun = await this.database.ingestionJobRun.create({
-      data: { jobId: job.id, status: "QUEUED", triggeredBy: trigger },
+      data: {
+        jobId: job.id,
+        jobName: job.name,
+        jobType: job.jobType,
+        status: "QUEUED",
+        triggeredBy: trigger,
+      },
     });
 
     try {
-      if (job.jobType === "CRAWL") {
-        const batchRun = await this.createBatchForJob(job);
+      if (job.jobType === "CRAWL" || job.jobType === "LOGO_FETCH") {
+        const batchRun =
+          job.jobType === "CRAWL"
+            ? await this.createBatchForJob(job)
+            : await this.createLogoFetchBatchForJob(job);
         await this.database.ingestionJobRun.update({
           data: {
             batchRunId: batchRun.id,
@@ -104,5 +114,27 @@ export class IngestionJobDispatchService {
     }
 
     return this.manualBatchRepository.createGlobalBatchRun({});
+  }
+
+  // Escopo de LOGO_FETCH so suporta ADAPTER/ALL (sem "fonte especifica" —
+  // logo e por Company, nao por JobSource individual, e o modal de criacao
+  // nem oferece essa opcao pra esse jobType).
+  private async createLogoFetchBatchForJob(job: IngestionJob) {
+    if (job.scopeType === "SOURCE") {
+      throw new Error(
+        "escopo 'fonte específica' não é suportado para carregar logo",
+      );
+    }
+
+    if (job.scopeType === "ADAPTER") {
+      if (!job.adapterType) {
+        throw new Error("adapterType is required for ADAPTER scope");
+      }
+      return this.manualBatchRepository.createLogoFetchBatchRun({
+        adapterType: job.adapterType,
+      });
+    }
+
+    return this.manualBatchRepository.createLogoFetchBatchRun({});
   }
 }

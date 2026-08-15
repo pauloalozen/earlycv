@@ -7,6 +7,7 @@ import type {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { LOGO_FETCH_SUPPORTED_ADAPTERS } from "./company-logo/logo-extractors";
 
 function isMissingManualBatchTableError(error: unknown) {
   if (!(error instanceof Error)) {
@@ -39,6 +40,13 @@ type CreateGlobalBatchRunInput = {
 
 type CreateSourceBatchRunInput = {
   jobSourceId: string;
+  requestedByUserId?: string;
+};
+
+type CreateLogoFetchBatchRunInput = {
+  // Ausente = todos os adapters com extractor de logo implementado (ver
+  // LOGO_FETCH_SUPPORTED_ADAPTERS).
+  adapterType?: JobSourceType;
   requestedByUserId?: string;
 };
 
@@ -224,6 +232,78 @@ export class ManualIngestionBatchRepository {
               sourceType: source.sourceType,
               status: "queued",
             },
+          });
+        }
+
+        return batchRun;
+      });
+    } catch (error) {
+      if (isMissingManualBatchTableError(error)) {
+        throw new Error(
+          "Manual ingestion tables are missing. Apply database migrations before starting manual runs.",
+        );
+      }
+      throw error;
+    }
+  }
+
+  // Um item por Company (nao por JobSource) — diferente das 3 acima, uma
+  // mesma empresa nunca entra 2x mesmo se tiver varias fontes elegiveis
+  // (evita buscar/gravar o mesmo logo em duplicidade). Ignora
+  // scheduleEnabled de proposito: esse flag e sobre participar de lotes de
+  // CRAWL, nao tem relacao com busca de logo.
+  async createLogoFetchBatchRun(input: CreateLogoFetchBatchRunInput) {
+    try {
+      return this.database.$transaction(async (tx) => {
+        const sourceTypeFilter = input.adapterType
+          ? [input.adapterType]
+          : LOGO_FETCH_SUPPORTED_ADAPTERS;
+
+        const sources = await tx.jobSource.findMany({
+          where: {
+            isActive: true,
+            OR: [{ pausedUntil: null }, { pausedUntil: { lte: new Date() } }],
+            sourceType: { in: sourceTypeFilter },
+          },
+          select: {
+            company: { select: { name: true } },
+            companyId: true,
+            id: true,
+            sourceName: true,
+            sourceType: true,
+          },
+          orderBy: { updatedAt: "desc" },
+        });
+
+        const seenCompanyIds = new Set<string>();
+        const dedupedSources = sources.filter((source) => {
+          if (seenCompanyIds.has(source.companyId)) return false;
+          seenCompanyIds.add(source.companyId);
+          return true;
+        });
+
+        const batchRun = await tx.ingestionBatchRun.create({
+          data: {
+            runKind: "LOGO_FETCH",
+            requestedByUserId: input.requestedByUserId,
+            scopeType: input.adapterType ? "adapter" : "global",
+            scopeValue: input.adapterType ?? "all",
+            status: "queued",
+            totalSources: dedupedSources.length,
+          },
+        });
+
+        if (dedupedSources.length > 0) {
+          await tx.ingestionBatchItem.createMany({
+            data: dedupedSources.map((source) => ({
+              batchRunId: batchRun.id,
+              companyId: source.companyId,
+              companyName: source.company.name,
+              jobSourceId: source.id,
+              sourceName: source.sourceName,
+              sourceType: source.sourceType,
+              status: "queued",
+            })),
           });
         }
 

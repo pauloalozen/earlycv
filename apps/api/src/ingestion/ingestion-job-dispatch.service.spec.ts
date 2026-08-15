@@ -92,6 +92,15 @@ function createFixture() {
       createdBatchRuns.push(run);
       return run;
     },
+    createLogoFetchBatchRun: async (input: { adapterType?: string }) => {
+      const run = {
+        id: input.adapterType ? "batch-logo-adapter" : "batch-logo-global",
+        status: "queued",
+        totalSources: 1,
+      };
+      createdBatchRuns.push(run);
+      return run;
+    },
   } as unknown as ManualIngestionBatchRepository;
 
   let runNowCalls = 0;
@@ -133,6 +142,21 @@ test("dispatchJob CRAWL cria IngestionBatchRun e atualiza nextRunAt", async () =
   assert.ok(jobUpdates[0]?.data.nextRunAt instanceof Date);
 });
 
+test("dispatchJob grava jobName/jobType na IngestionJobRun (snapshot que sobrevive a exclusao do job)", async () => {
+  const { service, jobRuns } = createFixture();
+  const job = createJob({
+    jobType: "CRAWL",
+    name: "Gupy diario",
+    scopeType: "ALL",
+  });
+
+  const run = await service.dispatchJob(job, "SCHEDULE");
+
+  const stored = jobRuns.get(run.id);
+  assert.equal(stored?.jobName, "Gupy diario");
+  assert.equal(stored?.jobType, "CRAWL");
+});
+
 test("dispatchJob ENRICHMENT chama runNow() do worker e atualiza nextRunAt", async () => {
   const { service, getRunNowCalls, getJobUpdates } = createFixture();
   const job = createJob({
@@ -152,4 +176,43 @@ test("dispatchJob ENRICHMENT chama runNow() do worker e atualiza nextRunAt", asy
   assert.equal(jobUpdates.length, 1);
   // MANUAL nunca reagenda
   assert.equal(jobUpdates[0]?.data.nextRunAt, null);
+});
+
+test("dispatchJob LOGO_FETCH com escopo ADAPTER cria batch de logo escopado ao adapter", async () => {
+  const { service, createdBatchRuns } = createFixture();
+  const job = createJob({
+    jobType: "LOGO_FETCH",
+    scopeType: "ADAPTER",
+    adapterType: "gupy",
+  });
+
+  const run = await service.dispatchJob(job, "MANUAL");
+
+  assert.equal(createdBatchRuns.length, 1);
+  assert.equal(run.status, "RUNNING");
+  assert.equal(run.batchRunId, "batch-logo-adapter");
+});
+
+test("dispatchJob LOGO_FETCH com escopo ALL cria batch de logo sem adapter especifico", async () => {
+  const { service, createdBatchRuns } = createFixture();
+  const job = createJob({ jobType: "LOGO_FETCH", scopeType: "ALL" });
+
+  const run = await service.dispatchJob(job, "MANUAL");
+
+  assert.equal(createdBatchRuns.length, 1);
+  assert.equal(run.batchRunId, "batch-logo-global");
+});
+
+test("dispatchJob LOGO_FETCH com escopo SOURCE falha (nao suportado)", async () => {
+  const { service, getJobUpdates } = createFixture();
+  const job = createJob({
+    jobType: "LOGO_FETCH",
+    scopeType: "SOURCE",
+    jobSourceId: "source-1",
+  });
+
+  await assert.rejects(() => service.dispatchJob(job, "MANUAL"));
+
+  const jobUpdates = getJobUpdates();
+  assert.equal(jobUpdates.length, 1);
 });

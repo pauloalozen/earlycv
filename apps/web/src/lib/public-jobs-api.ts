@@ -30,6 +30,7 @@ export type PublicJob = {
   canonicalKey: string;
   city: string | null;
   company: string;
+  companyLogoUrl: string | null;
   companyWebsiteUrl: string | null;
   country: string | null;
   description: string;

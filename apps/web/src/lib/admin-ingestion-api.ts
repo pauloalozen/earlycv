@@ -42,10 +42,17 @@ export type CompanyRecord = {
   industry: string | null;
   isActive: boolean;
   linkedinUrl: string | null;
+  logoFetchedAt: string | null;
+  logoUrl: string | null;
   name: string;
   normalizedName: string;
   websiteUrl: string | null;
 };
+
+export type LogoFetchResult =
+  | { status: "completed"; logoUrl: string }
+  | { status: "skipped"; reason: string }
+  | { status: "failed"; errorSummary: string };
 
 export type JobRecord = {
   canonicalKey: string;
@@ -227,6 +234,7 @@ export type JobSourceRecord = {
   checkIntervalMinutes: number;
   company: {
     id: string;
+    logoUrl: string | null;
     name: string;
     normalizedName: string;
   };
@@ -335,6 +343,21 @@ export async function listCompanies(token?: string) {
 
 export async function getCompany(companyId: string, token?: string) {
   return apiRequest<CompanyRecord>(`/companies/${companyId}`, token);
+}
+
+// Disparo síncrono, uma empresa por vez — botão "Buscar logo" na
+// listagem/detalhe de empresas. Disparo em lote (todos os adapters
+// implementados, ou um específico) passa pelo fluxo de IngestionJob
+// (jobType LOGO_FETCH, ver CreateJobModal em jobs-tab-client.tsx), não por
+// aqui.
+export async function fetchCompanyLogo(companyId: string, token?: string) {
+  return apiRequest<LogoFetchResult>(
+    `/companies/${companyId}/fetch-logo`,
+    token,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export async function listJobs(token?: string) {

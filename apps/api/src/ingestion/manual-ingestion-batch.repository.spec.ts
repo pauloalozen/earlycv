@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { LOGO_FETCH_SUPPORTED_ADAPTERS } from "./company-logo/logo-extractors";
 import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
 
 test("repository creates adapter batch with queued items", async () => {
@@ -74,6 +75,123 @@ test("repository creates adapter batch with queued items", async () => {
     true,
     "escopo ADAPTER so deve pegar fontes com o toggle de agendamento ligado",
   );
+});
+
+test("repository creates logo fetch batch scoped to one adapter, deduped by company", async () => {
+  const createdRun = {
+    id: "batch-logo-1",
+    scopeType: "adapter",
+    scopeValue: "gupy",
+    status: "queued",
+    totalSources: 1,
+  };
+
+  let createManyPayload: Array<Record<string, unknown>> = [];
+  let capturedSourceWhere: Record<string, unknown> | undefined;
+  const tx = {
+    ingestionBatchRun: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        assert.equal(data.runKind, "LOGO_FETCH");
+        assert.equal(data.scopeType, "adapter");
+        assert.equal(data.scopeValue, "gupy");
+        return createdRun;
+      },
+    },
+    jobSource: {
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        capturedSourceWhere = where;
+        // Mesma companyId em 2 fontes — so 1 item deve entrar no batch.
+        return [
+          {
+            id: "source-1",
+            companyId: "company-1",
+            company: { name: "Company 1" },
+            sourceName: "Source 1",
+            sourceType: "gupy",
+          },
+          {
+            id: "source-1b",
+            companyId: "company-1",
+            company: { name: "Company 1" },
+            sourceName: "Source 1b",
+            sourceType: "gupy",
+          },
+        ];
+      },
+    },
+    ingestionBatchItem: {
+      createMany: async ({
+        data,
+      }: {
+        data: Array<Record<string, unknown>>;
+      }) => {
+        createManyPayload = data;
+        return { count: data.length };
+      },
+    },
+  };
+  const database = {
+    $transaction: async (
+      callback: (transaction: typeof tx) => Promise<unknown>,
+    ) => callback(tx),
+  };
+
+  const repository = new ManualIngestionBatchRepository(database as never);
+  const result = await repository.createLogoFetchBatchRun({
+    adapterType: "gupy",
+  });
+
+  assert.equal(result.status, "queued");
+  assert.equal(createManyPayload.length, 1);
+  assert.deepEqual(capturedSourceWhere?.sourceType, { in: ["gupy"] });
+  assert.equal(
+    "scheduleEnabled" in (capturedSourceWhere ?? {}),
+    false,
+    "logo fetch nao deve depender do toggle de agendamento de CRAWL",
+  );
+});
+
+test("repository creates logo fetch batch for all supported adapters when adapterType is omitted", async () => {
+  const createdRun = {
+    id: "batch-logo-all",
+    scopeType: "global",
+    scopeValue: "all",
+    status: "queued",
+    totalSources: 0,
+  };
+
+  let capturedSourceWhere: Record<string, unknown> | undefined;
+  const tx = {
+    ingestionBatchRun: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        assert.equal(data.scopeType, "global");
+        assert.equal(data.scopeValue, "all");
+        return createdRun;
+      },
+    },
+    jobSource: {
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        capturedSourceWhere = where;
+        return [];
+      },
+    },
+  };
+  const database = {
+    $transaction: async (
+      callback: (transaction: typeof tx) => Promise<unknown>,
+    ) => callback(tx),
+  };
+
+  const repository = new ManualIngestionBatchRepository(database as never);
+  const result = await repository.createLogoFetchBatchRun({});
+
+  assert.equal(result.totalSources, 0);
+  // Sem adapterType, o filtro cobre todos os adapters com extractor de
+  // logo implementado — compara contra a constante real em vez de uma
+  // lista fixa, pra não quebrar esse teste a cada novo adapter.
+  assert.deepEqual(capturedSourceWhere?.sourceType, {
+    in: LOGO_FETCH_SUPPORTED_ADAPTERS,
+  });
 });
 
 test("repository lists runs with optional filters", async () => {

@@ -27,8 +27,9 @@ import {
   breakdownPct,
   type MatchBreakdown,
   type MatchData,
+  OpportunityBadge,
+  OpportunityRing,
   RADAR_AREA_LABELS,
-  ScorePill,
   ScoreRing,
   SkillChip,
   scoreColor,
@@ -289,7 +290,7 @@ function CompatCard({
     return (
       <CompatCardCta
         title="Seu CV está sendo processado"
-        description="Assim que terminar, esta vaga ganha um score de oportunidade com seu perfil."
+        description="Assim que terminar, esta vaga ganha uma classificação de oportunidade com seu perfil."
         href="/cv-base"
         linkLabel="Ver status"
       />
@@ -314,8 +315,8 @@ function CompatCard({
           borderBottom: "1px solid rgba(250,250,246,0.08)",
         }}
       >
-        <ScoreRing value={match.score} size={88} dark />
-        <ScorePill value={match.score} size="lg" format="label-only" />
+        <OpportunityRing score={match.score} size={88} dark />
+        <OpportunityBadge score={match.score} size="lg" dark />
       </div>
       <div
         style={{
@@ -518,6 +519,7 @@ function SimCard({ job }: { job: PublicJob }) {
       >
         <CompanyLogo
           name={job.company}
+          logoUrl={job.companyLogoUrl}
           websiteUrl={job.companyWebsiteUrl}
           size={32}
           borderRadius={7}
@@ -856,6 +858,7 @@ export default async function JobPage({ params }: JobPageProps) {
           >
             <CompanyLogo
               name={job.company}
+              logoUrl={job.companyLogoUrl}
               websiteUrl={job.companyWebsiteUrl}
               size={44}
               borderRadius={10}
@@ -1138,9 +1141,8 @@ export default async function JobPage({ params }: JobPageProps) {
                   color: "#8a8a85",
                 }}
               >
-                Este score mostra o quanto seu perfil combina com a vaga. A
-                análise do CV é mais precisa e pode resultar em um score
-                diferente.
+                Indica o quanto esta vaga combina com seu perfil. É diferente do
+                score da análise do currículo.
               </p>
             ) : null}
 

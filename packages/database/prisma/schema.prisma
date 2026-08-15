@@ -94,6 +94,15 @@ enum IngestionBatchScopeType {
   global
 }
 
+// Discrimina o que um IngestionBatchRun/IngestionBatchItem representa —
+// CRAWL (default, drenado por IngestionManualRunnerService via
+// ingestionService.runJobSource) ou LOGO_FETCH (drenado via
+// CompanyLogoFetchService, sem IngestionRun/newCount associado).
+enum IngestionBatchRunKind {
+  CRAWL
+  LOGO_FETCH
+}
+
 enum IngestionBatchRunStatus {
   queued
   running
@@ -775,6 +784,8 @@ model Company {
   industry            String?
   country             String?
   isActive            Boolean              @default(true)
+  logoUrl             String?
+  logoFetchedAt        DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   jobSources          JobSource[]
@@ -1067,6 +1078,7 @@ model IngestionRun {
 
 model IngestionBatchRun {
   id                String                  @id @default(cuid())
+  runKind           IngestionBatchRunKind   @default(CRAWL)
   scopeType         IngestionBatchScopeType
   scopeValue        String
   status            IngestionBatchRunStatus @default(queued)
@@ -1144,6 +1156,13 @@ model IngestionJob {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  // true para o job MANUAL/SOURCE auto-criado por "Carregar vagas" direto
+  // na fonte (ver IngestionJobService.runSourceAdHoc) — existe só pra dar
+  // um jobId às execuções ad-hoc aparecerem no histórico, nunca deve
+  // aparecer na listagem de jobs (essa só mostra o que foi criado
+  // explicitamente pelo popup "Criar job").
+  isAdHoc Boolean @default(false)
+
   runs IngestionJobRun[]
 
   @@index([jobType, isEnabled])
@@ -1151,9 +1170,16 @@ model IngestionJob {
 }
 
 model IngestionJobRun {
-  id    String       @id @default(cuid())
-  jobId String
-  job   IngestionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  id    String        @id @default(cuid())
+  jobId String?
+  job   IngestionJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  // Snapshot do nome/tipo do job no momento da execução — sobrevive à
+  // exclusão do job (jobId vira null via onDelete: SetNull) pra o
+  // histórico de execuções continuar legível mesmo depois que o job que
+  // gerou a execução foi apagado.
+  jobName String
+  jobType IngestionJobType
 
   batchRunId String?            @unique
   batchRun   IngestionBatchRun? @relation(fields: [batchRunId], references: [id], onDelete: SetNull)
@@ -1193,6 +1219,7 @@ model EnrichmentBatchRun {
 enum IngestionJobType {
   CRAWL
   ENRICHMENT
+  LOGO_FETCH
 }
 
 enum IngestionJobScopeType {

@@ -14,6 +14,7 @@ import {
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
+import { CompanyLogoFetchService } from "../ingestion/company-logo/company-logo-fetch.service";
 import { CompaniesService } from "./companies.service";
 import { CreateCompanyDto } from "./dto/create-company.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
@@ -31,6 +32,8 @@ export class CompaniesController {
   constructor(
     @Inject(CompaniesService)
     private readonly companiesService: CompaniesService,
+    @Inject(CompanyLogoFetchService)
+    private readonly companyLogoFetchService: CompanyLogoFetchService,
   ) {}
 
   @Post()
@@ -74,5 +77,16 @@ export class CompaniesController {
   @HttpCode(200)
   remove(@Param("id") id: string) {
     return this.companiesService.remove(id);
+  }
+
+  // Busca sincrona, uma empresa por vez — usada pelo botao "Buscar logo"
+  // na listagem de empresas/fontes do admin. Disparo em lote (todas as
+  // empresas) passa pelo fluxo de IngestionJob (jobType LOGO_FETCH), nao
+  // por aqui.
+  @Post(":id/fetch-logo")
+  @HttpCode(200)
+  async fetchLogo(@Param("id") id: string) {
+    await this.companiesService.getById(id);
+    return this.companyLogoFetchService.fetchLogoForCompany(id);
   }
 }

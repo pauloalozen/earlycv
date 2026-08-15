@@ -27,7 +27,7 @@ type IngestionRunSummary = {
 
 type JobSourceRow = {
   activeJobsCount: number;
-  company: { name: string };
+  company: { id: string; logoUrl: string | null; name: string };
   consecutive403Count?: number;
   createdAt: string;
   id: string;
@@ -194,6 +194,123 @@ function RunStatusBadge({ run }: { run?: IngestionRunSummary | null }) {
   return <AdminPill tone="danger">falhou</AdminPill>;
 }
 
+// Menu "⋯" com as ações menos usadas (Criar job, Excluir) — mantém a linha
+// de ações principal (Carregar vagas / Carregar logo / Editar) cabendo numa
+// linha só. Estado de aberto é local a cada linha; fecha ao clicar fora ou
+// em Escape.
+function RowActionsMenu({
+  sourceId,
+  companyName,
+  sourceName,
+  redirectPath,
+}: {
+  sourceId: string;
+  companyName: string;
+  sourceName: string;
+  redirectPath: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={containerRef} style={{ position: "relative" }}>
+      <button
+        aria-expanded={open}
+        aria-label="Mais ações"
+        className={buttonVariants({ size: "sm", variant: "outline" })}
+        onClick={() => setOpen((v) => !v)}
+        style={{ paddingLeft: 10, paddingRight: 10 }}
+        type="button"
+      >
+        ⋯
+      </button>
+      {open ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            top: "calc(100% + 4px)",
+            zIndex: 20,
+            background: AT.card,
+            border: `1px solid ${AT.border}`,
+            borderRadius: 8,
+            boxShadow: "0 8px 24px -8px rgba(10,10,10,0.25)",
+            display: "flex",
+            flexDirection: "column",
+            minWidth: 140,
+            overflow: "hidden",
+          }}
+        >
+          <Link
+            href={`/admin/ingestion?tab=jobs&createSourceId=${sourceId}&createSourceName=${encodeURIComponent(`${companyName} · ${sourceName}`)}`}
+            onClick={() => setOpen(false)}
+            style={{
+              padding: "8px 12px",
+              fontSize: 12.5,
+              color: AT.ink2,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Criar job
+          </Link>
+          <form
+            action={deleteJobSourceAction}
+            onSubmit={(e) => {
+              if (
+                !confirm(
+                  `Excluir a fonte "${sourceName}" (${companyName})? Essa acao nao pode ser desfeita.`,
+                )
+              ) {
+                e.preventDefault();
+                return;
+              }
+              setOpen(false);
+            }}
+          >
+            <input name="jobSourceId" type="hidden" value={sourceId} />
+            <input name="redirectPath" type="hidden" value={redirectPath} />
+            <button
+              style={{
+                width: "100%",
+                textAlign: "left",
+                padding: "8px 12px",
+                fontSize: 12.5,
+                color: AT.danger,
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+              type="submit"
+            >
+              Excluir
+            </button>
+          </form>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -204,6 +321,9 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
   const [result, setResult] = useState<PagedResult>(initialData);
   const [togglePending, setTogglePending] = useState(false);
   const [bulkPending, setBulkPending] = useState(false);
+  const [logoFetchPendingId, setLogoFetchPendingId] = useState<string | null>(
+    null,
+  );
 
   const isFirstRender = useRef(true);
   const paramsRef = useRef({
@@ -331,6 +451,34 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
       await fetchSources(paramsRef.current);
     } finally {
       setBulkPending(false);
+    }
+  }
+
+  // Busca síncrona por empresa (POST /companies/:id/fetch-logo, via proxy) —
+  // disparo em lote (todos os adapters implementados, ou um específico)
+  // fica no popup "Criar job" da aba Jobs (jobType LOGO_FETCH).
+  async function handleFetchLogo(companyId: string) {
+    setLogoFetchPendingId(companyId);
+    try {
+      const res = await fetch(`/api/admin/companies/${companyId}/fetch-logo`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        window.alert(data?.error ?? "Falha ao buscar logo.");
+        return;
+      }
+      if (data?.status === "completed") {
+        await fetchSources(paramsRef.current);
+      } else if (data?.status === "skipped") {
+        window.alert(
+          data.reason ?? "Nenhuma fonte suportada para essa empresa.",
+        );
+      } else {
+        window.alert(data?.errorSummary ?? "Logo não encontrado.");
+      }
+    } finally {
+      setLogoFetchPendingId(null);
     }
   }
 
@@ -582,7 +730,7 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
             <AdminTh w={180}>Status</AdminTh>
             <AdminTh w={140}>Agendamento</AdminTh>
             <AdminTh w={160}>Último run</AdminTh>
-            <AdminTh w={260} align="right">
+            <AdminTh w={340} align="right">
               Ações
             </AdminTh>
           </tr>
@@ -622,7 +770,47 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
                     "";
                 }}
               >
-                <AdminTd>{source.company.name}</AdminTd>
+                <AdminTd>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    {source.company.logoUrl ? (
+                      // biome-ignore lint/performance/noImgElement: logo de domínio externo, sem otimização do next/image
+                      <img
+                        alt=""
+                        src={source.company.logoUrl}
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 5,
+                          objectFit: "contain",
+                          flexShrink: 0,
+                        }}
+                      />
+                    ) : (
+                      <div
+                        aria-hidden
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 5,
+                          background: AT.ink,
+                          color: AT.card,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          fontFamily: '"Geist Mono", monospace',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {source.company.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    {source.company.name}
+                  </div>
+                </AdminTd>
                 <AdminTd muted>{source.sourceName}</AdminTd>
                 <AdminTd mono muted>
                   {source.sourceType}
@@ -724,7 +912,7 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
                   <div
                     style={{
                       display: "flex",
-                      flexWrap: "wrap",
+                      flexWrap: "nowrap",
                       gap: 6,
                       justifyContent: "flex-end",
                     }}
@@ -755,29 +943,23 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
                             : undefined),
                         }}
                       >
-                        Rodar
+                        Carregar vagas
                       </button>
                     </form>
-                    <Link
+                    <button
                       className={buttonVariants({
                         size: "sm",
                         variant: "outline",
                       })}
-                      href={`/admin/ingestion?tab=jobs&createSourceId=${source.id}&createSourceName=${encodeURIComponent(`${source.company.name} · ${source.sourceName}`)}`}
+                      disabled={logoFetchPendingId === source.company.id}
+                      onClick={() => handleFetchLogo(source.company.id)}
                       style={{ whiteSpace: "nowrap" }}
+                      type="button"
                     >
-                      Criar job
-                    </Link>
-                    <Link
-                      className={buttonVariants({
-                        size: "sm",
-                        variant: "outline",
-                      })}
-                      href={`/admin/ingestion/${source.id}`}
-                      style={{ whiteSpace: "nowrap" }}
-                    >
-                      Detalhe
-                    </Link>
+                      {logoFetchPendingId === source.company.id
+                        ? "Carregando..."
+                        : "Carregar logo"}
+                    </button>
                     <Link
                       className={buttonVariants({
                         size: "sm",
@@ -788,39 +970,12 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
                     >
                       Editar
                     </Link>
-                    <form
-                      action={deleteJobSourceAction}
-                      onSubmit={(e) => {
-                        if (
-                          !confirm(
-                            `Excluir a fonte "${source.sourceName}" (${source.company.name})? Essa acao nao pode ser desfeita.`,
-                          )
-                        ) {
-                          e.preventDefault();
-                        }
-                      }}
-                    >
-                      <input
-                        name="jobSourceId"
-                        type="hidden"
-                        value={source.id}
-                      />
-                      <input
-                        name="redirectPath"
-                        type="hidden"
-                        value={redirectPath}
-                      />
-                      <button
-                        className={buttonVariants({
-                          size: "sm",
-                          variant: "outline",
-                        })}
-                        style={{ whiteSpace: "nowrap" }}
-                        type="submit"
-                      >
-                        Excluir
-                      </button>
-                    </form>
+                    <RowActionsMenu
+                      companyName={source.company.name}
+                      redirectPath={redirectPath}
+                      sourceId={source.id}
+                      sourceName={source.sourceName}
+                    />
                   </div>
                 </AdminTd>
               </tr>

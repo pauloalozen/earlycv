@@ -90,6 +90,238 @@ export function scoreColor(value: number): string {
   return SCORE[scoreTier(value)].ring;
 }
 
+// ── Classificação categórica de oportunidade (nível 0-5) ──
+// O Opportunity Score numérico (0-100, calculado em MatchingEngine no
+// backend) continua existindo e sendo a fonte de ordenação — só não é mais
+// exibido ao usuário. Esta é a única função que converte score → nível;
+// nenhum componente deve reimplementar esses thresholds. Faixas definidas
+// pela spec do Radar de Oportunidades (não são as mesmas faixas de
+// `scoreTier`, que serve o Score da Análise, um conceito diferente).
+export type OpportunityLevel = 0 | 1 | 2 | 3 | 4 | 5;
+
+export type OpportunityLevelInfo = {
+  level: OpportunityLevel;
+  label: string;
+  fg: string;
+  bg: string;
+  ring: string;
+  darkFg: string;
+};
+
+const OPPORTUNITY_LEVELS: OpportunityLevelInfo[] = [
+  {
+    level: 0,
+    label: "Não recomendada",
+    fg: "#6a6560",
+    bg: "rgba(10,10,10,0.06)",
+    ring: "#a0a098",
+    darkFg: "#c8c6bf",
+  },
+  {
+    level: 1,
+    label: "Baixa aderência",
+    fg: "#8a5623",
+    bg: "rgba(181,121,58,0.14)",
+    ring: "#b5793a",
+    darkFg: "#e0a870",
+  },
+  {
+    level: 2,
+    label: "Pouco aderente",
+    fg: "#966615",
+    bg: "rgba(217,163,34,0.16)",
+    ring: "#d9a322",
+    darkFg: "#fbbf24",
+  },
+  {
+    level: 3,
+    label: "Aderente",
+    fg: "#63771a",
+    bg: "rgba(139,166,43,0.16)",
+    ring: "#8ba62b",
+    darkFg: "#a3e635",
+  },
+  {
+    level: 4,
+    label: "Muito aderente",
+    fg: "#1f7a34",
+    bg: "rgba(34,163,72,0.14)",
+    ring: "#2fa84c",
+    darkFg: "#4ade80",
+  },
+  {
+    level: 5,
+    label: "Excelente oportunidade",
+    fg: "#166b2c",
+    bg: "rgba(31,143,61,0.16)",
+    ring: "#1f8f3d",
+    darkFg: "#4ade80",
+  },
+];
+
+export function opportunityLevel(score: number): OpportunityLevelInfo {
+  if (score >= 90) return OPPORTUNITY_LEVELS[5];
+  if (score >= 75) return OPPORTUNITY_LEVELS[4];
+  if (score >= 55) return OPPORTUNITY_LEVELS[3];
+  if (score >= 35) return OPPORTUNITY_LEVELS[2];
+  if (score >= 15) return OPPORTUNITY_LEVELS[1];
+  return OPPORTUNITY_LEVELS[0];
+}
+
+const OPPORTUNITY_RING_SEGMENTS = [0, 1, 2, 3, 4] as const;
+
+// ── Ring de nível de oportunidade — substitui o ScoreRing percentual no
+// contexto de Oportunidade (nunca mostra o score numérico ao usuário, só o
+// nível 0-5 preenchido em arcos, igual à referência de design "Card Vaga -
+// Score Categorico.html"). ──
+export function OpportunityRing({
+  score,
+  size = 84,
+  dark = false,
+}: {
+  score: number;
+  size?: number;
+  dark?: boolean;
+}) {
+  const info = opportunityLevel(score);
+  const strokeWidth = size >= 66 ? 7 : 6;
+  const r = (size - strokeWidth - 3) / 2;
+  const c = 2 * Math.PI * r;
+  const gap = size > 66 ? 7 : 5;
+  const segLength = c / 5 - gap;
+
+  return (
+    <div
+      style={{ position: "relative", width: size, height: size, flexShrink: 0 }}
+    >
+      <svg
+        aria-hidden
+        width={size}
+        height={size}
+        style={{ transform: "rotate(-90deg)" }}
+      >
+        <title>Nível de oportunidade</title>
+        {OPPORTUNITY_RING_SEGMENTS.map((segment) => {
+          const on = segment < info.level;
+          return (
+            <circle
+              key={`segment-${segment}`}
+              cx={size / 2}
+              cy={size / 2}
+              r={r}
+              fill="none"
+              stroke={
+                on
+                  ? info.ring
+                  : dark
+                    ? "rgba(250,250,246,0.12)"
+                    : "rgba(10,10,10,0.09)"
+              }
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+              strokeDasharray={`${segLength} ${c - segLength}`}
+              strokeDashoffset={-((segment * c) / 5) - gap / 2}
+            />
+          );
+        })}
+      </svg>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span
+          style={{
+            fontSize: size * 0.3,
+            fontWeight: 600,
+            letterSpacing: -0.5,
+            color: dark ? "#fafaf6" : info.fg,
+            fontFamily: GEIST,
+            lineHeight: 1,
+          }}
+        >
+          {info.level}
+        </span>
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 9,
+            color: dark ? "rgba(250,250,246,0.5)" : "#8a8a85",
+            marginTop: 2,
+          }}
+        >
+          de 5
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Badge categórico de oportunidade — equivalente ao ScorePill, mas sem
+// número: só o nível (cor + texto). ──
+export function OpportunityBadge({
+  score,
+  size = "md",
+  dark = false,
+}: {
+  score: number;
+  size?: "md" | "lg";
+  dark?: boolean;
+}) {
+  const info = opportunityLevel(score);
+  const big = size === "lg";
+
+  if (dark) {
+    return (
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: big ? 12.5 : 11,
+          fontWeight: 600,
+          letterSpacing: 0.3,
+          color: info.darkFg,
+        }}
+      >
+        {info.label}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        background: info.bg,
+        color: info.fg,
+        fontWeight: 600,
+        fontFamily: MONO,
+        letterSpacing: 0.2,
+        fontSize: big ? 12.5 : 10.5,
+        padding: big ? "5px 11px" : "3px 8px",
+        borderRadius: 99,
+      }}
+    >
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          background: info.ring,
+          flexShrink: 0,
+        }}
+      />
+      {info.label}
+    </span>
+  );
+}
+
 export type MatchBreakdown = {
   area: number;
   skills: number;

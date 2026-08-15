@@ -44,6 +44,7 @@
     "docxtemplater": "^3.68.3",
     "google-auth-library": "^11.0.1",
     "helmet": "^8.1.0",
+    "image-size": "^2.0.2",
     "mammoth": "^1.12.0",
     "mercadopago": "^2.12.0",
     "passport": "^0.7.0",
