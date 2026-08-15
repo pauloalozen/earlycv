@@ -12,12 +12,7 @@ import { getAbsoluteUrl } from "@/lib/site";
 import { Carousel } from "./carousel";
 import { CompanyLogo } from "./company-logo";
 import { type ActiveFilters, FiltersBar } from "./filters-bar";
-import {
-  JobCard,
-  JobCardResponsiveStyles,
-  JobKeywordBadges,
-  JobMetaRow,
-} from "./job-card";
+import { JobCard } from "./job-card";
 import {
   AdaptBtn,
   BREAKDOWN_MAX,
@@ -115,72 +110,6 @@ function calibrationPhrase(
   return { area: areaLabel, seniority: seniorityLabel };
 }
 
-function JobCardLocked({ job }: { job: PublicJob }) {
-  return (
-    <div
-      className="jc-top"
-      style={{
-        background: "#fafaf6",
-        border: "1px solid rgba(10,10,10,0.08)",
-        borderRadius: 14,
-        padding: "18px 20px",
-        opacity: 0.75,
-        fontFamily: GEIST,
-      }}
-    >
-      <JobCardResponsiveStyles />
-      <div className="jc-headtext">
-        <CompanyLogo
-          name={job.company}
-          logoUrl={job.companyLogoUrl}
-          websiteUrl={job.companyWebsiteUrl}
-        />
-        <div style={{ minWidth: 0 }}>
-          <JobMetaRow job={job} />
-        </div>
-      </div>
-      <div className="jc-cluster">
-        <JobKeywordBadges job={job} />
-        <div
-          style={{
-            width: 64,
-            height: 64,
-            borderRadius: "50%",
-            border: "1.5px dashed rgba(10,10,10,0.15)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <title>Bloqueado</title>
-            <rect
-              x="5"
-              y="10"
-              width="14"
-              height="10"
-              rx="2"
-              stroke="#a0a098"
-              strokeWidth="1.6"
-            />
-            <path
-              d="M8 10V7a4 4 0 0 1 8 0v3"
-              stroke="#a0a098"
-              strokeWidth="1.6"
-            />
-          </svg>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Card de hero pro visitante deslogado — sem conta não há CV pra guardar,
-// então ao contrário do card "ATIVE O RADAR" (scoreState "no-cv", que já tem
-// conta e só falta enviar o CV), aqui o CTA é criar conta, não enviar
-// arquivo. O preview à direita é ilustrativo (dado fixo, não vem da API) —
-// mostra o que a pessoa ganha depois de criar a conta e enviar o CV.
 // Dado ilustrativo fixo (não vem da API) — score total calculado a partir
 // das 4 dimensões exibidas com os mesmos pesos de MatchingEngine
 // (BREAKDOWN_MAX), pra bater com o breakdown mostrado logo abaixo. Language
@@ -200,7 +129,279 @@ const HERO_SCORE = Math.round(
     100,
 );
 
-function AnonymousHeroCard() {
+// Card esquerdo do hero de 2 colunas (anônimo/no-cv) — só título, descrição
+// e CTA mudam entre as duas variantes; moldura e ícone (raio) são
+// idênticos, por isso ficaram num componente à parte em vez de duplicados.
+function HeroCtaCard({
+  title,
+  description,
+  href,
+  buttonLabel,
+}: {
+  title: string;
+  description: string;
+  href: string;
+  buttonLabel: string;
+}) {
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid rgba(10,10,10,0.08)",
+        borderRadius: 14,
+        padding: "28px 24px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        gap: 12,
+      }}
+    >
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: "50%",
+          background: "rgba(198,255,58,0.22)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <title>{title}</title>
+          <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" fill="#405410" />
+        </svg>
+      </div>
+      <div>
+        <p
+          style={{
+            fontSize: 15,
+            fontWeight: 600,
+            color: "#0a0a0a",
+            margin: "0 0 4px",
+          }}
+        >
+          {title}
+        </p>
+        <p style={{ fontSize: 13, color: "#5a5a55", margin: 0 }}>
+          {description}
+        </p>
+      </div>
+      <a
+        href={href}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          background: "#0a0a0a",
+          color: "#fafaf6",
+          borderRadius: 8,
+          padding: "10px 18px",
+          fontSize: 13,
+          fontWeight: 500,
+          textDecoration: "none",
+          fontFamily: GEIST,
+          marginTop: 4,
+        }}
+      >
+        {buttonLabel} →
+      </a>
+    </div>
+  );
+}
+
+// Card direito do hero de 2 colunas — preview ilustrativo (dado fixo, não
+// vem da API) de como fica a vaga depois que a pessoa tem CV master
+// calibrado. Idêntico nas variantes anônima e "no-cv" (a única diferença
+// entre elas é o CTA à esquerda, ver HeroCtaCard).
+function HeroPreviewCard() {
+  return (
+    <div
+      style={{
+        background: "#f5f4ef",
+        border: "1px solid rgba(10,10,10,0.06)",
+        borderRadius: 14,
+        padding: "22px",
+      }}
+    >
+      <p
+        style={{
+          fontFamily: MONO,
+          fontSize: 10.5,
+          letterSpacing: 0.4,
+          color: "#8a8a85",
+          margin: "0 0 12px",
+        }}
+      >
+        É ASSIM QUE FICA
+      </p>
+      <div
+        style={{
+          background: "#fff",
+          border: "1px solid rgba(10,10,10,0.08)",
+          borderRadius: 12,
+          padding: 16,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+          <div
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 9,
+              background: "#0a0a0a",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <svg width={22} height={22} viewBox="0 0 40 40" fill="none">
+              <title>earlyCV</title>
+              <rect x="0" y="0" width="12" height="6.5" rx="2" fill="#fafaf6" />
+              <rect
+                x="16"
+                y="0"
+                width="12"
+                height="6.5"
+                rx="2"
+                fill="#fafaf6"
+              />
+              <rect x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
+              <rect
+                x="0"
+                y="11.2"
+                width="16"
+                height="6.5"
+                rx="2"
+                fill="#c6ff3a"
+              />
+              <rect
+                x="20"
+                y="11.2"
+                width="18"
+                height="6.5"
+                rx="2"
+                fill="#fafaf6"
+              />
+              <rect
+                x="0"
+                y="22.4"
+                width="7"
+                height="6.5"
+                rx="2"
+                fill="#fafaf6"
+              />
+              <rect
+                x="11"
+                y="22.4"
+                width="16"
+                height="6.5"
+                rx="2"
+                fill="#c6ff3a"
+              />
+              <rect
+                x="30"
+                y="22.4"
+                width="8"
+                height="6.5"
+                rx="2"
+                fill="#fafaf6"
+              />
+              <rect
+                x="0"
+                y="33.5"
+                width="22"
+                height="6.5"
+                rx="2"
+                fill="#fafaf6"
+              />
+              <rect
+                x="26"
+                y="33.5"
+                width="9"
+                height="6.5"
+                rx="2"
+                fill="rgba(250,250,246,0.14)"
+              />
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p
+              style={{
+                fontSize: 13.5,
+                fontWeight: 500,
+                color: "#0a0a0a",
+                margin: "0 0 2px",
+              }}
+            >
+              Engenheira de software sênior
+            </p>
+            <p style={{ fontSize: 12, color: "#8a8a85", margin: 0 }}>earlyCV</p>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <OpportunityRing score={HERO_SCORE} size={52} />
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 8,
+                fontWeight: 600,
+                letterSpacing: 0.4,
+                color: "#8a8a85",
+              }}
+            >
+              OPORTUNIDADE
+            </span>
+          </div>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          <SkillChip label="Java" have />
+          <SkillChip label="Kotlin" have />
+          <SkillChip label="PCI-DSS" have={false} />
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 12,
+            paddingTop: 8,
+            borderTop: "1px solid rgba(10,10,10,0.06)",
+          }}
+        >
+          <MiniBar label="Área" value={HERO_AREA_PCT} compact />
+          <MiniBar label="Skills" value={HERO_SKILLS_PCT} compact />
+          <MiniBar label="Senioridade" value={HERO_SENIORITY_PCT} compact />
+          <MiniBar label="Tecnologias" value={HERO_TECHNOLOGIES_PCT} compact />
+        </div>
+      </div>
+      <p
+        style={{
+          fontSize: 12,
+          color: "#8a8a85",
+          margin: "12px 0 0",
+          lineHeight: 1.4,
+        }}
+      >
+        Score, skills e breakdown completo — calculados assim que você cria sua
+        conta e envia o CV.
+      </p>
+    </div>
+  );
+}
+
+function HeroTwoColumnGrid({ children }: { children: React.ReactNode }) {
   return (
     <div className="anon-hero-grid" style={{ marginBottom: 24 }}>
       <style>{`
@@ -209,273 +410,44 @@ function AnonymousHeroCard() {
           .anon-hero-grid { grid-template-columns: 1fr; }
         }
       `}</style>
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid rgba(10,10,10,0.08)",
-          borderRadius: 14,
-          padding: "28px 24px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          textAlign: "center",
-          gap: 12,
-        }}
-      >
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: "50%",
-            background: "rgba(198,255,58,0.22)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <title>Criar conta</title>
-            <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" fill="#405410" />
-          </svg>
-        </div>
-        <div>
-          <p
-            style={{
-              fontSize: 15,
-              fontWeight: 600,
-              color: "#0a0a0a",
-              margin: "0 0 4px",
-            }}
-          >
-            criar conta
-          </p>
-          <p style={{ fontSize: 13, color: "#5a5a55", margin: 0 }}>
-            para ver as melhores oportunidades pro seu perfil
-          </p>
-        </div>
-        <a
-          href="/entrar?tab=cadastrar"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            background: "#0a0a0a",
-            color: "#fafaf6",
-            borderRadius: 8,
-            padding: "10px 18px",
-            fontSize: 13,
-            fontWeight: 500,
-            textDecoration: "none",
-            fontFamily: GEIST,
-            marginTop: 4,
-          }}
-        >
-          Criar conta grátis →
-        </a>
-      </div>
-
-      <div
-        style={{
-          background: "#f5f4ef",
-          border: "1px solid rgba(10,10,10,0.06)",
-          borderRadius: 14,
-          padding: "22px",
-        }}
-      >
-        <p
-          style={{
-            fontFamily: MONO,
-            fontSize: 10.5,
-            letterSpacing: 0.4,
-            color: "#8a8a85",
-            margin: "0 0 12px",
-          }}
-        >
-          É ASSIM QUE FICA
-        </p>
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid rgba(10,10,10,0.08)",
-            borderRadius: 12,
-            padding: 16,
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-          }}
-        >
-          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-            <div
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 9,
-                background: "#0a0a0a",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <svg width={22} height={22} viewBox="0 0 40 40" fill="none">
-                <title>earlyCV</title>
-                <rect
-                  x="0"
-                  y="0"
-                  width="12"
-                  height="6.5"
-                  rx="2"
-                  fill="#fafaf6"
-                />
-                <rect
-                  x="16"
-                  y="0"
-                  width="12"
-                  height="6.5"
-                  rx="2"
-                  fill="#fafaf6"
-                />
-                <rect
-                  x="32"
-                  y="0"
-                  width="8"
-                  height="6.5"
-                  rx="2"
-                  fill="#c6ff3a"
-                />
-                <rect
-                  x="0"
-                  y="11.2"
-                  width="16"
-                  height="6.5"
-                  rx="2"
-                  fill="#c6ff3a"
-                />
-                <rect
-                  x="20"
-                  y="11.2"
-                  width="18"
-                  height="6.5"
-                  rx="2"
-                  fill="#fafaf6"
-                />
-                <rect
-                  x="0"
-                  y="22.4"
-                  width="7"
-                  height="6.5"
-                  rx="2"
-                  fill="#fafaf6"
-                />
-                <rect
-                  x="11"
-                  y="22.4"
-                  width="16"
-                  height="6.5"
-                  rx="2"
-                  fill="#c6ff3a"
-                />
-                <rect
-                  x="30"
-                  y="22.4"
-                  width="8"
-                  height="6.5"
-                  rx="2"
-                  fill="#fafaf6"
-                />
-                <rect
-                  x="0"
-                  y="33.5"
-                  width="22"
-                  height="6.5"
-                  rx="2"
-                  fill="#fafaf6"
-                />
-                <rect
-                  x="26"
-                  y="33.5"
-                  width="9"
-                  height="6.5"
-                  rx="2"
-                  fill="rgba(250,250,246,0.14)"
-                />
-              </svg>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p
-                style={{
-                  fontSize: 13.5,
-                  fontWeight: 500,
-                  color: "#0a0a0a",
-                  margin: "0 0 2px",
-                }}
-              >
-                Engenheira de software sênior
-              </p>
-              <p style={{ fontSize: 12, color: "#8a8a85", margin: 0 }}>
-                earlyCV
-              </p>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 4,
-              }}
-            >
-              <OpportunityRing score={HERO_SCORE} size={52} />
-              <span
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 8,
-                  fontWeight: 600,
-                  letterSpacing: 0.4,
-                  color: "#8a8a85",
-                }}
-              >
-                OPORTUNIDADE
-              </span>
-            </div>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            <SkillChip label="Java" have />
-            <SkillChip label="Kotlin" have />
-            <SkillChip label="PCI-DSS" have={false} />
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-              paddingTop: 8,
-              borderTop: "1px solid rgba(10,10,10,0.06)",
-            }}
-          >
-            <MiniBar label="Área" value={HERO_AREA_PCT} compact />
-            <MiniBar label="Skills" value={HERO_SKILLS_PCT} compact />
-            <MiniBar label="Senioridade" value={HERO_SENIORITY_PCT} compact />
-            <MiniBar
-              label="Tecnologias"
-              value={HERO_TECHNOLOGIES_PCT}
-              compact
-            />
-          </div>
-        </div>
-        <p
-          style={{
-            fontSize: 12,
-            color: "#8a8a85",
-            margin: "12px 0 0",
-            lineHeight: 1.4,
-          }}
-        >
-          Score, skills e breakdown completo — calculados assim que você cria
-          sua conta e envia o CV.
-        </p>
-      </div>
+      {children}
     </div>
+  );
+}
+
+function AnonymousHeroCard() {
+  return (
+    <HeroTwoColumnGrid>
+      <HeroCtaCard
+        buttonLabel="Criar conta grátis"
+        description="para ver as melhores oportunidades pro seu perfil"
+        href="/entrar?tab=cadastrar"
+        title="criar conta"
+      />
+      <HeroPreviewCard />
+    </HeroTwoColumnGrid>
+  );
+}
+
+// Mesmo card de preview do anônimo — a pessoa já tem conta, só falta
+// cadastrar o CV master, então o CTA muda de "criar conta" pra "cadastrar
+// CV master" (ver pedido do Paulo: layout idêntico ao anônimo, só o texto
+// do card da esquerda muda).
+function NoCvHeroCard({ cvFileName }: { cvFileName: string | null }) {
+  return (
+    <HeroTwoColumnGrid>
+      <HeroCtaCard
+        buttonLabel={cvFileName ? "Ver status" : "Enviar CV"}
+        description={
+          cvFileName
+            ? "seu CV está sendo processado — assim que terminar, cada vaga ganha uma classificação de oportunidade com seu perfil"
+            : "para ver as melhores oportunidades pro seu perfil"
+        }
+        href="/meu-cv-master"
+        title="cadastrar CV master"
+      />
+      <HeroPreviewCard />
+    </HeroTwoColumnGrid>
   );
 }
 
@@ -672,26 +644,6 @@ export async function RadarJobsListing({
       ? "has-cv"
       : "no-cv";
 
-  const radarOnboardingBanner: {
-    text: string;
-    href: string;
-    linkLabel: string;
-  } | null = !user
-    ? null
-    : !radarProfile
-      ? {
-          text: "Faça upload do seu CV para ver vagas compatíveis com seu perfil.",
-          href: "/cv-base",
-          linkLabel: "Enviar CV",
-        }
-      : radarProfile.areas.length === 0
-        ? {
-            text: "Seu perfil ainda está sendo processado. Envie um CV para ativar o Radar.",
-            href: "/cv-base",
-            linkLabel: "Enviar CV",
-          }
-        : null;
-
   const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar";
   const totalPages = Math.ceil(jobsResult.total / jobsResult.limit);
 
@@ -805,41 +757,6 @@ export async function RadarJobsListing({
       <script type="application/ld+json">
         {JSON.stringify(itemListJsonLd)}
       </script>
-
-      {radarOnboardingBanner ? (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-            background: "rgba(198,255,58,0.15)",
-            border: "1px solid rgba(64,84,16,0.2)",
-            borderRadius: 10,
-            padding: "12px 16px",
-            marginBottom: 20,
-            fontSize: 13,
-            color: "#3a3a38",
-          }}
-        >
-          <span>{radarOnboardingBanner.text}</span>
-          <a
-            href={radarOnboardingBanner.href}
-            style={{
-              fontFamily: MONO,
-              fontSize: 12,
-              fontWeight: 600,
-              color: "#0a0a0a",
-              textDecoration: "underline",
-              textUnderlineOffset: 3,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {radarOnboardingBanner.linkLabel} →
-          </a>
-        </div>
-      ) : null}
 
       {/* Hero */}
       <header style={{ marginBottom: 28 }}>
@@ -1367,59 +1284,7 @@ export async function RadarJobsListing({
 
       {scoreState === "anonymous" ? <AnonymousHeroCard /> : null}
 
-      {scoreState === "no-cv" ? (
-        <div
-          style={{
-            background: "#fafaf6",
-            border: "1px solid rgba(10,10,10,0.08)",
-            borderRadius: 14,
-            padding: "24px",
-            marginBottom: 20,
-            display: "flex",
-            alignItems: "center",
-            gap: 20,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <p
-              style={{
-                fontFamily: MONO,
-                fontSize: 10.5,
-                color: "#8a8a85",
-                letterSpacing: 0.4,
-                margin: "0 0 8px",
-              }}
-            >
-              ATIVE O RADAR
-            </p>
-            <p style={{ fontSize: 14.5, color: "#3a3a38", margin: "0 0 14px" }}>
-              {cvFileName
-                ? "Seu CV está sendo processado. Assim que terminar, cada vaga abaixo ganha uma classificação de oportunidade com seu perfil."
-                : "Envie seu CV e cada vaga abaixo ganha uma classificação de oportunidade com seu perfil — sem precisar filtrar nada."}
-            </p>
-            <a
-              href="/cv-base"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                background: "#0a0a0a",
-                color: "#fafaf6",
-                borderRadius: 8,
-                padding: "10px 16px",
-                fontSize: 13,
-                fontWeight: 500,
-                textDecoration: "none",
-                fontFamily: GEIST,
-              }}
-            >
-              {cvFileName ? "Ver status" : "Enviar CV"} →
-            </a>
-          </div>
-          <OpportunityRing score={68} size={72} />
-        </div>
-      ) : null}
+      {scoreState === "no-cv" ? <NoCvHeroCard cvFileName={cvFileName} /> : null}
 
       {carouselJobs.length > 0 ? (
         <div style={{ marginBottom: 24 }}>
@@ -1685,19 +1550,15 @@ export async function RadarJobsListing({
 
       {/* Job cards */}
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {jobsResult.data.map((job) =>
-          scoreState === "no-cv" ? (
-            <JobCardLocked key={job.id} job={job} />
-          ) : (
-            <JobCard
-              key={job.id}
-              job={job}
-              adaptarHref={adaptarHref}
-              showScore={scoreState === "has-cv"}
-              isLoggedIn={!!user}
-            />
-          ),
-        )}
+        {jobsResult.data.map((job) => (
+          <JobCard
+            key={job.id}
+            job={job}
+            adaptarHref={adaptarHref}
+            showScore={scoreState === "has-cv"}
+            isLoggedIn={!!user}
+          />
+        ))}
 
         {jobsResult.data.length === 0 ? (
           <div

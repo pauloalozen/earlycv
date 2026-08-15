@@ -280,7 +280,7 @@ function CompatCard({
       <CompatCardCta
         title="Suba seu CV para ver sua oportunidade"
         description="O score é calculado com base no seu CV Master."
-        href="/cv-base"
+        href="/meu-cv-master"
         linkLabel="Enviar CV"
       />
     );
@@ -291,7 +291,7 @@ function CompatCard({
       <CompatCardCta
         title="Seu CV está sendo processado"
         description="Assim que terminar, esta vaga ganha uma classificação de oportunidade com seu perfil."
-        href="/cv-base"
+        href="/meu-cv-master"
         linkLabel="Ver status"
       />
     );

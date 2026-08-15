@@ -54,7 +54,11 @@ test("refresh uses radarAreas as-is when already filled, skips inference", async
 test("refresh falls back to skills inference when radarAreas is empty", async () => {
   const profile = buildProfile({
     radarAreas: [],
-    skillsJson: { technical: ["python", "sql", "airflow"], business: [], soft: [] },
+    skillsJson: {
+      technical: ["python", "sql", "airflow"],
+      business: [],
+      soft: [],
+    },
   });
   const { service, upserts } = buildService(profile);
 
@@ -81,7 +85,11 @@ test("refresh falls back to experience inference when radarSeniority is UNKNOWN"
   const profile = buildProfile({
     radarSeniority: "UNKNOWN",
     experiencesJson: [
-      { role: "Engenheiro de Software", startDate: "2015-01", endDate: "atual" },
+      {
+        role: "Engenheiro de Software",
+        startDate: "2015-01",
+        endDate: "atual",
+      },
     ],
   });
   const { service, upserts } = buildService(profile);
@@ -202,10 +210,7 @@ test("inferSeniorityFromExperiences covers year-based bands", () => {
     },
   ];
 
-  assert.equal(
-    service.inferSeniorityFromExperiences([] as never),
-    "UNKNOWN",
-  );
+  assert.equal(service.inferSeniorityFromExperiences([] as never), "UNKNOWN");
   assert.equal(
     service.inferSeniorityFromExperiences(buildExp(0.5) as never),
     "INTERN",
@@ -227,9 +232,7 @@ test("inferSeniorityFromExperiences covers year-based bands", () => {
     "SENIOR",
   );
   assert.equal(
-    service.inferSeniorityFromExperiences(
-      buildExp(7, "Tech Lead") as never,
-    ),
+    service.inferSeniorityFromExperiences(buildExp(7, "Tech Lead") as never),
     "LEAD",
   );
 });
@@ -245,12 +248,61 @@ test("getProfile returns the stored UserRadarProfile row", async () => {
   assert.deepEqual(result, { userId: "user-1", areas: ["PRODUCT"] });
 });
 
+test("getProfile self-heals by calling refresh when there is no UserRadarProfile row yet but a UserProfile exists", async () => {
+  const profile = buildProfile({
+    radarAreas: ["PRODUCT"],
+    skillsJson: { technical: ["python"], business: [], soft: [] },
+  });
+  const { service, upserts } = buildService(profile, null);
+
+  const result = await service.getProfile("user-1");
+
+  assert.equal(upserts.length, 1);
+  assert.ok(result);
+});
+
+test("getProfile self-heals by calling refresh when the stored UserRadarProfile has empty areas", async () => {
+  const profile = buildProfile({
+    radarAreas: ["PRODUCT"],
+    skillsJson: { technical: ["python"], business: [], soft: [] },
+  });
+  const { service, upserts } = buildService(profile, {
+    userId: "user-1",
+    areas: [],
+  });
+
+  const result = await service.getProfile("user-1");
+
+  assert.equal(upserts.length, 1);
+  assert.ok(result);
+});
+
+test("getProfile returns null without calling refresh's upsert when the user never uploaded a master CV", async () => {
+  const upserts: Array<unknown> = [];
+  const service = new UserRadarProfileService({
+    userProfile: { findUnique: async () => null },
+    userRadarProfile: {
+      findUnique: async () => null,
+      upsert: async (args: unknown) => {
+        upserts.push(args);
+        return args;
+      },
+    },
+  } as never);
+
+  const result = await service.getProfile("user-without-profile");
+
+  assert.equal(result, null);
+  assert.equal(upserts.length, 0);
+});
+
 test("updateProfile writes areas/seniority to UserProfile as manually edited and to UserRadarProfile", async () => {
   const profileUpdates: Array<unknown> = [];
   const radarUpserts: Array<unknown> = [];
   const service = new UserRadarProfileService({
     userProfile: {
-      findUnique: async () => buildProfile({ radarAreas: [], radarSeniority: null }),
+      findUnique: async () =>
+        buildProfile({ radarAreas: [], radarSeniority: null }),
       update: async (args: unknown) => {
         profileUpdates.push(args);
         return args;
@@ -272,15 +324,29 @@ test("updateProfile writes areas/seniority to UserProfile as manually edited and
   } as never);
 
   const profileUpdate = profileUpdates[0] as {
-    data: { radarAreas: string[]; radarSeniority: string; profileFieldMetaJson: Record<string, { manuallyEdited: boolean }> };
+    data: {
+      radarAreas: string[];
+      radarSeniority: string;
+      profileFieldMetaJson: Record<string, { manuallyEdited: boolean }>;
+    };
   };
   assert.deepEqual(profileUpdate.data.radarAreas, ["DATA_AI"]);
   assert.equal(profileUpdate.data.radarSeniority, "SENIOR");
-  assert.equal(profileUpdate.data.profileFieldMetaJson.radarAreas.manuallyEdited, true);
-  assert.equal(profileUpdate.data.profileFieldMetaJson.radarSeniority.manuallyEdited, true);
+  assert.equal(
+    profileUpdate.data.profileFieldMetaJson.radarAreas.manuallyEdited,
+    true,
+  );
+  assert.equal(
+    profileUpdate.data.profileFieldMetaJson.radarSeniority.manuallyEdited,
+    true,
+  );
 
   const radarUpsert = radarUpserts[0] as {
-    create: { areas: string[]; seniority: string; preferredWorkModels: string[] };
+    create: {
+      areas: string[];
+      seniority: string;
+      preferredWorkModels: string[];
+    };
   };
   assert.deepEqual(radarUpsert.create.areas, ["DATA_AI"]);
   assert.equal(radarUpsert.create.seniority, "SENIOR");

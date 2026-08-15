@@ -2,7 +2,10 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { MatchBreakdown, MatchBreakdownDetails } from "@/lib/public-jobs-api";
+import type {
+  MatchBreakdown,
+  MatchBreakdownDetails,
+} from "@/lib/public-jobs-api";
 import { ScoreBreakdownPanel } from "./score-breakdown";
 
 const breakdown: MatchBreakdown = {

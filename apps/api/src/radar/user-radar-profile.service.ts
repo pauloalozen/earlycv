@@ -151,16 +151,16 @@ export class UserRadarProfileService {
     if (!profile) {
       return null;
     }
-    const existingRadarProfile = await this.database.userRadarProfile.findUnique(
-      { where: { userId } },
-    );
+    const existingRadarProfile =
+      await this.database.userRadarProfile.findUnique({ where: { userId } });
 
     const skills = this.normalizeSkills(profile.skillsJson);
     const areas = profile.radarAreas.length
       ? profile.radarAreas
       : this.inferAreasFromSkills(profile.skillsJson);
     const seniority =
-      profile.radarSeniority && profile.radarSeniority !== SeniorityLevel.UNKNOWN
+      profile.radarSeniority &&
+      profile.radarSeniority !== SeniorityLevel.UNKNOWN
         ? profile.radarSeniority
         : this.inferSeniorityFromExperiences(profile.experiencesJson);
 
@@ -176,7 +176,9 @@ export class UserRadarProfileService {
     // não vem logo após uma extração (ex: refresh() disparado por
     // updateProfile()), preserva o valor já salvo em vez de zerá-lo.
     const careerFingerprint =
-      options?.careerFingerprint ?? existingRadarProfile?.careerFingerprint ?? [];
+      options?.careerFingerprint ??
+      existingRadarProfile?.careerFingerprint ??
+      [];
 
     const generatedAt = new Date();
 
@@ -214,8 +216,22 @@ export class UserRadarProfileService {
     });
   }
 
+  // Self-heal: usuários que subiram o CV master antes da existência do
+  // radar (ou cuja extração falhou em popular o UserRadarProfile) ficam
+  // presos no estado "sem CV" mesmo já tendo currículo. refresh() só lê
+  // dados que já estão em UserProfile — sem custo de IA — então é seguro
+  // chamar aqui, no read path, sempre que o registro estiver ausente ou
+  // sem areas.
   async getProfile(userId: string) {
-    return this.database.userRadarProfile.findUnique({ where: { userId } });
+    const existing = await this.database.userRadarProfile.findUnique({
+      where: { userId },
+    });
+
+    if (existing && existing.areas.length > 0) {
+      return existing;
+    }
+
+    return this.refresh(userId);
   }
 
   // areas/seniority são espelhados em UserProfile.radarAreas/radarSeniority
@@ -233,9 +249,10 @@ export class UserRadarProfileService {
     if (!userProfile) {
       throw new NotFoundException("profile not found");
     }
-    const existingRadarProfile = await this.database.userRadarProfile.findUnique({
-      where: { userId },
-    });
+    const existingRadarProfile =
+      await this.database.userRadarProfile.findUnique({
+        where: { userId },
+      });
 
     const nowIso = new Date().toISOString();
     const fieldMeta = this.asFieldMetaRecord(userProfile.profileFieldMetaJson);
@@ -266,14 +283,17 @@ export class UserRadarProfileService {
       });
     }
 
-    const areas = dto.areas ?? existingRadarProfile?.areas ?? userProfile.radarAreas;
+    const areas =
+      dto.areas ?? existingRadarProfile?.areas ?? userProfile.radarAreas;
     const seniority =
       dto.seniority ??
       existingRadarProfile?.seniority ??
       userProfile.radarSeniority ??
       SeniorityLevel.UNKNOWN;
     const preferredWorkModels =
-      dto.preferredWorkModels ?? existingRadarProfile?.preferredWorkModels ?? [];
+      dto.preferredWorkModels ??
+      existingRadarProfile?.preferredWorkModels ??
+      [];
     const preferredContractTypes =
       dto.preferredContractTypes ??
       existingRadarProfile?.preferredContractTypes ??
@@ -295,7 +315,8 @@ export class UserRadarProfileService {
         preferredWorkModels,
         preferredContractTypes,
         openToRelocation: existingRadarProfile?.openToRelocation ?? false,
-        salaryExpectationMin: existingRadarProfile?.salaryExpectationMin ?? null,
+        salaryExpectationMin:
+          existingRadarProfile?.salaryExpectationMin ?? null,
         sourceResumeId: existingRadarProfile?.sourceResumeId ?? null,
       },
       update: {
@@ -341,9 +362,7 @@ export class UserRadarProfileService {
       }
     }
 
-    return areas.size > 0
-      ? Array.from(areas)
-      : [JobArea.SOFTWARE_ENGINEERING];
+    return areas.size > 0 ? Array.from(areas) : [JobArea.SOFTWARE_ENGINEERING];
   }
 
   inferSeniorityFromExperiences(
@@ -358,13 +377,17 @@ export class UserRadarProfileService {
       const start = this.parseDate(exp.startDate);
       const endRaw = typeof exp.endDate === "string" ? exp.endDate : null;
       const end =
-        !endRaw || endRaw.toLowerCase() === "atual" || endRaw.toLowerCase() === "presente"
+        !endRaw ||
+        endRaw.toLowerCase() === "atual" ||
+        endRaw.toLowerCase() === "presente"
           ? new Date()
           : this.parseDate(exp.endDate);
       if (!start || !end) {
         return acc;
       }
-      return acc + (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 365);
+      return (
+        acc + (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 365)
+      );
     }, 0);
 
     const roles = experiences.map((exp) =>
@@ -415,7 +438,9 @@ export class UserRadarProfileService {
     return Array.from(normalized.values());
   }
 
-  private extractCertifications(certificationsJson: Prisma.JsonValue): string[] {
+  private extractCertifications(
+    certificationsJson: Prisma.JsonValue,
+  ): string[] {
     const certifications = this.asArray(certificationsJson) as Array<{
       name?: unknown;
     }>;

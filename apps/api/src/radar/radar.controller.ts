@@ -1,8 +1,16 @@
-import { Body, Controller, Get, Inject, Put, UseGuards, ValidationPipe } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Put,
+  UseGuards,
+  ValidationPipe,
+} from "@nestjs/common";
 
 import {
-  AuthenticatedUser,
   type AuthenticatedRequestUser,
+  AuthenticatedUser,
 } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { UpdateRadarProfileDto } from "./dto/update-radar-profile.dto";
@@ -24,7 +32,13 @@ export class RadarController {
   @Put()
   updateProfile(
     @AuthenticatedUser() user: AuthenticatedRequestUser,
-    @Body(new ValidationPipe({ transform: true, whitelist: true, expectedType: UpdateRadarProfileDto }))
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        expectedType: UpdateRadarProfileDto,
+      }),
+    )
     dto: UpdateRadarProfileDto,
   ) {
     return this.userRadarProfileService.updateProfile(user.id, dto);

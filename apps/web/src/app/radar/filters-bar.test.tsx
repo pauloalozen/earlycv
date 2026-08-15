@@ -85,9 +85,9 @@ describe("FiltersBar", () => {
 
     expect(push).toHaveBeenCalledTimes(1);
     const url = push.mock.calls[0][0] as string;
-    expect(
-      new URL(url, "http://localhost").searchParams.get("area"),
-    ).toBe("DATA_AI");
+    expect(new URL(url, "http://localhost").searchParams.get("area")).toBe(
+      "DATA_AI",
+    );
   });
 
   it("shows a count badge on mais filtros only for additional filters (estado/cidade/empresa/publicada), not área/senioridade/modalidade", () => {

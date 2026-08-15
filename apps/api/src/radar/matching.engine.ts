@@ -83,7 +83,12 @@ function seniorityDistance(
   a: SeniorityLevel | null,
   b: SeniorityLevel | null,
 ): number | null {
-  if (!a || !b || a === SeniorityLevel.UNKNOWN || b === SeniorityLevel.UNKNOWN) {
+  if (
+    !a ||
+    !b ||
+    a === SeniorityLevel.UNKNOWN ||
+    b === SeniorityLevel.UNKNOWN
+  ) {
     return null;
   }
   const indexA = SENIORITY_LADDER.indexOf(a);
@@ -259,7 +264,10 @@ export class MatchingEngine {
       15,
     );
 
-    const seniorityScore = this.scoreSeniority(job.seniority, profile.seniority);
+    const seniorityScore = this.scoreSeniority(
+      job.seniority,
+      profile.seniority,
+    );
     const languageScore = this.scoreLanguage(job, profile);
     const workModelScore = this.scoreWorkModel(job, profile);
 

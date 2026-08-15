@@ -54,9 +54,9 @@ export function CompanyLogo({
   name,
   logoUrl,
   websiteUrl,
-  size = 42,
-  borderRadius = 9,
-  fontSize = 13,
+  size = 52,
+  borderRadius = 10,
+  fontSize = 15,
 }: Props) {
   const faviconSrc = websiteUrl ? faviconUrl(websiteUrl) : null;
   const [isSourceLogoBad, setIsSourceLogoBad] = useState(false);

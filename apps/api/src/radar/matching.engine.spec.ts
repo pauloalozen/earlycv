@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { MatchingEngine, type ScorableJob, type ScorableProfile } from "./matching.engine";
+import {
+  MatchingEngine,
+  type ScorableJob,
+  type ScorableProfile,
+} from "./matching.engine";
 
 function buildProfile(overrides: Record<string, unknown> = {}) {
   return {
@@ -35,7 +39,10 @@ function buildJob(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function buildEngine(jobs: Array<ReturnType<typeof buildJob>>, profile: unknown) {
+function buildEngine(
+  jobs: Array<ReturnType<typeof buildJob>>,
+  profile: unknown,
+) {
   return new MatchingEngine({
     userRadarProfile: { findUnique: async () => profile },
     job: {
@@ -85,7 +92,9 @@ test("filterCompatibleJobs applies seniority compatibility window (JUNIOR sees J
 
 test("filterCompatibleJobs returns empty array when the user has no UserRadarProfile", async () => {
   const engine = buildEngine([buildJob()], null);
-  const result = await engine.filterCompatibleJobs({ userId: "user-without-radar" });
+  const result = await engine.filterCompatibleJobs({
+    userId: "user-without-radar",
+  });
   assert.deepEqual(result, []);
 });
 
@@ -119,7 +128,10 @@ function buildScorableProfile(
 
 test("calculateScore returns 100 for a perfect match", () => {
   const engine = new MatchingEngine({} as never);
-  const result = engine.calculateScore(buildScorableJob(), buildScorableProfile());
+  const result = engine.calculateScore(
+    buildScorableJob(),
+    buildScorableProfile(),
+  );
 
   assert.equal(result.score, 100);
   assert.deepEqual(result.breakdown, {
@@ -191,7 +203,11 @@ test("calculateScore treats empty language/workModel requirements as trivially s
       languageRequirements: [],
       workModel: "on-site",
     }),
-    buildScorableProfile({ skills: [], technologies: [], preferredWorkModels: [] }),
+    buildScorableProfile({
+      skills: [],
+      technologies: [],
+      preferredWorkModels: [],
+    }),
   );
 
   // requiredSkills/technologies vazios quase sempre significam "enrichment
