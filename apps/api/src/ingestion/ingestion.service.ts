@@ -668,6 +668,9 @@ export class IngestionService {
     inconclusive: boolean;
     jobCount: number;
     ok: boolean;
+    // Total de vagas no board antes do filtro semantico de tech — permite
+    // distinguir "board vazio" de "board tem vagas, nenhuma de tech".
+    rawJobCount: number;
   }> {
     const adapter = this.adapters.get(sourceType);
     if (!adapter) {
@@ -676,8 +679,17 @@ export class IngestionService {
         inconclusive: false,
         jobCount: 0,
         ok: false,
+        rawJobCount: 0,
       };
     }
+
+    let semanticFilterSkips = 0;
+    const probeCollectContext: IngestionCollectContext = {
+      getExistingJobByCanonicalKey: async () => null,
+      onSemanticFilterSkip: () => {
+        semanticFilterSkips += 1;
+      },
+    };
 
     const syntheticContext: JobSourceContext = {
       checkIntervalMinutes: 30,
@@ -699,8 +711,16 @@ export class IngestionService {
     };
 
     try {
-      const observations = await adapter.collect(syntheticContext);
-      return { inconclusive: false, jobCount: observations.length, ok: true };
+      const observations = await adapter.collect(
+        syntheticContext,
+        probeCollectContext,
+      );
+      return {
+        inconclusive: false,
+        jobCount: observations.length,
+        ok: true,
+        rawJobCount: observations.length + semanticFilterSkips,
+      };
     } catch (error) {
       // 403 (anti-bot) e timeout nao provam que o slug/URL esta errado —
       // so que a tentativa falhou dessa vez. Erro estrutural (URL nao
@@ -716,6 +736,7 @@ export class IngestionService {
         inconclusive,
         jobCount: 0,
         ok: false,
+        rawJobCount: 0,
       };
     }
   }

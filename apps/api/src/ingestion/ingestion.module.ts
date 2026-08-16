@@ -46,6 +46,8 @@ import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.reposit
 import { SemanticFilterController } from "./semantic-filter.controller";
 import { SemanticFilterService } from "./semantic-filter.service";
 import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
+import { BraveSearchProvider } from "./web-search/brave-search.provider";
+import { WebSearchService } from "./web-search/web-search.service";
 
 @Module({
   imports: [DatabaseModule, GoogleIndexingModule],
@@ -94,6 +96,8 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
     TeamtailorAdapter,
     TalentbrewAdapter,
     WorkdayAdapter,
+    BraveSearchProvider,
+    WebSearchService,
   ],
   exports: [IngestionService, SemanticFilterService, CompanyLogoFetchService],
 })

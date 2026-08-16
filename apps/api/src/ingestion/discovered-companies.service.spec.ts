@@ -5,6 +5,7 @@ import type { DatabaseService } from "../database/database.service";
 import type { AdminIngestionImportService } from "./admin-ingestion-import.service";
 import { DiscoveredCompaniesService } from "./discovered-companies.service";
 import type { IngestionService } from "./ingestion.service";
+import type { WebSearchService } from "./web-search/web-search.service";
 
 type Candidate = {
   id: string;
@@ -16,6 +17,8 @@ type Candidate = {
   adapterType?: string | null;
   status: string;
   jobCount: number;
+  rawJobCount?: number;
+  resolutionMethod?: string | null;
   errorMessage?: string | null;
   checkedAt?: Date | null;
   linkedCompanyId?: string | null;
@@ -31,8 +34,25 @@ function createFixture(options?: {
   ) => Promise<{
     ok: boolean;
     jobCount: number;
+    rawJobCount?: number;
     inconclusive: boolean;
     error?: string;
+  }>;
+  webSearch?: {
+    maxQueriesPerRun?: number;
+    searchImpl?: (
+      query: string,
+    ) => Promise<{ title: string; url: string; snippet?: string }[]>;
+  };
+  importRowImpl?: (row: { nome: string }) => Promise<{
+    companyAction: string;
+    companyId?: string;
+    companyName: string;
+    inferredAdapter?: string;
+    jobSourceId?: string;
+    message: string;
+    sourceAction: string;
+    status: string;
   }>;
 }) {
   const candidates = new Map<string, Candidate>();
@@ -120,8 +140,10 @@ function createFixture(options?: {
 
   const ingestionService = {
     probeSource: async (sourceType: string, sourceUrl: string) => {
-      if (options?.probeImpl) return options.probeImpl(sourceType, sourceUrl);
-      return { inconclusive: false, jobCount: 0, ok: true };
+      const result = options?.probeImpl
+        ? await options.probeImpl(sourceType, sourceUrl)
+        : { inconclusive: false, jobCount: 0, ok: true };
+      return { rawJobCount: result.jobCount, ...result };
     },
   } as unknown as IngestionService;
 
@@ -129,6 +151,7 @@ function createFixture(options?: {
   const importService = {
     importRow: async (row: { nome: string }) => {
       importRowCalls.push(row);
+      if (options?.importRowImpl) return options.importRowImpl(row);
       return {
         companyAction: "created",
         companyId: "company-1",
@@ -142,10 +165,19 @@ function createFixture(options?: {
     },
   } as unknown as AdminIngestionImportService;
 
+  const webSearchService = {
+    getMaxQueriesPerRun: () =>
+      options?.webSearch?.maxQueriesPerRun ?? (options?.webSearch ? 10 : 0),
+    isEnabled: () => Boolean(options?.webSearch),
+    search: async (query: string) =>
+      options?.webSearch?.searchImpl?.(query) ?? [],
+  } as unknown as WebSearchService;
+
   const service = new DiscoveredCompaniesService(
     database,
     ingestionService,
     importService,
+    webSearchService,
   );
 
   return {
@@ -171,6 +203,20 @@ test("importCandidatesCsv (formato simples) cria PENDING sem URL/adapter", async
   const created = [...candidates.values()];
   assert.equal(created[0]?.status, "PENDING");
   assert.equal(created[0]?.careersUrl, null);
+});
+
+test("importCandidatesCsv decodifica entidades HTML no nome (ex: copiado de pagina web)", async () => {
+  const { service, candidates } = createFixture();
+
+  const report = await service.importCandidatesCsv({
+    csvText: "nome\nSuperl&#243;gica\nAssa&#237; Tech",
+  });
+
+  assert.equal(report.createdCount, 2);
+  const created = [...candidates.values()];
+  assert.equal(created[0]?.name, "Superlógica");
+  assert.equal(created[0]?.normalizedName, "superlogica");
+  assert.equal(created[1]?.name, "Assaí Tech");
 });
 
 test("importCandidatesCsv (formato completo) grava careers_url/adapter e não duplica", async () => {
@@ -245,6 +291,29 @@ test("validatePending (URL conhecida) marca NO_ACTIVE_JOBS quando o probe não a
   assert.equal(candidate?.status, "NO_ACTIVE_JOBS");
 });
 
+test("validatePending (URL conhecida) marca NO_TECH_JOBS quando o board tem vagas mas nenhuma passa no filtro semantico", async () => {
+  const { service, candidates } = createFixture({
+    probeImpl: async () => ({
+      inconclusive: false,
+      jobCount: 0,
+      ok: true,
+      rawJobCount: 11,
+    }),
+  });
+  await service.importCandidatesCsv({
+    csvText:
+      "nome,setor,site_url,careers_url,tipo_adapter\nUsiminas,,,https://usiminas.gupy.io,gupy",
+  });
+
+  const report = await service.validatePending();
+
+  assert.equal(report.noTechJobsCount, 1);
+  const candidate = [...candidates.values()][0];
+  assert.equal(candidate?.status, "NO_TECH_JOBS");
+  assert.equal(candidate?.jobCount, 0);
+  assert.equal(candidate?.rawJobCount, 11);
+});
+
 test("validatePending (URL conhecida) marca INVALID em erro estrutural e mantém PENDING em erro inconclusivo", async () => {
   const { service, candidates } = createFixture({
     probeImpl: async () => ({
@@ -278,6 +347,40 @@ test("validatePending (URL conhecida) marca INVALID em erro estrutural e mantém
   assert.equal([...candidates2.values()][0]?.status, "PENDING");
 });
 
+test("validateOne se auto-cura: careersUrl conhecida quebrada cai pra busca web em vez de marcar INVALID direto", async () => {
+  const { service, candidates } = createFixture({
+    probeImpl: async (sourceType, sourceUrl) => {
+      // A URL "conhecida" (pré-preenchida errada, ex: chute salvo antes da
+      // busca web existir) sempre falha — só a resolvida pela busca funciona.
+      if (sourceUrl === "https://assai.gupy.io") {
+        return { inconclusive: false, jobCount: 5, ok: true };
+      }
+      return {
+        error: "gupy board is unavailable",
+        inconclusive: false,
+        jobCount: 0,
+        ok: false,
+      };
+    },
+    webSearch: {
+      searchImpl: async () => [
+        { title: "Trabalhe conosco | Assaí", url: "https://assai.gupy.io/" },
+      ],
+    },
+  });
+  await service.importCandidatesCsv({
+    csvText:
+      "nome,setor,site_url,careers_url,tipo_adapter\nAssaí Tech,,,https://assaitech.gupy.io,gupy",
+  });
+  const candidate = [...candidates.values()][0];
+
+  const revalidated = await service.validateOne(candidate.id);
+
+  assert.equal(revalidated.status, "VALIDATED");
+  assert.equal(revalidated.careersUrl, "https://assai.gupy.io");
+  assert.equal(revalidated.resolutionMethod, "web_search");
+});
+
 test("validatePending (só nome) acha match chutando slug num dos adapters adivináveis", async () => {
   const { service, candidates } = createFixture({
     probeImpl: async (sourceType, sourceUrl) => {
@@ -296,6 +399,88 @@ test("validatePending (só nome) acha match chutando slug num dos adapters adivi
   assert.equal(candidate?.status, "VALIDATED");
   assert.equal(candidate?.adapterType, "greenhouse");
   assert.ok(candidate?.careersUrl?.includes("greenhouse.io"));
+});
+
+test("validatePending (só nome) resolve via busca web sem precisar chutar slug", async () => {
+  const { service, candidates } = createFixture({
+    probeImpl: async (sourceType, sourceUrl) => {
+      if (sourceType === "gupy" && sourceUrl === "https://venhasersafra.gupy.io") {
+        return { inconclusive: false, jobCount: 5, ok: true };
+      }
+      return { inconclusive: false, jobCount: 0, ok: true };
+    },
+    webSearch: {
+      searchImpl: async () => [
+        { title: "Site institucional", url: "https://safra.com.br" },
+        {
+          snippet: "Vagas abertas no Banco Safra",
+          title: "Trabalhe conosco",
+          url: "https://venhasersafra.gupy.io/",
+        },
+      ],
+    },
+  });
+  await service.importCandidatesCsv({ csvText: "nome\nBanco Safra" });
+
+  const report = await service.validatePending(100);
+
+  assert.equal(report.validatedCount, 1);
+  const candidate = [...candidates.values()][0];
+  assert.equal(candidate?.status, "VALIDATED");
+  assert.equal(candidate?.adapterType, "gupy");
+  assert.equal(candidate?.careersUrl, "https://venhasersafra.gupy.io");
+  assert.equal(candidate?.resolutionMethod, "web_search");
+});
+
+test("validatePending (só nome) cai pro chute de slug quando a busca web não acha nada", async () => {
+  const { service, candidates } = createFixture({
+    probeImpl: async (sourceType, sourceUrl) => {
+      if (sourceType === "greenhouse" && sourceUrl.includes("empresax")) {
+        return { inconclusive: false, jobCount: 3, ok: true };
+      }
+      return { inconclusive: false, jobCount: 0, ok: true };
+    },
+    webSearch: {
+      searchImpl: async () => [
+        { title: "LinkedIn", url: "https://linkedin.com/company/empresa-x" },
+      ],
+    },
+  });
+  await service.importCandidatesCsv({ csvText: "nome\nEmpresa X" });
+
+  const report = await service.validatePending(100);
+
+  assert.equal(report.validatedCount, 1);
+  const candidate = [...candidates.values()][0];
+  assert.equal(candidate?.status, "VALIDATED");
+  assert.equal(candidate?.resolutionMethod, "slug_guess");
+});
+
+test("validatePending respeita o orçamento de consultas de busca (searchBudget esgotado pula direto pro chute)", async () => {
+  let searchCalls = 0;
+  const { service, candidates } = createFixture({
+    probeImpl: async (sourceType, sourceUrl) => {
+      if (sourceType === "greenhouse" && sourceUrl.includes("empresax")) {
+        return { inconclusive: false, jobCount: 3, ok: true };
+      }
+      return { inconclusive: false, jobCount: 0, ok: true };
+    },
+    webSearch: {
+      maxQueriesPerRun: 0,
+      searchImpl: async () => {
+        searchCalls += 1;
+        return [];
+      },
+    },
+  });
+  await service.importCandidatesCsv({ csvText: "nome\nEmpresa X" });
+
+  const report = await service.validatePending(100);
+
+  assert.equal(searchCalls, 0);
+  assert.equal(report.validatedCount, 1);
+  const candidate = [...candidates.values()][0];
+  assert.equal(candidate?.resolutionMethod, "slug_guess");
 });
 
 test("validatePending (só nome) marca INVALID com o histórico de tentativas quando nada bate", async () => {
@@ -334,6 +519,191 @@ test("promote exige status VALIDATED e marca IMPORTED em caso de sucesso", async
   assert.equal(promoted.status, "IMPORTED");
   assert.equal(promoted.linkedCompanyId, "company-1");
   assert.equal(importRowCalls.length, 1);
+});
+
+test("promote aceita status NO_TECH_JOBS (adapter/URL ja confirmados, so sem vaga de tech no momento)", async () => {
+  const { service, candidates, importRowCalls } = createFixture();
+  await service.importCandidatesCsv({
+    csvText:
+      "nome,setor,site_url,careers_url,tipo_adapter\nUsiminas,,,https://usiminas.gupy.io,gupy",
+  });
+  const candidate = [...candidates.values()][0];
+
+  await candidates.set(candidate.id, {
+    ...candidate,
+    adapterType: "gupy",
+    careersUrl: "https://usiminas.gupy.io/",
+    jobCount: 0,
+    rawJobCount: 11,
+    status: "NO_TECH_JOBS",
+  });
+
+  const promoted = await service.promote(candidate.id);
+  assert.equal(promoted.status, "IMPORTED");
+  assert.equal(importRowCalls.length, 1);
+});
+
+test("promote aceita status NO_ACTIVE_JOBS (adapter/URL confirmados, board so estava vazio no momento)", async () => {
+  const { service, candidates, importRowCalls } = createFixture();
+  await service.importCandidatesCsv({
+    csvText:
+      "nome,setor,site_url,careers_url,tipo_adapter\nBanco Original,,,https://banco-original.gupy.io,gupy",
+  });
+  const candidate = [...candidates.values()][0];
+
+  await candidates.set(candidate.id, {
+    ...candidate,
+    adapterType: "gupy",
+    careersUrl: "https://banco-original.gupy.io/",
+    jobCount: 0,
+    rawJobCount: 0,
+    status: "NO_ACTIVE_JOBS",
+  });
+
+  const promoted = await service.promote(candidate.id);
+  assert.equal(promoted.status, "IMPORTED");
+  assert.equal(importRowCalls.length, 1);
+});
+
+test("promote recusa candidato INVALID (URL nao resolveu ou nenhum slug bateu)", async () => {
+  const { service, candidates } = createFixture();
+  await service.importCandidatesCsv({ csvText: "nome\nEmpresa Sem Match" });
+  const candidate = [...candidates.values()][0];
+
+  await candidates.set(candidate.id, {
+    ...candidate,
+    status: "INVALID",
+  });
+
+  await assert.rejects(() => service.promote(candidate.id));
+});
+
+test("promoteAll promove todos os promotáveis e reporta falhas isoladas sem travar o lote", async () => {
+  let calls = 0;
+  const { service, candidates } = createFixture({
+    importRowImpl: async (row) => {
+      calls += 1;
+      if (row.nome === "Empresa Com Erro") {
+        return {
+          companyAction: "error",
+          companyName: row.nome,
+          message: "site fora do ar",
+          sourceAction: "error",
+          status: "error",
+        };
+      }
+      return {
+        companyAction: "created",
+        companyId: "company-1",
+        companyName: row.nome,
+        sourceAction: "created",
+        status: "success",
+      };
+    },
+  });
+
+  await service.importCandidatesCsv({
+    csvText: "nome\nEmpresa Ok\nEmpresa Com Erro\nEmpresa Ainda Pendente",
+  });
+  const [ok, comErro, aindaPendente] = [...candidates.values()];
+  await candidates.set(ok.id, {
+    ...ok,
+    adapterType: "gupy",
+    careersUrl: "https://empresa-ok.gupy.io",
+    status: "VALIDATED",
+  });
+  await candidates.set(comErro.id, {
+    ...comErro,
+    adapterType: "gupy",
+    careersUrl: "https://empresa-com-erro.gupy.io",
+    status: "NO_TECH_JOBS",
+  });
+  // aindaPendente fica PENDING — não deve nem entrar no lote de promoteAll.
+
+  const report = await service.promoteAll();
+
+  assert.equal(report.totalCount, 2);
+  assert.equal(report.promotedCount, 1);
+  assert.equal(report.failedCount, 1);
+  assert.equal(report.errors[0]?.name, "Empresa Com Erro");
+  assert.equal(calls, 2);
+  assert.equal(candidates.get(ok.id)?.status, "IMPORTED");
+  assert.equal(candidates.get(comErro.id)?.status, "NO_TECH_JOBS");
+  assert.equal(candidates.get(aindaPendente.id)?.status, "PENDING");
+});
+
+test("promoteManual cria a fonte com URL/adapter informados na mão, mesmo pra candidato DISMISSED", async () => {
+  const { service, candidates, importRowCalls } = createFixture();
+  await service.importCandidatesCsv({ csvText: "nome\nEmpresa Achada Na Mao" });
+  const candidate = [...candidates.values()][0];
+  await service.dismiss(candidate.id);
+  assert.equal(candidates.get(candidate.id)?.status, "DISMISSED");
+
+  const promoted = await service.promoteManual(candidate.id, {
+    adapterType: "greenhouse",
+    careersUrl: "https://boards.greenhouse.io/empresaachadanamao",
+  });
+
+  assert.equal(promoted.status, "IMPORTED");
+  assert.equal(importRowCalls.length, 1);
+  assert.equal(candidates.get(candidate.id)?.adapterType, "greenhouse");
+});
+
+test("promoteManual recusa adapterType inválido e candidato já IMPORTED", async () => {
+  const { service, candidates } = createFixture();
+  await service.importCandidatesCsv({ csvText: "nome\nEmpresa X" });
+  const candidate = [...candidates.values()][0];
+
+  await assert.rejects(() =>
+    service.promoteManual(candidate.id, {
+      adapterType: "nao-existe",
+      careersUrl: "https://x.gupy.io",
+    }),
+  );
+
+  await candidates.set(candidate.id, { ...candidate, status: "IMPORTED" });
+  await assert.rejects(() =>
+    service.promoteManual(candidate.id, {
+      adapterType: "gupy",
+      careersUrl: "https://x.gupy.io",
+    }),
+  );
+});
+
+test("validateOne revalida um único candidato independente do status atual", async () => {
+  const { service, candidates } = createFixture({
+    probeImpl: async () => ({ inconclusive: false, jobCount: 4, ok: true }),
+  });
+  await service.importCandidatesCsv({
+    csvText:
+      "nome,setor,site_url,careers_url,tipo_adapter\nBanco Original,,,https://banco-original.gupy.io,gupy",
+  });
+  const candidate = [...candidates.values()][0];
+  await candidates.set(candidate.id, {
+    ...candidate,
+    status: "NO_ACTIVE_JOBS",
+  });
+
+  const revalidated = await service.validateOne(candidate.id);
+
+  assert.equal(revalidated.status, "VALIDATED");
+  assert.equal(revalidated.jobCount, 4);
+});
+
+test("validateOne recusa candidato já IMPORTED e propaga inconclusivo como erro", async () => {
+  const { service, candidates } = createFixture({
+    probeImpl: async () => ({ error: "timeout", inconclusive: true, jobCount: 0, ok: false }),
+  });
+  await service.importCandidatesCsv({
+    csvText:
+      "nome,setor,site_url,careers_url,tipo_adapter\nBanco Original,,,https://banco-original.gupy.io,gupy",
+  });
+  const candidate = [...candidates.values()][0];
+
+  await assert.rejects(() => service.validateOne(candidate.id));
+
+  await candidates.set(candidate.id, { ...candidate, status: "IMPORTED" });
+  await assert.rejects(() => service.validateOne(candidate.id));
 });
 
 test("dismiss marca DISMISSED e recusa candidato já IMPORTED", async () => {

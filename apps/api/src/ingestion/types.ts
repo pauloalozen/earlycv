@@ -59,6 +59,10 @@ export type IngestionCollectContext = {
     canonicalKey: string,
   ): Promise<{ lastSeenAt: Date | null } | null>;
   ingestionRunId?: string;
+  // Chamado toda vez que o filtro semantico descarta um titulo (SKIP) —
+  // usado pela Descoberta de Empresas pra distinguir "board vazio" de
+  // "board tem vagas, nenhuma de tech" (ver probeSource).
+  onSemanticFilterSkip?(): void;
 };
 
 export type IngestionSourceAdapter = {

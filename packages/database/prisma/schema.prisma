@@ -74,6 +74,9 @@ enum DiscoveredCompanyStatus {
   PENDING
   VALIDATED
   NO_ACTIVE_JOBS
+  // Board tem vagas abertas, mas nenhuma passou no filtro semantico de
+  // tech (ex: vagas industriais/operacionais) — distinto de board vazio.
+  NO_TECH_JOBS
   INVALID
   IMPORTED
   DISMISSED
@@ -1054,6 +1057,13 @@ model DiscoveredCompany {
   adapterType     JobSourceType?
   status          DiscoveredCompanyStatus @default(PENDING)
   jobCount        Int                     @default(0)
+  // Vagas no board antes do filtro semantico de tech — so difere de
+  // jobCount quando status = NO_TECH_JOBS (board nao vazio, sem match).
+  rawJobCount     Int                     @default(0)
+  // Como a careersUrl/adapterType foi descoberta: "known" (ja veio na
+  // planilha), "web_search" (achou via busca "{nome} vagas") ou
+  // "slug_guess" (chute de slug x adapter) — so pra debug/auditoria.
+  resolutionMethod String?
   // Ex: lista dos adapters/slugs tentados sem sucesso, ou o motivo do erro
   // estrutural — util pra nao repetir o mesmo chute numa proxima rodada.
   errorMessage    String?

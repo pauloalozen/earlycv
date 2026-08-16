@@ -24,6 +24,7 @@ const VALID_STATUSES: DiscoveredCompanyStatus[] = [
   "PENDING",
   "VALIDATED",
   "NO_ACTIVE_JOBS",
+  "NO_TECH_JOBS",
   "INVALID",
   "IMPORTED",
   "DISMISSED",
@@ -83,10 +84,38 @@ export class DiscoveredCompaniesController {
     );
   }
 
+  @Post(":id/validate")
+  @HttpCode(200)
+  validateOne(@Param("id") id: string) {
+    return this.discoveredCompaniesService.validateOne(id);
+  }
+
   @Post(":id/promote")
   @HttpCode(200)
   promote(@Param("id") id: string) {
     return this.discoveredCompaniesService.promote(id);
+  }
+
+  @Post("promote-all")
+  @HttpCode(200)
+  promoteAll() {
+    return this.discoveredCompaniesService.promoteAll();
+  }
+
+  @Post(":id/promote-manual")
+  @HttpCode(200)
+  promoteManual(
+    @Param("id") id: string,
+    @Body("careersUrl") careersUrl: string | undefined,
+    @Body("adapterType") adapterType: string | undefined,
+  ) {
+    if (!careersUrl || !adapterType) {
+      throw new BadRequestException("careersUrl and adapterType are required");
+    }
+    return this.discoveredCompaniesService.promoteManual(id, {
+      adapterType,
+      careersUrl,
+    });
   }
 
   @Post(":id/dismiss")

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
   AdminPill,
@@ -14,6 +14,7 @@ type DiscoveredCompanyStatus =
   | "PENDING"
   | "VALIDATED"
   | "NO_ACTIVE_JOBS"
+  | "NO_TECH_JOBS"
   | "INVALID"
   | "IMPORTED"
   | "DISMISSED";
@@ -25,6 +26,7 @@ type DiscoveredCompanyRow = {
   adapterType: string | null;
   status: DiscoveredCompanyStatus;
   jobCount: number;
+  rawJobCount: number;
   errorMessage: string | null;
   createdAt: string;
 };
@@ -33,14 +35,36 @@ type ValidateReport = {
   checkedCount: number;
   validatedCount: number;
   noActiveJobsCount: number;
+  noTechJobsCount: number;
   invalidCount: number;
   stillPendingCount: number;
 };
+
+type PromoteAllReport = {
+  errors: { id: string; message: string; name: string }[];
+  failedCount: number;
+  promotedCount: number;
+  totalCount: number;
+};
+
+const MANUAL_ADAPTER_TYPES = [
+  "gupy",
+  "greenhouse",
+  "lever",
+  "ashby",
+  "inhire",
+  "teamtailor",
+  "workday",
+  "talentbrew",
+  "custom_html",
+  "custom_api",
+] as const;
 
 const QUEUE_STATUSES: DiscoveredCompanyStatus[] = [
   "PENDING",
   "VALIDATED",
   "NO_ACTIVE_JOBS",
+  "NO_TECH_JOBS",
 ];
 const HISTORY_STATUSES: DiscoveredCompanyStatus[] = [
   "IMPORTED",
@@ -53,6 +77,7 @@ const STATUS_LABELS: Record<DiscoveredCompanyStatus, string> = {
   IMPORTED: "Importada",
   INVALID: "Inválida",
   NO_ACTIVE_JOBS: "Sem vagas",
+  NO_TECH_JOBS: "Sem vagas de tech",
   PENDING: "Pendente",
   VALIDATED: "Validada",
 };
@@ -65,6 +90,7 @@ const STATUS_TONE: Record<
   IMPORTED: "ok",
   INVALID: "danger",
   NO_ACTIVE_JOBS: "warn",
+  NO_TECH_JOBS: "warn",
   PENDING: "neutral",
   VALIDATED: "ok",
 };
@@ -75,7 +101,13 @@ export function DiscoveryTabClient() {
   const [view, setView] = useState<"fila" | "historico">("fila");
   const [importing, setImporting] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [promotingAll, setPromotingAll] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [manualFormRowId, setManualFormRowId] = useState<string | null>(null);
+  const [manualCareersUrl, setManualCareersUrl] = useState("");
+  const [manualAdapterType, setManualAdapterType] = useState<string>(
+    MANUAL_ADAPTER_TYPES[0],
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -142,11 +174,95 @@ export function DiscoveryTabClient() {
         return;
       }
       setMessage(
-        `${data.checkedCount} verificado(s): ${data.validatedCount} validada(s), ${data.noActiveJobsCount} sem vagas, ${data.invalidCount} inválida(s), ${data.stillPendingCount} ainda pendente(s).`,
+        `${data.checkedCount} verificado(s): ${data.validatedCount} validada(s), ${data.noActiveJobsCount} sem vagas, ${data.noTechJobsCount} sem vagas de tech, ${data.invalidCount} inválida(s), ${data.stillPendingCount} ainda pendente(s).`,
       );
       await fetchRows();
     } finally {
       setValidating(false);
+    }
+  }
+
+  async function handleValidateOne(id: string) {
+    setPendingActionId(id);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/ingestion/discovery/${id}/validate`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.message ?? "Falha ao validar candidato.");
+        return;
+      }
+      setMessage(
+        `"${data.name}" revalidado: ${STATUS_LABELS[data.status as DiscoveredCompanyStatus] ?? data.status}.`,
+      );
+      await fetchRows();
+    } finally {
+      setPendingActionId(null);
+    }
+  }
+
+  async function handlePromoteAll() {
+    setPromotingAll(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/ingestion/discovery/promote-all", {
+        method: "POST",
+      });
+      const data: PromoteAllReport = await res.json();
+      if (!res.ok) {
+        setError("Falha ao criar fontes em massa.");
+        return;
+      }
+      setMessage(
+        `${data.promotedCount}/${data.totalCount} fonte(s) criada(s)` +
+          (data.failedCount > 0 ? `, ${data.failedCount} falhou(aram).` : "."),
+      );
+      await fetchRows();
+    } finally {
+      setPromotingAll(false);
+    }
+  }
+
+  function openManualForm(id: string) {
+    setManualFormRowId(id);
+    setManualCareersUrl("");
+    setManualAdapterType(MANUAL_ADAPTER_TYPES[0]);
+    setError(null);
+  }
+
+  async function handlePromoteManual(id: string) {
+    if (!manualCareersUrl.trim()) {
+      setError("Informe a URL do board de vagas.");
+      return;
+    }
+    setPendingActionId(id);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(
+        `/api/admin/ingestion/discovery/${id}/promote-manual`,
+        {
+          body: JSON.stringify({
+            adapterType: manualAdapterType,
+            careersUrl: manualCareersUrl.trim(),
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.message ?? "Falha ao criar fonte manualmente.");
+        return;
+      }
+      setManualFormRowId(null);
+      await fetchRows();
+    } finally {
+      setPendingActionId(null);
     }
   }
 
@@ -223,6 +339,14 @@ export function DiscoveryTabClient() {
           >
             {validating ? "Validando..." : "Validar pendentes"}
           </button>
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            disabled={promotingAll}
+            onClick={handlePromoteAll}
+            type="button"
+          >
+            {promotingAll ? "Criando fontes..." : "Criar todas as fontes"}
+          </button>
         </div>
       </div>
 
@@ -286,72 +410,178 @@ export function DiscoveryTabClient() {
             </tr>
           ) : (
             rows.map((row) => (
-              <tr key={row.id}>
-                <AdminTd>
-                  <div>{row.name}</div>
-                  {row.errorMessage && (
+              <Fragment key={row.id}>
+                <tr>
+                  <AdminTd>
+                    <div>{row.name}</div>
+                    {row.errorMessage && (
+                      <div
+                        style={{
+                          color: AT.muted,
+                          fontSize: 10.5,
+                          marginTop: 2,
+                          maxWidth: 320,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={row.errorMessage}
+                      >
+                        {row.errorMessage}
+                      </div>
+                    )}
+                  </AdminTd>
+                  <AdminTd mono>{row.adapterType ?? "—"}</AdminTd>
+                  <AdminTd mono muted>
+                    {row.careersUrl ?? "—"}
+                  </AdminTd>
+                  <AdminTd>
+                    <AdminPill tone={STATUS_TONE[row.status]}>
+                      {STATUS_LABELS[row.status]}
+                    </AdminPill>
+                  </AdminTd>
+                  <AdminTd align="right" mono>
+                    {row.status === "NO_TECH_JOBS"
+                      ? `0 (${row.rawJobCount} no board)`
+                      : row.jobCount}
+                  </AdminTd>
+                  <AdminTd align="right">
                     <div
                       style={{
-                        color: AT.muted,
-                        fontSize: 10.5,
-                        marginTop: 2,
-                        maxWidth: 320,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
+                        display: "flex",
+                        gap: 6,
+                        justifyContent: "flex-end",
                       }}
-                      title={row.errorMessage}
                     >
-                      {row.errorMessage}
+                      {row.status !== "IMPORTED" && (
+                        <button
+                          className={buttonVariants({
+                            size: "sm",
+                            variant: "outline",
+                          })}
+                          disabled={pendingActionId === row.id}
+                          onClick={() => handleValidateOne(row.id)}
+                          type="button"
+                        >
+                          Validar
+                        </button>
+                      )}
+                      {(row.status === "VALIDATED" ||
+                        row.status === "NO_TECH_JOBS" ||
+                        row.status === "NO_ACTIVE_JOBS") && (
+                        <button
+                          className={buttonVariants({ size: "sm" })}
+                          disabled={pendingActionId === row.id}
+                          onClick={() => handlePromote(row.id)}
+                          type="button"
+                        >
+                          Criar fonte
+                        </button>
+                      )}
+                      {(row.status === "DISMISSED" ||
+                        row.status === "INVALID") && (
+                        <button
+                          className={buttonVariants({
+                            size: "sm",
+                            variant: "outline",
+                          })}
+                          disabled={pendingActionId === row.id}
+                          onClick={() =>
+                            manualFormRowId === row.id
+                              ? setManualFormRowId(null)
+                              : openManualForm(row.id)
+                          }
+                          type="button"
+                        >
+                          {manualFormRowId === row.id
+                            ? "Cancelar"
+                            : "Link manual"}
+                        </button>
+                      )}
+                      {row.status !== "IMPORTED" && (
+                        <button
+                          className={buttonVariants({
+                            size: "sm",
+                            variant: "outline",
+                          })}
+                          disabled={pendingActionId === row.id}
+                          onClick={() => handleDismiss(row.id)}
+                          type="button"
+                        >
+                          Descartar
+                        </button>
+                      )}
                     </div>
-                  )}
-                </AdminTd>
-                <AdminTd mono>{row.adapterType ?? "—"}</AdminTd>
-                <AdminTd mono muted>
-                  {row.careersUrl ?? "—"}
-                </AdminTd>
-                <AdminTd>
-                  <AdminPill tone={STATUS_TONE[row.status]}>
-                    {STATUS_LABELS[row.status]}
-                  </AdminPill>
-                </AdminTd>
-                <AdminTd align="right" mono>
-                  {row.jobCount}
-                </AdminTd>
-                <AdminTd align="right">
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 6,
-                      justifyContent: "flex-end",
-                    }}
-                  >
-                    {row.status === "VALIDATED" && (
-                      <button
-                        className={buttonVariants({ size: "sm" })}
-                        disabled={pendingActionId === row.id}
-                        onClick={() => handlePromote(row.id)}
-                        type="button"
+                  </AdminTd>
+                </tr>
+                {manualFormRowId === row.id && (
+                  <tr key={`${row.id}-manual-form`}>
+                    <td
+                      colSpan={6}
+                      style={{
+                        padding: "10px 16px",
+                        borderBottom: `1px solid ${AT.borderSoft}`,
+                      }}
+                    >
+                      <div
+                        style={{
+                          alignItems: "center",
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 8,
+                        }}
                       >
-                        Criar fonte
-                      </button>
-                    )}
-                    {row.status !== "IMPORTED" && (
-                      <button
-                        className={buttonVariants({
-                          size: "sm",
-                          variant: "outline",
-                        })}
-                        disabled={pendingActionId === row.id}
-                        onClick={() => handleDismiss(row.id)}
-                        type="button"
-                      >
-                        Descartar
-                      </button>
-                    )}
-                  </div>
-                </AdminTd>
-              </tr>
+                        <span style={{ color: AT.muted, fontSize: 12 }}>
+                          Achei manualmente:
+                        </span>
+                        <input
+                          className="text-[12.5px]"
+                          onChange={(event) =>
+                            setManualCareersUrl(event.target.value)
+                          }
+                          placeholder="https://empresa.gupy.io"
+                          style={{
+                            border: `1px solid ${AT.borderSoft}`,
+                            borderRadius: 6,
+                            flex: "1 1 260px",
+                            fontFamily: '"Geist Mono", monospace',
+                            fontSize: 12,
+                            padding: "6px 8px",
+                          }}
+                          type="text"
+                          value={manualCareersUrl}
+                        />
+                        <select
+                          onChange={(event) =>
+                            setManualAdapterType(event.target.value)
+                          }
+                          style={{
+                            border: `1px solid ${AT.borderSoft}`,
+                            borderRadius: 6,
+                            fontSize: 12.5,
+                            padding: "6px 8px",
+                          }}
+                          value={manualAdapterType}
+                        >
+                          {MANUAL_ADAPTER_TYPES.map((adapter) => (
+                            <option key={adapter} value={adapter}>
+                              {adapter}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className={buttonVariants({ size: "sm" })}
+                          disabled={pendingActionId === row.id}
+                          onClick={() => handlePromoteManual(row.id)}
+                          type="button"
+                        >
+                          Criar fonte
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))
           )}
         </tbody>

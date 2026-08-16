@@ -3,11 +3,13 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import type {
   DiscoveredCompany,
   DiscoveredCompanyStatus,
+  JobSourceType,
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
@@ -22,8 +24,10 @@ import {
   generateSlugVariants,
 } from "./discovery-slug";
 import { IngestionService } from "./ingestion.service";
-import { normalizeCompanyName } from "./name-normalization";
+import { decodeHtmlEntities, normalizeCompanyName } from "./name-normalization";
 import { canonicalizeSourceUrl } from "./url-normalization";
+import { matchAdapterUrl } from "./web-search/adapter-url-matcher";
+import { WebSearchService } from "./web-search/web-search.service";
 
 // Espaçamento entre chamadas de probe (com jitter) — mesmo espírito do
 // pacing entre itens de um batch normal (ver ingestion-manual-runner.ts),
@@ -59,18 +63,50 @@ export type ValidateCandidatesReport = {
   checkedCount: number;
   invalidCount: number;
   noActiveJobsCount: number;
+  noTechJobsCount: number;
   stillPendingCount: number;
   validatedCount: number;
 };
 
+// board vazio (rawJobCount 0) -> NO_ACTIVE_JOBS; board com vagas mas
+// nenhuma de tech (rawJobCount > 0, jobCount 0) -> NO_TECH_JOBS.
+function probeStatus(
+  jobCount: number,
+  rawJobCount: number,
+): DiscoveredCompanyStatus {
+  if (jobCount > 0) return "VALIDATED";
+  return rawJobCount > 0 ? "NO_TECH_JOBS" : "NO_ACTIVE_JOBS";
+}
+
+// VALIDATED, NO_TECH_JOBS e NO_ACTIVE_JOBS todos provam que o adapter/URL
+// esta certo (board existe e respondeu) — so varia se tinha vaga (de tech
+// ou nao) no momento do probe. INVALID fica de fora porque ali a URL nao
+// resolveu ou nenhum slug bateu (promoteManual ainda permite forçar nesses
+// casos com um link achado manualmente).
+const PROMOTABLE_STATUSES: DiscoveredCompanyStatus[] = [
+  "VALIDATED",
+  "NO_TECH_JOBS",
+  "NO_ACTIVE_JOBS",
+];
+
+// Orçamento generoso de probes pra uma validação pontual de 1 candidato
+// (clique manual) — cobre o pior caso do chute de slug (6 adapters x
+// variantes do nome) sem depender do teto compartilhado de "Validar
+// pendentes".
+const SINGLE_VALIDATE_PROBE_BUDGET = 60;
+
 @Injectable()
 export class DiscoveredCompaniesService {
+  private readonly logger = new Logger(DiscoveredCompaniesService.name);
+
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(IngestionService)
     private readonly ingestionService: IngestionService,
     @Inject(AdminIngestionImportService)
     private readonly importService: AdminIngestionImportService,
+    @Inject(WebSearchService)
+    private readonly webSearchService: WebSearchService,
   ) {}
 
   async list(status?: DiscoveredCompanyStatus[]) {
@@ -131,7 +167,7 @@ export class DiscoveredCompaniesService {
     for (const [index, rawLine] of lines.slice(1).entries()) {
       const lineNumber = index + 2;
       const cols = rawLine.split(",").map((value) => value.trim());
-      const nome = cols[0];
+      const nome = cols[0] ? decodeHtmlEntities(cols[0]) : cols[0];
 
       if (!nome) {
         report.errors.push({ line: lineNumber, message: "nome is required" });
@@ -248,17 +284,26 @@ export class DiscoveredCompaniesService {
       checkedCount: 0,
       invalidCount: 0,
       noActiveJobsCount: 0,
+      noTechJobsCount: 0,
       stillPendingCount: 0,
       validatedCount: 0,
     };
 
     let probesUsed = 0;
+    // Teto separado do probeBudget: cada consulta de busca custa fora do
+    // orçamento do provedor de busca (ex: free tier do Brave), então não
+    // deve competir com o teto de probes contra os adapters.
+    const searchBudget = { remaining: this.webSearchService.getMaxQueriesPerRun() };
 
     for (const candidate of candidates) {
       if (probesUsed >= maxProbes) break;
 
       const { outcome, probesUsed: candidateProbes } =
-        await this.validateCandidate(candidate, maxProbes - probesUsed);
+        await this.validateCandidate(
+          candidate,
+          maxProbes - probesUsed,
+          searchBudget,
+        );
       probesUsed += candidateProbes;
       summary.checkedCount += 1;
 
@@ -275,6 +320,8 @@ export class DiscoveredCompaniesService {
       if (outcome.status === "VALIDATED") summary.validatedCount += 1;
       else if (outcome.status === "NO_ACTIVE_JOBS")
         summary.noActiveJobsCount += 1;
+      else if (outcome.status === "NO_TECH_JOBS")
+        summary.noTechJobsCount += 1;
       else if (outcome.status === "INVALID") summary.invalidCount += 1;
     }
 
@@ -284,6 +331,7 @@ export class DiscoveredCompaniesService {
   private async validateCandidate(
     candidate: DiscoveredCompany,
     probeBudget: number,
+    searchBudget: { remaining: number },
   ): Promise<{
     outcome: {
       adapterType?: (typeof IMPORTABLE_ADAPTER_TYPES)[number];
@@ -291,6 +339,8 @@ export class DiscoveredCompaniesService {
       checkedAt?: Date;
       errorMessage?: string | null;
       jobCount?: number;
+      rawJobCount?: number;
+      resolutionMethod?: string;
       status: DiscoveredCompanyStatus;
     };
     probesUsed: number;
@@ -309,29 +359,100 @@ export class DiscoveredCompaniesService {
       if (probe.inconclusive) {
         return { outcome: { status: "PENDING" }, probesUsed: 1 };
       }
-      if (!probe.ok) {
+      if (probe.ok) {
         return {
           outcome: {
             checkedAt: new Date(),
-            errorMessage: probe.error ?? "probe failed",
-            status: "INVALID",
+            errorMessage: null,
+            jobCount: probe.jobCount,
+            rawJobCount: probe.rawJobCount,
+            resolutionMethod: "known",
+            status: probeStatus(probe.jobCount, probe.rawJobCount),
           },
           probesUsed: 1,
         };
       }
+
+      // A URL conhecida quebrou de verdade (nao inconclusivo) — em vez de
+      // marcar INVALID direto, assume que ela pode ter sido um chute
+      // errado guardado antes da busca web existir (ex: slug pre-populado
+      // na importação em lote) e tenta re-resolver do zero pelo nome, como
+      // se fosse um candidato "só nome". Isso faz "Validar" auto-curar
+      // candidatos com careersUrl ruim salva.
+      const fallback = await this.resolveFromScratch(
+        candidate.name,
+        probeBudget - 1,
+        searchBudget,
+      );
       return {
-        outcome: {
-          checkedAt: new Date(),
-          errorMessage: null,
-          jobCount: probe.jobCount,
-          status: probe.jobCount > 0 ? "VALIDATED" : "NO_ACTIVE_JOBS",
-        },
-        probesUsed: 1,
+        outcome: fallback.outcome,
+        probesUsed: fallback.probesUsed + 1,
       };
     }
 
-    // Modo "só nome": chuta slugs e testa contra os adapters adivináveis.
-    const variants = generateSlugVariants(candidate.name);
+    return this.resolveFromScratch(candidate.name, probeBudget, searchBudget);
+  }
+
+  // Modo "só nome": tenta achar a URL certa buscando "{nome} vagas" e
+  // casando o primeiro resultado que aponte pra um board conhecido, antes
+  // de cair no chute de slug x adapter (lento, N tentativas x 6 adapters).
+  private async resolveFromScratch(
+    name: string,
+    probeBudget: number,
+    searchBudget: { remaining: number },
+  ): Promise<{
+    outcome: {
+      adapterType?: (typeof IMPORTABLE_ADAPTER_TYPES)[number];
+      careersUrl?: string;
+      checkedAt?: Date;
+      errorMessage?: string | null;
+      jobCount?: number;
+      rawJobCount?: number;
+      resolutionMethod?: string;
+      status: DiscoveredCompanyStatus;
+    };
+    probesUsed: number;
+  }> {
+    if (probeBudget <= 0) {
+      return { outcome: { status: "PENDING" }, probesUsed: 0 };
+    }
+
+    // 1 unica consulta, custa do orçamento de busca (searchBudget),
+    // separado do probeBudget.
+    if (searchBudget.remaining > 0 && this.webSearchService.isEnabled()) {
+      searchBudget.remaining -= 1;
+      const resolved = await this.resolveViaWebSearch(name);
+
+      if (resolved) {
+        const probe = await this.ingestionService.probeSource(
+          resolved.sourceType,
+          resolved.careersUrl,
+        );
+        await this.pace();
+
+        if (probe.ok) {
+          return {
+            outcome: {
+              adapterType: resolved.sourceType,
+              careersUrl: resolved.careersUrl,
+              checkedAt: new Date(),
+              errorMessage: null,
+              jobCount: probe.jobCount,
+              rawJobCount: probe.rawJobCount,
+              resolutionMethod: "web_search",
+              status: probeStatus(probe.jobCount, probe.rawJobCount),
+            },
+            probesUsed: 1,
+          };
+        }
+        // Probe na URL achada pela busca falhou/inconclusivo — não assume
+        // que a busca errou, só cai pro chute de slug como rede de
+        // segurança em vez de já marcar INVALID.
+      }
+    }
+
+    // Fallback: chuta slugs e testa contra os adapters adivináveis.
+    const variants = generateSlugVariants(name);
     const attempted: string[] = [];
     let probesUsed = 0;
 
@@ -350,7 +471,10 @@ export class DiscoveredCompaniesService {
         probesUsed += 1;
         attempted.push(`${adapter}:${slug}`);
 
-        if (probe.ok && probe.jobCount > 0) {
+        // rawJobCount > 0 com jobCount 0 ja prova que o slug/adapter esta
+        // certo (board existe e tem vagas) — so nao tem vaga de tech, entao
+        // para de chutar em vez de continuar tentando outros adapters.
+        if (probe.ok && probe.rawJobCount > 0) {
           return {
             outcome: {
               adapterType: adapter,
@@ -358,7 +482,9 @@ export class DiscoveredCompaniesService {
               checkedAt: new Date(),
               errorMessage: null,
               jobCount: probe.jobCount,
-              status: "VALIDATED",
+              rawJobCount: probe.rawJobCount,
+              resolutionMethod: "slug_guess",
+              status: probeStatus(probe.jobCount, probe.rawJobCount),
             },
             probesUsed,
           };
@@ -376,6 +502,25 @@ export class DiscoveredCompaniesService {
     };
   }
 
+  // Busca "{nome} vagas" e retorna o primeiro resultado cuja URL bate um
+  // domínio de adapter conhecido (gupy.io, boards.greenhouse.io, etc.) — é
+  // o equivalente automatizado de jogar "empresa vagas" no Google e pegar
+  // o link certo nos primeiros resultados.
+  private async resolveViaWebSearch(name: string) {
+    try {
+      const results = await this.webSearchService.search(`${name} vagas`);
+      for (const result of results) {
+        const matched = matchAdapterUrl(result.url);
+        if (matched) return matched;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `web search failed for "${name}": ${error instanceof Error ? error.message : "unknown"}`,
+      );
+    }
+    return null;
+  }
+
   private async pace() {
     // Sem pacing nos testes — sao dezenas de probes mockadas por teste
     // (combinacoes de adapter x slug), esperar de verdade so deixaria a
@@ -388,8 +533,10 @@ export class DiscoveredCompaniesService {
     const candidate = await this.getOrThrow(id);
     const { careersUrl, adapterType } = candidate;
 
-    if (candidate.status !== "VALIDATED") {
-      throw new BadRequestException("candidate must be VALIDATED to promote");
+    if (!PROMOTABLE_STATUSES.includes(candidate.status)) {
+      throw new BadRequestException(
+        `candidate must be one of ${PROMOTABLE_STATUSES.join(", ")} to promote`,
+      );
     }
     if (!careersUrl || !adapterType) {
       throw new BadRequestException(
@@ -397,6 +544,85 @@ export class DiscoveredCompaniesService {
       );
     }
 
+    return this.importCandidateAsSource(candidate, careersUrl, adapterType);
+  }
+
+  // Promove todos os candidatos promotáveis de uma vez (botão "Criar todas
+  // as fontes" na Fila) — segue promovendo mesmo se algum falhar no meio,
+  // pra um erro isolado (ex: URL derrubada nesse meio tempo) não travar o
+  // resto do lote.
+  async promoteAll() {
+    const candidates = await this.database.discoveredCompany.findMany({
+      orderBy: { createdAt: "asc" },
+      where: { status: { in: PROMOTABLE_STATUSES } },
+    });
+
+    const report = {
+      errors: [] as { id: string; message: string; name: string }[],
+      failedCount: 0,
+      promotedCount: 0,
+      totalCount: candidates.length,
+    };
+
+    for (const candidate of candidates) {
+      try {
+        await this.promote(candidate.id);
+        report.promotedCount += 1;
+      } catch (error) {
+        report.failedCount += 1;
+        report.errors.push({
+          id: candidate.id,
+          message: error instanceof Error ? error.message : "promote failed",
+          name: candidate.name,
+        });
+      }
+    }
+
+    return report;
+  }
+
+  // Cria a fonte com uma URL/adapter informados manualmente — pra quando o
+  // candidato foi descartado (DISMISSED) ou ficou INVALID (nada bateu, nem
+  // busca nem chute de slug) mas você achou o board de vagas na mão.
+  // Funciona pra qualquer status exceto IMPORTED.
+  async promoteManual(
+    id: string,
+    input: { adapterType: string; careersUrl: string },
+  ) {
+    const candidate = await this.getOrThrow(id);
+
+    if (candidate.status === "IMPORTED") {
+      throw new BadRequestException(
+        "candidate was already promoted to a source",
+      );
+    }
+    if (!isImportableAdapterType(input.adapterType)) {
+      throw new BadRequestException(
+        `invalid adapterType, expected one of: ${IMPORTABLE_ADAPTER_TYPES.join(", ")}`,
+      );
+    }
+
+    let careersUrl: string;
+    try {
+      careersUrl = canonicalizeSourceUrl(input.careersUrl);
+    } catch {
+      throw new BadRequestException("invalid careersUrl");
+    }
+
+    return this.importCandidateAsSource(
+      candidate,
+      careersUrl,
+      input.adapterType,
+      "manual",
+    );
+  }
+
+  private async importCandidateAsSource(
+    candidate: DiscoveredCompany,
+    careersUrl: string,
+    adapterType: JobSourceType,
+    resolutionMethod?: string,
+  ) {
     const outcome = await this.importService.importRow({
       ativa: "true",
       careersUrl,
@@ -413,7 +639,48 @@ export class DiscoveredCompaniesService {
     }
 
     return this.database.discoveredCompany.update({
-      data: { linkedCompanyId: outcome.companyId, status: "IMPORTED" },
+      data: {
+        adapterType,
+        careersUrl,
+        linkedCompanyId: outcome.companyId,
+        status: "IMPORTED",
+        ...(resolutionMethod ? { resolutionMethod } : {}),
+      },
+      where: { id: candidate.id },
+    });
+  }
+
+  // Validação pontual de 1 candidato (botão na linha da Fila) — roda o
+  // mesmo validateCandidate() do "Validar pendentes" em lote, mas pra
+  // qualquer status (não só PENDING) e com orçamento generoso, pra dar pra
+  // reprocessar um item específico depois de um ajuste manual ou só pra
+  // testar de novo.
+  async validateOne(id: string) {
+    const candidate = await this.getOrThrow(id);
+
+    if (candidate.status === "IMPORTED") {
+      throw new BadRequestException(
+        "cannot re-validate a candidate that was already promoted",
+      );
+    }
+
+    const searchBudget = {
+      remaining: Math.min(1, this.webSearchService.getMaxQueriesPerRun()),
+    };
+    const { outcome } = await this.validateCandidate(
+      candidate,
+      SINGLE_VALIDATE_PROBE_BUDGET,
+      searchBudget,
+    );
+
+    if (outcome.status === "PENDING") {
+      throw new ConflictException(
+        "probe was inconclusive (rate limit/timeout) — try again",
+      );
+    }
+
+    return this.database.discoveredCompany.update({
+      data: outcome,
       where: { id },
     });
   }

@@ -173,6 +173,7 @@ export class GreenhouseAdapter implements IngestionSourceAdapter {
         const filterDecision = await this.semanticFilter.evaluate(normalizedTitle);
 
         if (filterDecision.result === "SKIP") {
+          context?.onSemanticFilterSkip?.();
           await this.saveDiscardedTitle({
             canonicalKey,
             externalJobId: String(job.id),
