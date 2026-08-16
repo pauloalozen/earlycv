@@ -84,6 +84,7 @@ export class IngestionJobService {
         jobType: dto.jobType,
         name: dto.name,
         nextRunAt,
+        onlyMissingLogo: dto.onlyMissingLogo ?? false,
         scopeType: dto.scopeType,
         ...scheduleFields,
       },

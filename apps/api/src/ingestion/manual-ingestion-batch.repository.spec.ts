@@ -194,6 +194,68 @@ test("repository creates logo fetch batch for all supported adapters when adapte
   });
 });
 
+test("repository filters by company sem logo quando onlyMissingLogo=true (delta)", async () => {
+  let capturedSourceWhere: Record<string, unknown> | undefined;
+  const tx = {
+    ingestionBatchRun: {
+      create: async () => ({
+        id: "batch-logo-delta",
+        scopeType: "global",
+        scopeValue: "all",
+        status: "queued",
+        totalSources: 0,
+      }),
+    },
+    jobSource: {
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        capturedSourceWhere = where;
+        return [];
+      },
+    },
+  };
+  const database = {
+    $transaction: async (
+      callback: (transaction: typeof tx) => Promise<unknown>,
+    ) => callback(tx),
+  };
+
+  const repository = new ManualIngestionBatchRepository(database as never);
+  await repository.createLogoFetchBatchRun({ onlyMissingLogo: true });
+
+  assert.deepEqual(capturedSourceWhere?.company, { logoUrl: null });
+});
+
+test("repository não filtra por logoUrl quando onlyMissingLogo é omitido/false", async () => {
+  let capturedSourceWhere: Record<string, unknown> | undefined;
+  const tx = {
+    ingestionBatchRun: {
+      create: async () => ({
+        id: "batch-logo-full",
+        scopeType: "global",
+        scopeValue: "all",
+        status: "queued",
+        totalSources: 0,
+      }),
+    },
+    jobSource: {
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        capturedSourceWhere = where;
+        return [];
+      },
+    },
+  };
+  const database = {
+    $transaction: async (
+      callback: (transaction: typeof tx) => Promise<unknown>,
+    ) => callback(tx),
+  };
+
+  const repository = new ManualIngestionBatchRepository(database as never);
+  await repository.createLogoFetchBatchRun({});
+
+  assert.equal(capturedSourceWhere?.company, undefined);
+});
+
 test("repository lists runs with optional filters", async () => {
   let capturedWhere: Record<string, unknown> | undefined;
   const database = {

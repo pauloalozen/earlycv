@@ -47,6 +47,8 @@ type CreateLogoFetchBatchRunInput = {
   // Ausente = todos os adapters com extractor de logo implementado (ver
   // LOGO_FETCH_SUPPORTED_ADAPTERS).
   adapterType?: JobSourceType;
+  // true = pula companies que já têm logoUrl preenchido (delta).
+  onlyMissingLogo?: boolean;
   requestedByUserId?: string;
 };
 
@@ -261,6 +263,7 @@ export class ManualIngestionBatchRepository {
 
         const sources = await tx.jobSource.findMany({
           where: {
+            company: input.onlyMissingLogo ? { logoUrl: null } : undefined,
             isActive: true,
             OR: [{ pausedUntil: null }, { pausedUntil: { lte: new Date() } }],
             sourceType: { in: sourceTypeFilter },

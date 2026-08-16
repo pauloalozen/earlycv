@@ -177,6 +177,7 @@ function CreateJobModal({
     initialSourceId ? "SOURCE" : "ALL",
   );
   const [adapterType, setAdapterType] = useState("gupy");
+  const [onlyMissingLogo, setOnlyMissingLogo] = useState(true);
 
   function handleJobTypeChange(next: JobType) {
     setJobType(next);
@@ -238,6 +239,9 @@ function CreateJobModal({
       body.scopeType = scopeType;
       if (scopeType === "ADAPTER") body.adapterType = adapterType;
       if (scopeType === "SOURCE") body.jobSourceId = jobSourceId;
+    }
+    if (jobType === "LOGO_FETCH") {
+      body.onlyMissingLogo = onlyMissingLogo;
     }
 
     if (scheduleType === "DAILY" || scheduleType === "WEEKLY") {
@@ -494,6 +498,27 @@ function CreateJobModal({
                     : "Todas as fontes ativas"}
                 </label>
               </div>
+              {jobType === "LOGO_FETCH" && (
+                <label
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    fontSize: 12.5,
+                    gap: 8,
+                    marginTop: 8,
+                  }}
+                >
+                  <input
+                    checked={onlyMissingLogo}
+                    onChange={(event) =>
+                      setOnlyMissingLogo(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  Somente companies sem logo (delta) — desmarque pra reprocessar
+                  mesmo as que já têm logo carregado
+                </label>
+              )}
             </div>
           )}
 
