@@ -9,13 +9,17 @@ function getApiBaseUrl() {
   return base.endsWith("/api") ? base : `${base}/api`;
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const token = await getBackofficeSessionToken();
   if (!token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const res = await fetch(`${getApiBaseUrl()}/admin/discovery/validate`, {
+  const limit = new URL(request.url).searchParams.get("limit");
+  const url = new URL(`${getApiBaseUrl()}/admin/discovery/validate`);
+  if (limit) url.searchParams.set("limit", limit);
+
+  const res = await fetch(url, {
     cache: "no-store",
     headers: { Authorization: `Bearer ${token}` },
     method: "POST",

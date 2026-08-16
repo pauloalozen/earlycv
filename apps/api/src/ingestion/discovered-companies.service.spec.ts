@@ -39,7 +39,6 @@ function createFixture(options?: {
     error?: string;
   }>;
   webSearch?: {
-    maxQueriesPerRun?: number;
     searchImpl?: (
       query: string,
     ) => Promise<{ title: string; url: string; snippet?: string }[]>;
@@ -57,7 +56,10 @@ function createFixture(options?: {
 }) {
   const candidates = new Map<string, Candidate>();
   const companies = new Map<string, { id: string; normalizedName: string }>();
-  const sources = new Map<string, { sourceUrl: string }>();
+  const sources = new Map<
+    string,
+    { companyId: string; companyName: string; sourceUrl: string }
+  >();
   let nextId = 1;
 
   const database = {
@@ -65,9 +67,11 @@ function createFixture(options?: {
       findMany: async ({
         where,
         orderBy: _orderBy,
+        take,
       }: {
         where?: { status?: { in?: string[] } | string };
         orderBy?: unknown;
+        take?: number;
       } = {}) => {
         let items = [...candidates.values()];
         if (where?.status) {
@@ -77,9 +81,10 @@ function createFixture(options?: {
             items = items.filter((c) => where.status.in?.includes(c.status));
           }
         }
-        return items.sort(
+        items = items.sort(
           (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
         );
+        return typeof take === "number" ? items.slice(0, take) : items;
       },
       findUnique: async ({
         where,
@@ -133,8 +138,14 @@ function createFixture(options?: {
         companies.get(where.normalizedName) ?? null,
     },
     jobSource: {
-      findFirst: async ({ where }: { where: { sourceUrl: string } }) =>
-        sources.get(where.sourceUrl) ?? null,
+      findFirst: async ({ where }: { where: { sourceUrl: string } }) => {
+        const source = sources.get(where.sourceUrl);
+        if (!source) return null;
+        return {
+          ...source,
+          company: { name: source.companyName },
+        };
+      },
     },
   } as unknown as DatabaseService;
 
@@ -166,8 +177,6 @@ function createFixture(options?: {
   } as unknown as AdminIngestionImportService;
 
   const webSearchService = {
-    getMaxQueriesPerRun: () =>
-      options?.webSearch?.maxQueriesPerRun ?? (options?.webSearch ? 10 : 0),
     isEnabled: () => Boolean(options?.webSearch),
     search: async (query: string) =>
       options?.webSearch?.searchImpl?.(query) ?? [],
@@ -456,31 +465,55 @@ test("validatePending (só nome) cai pro chute de slug quando a busca web não a
   assert.equal(candidate?.resolutionMethod, "slug_guess");
 });
 
-test("validatePending respeita o orçamento de consultas de busca (searchBudget esgotado pula direto pro chute)", async () => {
+test("validatePending dá busca web pra cada candidato do lote (orçamento não é compartilhado entre eles)", async () => {
   let searchCalls = 0;
   const { service, candidates } = createFixture({
     probeImpl: async (sourceType, sourceUrl) => {
-      if (sourceType === "greenhouse" && sourceUrl.includes("empresax")) {
-        return { inconclusive: false, jobCount: 3, ok: true };
+      if (sourceUrl === "https://empresa-a.gupy.io") {
+        return { inconclusive: false, jobCount: 2, ok: true };
+      }
+      if (sourceUrl === "https://empresa-b.gupy.io") {
+        return { inconclusive: false, jobCount: 4, ok: true };
       }
       return { inconclusive: false, jobCount: 0, ok: true };
     },
     webSearch: {
-      maxQueriesPerRun: 0,
-      searchImpl: async () => {
+      searchImpl: async (query) => {
         searchCalls += 1;
-        return [];
+        if (query.includes("Empresa A")) {
+          return [{ title: "A", url: "https://empresa-a.gupy.io/" }];
+        }
+        return [{ title: "B", url: "https://empresa-b.gupy.io/" }];
       },
     },
   });
-  await service.importCandidatesCsv({ csvText: "nome\nEmpresa X" });
+  await service.importCandidatesCsv({
+    csvText: "nome\nEmpresa A\nEmpresa B",
+  });
 
-  const report = await service.validatePending(100);
+  const report = await service.validatePending();
 
-  assert.equal(searchCalls, 0);
-  assert.equal(report.validatedCount, 1);
-  const candidate = [...candidates.values()][0];
-  assert.equal(candidate?.resolutionMethod, "slug_guess");
+  assert.equal(searchCalls, 2);
+  assert.equal(report.validatedCount, 2);
+  for (const candidate of candidates.values()) {
+    assert.equal(candidate.resolutionMethod, "web_search");
+  }
+});
+
+test("validatePending(limit) processa só os N primeiros candidatos pendentes e para", async () => {
+  const { service, candidates } = createFixture({
+    probeImpl: async () => ({ inconclusive: false, jobCount: 1, ok: true }),
+    webSearch: { searchImpl: async () => [] },
+  });
+  await service.importCandidatesCsv({
+    csvText: "nome\nEmpresa A\nEmpresa B\nEmpresa C",
+  });
+
+  const report = await service.validatePending(1);
+
+  assert.equal(report.checkedCount, 1);
+  const statuses = [...candidates.values()].map((c) => c.status);
+  assert.equal(statuses.filter((s) => s === "PENDING").length, 2);
 });
 
 test("validatePending (só nome) marca INVALID com o histórico de tentativas quando nada bate", async () => {
@@ -495,6 +528,36 @@ test("validatePending (só nome) marca INVALID com o histórico de tentativas qu
   const candidate = [...candidates.values()][0];
   assert.equal(candidate?.status, "INVALID");
   assert.ok(candidate?.errorMessage?.includes("tried:"));
+});
+
+test("promote não duplica fonte quando a URL resolvida já está registrada sob outra company (nomes diferentes, mesma URL)", async () => {
+  // Cenário real: "Usiminas Tech" nunca foi importado com URL conhecida —
+  // foi resolvido depois (busca/chute) pra uma URL que já é a fonte de uma
+  // company com nome diferente ("Usiminas"). O dedup do importRow (escopado
+  // por companyId) não pegaria isso; o novo check em importCandidateAsSource
+  // pega, porque busca por sourceUrl sem escopo de company.
+  const { service, candidates, sources, importRowCalls } = createFixture();
+  sources.set("https://usiminas.gupy.io/", {
+    companyId: "company-usiminas",
+    companyName: "Usiminas",
+    sourceUrl: "https://usiminas.gupy.io/",
+  });
+
+  await service.importCandidatesCsv({ csvText: "nome\nUsiminas Tech" });
+  const candidate = [...candidates.values()][0];
+  await candidates.set(candidate.id, {
+    ...candidate,
+    adapterType: "gupy",
+    careersUrl: "https://usiminas.gupy.io/",
+    status: "VALIDATED",
+  });
+
+  const promoted = await service.promote(candidate.id);
+
+  assert.equal(promoted.status, "IMPORTED");
+  assert.equal(promoted.linkedCompanyId, "company-usiminas");
+  assert.ok(promoted.errorMessage?.includes("Usiminas"));
+  assert.equal(importRowCalls.length, 0);
 });
 
 test("promote exige status VALIDATED e marca IMPORTED em caso de sucesso", async () => {

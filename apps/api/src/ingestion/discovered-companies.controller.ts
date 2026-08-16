@@ -73,14 +73,17 @@ export class DiscoveredCompaniesController {
     });
   }
 
+  // limit ausente = "fila inteira" (até o teto de segurança QUEUE_HARD_CAP).
+  // Com limit, processa exatamente esse número de candidatos e para —
+  // decidido no popup "Validar pendentes" do admin.
   @Post("validate")
   @HttpCode(200)
-  validate(@Query("maxProbes") maxProbesParam?: string) {
-    const maxProbes = maxProbesParam
-      ? Number.parseInt(maxProbesParam, 10)
-      : undefined;
+  validate(@Query("limit") limitParam?: string) {
+    const limit = limitParam ? Number.parseInt(limitParam, 10) : undefined;
     return this.discoveredCompaniesService.validatePending(
-      Number.isFinite(maxProbes) ? maxProbes : undefined,
+      limit !== undefined && Number.isFinite(limit) && limit > 0
+        ? limit
+        : undefined,
     );
   }
 

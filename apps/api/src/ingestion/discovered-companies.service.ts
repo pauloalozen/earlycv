@@ -35,11 +35,11 @@ import { WebSearchService } from "./web-search/web-search.service";
 const BASE_PROBE_DELAY_MS = 900;
 const JITTER_MIN_FACTOR = 0.7;
 const JITTER_MAX_FACTOR = 1.3;
-// Teto de chamadas por clique em "Validar pendentes" — o modo "só nome"
-// faz até GUESSABLE_ADAPTERS.length * variantes chamadas por candidato,
-// então isso limita o tempo de resposta do endpoint em vez de limitar por
-// quantidade de candidatos (que seria bem mais imprevisível).
-const DEFAULT_MAX_PROBES = 40;
+// Teto de segurança pra "rodar fila inteira" (sem limite escolhido no
+// popup) — evita puxar um número patológico de candidatos numa chamada só.
+// Não é o mecanismo de corte principal: esse agora é o número de candidatos
+// escolhido no popup "Validar pendentes".
+const QUEUE_HARD_CAP = 200;
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -89,11 +89,11 @@ const PROMOTABLE_STATUSES: DiscoveredCompanyStatus[] = [
   "NO_ACTIVE_JOBS",
 ];
 
-// Orçamento generoso de probes pra uma validação pontual de 1 candidato
-// (clique manual) — cobre o pior caso do chute de slug (6 adapters x
-// variantes do nome) sem depender do teto compartilhado de "Validar
-// pendentes".
-const SINGLE_VALIDATE_PROBE_BUDGET = 60;
+// Orçamento de probes por candidato (validação pontual OU dentro de um
+// lote de "Validar pendentes") — cobre o pior caso do chute de slug (6
+// adapters x variantes do nome). É por candidato, não compartilhado entre
+// candidatos do mesmo lote — ver validatePending.
+const PER_CANDIDATE_PROBE_BUDGET = 60;
 
 @Injectable()
 export class DiscoveredCompaniesService {
@@ -269,14 +269,18 @@ export class DiscoveredCompaniesService {
     return report;
   }
 
+  // candidateLimit = quantos candidatos processar nessa chamada (o popup
+  // "Validar pendentes" pergunta isso: um número de rodadas ou "fila
+  // inteira"). Cada candidato processado aqui recebe seu próprio orçamento
+  // de busca web (1 consulta, se habilitada) — não existe mais um teto
+  // compartilhado de consultas por execução: o número de candidatos JÁ é
+  // esse teto, escolhido no momento do clique.
   async validatePending(
-    maxProbes = DEFAULT_MAX_PROBES,
+    candidateLimit?: number,
   ): Promise<ValidateCandidatesReport> {
     const candidates = await this.database.discoveredCompany.findMany({
       orderBy: { createdAt: "asc" },
-      // Teto generoso — o corte real é por maxProbes, não por quantidade de
-      // candidatos (ver comentário na constante).
-      take: 200,
+      take: candidateLimit ?? QUEUE_HARD_CAP,
       where: { status: "PENDING" },
     });
 
@@ -289,22 +293,18 @@ export class DiscoveredCompaniesService {
       validatedCount: 0,
     };
 
-    let probesUsed = 0;
-    // Teto separado do probeBudget: cada consulta de busca custa fora do
-    // orçamento do provedor de busca (ex: free tier do Brave), então não
-    // deve competir com o teto de probes contra os adapters.
-    const searchBudget = { remaining: this.webSearchService.getMaxQueriesPerRun() };
-
     for (const candidate of candidates) {
-      if (probesUsed >= maxProbes) break;
-
-      const { outcome, probesUsed: candidateProbes } =
-        await this.validateCandidate(
-          candidate,
-          maxProbes - probesUsed,
-          searchBudget,
-        );
-      probesUsed += candidateProbes;
+      // Orçamento novo por candidato — nunca deixa um candidato sem chance
+      // de busca só porque candidatos anteriores no mesmo clique já
+      // gastaram o orçamento (era o problema do teto compartilhado antigo).
+      const searchBudget = {
+        remaining: this.webSearchService.isEnabled() ? 1 : 0,
+      };
+      const { outcome } = await this.validateCandidate(
+        candidate,
+        PER_CANDIDATE_PROBE_BUDGET,
+        searchBudget,
+      );
       summary.checkedCount += 1;
 
       if (outcome.status === "PENDING") {
@@ -623,6 +623,30 @@ export class DiscoveredCompaniesService {
     adapterType: JobSourceType,
     resolutionMethod?: string,
   ) {
+    // Dedup de verdade contra fonte já cadastrada: o dedup do importRow é
+    // escopado por (companyId, sourceUrl), então dois candidatos com nomes
+    // diferentes (ex: "Usiminas" e "Usiminas Tech") que resolvem pra mesma
+    // URL passariam batido e criariam Company+JobSource duplicados. Aqui a
+    // busca é global (qualquer company) — se já existe, só linka o
+    // candidato na company existente em vez de duplicar.
+    const existingSource = await this.database.jobSource.findFirst({
+      include: { company: true },
+      where: { sourceUrl: careersUrl },
+    });
+    if (existingSource) {
+      return this.database.discoveredCompany.update({
+        data: {
+          adapterType,
+          careersUrl,
+          errorMessage: `already registered as a source under "${existingSource.company.name}"`,
+          linkedCompanyId: existingSource.companyId,
+          status: "IMPORTED",
+          ...(resolutionMethod ? { resolutionMethod } : {}),
+        },
+        where: { id: candidate.id },
+      });
+    }
+
     const outcome = await this.importService.importRow({
       ativa: "true",
       careersUrl,
@@ -665,11 +689,11 @@ export class DiscoveredCompaniesService {
     }
 
     const searchBudget = {
-      remaining: Math.min(1, this.webSearchService.getMaxQueriesPerRun()),
+      remaining: this.webSearchService.isEnabled() ? 1 : 0,
     };
     const { outcome } = await this.validateCandidate(
       candidate,
-      SINGLE_VALIDATE_PROBE_BUDGET,
+      PER_CANDIDATE_PROBE_BUDGET,
       searchBudget,
     );
 

@@ -26,14 +26,6 @@ export class WebSearchService {
     }
   }
 
-  getMaxQueriesPerRun(): number {
-    const raw = Number.parseInt(
-      process.env.WEB_SEARCH_MAX_QUERIES_PER_RUN ?? "",
-      10,
-    );
-    return Number.isFinite(raw) && raw > 0 ? raw : 0;
-  }
-
   async search(query: string): Promise<WebSearchResult[]> {
     const count = Number.parseInt(
       process.env.WEB_SEARCH_RESULTS_COUNT ?? "",

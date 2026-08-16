@@ -101,6 +101,8 @@ export function DiscoveryTabClient() {
   const [view, setView] = useState<"fila" | "historico">("fila");
   const [importing, setImporting] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [showValidateModal, setShowValidateModal] = useState(false);
+  const [validateLimitInput, setValidateLimitInput] = useState("30");
   const [promotingAll, setPromotingAll] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [manualFormRowId, setManualFormRowId] = useState<string | null>(null);
@@ -160,14 +162,16 @@ export function DiscoveryTabClient() {
     }
   }
 
-  async function handleValidate() {
+  async function handleValidate(limit?: number) {
+    setShowValidateModal(false);
     setValidating(true);
     setError(null);
     setMessage(null);
     try {
-      const res = await fetch("/api/admin/ingestion/discovery/validate", {
-        method: "POST",
-      });
+      const url = limit
+        ? `/api/admin/ingestion/discovery/validate?limit=${limit}`
+        : "/api/admin/ingestion/discovery/validate";
+      const res = await fetch(url, { method: "POST" });
       const data: ValidateReport = await res.json();
       if (!res.ok) {
         setError("Falha ao validar candidatos.");
@@ -334,7 +338,7 @@ export function DiscoveryTabClient() {
           <button
             className={buttonVariants({ size: "sm" })}
             disabled={validating}
-            onClick={handleValidate}
+            onClick={() => setShowValidateModal(true)}
             type="button"
           >
             {validating ? "Validando..." : "Validar pendentes"}
@@ -586,6 +590,101 @@ export function DiscoveryTabClient() {
           )}
         </tbody>
       </AdminTable>
+
+      {showValidateModal && (
+        <div
+          style={{
+            alignItems: "center",
+            background: "rgba(10,10,10,0.4)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            position: "fixed",
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              background: AT.card,
+              border: `1px solid ${AT.border}`,
+              borderRadius: 10,
+              boxShadow: "0 8px 32px rgba(10,10,10,0.25)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              padding: 20,
+              width: 340,
+            }}
+          >
+            <h3 style={{ color: AT.ink, fontSize: 14, fontWeight: 600 }}>
+              Validar pendentes
+            </h3>
+            <p style={{ color: AT.muted, fontSize: 12 }}>
+              Cada candidato processado nessa execução recebe 1 consulta de
+              busca web (se habilitada). Escolha quantos processar agora, ou
+              rode a fila inteira.
+            </p>
+            <label
+              style={{
+                color: AT.ink2,
+                display: "flex",
+                flexDirection: "column",
+                fontSize: 12.5,
+                gap: 4,
+              }}
+            >
+              Quantos candidatos
+              <input
+                min={1}
+                onChange={(event) => setValidateLimitInput(event.target.value)}
+                style={{
+                  border: `1px solid ${AT.borderSoft}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  padding: "6px 8px",
+                }}
+                type="number"
+                value={validateLimitInput}
+              />
+            </label>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                justifyContent: "flex-end",
+                marginTop: 4,
+              }}
+            >
+              <button
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+                onClick={() => setShowValidateModal(false)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+                onClick={() => handleValidate()}
+                type="button"
+              >
+                Rodar fila inteira
+              </button>
+              <button
+                className={buttonVariants({ size: "sm" })}
+                onClick={() => {
+                  const parsed = Number.parseInt(validateLimitInput, 10);
+                  handleValidate(
+                    Number.isFinite(parsed) && parsed > 0 ? parsed : 1,
+                  );
+                }}
+                type="button"
+              >
+                Rodar {validateLimitInput || "N"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
