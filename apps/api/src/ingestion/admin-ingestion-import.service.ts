@@ -28,7 +28,7 @@ const FULL_CSV_HEADER = [
 // demais valores do enum JobSourceType (kenoby, successfactors, solides,
 // pandape) ainda nao tem adapter implementado — aceitar aqui so criaria
 // fonte que nunca roda.
-const IMPORTABLE_ADAPTER_TYPES = [
+export const IMPORTABLE_ADAPTER_TYPES = [
   "gupy",
   "custom_html",
   "custom_api",
@@ -40,29 +40,55 @@ const IMPORTABLE_ADAPTER_TYPES = [
   "talentbrew",
   "workday",
 ] as const;
-type ImportableAdapterType = (typeof IMPORTABLE_ADAPTER_TYPES)[number];
+export type ImportableAdapterType = (typeof IMPORTABLE_ADAPTER_TYPES)[number];
 
-function isImportableAdapterType(
+export function isImportableAdapterType(
   value: string,
 ): value is ImportableAdapterType {
   return (IMPORTABLE_ADAPTER_TYPES as readonly string[]).includes(value);
 }
 
-type ImportLineReport = {
+type ImportRowOutcome = ImportRowSuccess | ImportRowError;
+
+type ImportRowSuccess = {
   companyAction: "created" | "updated";
+  companyId: string;
   companyName: string;
   inferredAdapter: ImportableAdapterType;
-  line: number;
+  jobSourceId: string | null;
   message: string;
   sourceAction: "created" | "updated";
   status: "success";
 };
 
-type ImportLineError = {
+type ImportRowError = {
   companyName: string;
-  line: number;
   message: string;
   status: "error";
+};
+
+type ImportLineReport = ImportRowSuccess & { line: number };
+
+type ImportLineError = ImportRowError & { line: number };
+
+export type ImportRowInput = {
+  agendamentoAtivo?: string;
+  agendamentoCron?: string;
+  careersUrl: string;
+  dryRun: boolean;
+  escalonamentoMinutos?: string;
+  // Quando true, respeita ativa/escalonamento/agendamento; quando false,
+  // cai nos defaults de sempre (isActive=true, scheduleEnabled=false,
+  // checkIntervalMinutes=30) — mesmo comportamento do CSV legado/intermediário.
+  hasConfigColumns: boolean;
+  linkedinUrl?: string;
+  nome: string;
+  setor?: string;
+  siteUrl?: string;
+  // Vazio/undefined = inferir pela URL (contém "gupy" -> gupy, senão
+  // custom_html), igual o CSV sem coluna tipo_adapter sempre fez.
+  tipoAdapter?: string;
+  ativa?: string;
 };
 
 function getAdapterDefaults(adapter: ImportableAdapterType) {
@@ -162,173 +188,198 @@ export class AdminIngestionImportService {
         agendamentoCron,
       ] = rawLine.split(",").map((value) => value.trim());
 
-      if (!nome || !careersUrl) {
-        report.lines.push({
-          companyName: nome || "(missing)",
-          line: lineNumber,
-          message: "nome and careers_url are required",
-          status: "error",
-        });
+      const outcome = await this.importRow({
+        agendamentoAtivo,
+        agendamentoCron,
+        ativa,
+        careersUrl,
+        dryRun: input.dryRun,
+        escalonamentoMinutos,
+        hasConfigColumns,
+        linkedinUrl,
+        nome,
+        setor,
+        siteUrl,
+        tipoAdapter: hasAdapterColumn ? tipoAdapter : undefined,
+      });
+
+      report.lines.push({ ...outcome, line: lineNumber });
+
+      if (outcome.status === "error") {
         report.summary.errorCount += 1;
         continue;
       }
 
-      const normalizedName = normalizeCompanyName(nome);
+      report.summary.successCount += 1;
+      report.summary[
+        outcome.companyAction === "created"
+          ? "companiesCreated"
+          : "companiesUpdated"
+      ] += 1;
+      report.summary[
+        outcome.sourceAction === "created" ? "sourcesCreated" : "sourcesUpdated"
+      ] += 1;
+    }
 
-      if (!normalizedName) {
-        report.lines.push({
-          companyName: nome,
-          line: lineNumber,
-          message: "failed to normalize company name",
-          status: "error",
-        });
-        report.summary.errorCount += 1;
-        continue;
+    return report;
+  }
+
+  // Corpo de uma unica linha (nome + careers_url + adapter [+ config
+  // operacional opcional]) — extraido do loop de importCompanySourcesCsv
+  // pra ser reutilizavel tambem pelo "Criar fonte" da Descoberta de
+  // Empresas (DiscoveredCompaniesService.promote), sem duplicar a logica
+  // de dedupe/upsert de Company+JobSource.
+  async importRow(row: ImportRowInput): Promise<ImportRowOutcome> {
+    const { nome, careersUrl, setor, siteUrl, linkedinUrl } = row;
+
+    if (!nome || !careersUrl) {
+      return {
+        companyName: nome || "(missing)",
+        message: "nome and careers_url are required",
+        status: "error",
+      };
+    }
+
+    const normalizedName = normalizeCompanyName(nome);
+
+    if (!normalizedName) {
+      return {
+        companyName: nome,
+        message: "failed to normalize company name",
+        status: "error",
+      };
+    }
+
+    let canonicalSourceUrl: string;
+
+    try {
+      canonicalSourceUrl = canonicalizeSourceUrl(careersUrl);
+    } catch {
+      return {
+        companyName: nome,
+        message: "invalid careers_url",
+        status: "error",
+      };
+    }
+
+    const explicitAdapter = row.tipoAdapter?.trim();
+
+    if (explicitAdapter && !isImportableAdapterType(explicitAdapter)) {
+      return {
+        companyName: nome,
+        message: `invalid tipo_adapter "${explicitAdapter}", expected one of: ${IMPORTABLE_ADAPTER_TYPES.join(", ")}`,
+        status: "error",
+      };
+    }
+
+    const inferredAdapter: ImportableAdapterType = explicitAdapter
+      ? (explicitAdapter as ImportableAdapterType)
+      : careersUrl.toLowerCase().includes("gupy")
+        ? "gupy"
+        : "custom_html";
+
+    try {
+      const existingCompany = await this.database.company.findUnique({
+        where: { normalizedName },
+      });
+
+      const companyAction = existingCompany ? "updated" : "created";
+      const companyPayload = {
+        ...(setor ? { industry: setor } : {}),
+        ...(siteUrl ? { websiteUrl: siteUrl } : {}),
+        ...(careersUrl ? { careersUrl } : {}),
+        ...(linkedinUrl ? { linkedinUrl } : {}),
+        name: nome,
+        normalizedName,
+      };
+
+      let companyId = existingCompany?.id ?? "";
+
+      if (!row.dryRun) {
+        const company = existingCompany
+          ? await this.database.company.update({
+              where: { id: existingCompany.id },
+              data: companyPayload,
+            })
+          : await this.database.company.create({ data: companyPayload });
+        companyId = company.id;
       }
 
-      let canonicalSourceUrl: string;
+      const existingSource =
+        !row.dryRun && companyId
+          ? await this.database.jobSource.findUnique({
+              where: {
+                companyId_sourceUrl: {
+                  companyId,
+                  sourceUrl: canonicalSourceUrl,
+                },
+              },
+            })
+          : null;
 
-      try {
-        canonicalSourceUrl = canonicalizeSourceUrl(careersUrl);
-      } catch {
-        report.lines.push({
-          companyName: nome,
-          line: lineNumber,
-          message: "invalid careers_url",
-          status: "error",
-        });
-        report.summary.errorCount += 1;
-        continue;
-      }
+      const sourceAction = existingSource ? "updated" : "created";
+      let jobSourceId: string | null = existingSource?.id ?? null;
 
-      const explicitAdapter = hasAdapterColumn ? tipoAdapter?.trim() : "";
-
-      if (explicitAdapter && !isImportableAdapterType(explicitAdapter)) {
-        report.lines.push({
-          companyName: nome,
-          line: lineNumber,
-          message: `invalid tipo_adapter "${explicitAdapter}", expected one of: ${IMPORTABLE_ADAPTER_TYPES.join(", ")}`,
-          status: "error",
-        });
-        report.summary.errorCount += 1;
-        continue;
-      }
-
-      const inferredAdapter: ImportableAdapterType = explicitAdapter
-        ? (explicitAdapter as ImportableAdapterType)
-        : careersUrl.toLowerCase().includes("gupy")
-          ? "gupy"
-          : "custom_html";
-
-      try {
-        const existingCompany = await this.database.company.findUnique({
-          where: { normalizedName },
-        });
-
-        const companyAction = existingCompany ? "updated" : "created";
-        const companyPayload = {
-          ...(setor ? { industry: setor } : {}),
-          ...(siteUrl ? { websiteUrl: siteUrl } : {}),
-          ...(careersUrl ? { careersUrl } : {}),
-          ...(linkedinUrl ? { linkedinUrl } : {}),
-          name: nome,
-          normalizedName,
+      if (!row.dryRun && companyId) {
+        const adapterDefaults = getAdapterDefaults(inferredAdapter);
+        const parsedInterval = row.hasConfigColumns
+          ? Number.parseInt(row.escalonamentoMinutos ?? "", 10)
+          : Number.NaN;
+        const sourcePayload = {
+          checkIntervalMinutes: Number.isFinite(parsedInterval)
+            ? parsedInterval
+            : 30,
+          crawlStrategy: adapterDefaults.crawlStrategy,
+          isActive: row.hasConfigColumns
+            ? parseCsvBoolean(row.ativa, true)
+            : true,
+          isFallbackAdapter: adapterDefaults.isFallbackAdapter,
+          parserKey: adapterDefaults.parserKey,
+          scheduleCron:
+            row.hasConfigColumns && row.agendamentoCron
+              ? row.agendamentoCron
+              : null,
+          scheduleEnabled: row.hasConfigColumns
+            ? parseCsvBoolean(row.agendamentoAtivo, false)
+            : false,
+          sourceName: `${nome} careers`,
+          sourceType: inferredAdapter,
+          sourceUrl: canonicalSourceUrl,
         };
 
-        let companyId = existingCompany?.id ?? "";
-
-        if (!input.dryRun) {
-          const company = existingCompany
-            ? await this.database.company.update({
-                where: { id: existingCompany.id },
-                data: companyPayload,
-              })
-            : await this.database.company.create({ data: companyPayload });
-          companyId = company.id;
-        }
-
-        const existingSource =
-          !input.dryRun && companyId
-            ? await this.database.jobSource.findUnique({
-                where: {
-                  companyId_sourceUrl: {
-                    companyId,
-                    sourceUrl: canonicalSourceUrl,
-                  },
-                },
-              })
-            : null;
-
-        const sourceAction = existingSource ? "updated" : "created";
-
-        if (!input.dryRun && companyId) {
-          const adapterDefaults = getAdapterDefaults(inferredAdapter);
-          const parsedInterval = hasConfigColumns
-            ? Number.parseInt(escalonamentoMinutos ?? "", 10)
-            : Number.NaN;
-          const sourcePayload = {
-            checkIntervalMinutes: Number.isFinite(parsedInterval)
-              ? parsedInterval
-              : 30,
-            crawlStrategy: adapterDefaults.crawlStrategy,
-            isActive: hasConfigColumns ? parseCsvBoolean(ativa, true) : true,
-            isFallbackAdapter: adapterDefaults.isFallbackAdapter,
-            parserKey: adapterDefaults.parserKey,
-            scheduleCron:
-              hasConfigColumns && agendamentoCron ? agendamentoCron : null,
-            scheduleEnabled: hasConfigColumns
-              ? parseCsvBoolean(agendamentoAtivo, false)
-              : false,
-            sourceName: `${nome} careers`,
-            sourceType: inferredAdapter,
-            sourceUrl: canonicalSourceUrl,
-          };
-
-          if (existingSource) {
-            await this.database.jobSource.update({
+        const source = existingSource
+          ? await this.database.jobSource.update({
               where: { id: existingSource.id },
               data: sourcePayload,
-            });
-          } else {
-            await this.database.jobSource.create({
+            })
+          : await this.database.jobSource.create({
               data: {
                 ...sourcePayload,
                 companyId,
               },
             });
-          }
-        }
-
-        report.lines.push({
-          companyAction,
-          companyName: nome,
-          inferredAdapter,
-          line: lineNumber,
-          message: input.dryRun
-            ? "validated without persistence"
-            : "company and source processed",
-          sourceAction,
-          status: "success",
-        });
-        report.summary.successCount += 1;
-        report.summary[
-          companyAction === "created" ? "companiesCreated" : "companiesUpdated"
-        ] += 1;
-        report.summary[
-          sourceAction === "created" ? "sourcesCreated" : "sourcesUpdated"
-        ] += 1;
-      } catch (error) {
-        report.lines.push({
-          companyName: nome,
-          line: lineNumber,
-          message: error instanceof Error ? error.message : "import failed",
-          status: "error",
-        });
-        report.summary.errorCount += 1;
+        jobSourceId = source.id;
       }
-    }
 
-    return report;
+      return {
+        companyAction,
+        companyId,
+        companyName: nome,
+        inferredAdapter,
+        jobSourceId,
+        message: row.dryRun
+          ? "validated without persistence"
+          : "company and source processed",
+        sourceAction,
+        status: "success",
+      };
+    } catch (error) {
+      return {
+        companyName: nome,
+        message: error instanceof Error ? error.message : "import failed",
+        status: "error",
+      };
+    }
   }
 
   // Mesmo header do importCompanySourcesCsv (FULL_CSV_HEADER) — permite

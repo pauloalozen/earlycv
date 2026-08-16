@@ -49,6 +49,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.company;
   }
 
+  get discoveredCompany() {
+    return this.prisma.discoveredCompany;
+  }
+
   get jobSource() {
     return this.prisma.jobSource;
   }

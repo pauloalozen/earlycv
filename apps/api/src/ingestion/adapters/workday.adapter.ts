@@ -240,6 +240,7 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
         const filterDecision = await this.semanticFilter.evaluate(normalizedTitle);
 
         if (filterDecision.result === "SKIP") {
+          context?.onSemanticFilterSkip?.();
           await this.saveDiscardedTitle({
             canonicalKey,
             externalJobId,

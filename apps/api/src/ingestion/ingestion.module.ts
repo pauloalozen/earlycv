@@ -21,6 +21,8 @@ import { CrawlerDiscardController } from "./crawler-discard.controller";
 import { CrawlerDiscardService } from "./crawler-discard.service";
 import { DashboardAdminController } from "./dashboard-admin.controller";
 import { DashboardAdminService } from "./dashboard-admin.service";
+import { DiscoveredCompaniesController } from "./discovered-companies.controller";
+import { DiscoveredCompaniesService } from "./discovered-companies.service";
 import { EnrichmentConfigController } from "./enrichment-config.controller";
 import { EnrichmentConfigService } from "./enrichment-config.service";
 import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
@@ -44,6 +46,8 @@ import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.reposit
 import { SemanticFilterController } from "./semantic-filter.controller";
 import { SemanticFilterService } from "./semantic-filter.service";
 import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
+import { BraveSearchProvider } from "./web-search/brave-search.provider";
+import { WebSearchService } from "./web-search/web-search.service";
 
 @Module({
   imports: [DatabaseModule, GoogleIndexingModule],
@@ -56,11 +60,13 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
     IngestionRunEnrichmentController,
     CrawlerDiscardController,
     DashboardAdminController,
+    DiscoveredCompaniesController,
   ],
   providers: [
     IngestionService,
     CompanyLogoFetchService,
     DashboardAdminService,
+    DiscoveredCompaniesService,
     AdminIngestionImportService,
     CrawlerDiscardService,
     GlobalSchedulerConfigService,
@@ -90,6 +96,8 @@ import { SemanticFilterAdminService } from "./semantic-filter-admin.service";
     TeamtailorAdapter,
     TalentbrewAdapter,
     WorkdayAdapter,
+    BraveSearchProvider,
+    WebSearchService,
   ],
   exports: [IngestionService, SemanticFilterService, CompanyLogoFetchService],
 })

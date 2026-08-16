@@ -268,6 +268,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
             await this.semanticFilter.evaluate(normalizedTitle);
 
           if (filterDecision.result === "SKIP") {
+            context?.onSemanticFilterSkip?.();
             await this.saveDiscardedTitle({
               canonicalKey,
               externalJobId: String(boardJob.id),

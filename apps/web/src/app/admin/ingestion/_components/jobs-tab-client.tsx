@@ -685,6 +685,203 @@ function CreateJobModal({
   );
 }
 
+type GlobalSchedulerConfig = {
+  enabled: boolean;
+  globalCron: string | null;
+  normalDelayMs: number;
+  errorDelayMs: number;
+  timezone: string;
+};
+
+function SettingsModal({ onClose }: { onClose: () => void }) {
+  const [config, setConfig] = useState<GlobalSchedulerConfig | null>(null);
+  const [normalDelaySeconds, setNormalDelaySeconds] = useState("45");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/ingestion/scheduler", {
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error("Falha ao carregar configurações.");
+        const data: GlobalSchedulerConfig = await res.json();
+        if (cancelled) return;
+        setConfig(data);
+        setNormalDelaySeconds(String(Math.round(data.normalDelayMs / 1000)));
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Falha ao carregar configurações.",
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSave() {
+    setError(null);
+    const seconds = Number(normalDelaySeconds);
+    if (!config || !Number.isFinite(seconds) || seconds < 1 || seconds > 600) {
+      setError("Delay entre empresas deve ser entre 1 e 600 segundos.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/ingestion/scheduler", {
+        body: JSON.stringify({
+          enabled: config.enabled,
+          errorDelayMs: config.errorDelayMs,
+          globalCron: config.globalCron || undefined,
+          normalDelayMs: Math.round(seconds * 1000),
+          timezone: config.timezone,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "PUT",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.message ?? "Falha ao salvar configurações.");
+        return;
+      }
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const fieldStyle = {
+    background: "#fafaf6",
+    borderColor: "rgba(10,10,10,0.08)",
+    color: "#2a2620",
+  };
+
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: backdrop precisa envolver o modal (que tem seus proprios controles), nao pode virar <button>
+    <div
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onClose();
+      }}
+      role="button"
+      style={{
+        alignItems: "flex-start",
+        background: "rgba(10,10,10,0.45)",
+        display: "flex",
+        inset: 0,
+        justifyContent: "center",
+        overflowY: "auto",
+        padding: "40px 16px",
+        position: "fixed",
+        zIndex: 60,
+      }}
+      tabIndex={-1}
+    >
+      <div
+        style={{
+          background: AT.card,
+          borderRadius: 12,
+          maxWidth: 440,
+          padding: 24,
+          width: "100%",
+        }}
+      >
+        <h3 style={{ color: AT.ink, fontSize: 15, fontWeight: 600 }}>
+          Configurações
+        </h3>
+
+        {loading ? (
+          <p style={{ color: AT.muted, fontSize: 12.5, marginTop: 16 }}>
+            Carregando...
+          </p>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+              marginTop: 16,
+            }}
+          >
+            <div>
+              <label
+                htmlFor="normal-delay-seconds"
+                style={{
+                  color: AT.muted,
+                  display: "block",
+                  fontSize: 11.5,
+                  marginBottom: 4,
+                }}
+              >
+                Delay entre empresas (segundos)
+              </label>
+              <input
+                className="h-9 w-full rounded-md border px-3 text-[12.5px]"
+                id="normal-delay-seconds"
+                max={600}
+                min={1}
+                onChange={(e) => setNormalDelaySeconds(e.target.value)}
+                style={fieldStyle}
+                type="number"
+                value={normalDelaySeconds}
+              />
+              <p style={{ color: AT.faint, fontSize: 11, marginTop: 4 }}>
+                Tempo de espera entre o início de uma empresa e a próxima, por
+                fonte de captura. Vale pra todos os adapters (Gupy, Greenhouse,
+                Lever etc.).
+              </p>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <p style={{ color: "#b91c1c", fontSize: 12.5, marginTop: 12 }}>
+            {error}
+          </p>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            justifyContent: "flex-end",
+            marginTop: 20,
+          }}
+        >
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            onClick={onClose}
+            type="button"
+          >
+            Cancelar
+          </button>
+          <button
+            className={buttonVariants({ size: "sm" })}
+            disabled={loading || saving}
+            onClick={handleSave}
+            type="button"
+          >
+            {saving ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function JobsTabClient({
   sources,
   initialCreateSourceId,
@@ -693,6 +890,7 @@ export function JobsTabClient({
   const [jobs, setJobs] = useState<IngestionJobRow[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [modalOpen, setModalOpen] = useState(Boolean(initialCreateSourceId));
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
 
   const [runsResult, setRunsResult] = useState<RunsResponse | null>(null);
@@ -826,6 +1024,13 @@ export function JobsTabClient({
               type="button"
             >
               {loadingJobs ? "Atualizando..." : "Atualizar"}
+            </button>
+            <button
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              onClick={() => setSettingsModalOpen(true)}
+              type="button"
+            >
+              Configurações
             </button>
             <button
               className={buttonVariants({ size: "sm" })}
@@ -1177,6 +1382,10 @@ export function JobsTabClient({
           onCreated={fetchJobs}
           sources={sources}
         />
+      )}
+
+      {settingsModalOpen && (
+        <SettingsModal onClose={() => setSettingsModalOpen(false)} />
       )}
     </div>
   );

@@ -17,6 +17,7 @@ type FixtureJobRun = {
   batchRun: {
     status: string;
     cancelRequestedAt?: Date | null;
+    finishedAt?: Date | null;
     updatedAt?: Date;
   } | null;
   job: { id: string; jobType: string; name: string } | null;
@@ -250,6 +251,32 @@ test("listRuns reconcilia status RUNNING travado usando o status real do batchRu
   assert.ok(result.runs[0]?.finishedAt instanceof Date);
   // reconciliacao deve persistir, nao so refletir na resposta
   assert.equal(jobRuns.get("run-1")?.status, "COMPLETED");
+});
+
+test("listRuns reconcilia usando o finishedAt real do batchRun, nao o horario da leitura", async () => {
+  const realFinishedAt = new Date("2026-08-15T03:27:06.140Z");
+  const { service, jobRuns } = createFixture(
+    [],
+    [
+      {
+        batchRun: { finishedAt: realFinishedAt, status: "failed" },
+        finishedAt: null,
+        id: "run-1",
+        job: { id: "job-1", jobType: "CRAWL", name: "Gupy" },
+        jobId: "job-1",
+        status: "RUNNING",
+      },
+    ],
+  );
+
+  const result = await service.listRuns();
+
+  assert.equal(result.runs[0]?.status, "FAILED");
+  assert.equal(result.runs[0]?.finishedAt?.getTime(), realFinishedAt.getTime());
+  assert.equal(
+    jobRuns.get("run-1")?.finishedAt?.getTime(),
+    realFinishedAt.getTime(),
+  );
 });
 
 test("listRuns nao mexe em runs sem batchRun ou ja em status terminal", async () => {

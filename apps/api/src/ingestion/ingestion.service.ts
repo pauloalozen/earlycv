@@ -654,6 +654,93 @@ export class IngestionService {
     return adapter;
   }
 
+  // Usado pela Descoberta de Empresas pra validar um candidato (nome +
+  // URL/adapter chutados) antes de virar Company+JobSource de verdade —
+  // roda o adapter real de producao (mesmo collect() de um crawl normal)
+  // contra um JobSourceContext sintetico, sem persistir nada. Um candidato
+  // sem adapter implementado (kenoby/successfactors/solides/pandape) so
+  // retorna "sem adapter", nao lanca.
+  async probeSource(
+    sourceType: JobSource["sourceType"],
+    sourceUrl: string,
+  ): Promise<{
+    error?: string;
+    inconclusive: boolean;
+    jobCount: number;
+    ok: boolean;
+    // Total de vagas no board antes do filtro semantico de tech — permite
+    // distinguir "board vazio" de "board tem vagas, nenhuma de tech".
+    rawJobCount: number;
+  }> {
+    const adapter = this.adapters.get(sourceType);
+    if (!adapter) {
+      return {
+        error: `no adapter implemented for ${sourceType}`,
+        inconclusive: false,
+        jobCount: 0,
+        ok: false,
+        rawJobCount: 0,
+      };
+    }
+
+    let semanticFilterSkips = 0;
+    const probeCollectContext: IngestionCollectContext = {
+      getExistingJobByCanonicalKey: async () => null,
+      onSemanticFilterSkip: () => {
+        semanticFilterSkips += 1;
+      },
+    };
+
+    const syntheticContext: JobSourceContext = {
+      checkIntervalMinutes: 30,
+      companyId: "discovery-probe",
+      consecutive403Count: 0,
+      crawlStrategy: "api",
+      id: "discovery-probe",
+      parserKey: sourceType,
+      pauseReason: null,
+      pausedUntil: null,
+      sourceName: "discovery probe",
+      sourceType,
+      sourceUrl,
+      company: {
+        id: "discovery-probe",
+        name: "Discovery Probe",
+        normalizedName: "discovery-probe",
+      },
+    };
+
+    try {
+      const observations = await adapter.collect(
+        syntheticContext,
+        probeCollectContext,
+      );
+      return {
+        inconclusive: false,
+        jobCount: observations.length,
+        ok: true,
+        rawJobCount: observations.length + semanticFilterSkips,
+      };
+    } catch (error) {
+      // 403 (anti-bot) e timeout nao provam que o slug/URL esta errado —
+      // so que a tentativa falhou dessa vez. Erro estrutural (URL nao
+      // resolve, 404, parse quebrado) e o sinal real de "nao existe".
+      const inconclusive =
+        isForbiddenIngestionError(error) ||
+        (error instanceof Error &&
+          (error.name === "TimeoutError" ||
+            error.name === "AbortError" ||
+            /timeout/i.test(error.message)));
+      return {
+        error: error instanceof Error ? error.message : "probe failed",
+        inconclusive,
+        jobCount: 0,
+        ok: false,
+        rawJobCount: 0,
+      };
+    }
+  }
+
   private assertJobSourceNotPaused(jobSource: JobSourceContext) {
     if (!jobSource.pausedUntil) {
       return;
