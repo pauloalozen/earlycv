@@ -19,6 +19,7 @@ function createJob(overrides: Partial<IngestionJob> = {}): IngestionJob {
     lastRunAt: null,
     name: "job",
     nextRunAt: new Date("2026-08-04T10:00:00.000Z"),
+    onlyMissingLogo: false,
     scheduleDaysOfWeek: [],
     scheduleHour: null,
     scheduleInterval: 2,
@@ -76,6 +77,8 @@ function createFixture() {
   } as unknown as DatabaseService;
 
   const createdBatchRuns: unknown[] = [];
+  const logoFetchInputs: { adapterType?: string; onlyMissingLogo?: boolean }[] =
+    [];
   const manualBatchRepository = {
     createAdapterBatchRun: async () => {
       const run = { id: "batch-adapter", status: "queued", totalSources: 1 };
@@ -92,13 +95,17 @@ function createFixture() {
       createdBatchRuns.push(run);
       return run;
     },
-    createLogoFetchBatchRun: async (input: { adapterType?: string }) => {
+    createLogoFetchBatchRun: async (input: {
+      adapterType?: string;
+      onlyMissingLogo?: boolean;
+    }) => {
       const run = {
         id: input.adapterType ? "batch-logo-adapter" : "batch-logo-global",
         status: "queued",
         totalSources: 1,
       };
       createdBatchRuns.push(run);
+      logoFetchInputs.push(input);
       return run;
     },
   } as unknown as ManualIngestionBatchRepository;
@@ -122,6 +129,7 @@ function createFixture() {
     getJobUpdates: () => jobUpdates,
     getRunNowCalls: () => runNowCalls,
     jobRuns,
+    logoFetchInputs,
     service,
   };
 }
@@ -201,6 +209,32 @@ test("dispatchJob LOGO_FETCH com escopo ALL cria batch de logo sem adapter espec
 
   assert.equal(createdBatchRuns.length, 1);
   assert.equal(run.batchRunId, "batch-logo-global");
+});
+
+test("dispatchJob LOGO_FETCH repassa onlyMissingLogo do job pro repository (ADAPTER e ALL)", async () => {
+  const { service, logoFetchInputs } = createFixture();
+
+  await service.dispatchJob(
+    createJob({
+      adapterType: "gupy",
+      jobType: "LOGO_FETCH",
+      onlyMissingLogo: true,
+      scopeType: "ADAPTER",
+    }),
+    "MANUAL",
+  );
+  await service.dispatchJob(
+    createJob({
+      jobType: "LOGO_FETCH",
+      onlyMissingLogo: true,
+      scopeType: "ALL",
+    }),
+    "MANUAL",
+  );
+
+  assert.equal(logoFetchInputs.length, 2);
+  assert.equal(logoFetchInputs[0]?.onlyMissingLogo, true);
+  assert.equal(logoFetchInputs[1]?.onlyMissingLogo, true);
 });
 
 test("dispatchJob LOGO_FETCH com escopo SOURCE falha (nao suportado)", async () => {

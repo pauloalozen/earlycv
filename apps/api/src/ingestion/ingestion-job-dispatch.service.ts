@@ -132,9 +132,12 @@ export class IngestionJobDispatchService {
       }
       return this.manualBatchRepository.createLogoFetchBatchRun({
         adapterType: job.adapterType,
+        onlyMissingLogo: job.onlyMissingLogo,
       });
     }
 
-    return this.manualBatchRepository.createLogoFetchBatchRun({});
+    return this.manualBatchRepository.createLogoFetchBatchRun({
+      onlyMissingLogo: job.onlyMissingLogo,
+    });
   }
 }

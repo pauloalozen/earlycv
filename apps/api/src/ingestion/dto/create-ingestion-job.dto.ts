@@ -9,6 +9,7 @@ import {
   ArrayMaxSize,
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -50,6 +51,12 @@ export class CreateIngestionJobDto {
   @IsString()
   @MinLength(1)
   jobSourceId?: string;
+
+  // Só relevante pra jobType LOGO_FETCH — pula companies que já têm
+  // logoUrl preenchido (delta) em vez de reprocessar todas do escopo.
+  @IsOptional()
+  @IsBoolean()
+  onlyMissingLogo?: boolean;
 
   @IsEnum(IngestionJobScheduleType)
   scheduleType!: IngestionJobScheduleType;

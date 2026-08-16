@@ -1194,6 +1194,11 @@ model IngestionJob {
   jobSourceId String?
   jobSource   JobSource?             @relation(fields: [jobSourceId], references: [id], onDelete: SetNull)
 
+  // So usado quando jobType = LOGO_FETCH: true = pula companies que ja tem
+  // logoUrl preenchido (delta), false = reprocessa todas as elegiveis pro
+  // escopo, mesmo as que ja tem logo.
+  onlyMissingLogo Boolean @default(false)
+
   // Agendamento em linguagem humana (sem cron exposto ao usuario)
   scheduleType       IngestionJobScheduleType
   scheduleHour       Int?
