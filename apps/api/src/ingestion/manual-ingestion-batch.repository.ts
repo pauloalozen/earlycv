@@ -8,6 +8,7 @@ import type {
 
 import { DatabaseService } from "../database/database.service";
 import { LOGO_FETCH_SUPPORTED_ADAPTERS } from "./company-logo/logo-extractors";
+import { QUEUE_HARD_CAP } from "./discovered-companies.service";
 
 function isMissingManualBatchTableError(error: unknown) {
   if (!(error instanceof Error)) {
@@ -49,6 +50,13 @@ type CreateLogoFetchBatchRunInput = {
   adapterType?: JobSourceType;
   // true = pula companies que já têm logoUrl preenchido (delta).
   onlyMissingLogo?: boolean;
+  requestedByUserId?: string;
+};
+
+type CreateDiscoveryValidateBatchRunInput = {
+  // Ausente = fila inteira (ate o teto de seguranca QUEUE_HARD_CAP — ver
+  // discovered-companies.service.ts).
+  candidateLimit?: number;
   requestedByUserId?: string;
 };
 
@@ -305,6 +313,60 @@ export class ManualIngestionBatchRepository {
               jobSourceId: source.id,
               sourceName: source.sourceName,
               sourceType: source.sourceType,
+              status: "queued",
+            })),
+          });
+        }
+
+        return batchRun;
+      });
+    } catch (error) {
+      if (isMissingManualBatchTableError(error)) {
+        throw new Error(
+          "Manual ingestion tables are missing. Apply database migrations before starting manual runs.",
+        );
+      }
+      throw error;
+    }
+  }
+
+  // Um item por DiscoveredCompany PENDING (nao por JobSource/Company — o
+  // candidato pode nem ter nenhum dos dois ainda). candidateLimit vira o
+  // teto de consultas de busca web daquela execucao tambem (ver
+  // DiscoveredCompaniesService.validateOne, chamado 1x por item pelo
+  // runner) — nao existe mais orcamento fixo por env var, o numero
+  // escolhido aqui (no popup/job) e o teto de verdade.
+  async createDiscoveryValidateBatchRun(
+    input: CreateDiscoveryValidateBatchRunInput,
+  ) {
+    try {
+      return this.database.$transaction(async (tx) => {
+        const candidates = await tx.discoveredCompany.findMany({
+          orderBy: { createdAt: "asc" },
+          select: { id: true, name: true },
+          take: input.candidateLimit ?? QUEUE_HARD_CAP,
+          where: { status: "PENDING" },
+        });
+
+        const batchRun = await tx.ingestionBatchRun.create({
+          data: {
+            runKind: "DISCOVERY_VALIDATE",
+            requestedByUserId: input.requestedByUserId,
+            scopeType: "global",
+            scopeValue: input.candidateLimit
+              ? String(input.candidateLimit)
+              : "all",
+            status: "queued",
+            totalSources: candidates.length,
+          },
+        });
+
+        if (candidates.length > 0) {
+          await tx.ingestionBatchItem.createMany({
+            data: candidates.map((candidate) => ({
+              batchRunId: batchRun.id,
+              companyName: candidate.name,
+              discoveredCompanyId: candidate.id,
               status: "queued",
             })),
           });

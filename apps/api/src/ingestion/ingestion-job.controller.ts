@@ -126,4 +126,18 @@ export class IngestionJobController {
   runSourceAdHoc(@Param("jobSourceId") jobSourceId: string) {
     return this.ingestionJobService.runSourceAdHoc(jobSourceId);
   }
+
+  // Disparo "Validar pendentes" da Descoberta de Empresas como job de
+  // background (fire-and-forget) — ver runDiscoveryValidateAdHoc. limit
+  // ausente = fila inteira.
+  @Post("run-discovery-validate")
+  @HttpCode(202)
+  runDiscoveryValidateAdHoc(@Query("limit") limitParam?: string) {
+    const limit = limitParam ? Number.parseInt(limitParam, 10) : undefined;
+    return this.ingestionJobService.runDiscoveryValidateAdHoc(
+      limit !== undefined && Number.isFinite(limit) && limit > 0
+        ? limit
+        : undefined,
+    );
+  }
 }

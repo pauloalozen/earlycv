@@ -14,6 +14,22 @@ export type ResolvedAdapterUrl = {
   sourceType: "ashby" | "greenhouse" | "gupy" | "inhire" | "lever" | "teamtailor" | "workday";
 };
 
+// Dominios reconhecidos por matchAdapterUrl — usado pra restringir a busca
+// web (query com `site:`) só a paginas hospedadas num desses adapters, em
+// vez de deixar o motor de busca livre pra devolver a pagina institucional
+// de carreiras da empresa (que costuma rankear acima do board de ATS de
+// verdade e nunca bate nenhum dos regexes abaixo).
+export const ATS_SEARCH_DOMAINS = [
+  "gupy.io",
+  "boards.greenhouse.io",
+  "job-boards.greenhouse.io",
+  "jobs.lever.co",
+  "jobs.ashbyhq.com",
+  "inhire.app",
+  "teamtailor.com",
+  "myworkdayjobs.com",
+];
+
 function firstPathSegment(pathname: string) {
   return pathname.split("/").filter(Boolean)[0];
 }

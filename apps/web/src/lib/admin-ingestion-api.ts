@@ -191,8 +191,11 @@ export type StartManualAdapterRunResponse = {
   status: ManualRunStatus;
 };
 
+export type ManualRunKind = "CRAWL" | "LOGO_FETCH" | "DISCOVERY_VALIDATE";
+
 export type ManualRunRecord = {
   id: string;
+  runKind?: ManualRunKind;
   scopeType: ManualRunScopeType;
   scopeValue: string;
   status: ManualRunStatus;
@@ -210,11 +213,15 @@ export type ManualRunRecord = {
 
 export type ManualRunItemRecord = {
   companyName: string;
-  sourceName: string;
-  sourceType: ManualAdapterType;
+  // Nulos pra itens de runKind DISCOVERY_VALIDATE (candidato de Descoberta
+  // de Empresas, sem JobSource/Company de verdade ainda) — sourceName vira
+  // a careersUrl resolvida e sourceType o adapter resolvido, quando houver.
+  sourceName: string | null;
+  sourceType: ManualAdapterType | null;
   id: string;
   batchRunId: string;
-  jobSourceId: string;
+  jobSourceId: string | null;
+  discoveredCompanyId?: string | null;
   status: ManualRunItemStatus;
   startedAt: string | null;
   finishedAt: string | null;

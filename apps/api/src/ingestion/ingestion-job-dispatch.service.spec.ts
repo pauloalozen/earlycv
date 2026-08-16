@@ -12,6 +12,7 @@ function createJob(overrides: Partial<IngestionJob> = {}): IngestionJob {
     adapterType: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     description: null,
+    discoveryValidateLimit: null,
     id: "job-1",
     isEnabled: true,
     jobSourceId: null,
@@ -79,6 +80,7 @@ function createFixture() {
   const createdBatchRuns: unknown[] = [];
   const logoFetchInputs: { adapterType?: string; onlyMissingLogo?: boolean }[] =
     [];
+  const discoveryValidateInputs: { candidateLimit?: number }[] = [];
   const manualBatchRepository = {
     createAdapterBatchRun: async () => {
       const run = { id: "batch-adapter", status: "queued", totalSources: 1 };
@@ -108,6 +110,14 @@ function createFixture() {
       logoFetchInputs.push(input);
       return run;
     },
+    createDiscoveryValidateBatchRun: async (input: {
+      candidateLimit?: number;
+    }) => {
+      const run = { id: "batch-discovery", status: "queued", totalSources: 1 };
+      createdBatchRuns.push(run);
+      discoveryValidateInputs.push(input);
+      return run;
+    },
   } as unknown as ManualIngestionBatchRepository;
 
   let runNowCalls = 0;
@@ -126,6 +136,7 @@ function createFixture() {
 
   return {
     createdBatchRuns,
+    discoveryValidateInputs,
     getJobUpdates: () => jobUpdates,
     getRunNowCalls: () => runNowCalls,
     jobRuns,
@@ -235,6 +246,36 @@ test("dispatchJob LOGO_FETCH repassa onlyMissingLogo do job pro repository (ADAP
   assert.equal(logoFetchInputs.length, 2);
   assert.equal(logoFetchInputs[0]?.onlyMissingLogo, true);
   assert.equal(logoFetchInputs[1]?.onlyMissingLogo, true);
+});
+
+test("dispatchJob DISCOVERY_VALIDATE cria batch sem escopo, repassando discoveryValidateLimit", async () => {
+  const { service, createdBatchRuns, discoveryValidateInputs } =
+    createFixture();
+  const job = createJob({
+    discoveryValidateLimit: 30,
+    jobType: "DISCOVERY_VALIDATE",
+    scopeType: null,
+  });
+
+  const run = await service.dispatchJob(job, "MANUAL");
+
+  assert.equal(createdBatchRuns.length, 1);
+  assert.equal(run.status, "RUNNING");
+  assert.equal(run.batchRunId, "batch-discovery");
+  assert.equal(discoveryValidateInputs[0]?.candidateLimit, 30);
+});
+
+test("dispatchJob DISCOVERY_VALIDATE sem limit passa undefined (fila inteira)", async () => {
+  const { service, discoveryValidateInputs } = createFixture();
+  const job = createJob({
+    discoveryValidateLimit: null,
+    jobType: "DISCOVERY_VALIDATE",
+    scopeType: null,
+  });
+
+  await service.dispatchJob(job, "MANUAL");
+
+  assert.equal(discoveryValidateInputs[0]?.candidateLimit, undefined);
 });
 
 test("dispatchJob LOGO_FETCH com escopo SOURCE falha (nao suportado)", async () => {

@@ -31,15 +31,6 @@ type DiscoveredCompanyRow = {
   createdAt: string;
 };
 
-type ValidateReport = {
-  checkedCount: number;
-  validatedCount: number;
-  noActiveJobsCount: number;
-  noTechJobsCount: number;
-  invalidCount: number;
-  stillPendingCount: number;
-};
-
 type PromoteAllReport = {
   errors: { id: string; message: string; name: string }[];
   failedCount: number;
@@ -162,6 +153,10 @@ export function DiscoveryTabClient() {
     }
   }
 
+  // Dispara como job de background (runKind DISCOVERY_VALIDATE) em vez de
+  // rodar sincrono aqui — a tela nao trava esperando N probes/buscas
+  // terminarem, e a execução fica visível/acompanhável na aba Jobs, igual
+  // aos outros tipos (CRAWL/LOGO_FETCH).
   async function handleValidate(limit?: number) {
     setShowValidateModal(false);
     setValidating(true);
@@ -169,16 +164,15 @@ export function DiscoveryTabClient() {
     setMessage(null);
     try {
       const url = limit
-        ? `/api/admin/ingestion/discovery/validate?limit=${limit}`
-        : "/api/admin/ingestion/discovery/validate";
+        ? `/api/admin/ingestion/ingestion-jobs/run-discovery-validate?limit=${limit}`
+        : "/api/admin/ingestion/ingestion-jobs/run-discovery-validate";
       const res = await fetch(url, { method: "POST" });
-      const data: ValidateReport = await res.json();
       if (!res.ok) {
-        setError("Falha ao validar candidatos.");
+        setError("Falha ao disparar job de validação.");
         return;
       }
       setMessage(
-        `${data.checkedCount} verificado(s): ${data.validatedCount} validada(s), ${data.noActiveJobsCount} sem vagas, ${data.noTechJobsCount} sem vagas de tech, ${data.invalidCount} inválida(s), ${data.stillPendingCount} ainda pendente(s).`,
+        `Job de validação disparado (${limit ? `até ${limit} candidato(s)` : "fila inteira"}). Acompanhe em Jobs > Histórico de execuções.`,
       );
       await fetchRows();
     } finally {
@@ -620,9 +614,9 @@ export function DiscoveryTabClient() {
               Validar pendentes
             </h3>
             <p style={{ color: AT.muted, fontSize: 12 }}>
-              Cada candidato processado nessa execução recebe 1 consulta de
-              busca web (se habilitada). Escolha quantos processar agora, ou
-              rode a fila inteira.
+              Roda em background (aba Jobs) — cada candidato processado recebe 1
+              consulta de busca web (se habilitada). Escolha quantos processar,
+              ou rode a fila inteira.
             </p>
             <label
               style={{

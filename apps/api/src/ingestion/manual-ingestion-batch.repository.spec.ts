@@ -256,6 +256,70 @@ test("repository não filtra por logoUrl quando onlyMissingLogo é omitido/false
   assert.equal(capturedSourceWhere?.company, undefined);
 });
 
+test("repository creates discovery validate batch — 1 item por DiscoveredCompany PENDING, sem jobSourceId/companyId", async () => {
+  let capturedCandidateWhere: Record<string, unknown> | undefined;
+  let createManyPayload: Array<Record<string, unknown>> = [];
+  const tx = {
+    ingestionBatchRun: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        assert.equal(data.runKind, "DISCOVERY_VALIDATE");
+        assert.equal(data.scopeType, "global");
+        assert.equal(data.scopeValue, "30");
+        return {
+          id: "batch-discovery",
+          scopeType: "global",
+          scopeValue: "30",
+          status: "queued",
+          totalSources: 2,
+        };
+      },
+    },
+    discoveredCompany: {
+      findMany: async ({
+        where,
+        take,
+      }: {
+        where: Record<string, unknown>;
+        take: number;
+      }) => {
+        capturedCandidateWhere = where;
+        assert.equal(take, 30);
+        return [
+          { id: "candidate-1", name: "Empresa A" },
+          { id: "candidate-2", name: "Empresa B" },
+        ];
+      },
+    },
+    ingestionBatchItem: {
+      createMany: async ({
+        data,
+      }: {
+        data: Array<Record<string, unknown>>;
+      }) => {
+        createManyPayload = data;
+        return { count: data.length };
+      },
+    },
+  };
+  const database = {
+    $transaction: async (
+      callback: (transaction: typeof tx) => Promise<unknown>,
+    ) => callback(tx),
+  };
+
+  const repository = new ManualIngestionBatchRepository(database as never);
+  const result = await repository.createDiscoveryValidateBatchRun({
+    candidateLimit: 30,
+  });
+
+  assert.equal(result.status, "queued");
+  assert.deepEqual(capturedCandidateWhere, { status: "PENDING" });
+  assert.equal(createManyPayload.length, 2);
+  assert.equal(createManyPayload[0]?.discoveredCompanyId, "candidate-1");
+  assert.equal(createManyPayload[0]?.companyName, "Empresa A");
+  assert.equal("jobSourceId" in createManyPayload[0], false);
+});
+
 test("repository lists runs with optional filters", async () => {
   let capturedWhere: Record<string, unknown> | undefined;
   const database = {

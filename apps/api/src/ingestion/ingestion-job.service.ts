@@ -80,6 +80,7 @@ export class IngestionJobService {
       data: {
         adapterType: dto.adapterType,
         description: dto.description,
+        discoveryValidateLimit: dto.discoveryValidateLimit ?? null,
         jobSourceId: dto.jobSourceId,
         jobType: dto.jobType,
         name: dto.name,
@@ -206,6 +207,39 @@ export class IngestionJobService {
           scheduleType: "MANUAL",
           scopeType: "SOURCE",
         },
+      });
+    }
+
+    return this.dispatchService.dispatchJob(job, "MANUAL");
+  }
+
+  // Dispara "Validar pendentes" da Descoberta de Empresas como job de
+  // background (ver IngestionManualRunnerService) em vez do antigo popup
+  // síncrono que travava a tela até o fetch/probe de cada candidato
+  // terminar — mesmo padrão do runSourceAdHoc: reaproveita um job isAdHoc
+  // já existente (so 1 por natureza, nao precisa de chave composta) em vez
+  // de criar um novo a cada clique.
+  async runDiscoveryValidateAdHoc(candidateLimit?: number) {
+    let job = await this.database.ingestionJob.findFirst({
+      where: { isAdHoc: true, jobType: "DISCOVERY_VALIDATE" },
+    });
+
+    if (!job) {
+      job = await this.database.ingestionJob.create({
+        data: {
+          discoveryValidateLimit: candidateLimit ?? null,
+          isAdHoc: true,
+          jobType: "DISCOVERY_VALIDATE",
+          name: "Validar pendentes (Descoberta)",
+          scheduleDaysOfWeek: [],
+          scheduleMinute: 0,
+          scheduleType: "MANUAL",
+        },
+      });
+    } else if (job.discoveryValidateLimit !== (candidateLimit ?? null)) {
+      job = await this.database.ingestionJob.update({
+        data: { discoveryValidateLimit: candidateLimit ?? null },
+        where: { id: job.id },
       });
     }
 

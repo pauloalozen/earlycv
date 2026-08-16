@@ -76,17 +76,12 @@ function createFixture(
       findFirst: async ({
         where,
       }: {
-        where: {
-          jobSourceId: string;
-          scheduleType: string;
-          scopeType: string;
-        };
+        where: Record<string, unknown>;
       }) =>
-        Array.from(jobs.values()).find(
-          (job) =>
-            job.jobSourceId === where.jobSourceId &&
-            job.scheduleType === where.scheduleType &&
-            job.scopeType === where.scopeType,
+        Array.from(jobs.values()).find((job) =>
+          Object.entries(where).every(
+            ([key, value]) => (job as Record<string, unknown>)[key] === value,
+          ),
         ) ?? null,
       findMany: async ({ where }: { where?: { isAdHoc?: boolean } } = {}) =>
         Array.from(jobs.values()).filter((job) =>
@@ -384,6 +379,37 @@ test("runSourceAdHoc cria um job MANUAL isAdHoc na primeira chamada e reaproveit
   assert.equal(jobs.size, 1, "nao deve criar um segundo job pra mesma fonte");
   assert.equal(dispatchCalls.length, 2);
   assert.ok(dispatchCalls.every((call) => call.trigger === "MANUAL"));
+});
+
+test("runDiscoveryValidateAdHoc cria job isAdHoc DISCOVERY_VALIDATE na primeira chamada e reaproveita nas seguintes", async () => {
+  const { service, jobs, dispatchCalls } = createFixture();
+
+  await service.runDiscoveryValidateAdHoc(30);
+  assert.equal(jobs.size, 1);
+  const created = Array.from(jobs.values())[0] as IngestionJob & {
+    isAdHoc?: boolean;
+  };
+  assert.equal(created?.jobType, "DISCOVERY_VALIDATE");
+  assert.equal(created?.scheduleType, "MANUAL");
+  assert.equal(created?.discoveryValidateLimit, 30);
+  assert.equal(created?.isAdHoc, true);
+
+  await service.runDiscoveryValidateAdHoc(30);
+  assert.equal(
+    jobs.size,
+    1,
+    "nao deve criar um segundo job isAdHoc de descoberta",
+  );
+  assert.equal(dispatchCalls.length, 2);
+
+  // limit diferente atualiza o mesmo job em vez de criar outro.
+  await service.runDiscoveryValidateAdHoc(50);
+  assert.equal(jobs.size, 1);
+  assert.equal(
+    (Array.from(jobs.values())[0] as { discoveryValidateLimit?: number })
+      ?.discoveryValidateLimit,
+    50,
+  );
 });
 
 test("findAll esconde jobs isAdHoc, so mostra os criados pelo popup Criar job", async () => {

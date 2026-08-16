@@ -15,7 +15,7 @@ function createServiceFixture(
     string,
     {
       id: string;
-      runKind?: "CRAWL" | "LOGO_FETCH";
+      runKind?: "CRAWL" | "LOGO_FETCH" | "DISCOVERY_VALIDATE";
       scopeType?: string;
       scopeValue?: string;
       status:
@@ -40,9 +40,10 @@ function createServiceFixture(
     {
       id: string;
       batchRunId: string;
-      jobSourceId: string;
+      jobSourceId?: string;
       companyId?: string;
       sourceType?: string;
+      discoveredCompanyId?: string;
       status:
         | "queued"
         | "running"
@@ -295,10 +296,27 @@ function createServiceFixture(
     },
   };
 
+  let validateOneImpl:
+    | ((discoveredCompanyId: string) => Promise<unknown>)
+    | undefined;
+  const validateOneCalls: string[] = [];
+  const discoveredCompaniesService = {
+    validateOne: async (discoveredCompanyId: string) => {
+      validateOneCalls.push(discoveredCompanyId);
+      if (validateOneImpl) return validateOneImpl(discoveredCompanyId);
+      return {
+        adapterType: "gupy",
+        careersUrl: `https://${discoveredCompanyId}.gupy.io`,
+        status: "VALIDATED",
+      };
+    },
+  };
+
   const service = new IngestionManualRunnerService(
     database as never,
     ingestionService as never,
     companyLogoFetchService as never,
+    discoveredCompaniesService as never,
     lockRepository as never,
     globalConfigService as never,
   );
@@ -307,6 +325,12 @@ function createServiceFixture(
     companyLogoFetchCalls,
     items,
     lockRepository,
+    setValidateOneImpl(
+      callback: (discoveredCompanyId: string) => Promise<unknown>,
+    ) {
+      validateOneImpl = callback;
+    },
+    validateOneCalls,
     resolveSlowJob(jobSourceId: string) {
       slowJobResolvers.get(jobSourceId)?.();
     },
@@ -1255,4 +1279,97 @@ test("runner marks a LOGO_FETCH item as failed when the logo isn't found", async
   const item = items.get("item-logo-fail");
   assert.equal(item?.status, "failed");
   assert.equal(item?.errorMessage, "logo não encontrado na página de carreira");
+});
+
+test("runner processes a DISCOVERY_VALIDATE batch via discoveredCompaniesService.validateOne", async () => {
+  const { items, runs, service, setValidateOneImpl, validateOneCalls } =
+    createServiceFixture();
+
+  setValidateOneImpl(async (discoveredCompanyId) => {
+    assert.equal(discoveredCompanyId, "candidate-1");
+    return {
+      adapterType: "gupy",
+      careersUrl: "https://empresa-x.gupy.io",
+      status: "VALIDATED",
+    };
+  });
+
+  runs.set("batch-discovery", {
+    id: "batch-discovery",
+    runKind: "DISCOVERY_VALIDATE",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-discovery-1", {
+    id: "item-discovery-1",
+    batchRunId: "batch-discovery",
+    discoveredCompanyId: "candidate-1",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  assert.deepEqual(validateOneCalls, ["candidate-1"]);
+  const run = runs.get("batch-discovery");
+  assert.equal(run?.status, "completed");
+  assert.equal(run?.succeededCount, 1);
+  const item = items.get("item-discovery-1");
+  assert.equal(item?.status, "completed");
+  assert.equal(item?.errorMessage, "VALIDATED · https://empresa-x.gupy.io");
+  assert.equal((item as { sourceType?: string })?.sourceType, "gupy");
+});
+
+test("runner marca item DISCOVERY_VALIDATE como failed quando validateOne lança (ex: probe inconclusivo)", async () => {
+  const { items, runs, service, setValidateOneImpl } = createServiceFixture();
+
+  setValidateOneImpl(async () => {
+    throw new Error("probe was inconclusive (rate limit/timeout) — try again");
+  });
+
+  runs.set("batch-discovery-fail", {
+    id: "batch-discovery-fail",
+    runKind: "DISCOVERY_VALIDATE",
+    status: "queued",
+    cancelRequestedAt: null,
+    succeededCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    totalSources: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+  items.set("item-discovery-fail", {
+    id: "item-discovery-fail",
+    batchRunId: "batch-discovery-fail",
+    discoveredCompanyId: "candidate-2",
+    status: "queued",
+    errorMessage: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    startedAt: null,
+    finishedAt: null,
+  });
+
+  await service.processNextBatchRun();
+
+  const run = runs.get("batch-discovery-fail");
+  assert.equal(run?.status, "failed");
+  assert.equal(run?.failedCount, 1);
+  const item = items.get("item-discovery-fail");
+  assert.equal(item?.status, "failed");
+  assert.equal(
+    item?.errorMessage,
+    "probe was inconclusive (rate limit/timeout) — try again",
+  );
 });

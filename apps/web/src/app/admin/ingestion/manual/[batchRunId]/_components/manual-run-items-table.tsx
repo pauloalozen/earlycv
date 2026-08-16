@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
   AdminPagination,
   AdminTable,
@@ -8,7 +9,6 @@ import {
   AdminTh,
   AT,
 } from "@/app/admin/_components/admin-primitives";
-import { buttonVariants } from "@/app/admin/_components/admin-button";
 import type {
   ManualRunItemRecord,
   ManualRunItemStatus,
@@ -128,8 +128,8 @@ export function ManualRunItemsTable({
               return (
                 <tr key={item.id}>
                   <AdminTd>{item.companyName}</AdminTd>
-                  <AdminTd>{item.sourceName}</AdminTd>
-                  <AdminTd mono>{item.sourceType}</AdminTd>
+                  <AdminTd>{item.sourceName ?? "—"}</AdminTd>
+                  <AdminTd mono>{item.sourceType ?? "—"}</AdminTd>
                   <AdminTd>{item.status}</AdminTd>
                   <AdminTd mono muted>
                     {item.startedAt
@@ -155,9 +155,7 @@ export function ManualRunItemsTable({
       </AdminTable>
 
       {totalPages > 1 && (
-        <AdminPagination
-          summary={`Página ${currentPage} de ${totalPages}`}
-        >
+        <AdminPagination summary={`Página ${currentPage} de ${totalPages}`}>
           <button
             type="button"
             disabled={currentPage <= 1}
