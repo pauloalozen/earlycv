@@ -410,6 +410,33 @@ test("validatePending (só nome) acha match chutando slug num dos adapters adivi
   assert.ok(candidate?.careersUrl?.includes("greenhouse.io"));
 });
 
+test("resolveViaWebSearch restringe a busca aos domínios de adapter conhecidos (site:) — nunca deixa a busca livre", async () => {
+  // Regressão: "{nome} vagas" sem filtro de site perdia pro board de
+  // verdade com frequência (a pagina institucional de carreiras rankeia
+  // acima do board de ATS real — casos reais: Banco Agibank, Banco
+  // Mercantil do Brasil). O filtro site: garante que só resultado
+  // hospedado num adapter conhecido pode aparecer.
+  let capturedQuery = "";
+  const { service, candidates } = createFixture({
+    probeImpl: async () => ({ inconclusive: false, jobCount: 2, ok: true }),
+    webSearch: {
+      searchImpl: async (query) => {
+        capturedQuery = query;
+        return [{ title: "Agibank", url: "https://boards.greenhouse.io/agibank" }];
+      },
+    },
+  });
+  await service.importCandidatesCsv({ csvText: "nome\nBanco Agibank" });
+
+  await service.validatePending();
+
+  assert.ok(capturedQuery.includes("Banco Agibank"));
+  assert.ok(capturedQuery.includes("site:gupy.io"));
+  assert.ok(capturedQuery.includes("site:job-boards.greenhouse.io"));
+  assert.ok(capturedQuery.includes("site:myworkdayjobs.com"));
+  assert.equal([...candidates.values()][0]?.status, "VALIDATED");
+});
+
 test("validatePending (só nome) resolve via busca web sem precisar chutar slug", async () => {
   const { service, candidates } = createFixture({
     probeImpl: async (sourceType, sourceUrl) => {

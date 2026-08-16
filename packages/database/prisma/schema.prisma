@@ -113,6 +113,7 @@ enum IngestionBatchScopeType {
 enum IngestionBatchRunKind {
   CRAWL
   LOGO_FETCH
+  DISCOVERY_VALIDATE
 }
 
 enum IngestionBatchRunStatus {
@@ -1074,6 +1075,7 @@ model DiscoveredCompany {
   batchLabel      String?
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
+  batchItems      IngestionBatchItem[]
 
   @@index([status])
   @@index([linkedCompanyId])
@@ -1156,11 +1158,17 @@ model IngestionBatchRun {
 model IngestionBatchItem {
   id             String                   @id @default(cuid())
   batchRunId     String
-  jobSourceId    String
-  companyId      String
+  // Nulos pra itens de runKind DISCOVERY_VALIDATE (candidato ainda nao tem
+  // JobSource/Company de verdade — so depois de promovido). Pra
+  // CRAWL/LOGO_FETCH continuam sempre preenchidos.
+  jobSourceId    String?
+  companyId      String?
   companyName    String
-  sourceName     String
-  sourceType     JobSourceType
+  sourceName     String?
+  sourceType     JobSourceType?
+  // So preenchido pra runKind DISCOVERY_VALIDATE — candidato sendo
+  // validado (ver DiscoveredCompaniesService.validateOne).
+  discoveredCompanyId String?
   status         IngestionBatchItemStatus @default(queued)
   startedAt      DateTime?
   finishedAt     DateTime?
@@ -1168,16 +1176,19 @@ model IngestionBatchItem {
   ingestionRunId String?
   createdAt      DateTime                 @default(now())
   updatedAt      DateTime                 @updatedAt
-  batchRun       IngestionBatchRun        @relation(fields: [batchRunId], references: [id], onDelete: Cascade)
-  jobSource      JobSource                @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
-  company        Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  ingestionRun   IngestionRun?            @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
+  batchRun          IngestionBatchRun @relation(fields: [batchRunId], references: [id], onDelete: Cascade)
+  jobSource         JobSource?        @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  company           Company?          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  discoveredCompany DiscoveredCompany? @relation(fields: [discoveredCompanyId], references: [id], onDelete: Cascade)
+  ingestionRun      IngestionRun?     @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
 
   @@unique([batchRunId, jobSourceId])
+  @@unique([batchRunId, discoveredCompanyId])
   @@index([batchRunId, status, createdAt])
   @@index([status, updatedAt])
   @@index([jobSourceId])
   @@index([companyId])
+  @@index([discoveredCompanyId])
   @@index([ingestionRunId])
 }
 
@@ -1198,6 +1209,11 @@ model IngestionJob {
   // logoUrl preenchido (delta), false = reprocessa todas as elegiveis pro
   // escopo, mesmo as que ja tem logo.
   onlyMissingLogo Boolean @default(false)
+
+  // So usado quando jobType = DISCOVERY_VALIDATE: quantos candidatos
+  // PENDING processar por execucao (null = fila inteira, ate o teto de
+  // seguranca — ver QUEUE_HARD_CAP em discovered-companies.service.ts).
+  discoveryValidateLimit Int?
 
   // Agendamento em linguagem humana (sem cron exposto ao usuario)
   scheduleType       IngestionJobScheduleType
@@ -1277,6 +1293,7 @@ enum IngestionJobType {
   CRAWL
   ENRICHMENT
   LOGO_FETCH
+  DISCOVERY_VALIDATE
 }
 
 enum IngestionJobScopeType {

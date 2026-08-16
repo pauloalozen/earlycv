@@ -5,6 +5,7 @@ import type { JobSourceType } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import { CompanyLogoFetchService } from "./company-logo/company-logo-fetch.service";
+import { DiscoveredCompaniesService } from "./discovered-companies.service";
 import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
 import { IngestionService } from "./ingestion.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
@@ -125,7 +126,7 @@ function isMissingManualBatchTableError(error: unknown) {
 
 type ActiveBatchRun = {
   id: string;
-  runKind: "CRAWL" | "LOGO_FETCH";
+  runKind: "CRAWL" | "LOGO_FETCH" | "DISCOVERY_VALIDATE";
   scopeType: string;
   scopeValue: string;
   status:
@@ -154,6 +155,8 @@ export class IngestionManualRunnerService {
     private readonly ingestionService: IngestionService,
     @Inject(CompanyLogoFetchService)
     private readonly companyLogoFetchService: CompanyLogoFetchService,
+    @Inject(DiscoveredCompaniesService)
+    private readonly discoveredCompaniesService: DiscoveredCompaniesService,
     @Inject(IngestionLockRepository)
     private readonly lockRepository: IngestionLockRepository,
     @Inject(GlobalSchedulerConfigService)
@@ -474,18 +477,26 @@ export class IngestionManualRunnerService {
   // dois lançamentos pegarem o mesmo item.
   private async runClaimedItem(
     batchRunId: string,
-    runKind: "CRAWL" | "LOGO_FETCH",
+    runKind: "CRAWL" | "LOGO_FETCH" | "DISCOVERY_VALIDATE",
     item: {
       id: string;
-      jobSourceId: string;
-      companyId: string;
-      sourceType: JobSourceType;
+      jobSourceId: string | null;
+      companyId: string | null;
+      sourceType: JobSourceType | null;
+      discoveredCompanyId: string | null;
     },
     owner: string,
     onOutcomeKnown: (blocked: boolean) => void,
   ): Promise<ClaimedItemOutcome> {
     const itemOwner = `${owner}:${item.id}`;
-    const itemLockId = `job-source:${item.jobSourceId}`;
+    // DISCOVERY_VALIDATE nao compete por um recurso externo compartilhado
+    // (cada candidato so e processado por 1 item, nunca por 2 fontes) — a
+    // chave de lock so existe pra manter o mesmo formato de acquire/release
+    // do bloco CRAWL/LOGO_FETCH abaixo.
+    const itemLockId =
+      runKind === "DISCOVERY_VALIDATE"
+        ? `discovery-candidate:${item.discoveredCompanyId}`
+        : `job-source:${item.jobSourceId}`;
     const sourceLockAcquired = await this.lockRepository.acquire(
       itemLockId,
       itemOwner,
@@ -510,11 +521,43 @@ export class IngestionManualRunnerService {
     let blocked = false;
 
     try {
+      if (runKind === "DISCOVERY_VALIDATE") {
+        // validateOne sempre resolve com um status de negocio (VALIDATED,
+        // NO_TECH_JOBS, NO_ACTIVE_JOBS, INVALID) ou lanca (candidato ja
+        // IMPORTADO, ou probe inconclusivo) — o catch generico la embaixo
+        // ja cobre o caso de excecao, entao aqui so trata o caminho feliz.
+        const candidate = await this.discoveredCompaniesService.validateOne(
+          item.discoveredCompanyId as string,
+        );
+        onOutcomeKnown(false);
+        const outcomeSummary = candidate.careersUrl
+          ? `${candidate.status} · ${candidate.careersUrl}`
+          : candidate.status;
+        const markCompletedResult =
+          await this.database.ingestionBatchItem.updateMany({
+            where: { id: item.id, status: { in: ["queued", "running"] } },
+            data: {
+              errorMessage: outcomeSummary,
+              finishedAt: new Date(),
+              sourceName: candidate.careersUrl,
+              sourceType: candidate.adapterType,
+              status: "completed",
+            },
+          });
+        if (markCompletedResult.count > 0) {
+          await this.database.ingestionBatchRun.update({
+            where: { id: batchRunId },
+            data: { succeededCount: { increment: 1 } },
+          });
+        }
+        return { blocked: false, outcome: "processed" };
+      }
+
       if (runKind === "LOGO_FETCH") {
         const logoResult =
           await this.companyLogoFetchService.fetchLogoForCompany(
-            item.companyId,
-            item.sourceType,
+            item.companyId as string,
+            item.sourceType as JobSourceType,
           );
 
         // "skipped" (empresa sem fonte suportada / adapter ainda sem
@@ -560,7 +603,9 @@ export class IngestionManualRunnerService {
         return { blocked: false, outcome: "processed" };
       }
 
-      const result = await this.ingestionService.runJobSource(item.jobSourceId);
+      const result = await this.ingestionService.runJobSource(
+        item.jobSourceId as string,
+      );
 
       // runJobSource resolves even when individual job observations
       // failed inside an otherwise-successful adapter run (status

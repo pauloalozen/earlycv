@@ -48,7 +48,13 @@ export function generateSlugVariants(companyName: string): string[] {
 
   addFromWords(words);
   addFromWords(primaryWords);
-  if (primaryWords.length > 1) addFromWords([primaryWords[0]]);
+  // Cada palavra "significativa" isolada, nao so a primeira — o slug real
+  // costuma ser só o nome fantasia, que nem sempre é a primeira palavra da
+  // razão social (ex: "Banco Agibank" -> slug real é "agibank", não
+  // "banco").
+  if (primaryWords.length > 1) {
+    for (const word of primaryWords) addFromWords([word]);
+  }
 
   return [...variants].filter((slug) => slug.length >= 2);
 }

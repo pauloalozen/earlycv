@@ -58,6 +58,14 @@ export class CreateIngestionJobDto {
   @IsBoolean()
   onlyMissingLogo?: boolean;
 
+  // Só relevante pra jobType DISCOVERY_VALIDATE — quantos candidatos
+  // PENDING processar por execução (ausente = fila inteira).
+  @ValidateIf((dto) => dto.jobType === "DISCOVERY_VALIDATE")
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  discoveryValidateLimit?: number;
+
   @IsEnum(IngestionJobScheduleType)
   scheduleType!: IngestionJobScheduleType;
 

@@ -14,7 +14,7 @@ import {
 
 type ScopeType = "ADAPTER" | "SOURCE" | "ALL";
 type ScheduleType = "MANUAL" | "DAILY" | "EVERY_N_HOURS" | "WEEKLY";
-type JobType = "CRAWL" | "ENRICHMENT" | "LOGO_FETCH";
+type JobType = "CRAWL" | "ENRICHMENT" | "LOGO_FETCH" | "DISCOVERY_VALIDATE";
 
 // Adapters com extractor de logo implementado no backend (ver
 // LOGO_EXTRACTORS em apps/api/src/ingestion/company-logo/logo-extractors.ts)
@@ -36,6 +36,7 @@ type IngestionJobRow = {
   jobType: JobType;
   scopeType: ScopeType | null;
   adapterType: string | null;
+  discoveryValidateLimit: number | null;
   jobSourceId: string | null;
   jobSource: {
     id: string;
@@ -129,6 +130,11 @@ function frequencyLabel(job: IngestionJobRow) {
 
 function scopeLabel(job: IngestionJobRow) {
   if (job.jobType === "ENRICHMENT") return "—";
+  if (job.jobType === "DISCOVERY_VALIDATE") {
+    return job.discoveryValidateLimit
+      ? `Até ${job.discoveryValidateLimit} candidato(s)`
+      : "Fila inteira";
+  }
   if (job.scopeType === "ADAPTER") return `Adapter: ${job.adapterType ?? "?"}`;
   if (job.scopeType === "SOURCE") {
     return job.jobSource
@@ -178,6 +184,7 @@ function CreateJobModal({
   );
   const [adapterType, setAdapterType] = useState("gupy");
   const [onlyMissingLogo, setOnlyMissingLogo] = useState(true);
+  const [discoveryValidateLimit, setDiscoveryValidateLimit] = useState("30");
 
   function handleJobTypeChange(next: JobType) {
     setJobType(next);
@@ -242,6 +249,12 @@ function CreateJobModal({
     }
     if (jobType === "LOGO_FETCH") {
       body.onlyMissingLogo = onlyMissingLogo;
+    }
+    if (jobType === "DISCOVERY_VALIDATE" && discoveryValidateLimit.trim()) {
+      const parsed = Number.parseInt(discoveryValidateLimit, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        body.discoveryValidateLimit = parsed;
+      }
     }
 
     if (scheduleType === "DAILY" || scheduleType === "WEEKLY") {
@@ -381,8 +394,49 @@ function CreateJobModal({
                 />
                 Carregar logo
               </label>
+              <label
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  fontSize: 12.5,
+                  gap: 8,
+                }}
+              >
+                <input
+                  checked={jobType === "DISCOVERY_VALIDATE"}
+                  name="jobType"
+                  onChange={() => handleJobTypeChange("DISCOVERY_VALIDATE")}
+                  type="radio"
+                />
+                Descoberta ATS
+              </label>
             </div>
           </div>
+
+          {jobType === "DISCOVERY_VALIDATE" && (
+            <div>
+              <label
+                htmlFor="discovery-validate-limit"
+                style={{
+                  color: AT.muted,
+                  display: "block",
+                  fontSize: 11.5,
+                  marginBottom: 4,
+                }}
+              >
+                Quantos candidatos por execução (vazio = fila inteira)
+              </label>
+              <input
+                className="h-9 w-full rounded-md border px-3 text-[12.5px]"
+                id="discovery-validate-limit"
+                min={1}
+                onChange={(e) => setDiscoveryValidateLimit(e.target.value)}
+                style={fieldStyle}
+                type="number"
+                value={discoveryValidateLimit}
+              />
+            </div>
+          )}
 
           {(jobType === "CRAWL" || jobType === "LOGO_FETCH") && (
             <div>

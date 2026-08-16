@@ -211,23 +211,23 @@ export default async function AdminIngestionPage({
           >
             Fontes
           </TabLink>
-          <TabLink active={activeTab === "jobs"} href={buildTabHref("jobs")}>
-            Jobs
+          <TabLink
+            active={activeTab === "descoberta"}
+            href={buildTabHref("descoberta")}
+          >
+            Descoberta ATS
           </TabLink>
           <TabLink
             active={activeTab === "enrichment"}
             href={buildTabHref("enrichment")}
           >
-            Enriquecimento
+            Enriquecimento de vagas
           </TabLink>
           <TabLink active={activeTab === "vagas"} href={buildTabHref("vagas")}>
             Vagas
           </TabLink>
-          <TabLink
-            active={activeTab === "descoberta"}
-            href={buildTabHref("descoberta")}
-          >
-            Descoberta
+          <TabLink active={activeTab === "jobs"} href={buildTabHref("jobs")}>
+            Jobs
           </TabLink>
         </div>
 

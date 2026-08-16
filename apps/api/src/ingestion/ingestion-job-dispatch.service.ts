@@ -36,11 +36,17 @@ export class IngestionJobDispatchService {
     });
 
     try {
-      if (job.jobType === "CRAWL" || job.jobType === "LOGO_FETCH") {
+      if (
+        job.jobType === "CRAWL" ||
+        job.jobType === "LOGO_FETCH" ||
+        job.jobType === "DISCOVERY_VALIDATE"
+      ) {
         const batchRun =
           job.jobType === "CRAWL"
             ? await this.createBatchForJob(job)
-            : await this.createLogoFetchBatchForJob(job);
+            : job.jobType === "LOGO_FETCH"
+              ? await this.createLogoFetchBatchForJob(job)
+              : await this.createDiscoveryValidateBatchForJob(job);
         await this.database.ingestionJobRun.update({
           data: {
             batchRunId: batchRun.id,
@@ -138,6 +144,15 @@ export class IngestionJobDispatchService {
 
     return this.manualBatchRepository.createLogoFetchBatchRun({
       onlyMissingLogo: job.onlyMissingLogo,
+    });
+  }
+
+  // DISCOVERY_VALIDATE nao tem escopo (nao existe eixo adapter/fonte pra
+  // candidato de descoberta) — sempre processa os PENDING mais antigos,
+  // ate discoveryValidateLimit (ou fila inteira se ausente).
+  private async createDiscoveryValidateBatchForJob(job: IngestionJob) {
+    return this.manualBatchRepository.createDiscoveryValidateBatchRun({
+      candidateLimit: job.discoveryValidateLimit ?? undefined,
     });
   }
 }

@@ -26,7 +26,10 @@ import {
 import { IngestionService } from "./ingestion.service";
 import { decodeHtmlEntities, normalizeCompanyName } from "./name-normalization";
 import { canonicalizeSourceUrl } from "./url-normalization";
-import { matchAdapterUrl } from "./web-search/adapter-url-matcher";
+import {
+  ATS_SEARCH_DOMAINS,
+  matchAdapterUrl,
+} from "./web-search/adapter-url-matcher";
 import { WebSearchService } from "./web-search/web-search.service";
 
 // Espaçamento entre chamadas de probe (com jitter) — mesmo espírito do
@@ -39,7 +42,7 @@ const JITTER_MAX_FACTOR = 1.3;
 // popup) — evita puxar um número patológico de candidatos numa chamada só.
 // Não é o mecanismo de corte principal: esse agora é o número de candidatos
 // escolhido no popup "Validar pendentes".
-const QUEUE_HARD_CAP = 200;
+export const QUEUE_HARD_CAP = 200;
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -502,13 +505,24 @@ export class DiscoveredCompaniesService {
     };
   }
 
-  // Busca "{nome} vagas" e retorna o primeiro resultado cuja URL bate um
-  // domínio de adapter conhecido (gupy.io, boards.greenhouse.io, etc.) — é
-  // o equivalente automatizado de jogar "empresa vagas" no Google e pegar
-  // o link certo nos primeiros resultados.
+  // Busca restrita aos domínios de adapter conhecidos (`site:gupy.io OR
+  // site:...`) e retorna o primeiro resultado cuja URL bate um deles.
+  //
+  // Testado ao vivo (Brave) e "{empresa} vagas" sem filtro de site perde
+  // pro board de verdade com frequência: a página institucional de
+  // carreiras da empresa (ex: carreiras.agibank.com.br) rankeia acima do
+  // board de ATS, e às vezes o board nem aparece nos 10 primeiros. Com
+  // `site:` restrito ao board, o board sempre veio em 1º lugar nos 3 casos
+  // testados (Banco Safra, Banco Agibank → Greenhouse, Banco Mercantil do
+  // Brasil → Gupy).
   private async resolveViaWebSearch(name: string) {
+    const siteFilter = ATS_SEARCH_DOMAINS.map((domain) => `site:${domain}`).join(
+      " OR ",
+    );
     try {
-      const results = await this.webSearchService.search(`${name} vagas`);
+      const results = await this.webSearchService.search(
+        `${name} ${siteFilter}`,
+      );
       for (const result of results) {
         const matched = matchAdapterUrl(result.url);
         if (matched) return matched;
