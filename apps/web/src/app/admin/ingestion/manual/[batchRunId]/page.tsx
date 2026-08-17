@@ -63,6 +63,33 @@ export default async function ManualRunDetailPage({
       (item) => item.status === "skipped" || item.status === "cancelled",
     ).length;
 
+    // Itens de runKind DISCOVERY_VALIDATE têm discoveredCompany preenchido —
+    // "completed" aqui só diz que o probe rodou sem erro, não em qual status
+    // o candidato ficou. Sem esse breakdown, um lote que validou 139
+    // candidatos aparecia igual a um que não achou nada promovível.
+    const discoveryStatusCounts = items.reduce<Record<string, number>>(
+      (acc, item) => {
+        const status = item.discoveredCompany?.status;
+        if (!status) return acc;
+        acc[status] = (acc[status] ?? 0) + 1;
+        return acc;
+      },
+      {},
+    );
+    const isDiscoveryRun = Object.keys(discoveryStatusCounts).length > 0;
+    const promotableCount =
+      (discoveryStatusCounts.VALIDATED ?? 0) +
+      (discoveryStatusCounts.NO_TECH_JOBS ?? 0) +
+      (discoveryStatusCounts.NO_ACTIVE_JOBS ?? 0);
+    const DISCOVERY_STATUS_LABELS: Record<string, string> = {
+      IMPORTED: "Importada",
+      INVALID: "Inválida",
+      NO_ACTIVE_JOBS: "Sem vagas",
+      NO_TECH_JOBS: "Sem vagas de tech",
+      PENDING: "Pendente",
+      VALIDATED: "Validada",
+    };
+
     return (
       <main className="min-h-screen bg-stone-50 px-6 py-10 text-stone-900 md:px-10">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -113,6 +140,42 @@ export default async function ManualRunDetailPage({
               Calculado a partir dos itens do lote.
             </div>
           </div>
+
+          {isDiscoveryRun && (
+            <div className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-4">
+              <h2 className="text-sm font-semibold text-stone-900">
+                Resultado da validação
+              </h2>
+              <div className="flex flex-wrap gap-3">
+                {Object.entries(discoveryStatusCounts).map(([status, count]) => (
+                  <div
+                    className="rounded-lg border border-stone-200 px-3 py-2 text-sm"
+                    key={status}
+                  >
+                    {DISCOVERY_STATUS_LABELS[status] ?? status}:{" "}
+                    <span className="font-semibold">{count}</span>
+                  </div>
+                ))}
+              </div>
+              {promotableCount > 0 && (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                  <span>
+                    {promotableCount}{" "}
+                    {promotableCount === 1
+                      ? "candidato pronto"
+                      : "candidatos prontos"}{" "}
+                    pra criar fonte.
+                  </span>
+                  <Link
+                    className={buttonVariants({ size: "sm" })}
+                    href="/admin/ingestion?tab=descoberta"
+                  >
+                    Ir pra fila
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
 
           <ManualRunItemsTable items={items} />
         </div>

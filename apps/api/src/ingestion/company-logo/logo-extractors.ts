@@ -5,6 +5,7 @@ import { fetchGreenhouseCompanyLogo } from "./greenhouse-logo.extractor";
 import { fetchGupyCompanyLogo } from "./gupy-logo.extractor";
 import { fetchInHireCompanyLogo } from "./inhire-logo.extractor";
 import { fetchLeverCompanyLogo } from "./lever-logo.extractor";
+import { fetchPandapeCompanyLogo } from "./pandape-logo.extractor";
 import { fetchTeamtailorCompanyLogo } from "./teamtailor-logo.extractor";
 import { fetchWorkdayCompanyLogo } from "./workday-logo.extractor";
 
@@ -19,8 +20,11 @@ export type LogoExtractor = (sourceUrl: string) => Promise<string | null>;
 // greenhouse e ashby: cobertura parcial e conhecida (~23% e ~65% das
 // fontes atuais, respectivamente) — ver comentario no topo de cada
 // extractor. lever, workday e teamtailor: cobertura alta, padrao bem
-// consistente. talentbrew (site 100% sob medida por cliente, sem template
-// compartilhado) ficou de fora — sem padrao generico confiavel.
+// consistente. pandape: cobertura parcial — empresas com microsite
+// "whitelabel" customizado trocam o template padrao (sem a classe
+// brand-image), retorna null nesses casos. talentbrew (site 100% sob
+// medida por cliente, sem template compartilhado) ficou de fora — sem
+// padrao generico confiavel.
 export const LOGO_EXTRACTORS: Partial<Record<JobSourceType, LogoExtractor>> = {
   gupy: fetchGupyCompanyLogo,
   inhire: fetchInHireCompanyLogo,
@@ -29,6 +33,7 @@ export const LOGO_EXTRACTORS: Partial<Record<JobSourceType, LogoExtractor>> = {
   ashby: fetchAshbyCompanyLogo,
   workday: fetchWorkdayCompanyLogo,
   teamtailor: fetchTeamtailorCompanyLogo,
+  pandape: fetchPandapeCompanyLogo,
 };
 
 export const LOGO_FETCH_SUPPORTED_ADAPTERS = Object.keys(

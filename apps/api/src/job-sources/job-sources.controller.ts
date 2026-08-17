@@ -18,6 +18,7 @@ import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import { IngestionService } from "../ingestion/ingestion.service";
+import { BulkUpdateActiveDto } from "./dto/bulk-update-active.dto";
 import { BulkUpdateScheduleDto } from "./dto/bulk-update-schedule.dto";
 import { CreateJobSourceDto } from "./dto/create-job-source.dto";
 // biome-ignore lint/style/useImportType: DTO precisa de import em runtime para reflection do NestJS ValidationPipe
@@ -90,6 +91,20 @@ export class JobSourcesController {
     dto: BulkUpdateScheduleDto,
   ) {
     return this.jobSourcesService.bulkUpdateSchedule(dto);
+  }
+
+  @Patch("bulk-active")
+  @HttpCode(200)
+  bulkUpdateActive(
+    @Body(
+      new ValidationPipe({
+        ...jobSourcesValidationOptions,
+        expectedType: BulkUpdateActiveDto,
+      }),
+    )
+    dto: BulkUpdateActiveDto,
+  ) {
+    return this.jobSourcesService.bulkUpdateActive(dto);
   }
 
   @Get(":id")

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import {
+  bulkUpdateJobSourceActive,
   bulkUpdateJobSourceSchedule,
   cancelManualRun,
   createCompany,
@@ -532,6 +533,31 @@ export async function bulkToggleScheduleEnabledAction(formData: FormData) {
       error instanceof Error
         ? error.message
         : "Falha ao atualizar agendamento em massa.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+}
+
+export async function bulkToggleActiveAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const sourceType = String(formData.get("sourceType") ?? "").trim();
+  const isActive = String(formData.get("isActive")) === "true";
+
+  if (!sourceType) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe o adapter."));
+  }
+
+  try {
+    return await bulkUpdateJobSourceActive({ sourceType, isActive });
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Falha ao atualizar fontes em massa.";
     redirect(buildAdminRedirect(redirectPath, "error", message));
   }
 }

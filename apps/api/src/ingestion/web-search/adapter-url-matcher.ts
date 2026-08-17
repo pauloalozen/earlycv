@@ -11,7 +11,16 @@
 // pela URL sem falso positivo alto.
 export type ResolvedAdapterUrl = {
   careersUrl: string;
-  sourceType: "ashby" | "greenhouse" | "gupy" | "inhire" | "lever" | "teamtailor" | "workday";
+  sourceType:
+    | "ashby"
+    | "greenhouse"
+    | "gupy"
+    | "inhire"
+    | "lever"
+    | "pandape"
+    | "solides"
+    | "teamtailor"
+    | "workday";
 };
 
 // Dominios reconhecidos por matchAdapterUrl — usado pra restringir a busca
@@ -28,6 +37,13 @@ export const ATS_SEARCH_DOMAINS = [
   "inhire.app",
   "teamtailor.com",
   "myworkdayjobs.com",
+  "pandape.com.br",
+  "pandape.infojobs.com.br",
+  // Sólides ainda nao tem adapter implementado, mas reconhecer o dominio
+  // aqui evita que a busca web pra um candidato hospedado la caia no chute
+  // de slug (que nunca vai bater) — ver o tratamento "sem adapter" em
+  // resolveFromScratch (discovered-companies.service.ts).
+  "vagas.solides.com.br",
 ];
 
 function firstPathSegment(pathname: string) {
@@ -78,6 +94,28 @@ export function matchAdapterUrl(rawUrl: string): ResolvedAdapterUrl | null {
   const teamtailorMatch = hostname.match(/^([a-z0-9-]+)\.teamtailor\.com$/);
   if (teamtailorMatch?.[1]) {
     return { careersUrl: `https://${teamtailorMatch[1]}.teamtailor.com`, sourceType: "teamtailor" };
+  }
+
+  // pandape.com.br redireciona (301) pra pandape.infojobs.com.br — os dois
+  // hostnames aparecem em resultado de busca dependendo do motor, entao os
+  // dois casam aqui, mas sempre normaliza pra URL canonica em pandape.com.br
+  // (mesmo dominio que buildCandidateUrl usa pro chute de slug).
+  const pandapeMatch =
+    hostname.match(/^([a-z0-9-]+)\.pandape\.com\.br$/) ??
+    hostname.match(/^([a-z0-9-]+)\.pandape\.infojobs\.com\.br$/);
+  if (pandapeMatch?.[1]) {
+    return {
+      careersUrl: `https://${pandapeMatch[1]}.pandape.com.br`,
+      sourceType: "pandape",
+    };
+  }
+
+  const solidesMatch = hostname.match(/^([a-z0-9-]+)\.vagas\.solides\.com\.br$/);
+  if (solidesMatch?.[1]) {
+    return {
+      careersUrl: `https://${solidesMatch[1]}.vagas.solides.com.br`,
+      sourceType: "solides",
+    };
   }
 
   const workdayMatch = hostname.match(/^([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com$/);

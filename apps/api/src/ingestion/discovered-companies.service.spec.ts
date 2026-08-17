@@ -199,6 +199,50 @@ function createFixture(options?: {
   };
 }
 
+test("list() nunca trunca candidatos promovíveis mesmo com PENDING mais recente lotando o corte de 500", async () => {
+  const { service, candidates } = createFixture();
+  const base = new Date("2026-08-16T22:16:18.000Z").getTime();
+
+  for (let i = 0; i < 139; i++) {
+    candidates.set(`validated-${i}`, {
+      adapterType: "gupy",
+      careersUrl: `https://empresa-${i}.gupy.io`,
+      checkedAt: new Date(base + i),
+      createdAt: new Date(base + i),
+      id: `validated-${i}`,
+      industry: null,
+      jobCount: 3,
+      name: `Empresa Validada ${i}`,
+      normalizedName: `empresa validada ${i}`,
+      status: "VALIDATED",
+      updatedAt: new Date(base + i),
+    });
+  }
+  // PENDINGs criados minutos depois — em volume bem maior que o corte de 500.
+  for (let i = 0; i < 600; i++) {
+    candidates.set(`pending-${i}`, {
+      createdAt: new Date(base + 1_000 + i),
+      id: `pending-${i}`,
+      industry: null,
+      jobCount: 0,
+      name: `Empresa Pendente ${i}`,
+      normalizedName: `empresa pendente ${i}`,
+      status: "PENDING",
+      updatedAt: new Date(base + 1_000 + i),
+    });
+  }
+
+  const rows = await service.list([
+    "PENDING",
+    "VALIDATED",
+    "NO_ACTIVE_JOBS",
+    "NO_TECH_JOBS",
+  ] as never);
+
+  const validatedRows = rows.filter((r) => r.status === "VALIDATED");
+  assert.equal(validatedRows.length, 139);
+});
+
 test("importCandidatesCsv (formato simples) cria PENDING sem URL/adapter", async () => {
   const { service, candidates } = createFixture();
 
@@ -435,6 +479,46 @@ test("resolveViaWebSearch restringe a busca aos domínios de adapter conhecidos 
   assert.ok(capturedQuery.includes("site:job-boards.greenhouse.io"));
   assert.ok(capturedQuery.includes("site:myworkdayjobs.com"));
   assert.equal([...candidates.values()][0]?.status, "VALIDATED");
+});
+
+test("validatePending marca candidato Sólides achado via busca web como INVALID com adapterType/careersUrl preenchidos, em vez de cair no chute de slug", async () => {
+  // Sólides não tem adapter implementado — probeSource retorna
+  // ok:false/inconclusive:false com "no adapter implemented for solides"
+  // (mesmo contrato de qualquer sourceType sem adapter registrado). Sem o
+  // tratamento especial em resolveFromScratch, esse achado seria
+  // descartado e o candidato cairia no chute de slug gupy/greenhouse/etc,
+  // que nunca bate — perdendo a informação real de que o board existe.
+  const { service, candidates } = createFixture({
+    probeImpl: async (sourceType) => {
+      if (sourceType === "solides") {
+        return {
+          error: "no adapter implemented for solides",
+          inconclusive: false,
+          jobCount: 0,
+          ok: false,
+        };
+      }
+      return { inconclusive: false, jobCount: 0, ok: true };
+    },
+    webSearch: {
+      searchImpl: async () => [
+        {
+          title: "Trabalhe conosco",
+          url: "https://empresax.vagas.solides.com.br/",
+        },
+      ],
+    },
+  });
+  await service.importCandidatesCsv({ csvText: "nome\nEmpresa X" });
+
+  await service.validatePending(100);
+
+  const candidate = [...candidates.values()][0];
+  assert.equal(candidate?.status, "INVALID");
+  assert.equal(candidate?.adapterType, "solides");
+  assert.equal(candidate?.careersUrl, "https://empresax.vagas.solides.com.br");
+  assert.equal(candidate?.resolutionMethod, "web_search");
+  assert.ok(candidate?.errorMessage?.includes("solides"));
 });
 
 test("validatePending (só nome) resolve via busca web sem precisar chutar slug", async () => {

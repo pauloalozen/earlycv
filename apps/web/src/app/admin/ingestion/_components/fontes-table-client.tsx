@@ -12,6 +12,7 @@ import {
   AT,
 } from "@/app/admin/_components/admin-primitives";
 import {
+  bulkToggleActiveAction,
   bulkToggleScheduleEnabledAction,
   deleteJobSourceAction,
   importCompanySourcesCsvAction,
@@ -454,6 +455,32 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
     }
   }
 
+  async function handleBulkToggleActive(nextActive: boolean) {
+    if (!typeFilter) return;
+    const verb = nextActive ? "ativar" : "desativar";
+    const confirmed = window.confirm(
+      `Isso vai ${verb} ${total} fonte(s) do adapter "${typeFilter}". Confirma?`,
+    );
+    if (!confirmed) return;
+
+    setBulkPending(true);
+    try {
+      const fd = new FormData();
+      fd.set("sourceType", typeFilter);
+      fd.set("isActive", String(nextActive));
+      fd.set("redirectPath", redirectPath);
+      const response = await bulkToggleActiveAction(fd);
+      if (response) {
+        window.alert(
+          `${response.count} fonte(s) do adapter "${typeFilter}" ${nextActive ? "ativada(s)" : "desativada(s)"}.`,
+        );
+      }
+      await fetchSources(paramsRef.current);
+    } finally {
+      setBulkPending(false);
+    }
+  }
+
   // Busca síncrona por empresa (POST /companies/:id/fetch-logo, via proxy) —
   // disparo em lote (todos os adapters implementados, ou um específico)
   // fica no popup "Criar job" da aba Jobs (jobType LOGO_FETCH).
@@ -592,6 +619,22 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
               className={buttonVariants({ variant: "outline", size: "sm" })}
             >
               Desativar agendamento ({typeFilter})
+            </button>
+            <button
+              type="button"
+              disabled={bulkPending}
+              onClick={() => handleBulkToggleActive(true)}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              Ativar fontes ({typeFilter})
+            </button>
+            <button
+              type="button"
+              disabled={bulkPending}
+              onClick={() => handleBulkToggleActive(false)}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              Desativar fontes ({typeFilter})
             </button>
           </div>
         )}

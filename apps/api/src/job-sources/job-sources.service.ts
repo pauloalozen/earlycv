@@ -9,6 +9,7 @@ import { Prisma } from "@prisma/client";
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
 import { canonicalizeSourceUrl } from "../ingestion/url-normalization";
+import type { BulkUpdateActiveDto } from "./dto/bulk-update-active.dto";
 import type { BulkUpdateScheduleDto } from "./dto/bulk-update-schedule.dto";
 import type { CreateJobSourceDto } from "./dto/create-job-source.dto";
 import type { ListJobSourcesDto } from "./dto/list-job-sources.dto";
@@ -245,6 +246,15 @@ export class JobSourcesService {
     });
 
     return { count, scheduleEnabled: dto.scheduleEnabled, sourceType: dto.sourceType };
+  }
+
+  async bulkUpdateActive(dto: BulkUpdateActiveDto) {
+    const { count } = await this.database.jobSource.updateMany({
+      where: { sourceType: dto.sourceType },
+      data: { isActive: dto.isActive },
+    });
+
+    return { count, isActive: dto.isActive, sourceType: dto.sourceType };
   }
 
   async remove(jobSourceId: string) {
