@@ -39,3 +39,25 @@ test("PATCH bulk-schedule delegates to the service and returns the update count"
   assert.equal(result.count, 164);
   assert.equal(result.scheduleEnabled, false);
 });
+
+test("PATCH bulk-active delegates to the service and returns the update count", async () => {
+  let received: unknown;
+  const controller = new JobSourcesController(
+    {
+      bulkUpdateActive: async (dto: unknown) => {
+        received = dto;
+        return { count: 42, isActive: true, sourceType: "pandape" };
+      },
+    } as never,
+    {} as never,
+  );
+
+  const result = await controller.bulkUpdateActive({
+    sourceType: "pandape",
+    isActive: true,
+  } as never);
+
+  assert.deepEqual(received, { sourceType: "pandape", isActive: true });
+  assert.equal(result.count, 42);
+  assert.equal(result.isActive, true);
+});

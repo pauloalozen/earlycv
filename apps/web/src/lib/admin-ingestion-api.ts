@@ -659,6 +659,23 @@ export async function bulkUpdateJobSourceSchedule(
   });
 }
 
+export async function bulkUpdateJobSourceActive(
+  payload: { sourceType: string; isActive: boolean },
+  token?: string,
+) {
+  return apiRequest<{
+    count: number;
+    isActive: boolean;
+    sourceType: string;
+  }>("/job-sources/bulk-active", token, {
+    body: JSON.stringify(payload),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "PATCH",
+  });
+}
+
 export async function deleteCompany(companyId: string, token?: string) {
   return apiRequest<{ ok: true }>(`/companies/${companyId}`, token, {
     method: "DELETE",

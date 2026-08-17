@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../actions", () => ({
+  bulkToggleActiveAction: vi.fn(),
   bulkToggleScheduleEnabledAction: vi.fn(),
   deleteJobSourceAction: vi.fn(),
   importCompanySourcesCsvAction: vi.fn(),
