@@ -72,6 +72,7 @@ export const MANUAL_ADAPTER_TYPES = [
   "teamtailor",
   "talentbrew",
   "workday",
+  "pandape",
 ] as const;
 
 export type ManualAdapterType = (typeof MANUAL_ADAPTER_TYPES)[number];
@@ -112,10 +113,7 @@ export function buildAdminRedirect(
 // ATS types without an adapter yet — API-based platforms, same shape as
 // gupy/custom_api, so crawlStrategy defaults to "api". They only exist so
 // companies can be tagged now; running them fails until the adapter ships.
-const UNIMPLEMENTED_API_SOURCE_TYPES: JobSourceTypeOption[] = [
-  "solides",
-  "pandape",
-];
+const UNIMPLEMENTED_API_SOURCE_TYPES: JobSourceTypeOption[] = ["solides"];
 
 export function getSourceDefaults(sourceType: string): SourceDefaults {
   if (sourceType === "gupy") {
@@ -187,6 +185,14 @@ export function getSourceDefaults(sourceType: string): SourceDefaults {
       crawlStrategy: "api",
       parserKey: "workday",
       sourceType: "workday",
+    };
+  }
+
+  if (sourceType === "pandape") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "pandape",
+      sourceType: "pandape",
     };
   }
 

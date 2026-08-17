@@ -12,6 +12,13 @@ const EMPLOYMENT_TYPE_MAP: Record<string, string> = {
   vacancy_legal_entity: "pj",
   vacancy_type_autonomous: "autonomous",
   full_time: "full_time",
+  // JSON-LD do Pandape usa o vocabulario schema.org com hifen em vez de
+  // underscore (ex: "full-time"), diferente do que Gupy/TalentBrew mandam.
+  "full-time": "full_time",
+  "part-time": "part_time",
+  contractor: "pj",
+  intern: "internship",
+  temporary: "temporary",
 };
 
 export function normalizeVacancyType(value?: string | null) {

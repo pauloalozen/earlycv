@@ -51,6 +51,27 @@ test("matchAdapterUrl reconhece Workday (tenant + instance + site)", () => {
   );
 });
 
+test("matchAdapterUrl reconhece Pandape nos dois dominios (pandape.com.br e pandape.infojobs.com.br) e normaliza pro canonico", () => {
+  assert.deepEqual(matchAdapterUrl("https://tendaatacado.pandape.com.br/Vacancies"), {
+    careersUrl: "https://tendaatacado.pandape.com.br",
+    sourceType: "pandape",
+  });
+  assert.deepEqual(
+    matchAdapterUrl("https://tendaatacado.pandape.infojobs.com.br/Detail/123"),
+    {
+      careersUrl: "https://tendaatacado.pandape.com.br",
+      sourceType: "pandape",
+    },
+  );
+});
+
+test("matchAdapterUrl reconhece Solides mesmo sem adapter implementado (pra marcar o candidato)", () => {
+  assert.deepEqual(matchAdapterUrl("https://empresax.vagas.solides.com.br/vagas/1"), {
+    careersUrl: "https://empresax.vagas.solides.com.br",
+    sourceType: "solides",
+  });
+});
+
 test("matchAdapterUrl retorna null pra URLs sem dominio conhecido (LinkedIn, site institucional)", () => {
   assert.equal(matchAdapterUrl("https://linkedin.com/company/empresax"), null);
   assert.equal(matchAdapterUrl("https://empresax.com.br"), null);

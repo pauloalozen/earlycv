@@ -28,6 +28,7 @@ const LOGO_FETCH_ADAPTER_OPTIONS = [
   "ashby",
   "workday",
   "teamtailor",
+  "pandape",
 ];
 
 type IngestionJobRow = {
@@ -483,6 +484,7 @@ function CreateJobModal({
                             "teamtailor",
                             "talentbrew",
                             "workday",
+                            "pandape",
                           ].map((option) => (
                             <option key={option} value={option}>
                               {option}

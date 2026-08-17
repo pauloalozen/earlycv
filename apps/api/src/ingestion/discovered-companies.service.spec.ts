@@ -481,6 +481,46 @@ test("resolveViaWebSearch restringe a busca aos domínios de adapter conhecidos 
   assert.equal([...candidates.values()][0]?.status, "VALIDATED");
 });
 
+test("validatePending marca candidato Sólides achado via busca web como INVALID com adapterType/careersUrl preenchidos, em vez de cair no chute de slug", async () => {
+  // Sólides não tem adapter implementado — probeSource retorna
+  // ok:false/inconclusive:false com "no adapter implemented for solides"
+  // (mesmo contrato de qualquer sourceType sem adapter registrado). Sem o
+  // tratamento especial em resolveFromScratch, esse achado seria
+  // descartado e o candidato cairia no chute de slug gupy/greenhouse/etc,
+  // que nunca bate — perdendo a informação real de que o board existe.
+  const { service, candidates } = createFixture({
+    probeImpl: async (sourceType) => {
+      if (sourceType === "solides") {
+        return {
+          error: "no adapter implemented for solides",
+          inconclusive: false,
+          jobCount: 0,
+          ok: false,
+        };
+      }
+      return { inconclusive: false, jobCount: 0, ok: true };
+    },
+    webSearch: {
+      searchImpl: async () => [
+        {
+          title: "Trabalhe conosco",
+          url: "https://empresax.vagas.solides.com.br/",
+        },
+      ],
+    },
+  });
+  await service.importCandidatesCsv({ csvText: "nome\nEmpresa X" });
+
+  await service.validatePending(100);
+
+  const candidate = [...candidates.values()][0];
+  assert.equal(candidate?.status, "INVALID");
+  assert.equal(candidate?.adapterType, "solides");
+  assert.equal(candidate?.careersUrl, "https://empresax.vagas.solides.com.br");
+  assert.equal(candidate?.resolutionMethod, "web_search");
+  assert.ok(candidate?.errorMessage?.includes("solides"));
+});
+
 test("validatePending (só nome) resolve via busca web sem precisar chutar slug", async () => {
   const { service, candidates } = createFixture({
     probeImpl: async (sourceType, sourceUrl) => {

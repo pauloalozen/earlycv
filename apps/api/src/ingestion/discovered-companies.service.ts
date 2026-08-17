@@ -376,7 +376,7 @@ export class DiscoveredCompaniesService {
     searchBudget: { remaining: number },
   ): Promise<{
     outcome: {
-      adapterType?: (typeof IMPORTABLE_ADAPTER_TYPES)[number];
+      adapterType?: JobSourceType;
       careersUrl?: string;
       checkedAt?: Date;
       errorMessage?: string | null;
@@ -444,7 +444,7 @@ export class DiscoveredCompaniesService {
     searchBudget: { remaining: number },
   ): Promise<{
     outcome: {
-      adapterType?: (typeof IMPORTABLE_ADAPTER_TYPES)[number];
+      adapterType?: JobSourceType;
       careersUrl?: string;
       checkedAt?: Date;
       errorMessage?: string | null;
@@ -483,6 +483,27 @@ export class DiscoveredCompaniesService {
               rawJobCount: probe.rawJobCount,
               resolutionMethod: "web_search",
               status: probeStatus(probe.jobCount, probe.rawJobCount),
+            },
+            probesUsed: 1,
+          };
+        }
+
+        // Board achado de verdade (URL bateu um domínio de ATS conhecido),
+        // mas o adapter desse tipo ainda não existe (ex: Sólides) — marca o
+        // candidato com o adapterType/careersUrl certos em vez de descartar
+        // esse achado e cair no chute de slug (que nunca ia bater um
+        // adapter diferente do real, só gastaria orçamento à toa). Assim
+        // que o adapter existir, promoteManual/revalidar já usa a URL
+        // salva aqui sem precisar descobrir tudo de novo.
+        if (!probe.inconclusive && probe.error?.startsWith("no adapter implemented for")) {
+          return {
+            outcome: {
+              adapterType: resolved.sourceType,
+              careersUrl: resolved.careersUrl,
+              checkedAt: new Date(),
+              errorMessage: `board encontrado via busca web, mas adapter "${resolved.sourceType}" ainda não implementado: ${resolved.careersUrl}`,
+              resolutionMethod: "web_search",
+              status: "INVALID",
             },
             probesUsed: 1,
           };
