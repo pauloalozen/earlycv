@@ -1569,7 +1569,12 @@ model BusinessFunnelStageMetric {
 model Job {
   id                String           @id @default(cuid())
   companyId         String
-  jobSourceId       String
+  // Nullable de propósito: excluir uma JobSource não pode arrastar junto
+  // firstSeenAt/histórico/URL pública indexada da vaga (ver decisão em
+  // JobSourcesService.remove — a vaga é registro de produto, não artefato
+  // do pipeline de ingestão). SetNull em vez de Cascade; a UI de exclusão
+  // oferece a opção separada de marcar as vagas como "removed".
+  jobSourceId       String?
   externalJobId     String?
   sourceJobUrl      String
   canonicalKey      String           @unique
@@ -1601,7 +1606,7 @@ model Job {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
   company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  jobSource         JobSource        @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  jobSource         JobSource?       @relation(fields: [jobSourceId], references: [id], onDelete: SetNull)
   targetResumes     Resume[]
   enrichment        JobEnrichment?
   applications      JobApplication[]

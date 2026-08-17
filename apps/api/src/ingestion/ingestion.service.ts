@@ -573,6 +573,7 @@ export class IngestionService {
     );
     const driftMap = new Map<string, { total: number; withoutDesc: number }>();
     for (const job of recentJobs) {
+      if (!job.jobSourceId) continue;
       const entry = driftMap.get(job.jobSourceId) ?? {
         total: 0,
         withoutDesc: 0,

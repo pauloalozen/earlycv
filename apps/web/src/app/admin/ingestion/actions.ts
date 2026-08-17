@@ -6,6 +6,7 @@ import {
   bulkUpdateJobSourceActive,
   bulkUpdateJobSourceSchedule,
   cancelManualRun,
+  checkJobSourceUrlAvailable,
   createCompany,
   createJobSource,
   deleteJobSource,
@@ -162,6 +163,25 @@ export async function createCompanyAndSourceAction(formData: FormData) {
     formData.get("redirectPath") ?? `${NEW_SOURCE_REDIRECT_PATH}`,
   );
   const runAfterCreate = formData.get("runAfterCreate") === "on";
+  const sourceUrl = String(formData.get("sourceUrl") ?? "").trim();
+
+  // Checa a URL ANTES de criar a empresa — sem isso, uma URL duplicada só
+  // era descoberta depois que a Company já existia (a fonte falhava, a
+  // empresa ficava órfã "sem fonte vinculada", exigindo completar o
+  // cadastro manualmente na tela de detalhe). Fica preso no form aqui, sem
+  // criar nada, em vez de criar metade do cadastro.
+  if (sourceUrl) {
+    const availability = await checkJobSourceUrlAvailable(sourceUrl);
+    if (availability.taken) {
+      redirect(
+        buildAdminRedirect(
+          redirectPath,
+          "error",
+          `a fonte "${availability.sourceName}" (${availability.companyName}) já tem essa URL cadastrada`,
+        ),
+      );
+    }
+  }
 
   let company: Awaited<ReturnType<typeof createCompany>>;
 
@@ -429,13 +449,14 @@ export async function deleteJobSourceAction(formData: FormData) {
     formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
   );
   const jobSourceId = String(formData.get("jobSourceId") ?? "").trim();
+  const removeJobs = String(formData.get("removeJobs")) === "true";
 
   if (!jobSourceId) {
     redirect(buildAdminRedirect(redirectPath, "error", "Informe a fonte."));
   }
 
   try {
-    await deleteJobSource(jobSourceId);
+    await deleteJobSource(jobSourceId, removeJobs);
   } catch (error) {
     if (isRedirectControlFlowError(error)) {
       throw error;

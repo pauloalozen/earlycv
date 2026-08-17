@@ -18,6 +18,7 @@ import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import { IngestionService } from "../ingestion/ingestion.service";
+import { BulkDeleteJobSourcesDto } from "./dto/bulk-delete-job-sources.dto";
 import { BulkUpdateActiveDto } from "./dto/bulk-update-active.dto";
 import { BulkUpdateScheduleDto } from "./dto/bulk-update-schedule.dto";
 import { CreateJobSourceDto } from "./dto/create-job-source.dto";
@@ -65,6 +66,16 @@ export class JobSourcesController {
     return this.jobSourcesService.list();
   }
 
+  @Get("duplicates")
+  findDuplicates() {
+    return this.jobSourcesService.findDuplicates();
+  }
+
+  @Get("check-url")
+  checkUrlAvailable(@Query("url") url: string) {
+    return this.jobSourcesService.checkUrlAvailable(url);
+  }
+
   @Get("paginated")
   listPaginated(
     @Query(
@@ -107,6 +118,20 @@ export class JobSourcesController {
     return this.jobSourcesService.bulkUpdateActive(dto);
   }
 
+  @Delete("bulk")
+  @HttpCode(200)
+  bulkDelete(
+    @Body(
+      new ValidationPipe({
+        ...jobSourcesValidationOptions,
+        expectedType: BulkDeleteJobSourcesDto,
+      }),
+    )
+    dto: BulkDeleteJobSourcesDto,
+  ) {
+    return this.jobSourcesService.bulkDelete(dto);
+  }
+
   @Get(":id")
   getById(@Param("id") id: string) {
     return this.jobSourcesService.getById(id);
@@ -144,7 +169,7 @@ export class JobSourcesController {
 
   @Delete(":id")
   @HttpCode(200)
-  remove(@Param("id") id: string) {
-    return this.jobSourcesService.remove(id);
+  remove(@Param("id") id: string, @Query("removeJobs") removeJobs?: string) {
+    return this.jobSourcesService.remove(id, removeJobs === "true");
   }
 }

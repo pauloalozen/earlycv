@@ -129,6 +129,7 @@ export class DashboardAdminService {
     }
 
     for (const job of newJobs24h) {
+      if (!job.jobSourceId) continue;
       const adapterType = sourceIdToType.get(job.jobSourceId);
       if (!adapterType) continue;
       bucket(adapterType).newJobsLast24h += 1;

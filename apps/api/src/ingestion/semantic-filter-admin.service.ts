@@ -140,7 +140,7 @@ export class SemanticFilterAdminService {
         id: row.id,
         normalizedTitle: row.job.normalizedTitle,
         semanticFilterReason: row.semanticFilterReason,
-        sourceName: row.job.jobSource.sourceName,
+        sourceName: row.job.jobSource?.sourceName ?? "Fonte removida",
       })),
       total,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
