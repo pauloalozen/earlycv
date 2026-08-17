@@ -622,8 +622,13 @@ export async function cancelManualRun(batchRunId: string, token?: string) {
   );
 }
 
-export async function deleteJobSource(jobSourceId: string, token?: string) {
-  return apiRequest<{ ok: true }>(`/job-sources/${jobSourceId}`, token, {
+export async function deleteJobSource(
+  jobSourceId: string,
+  removeJobs?: boolean,
+  token?: string,
+) {
+  const qs = removeJobs ? "?removeJobs=true" : "";
+  return apiRequest<{ ok: true }>(`/job-sources/${jobSourceId}${qs}`, token, {
     method: "DELETE",
   });
 }
@@ -673,6 +678,53 @@ export async function bulkUpdateJobSourceActive(
       "Content-Type": "application/json",
     },
     method: "PATCH",
+  });
+}
+
+export type DuplicateJobSourceGroup = {
+  count: number;
+  sourceType: string;
+  sourceUrl: string;
+  sources: {
+    companyId: string;
+    companyName: string;
+    createdAt: string;
+    id: string;
+    isActive: boolean;
+    jobCount: number;
+    sourceName: string;
+  }[];
+};
+
+export async function listDuplicateJobSources(token?: string) {
+  return apiRequest<DuplicateJobSourceGroup[]>(
+    "/job-sources/duplicates",
+    token,
+  );
+}
+
+export type CheckJobSourceUrlResult =
+  | { taken: false }
+  | { companyName: string; sourceName: string; taken: true };
+
+export async function checkJobSourceUrlAvailable(url: string, token?: string) {
+  return apiRequest<CheckJobSourceUrlResult>(
+    `/job-sources/check-url?url=${encodeURIComponent(url)}`,
+    token,
+  );
+}
+
+export async function bulkDeleteJobSources(
+  ids: string[],
+  removeJobs?: boolean,
+  token?: string,
+) {
+  return apiRequest<{ count: number }>("/job-sources/bulk", token, {
+    body: JSON.stringify({ ids, removeJobs }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "DELETE",
   });
 }
 
