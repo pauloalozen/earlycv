@@ -9,6 +9,7 @@ import { Prisma } from "@prisma/client";
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
 import { canonicalizeSourceUrl } from "../ingestion/url-normalization";
+import type { BulkDeleteJobSourcesDto } from "./dto/bulk-delete-job-sources.dto";
 import type { BulkUpdateActiveDto } from "./dto/bulk-update-active.dto";
 import type { BulkUpdateScheduleDto } from "./dto/bulk-update-schedule.dto";
 import type { CreateJobSourceDto } from "./dto/create-job-source.dto";
@@ -193,6 +194,7 @@ export class JobSourcesService {
   async create(dto: CreateJobSourceDto) {
     await this.companiesService.getById(dto.companyId);
     const normalizedSourceUrl = canonicalizeSourceUrl(dto.sourceUrl);
+    await this.assertSourceUrlNotTaken(normalizedSourceUrl);
 
     try {
       return await this.database.jobSource.create({
@@ -257,11 +259,142 @@ export class JobSourcesService {
     return { count, isActive: dto.isActive, sourceType: dto.sourceType };
   }
 
-  async remove(jobSourceId: string) {
+  // Fontes com a mesma sourceUrl sob companies diferentes — normalmente
+  // sinal de duplicidade real (mesma empresa cadastrada mais de uma vez
+  // com nomes diferentes, ex: "RAIZEN S.A." e "RAIZEN COMBUSTIVEIS" ambas
+  // apontando pro mesmo board gupy). O dedup em
+  // DiscoveredCompaniesService.importCandidateAsSource evita isso pra
+  // fontes novas (ver fix do bug de barra final), mas não limpa o que já
+  // existe — aqui só lista os grupos, a decisão de qual manter/excluir é
+  // manual (botão "Excluir" já existente por fonte).
+  async findDuplicates() {
+    const groups = await this.database.jobSource.groupBy({
+      by: ["sourceUrl"],
+      _count: { _all: true },
+      having: { sourceUrl: { _count: { gt: 1 } } },
+    });
+
+    if (groups.length === 0) return [];
+
+    const duplicateUrls = groups.map((g) => g.sourceUrl);
+    const sources = await this.database.jobSource.findMany({
+      where: { sourceUrl: { in: duplicateUrls } },
+      include: {
+        company: { select: { id: true, name: true } },
+        _count: { select: { jobs: true } },
+      },
+      orderBy: [{ sourceUrl: "asc" }, { createdAt: "asc" }],
+    });
+
+    const bySourceUrl = new Map<string, typeof sources>();
+    for (const source of sources) {
+      const bucket = bySourceUrl.get(source.sourceUrl) ?? [];
+      bucket.push(source);
+      bySourceUrl.set(source.sourceUrl, bucket);
+    }
+
+    return [...bySourceUrl.entries()]
+      .map(([sourceUrl, group]) => ({
+        count: group.length,
+        sourceType: group[0]?.sourceType,
+        sourceUrl,
+        sources: group.map((source) => ({
+          companyId: source.companyId,
+          companyName: source.company.name,
+          createdAt: source.createdAt,
+          id: source.id,
+          isActive: source.isActive,
+          jobCount: source._count.jobs,
+          sourceName: source.sourceName,
+        })),
+      }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  // Usado pelo painel de fontes duplicadas — tanto pra excluir uma fonte
+  // isolada quanto pro fluxo "manter esta, apagar as outras N do mesmo
+  // sourceUrl" num só request (evita N chamadas sequenciais e o
+  // navigate-away de um <form action> por linha).
+  async bulkDelete(dto: BulkDeleteJobSourcesDto) {
+    if (dto.removeJobs) {
+      await this.database.job.updateMany({
+        where: { jobSourceId: { in: dto.ids } },
+        data: { status: "removed" },
+      });
+    }
+
+    const { count } = await this.database.jobSource.deleteMany({
+      where: { id: { in: dto.ids } },
+    });
+
+    return { count };
+  }
+
+  // Excluir uma fonte não pode arrastar o histórico de produto das vagas
+  // que vieram dela (firstSeenAt, candidaturas, páginas públicas indexadas)
+  // — por isso Job.jobSourceId é nullable (SetNull) em vez de cascade. O
+  // caller decide explicitamente se quer fechar as vagas dessa fonte
+  // (status "removed", mesmo status que um crawl normal já usa quando uma
+  // vaga some do board) ou deixá-las órfãs e ativas.
+  async remove(jobSourceId: string, removeJobs = false) {
     await this.getById(jobSourceId);
+
+    if (removeJobs) {
+      await this.database.job.updateMany({
+        where: { jobSourceId },
+        data: { status: "removed" },
+      });
+    }
+
     await this.database.jobSource.delete({ where: { id: jobSourceId } });
 
     return { ok: true } as const;
+  }
+
+  // Sem constraint de banco global em sourceUrl ainda (bloqueada pelas
+  // duplicatas já existentes — ver findDuplicates) — checagem em app-level,
+  // chamada por toda via de criação (manual aqui, CSV/promoção em
+  // AdminIngestionImportService.importRow). Mensagem nomeia a fonte
+  // conflitante pra o usuário decidir na hora, em vez de um 500/P2002 cru.
+  // Pre-check pro fluxo "criar empresa + primeira fonte" do admin (web) —
+  // sem isso, a UI só descobria o conflito depois de já ter criado a
+  // Company (a fonte falha, a empresa fica órfã "sem fonte vinculada").
+  // Canonicaliza igual assertSourceUrlNotTaken pra bater com o que está
+  // salvo (barra final em URL de caminho vazio etc.).
+  async checkUrlAvailable(rawUrl: string) {
+    let sourceUrl: string;
+    try {
+      sourceUrl = canonicalizeSourceUrl(rawUrl);
+    } catch {
+      // URL invalida/vazia nao e conflito — o erro real de validacao
+      // aparece na hora de criar de verdade (canonicalizeSourceUrl la).
+      return { taken: false as const };
+    }
+
+    const existing = await this.database.jobSource.findFirst({
+      include: { company: true },
+      where: { sourceUrl },
+    });
+
+    if (!existing) return { taken: false as const };
+
+    return {
+      companyName: existing.company.name,
+      sourceName: existing.sourceName,
+      taken: true as const,
+    };
+  }
+
+  private async assertSourceUrlNotTaken(sourceUrl: string) {
+    const existing = await this.database.jobSource.findFirst({
+      include: { company: true },
+      where: { sourceUrl },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `a fonte "${existing.sourceName}" (${existing.company.name}) já tem essa URL cadastrada`,
+      );
+    }
   }
 
   private rethrowKnownError(error: unknown): never {

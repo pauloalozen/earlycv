@@ -284,6 +284,26 @@ export class AdminIngestionImportService {
         where: { normalizedName },
       });
 
+      // Checagem global (nao so companyId_sourceUrl, que so barra
+      // duplicata dentro da MESMA company): outra company ja usando essa
+      // URL e sempre duplicidade real (mesmo board, cadastrado 2x com nome
+      // diferente) — bloqueia antes de criar/atualizar qualquer coisa, em
+      // vez de deixar acontecer e so achar depois (ver findDuplicates).
+      const conflictingSource = await this.database.jobSource.findFirst({
+        include: { company: true },
+        where: { sourceUrl: canonicalSourceUrl },
+      });
+      if (
+        conflictingSource &&
+        conflictingSource.companyId !== existingCompany?.id
+      ) {
+        return {
+          companyName: nome,
+          message: `a fonte "${conflictingSource.sourceName}" (${conflictingSource.company.name}) já tem essa URL cadastrada`,
+          status: "error",
+        };
+      }
+
       const companyAction = existingCompany ? "updated" : "created";
       const companyPayload = {
         ...(setor ? { industry: setor } : {}),

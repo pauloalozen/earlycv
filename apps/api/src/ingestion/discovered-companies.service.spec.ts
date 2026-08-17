@@ -671,6 +671,38 @@ test("promote não duplica fonte quando a URL resolvida já está registrada sob
   assert.equal(importRowCalls.length, 0);
 });
 
+test("promote não duplica fonte mesmo quando a URL do candidato não tem barra final e a já cadastrada tem", async () => {
+  // Regressão real: matchAdapterUrl/buildCandidateUrl geram
+  // "https://x.gupy.io" (sem barra), mas o que fica salvo em
+  // JobSource.sourceUrl é sempre canonicalizado com barra final em URL de
+  // caminho vazio ("https://x.gupy.io/"). Sem canonicalizar antes de
+  // comparar, o dedup nunca batia e cada empresa nova promovida pro mesmo
+  // board acabava duplicando Company+JobSource (achado real: 10 companies
+  // "Raízen" diferentes todas apontando pro mesmo genteraizen.gupy.io).
+  const { service, candidates, sources, importRowCalls } = createFixture();
+  sources.set("https://raizen.gupy.io/", {
+    companyId: "company-raizen",
+    companyName: "RAIZEN S.A.",
+    sourceUrl: "https://raizen.gupy.io/",
+  });
+
+  await service.importCandidatesCsv({ csvText: "nome\nRaizen Combustiveis" });
+  const candidate = [...candidates.values()][0];
+  await candidates.set(candidate.id, {
+    ...candidate,
+    adapterType: "gupy",
+    careersUrl: "https://raizen.gupy.io",
+    status: "VALIDATED",
+  });
+
+  const promoted = await service.promote(candidate.id);
+
+  assert.equal(promoted.status, "IMPORTED");
+  assert.equal(promoted.linkedCompanyId, "company-raizen");
+  assert.ok(promoted.errorMessage?.includes("RAIZEN S.A."));
+  assert.equal(importRowCalls.length, 0);
+});
+
 test("promote exige status VALIDATED e marca IMPORTED em caso de sucesso", async () => {
   const { service, candidates, importRowCalls } = createFixture();
   const created = await service.importCandidatesCsv({

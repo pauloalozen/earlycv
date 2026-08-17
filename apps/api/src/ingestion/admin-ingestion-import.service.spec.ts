@@ -48,6 +48,16 @@ function createDatabaseMock() {
         const key = `${where.companyId_sourceUrl.companyId}:${where.companyId_sourceUrl.sourceUrl}`;
         return sources.get(key) ?? null;
       },
+      findFirst: async ({ where }: { where: { sourceUrl: string } }) => {
+        const source = [...sources.values()].find(
+          (s) => s.sourceUrl === where.sourceUrl,
+        );
+        if (!source) return null;
+        const company = [...companies.values()].find(
+          (c) => c.id === source.companyId,
+        );
+        return { ...source, company };
+      },
       create: async ({
         data,
       }: {
@@ -97,6 +107,32 @@ test("importCompanySourcesCsv accepts the legacy 5-column header and infers gupy
   );
   const source = [...sources.values()][0];
   assert.equal(source?.sourceType, "gupy");
+});
+
+test("importCompanySourcesCsv rejeita URL já cadastrada sob outra company", async () => {
+  const { database } = createDatabaseMock();
+  const service = new AdminIngestionImportService(database);
+
+  await service.importCompanySourcesCsv({
+    csvText: [
+      "nome,setor,site_url,careers_url,linkedin_url",
+      "ACME,Tech,https://acme.dev,https://acme.gupy.io,",
+    ].join("\n"),
+    dryRun: false,
+  });
+
+  const report = await service.importCompanySourcesCsv({
+    csvText: [
+      "nome,setor,site_url,careers_url,linkedin_url",
+      "ACME TECH,Tech,https://acme-tech.dev,https://acme.gupy.io,",
+    ].join("\n"),
+    dryRun: false,
+  });
+
+  assert.equal(report.summary.errorCount, 1);
+  assert.equal(report.lines[0]?.status, "error");
+  assert.ok(report.lines[0]?.message.includes("já tem essa URL cadastrada"));
+  assert.ok(report.lines[0]?.message.includes("ACME"));
 });
 
 test("importCompanySourcesCsv honors an explicit tipo_adapter column over URL inference", async () => {

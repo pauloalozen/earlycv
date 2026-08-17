@@ -693,10 +693,21 @@ export class DiscoveredCompaniesService {
 
   private async importCandidateAsSource(
     candidate: DiscoveredCompany,
-    careersUrl: string,
+    rawCareersUrl: string,
     adapterType: JobSourceType,
     resolutionMethod?: string,
   ) {
+    // canonicalizeSourceUrl SEMPRE acrescenta "/" em URL de caminho vazio
+    // (buildCandidateUrl/matchAdapterUrl geram "https://x.gupy.io", sem
+    // barra) — é o que importService.importRow usa antes de gravar
+    // JobSource.sourceUrl. Sem canonicalizar aqui também, a checagem de
+    // dedup abaixo comparava a URL crua (sem barra) contra o que já está
+    // salvo (com barra) e nunca batia: toda empresa promovida por um board
+    // já cadastrado virava Company+JobSource duplicados em vez de linkar
+    // na existente (achado real: 10 companies "Raízen" diferentes todas
+    // apontando pra genteraizen.gupy.io).
+    const careersUrl = canonicalizeSourceUrl(rawCareersUrl);
+
     // Dedup de verdade contra fonte já cadastrada: o dedup do importRow é
     // escopado por (companyId, sourceUrl), então dois candidatos com nomes
     // diferentes (ex: "Usiminas" e "Usiminas Tech") que resolvem pra mesma
