@@ -422,6 +422,9 @@ export class ManualIngestionBatchRepository {
           status: filters.status,
         },
         include: {
+          discoveredCompany: {
+            select: { id: true, status: true },
+          },
           ingestionRun: {
             select: {
               errorSummary: true,

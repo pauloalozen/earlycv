@@ -222,6 +222,17 @@ export type ManualRunItemRecord = {
   batchRunId: string;
   jobSourceId: string | null;
   discoveredCompanyId?: string | null;
+  discoveredCompany?: {
+    id: string;
+    status:
+      | "PENDING"
+      | "VALIDATED"
+      | "NO_ACTIVE_JOBS"
+      | "NO_TECH_JOBS"
+      | "INVALID"
+      | "IMPORTED"
+      | "DISMISSED";
+  } | null;
   status: ManualRunItemStatus;
   startedAt: string | null;
   finishedAt: string | null;
@@ -484,6 +495,26 @@ export async function importCompanySourcesCsv(
   }
 
   return (await response.json()) as CsvImportReport;
+}
+
+export type DiscoveredCompanyStatus =
+  | "PENDING"
+  | "VALIDATED"
+  | "NO_ACTIVE_JOBS"
+  | "NO_TECH_JOBS"
+  | "INVALID"
+  | "IMPORTED"
+  | "DISMISSED";
+
+export async function listDiscoveredCompanies(
+  statuses?: DiscoveredCompanyStatus[],
+  token?: string,
+) {
+  const qs = statuses?.length ? `?status=${statuses.join(",")}` : "";
+  return apiRequest<{ id: string; status: DiscoveredCompanyStatus }[]>(
+    `/admin/discovery${qs}`,
+    token,
+  );
 }
 
 export async function getGlobalSchedulerConfig(token?: string) {

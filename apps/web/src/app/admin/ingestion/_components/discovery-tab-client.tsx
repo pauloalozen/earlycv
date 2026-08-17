@@ -382,6 +382,59 @@ export function DiscoveryTabClient() {
         </button>
       </div>
 
+      {view === "fila" &&
+        !loading &&
+        (() => {
+          const counts = QUEUE_STATUSES.reduce<
+            Record<DiscoveredCompanyStatus, number>
+          >(
+            (acc, status) => {
+              acc[status] = rows.filter((r) => r.status === status).length;
+              return acc;
+            },
+            {} as Record<DiscoveredCompanyStatus, number>,
+          );
+          const promotableCount =
+            counts.VALIDATED + counts.NO_TECH_JOBS + counts.NO_ACTIVE_JOBS;
+
+          if (promotableCount === 0) return null;
+
+          return (
+            <div
+              style={{
+                alignItems: "center",
+                background: "#ecfdf5",
+                border: "1px solid #a7f3d0",
+                borderRadius: 8,
+                color: "#065f46",
+                display: "flex",
+                fontSize: 13,
+                gap: 8,
+                justifyContent: "space-between",
+                padding: "8px 12px",
+              }}
+            >
+              <span>
+                <strong>{promotableCount}</strong>{" "}
+                {promotableCount === 1
+                  ? "candidato validado pronto"
+                  : "candidatos validados prontos"}{" "}
+                pra criar fonte ({counts.VALIDATED} validada,{" "}
+                {counts.NO_TECH_JOBS} sem vaga de tech,{" "}
+                {counts.NO_ACTIVE_JOBS} sem vaga ativa).
+              </span>
+              <button
+                className={buttonVariants({ size: "sm" })}
+                disabled={promotingAll}
+                onClick={handlePromoteAll}
+                type="button"
+              >
+                {promotingAll ? "Criando fontes..." : "Criar todas as fontes"}
+              </button>
+            </div>
+          );
+        })()}
+
       <AdminTable>
         <thead>
           <tr>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { AdminPageWrap } from "@/app/admin/_components/admin-primitives";
 import {
+  listDiscoveredCompanies,
   listJobSources,
   listJobSourcesPaginated,
 } from "@/lib/admin-ingestion-api";
@@ -71,15 +72,17 @@ function TabLink({
   href,
   active,
   children,
+  badgeCount,
 }: {
   href: string;
   active: boolean;
   children: React.ReactNode;
+  badgeCount?: number;
 }) {
   return (
     <Link
       className={cn(
-        "rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
+        "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
         active
           ? "bg-stone-900 !text-white"
           : "text-stone-600 hover:bg-stone-100 hover:text-stone-900",
@@ -87,6 +90,18 @@ function TabLink({
       href={href}
     >
       {children}
+      {!!badgeCount && (
+        <span
+          className={cn(
+            "rounded-full px-1.5 py-0.5 text-xs font-bold",
+            active
+              ? "bg-white/20 text-white"
+              : "bg-emerald-100 text-emerald-800",
+          )}
+        >
+          {badgeCount}
+        </span>
+      )}
     </Link>
   );
 }
@@ -140,12 +155,20 @@ export default async function AdminIngestionPage({
   }
 
   try {
-    const [sourcesResult, sourcesFirstPageResult] = await Promise.all([
-      listJobSources().catch((e: unknown) => e),
-      listJobSourcesPaginated({ pageSize: 50, typeFilter: sourceType }).catch(
-        (e: unknown) => e,
-      ),
-    ]);
+    const [sourcesResult, sourcesFirstPageResult, promotableDiscoveries] =
+      await Promise.all([
+        listJobSources().catch((e: unknown) => e),
+        listJobSourcesPaginated({
+          pageSize: 50,
+          typeFilter: sourceType,
+        }).catch((e: unknown) => e),
+        listDiscoveredCompanies([
+          "VALIDATED",
+          "NO_TECH_JOBS",
+          "NO_ACTIVE_JOBS",
+        ]).catch(() => []),
+      ]);
+    const promotableDiscoveriesCount = promotableDiscoveries.length;
 
     const sources =
       sourcesResult instanceof Error
@@ -213,6 +236,7 @@ export default async function AdminIngestionPage({
           </TabLink>
           <TabLink
             active={activeTab === "descoberta"}
+            badgeCount={promotableDiscoveriesCount}
             href={buildTabHref("descoberta")}
           >
             Descoberta ATS

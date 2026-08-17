@@ -199,6 +199,50 @@ function createFixture(options?: {
   };
 }
 
+test("list() nunca trunca candidatos promovíveis mesmo com PENDING mais recente lotando o corte de 500", async () => {
+  const { service, candidates } = createFixture();
+  const base = new Date("2026-08-16T22:16:18.000Z").getTime();
+
+  for (let i = 0; i < 139; i++) {
+    candidates.set(`validated-${i}`, {
+      adapterType: "gupy",
+      careersUrl: `https://empresa-${i}.gupy.io`,
+      checkedAt: new Date(base + i),
+      createdAt: new Date(base + i),
+      id: `validated-${i}`,
+      industry: null,
+      jobCount: 3,
+      name: `Empresa Validada ${i}`,
+      normalizedName: `empresa validada ${i}`,
+      status: "VALIDATED",
+      updatedAt: new Date(base + i),
+    });
+  }
+  // PENDINGs criados minutos depois — em volume bem maior que o corte de 500.
+  for (let i = 0; i < 600; i++) {
+    candidates.set(`pending-${i}`, {
+      createdAt: new Date(base + 1_000 + i),
+      id: `pending-${i}`,
+      industry: null,
+      jobCount: 0,
+      name: `Empresa Pendente ${i}`,
+      normalizedName: `empresa pendente ${i}`,
+      status: "PENDING",
+      updatedAt: new Date(base + 1_000 + i),
+    });
+  }
+
+  const rows = await service.list([
+    "PENDING",
+    "VALIDATED",
+    "NO_ACTIVE_JOBS",
+    "NO_TECH_JOBS",
+  ] as never);
+
+  const validatedRows = rows.filter((r) => r.status === "VALIDATED");
+  assert.equal(validatedRows.length, 139);
+});
+
 test("importCandidatesCsv (formato simples) cria PENDING sem URL/adapter", async () => {
   const { service, candidates } = createFixture();
 
