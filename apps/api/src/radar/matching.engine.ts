@@ -19,6 +19,27 @@ export type ScoreBreakdown = {
   workModel: number;
 };
 
+// Faixas de categoria de aderência (filtro "ADERÊNCIA" do /radar) —
+// espelha exatamente OPPORTUNITY_LEVELS/opportunityLevel em radar-ui.tsx no
+// front (0=Não recomendada .. 5=Excelente oportunidade). Precisa existir
+// aqui também porque o filtro por categoria roda no backend, sobre o score
+// já calculado por calculateScore.
+export const OPPORTUNITY_LEVEL_THRESHOLDS = [
+  [90, 5],
+  [75, 4],
+  [55, 3],
+  [35, 2],
+  [15, 1],
+  [0, 0],
+] as const;
+
+export function scoreToOpportunityLevel(score: number): 0 | 1 | 2 | 3 | 4 | 5 {
+  for (const [minScore, level] of OPPORTUNITY_LEVEL_THRESHOLDS) {
+    if (score >= minScore) return level;
+  }
+  return 0;
+}
+
 export type MatchDetailItem = { label: string; ok: boolean };
 
 // Item-a-item por dimensão (área/skills/senioridade/tecnologias) — usado
@@ -99,8 +120,32 @@ function seniorityDistance(
   return Math.abs(indexA - indexB);
 }
 
+// Pontos máximos por dimensão (soma 100). Recalibrado em 2026-08: skills
+// caiu de 30->25 e seniority subiu de 20->25 — skills é o sinal mais
+// ruidoso (string extraída por LLM em dois momentos diferentes, sem
+// vocabulário controlado), senioridade é o mais confiável (enum fechado).
+// BREAKDOWN_MAX em radar-ui.tsx precisa ficar em sincronia com isto.
+export const SCORE_MAX = {
+  area: 25,
+  skills: 25,
+  seniority: 25,
+  technologies: 15,
+  language: 5,
+  workModel: 5,
+} as const;
+
+function stripDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+// Tolerante a variação de formatação ("Node.js" / "node-js" / "Node JS" /
+// "nodejs" todos viram "nodejs") — remove acento, caixa e qualquer
+// pontuação/espaço, sobrando só alfanumérico. Reduz falso-negativo de match
+// que é só diferença de escrita entre o texto extraído da vaga (LLM) e o
+// termo salvo no perfil (também LLM, em outro momento/prompt), sem precisar
+// de dicionário de sinônimos.
 function normalize(value: string): string {
-  return value.trim().toLowerCase();
+  return stripDiacritics(value.trim().toLowerCase()).replace(/[^a-z0-9]+/g, "");
 }
 
 function normalizedSet(values: string[]): Set<string> {
@@ -134,22 +179,17 @@ function matchPercentage(
   return { pct: matched.length / required.length, matched, missing };
 }
 
-// Bucket por faixa mínima (100/75/50/25/0%), conforme a tabela da spec —
-// não é interpolação linear.
-function scoreByPercentageBucket(pct: number, max: number): number {
-  const buckets: Array<[minPct: number, fraction: number]> = [
-    [1, 1],
-    [0.75, 0.75],
-    [0.5, 0.5],
-    [0.25, 0.25],
-    [0, 0],
-  ];
-  for (const [minPct, fraction] of buckets) {
-    if (pct >= minPct) {
-      return Math.round(max * fraction);
-    }
-  }
-  return 0;
+// Curva contínua (era bucket em degraus de 25% até 2026-08 — trocado porque
+// zerava a dimensão inteira sempre que o match ficava abaixo de 25%, mesmo
+// havendo overlap real. requiredSkills vem do enrichment quebrado em itens
+// atômicos (ver job-enrichment-llm.ts), então vaga com lista bem extraída
+// (10+ itens) tem denominador maior e cai abaixo de 25% com muito mais
+// facilidade que vaga com lista curta — o degrau penalizava justamente a
+// extração mais completa, não a vaga menos aderente. Achado analisando o
+// perfil real de um usuário LEAD: 90% das vagas com área batendo 100%
+// zeravam a dimensão de skills (30% do score) por causa disso.
+function scoreByPercentage(pct: number, max: number): number {
+  return Math.round(max * pct);
 }
 
 @Injectable()
@@ -249,7 +289,7 @@ export class MatchingEngine {
       job.requiredSkills,
       normalizedSet(profile.skills),
     );
-    const skillsScore = scoreByPercentageBucket(skillsResult.pct, 30);
+    const skillsScore = scoreByPercentage(skillsResult.pct, SCORE_MAX.skills);
 
     const technologiesPool = normalizedSet([
       ...profile.skills,
@@ -259,9 +299,9 @@ export class MatchingEngine {
       job.technologies,
       technologiesPool,
     );
-    const technologiesScore = scoreByPercentageBucket(
+    const technologiesScore = scoreByPercentage(
       technologiesResult.pct,
-      15,
+      SCORE_MAX.technologies,
     );
 
     const seniorityScore = this.scoreSeniority(
@@ -348,7 +388,7 @@ export class MatchingEngine {
       return 0;
     }
     if (job.dominantArea && profile.areas.includes(job.dominantArea)) {
-      return 25;
+      return SCORE_MAX.area;
     }
     if (job.areas.some((area) => profile.areas.includes(area))) {
       return 15;
@@ -356,34 +396,41 @@ export class MatchingEngine {
     return 0;
   }
 
+  // Distâncias suavizadas em 2026-08 (eram 20/12/5/0 num máximo de 20) — a
+  // régua anterior zerava por completo qualquer vaga 3+ níveis distante do
+  // perfil, o que é excessivo pra quem está no topo da escala (LEAD/STAFF):
+  // o mercado tem poucas vagas nesses níveis, então zerar a dimensão inteira
+  // por distância>=3 empurrava o teto de score pra baixo de forma
+  // desproporcional. distance===null (algum dos dois lados é UNKNOWN) segue
+  // sem informação suficiente pra penalizar — meio do caminho, não zero.
   private scoreSeniority(
     jobSeniority: SeniorityLevel | null,
     profileSeniority: SeniorityLevel,
   ): number {
     const distance = seniorityDistance(profileSeniority, jobSeniority);
     if (distance === null) {
-      return 10;
+      return 12;
     }
-    if (distance === 0) return 20;
-    if (distance === 1) return 12;
-    if (distance === 2) return 5;
-    return 0;
+    if (distance === 0) return SCORE_MAX.seniority;
+    if (distance === 1) return 18;
+    if (distance === 2) return 10;
+    return 3;
   }
 
   private scoreLanguage(job: ScorableJob, profile: ScorableProfile): number {
     if (job.languageRequirements.length === 0) {
-      return 5;
+      return SCORE_MAX.language;
     }
     const available = normalizedSet(profile.languages);
     const { pct } = matchPercentage(job.languageRequirements, available);
-    if (pct >= 1) return 5;
+    if (pct >= 1) return SCORE_MAX.language;
     if (pct > 0) return 2;
     return 0;
   }
 
   private scoreWorkModel(job: ScorableJob, profile: ScorableProfile): number {
     if (profile.preferredWorkModels.length === 0) {
-      return 5;
+      return SCORE_MAX.workModel;
     }
     if (!job.workModel) {
       return 0;
@@ -391,7 +438,7 @@ export class MatchingEngine {
     return normalizedSet(profile.preferredWorkModels).has(
       normalize(job.workModel),
     )
-      ? 5
+      ? SCORE_MAX.workModel
       : 0;
   }
 }

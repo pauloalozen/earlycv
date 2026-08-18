@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   MatchingEngine,
+  SCORE_MAX,
   type ScorableJob,
   type ScorableProfile,
 } from "./matching.engine";
@@ -136,8 +137,8 @@ test("calculateScore returns 100 for a perfect match", () => {
   assert.equal(result.score, 100);
   assert.deepEqual(result.breakdown, {
     area: 25,
-    skills: 30,
-    seniority: 20,
+    skills: 25,
+    seniority: 25,
     technologies: 15,
     language: 5,
     workModel: 5,
@@ -182,12 +183,12 @@ test("calculateScore breakdown is correct per dimension for a partial match", ()
 
   // area: nao e dominante, mas ha intersecao (SOFTWARE_ENGINEERING) -> 15
   assert.equal(result.breakdown.area, 15);
-  // skills: 2 de 4 = 50% -> 15
-  assert.equal(result.breakdown.skills, 15);
-  // technologies: 2 de 4 = 50% -> 8 (Math.round(15 * 0.5) = 8)
+  // skills: 2 de 4 = 50% -> Math.round(25 * 0.5) = 13
+  assert.equal(result.breakdown.skills, 13);
+  // technologies: 2 de 4 = 50% -> Math.round(15 * 0.5) = 8
   assert.equal(result.breakdown.technologies, 8);
-  // seniority: SENIOR vs LEAD = 1 nivel de distancia -> 12
-  assert.equal(result.breakdown.seniority, 12);
+  // seniority: SENIOR vs LEAD = 1 nivel de distancia -> 18
+  assert.equal(result.breakdown.seniority, 18);
   // language: so 1 dos 2 requeridos -> parcial -> 2
   assert.equal(result.breakdown.language, 2);
   // workModel: hybrid nao esta em preferredWorkModels=[remote] -> 0
@@ -318,4 +319,69 @@ test("calculateScore does not let an unclassified job (dominantArea OTHER, no ex
     realMatchJob.score > unclassifiedJob.score,
     `expected real match (${realMatchJob.score}) to outrank unclassified job (${unclassifiedJob.score})`,
   );
+});
+
+// Regressão do bug real (2026-08): perfil LEAD, ~90% das vagas com área
+// batendo 100% zeravam a dimensão de skills (30% do score na época) porque
+// requiredSkills vem em listas longas e atômicas (ver
+// job-enrichment-llm.ts) — 2 skills batendo em 11 exigidas = 18%, abaixo do
+// degrau de 25%, virava 0 mesmo com overlap real. A curva contínua dá
+// crédito proporcional em vez de zerar.
+test("calculateScore gives proportional credit below the old 25% bucket floor instead of zeroing the whole dimension", () => {
+  const engine = new MatchingEngine({} as never);
+  const result = engine.calculateScore(
+    buildScorableJob({
+      requiredSkills: [
+        "python",
+        "api",
+        "n8n",
+        "zapier",
+        "lovable",
+        "bolt",
+        "ci/cd",
+        "git",
+        "testes automatizados",
+        "aws",
+        "sql",
+      ],
+    }),
+    buildScorableProfile({ skills: ["aws", "ci/cd"] }),
+  );
+
+  // 2 de 11 = 18% -> Math.round(25 * 2/11) = 5, não mais 0.
+  assert.equal(result.breakdown.skills, 5);
+  assert.deepEqual(result.matchedSkills, ["ci/cd", "aws"]);
+});
+
+test("calculateScore normalize() tolera variação de formatação (pontuação/espaço/acento/caixa) sem precisar de sinônimo", () => {
+  const engine = new MatchingEngine({} as never);
+  const result = engine.calculateScore(
+    buildScorableJob({
+      requiredSkills: ["Node.js", "CI/CD", "Não-relacional"],
+      technologies: ["Node.js", "CI/CD", "Não-relacional"],
+    }),
+    buildScorableProfile({
+      skills: ["nodejs", "cicd", "naorelacional"],
+      technologies: ["nodejs", "cicd", "naorelacional"],
+    }),
+  );
+
+  assert.equal(result.breakdown.skills, SCORE_MAX.skills);
+  assert.equal(result.breakdown.technologies, SCORE_MAX.technologies);
+  assert.deepEqual(result.missingSkills, []);
+});
+
+// Régua de distância de senioridade suavizada (2026-08): distância >=3
+// (ex: perfil LEAD/STAFF vs vaga JUNIOR) não zera mais por completo — o
+// mercado tem poucas vagas nos níveis mais altos, então zerar a dimensão
+// inteira empurrava o teto de score pra baixo desproporcionalmente pra
+// quem está no topo da escala.
+test("calculateScore no longer zeroes the seniority dimension for distance >= 3, gives a small floor instead", () => {
+  const engine = new MatchingEngine({} as never);
+  const result = engine.calculateScore(
+    buildScorableJob({ seniority: "JUNIOR" as never }),
+    buildScorableProfile({ seniority: "MANAGER" as never }),
+  );
+
+  assert.equal(result.breakdown.seniority, 3);
 });

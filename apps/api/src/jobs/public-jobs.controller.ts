@@ -18,7 +18,10 @@ import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { OptionalJwtAuthGuard } from "../common/optional-jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
-import { MatchingEngine } from "../radar/matching.engine";
+import {
+  MatchingEngine,
+  scoreToOpportunityLevel,
+} from "../radar/matching.engine";
 import { UserRadarProfileService } from "../radar/user-radar-profile.service";
 import { SavedJobsService } from "../saved-jobs/saved-jobs.service";
 import { JobsService } from "./jobs.service";
@@ -66,6 +69,7 @@ export class PublicJobsController {
     @Query("state") state?: string,
     @Query("city") city?: string,
     @Query("technology") technology?: string,
+    @Query("aderencia") aderenciaRaw?: string,
   ) {
     const validPublishedWithin = ["24h", "3d", "7d"].includes(
       publishedWithin ?? "",
@@ -77,6 +81,18 @@ export class PublicJobsController {
       ? Number.parseInt(minSkillsPctRaw, 10)
       : undefined;
     const excludeAnalyzed = excludeAnalyzedRaw === "true";
+    // "5,4,3" -> {5,4,3}. Categoria de aderência (0-5, ver
+    // scoreToOpportunityLevel em matching.engine.ts) — filtro só existe pra
+    // quem tem score calculável (usuário logado com UserRadarProfile),
+    // igual minScore/minSkillsPct.
+    const aderenciaLevels = aderenciaRaw
+      ? new Set(
+          aderenciaRaw
+            .split(",")
+            .map((v) => Number.parseInt(v.trim(), 10))
+            .filter((v) => Number.isInteger(v) && v >= 0 && v <= 5),
+        )
+      : null;
 
     const parsedPage = Math.max(1, Number.parseInt(page ?? "1", 10) || 1);
     const parsedLimit = Math.min(
@@ -207,8 +223,8 @@ export class PublicJobsController {
       scoredAll.map(({ job }) => job.id),
     );
 
-    // minScore/minSkillsPct só existem quando o usuário ativa o filtro
-    // explicitamente (Radar nunca esconde vaga por conta própria por
+    // minScore/minSkillsPct/aderencia só existem quando o usuário ativa o
+    // filtro explicitamente (Radar nunca esconde vaga por conta própria por
     // padrão) — vagas sem score calculável nunca passam nesses filtros.
     // excludeAnalyzed é o único filtro do Radar que vem ligado por padrão no
     // front (checkbox pré-marcado) — aqui só reage ao que o front mandou.
@@ -217,6 +233,13 @@ export class PublicJobsController {
         return false;
       }
       if (minSkillsPct !== undefined && (item.skillsPct ?? -1) < minSkillsPct) {
+        return false;
+      }
+      if (
+        aderenciaLevels &&
+        (item.match === null ||
+          !aderenciaLevels.has(scoreToOpportunityLevel(item.match.score)))
+      ) {
         return false;
       }
       if (
@@ -267,10 +290,7 @@ export class PublicJobsController {
   @Get("facets")
   @InternalRoles("admin", "superadmin")
   @UseGuards(PublicJobsGhostModeGuard)
-  async getFacets(
-    @Req() _request: Request,
-    @Query("state") state?: string,
-  ) {
+  async getFacets(@Req() _request: Request, @Query("state") state?: string) {
     return this.jobsService.listPublicFacets({ state });
   }
 

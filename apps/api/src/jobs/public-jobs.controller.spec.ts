@@ -250,10 +250,10 @@ test("list includes breakdown/matchedSkills/missingSkills per item", async () =>
   assert.deepEqual(item.matchedSkills.sort(), ["python", "sql"]);
   assert.deepEqual(item.missingSkills, []);
   assert.ok(item.breakdownDetails);
-  assert.deepEqual(
-    item.breakdownDetails.skills.map((i) => i.label).sort(),
-    ["python", "sql"],
-  );
+  assert.deepEqual(item.breakdownDetails.skills.map((i) => i.label).sort(), [
+    "python",
+    "sql",
+  ]);
   assert.ok(item.breakdownDetails.skills.every((i) => i.ok));
 });
 
@@ -463,4 +463,73 @@ test("getScore throws NotFoundException when getPublicBySlug returns null (slug-
     () => controller.getScore(USER, "nao-existe"),
     NotFoundException,
   );
+});
+
+test("list applies aderencia filter by opportunity category, not by raw score", async () => {
+  // buildJob() default (área/skills/senioridade/tech todos batendo o
+  // PROFILE) tira score 100 -> categoria 5. O "low" (sem dado extraído,
+  // dominantArea OTHER) tira score baixo -> categoria 1.
+  const highJob = buildJob({ id: "high" });
+  const lowJob = buildJob({
+    id: "low",
+    enrichment: {
+      enrichmentStatus: "COMPLETED",
+      dominantArea: "OTHER",
+      areas: [],
+      requiredSkills: [],
+      technologies: [],
+      seniority: null,
+      languageRequirements: [],
+    },
+  });
+  const controller = buildController([highJob, lowJob], PROFILE);
+
+  const only5 = await controller.list(
+    undefined as never,
+    USER,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    "5",
+  );
+  assert.deepEqual(
+    only5.data.map((j) => j.id),
+    ["high"],
+  );
+
+  const level1And5 = await controller.list(
+    undefined as never,
+    USER,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    "1,5",
+  );
+  assert.deepEqual(level1And5.data.map((j) => j.id).sort(), ["high", "low"]);
 });
