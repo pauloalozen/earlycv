@@ -1,7 +1,7 @@
 import { ContractType, JobArea, SeniorityLevel } from "@prisma/client";
 import type OpenAI from "openai";
 
-export const JOB_ENRICHMENT_PROMPT_VERSION = "2026-08-11.v5";
+export const JOB_ENRICHMENT_PROMPT_VERSION = "2026-08-18.v6";
 
 const DESCRIPTION_MAX_CHARS = 6000;
 const CAREER_FINGERPRINT_MAX_ITEMS = 6;
@@ -87,6 +87,27 @@ OTHER: qualquer coisa que não se encaixe nas categorias acima
   título use a palavra "produto".
 - "Segurança do Trabalho"/"Engenheiro de Segurança do Trabalho": é segurança
   ocupacional/industrial, NUNCA CYBERSECURITY — classifica como OTHER.
+- "Empresa tradicional → OTHER" (regras acima) é sobre a NATUREZA DO CARGO, não
+  sobre a empresa contratante. Não generalize essa heurística para cargos de
+  TI hands-on só porque o empregador é banco/varejo/indústria/jurídico: um
+  título como "Analista de Sistemas", "Desenvolvedor(a)", "Programador(a)",
+  "Analista/Consultor de TI" cuja descrição trata de configurar, desenvolver,
+  integrar ou dar suporte a sistemas/software/dados é classificável
+  normalmente mesmo em empresa não-tech — nunca caia em OTHER só por a
+  empresa não ser "nativamente tech" quando a descrição já confirma trabalho
+  técnico. Só use OTHER nesses títulos se a descrição revelar que o trabalho
+  é, na prática, outra coisa disfarçada pelo título (ex: "Desenvolvedor de
+  Mercado"/"Desenvolvedor(a) de Negócios" que descrevem visitas a pontos de
+  venda, prospecção comercial ou expansão de negócio — aí "desenvolvedor" não
+  tem nada a ver com software).
+- SAP/ERP — desempate entre ERP_FUNCTIONAL e SOFTWARE_ENGINEERING/DATA_AI:
+  se o cargo é consultor(a) funcional/técnico que configura, parametriza ou dá
+  suporte a módulos do ERP (ex: analista de governança de TI focado em SAP,
+  consultor funcional SAP FI/MM/SD) → ERP_FUNCTIONAL. Se o cargo é
+  developer/engenheiro que constrói/integra pipelines, extrações ou
+  aplicações sobre dados do ERP (ex: "SAP Data Developer", desenvolvimento de
+  ABAP/BTP/integrações customizadas) → SOFTWARE_ENGINEERING ou DATA_AI
+  conforme o foco (dados → DATA_AI, aplicação/integração → SOFTWARE_ENGINEERING).
 
 ## Formato de resposta (JSON estrito, sem texto fora do JSON)
 {

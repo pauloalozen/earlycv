@@ -5,7 +5,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { JobArea, Prisma, SeniorityLevel } from "@prisma/client";
+import {
+  JobArea,
+  type JobStatus,
+  Prisma,
+  SeniorityLevel,
+} from "@prisma/client";
 
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
@@ -223,25 +228,30 @@ export class JobsService {
     search?: string;
     sourceFilter?: string;
     statusFilter?: string;
+    dominantAreaFilter?: string;
+    radarVisibilityFilter?: string;
   }) {
     const page = params.page ?? 1;
     const pageSize = params.pageSize ?? 20;
     const skip = (page - 1) * pageSize;
 
     const where: Prisma.JobWhereInput = {};
+    const and: Prisma.JobWhereInput[] = [];
 
     if (params.search) {
       const term = params.search;
-      where.OR = [
-        { title: { contains: term, mode: "insensitive" } },
-        { locationText: { contains: term, mode: "insensitive" } },
-        { company: { name: { contains: term, mode: "insensitive" } } },
-      ];
+      and.push({
+        OR: [
+          { title: { contains: term, mode: "insensitive" } },
+          { locationText: { contains: term, mode: "insensitive" } },
+          { company: { name: { contains: term, mode: "insensitive" } } },
+        ],
+      });
     }
 
     if (params.sourceFilter) {
       where.jobSource = {
-        sourceName: { equals: params.sourceFilter, mode: "insensitive" },
+        sourceName: { contains: params.sourceFilter, mode: "insensitive" },
       };
     }
 
@@ -249,10 +259,56 @@ export class JobsService {
       where.status = params.statusFilter as Prisma.EnumJobStatusFilter;
     }
 
+    // "sem-enriquecimento" = nenhuma linha JobEnrichment ainda (worker não
+    // rodou); demais valores filtram por dominantArea, inclusive OTHER —
+    // usado pra investigar vagas classificadas fora da taxonomia tech.
+    if (params.dominantAreaFilter === "sem-enriquecimento") {
+      where.enrichment = null;
+    } else if (params.dominantAreaFilter) {
+      where.enrichment = {
+        dominantArea: params.dominantAreaFilter as JobArea,
+      };
+    }
+
+    // Reflete exatamente PUBLIC_JOB_INTEGRITY_WHERE — "oculta" é o
+    // complemento lógico de "visivel", pra diagnosticar por que uma vaga
+    // "active" não aparece no /radar.
+    if (params.radarVisibilityFilter === "visivel") {
+      where.status = "active";
+      where.descriptionClean = { not: "" };
+      where.title = { not: "" };
+      where.slug = { not: null };
+      where.enrichment = {
+        enrichmentStatus: "COMPLETED",
+        dominantArea: { not: "OTHER" },
+      };
+    } else if (params.radarVisibilityFilter === "oculta") {
+      where.status = "active";
+      and.push({
+        OR: [
+          { descriptionClean: "" },
+          { title: "" },
+          { slug: null },
+          { enrichment: null },
+          { enrichment: { enrichmentStatus: { not: "COMPLETED" } } },
+          { enrichment: { dominantArea: "OTHER" } },
+        ],
+      });
+    }
+
+    if (and.length > 0) {
+      where.AND = and;
+    }
+
     const [jobs, total] = await Promise.all([
       this.database.job.findMany({
         where,
-        include: { company: { select: { name: true } } },
+        include: {
+          company: { select: { name: true } },
+          enrichment: {
+            select: { dominantArea: true, enrichmentStatus: true },
+          },
+        },
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
         skip,
         take: pageSize,
@@ -662,7 +718,12 @@ export class JobsService {
       workModels: toSorted(workModelMap),
       areas: toSorted(areaMap),
       seniorities: toSorted(seniorityMap),
-      companies: toSorted(companyMap).slice(0, 20),
+      // Sem cap: o dropdown de empresa no /radar agora tem busca por texto
+      // (filters-bar.tsx), então cortar em 20 escondia empresa real com
+      // vaga visível (ex: Petz) só por não estar entre as 20 com mais
+      // vagas — o corte fazia sentido só quando a lista inteira era
+      // mostrada sem filtro.
+      companies: toSorted(companyMap),
       states: buildStateFacets(states).slice(0, 40),
       cities: groupLocationValues(cities).slice(0, 40),
     };
@@ -706,6 +767,54 @@ export class JobsService {
             : new Date(dto.publishedAtSource),
       },
     });
+  }
+
+  // Correção manual de classificação errada do enrichment (ex: LLM jogou em
+  // OTHER uma vaga tech de empresa não-nativamente-tech). O worker de
+  // enriquecimento só processa enrichmentStatus=PENDING (ver
+  // job-enrichment.worker.ts), então esse override nunca é sobrescrito por
+  // um reprocessamento futuro do mesmo job.
+  async reclassifyDominantArea(jobId: string, dominantArea: JobArea) {
+    const job = await this.database.job.findUnique({
+      where: { id: jobId },
+      include: { enrichment: true },
+    });
+
+    if (!job) {
+      throw new NotFoundException("job not found");
+    }
+
+    if (!job.enrichment) {
+      throw new BadRequestException(
+        "job has no enrichment record to reclassify",
+      );
+    }
+
+    await this.database.jobEnrichment.update({
+      where: { jobId },
+      data: {
+        dominantArea,
+        areas: { set: [dominantArea] },
+      },
+    });
+
+    return this.getByIdWithEnrichment(jobId);
+  }
+
+  // Botão "desativar/ativar todas as vagas da fonte" no admin — pra quando
+  // a fonte inteira foi cadastrada errada (ex: board Lever global trazendo
+  // vaga de outro país que passou pelo filtro isForeignLocation por engano,
+  // caso real: LOUIS DREYFUS BR/Romênia) e o volume de vagas já ingeridas
+  // torna reclassificar uma a uma inviável.
+  async bulkSetStatusByJobSource(jobSourceId: string, status: JobStatus) {
+    const jobSource = await this.jobSourcesService.getById(jobSourceId);
+
+    const { count } = await this.database.job.updateMany({
+      data: { status },
+      where: { jobSourceId: jobSource.id },
+    });
+
+    return { count, status } as const;
   }
 
   async remove(jobId: string) {

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import {
+  bulkSetJobsStatusByJobSource,
   bulkUpdateJobSourceActive,
   bulkUpdateJobSourceSchedule,
   cancelManualRun,
@@ -613,5 +614,42 @@ export async function cancelManualRunAction(formData: FormData) {
 
   redirect(
     buildAdminRedirect(redirectPath, "success", "Cancelamento solicitado."),
+  );
+}
+
+export async function bulkSetJobsStatusByJobSourceAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const jobSourceId = String(formData.get("jobSourceId") ?? "").trim();
+  const status = String(formData.get("status") ?? "").trim();
+
+  if (!jobSourceId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe a fonte."));
+  }
+  if (status !== "active" && status !== "inactive") {
+    redirect(buildAdminRedirect(redirectPath, "error", "Status invalido."));
+  }
+
+  let result: { count: number; status: string };
+  try {
+    result = await bulkSetJobsStatusByJobSource(jobSourceId, status);
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Falha ao alterar status das vagas da fonte.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  redirect(
+    buildAdminRedirect(
+      redirectPath,
+      "success",
+      `${result.count} vaga(s) marcada(s) como "${result.status}".`,
+    ),
   );
 }
