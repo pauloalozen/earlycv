@@ -681,6 +681,27 @@ export async function bulkUpdateJobSourceActive(
   });
 }
 
+// Botão "desativar/ativar todas as vagas da fonte" — pra quando a fonte
+// inteira foi cadastrada errada e o volume de vagas já ingeridas torna
+// corrigir uma a uma inviável (ver isForeignLocation em geo-normalizer.ts).
+export async function bulkSetJobsStatusByJobSource(
+  jobSourceId: string,
+  status: "active" | "inactive" | "removed",
+  token?: string,
+) {
+  return apiRequest<{ count: number; status: string }>(
+    `/jobs/by-source/${jobSourceId}`,
+    token,
+    {
+      body: JSON.stringify({ status }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "PUT",
+    },
+  );
+}
+
 export type DuplicateJobSourceGroup = {
   count: number;
   sourceType: string;

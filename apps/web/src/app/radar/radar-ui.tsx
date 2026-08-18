@@ -108,7 +108,7 @@ export type OpportunityLevelInfo = {
   darkFg: string;
 };
 
-const OPPORTUNITY_LEVELS: OpportunityLevelInfo[] = [
+export const OPPORTUNITY_LEVELS: OpportunityLevelInfo[] = [
   {
     level: 0,
     label: "Não recomendada",
@@ -344,8 +344,8 @@ export type MatchData = {
 // barra ou cor por faixa.
 export const BREAKDOWN_MAX: Record<keyof MatchBreakdown, number> = {
   area: 25,
-  skills: 30,
-  seniority: 20,
+  skills: 25,
+  seniority: 25,
   technologies: 15,
   language: 5,
   workModel: 5,

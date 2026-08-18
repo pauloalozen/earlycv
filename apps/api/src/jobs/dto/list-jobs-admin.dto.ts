@@ -29,4 +29,14 @@ export class ListJobsAdminDto {
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   @IsString()
   statusFilter?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  dominantAreaFilter?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  radarVisibilityFilter?: string;
 }

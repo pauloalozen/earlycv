@@ -307,8 +307,25 @@ function splitCountryTokens(value: string): string[] {
 // cada adapter trata esse token como country (não como cidade) — BTG
 // Pactual, Banco PAN, Braze Brasil e outras vagas BR reais estavam sendo
 // descartadas por isso. Reconhece como Brasil quando o valor (ou algum
-// token dele, em location composto) é "remoto"/"remote" ou bate com uma UF
-// brasileira via normalizeState.
+// token dele, em location composto) é "remoto"/"remote" ou bate com o NOME
+// POR EXTENSO de uma UF brasileira (ex: "São Paulo").
+//
+// Propositalmente NÃO usa normalizeState() aqui (que também aceita sigla de
+// 2 letras) — bug real encontrado em produção (LOUIS DREYFUS BR, board
+// Lever global): posting.country="RO" (código ISO do país Romênia) colide
+// com a sigla da UF Rondônia, então normalizeState("RO") retornava a UF e a
+// vaga de Bucareste era aceita como brasileira. Sigla de 2 letras isolada
+// (sem nome por extenso) é ambígua com dezenas de códigos ISO-3166-1
+// alpha-2 (RO=Romênia, PA=Panamá, PE=Peru, SE=Suécia, TO=Tonga,
+// AL=Albânia, MA=Marrocos, MT=Malta, BA=Bósnia, SC=Seicheles...) — quando o
+// adapter manda country estruturado (Ashby/Teamtailor/Talentbrew/Workday/
+// Lever via posting.country), esse valor é sempre um código de país real,
+// nunca uma UF brasileira, então nunca deve ser resolvido via sigla.
+function isBrazilianStateFullNameToken(token: string): boolean {
+  const key = normalizeLookupKey(token);
+  return STATE_SIGLA_BY_NORMALIZED_NAME.has(key);
+}
+
 function isBrazilianCountryValue(value: string): boolean {
   const key = normalizeLookupKey(value);
   if (BRAZIL_COUNTRY_NAMES.has(key) || key === "remoto" || key === "remote") {
@@ -318,7 +335,9 @@ function isBrazilianCountryValue(value: string): boolean {
   return splitCountryTokens(value).some((token) => {
     const tokenKey = normalizeLookupKey(token);
     return (
-      tokenKey === "remoto" || tokenKey === "remote" || normalizeState(token) !== null
+      tokenKey === "remoto" ||
+      tokenKey === "remote" ||
+      isBrazilianStateFullNameToken(token)
     );
   });
 }

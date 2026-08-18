@@ -85,6 +85,9 @@ export type PublicJobsFilters = {
   state?: string;
   city?: string;
   technology?: string;
+  // CSV de níveis de categoria de aderência (0-5, ver opportunityLevel em
+  // radar-ui.tsx) — ex: "5,4,3".
+  aderencia?: string;
 };
 
 export type FacetItem = { value: string; count: number };
@@ -137,6 +140,7 @@ export async function listPublicJobs(
   if (filters?.state) params.set("state", filters.state);
   if (filters?.city) params.set("city", filters.city);
   if (filters?.technology) params.set("technology", filters.technology);
+  if (filters?.aderencia) params.set("aderencia", filters.aderencia);
 
   const qs = params.toString();
   return requestPublicJobs<PublicJobsPage>(`/public/jobs${qs ? `?${qs}` : ""}`);

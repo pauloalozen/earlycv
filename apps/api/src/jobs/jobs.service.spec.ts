@@ -427,3 +427,168 @@ test("listPublicJobsByTech filters by requiredSkills OR technologies once at/abo
     { technologies: { has: "python" } },
   ]);
 });
+
+test("reclassifyDominantArea updates JobEnrichment.dominantArea and areas for a job that has enrichment", async () => {
+  const updateCalls: Array<{ where: unknown; data: unknown }> = [];
+  const database = {
+    job: {
+      findUnique: async () => ({
+        id: "job-1",
+        enrichment: { dominantArea: "OTHER" },
+      }),
+    },
+    jobEnrichment: {
+      update: async (args: { where: unknown; data: unknown }) => {
+        updateCalls.push(args);
+        return {};
+      },
+    },
+  };
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  await service.reclassifyDominantArea(
+    "job-1",
+    "SOFTWARE_ENGINEERING" as never,
+  );
+
+  assert.deepEqual(updateCalls[0]?.where, { jobId: "job-1" });
+  assert.deepEqual(updateCalls[0]?.data, {
+    dominantArea: "SOFTWARE_ENGINEERING",
+    areas: { set: ["SOFTWARE_ENGINEERING"] },
+  });
+});
+
+test("reclassifyDominantArea rejects a job that has no enrichment record", async () => {
+  const database = {
+    job: {
+      findUnique: async () => ({ id: "job-1", enrichment: null }),
+    },
+  };
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  await assert.rejects(() =>
+    service.reclassifyDominantArea("job-1", "SOFTWARE_ENGINEERING" as never),
+  );
+});
+
+test("reclassifyDominantArea rejects an unknown job id", async () => {
+  const database = {
+    job: {
+      findUnique: async () => null,
+    },
+  };
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  await assert.rejects(() =>
+    service.reclassifyDominantArea("missing", "SOFTWARE_ENGINEERING" as never),
+  );
+});
+
+// listAdmin combina busca por texto (search) e o filtro radarVisibilityFilter
+// via where.AND — antes desse fix os dois usavam where.OR diretamente e um
+// sobrescrevia o outro, o que fazia o filtro "oculta" (ou a busca, dependendo
+// da ordem) virar um OR solto sem exigir os dois grupos de condição ao mesmo
+// tempo.
+test("listAdmin combines search and radarVisibilityFilter=oculta as independent AND groups, not a single merged OR", async () => {
+  const calls: Array<{ where: unknown }> = [];
+  const database = {
+    job: {
+      findMany: async (args: { where: unknown }) => {
+        calls.push({ where: args.where });
+        return [];
+      },
+      count: async () => 0,
+    },
+  };
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  await service.listAdmin({
+    search: "java",
+    radarVisibilityFilter: "oculta",
+  });
+
+  const where = calls[0]?.where as {
+    status?: string;
+    AND?: Array<{ OR?: Array<Record<string, unknown>> }>;
+  };
+  assert.equal(where.status, "active");
+  assert.equal(where.AND?.length, 2);
+  assert.deepEqual(
+    where.AND?.[0]?.OR?.map((c) => Object.keys(c)[0]),
+    ["title", "locationText", "company"],
+  );
+  assert.deepEqual(
+    where.AND?.[1]?.OR?.map((c) => Object.keys(c)[0]),
+    [
+      "descriptionClean",
+      "title",
+      "slug",
+      "enrichment",
+      "enrichment",
+      "enrichment",
+    ],
+  );
+});
+
+test("bulkSetStatusByJobSource atualiza status de todas as vagas da fonte e valida que a fonte existe", async () => {
+  const updateManyCalls: Array<{ where: unknown; data: unknown }> = [];
+  const database = {
+    job: {
+      updateMany: async (args: { where: unknown; data: unknown }) => {
+        updateManyCalls.push(args);
+        return { count: 5 };
+      },
+    },
+  };
+  const jobSourcesService = {
+    getById: async (id: string) => ({ id }),
+  };
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    jobSourcesService as never,
+  );
+
+  const result = await service.bulkSetStatusByJobSource(
+    "source-1",
+    "inactive" as never,
+  );
+
+  assert.deepEqual(result, { count: 5, status: "inactive" });
+  assert.deepEqual(updateManyCalls[0]?.where, { jobSourceId: "source-1" });
+  assert.deepEqual(updateManyCalls[0]?.data, { status: "inactive" });
+});
+
+test("bulkSetStatusByJobSource propaga erro quando a fonte não existe (getById lança)", async () => {
+  const database = { job: { updateMany: async () => ({ count: 0 }) } };
+  const jobSourcesService = {
+    getById: async () => {
+      throw new Error("job source not found");
+    },
+  };
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    jobSourcesService as never,
+  );
+
+  await assert.rejects(() =>
+    service.bulkSetStatusByJobSource("missing", "active" as never),
+  );
+});

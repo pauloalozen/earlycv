@@ -14,7 +14,12 @@ const FACETS = {
   workModels: [{ value: "remote", count: 3 }],
   areas: [{ value: "DATA_AI", count: 5 }],
   seniorities: [{ value: "SENIOR", count: 2 }],
-  companies: [{ value: "EarlyCV", count: 1 }],
+  companies: [
+    { value: "EarlyCV", count: 1 },
+    { value: "SND SOLUCOES TECNOLOGIA", count: 4 },
+    { value: "CI&T", count: 2 },
+    { value: "AB InBev Brasil", count: 3 },
+  ],
   states: [{ value: "SP", label: "São Paulo", count: 4 }],
   cities: [{ value: "São Paulo", count: 4 }],
 };
@@ -137,6 +142,64 @@ describe("FiltersBar", () => {
     expect(new URL(url, "http://localhost").searchParams.get("area")).not.toBe(
       "DATA_AI,SOFTWARE_ENGINEERING",
     );
+  });
+
+  it("normalizes ALL CAPS company names to Title Case in the EMPRESA dropdown, keeps short acronyms and already-mixed-case names untouched", () => {
+    const { container } = render(
+      <FiltersBar facets={FACETS} activeFilters={{}} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /mais filtros/ }));
+    fireEvent.click(screen.getByText("EMPRESA"));
+
+    // "SND" tem 3 letras (<=4): mantém sigla em caixa alta; o resto vira
+    // Title Case.
+    expect(container.textContent).toContain("SND Solucoes Tecnologia");
+    expect(container.textContent).not.toContain("SND SOLUCOES TECNOLOGIA");
+    // sigla curta (<=4 letras): mantém caixa alta
+    expect(container.textContent).toContain("CI&T");
+    // já em capitalização mista (deliberada): não mexe
+    expect(container.textContent).toContain("AB InBev Brasil");
+  });
+
+  it("renders the ADERÊNCIA dropdown with the 5 opportunity categories and applies it as a CSV filter", () => {
+    render(<FiltersBar facets={FACETS} activeFilters={{}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /mais filtros/ }));
+    fireEvent.click(screen.getByText("ADERÊNCIA"));
+
+    expect(screen.getByText("Excelente oportunidade")).toBeInTheDocument();
+    expect(screen.getByText("Muito aderente")).toBeInTheDocument();
+    expect(screen.getByText("Aderente")).toBeInTheDocument();
+    expect(screen.getByText("Pouco aderente")).toBeInTheDocument();
+    expect(screen.getByText("Baixa aderência")).toBeInTheDocument();
+    // nível 0 ("Não recomendada") não é uma opção do filtro
+    expect(screen.queryByText("Não recomendada")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Muito aderente"));
+    fireEvent.click(screen.getByText("Aderente"));
+    fireEvent.click(screen.getByRole("button", { name: "aplicar filtros" }));
+
+    expect(push).toHaveBeenCalledTimes(1);
+    const url = push.mock.calls[0][0] as string;
+    const aderencia = new URL(url, "http://localhost").searchParams.get(
+      "aderencia",
+    );
+    expect(aderencia?.split(",").sort()).toEqual(["3", "4"]);
+  });
+
+  it("hides the ADERÊNCIA filter when hiddenFilters includes it (no personalized score to filter by)", () => {
+    render(
+      <FiltersBar
+        facets={FACETS}
+        activeFilters={{}}
+        hiddenFilters={["aderencia"]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /mais filtros/ }));
+
+    expect(screen.queryByText("ADERÊNCIA")).not.toBeInTheDocument();
   });
 
   it("limpar tudo clears every active filter and navigates", () => {

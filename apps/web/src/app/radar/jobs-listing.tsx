@@ -60,6 +60,7 @@ export type RadarSearchParams = {
   cidade?: string;
   publicada?: string;
   minSkillsPct?: string;
+  aderencia?: string;
   sort?: string;
   page?: string;
   excludeAnalyzed?: string;
@@ -586,6 +587,7 @@ export async function RadarJobsListing({
   const cidade = params.cidade;
   const publicada = params.publicada;
   const minSkillsPct = params.minSkillsPct;
+  const aderencia = params.aderencia;
   const sort: SortValue = SORT_VALUES.includes(params.sort as SortValue)
     ? (params.sort as SortValue)
     : "score_desc";
@@ -620,6 +622,7 @@ export async function RadarJobsListing({
       minSkillsPct: minSkillsPct
         ? Number.parseInt(minSkillsPct, 10)
         : undefined,
+      aderencia,
       sort,
       excludeAnalyzed,
     }),
@@ -661,6 +664,7 @@ export async function RadarJobsListing({
     estado,
     cidade,
     minSkillsPct,
+    aderencia,
     sort,
     excludeAnalyzed: excludeAnalyzed ? undefined : "false",
   };
@@ -669,8 +673,14 @@ export async function RadarJobsListing({
     isModalidadeFixed ? ("modalidade" as const) : null,
     isSeniorityFixed ? ("senioridade" as const) : null,
     isEmpresaFixed ? ("empresa" as const) : null,
+    // Sem UserRadarProfile não existe score calculável — filtrar por
+    // categoria de aderência não faz sentido nesse estado (mesmo motivo do
+    // backend rejeitar minScore/minSkillsPct sem score, ver
+    // public-jobs.controller.ts).
+    scoreState !== "has-cv" ? ("aderencia" as const) : null,
   ].filter(
-    (v): v is "area" | "modalidade" | "senioridade" | "empresa" => v !== null,
+    (v): v is "area" | "modalidade" | "senioridade" | "empresa" | "aderencia" =>
+      v !== null,
   );
 
   function buildPageUrl(targetPage: number) {
@@ -685,6 +695,7 @@ export async function RadarJobsListing({
     if (estado) p.set("estado", estado);
     if (cidade) p.set("cidade", cidade);
     if (minSkillsPct) p.set("minSkillsPct", minSkillsPct);
+    if (aderencia) p.set("aderencia", aderencia);
     if (sort) p.set("sort", sort);
     if (!excludeAnalyzed) p.set("excludeAnalyzed", "false");
     p.set("page", String(targetPage));
@@ -703,6 +714,7 @@ export async function RadarJobsListing({
     if (estado) p.set("estado", estado);
     if (cidade) p.set("cidade", cidade);
     if (minSkillsPct) p.set("minSkillsPct", minSkillsPct);
+    if (aderencia) p.set("aderencia", aderencia);
     if (sortValue !== "score_desc") p.set("sort", sortValue);
     if (!excludeAnalyzed) p.set("excludeAnalyzed", "false");
     const qs = p.toString();
@@ -721,6 +733,7 @@ export async function RadarJobsListing({
     if (estado) p.set("estado", estado);
     if (cidade) p.set("cidade", cidade);
     if (minSkillsPct) p.set("minSkillsPct", minSkillsPct);
+    if (aderencia) p.set("aderencia", aderencia);
     if (sort) p.set("sort", sort);
     if (excludeAnalyzed) p.set("excludeAnalyzed", "false");
     const qs = p.toString();

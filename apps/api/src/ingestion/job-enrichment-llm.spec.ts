@@ -7,8 +7,8 @@ import {
 } from "./job-enrichment-llm";
 
 describe("JOB_ENRICHMENT_PROMPT_VERSION", () => {
-  it("está na v4", () => {
-    expect(JOB_ENRICHMENT_PROMPT_VERSION).toBe("2026-08-08.v4");
+  it("está na v6", () => {
+    expect(JOB_ENRICHMENT_PROMPT_VERSION).toBe("2026-08-18.v6");
   });
 });
 
@@ -45,6 +45,24 @@ describe("SYSTEM_PROMPT — taxonomia de áreas Sprint 7", () => {
   it("inclui regra de Customer Success só CX_DIGITAL em produto digital", () => {
     expect(SYSTEM_PROMPT).toContain(
       "CS comercial/vendas em empresa não-tech → OTHER.",
+    );
+  });
+
+  // Regressão: vagas claramente tech (Analista de Sistemas, Desenvolvedor)
+  // caindo em OTHER só por a empresa ser banco/varejo/jurídico, mesmo sem
+  // nenhuma regra pedindo isso — o modelo generalizava demais a heurística
+  // "empresa tradicional → OTHER" pensada pra SDR/CS/produto.
+  it("inclui regra deixando explícito que cargo de TI hands-on não vira OTHER só por a empresa não ser tech", () => {
+    expect(SYSTEM_PROMPT).toContain("sobre a empresa contratante");
+    expect(SYSTEM_PROMPT).toContain(
+      "prospecção comercial ou expansão de negócio",
+    );
+  });
+
+  it("inclui regra de desempate SAP developer (SOFTWARE_ENGINEERING/DATA_AI) vs consultor funcional (ERP_FUNCTIONAL)", () => {
+    expect(SYSTEM_PROMPT).toContain("SAP Data Developer");
+    expect(SYSTEM_PROMPT).toContain(
+      "ERP_FUNCTIONAL. Se o cargo é\n  developer/engenheiro",
     );
   });
 });

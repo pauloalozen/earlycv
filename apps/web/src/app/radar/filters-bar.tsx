@@ -4,7 +4,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import type { FacetItem, PublicJobFacets } from "@/lib/public-jobs-api";
-import { RADAR_AREA_LABELS, RADAR_SENIORITY_LABELS } from "./radar-ui";
+import {
+  OPPORTUNITY_LEVELS,
+  RADAR_AREA_LABELS,
+  RADAR_SENIORITY_LABELS,
+} from "./radar-ui";
 
 const MONO = "var(--font-geist-mono), monospace";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -14,6 +18,31 @@ const WORK_MODEL_LABELS: Record<string, string> = {
   hybrid: "Híbrido",
   "on-site": "Presencial",
 };
+
+// Company.name vem cru do crawler — muitas fontes mandam tudo em CAIXA
+// ALTA ("SND SOLUCOES TECNOLOGIA"), outras já vêm com capitalização normal
+// ("BTG Pactual", "AB InBev Brasil"). Normaliza só o texto exibido no
+// seletor de empresa do /radar (não mexe em Company.name no banco nem em
+// outras telas) pra não misturar os dois estilos na mesma lista.
+//
+// Palavra que já tem alguma letra minúscula fica intocada — é sinal de
+// capitalização deliberada (ex: "InBev", "PagSeguro"), então blindar é mais
+// seguro que tentar "corrigir" e acabar quebrando a marca. Palavra 100%
+// maiúscula com até 4 letras (ignorando símbolos como "&") é tratada como
+// sigla e mantida em caixa alta ("BTG", "CSN", "CI&T", "J&F"); acima disso
+// vira Title Case ("SOLUCOES" -> "Solucoes").
+function formatCompanyLabel(name: string): string {
+  return name
+    .split(" ")
+    .map((word) => {
+      if (word === "") return word;
+      if (word !== word.toUpperCase()) return word;
+      const letterCount = word.replace(/[^A-Za-zÀ-ÿ]/g, "").length;
+      if (letterCount === 0 || letterCount <= 4) return word;
+      return word[0] + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
 
 const PUBLISHED_OPTIONS = [
   { value: "hoje", label: "Últimas 24h" },
@@ -31,10 +60,16 @@ export type ActiveFilters = {
   estado?: string;
   cidade?: string;
   minSkillsPct?: string;
+  // CSV de categorias de aderência (5,4,3,2,1 — sem 0/"não recomendada",
+  // que não é uma faixa que faz sentido filtrar por "ver mais disso").
+  aderencia?: string;
   sort?: string;
   // undefined = filtro ligado (default); "false" = usuário desmarcou.
   excludeAnalyzed?: string;
 };
+
+// Só 5..1 — nível 0 ("Não recomendada") não é uma opção do filtro.
+const ADERENCIA_LEVELS = [5, 4, 3, 2, 1] as const;
 
 function csv(value?: string): string[] {
   return value ? value.split(",").filter(Boolean) : [];
@@ -255,6 +290,10 @@ type MultiFilterDropdownProps = {
   onToggle: (value: string) => void;
   onClear: () => void;
   variant?: DropdownVariant;
+  // ESTADO/CIDADE/EMPRESA usam (listas grandes demais pra rolar
+  // procurando) — SENIORIDADE/ÁREA/MODALIDADE/PUBLICADO continuam sem
+  // busca, sem mudar o visual deles.
+  searchable?: boolean;
 };
 
 function MultiFilterDropdown({
@@ -265,9 +304,16 @@ function MultiFilterDropdown({
   onToggle,
   onClear,
   variant = "pill",
+  searchable = false,
 }: MultiFilterDropdownProps) {
+  const [search, setSearch] = useState("");
   if (options.length === 0) return null;
   const isActive = selected.length > 0;
+  const visibleOptions = searchable
+    ? options.filter((o) =>
+        o.label.toLowerCase().includes(search.trim().toLowerCase()),
+      )
+    : options;
   // Rótulo com largura previsível — listar todos os valores selecionados
   // faria a pill crescer sem limite e quebrar a linha de filtros (ex:
   // "Remoto, Híbrido, onsite"). Acima de 1 item, mostra só a contagem.
@@ -298,6 +344,28 @@ function MultiFilterDropdown({
         isActive={isActive}
       />
       <DropdownMenu>
+        {searchable ? (
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={`Buscar ${label.toLowerCase()}…`}
+            style={{
+              display: "block",
+              width: "100%",
+              boxSizing: "border-box",
+              margin: "0 0 6px",
+              padding: "7px 10px",
+              borderRadius: 7,
+              fontSize: 13,
+              fontFamily: GEIST,
+              color: "#0a0a0a",
+              background: "#fbfbf7",
+              border: "1px solid rgba(10,10,10,0.1)",
+              outline: "none",
+            }}
+          />
+        ) : null}
         <button
           type="button"
           onClick={onClear}
@@ -318,7 +386,19 @@ function MultiFilterDropdown({
         >
           {allLabel}
         </button>
-        {options.map((opt) => {
+        {searchable && visibleOptions.length === 0 ? (
+          <p
+            style={{
+              margin: 0,
+              padding: "7px 10px",
+              fontSize: 12.5,
+              color: "#8a8a85",
+            }}
+          >
+            Nenhum resultado encontrado.
+          </p>
+        ) : null}
+        {visibleOptions.map((opt) => {
           const checked = selected.includes(opt.value);
           return (
             <button
@@ -466,7 +546,9 @@ type FiltersBarProps = {
   // chip bloqueado ou removível). O valor fixo em si não passa por aqui —
   // quem decide o filtro fixo é a camada de dados (RadarJobsListing); esta
   // prop só esconde o controle.
-  hiddenFilters?: Array<"area" | "modalidade" | "senioridade" | "empresa">;
+  hiddenFilters?: Array<
+    "area" | "modalidade" | "senioridade" | "empresa" | "aderencia"
+  >;
 };
 
 export function FiltersBar({
@@ -488,6 +570,9 @@ export function FiltersBar({
   const [empresa, setEmpresa] = useState<string[]>(csv(activeFilters.empresa));
   const [estado, setEstado] = useState<string[]>(csv(activeFilters.estado));
   const [cidade, setCidade] = useState<string[]>(csv(activeFilters.cidade));
+  const [aderencia, setAderencia] = useState<string[]>(
+    csv(activeFilters.aderencia),
+  );
   // Cidade é escopada pro estado no backend (ver comentário em toggleEstado)
   // — os facets vindos do server só refletem o estado já aplicado na URL,
   // então qualquer seleção de estado ainda pendente teria cidades erradas
@@ -558,7 +643,7 @@ export function FiltersBar({
   const companyItems = facets
     ? facets.companies.map((f) => ({
         value: f.value,
-        label: f.value,
+        label: formatCompanyLabel(f.value),
         count: f.count,
       }))
     : [];
@@ -580,11 +665,22 @@ export function FiltersBar({
       }))
     : [];
 
+  // Sem count — categoria de aderência não vem como facet da API (é
+  // calculada em cima do score, não é uma coluna facetável no banco).
+  const aderenciaItems = ADERENCIA_LEVELS.map((level) => ({
+    value: String(level),
+    label: OPPORTUNITY_LEVELS[level].label,
+  }));
+
   // Contagem separada por seção: primária (sempre visível) vs adicional
   // (dentro do painel "mais filtros") — o badge do botão "mais filtros" só
   // reflete a segunda.
   const additionalPendingCount =
-    estado.length + cidade.length + empresa.length + (publicada ? 1 : 0);
+    estado.length +
+    cidade.length +
+    empresa.length +
+    aderencia.length +
+    (publicada ? 1 : 0);
   const pendingCount =
     modalidade.length +
     senioridade.length +
@@ -603,6 +699,7 @@ export function FiltersBar({
     !sameSet(empresa, csv(activeFilters.empresa)) ||
     !sameSet(estado, csv(activeFilters.estado)) ||
     !sameSet(cidade, csv(activeFilters.cidade)) ||
+    !sameSet(aderencia, csv(activeFilters.aderencia)) ||
     publicada !== (activeFilters.publicada ?? "");
 
   function toggle(list: string[], set: (v: string[]) => void, value: string) {
@@ -637,6 +734,7 @@ export function FiltersBar({
       estado: activeFilters.estado,
       cidade: activeFilters.cidade,
       publicada: activeFilters.publicada,
+      aderencia: activeFilters.aderencia,
       sort: activeFilters.sort,
       excludeAnalyzed:
         activeFilters.excludeAnalyzed === "false" ? "false" : undefined,
@@ -660,6 +758,7 @@ export function FiltersBar({
     if (estado.length > 0) p.set("estado", estado.join(","));
     if (cidade.length > 0) p.set("cidade", cidade.join(","));
     if (publicada) p.set("publicada", publicada);
+    if (aderencia.length > 0) p.set("aderencia", aderencia.join(","));
     if (activeFilters.minSkillsPct)
       p.set("minSkillsPct", activeFilters.minSkillsPct);
     if (activeFilters.sort) p.set("sort", activeFilters.sort);
@@ -679,6 +778,7 @@ export function FiltersBar({
     setEstado([]);
     setCidade([]);
     setPublicada("");
+    setAderencia([]);
 
     // Navega direto — botões de "limpar" são ações decisivas, diferente dos
     // toggles individuais, que ficam pendentes até aplicar. minSkillsPct
@@ -694,7 +794,7 @@ export function FiltersBar({
     router.push(`${basePath}${qs ? `?${qs}` : ""}`);
   }
 
-  // Limpa só os 4 campos do painel "mais filtros" (local + já aplicado),
+  // Limpa só os campos do painel "mais filtros" (local + já aplicado),
   // preservando busca/área/modalidade/senioridade aplicados — mesma lógica
   // "decisiva, navega na hora" de clearAll().
   function clearAdditional() {
@@ -702,12 +802,14 @@ export function FiltersBar({
     setCidade([]);
     setEmpresa([]);
     setPublicada("");
+    setAderencia([]);
 
     const p = buildAppliedParams({
       empresa: undefined,
       estado: undefined,
       cidade: undefined,
       publicada: undefined,
+      aderencia: undefined,
     });
     const qs = p.toString();
     router.push(`${basePath}${qs ? `?${qs}` : ""}`);
@@ -779,7 +881,13 @@ export function FiltersBar({
     filterKey: "empresa" as const,
     value: v,
     filterLabel: "empresa",
-    valueLabel: v,
+    valueLabel: formatCompanyLabel(v),
+  }));
+  const aderenciaTags = csv(activeFilters.aderencia).map((v) => ({
+    filterKey: "aderencia" as const,
+    value: v,
+    filterLabel: "aderência",
+    valueLabel: OPPORTUNITY_LEVELS[Number(v) as 1 | 2 | 3 | 4 | 5]?.label ?? v,
   }));
   const publicadaTags = activeFilters.publicada
     ? [
@@ -812,6 +920,7 @@ export function FiltersBar({
     ...estadoTags,
     ...cidadeTags,
     ...empresaTags,
+    ...aderenciaTags,
     ...publicadaTags,
   ];
 
@@ -1190,6 +1299,7 @@ export function FiltersBar({
                   onToggle={toggleEstado}
                   onClear={clearEstado}
                   variant="field"
+                  searchable
                 />
                 <MultiFilterDropdown
                   label="CIDADE"
@@ -1199,6 +1309,7 @@ export function FiltersBar({
                   onToggle={(v) => toggle(cidade, setCidade, v)}
                   onClear={() => setCidade([])}
                   variant="field"
+                  searchable
                 />
                 {hiddenFilters.includes("empresa") ? null : (
                   <MultiFilterDropdown
@@ -1209,6 +1320,7 @@ export function FiltersBar({
                     onToggle={(v) => toggle(empresa, setEmpresa, v)}
                     onClear={() => setEmpresa([])}
                     variant="field"
+                    searchable
                   />
                 )}
                 <SingleFilterDropdown
@@ -1219,6 +1331,17 @@ export function FiltersBar({
                   onSelect={setPublicada}
                   variant="field"
                 />
+                {hiddenFilters.includes("aderencia") ? null : (
+                  <MultiFilterDropdown
+                    label="ADERÊNCIA"
+                    allLabel="todas"
+                    options={aderenciaItems}
+                    selected={aderencia}
+                    onToggle={(v) => toggle(aderencia, setAderencia, v)}
+                    onClear={() => setAderencia([])}
+                    variant="field"
+                  />
+                )}
               </div>
 
               {additionalPendingCount > 0 ? (

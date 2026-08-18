@@ -6,10 +6,12 @@ import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { BulkJobsStatusForm } from "../_components/bulk-jobs-status-form";
 import { JobSourceScheduleForm } from "../_components/job-source-schedule-form";
 import { humanScheduleLabel } from "../_components/job-source-schedule-format";
 import { RunSourceSubmitButton } from "../_components/run-source-submit-button";
 import {
+  bulkSetJobsStatusByJobSourceAction,
   runJobSourceAction,
   updateJobSourceAction,
   updateJobSourceScheduleAction,
@@ -251,6 +253,34 @@ export default async function JobSourceAdminPage({
                 </button>
               </div>
             </form>
+          </Card>
+
+          <Card className="space-y-4" padding="lg">
+            <h2 className="text-lg font-bold tracking-tight">
+              Vagas desta fonte
+            </h2>
+            <p className="text-sm text-stone-600">
+              Ativa/desativa em massa todas as vagas já ingeridas dessa fonte —
+              use quando a fonte foi cadastrada errada (adapter ou país errado)
+              e as vagas já publicadas precisam sair do radar de uma vez, sem
+              editar uma por uma.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <BulkJobsStatusForm
+                action={bulkSetJobsStatusByJobSourceAction}
+                jobSourceId={source.id}
+                redirectPath={redirectPath}
+                sourceName={source.sourceName}
+                status="inactive"
+              />
+              <BulkJobsStatusForm
+                action={bulkSetJobsStatusByJobSourceAction}
+                jobSourceId={source.id}
+                redirectPath={redirectPath}
+                sourceName={source.sourceName}
+                status="active"
+              />
+            </div>
           </Card>
 
           <Card className="space-y-4" padding="lg">

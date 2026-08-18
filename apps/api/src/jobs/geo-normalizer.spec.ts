@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { isForeignLocation, normalizeCity, normalizeState } from "./geo-normalizer";
+import {
+  isForeignLocation,
+  normalizeCity,
+  normalizeState,
+} from "./geo-normalizer";
 
 test("normalizeState resolves sigla, nome por extenso e variações de caixa/acento pra mesma UF", () => {
   assert.deepEqual(normalizeState("SP"), { sigla: "SP", nome: "São Paulo" });
@@ -59,7 +63,10 @@ test("normalizeCity retorna null pra entrada vazia/nula", () => {
 
 test("isForeignLocation rejeita quando country real (nao BR) vem preenchido", () => {
   assert.equal(isForeignLocation("United States", null), true);
-  assert.equal(isForeignLocation("United States of America", "California"), true);
+  assert.equal(
+    isForeignLocation("United States of America", "California"),
+    true,
+  );
   assert.equal(isForeignLocation("India", "Karnātaka"), true);
   assert.equal(isForeignLocation("Brasil", "SP"), false);
   assert.equal(isForeignLocation("Brazil", null), false);
@@ -122,4 +129,59 @@ test("isForeignLocation ainda rejeita pais estrangeiro real mesmo depois do fix 
   assert.equal(isForeignLocation("United States", null), true);
   assert.equal(isForeignLocation("New York", null), true);
   assert.equal(isForeignLocation("India", null), true);
+});
+
+// Bug real de produção (LOUIS DREYFUS BR, board Lever global): posting.country
+// da Lever manda código ISO-3166-1 alpha-2 do país estrangeiro, e vários
+// desses códigos colidem com a sigla de alguma UF brasileira — RO=Romênia
+// vs UF Rondônia, PA=Panamá vs UF Pará, PE=Peru vs UF Pernambuco, SE=Suécia
+// vs UF Sergipe, TO=Tonga vs UF Tocantins, AL=Albânia vs UF Alagoas,
+// MT=Malta vs UF Mato Grosso, BA=Bósnia vs UF Bahia. O fallback de
+// isBrazilianCountryValue não pode mais resolver token de 2 letras isolado
+// via sigla de UF (só via nome por extenso), senão vaga de Bucareste
+// (country="RO") passava como brasileira.
+test("isForeignLocation rejeita código ISO de país que colide com sigla de UF brasileira", () => {
+  assert.equal(
+    isForeignLocation("RO", "Romania"),
+    true,
+    "RO = Romênia, não Rondônia",
+  );
+  assert.equal(
+    isForeignLocation("PA", "Panama"),
+    true,
+    "PA = Panamá, não Pará",
+  );
+  assert.equal(
+    isForeignLocation("PE", "Peru"),
+    true,
+    "PE = Peru, não Pernambuco",
+  );
+  assert.equal(
+    isForeignLocation("SE", "Sweden"),
+    true,
+    "SE = Suécia, não Sergipe",
+  );
+  assert.equal(
+    isForeignLocation("TO", "Tonga"),
+    true,
+    "TO = Tonga, não Tocantins",
+  );
+  assert.equal(
+    isForeignLocation("AL", "Albania"),
+    true,
+    "AL = Albânia, não Alagoas",
+  );
+  assert.equal(
+    isForeignLocation("MT", "Malta"),
+    true,
+    "MT = Malta, não Mato Grosso",
+  );
+  assert.equal(
+    isForeignLocation("BA", "Bosnia"),
+    true,
+    "BA = Bósnia, não Bahia",
+  );
+  // Nome por extenso de UF continua reconhecido normalmente (não regrediu).
+  assert.equal(isForeignLocation("Rondônia", null), false);
+  assert.equal(isForeignLocation("Pará", null), false);
 });
