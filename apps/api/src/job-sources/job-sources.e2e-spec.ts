@@ -291,6 +291,9 @@ test("job-source endpoints validate company linkage and reject crawler execution
     })
     .expect(409);
 
+  await database.company.deleteMany({
+    where: { id: { in: [company.id, secondCompany.id] } },
+  });
   await deleteUserByEmail(database, user.email);
   await app.close();
 });
@@ -385,9 +388,11 @@ test("global ingestion run endpoints list and fetch run details across sources",
     .set("Authorization", `Bearer ${user.accessToken}`)
     .expect(200)
     .expect(({ body }) => {
-      assert.equal(Array.isArray(body), true);
+      assert.equal(Array.isArray(body.runs), true);
       assert.equal(
-        body.some((run: { id: string }) => run.id === runResponse.body.id),
+        body.runs.some(
+          (run: { id: string }) => run.id === runResponse.body.id,
+        ),
         true,
       );
     });

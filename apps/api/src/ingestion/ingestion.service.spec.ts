@@ -224,6 +224,7 @@ function createIngestionServiceFixture(options?: {
     { sourceType: "teamtailor", collect: async () => [] } as never,
     { sourceType: "talentbrew", collect: async () => [] } as never,
     { sourceType: "workday", collect: async () => [] } as never,
+    { sourceType: "pandape", collect: async () => [] } as never,
     googleIndexingService as never,
   );
 

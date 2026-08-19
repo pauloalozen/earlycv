@@ -143,13 +143,15 @@ test("GET /api/admin/users lists product users and returns detail with ordered r
     .set("Authorization", `Bearer ${admin.accessToken}`)
     .expect(200)
     .expect(({ body }) => {
-      assert.equal(Array.isArray(body), true);
+      assert.equal(Array.isArray(body.users), true);
       assert.equal(
-        body.some((user: { id: string }) => user.id === staffUser.userId),
+        body.users.some(
+          (user: { id: string }) => user.id === staffUser.userId,
+        ),
         false,
       );
 
-      const listedUser = body.find(
+      const listedUser = body.users.find(
         (user: { id: string }) => user.id === productUser.userId,
       ) as Record<string, unknown> | undefined;
 
