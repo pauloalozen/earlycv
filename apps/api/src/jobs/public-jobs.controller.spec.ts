@@ -229,6 +229,52 @@ test("list sorts by score DESC by default, and supports score_asc/date_desc/date
   ]);
 });
 
+test("list sorts date_desc/date_asc by publishedAtSource (data da vaga), not lastSeenAt (data de captura)", async () => {
+  // lastSeenAt inverso do publishedAtSource: se o sort caísse pra
+  // lastSeenAt, o resultado sairia invertido do esperado.
+  const capturedFirstButPostedLater = buildJob({
+    id: "captured-first-posted-later",
+    lastSeenAt: new Date("2026-07-01T00:00:00Z"),
+    publishedAtSource: new Date("2026-07-10T00:00:00Z"),
+  });
+  const capturedLaterButPostedFirst = buildJob({
+    id: "captured-later-posted-first",
+    lastSeenAt: new Date("2026-07-05T00:00:00Z"),
+    publishedAtSource: new Date("2026-07-02T00:00:00Z"),
+  });
+  const controller = buildController(
+    [capturedFirstButPostedLater, capturedLaterButPostedFirst],
+    PROFILE,
+  );
+
+  async function listWithSort(sort: string) {
+    const result = await controller.list(
+      undefined as never,
+      USER,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      sort,
+    );
+    return result.data.map((item) => item.id);
+  }
+
+  assert.deepEqual(await listWithSort("date_desc"), [
+    "captured-first-posted-later",
+    "captured-later-posted-first",
+  ]);
+  assert.deepEqual(await listWithSort("date_asc"), [
+    "captured-later-posted-first",
+    "captured-first-posted-later",
+  ]);
+});
+
 test("list includes breakdown/matchedSkills/missingSkills per item", async () => {
   const controller = buildController([buildJob()], PROFILE);
   const result = await controller.list(undefined as never, USER);

@@ -188,11 +188,16 @@ export class PublicJobsController {
         return { job, match, skillsPct };
       })
       .sort((a, b) => {
+        // publishedAtSource e a data da vaga em si (reportada pela fonte);
+        // lastSeenAt e so quando o crawler capturou/reconfirmou — cai pra
+        // ele apenas quando a fonte nao informa data de publicacao.
+        const aDate = (a.job.publishedAtSource ?? a.job.lastSeenAt).getTime();
+        const bDate = (b.job.publishedAtSource ?? b.job.lastSeenAt).getTime();
         if (sort === "date_asc") {
-          return a.job.lastSeenAt.getTime() - b.job.lastSeenAt.getTime();
+          return aDate - bDate;
         }
         if (sort === "date_desc") {
-          return b.job.lastSeenAt.getTime() - a.job.lastSeenAt.getTime();
+          return bDate - aDate;
         }
         // score_asc/score_desc (e default): vagas sem score calculável vão
         // sempre por último, nas duas direções — não representam "0%", e
@@ -200,14 +205,14 @@ export class PublicJobsController {
         const aScore = a.match?.score ?? null;
         const bScore = b.match?.score ?? null;
         if (aScore === null && bScore === null) {
-          return b.job.lastSeenAt.getTime() - a.job.lastSeenAt.getTime();
+          return bDate - aDate;
         }
         if (aScore === null) return 1;
         if (bScore === null) return -1;
         if (bScore !== aScore) {
           return sort === "score_asc" ? aScore - bScore : bScore - aScore;
         }
-        return b.job.lastSeenAt.getTime() - a.job.lastSeenAt.getTime();
+        return bDate - aDate;
       });
 
     const highCompatCount = scoredAll.filter(
