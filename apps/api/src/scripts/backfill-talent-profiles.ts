@@ -12,10 +12,11 @@
 // normalizedValue) no signal) garantem que rodar de novo não duplica nada.
 //
 // Por padrão roda em --dry-run (só lê e reporta, nunca escreve). Passe
-// --apply pra gravar de verdade.
+// --apply pra gravar de verdade, e --limit=N pra processar só os N
+// primeiros registros de cada fase (piloto barato antes da base inteira).
 //
 //   npm run talent:backfill-profiles --workspace @earlycv/api
-//   npm run talent:backfill-profiles --workspace @earlycv/api -- --apply
+//   npm run talent:backfill-profiles --workspace @earlycv/api -- --apply --limit=100
 
 import { PrismaClient } from "@prisma/client";
 
@@ -33,6 +34,10 @@ import {
 
 const APPLY = process.argv.includes("--apply");
 const DRY_RUN = !APPLY;
+const LIMIT_ARG = process.argv.find((arg) => arg.startsWith("--limit="));
+const LIMIT = LIMIT_ARG
+  ? Number.parseInt(LIMIT_ARG.split("=")[1], 10)
+  : undefined;
 
 type Counters = {
   usersProcessed: number;
@@ -228,6 +233,8 @@ async function processUsers(
         },
       },
     },
+    orderBy: { createdAt: "asc" },
+    ...(LIMIT ? { take: LIMIT } : {}),
   });
 
   for (const user of users) {
@@ -276,6 +283,8 @@ async function processLinkedSnapshots(
   const snapshots = await prisma.analysisCvSnapshot.findMany({
     where: { userId: { not: null }, ownerUser: { isStaff: false } },
     select: { id: true, userId: true, textStorageKey: true },
+    orderBy: { createdAt: "asc" },
+    ...(LIMIT ? { take: LIMIT } : {}),
   });
 
   for (const snapshot of snapshots) {
@@ -307,6 +316,8 @@ async function processGuestSnapshots(
   const snapshots = await prisma.analysisCvSnapshot.findMany({
     where: { userId: null },
     select: { id: true, textStorageKey: true },
+    orderBy: { createdAt: "asc" },
+    ...(LIMIT ? { take: LIMIT } : {}),
   });
 
   for (const snapshot of snapshots) {
@@ -351,7 +362,7 @@ async function main() {
   const counters = emptyCounters();
 
   console.log(
-    `[talent-backfill] modo: ${DRY_RUN ? "DRY-RUN (nada será gravado)" : "APPLY (gravando de verdade)"}`,
+    `[talent-backfill] modo: ${DRY_RUN ? "DRY-RUN (nada será gravado)" : "APPLY (gravando de verdade)"}${LIMIT ? ` | limite: ${LIMIT} por fase` : ""}`,
   );
 
   try {
