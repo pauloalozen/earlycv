@@ -274,7 +274,7 @@ async function processLinkedSnapshots(
   counters: Counters,
 ) {
   const snapshots = await prisma.analysisCvSnapshot.findMany({
-    where: { userId: { not: null } },
+    where: { userId: { not: null }, ownerUser: { isStaff: false } },
     select: { id: true, userId: true, textStorageKey: true },
   });
 
