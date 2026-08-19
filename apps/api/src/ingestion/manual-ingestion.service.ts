@@ -44,6 +44,11 @@ export class ManualIngestionService {
     return this.batchRepository.listRunItems(batchRunId, filters);
   }
 
+  async getRunItemStatusCounts(batchRunId: string) {
+    await this.getRunById(batchRunId);
+    return this.batchRepository.getRunItemStatusCounts(batchRunId);
+  }
+
   async cancel(batchRunId: string) {
     const run = await this.batchRepository.markCancelRequested(batchRunId);
     if (!run) {

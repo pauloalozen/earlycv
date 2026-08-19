@@ -10,6 +10,7 @@ import type {
   IngestionRun,
   IngestionRunStatus,
   JobSource,
+  Prisma,
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
@@ -359,27 +360,83 @@ export class IngestionService {
     );
   }
 
-  async listAllRuns() {
-    const runs = await this.database.ingestionRun.findMany({
-      include: {
-        jobSource: {
-          select: {
-            company: {
-              select: {
-                id: true,
-                name: true,
+  async listAllRuns(filters: {
+    page?: number;
+    limit?: number;
+    query?: string;
+    status?: IngestionRunStatus;
+  }) {
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit =
+      filters.limit && filters.limit > 0
+        ? Math.min(filters.limit, 100)
+        : 25;
+
+    const where: Prisma.IngestionRunWhereInput = {
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.query
+        ? {
+            OR: [
+              { id: { contains: filters.query, mode: "insensitive" } },
+              {
+                jobSource: {
+                  sourceName: { contains: filters.query, mode: "insensitive" },
+                },
               },
-            },
-            sourceName: true,
-          },
+              {
+                jobSource: {
+                  company: {
+                    name: { contains: filters.query, mode: "insensitive" },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    // previewJson (o blob de items previstos por run) e propositalmente
+    // deixado de fora daqui — so o detalhe de UM run (getRun/getRunById)
+    // precisa dele. Incluir isso pra toda a lista, sem paginacao, e o que
+    // deixava a tela admin lenta a medida que o historico de runs crescia.
+    const select = {
+      errorSummary: true,
+      failedCount: true,
+      finishedAt: true,
+      id: true,
+      jobSource: {
+        select: {
+          company: { select: { id: true, name: true } },
+          sourceName: true,
         },
       },
-      orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
-    });
+      jobSourceId: true,
+      newCount: true,
+      skippedCount: true,
+      startedAt: true,
+      status: true,
+      updatedCount: true,
+    } as const;
 
-    return runs.map((run: IngestionRun) =>
-      toRunSummary(run as IngestionRunRecord),
-    );
+    const [runs, total] = await Promise.all([
+      this.database.ingestionRun.findMany({
+        orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+        select,
+        skip: (page - 1) * limit,
+        take: limit,
+        where,
+      }),
+      this.database.ingestionRun.count({ where }),
+    ]);
+
+    return {
+      limit,
+      page,
+      runs: runs.map((run) =>
+        toRunSummary({ ...run, previewJson: null } as IngestionRunRecord),
+      ),
+      total,
+    };
   }
 
   async getRunById(runId: string) {

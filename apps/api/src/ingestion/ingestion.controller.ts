@@ -16,6 +16,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle } from "@nestjs/throttler";
+import type { IngestionRunStatus } from "@prisma/client";
 import {
   type AuthenticatedRequestUser,
   AuthenticatedUser,
@@ -62,8 +63,18 @@ export class IngestionController {
   ) {}
 
   @Get()
-  list() {
-    return this.ingestionService.listAllRuns();
+  list(
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+    @Query("query") query?: string,
+    @Query("status") status?: IngestionRunStatus,
+  ) {
+    return this.ingestionService.listAllRuns({
+      limit: limit ? Number.parseInt(limit, 10) : undefined,
+      page: page ? Number.parseInt(page, 10) : undefined,
+      query,
+      status,
+    });
   }
 
   @Get("dashboard")
@@ -161,6 +172,11 @@ export class IngestionController {
     query: ListManualRunItemsDto,
   ) {
     return this.manualIngestionService.listRunItems(batchRunId, query);
+  }
+
+  @Get("manual/:batchRunId/items/counts")
+  getManualRunItemStatusCounts(@Param("batchRunId") batchRunId: string) {
+    return this.manualIngestionService.getRunItemStatusCounts(batchRunId);
   }
 
   @Post("manual/:batchRunId/cancel")

@@ -347,6 +347,7 @@ test("repository gets run by id and lists filtered items", async () => {
       },
     },
     ingestionBatchItem: {
+      count: async () => 0,
       findMany: async ({ where }: { where: Record<string, unknown> }) => {
         capturedItemWhere = where;
         return [];
@@ -356,9 +357,10 @@ test("repository gets run by id and lists filtered items", async () => {
 
   const repository = new ManualIngestionBatchRepository(database as never);
   const run = await repository.getRunById("batch-1");
-  await repository.listRunItems("batch-1", { status: "queued" });
+  const result = await repository.listRunItems("batch-1", { status: "queued" });
 
   assert.deepEqual(run, { id: "batch-1" });
+  assert.deepEqual(result, { items: [], limit: 50, page: 1, total: 0 });
   assert.deepEqual(capturedItemWhere, {
     batchRunId: "batch-1",
     status: "queued",

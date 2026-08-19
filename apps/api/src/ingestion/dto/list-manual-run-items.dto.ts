@@ -1,8 +1,21 @@
 import { IngestionBatchItemStatus } from "@prisma/client";
-import { IsEnum, IsOptional } from "class-validator";
+import { Type } from "class-transformer";
+import { IsEnum, IsInt, IsOptional, Min } from "class-validator";
 
 export class ListManualRunItemsDto {
   @IsOptional()
   @IsEnum(IngestionBatchItemStatus)
   status?: IngestionBatchItemStatus;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  limit?: number;
 }

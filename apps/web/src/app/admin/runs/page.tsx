@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Card, EmptyState, Input } from "@/components/ui";
-import { filterRuns } from "@/lib/admin-operations";
 import { getRunsDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
@@ -13,11 +12,17 @@ import { AdminTokenState } from "../_components/admin-token-state";
 export const metadata = buildAdminMetadata("Runs");
 
 type RunsPageProps = {
-  searchParams: Promise<{ query?: string; status?: string; token?: string }>;
+  searchParams: Promise<{
+    page?: string;
+    query?: string;
+    status?: string;
+    token?: string;
+  }>;
 };
 
 export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
-  const { query, status } = await searchParams;
+  const { page, query, status } = await searchParams;
+  const pageNum = Math.max(1, Number.parseInt(page ?? "1", 10) || 1);
   const token = await getBackofficeSessionToken();
 
   if (!token) {
@@ -30,7 +35,11 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
     );
   }
 
-  const runsDataResult = await getRunsDataSafely();
+  const runsDataResult = await getRunsDataSafely({
+    page: pageNum,
+    query,
+    status,
+  });
 
   if (runsDataResult.kind !== "ok") {
     const state = buildAdminStateModel(runsDataResult.kind, "/admin/runs");
@@ -42,19 +51,9 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
     );
   }
 
-  const { orderedRuns, sourceViews } = runsDataResult.data;
-  const sourceMap = new Map(sourceViews.map((source) => [source.id, source]));
-  const filteredRuns = filterRuns(
-    orderedRuns.map((run) => ({
-      companyName: sourceMap.get(run.jobSourceId)?.company.name ?? "",
-      id: run.id,
-      sourceName: sourceMap.get(run.jobSourceId)?.sourceName ?? run.jobSourceId,
-      status: run.status,
-    })),
-    { query, status },
-  );
-  const filteredRunIds = new Set(filteredRuns.map((run) => run.id));
-  const visibleRuns = orderedRuns.filter((run) => filteredRunIds.has(run.id));
+  const { limit, orderedRuns: visibleRuns, total } = runsDataResult.data;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const safePageNum = Math.min(pageNum, totalPages);
 
   return (
     <div className="px-6 py-10 md:px-10">
@@ -97,17 +96,15 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
           </form>
         </Card>
 
-        {filteredRuns.length === 0 ? (
+        {total === 0 ? (
           <EmptyState
             description="Nenhum run corresponde aos filtros atuais."
             title="Nenhum resultado"
           />
         ) : (
-          <div className="grid gap-4">
-            {visibleRuns.map((run) => {
-              const source = sourceMap.get(run.jobSourceId);
-
-              return (
+          <>
+            <div className="grid gap-4">
+              {visibleRuns.map((run) => (
                 <Card
                   className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
                   key={run.id}
@@ -117,10 +114,10 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
                       {run.startedAt}
                     </p>
                     <h2 className="text-lg font-bold tracking-tight text-stone-950">
-                      {source?.sourceName ?? run.jobSourceId}
+                      {run.sourceName ?? run.jobSourceId}
                     </h2>
                     <p className="text-sm text-stone-600">
-                      {source?.company.name ?? "Fonte desconhecida"} - novas{" "}
+                      {run.companyName ?? "Fonte desconhecida"} - novas{" "}
                       {run.newCount} - atualizadas {run.updatedCount} - falhas{" "}
                       {run.failedCount}
                     </p>
@@ -148,11 +145,62 @@ export default async function AdminRunsPage({ searchParams }: RunsPageProps) {
                     </Link>
                   </div>
                 </Card>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between text-sm text-stone-500">
+                <span>
+                  Página {safePageNum} de {totalPages} · {total} runs
+                </span>
+                <div className="flex gap-2">
+                  {safePageNum > 1 && (
+                    <Link
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
+                      href={buildRunsPageHref({
+                        page: safePageNum - 1,
+                        query,
+                        status,
+                      })}
+                    >
+                      ← Anterior
+                    </Link>
+                  )}
+                  {safePageNum < totalPages && (
+                    <Link
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
+                      href={buildRunsPageHref({
+                        page: safePageNum + 1,
+                        query,
+                        status,
+                      })}
+                    >
+                      Próxima →
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
   );
+}
+
+function buildRunsPageHref(params: {
+  page: number;
+  query?: string;
+  status?: string;
+}) {
+  const qs = new URLSearchParams();
+  qs.set("page", String(params.page));
+  if (params.query) qs.set("query", params.query);
+  if (params.status) qs.set("status", params.status);
+  return `/admin/runs?${qs}`;
 }

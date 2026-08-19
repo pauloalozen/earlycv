@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getBackofficeSessionToken: vi.fn(),
   getManualRunById: vi.fn(),
+  getManualRunItemStatusCounts: vi.fn(),
   listManualRunItems: vi.fn(),
 }));
 
@@ -28,6 +29,7 @@ vi.mock("@/lib/backoffice-session.server", () => ({
 
 vi.mock("@/lib/admin-ingestion-api", () => ({
   getManualRunById: mocks.getManualRunById,
+  getManualRunItemStatusCounts: mocks.getManualRunItemStatusCounts,
   listManualRunItems: mocks.listManualRunItems,
 }));
 
@@ -122,6 +124,11 @@ describe("ManualRunDetailPage summary", () => {
         updatedAt: "2026-04-01T10:00:00.000Z",
       },
     ]);
+
+    mocks.getManualRunItemStatusCounts.mockResolvedValue({
+      discoveryStatusCounts: {},
+      statusCounts: { cancelled: 1, completed: 1, failed: 1, skipped: 1 },
+    });
 
     const page = await ManualRunDetailPage({
       params: Promise.resolve({ batchRunId: "run_1" }),

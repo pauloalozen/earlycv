@@ -2,11 +2,10 @@ import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { AT } from "@/app/admin/_components/admin-primitives";
 import { Badge, Card, EmptyState, Input } from "@/components/ui";
-import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
+import { getAdminResumesListDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import {
   buildAdminResumeDetailHref,
-  filterAdminUsers,
   getResumeDisplayKind,
 } from "@/lib/admin-users-operations";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
@@ -15,12 +14,6 @@ import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
 
 export const metadata = buildAdminMetadata("Curriculos");
-
-const PAGE_SIZE = 50;
-
-function normalizeQuery(value: string) {
-  return value.trim().toLowerCase();
-}
 
 type AdminResumesPageProps = {
   searchParams: Promise<{
@@ -31,6 +24,10 @@ type AdminResumesPageProps = {
     token?: string;
   }>;
 };
+
+function isResumeKind(value: string | undefined): value is "master" | "base" | "adapted" {
+  return value === "master" || value === "base" || value === "adapted";
+}
 
 export default async function AdminResumesPage({
   searchParams,
@@ -49,11 +46,16 @@ export default async function AdminResumesPage({
     );
   }
 
-  const usersDataResult = await getAdminUsersDataSafely();
+  const resumesDataResult = await getAdminResumesListDataSafely({
+    kind: isResumeKind(kind) ? kind : undefined,
+    page: pageNum,
+    query,
+    status,
+  });
 
-  if (usersDataResult.kind !== "ok") {
+  if (resumesDataResult.kind !== "ok") {
     const state = buildAdminStateModel(
-      usersDataResult.kind,
+      resumesDataResult.kind,
       "/admin/curriculos",
     );
 
@@ -64,40 +66,9 @@ export default async function AdminResumesPage({
     );
   }
 
-  const { adminUserViews } = usersDataResult.data;
-
-  const matchingUserIds = new Set(
-    filterAdminUsers(adminUserViews, { query }).map((user) => user.id),
-  );
-  const normalizedQuery = query ? normalizeQuery(query) : "";
-  const resumeViews = adminUserViews
-    .flatMap((user) =>
-      user.resumes.map((resume) => ({
-        owner: user,
-        resume,
-        resumeKind: getResumeDisplayKind(resume),
-      })),
-    )
-    .filter(({ owner, resume, resumeKind }) => {
-      const matchesOwner = !query || matchingUserIds.has(owner.id);
-      const matchesResume =
-        !query ||
-        normalizeQuery(resume.title).includes(normalizedQuery) ||
-        normalizeQuery(resume.id).includes(normalizedQuery);
-
-      return (
-        (matchesOwner || matchesResume) &&
-        (!kind || resumeKind === kind) &&
-        (!status || resume.status === status)
-      );
-    });
-
-  const totalPages = Math.max(1, Math.ceil(resumeViews.length / PAGE_SIZE));
+  const { limit, resumes, total } = resumesDataResult.data;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
   const safePageNum = Math.min(pageNum, totalPages);
-  const paginatedResumeViews = resumeViews.slice(
-    (safePageNum - 1) * PAGE_SIZE,
-    safePageNum * PAGE_SIZE,
-  );
 
   return (
     <div className="px-6 py-10 md:px-10">
@@ -152,74 +123,77 @@ export default async function AdminResumesPage({
           </form>
         </Card>
 
-        {resumeViews.length === 0 ? (
+        {total === 0 ? (
           <EmptyState
             description="Nenhum curriculo corresponde aos filtros atuais."
             title="Nenhum resultado"
           />
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
-            {paginatedResumeViews.map(({ owner, resume, resumeKind }) => (
-              <Card className="space-y-4" key={resume.id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="text-xl font-bold tracking-tight text-stone-950">
-                      {resume.title}
-                    </p>
-                    <p className="text-sm text-stone-600">
-                      {owner.name} - {owner.email}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      resumeKind === "master"
-                        ? "dark"
+            {resumes.map((resume) => {
+              const resumeKind = getResumeDisplayKind(resume);
+
+              return (
+                <Card className="space-y-4" key={resume.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-xl font-bold tracking-tight text-stone-950">
+                        {resume.title}
+                      </p>
+                      <p className="text-sm text-stone-600">
+                        {resume.user.name} - {resume.user.email}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={
+                        resumeKind === "master"
+                          ? "dark"
+                          : resumeKind === "base"
+                            ? "outline"
+                            : "accent"
+                      }
+                    >
+                      {resumeKind === "master"
+                        ? "CV master"
                         : resumeKind === "base"
-                          ? "outline"
-                          : "accent"
-                    }
-                  >
-                    {resumeKind === "master"
-                      ? "CV master"
-                      : resumeKind === "base"
-                        ? "CV base"
-                        : "CV adaptado"}
-                  </Badge>
-                </div>
+                          ? "CV base"
+                          : "CV adaptado"}
+                    </Badge>
+                  </div>
 
-                <div className="grid gap-2 rounded-[18px] border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">
-                  <p>Status: {resume.status}</p>
-                  <p>ID: {resume.id}</p>
-                  <p>Usuario: {owner.id}</p>
-                </div>
+                  <div className="grid gap-2 rounded-[18px] border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">
+                    <p>Status: {resume.status}</p>
+                    <p>ID: {resume.id}</p>
+                    <p>Usuario: {resume.user.id}</p>
+                  </div>
 
-                <div className="flex flex-wrap gap-3">
-                  <Link
-                    className={buttonVariants()}
-                    href={buildAdminResumeDetailHref(resume.id)}
-                  >
-                    Abrir curriculo
-                  </Link>
-                  <Link
-                    className={buttonVariants({ variant: "outline" })}
-                    href={`/admin/usuarios/${owner.id}`}
-                  >
-                    Ver usuario
-                  </Link>
-                </div>
-              </Card>
-            ))}
+                  <div className="flex flex-wrap gap-3">
+                    <Link
+                      className={buttonVariants()}
+                      href={buildAdminResumeDetailHref(resume.id)}
+                    >
+                      Abrir curriculo
+                    </Link>
+                    <Link
+                      className={buttonVariants({ variant: "outline" })}
+                      href={`/admin/usuarios/${resume.user.id}`}
+                    >
+                      Ver usuario
+                    </Link>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         )}
 
-        {totalPages > 1 && resumeViews.length > 0 && (
+        {totalPages > 1 && total > 0 && (
           <div
             className="flex items-center justify-between text-sm"
             style={{ color: AT.muted }}
           >
             <span>
-              Página {safePageNum} de {totalPages} · {resumeViews.length}{" "}
-              currículos
+              Página {safePageNum} de {totalPages} · {total} currículos
             </span>
             <div className="flex gap-2">
               {safePageNum > 1 && (

@@ -7,9 +7,11 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
+import type { ResumeStatus, UserPlanType } from "@prisma/client";
 
 import {
   type AuthenticatedRequestUser,
@@ -42,8 +44,39 @@ export class AdminUsersController {
   ) {}
 
   @Get()
-  list() {
-    return this.adminUsersService.list();
+  list(
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+    @Query("planType") planType?: UserPlanType,
+    @Query("query") query?: string,
+    @Query("status") status?: string,
+  ) {
+    return this.adminUsersService.list({
+      limit: limit ? Number.parseInt(limit, 10) : undefined,
+      page: page ? Number.parseInt(page, 10) : undefined,
+      planType,
+      query,
+      status,
+    });
+  }
+
+  // Precisa vir antes de @Get(":id") — senao o Nest casa "/resumes" como
+  // valor do param :id.
+  @Get("resumes")
+  listResumes(
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+    @Query("kind") kind?: "master" | "base" | "adapted",
+    @Query("query") query?: string,
+    @Query("status") status?: ResumeStatus,
+  ) {
+    return this.adminUsersService.listResumes({
+      kind,
+      limit: limit ? Number.parseInt(limit, 10) : undefined,
+      page: page ? Number.parseInt(page, 10) : undefined,
+      query,
+      status,
+    });
   }
 
   @Get(":id")

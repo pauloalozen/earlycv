@@ -2,12 +2,11 @@ import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { AdminPageWrap, AT } from "@/app/admin/_components/admin-primitives";
 import { EmptyState } from "@/components/ui";
-import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
+import { getAdminUsersListDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import {
   buildAdminResumeDetailHref,
   buildAdminUserDetailHref,
-  filterAdminUsers,
 } from "@/lib/admin-users-operations";
 
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
@@ -18,8 +17,6 @@ import { UsersList } from "./_components/users-list";
 import { deleteUserAction } from "./[id]/actions";
 
 export const metadata = buildAdminMetadata("Usuarios");
-
-const PAGE_SIZE = 50;
 
 type AdminUsersPageProps = {
   searchParams: Promise<{
@@ -48,7 +45,12 @@ export default async function AdminUsersPage({
     );
   }
 
-  const usersDataResult = await getAdminUsersDataSafely();
+  const usersDataResult = await getAdminUsersListDataSafely({
+    page: pageNum,
+    planType,
+    query,
+    status,
+  });
 
   if (usersDataResult.kind !== "ok") {
     const state = buildAdminStateModel(usersDataResult.kind, "/admin/usuarios");
@@ -60,21 +62,11 @@ export default async function AdminUsersPage({
     );
   }
 
-  const { adminUserViews } = usersDataResult.data;
-
-  const filteredUsers = filterAdminUsers(adminUserViews, {
-    planType,
-    query,
-    status,
-  });
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const { adminUserViews, limit, total } = usersDataResult.data;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
   const safePageNum = Math.min(pageNum, totalPages);
-  const paginatedUsers = filteredUsers.slice(
-    (safePageNum - 1) * PAGE_SIZE,
-    safePageNum * PAGE_SIZE,
-  );
 
-  const userRows = paginatedUsers.map((user) => ({
+  const userRows = adminUserViews.map((user) => ({
     id: user.id,
     name: user.name,
     email: user.email,
@@ -145,7 +137,7 @@ export default async function AdminUsersPage({
         </button>
       </form>
 
-      {filteredUsers.length === 0 ? (
+      {total === 0 ? (
         <EmptyState
           description="Nenhuma conta corresponde aos filtros atuais. Ajuste a busca para revisar outro usuário."
           title="Nenhum resultado"
@@ -159,8 +151,7 @@ export default async function AdminUsersPage({
               style={{ color: AT.muted, marginTop: 8 }}
             >
               <span>
-                Página {safePageNum} de {totalPages} · {filteredUsers.length}{" "}
-                usuários
+                Página {safePageNum} de {totalPages} · {total} usuários
               </span>
               <div className="flex gap-2">
                 {safePageNum > 1 && (

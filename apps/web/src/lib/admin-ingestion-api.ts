@@ -142,6 +142,8 @@ export type CsvImportReport = {
 };
 
 export type IngestionRunSummary = {
+  companyId?: string;
+  companyName?: string;
   discardedByFilterCount?: number;
   errorSummary: string | null;
   failedCount: number;
@@ -151,6 +153,7 @@ export type IngestionRunSummary = {
   newCount: number;
   previewItems: IngestionPreviewItem[];
   skippedCount: number;
+  sourceName?: string;
   startedAt: string;
   status: "running" | "completed" | "failed";
   updatedCount: number;
@@ -383,8 +386,28 @@ export async function listJobs(token?: string) {
   return apiRequest<JobRecord[]>("/jobs", token);
 }
 
-export async function listAllIngestionRuns(token?: string) {
-  return apiRequest<IngestionRunSummary[]>("/runs", token);
+export async function listAllIngestionRuns(
+  filters: {
+    page?: number;
+    limit?: number;
+    query?: string;
+    status?: string;
+  } = {},
+  token?: string,
+) {
+  const params = new URLSearchParams();
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.limit) params.set("limit", String(filters.limit));
+  if (filters.query) params.set("query", filters.query);
+  if (filters.status) params.set("status", filters.status);
+  const qs = params.toString();
+
+  return apiRequest<{
+    limit: number;
+    page: number;
+    runs: IngestionRunSummary[];
+    total: number;
+  }>(`/runs${qs ? `?${qs}` : ""}`, token);
 }
 
 export async function createCompany(
@@ -610,6 +633,25 @@ export async function listManualRunItems(
     : `/runs/manual/${batchRunId}/items`;
 
   return apiRequest<ManualRunItemRecord[]>(path, token);
+}
+
+export type ManualRunItemStatusCounts = {
+  discoveryStatusCounts: Record<string, number>;
+  statusCounts: Record<string, number>;
+};
+
+// Contadores agregados calculados no banco (groupBy), em vez de recontar
+// em cima do array inteiro de listManualRunItems — usado pelos cards de
+// resumo, que nao precisam de cada item individual pra mostrar so 4 numeros
+// mais o detalhamento de descoberta.
+export async function getManualRunItemStatusCounts(
+  batchRunId: string,
+  token?: string,
+) {
+  return apiRequest<ManualRunItemStatusCounts>(
+    `/runs/manual/${batchRunId}/items/counts`,
+    token,
+  );
 }
 
 export async function cancelManualRun(batchRunId: string, token?: string) {
