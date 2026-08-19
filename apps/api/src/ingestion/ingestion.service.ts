@@ -58,8 +58,11 @@ type IngestionRunRecord = IngestionRun & {
 // preso em "running" pra sempre — e como o findFirst({status:"running"})
 // no topo de runJobSource bloqueia nova execucao pra aquela fonte, a fonte
 // fica travada ate alguem mexer no banco na mao. Qualquer run "running" ha
-// mais tempo que isso e tratado como orfao.
-const STALE_RUN_THRESHOLD_MS = 20 * 60_000;
+// mais tempo que isso e tratado como orfao. Precisa ficar >= ITEM_LOCK_TTL_MS
+// (ingestion-manual-runner.service.ts) — senao um run legitimo mas lento
+// (Workday com pacing por vaga ja passou de 23min num caso real) e marcado
+// como orfao por essa checagem antes mesmo do item-lock expirar.
+const STALE_RUN_THRESHOLD_MS = 30 * 60_000;
 
 function normalizeUrl(rawUrl: string) {
   const url = new URL(rawUrl.trim());
