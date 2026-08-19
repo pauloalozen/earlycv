@@ -10,6 +10,7 @@ import type {
   IngestionRun,
   IngestionRunStatus,
   JobSource,
+  Prisma,
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
@@ -58,8 +59,11 @@ type IngestionRunRecord = IngestionRun & {
 // preso em "running" pra sempre — e como o findFirst({status:"running"})
 // no topo de runJobSource bloqueia nova execucao pra aquela fonte, a fonte
 // fica travada ate alguem mexer no banco na mao. Qualquer run "running" ha
-// mais tempo que isso e tratado como orfao.
-const STALE_RUN_THRESHOLD_MS = 20 * 60_000;
+// mais tempo que isso e tratado como orfao. Precisa ficar >= ITEM_LOCK_TTL_MS
+// (ingestion-manual-runner.service.ts) — senao um run legitimo mas lento
+// (Workday com pacing por vaga ja passou de 23min num caso real) e marcado
+// como orfao por essa checagem antes mesmo do item-lock expirar.
+const STALE_RUN_THRESHOLD_MS = 30 * 60_000;
 
 function normalizeUrl(rawUrl: string) {
   const url = new URL(rawUrl.trim());
@@ -356,27 +360,83 @@ export class IngestionService {
     );
   }
 
-  async listAllRuns() {
-    const runs = await this.database.ingestionRun.findMany({
-      include: {
-        jobSource: {
-          select: {
-            company: {
-              select: {
-                id: true,
-                name: true,
+  async listAllRuns(filters: {
+    page?: number;
+    limit?: number;
+    query?: string;
+    status?: IngestionRunStatus;
+  }) {
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit =
+      filters.limit && filters.limit > 0
+        ? Math.min(filters.limit, 100)
+        : 25;
+
+    const where: Prisma.IngestionRunWhereInput = {
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.query
+        ? {
+            OR: [
+              { id: { contains: filters.query, mode: "insensitive" } },
+              {
+                jobSource: {
+                  sourceName: { contains: filters.query, mode: "insensitive" },
+                },
               },
-            },
-            sourceName: true,
-          },
+              {
+                jobSource: {
+                  company: {
+                    name: { contains: filters.query, mode: "insensitive" },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    // previewJson (o blob de items previstos por run) e propositalmente
+    // deixado de fora daqui — so o detalhe de UM run (getRun/getRunById)
+    // precisa dele. Incluir isso pra toda a lista, sem paginacao, e o que
+    // deixava a tela admin lenta a medida que o historico de runs crescia.
+    const select = {
+      errorSummary: true,
+      failedCount: true,
+      finishedAt: true,
+      id: true,
+      jobSource: {
+        select: {
+          company: { select: { id: true, name: true } },
+          sourceName: true,
         },
       },
-      orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
-    });
+      jobSourceId: true,
+      newCount: true,
+      skippedCount: true,
+      startedAt: true,
+      status: true,
+      updatedCount: true,
+    } as const;
 
-    return runs.map((run: IngestionRun) =>
-      toRunSummary(run as IngestionRunRecord),
-    );
+    const [runs, total] = await Promise.all([
+      this.database.ingestionRun.findMany({
+        orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+        select,
+        skip: (page - 1) * limit,
+        take: limit,
+        where,
+      }),
+      this.database.ingestionRun.count({ where }),
+    ]);
+
+    return {
+      limit,
+      page,
+      runs: runs.map((run) =>
+        toRunSummary({ ...run, previewJson: null } as IngestionRunRecord),
+      ),
+      total,
+    };
   }
 
   async getRunById(runId: string) {

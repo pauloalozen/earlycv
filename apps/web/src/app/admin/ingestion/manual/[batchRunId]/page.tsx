@@ -3,6 +3,7 @@ import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Card } from "@/components/ui";
 import {
   getManualRunById,
+  getManualRunItemStatusCounts,
   listManualRunItems,
 } from "@/lib/admin-ingestion-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
@@ -49,33 +50,31 @@ export default async function ManualRunDetailPage({
   }
 
   try {
-    const [run, items] = await Promise.all([
+    const [run, items, counts] = await Promise.all([
       getManualRunById(batchRunId),
       listManualRunItems(batchRunId),
+      getManualRunItemStatusCounts(batchRunId),
     ]);
 
-    const totalCount = items.length;
-    const succeededCount = items.filter(
-      (item) => item.status === "completed",
-    ).length;
-    const failedCount = items.filter((item) => item.status === "failed").length;
-    const skippedCount = items.filter(
-      (item) => item.status === "skipped" || item.status === "cancelled",
-    ).length;
+    // Contadores vem do banco (groupBy, ver getManualRunItemStatusCounts) em
+    // vez de recontados aqui em cima do array `items` inteiro — mesma fonte
+    // da verdade (a tabela de items), so que sem precisar materializar cada
+    // linha (com as relations de ingestionRun/discoveredCompany) so pra
+    // somar 4 numeros.
+    const totalCount = Object.values(counts.statusCounts).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+    const succeededCount = counts.statusCounts.completed ?? 0;
+    const failedCount = counts.statusCounts.failed ?? 0;
+    const skippedCount =
+      (counts.statusCounts.skipped ?? 0) + (counts.statusCounts.cancelled ?? 0);
 
     // Itens de runKind DISCOVERY_VALIDATE têm discoveredCompany preenchido —
     // "completed" aqui só diz que o probe rodou sem erro, não em qual status
     // o candidato ficou. Sem esse breakdown, um lote que validou 139
     // candidatos aparecia igual a um que não achou nada promovível.
-    const discoveryStatusCounts = items.reduce<Record<string, number>>(
-      (acc, item) => {
-        const status = item.discoveredCompany?.status;
-        if (!status) return acc;
-        acc[status] = (acc[status] ?? 0) + 1;
-        return acc;
-      },
-      {},
-    );
+    const discoveryStatusCounts = counts.discoveryStatusCounts;
     const isDiscoveryRun = Object.keys(discoveryStatusCounts).length > 0;
     const promotableCount =
       (discoveryStatusCounts.VALIDATED ?? 0) +

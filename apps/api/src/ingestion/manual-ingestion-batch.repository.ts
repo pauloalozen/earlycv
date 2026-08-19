@@ -67,6 +67,8 @@ type ListRunsFilters = {
 
 type ListRunItemsFilters = {
   status?: IngestionBatchItemStatus;
+  page?: number;
+  limit?: number;
 };
 
 @Injectable()
@@ -415,31 +417,81 @@ export class ManualIngestionBatchRepository {
   }
 
   async listRunItems(batchRunId: string, filters: ListRunItemsFilters = {}) {
+    // Sem page/limit explicitos, mantem o comportamento antigo (devolve o
+    // lote inteiro) — a tela de detalhe do run manual ainda calcula os
+    // contadores de status a partir do array completo. Com page/limit, pagina
+    // de verdade (usado pela paginacao real da tabela de itens).
+    const paginate = filters.page !== undefined || filters.limit !== undefined;
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit =
+      filters.limit && filters.limit > 0 ? Math.min(filters.limit, 200) : 50;
+
     try {
-      return this.database.ingestionBatchItem.findMany({
-        where: {
-          batchRunId,
-          status: filters.status,
-        },
-        include: {
-          discoveredCompany: {
-            select: { id: true, status: true },
-          },
-          ingestionRun: {
-            select: {
-              errorSummary: true,
-              failedCount: true,
-              newCount: true,
-              skippedCount: true,
-              updatedCount: true,
+      const where = { batchRunId, status: filters.status };
+      const [items, total] = await Promise.all([
+        this.database.ingestionBatchItem.findMany({
+          include: {
+            discoveredCompany: {
+              select: { id: true, status: true },
+            },
+            ingestionRun: {
+              select: {
+                errorSummary: true,
+                failedCount: true,
+                newCount: true,
+                skippedCount: true,
+                updatedCount: true,
+              },
             },
           },
-        },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      });
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          where,
+          ...(paginate ? { skip: (page - 1) * limit, take: limit } : {}),
+        }),
+        this.database.ingestionBatchItem.count({ where }),
+      ]);
+
+      return { items, limit, page, total };
     } catch (error) {
       if (isMissingManualBatchTableError(error)) {
-        return [];
+        return { items: [], limit, page, total: 0 };
+      }
+      throw error;
+    }
+  }
+
+  // Contadores agregados via banco (nao em cima do array inteiro de itens
+  // ja carregado) — usado pelos cards de resumo da tela de detalhe do run
+  // manual, que antes recomputava tudo a partir do listRunItems sem
+  // paginacao.
+  async getRunItemStatusCounts(batchRunId: string) {
+    try {
+      const [statusGroups, discoveryGroups] = await Promise.all([
+        this.database.ingestionBatchItem.groupBy({
+          _count: true,
+          by: ["status"],
+          where: { batchRunId },
+        }),
+        this.database.discoveredCompany.groupBy({
+          _count: true,
+          by: ["status"],
+          where: { batchItems: { some: { batchRunId } } },
+        }),
+      ]);
+
+      const statusCounts: Record<string, number> = {};
+      for (const group of statusGroups) {
+        statusCounts[group.status] = group._count;
+      }
+      const discoveryStatusCounts: Record<string, number> = {};
+      for (const group of discoveryGroups) {
+        discoveryStatusCounts[group.status] = group._count;
+      }
+
+      return { discoveryStatusCounts, statusCounts };
+    } catch (error) {
+      if (isMissingManualBatchTableError(error)) {
+        return { discoveryStatusCounts: {}, statusCounts: {} };
       }
       throw error;
     }

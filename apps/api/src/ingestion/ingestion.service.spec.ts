@@ -224,6 +224,7 @@ function createIngestionServiceFixture(options?: {
     { sourceType: "teamtailor", collect: async () => [] } as never,
     { sourceType: "talentbrew", collect: async () => [] } as never,
     { sourceType: "workday", collect: async () => [] } as never,
+    { sourceType: "pandape", collect: async () => [] } as never,
     googleIndexingService as never,
   );
 
@@ -1231,6 +1232,101 @@ test("IngestionService.getRunEnrichmentSummary returns zeros when the run create
   });
 
   await database.job.deleteMany({ where: { jobSourceId: jobSource.id } });
+  await database.jobSource.delete({ where: { id: jobSource.id } });
+  await database.company.delete({ where: { id: company.id } });
+  await moduleRef.close();
+});
+
+test("IngestionService.listAllRuns paginates, filters, and omits previewJson from the list payload", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      DatabaseModule,
+      CompaniesModule,
+      JobSourcesModule,
+      IngestionModule,
+    ],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(IngestionService);
+  const uniqueSuffix = randomUUID();
+  const company = await database.company.create({
+    data: {
+      name: `List Runs Co ${uniqueSuffix}`,
+      normalizedName: `list-runs-co-${uniqueSuffix}`,
+    },
+  });
+  const jobSource = await database.jobSource.create({
+    data: {
+      checkIntervalMinutes: 30,
+      companyId: company.id,
+      crawlStrategy: "html",
+      parserKey: "custom_html",
+      sourceName: "List Runs Source",
+      sourceType: "custom_html",
+      sourceUrl: `https://manual.example.com/${randomUUID()}`,
+    },
+  });
+
+  // 3 runs pra esse source: um "failed" e dois "completed", cada um com
+  // previewJson populado — a lista nunca deveria devolver esse blob.
+  await database.ingestionRun.create({
+    data: {
+      jobSourceId: jobSource.id,
+      previewJson: [{ canonicalKey: "a", action: "created", title: "A" }],
+      startedAt: new Date("2026-08-01T10:00:00.000Z"),
+      status: "failed",
+    },
+  });
+  await database.ingestionRun.create({
+    data: {
+      jobSourceId: jobSource.id,
+      previewJson: [{ canonicalKey: "b", action: "created", title: "B" }],
+      startedAt: new Date("2026-08-02T10:00:00.000Z"),
+      status: "completed",
+    },
+  });
+  await database.ingestionRun.create({
+    data: {
+      jobSourceId: jobSource.id,
+      previewJson: [{ canonicalKey: "c", action: "created", title: "C" }],
+      startedAt: new Date("2026-08-03T10:00:00.000Z"),
+      status: "completed",
+    },
+  });
+
+  const firstPage = await service.listAllRuns({
+    limit: 2,
+    page: 1,
+    query: uniqueSuffix,
+  });
+  assert.equal(firstPage.total, 3);
+  assert.equal(firstPage.runs.length, 2);
+  // orderBy startedAt desc: run mais recente primeiro.
+  assert.equal(firstPage.runs[0]?.startedAt, "2026-08-03T10:00:00.000Z");
+  assert.deepEqual(firstPage.runs[0]?.previewItems, []);
+
+  const secondPage = await service.listAllRuns({
+    limit: 2,
+    page: 2,
+    query: uniqueSuffix,
+  });
+  assert.equal(secondPage.runs.length, 1);
+  assert.equal(secondPage.runs[0]?.startedAt, "2026-08-01T10:00:00.000Z");
+
+  const onlyFailed = await service.listAllRuns({
+    query: jobSource.sourceName,
+    status: "failed",
+  });
+  assert.equal(onlyFailed.total, 1);
+  assert.equal(onlyFailed.runs[0]?.status, "failed");
+
+  const noMatch = await service.listAllRuns({ query: "no-such-company-xyz" });
+  assert.equal(noMatch.total, 0);
+
+  await database.ingestionRun.deleteMany({
+    where: { jobSourceId: jobSource.id },
+  });
   await database.jobSource.delete({ where: { id: jobSource.id } });
   await database.company.delete({ where: { id: company.id } });
   await moduleRef.close();

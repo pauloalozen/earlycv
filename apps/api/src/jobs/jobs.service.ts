@@ -596,7 +596,14 @@ export class JobsService {
     const [jobs, total] = await Promise.all([
       this.database.job.findMany({
         where,
-        orderBy: [{ lastSeenAt: "desc" }, { updatedAt: "desc" }],
+        // publishedAtSource e a data da vaga em si (reportada pela fonte);
+        // cai pro lastSeenAt (data de captura) so quando a fonte nao
+        // informa data de publicacao.
+        orderBy: [
+          { publishedAtSource: { sort: "desc", nulls: "last" } },
+          { lastSeenAt: "desc" },
+          { updatedAt: "desc" },
+        ],
         skip,
         take: limit,
         select,

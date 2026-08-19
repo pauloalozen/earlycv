@@ -18,7 +18,15 @@ const MANUAL_RUNNER_LOCK_ID = "manual-ingestion-batch-runner";
 // batch (ou finaliza um cancelamento pendente) em minutos, nao em ate
 // uma hora.
 const MANUAL_RUNNER_LOCK_TTL_MS = 5 * 60_000;
-const ITEM_LOCK_TTL_MS = 10 * 60_000;
+// Precisa cobrir o pior caso real de duracao de UM item, nao so a media —
+// Workday tem pacing de 300-500ms por vaga pra nao levar rate-limit, entao
+// uma empresa grande sozinha ja passou de 23min num run real de producao.
+// Um TTL curto demais aqui expira o lock com o item AINDA rodando de
+// verdade, o loop principal relanca a mesma fonte, e o segundo lancamento
+// esbarra no "ingestion run already in progress" do proprio runJobSource
+// (esse check e via banco, sem TTL, entao sempre acerta) — falha espuria,
+// nao um bug na fonte.
+const ITEM_LOCK_TTL_MS = 30 * 60_000;
 // Um item que ficou "running" por mais que isso sem terminar quase certo
 // morreu junto com o processo que o marcou assim — nada mais vai
 // avança-lo (o where clause so promove "queued" -> "running", nunca

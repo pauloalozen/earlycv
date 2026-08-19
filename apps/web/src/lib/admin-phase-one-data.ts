@@ -20,6 +20,7 @@ import { getAdminDataErrorKind } from "./admin-token-errors";
 import {
   type AdminUserRecord,
   type AssistedSessionRecord,
+  listAdminResumes,
   listAdminUsers,
 } from "./admin-users-api";
 import {
@@ -52,13 +53,18 @@ type AdminUserWithAssistedSession = AdminUserRecord & {
 };
 
 export async function getPhaseOneAdminData(token?: string) {
-  const [adminUsersResult, companies, jobSources, runs] = await Promise.all([
-    listAdminUsers(token),
+  // Nao busca listAllIngestionRuns aqui: nenhuma das paginas que chamam
+  // essa funcao (/admin, /admin/empresas, /admin/empresas/[id]) usa o
+  // historico de runs — so /admin/runs usa, via getRunsData abaixo. Essa
+  // lista carrega previewJson de cada run (pode ser um blob grande) sem
+  // paginacao, entao buscar sem necessidade pesava a tela toda.
+  const [adminUsersResult, companies, jobSources] = await Promise.all([
+    listAdminUsers({}, token),
     listCompanies(token),
     listJobSources(token),
-    listAllIngestionRuns(token),
   ]);
-  const adminUsers = adminUsersResult as AdminUserWithAssistedSession[];
+  const adminUsers =
+    adminUsersResult.users as AdminUserWithAssistedSession[];
   const groupedSources = groupSourcesByCompany(jobSources);
   const companyViews = companies.map((company) => {
     const relatedSources = groupedSources.get(company.id) ?? [];
@@ -93,16 +99,13 @@ export async function getPhaseOneAdminData(token?: string) {
     companies,
     jobSources,
   });
-  const orderedRuns = sortRunsDescending(runs);
 
   return {
     adminUserViews,
     adminUsers,
     companies,
     companyViews,
-    orderedRuns,
     pendingItems,
-    runs,
     sourceViews,
   };
 }
@@ -118,28 +121,34 @@ export async function getPhaseOneAdminDataSafely(token?: string) {
   }
 }
 
+function toAdminUserView(user: AdminUserWithAssistedSession) {
+  const userState = buildAdminUserState(user);
+
+  return {
+    ...user,
+    adaptedResumeCount: countAdaptedResumes(user.resumes),
+    completenessStatus: buildUserCompletenessStatus({
+      hasAnyProfile: userState.hasAnyProfile,
+      hasMasterResume: userState.hasMasterResume,
+      hasProfile: userState.hasProfile,
+    }),
+    masterResume: getMasterResume(user.resumes),
+    profileStatus: buildUserProfileStatus(userState),
+  } satisfies AdminUserView;
+}
+
+// Usada pelas paginas de detalhe por id (usuarios/perfis/curriculos/[id])
+// e por qualquer lugar que precise olhar a base inteira de uma vez — sem
+// page/limit explicitos, o backend mantem o comportamento antigo (devolve
+// todo mundo). Pra listagem paginada de verdade, ver getAdminUsersListData
+// abaixo.
 export async function getAdminUsersData(token?: string) {
-  const adminUsers = (await listAdminUsers(
-    token,
-  )) as AdminUserWithAssistedSession[];
+  const { users } = await listAdminUsers({}, token);
+  const adminUsers = users as AdminUserWithAssistedSession[];
 
   return {
     adminUsers,
-    adminUserViews: adminUsers.map((user) => {
-      const userState = buildAdminUserState(user);
-
-      return {
-        ...user,
-        adaptedResumeCount: countAdaptedResumes(user.resumes),
-        completenessStatus: buildUserCompletenessStatus({
-          hasAnyProfile: userState.hasAnyProfile,
-          hasMasterResume: userState.hasMasterResume,
-          hasProfile: userState.hasProfile,
-        }),
-        masterResume: getMasterResume(user.resumes),
-        profileStatus: buildUserProfileStatus(userState),
-      };
-    }) satisfies AdminUserView[],
+    adminUserViews: adminUsers.map(toAdminUserView),
   };
 }
 
@@ -147,6 +156,80 @@ export async function getAdminUsersDataSafely(token?: string) {
   try {
     return {
       data: await getAdminUsersData(token),
+      kind: "ok",
+    } as const;
+  } catch (error) {
+    return { kind: getAdminDataErrorKind(error) } as const;
+  }
+}
+
+export async function getAdminUsersListData(
+  filters: {
+    page: number;
+    limit?: number;
+    planType?: string;
+    query?: string;
+    status?: string;
+  },
+  token?: string,
+) {
+  const { limit, page, total, users } = await listAdminUsers(filters, token);
+  const adminUsers = users as AdminUserWithAssistedSession[];
+
+  return {
+    adminUserViews: adminUsers.map(toAdminUserView),
+    limit,
+    page,
+    total,
+  };
+}
+
+export async function getAdminUsersListDataSafely(
+  filters: {
+    page: number;
+    limit?: number;
+    planType?: string;
+    query?: string;
+    status?: string;
+  },
+  token?: string,
+) {
+  try {
+    return {
+      data: await getAdminUsersListData(filters, token),
+      kind: "ok",
+    } as const;
+  } catch (error) {
+    return { kind: getAdminDataErrorKind(error) } as const;
+  }
+}
+
+export async function getAdminResumesListData(
+  filters: {
+    page: number;
+    limit?: number;
+    kind?: "master" | "base" | "adapted";
+    query?: string;
+    status?: string;
+  },
+  token?: string,
+) {
+  return listAdminResumes(filters, token);
+}
+
+export async function getAdminResumesListDataSafely(
+  filters: {
+    page: number;
+    limit?: number;
+    kind?: "master" | "base" | "adapted";
+    query?: string;
+    status?: string;
+  },
+  token?: string,
+) {
+  try {
+    return {
+      data: await getAdminResumesListData(filters, token),
       kind: "ok",
     } as const;
   } catch (error) {
@@ -199,11 +282,12 @@ export function buildJobsBySource(jobSourceId: string, jobs: JobRecord[]) {
 
 async function getPendingData(token?: string) {
   const [adminUsersResult, companies, jobSources] = await Promise.all([
-    listAdminUsers(token),
+    listAdminUsers({}, token),
     listCompanies(token),
     listJobSources(token),
   ]);
-  const adminUsers = adminUsersResult as AdminUserWithAssistedSession[];
+  const adminUsers =
+    adminUsersResult.users as AdminUserWithAssistedSession[];
   const pendingItems = buildPendingItems({ adminUsers, companies, jobSources });
   return { pendingItems };
 }
@@ -216,21 +300,26 @@ export async function getPendingDataSafely(token?: string) {
   }
 }
 
-async function getRunsData(token?: string) {
-  const [runs, jobSources] = await Promise.all([
-    listAllIngestionRuns(token),
-    listJobSources(token),
-  ]);
-  const sourceViews = jobSources.map((jobSource) => ({
-    ...jobSource,
-    status: buildSourceStatus(jobSource),
-  })) satisfies AdminJobSourceView[];
-  return { orderedRuns: sortRunsDescending(runs), sourceViews };
+async function getRunsData(
+  filters: { page?: number; limit?: number; query?: string; status?: string },
+  token?: string,
+) {
+  // companyName/sourceName ja vem no proprio IngestionRunSummary (o /runs
+  // do backend faz o join com jobSource/company) — nao precisa buscar
+  // listJobSources aqui so pra montar um Map de lookup.
+  const { limit, page, runs, total } = await listAllIngestionRuns(
+    filters,
+    token,
+  );
+  return { limit, orderedRuns: sortRunsDescending(runs), page, total };
 }
 
-export async function getRunsDataSafely(token?: string) {
+export async function getRunsDataSafely(
+  filters: { page?: number; limit?: number; query?: string; status?: string },
+  token?: string,
+) {
   try {
-    return { data: await getRunsData(token), kind: "ok" } as const;
+    return { data: await getRunsData(filters, token), kind: "ok" } as const;
   } catch (error) {
     return { kind: getAdminDataErrorKind(error) } as const;
   }

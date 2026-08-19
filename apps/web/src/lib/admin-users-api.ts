@@ -142,8 +142,60 @@ async function apiRequest<T>(path: string, token?: string, init?: RequestInit) {
   return (await response.json()) as T;
 }
 
-export async function listAdminUsers(token?: string) {
-  return apiRequest<AdminUserRecord[]>("/admin/users", token);
+export async function listAdminUsers(
+  filters: {
+    page?: number;
+    limit?: number;
+    planType?: string;
+    query?: string;
+    status?: string;
+  } = {},
+  token?: string,
+) {
+  const params = new URLSearchParams();
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.limit) params.set("limit", String(filters.limit));
+  if (filters.planType) params.set("planType", filters.planType);
+  if (filters.query) params.set("query", filters.query);
+  if (filters.status) params.set("status", filters.status);
+  const qs = params.toString();
+
+  return apiRequest<{
+    limit: number;
+    page: number;
+    total: number;
+    users: AdminUserRecord[];
+  }>(`/admin/users${qs ? `?${qs}` : ""}`, token);
+}
+
+export type AdminResumeListRecord = AdminUserResumeRecord & {
+  user: { email: string; id: string; name: string };
+};
+
+export async function listAdminResumes(
+  filters: {
+    page?: number;
+    limit?: number;
+    kind?: "master" | "base" | "adapted";
+    query?: string;
+    status?: string;
+  } = {},
+  token?: string,
+) {
+  const params = new URLSearchParams();
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.limit) params.set("limit", String(filters.limit));
+  if (filters.kind) params.set("kind", filters.kind);
+  if (filters.query) params.set("query", filters.query);
+  if (filters.status) params.set("status", filters.status);
+  const qs = params.toString();
+
+  return apiRequest<{
+    limit: number;
+    page: number;
+    resumes: AdminResumeListRecord[];
+    total: number;
+  }>(`/admin/users/resumes${qs ? `?${qs}` : ""}`, token);
 }
 
 export async function getAdminUser(userId: string, token?: string) {
