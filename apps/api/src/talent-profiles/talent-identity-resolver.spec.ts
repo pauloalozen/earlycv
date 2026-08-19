@@ -149,6 +149,45 @@ test("conflicting STRONG signals across two different users never merge, and log
   await prisma.user.delete({ where: { id: userB.id } });
 });
 
+test("re-resolving the same conflicting pair does not log a duplicate conflict", async () => {
+  const resolver = new TalentIdentityResolver(prisma, false);
+  const sharedEmail = `conflict-rerun+${randomUUID()}@example.com`;
+  const userA = await makeUser();
+  const userB = await makeUser();
+
+  const outcomeA = await resolver.resolveForUser(userA.id, [
+    emailSignal(sharedEmail),
+  ]);
+  // Simula uma re-execução do backfill (ex: depois de uma interrupção) —
+  // o mesmo snapshot de B é reprocessado e bate no mesmo conflito de novo.
+  await resolver.resolveForUser(userB.id, [
+    emailSignal(sharedEmail, randomUUID()),
+  ]);
+  const secondRunOutcomeB = await resolver.resolveForUser(userB.id, [
+    emailSignal(sharedEmail, randomUUID()),
+  ]);
+
+  assert.equal(secondRunOutcomeB.conflicts, 0);
+
+  const conflictCount = await prisma.talentIdentityConflict.count({
+    where: {
+      OR: [
+        { profileAId: outcomeA.talentProfileId },
+        { profileBId: outcomeA.talentProfileId },
+      ],
+    },
+  });
+  assert.equal(conflictCount, 1);
+
+  const profileB = await prisma.talentProfile.findUnique({
+    where: { userId: userB.id },
+  });
+  await cleanupProfile(outcomeA.talentProfileId);
+  if (profileB) await cleanupProfile(profileB.id);
+  await prisma.user.delete({ where: { id: userA.id } });
+  await prisma.user.delete({ where: { id: userB.id } });
+});
+
 test("dry run never writes to the database", async () => {
   const resolver = new TalentIdentityResolver(prisma, true);
   const email = `dry-run+${randomUUID()}@example.com`;

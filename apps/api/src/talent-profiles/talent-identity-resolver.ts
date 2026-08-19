@@ -255,6 +255,21 @@ export class TalentIdentityResolver {
     let count = 0;
     for (const { otherProfileId, signal } of pending) {
       if (otherProfileId === profileId) continue;
+
+      // Reprocessar o mesmo par (ex: reexecução do backfill depois de uma
+      // interrupção) não pode logar o mesmo conflito de novo — sem isso,
+      // toda vez que os dois profiles ainda existirem separados o
+      // conflito reaparece duplicado.
+      const alreadyLogged = await this.prisma.talentIdentityConflict.findFirst({
+        where: {
+          profileAId: otherProfileId,
+          profileBId: profileId,
+          signalType: signal.signalType,
+          resolvedAt: null,
+        },
+      });
+      if (alreadyLogged) continue;
+
       await this.prisma.talentIdentityConflict.create({
         data: {
           profileAId: otherProfileId,
