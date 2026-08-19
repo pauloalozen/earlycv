@@ -205,6 +205,42 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.googleIndexingLog;
   }
 
+  get talentProfile() {
+    return this.prisma.talentProfile;
+  }
+
+  get talentIdentitySignal() {
+    return this.prisma.talentIdentitySignal;
+  }
+
+  get talentIdentityConflict() {
+    return this.prisma.talentIdentityConflict;
+  }
+
+  get talentCompetency() {
+    return this.prisma.talentCompetency;
+  }
+
+  get talentLanguageSkill() {
+    return this.prisma.talentLanguageSkill;
+  }
+
+  get talentCertification() {
+    return this.prisma.talentCertification;
+  }
+
+  get talentExperience() {
+    return this.prisma.talentExperience;
+  }
+
+  get talentEducation() {
+    return this.prisma.talentEducation;
+  }
+
+  get talentInteractionHistory() {
+    return this.prisma.talentInteractionHistory;
+  }
+
   get $transaction() {
     return this.prisma.$transaction.bind(this.prisma);
   }
