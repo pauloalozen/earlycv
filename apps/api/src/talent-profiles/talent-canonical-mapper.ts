@@ -100,6 +100,47 @@ function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 
+// A IA às vezes escreve o mesmo idioma em português, em inglês, ou sem
+// acento ("Inglês" / "English" / "Ingles") dependendo do CV — sem
+// normalizar, isso vira linhas duplicadas em TalentLanguageSkill pra
+// mesma pessoa (achado revisando o piloto de produção: 81 linhas, só 11
+// valores distintos, a maioria eram a mesma língua escrita diferente).
+// Canoniza pro rótulo em português (produto é BR); nomes não mapeados
+// passam por normalize() + title case, sem inventar tradução.
+const LANGUAGE_CANONICAL_LABEL: Record<string, string> = {
+  ingles: "Inglês",
+  english: "Inglês",
+  espanhol: "Espanhol",
+  spanish: "Espanhol",
+  portugues: "Português",
+  portuguese: "Português",
+  italiano: "Italiano",
+  italian: "Italiano",
+  frances: "Francês",
+  french: "Francês",
+  alemao: "Alemão",
+  german: "Alemão",
+  mandarim: "Mandarim",
+  mandarin: "Mandarim",
+  chines: "Mandarim",
+  chinese: "Mandarim",
+  japones: "Japonês",
+  japanese: "Japonês",
+  libras: "Libras",
+};
+
+function stripAccents(value: string): string {
+  return value.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+function canonicalLanguageLabel(raw: string): string {
+  const key = stripAccents(normalize(raw));
+  const canonical = LANGUAGE_CANONICAL_LABEL[key];
+  if (canonical) return canonical;
+  const trimmed = raw.trim();
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
 function parseYear(value: string | null): number | null {
   if (!value) return null;
   const match = value.match(/\d{4}/);
@@ -191,12 +232,18 @@ export function mapCompetencies(profile: CanonicalProfile): MappedCompetency[] {
 }
 
 export function mapLanguages(profile: CanonicalProfile): MappedLanguage[] {
-  return profile.languages
+  const languages = profile.languages
     .filter((entry) => entry.language.trim().length > 0)
     .map((entry) => ({
-      language: entry.language.trim(),
+      language: canonicalLanguageLabel(entry.language),
       proficiencyLevel: entry.level,
     }));
+
+  const dedup = new Map<string, MappedLanguage>();
+  for (const language of languages) {
+    dedup.set(language.language, language);
+  }
+  return [...dedup.values()];
 }
 
 export function mapCertifications(

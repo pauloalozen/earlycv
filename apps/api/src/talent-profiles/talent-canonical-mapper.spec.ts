@@ -60,6 +60,37 @@ test("mapLanguages passes through language + level, skipping blanks", () => {
   assert.equal(result[0].proficiencyLevel, "Avançado");
 });
 
+test("mapLanguages collapses the same language written differently into one row", () => {
+  // Achado revisando o piloto de produção: a IA escreve o mesmo idioma como
+  // "Inglês", "English" ou "Ingles" dependendo do CV — sem normalizar isso
+  // virava linhas duplicadas pra mesma pessoa.
+  const result = mapLanguages(
+    baseProfile({
+      languages: [
+        { language: "Inglês", level: "Avançado" },
+        { language: "English", level: null },
+        { language: "Ingles", level: "Fluente" },
+        { language: "Espanhol", level: "Básico" },
+        { language: "Spanish", level: null },
+      ],
+    }),
+  );
+
+  assert.equal(result.length, 2);
+  assert.deepEqual(result.map((r) => r.language).sort(), [
+    "Espanhol",
+    "Inglês",
+  ]);
+});
+
+test("mapLanguages keeps an unmapped language capitalized instead of dropping it", () => {
+  const result = mapLanguages(
+    baseProfile({ languages: [{ language: "coreano", level: null }] }),
+  );
+
+  assert.equal(result[0].language, "Coreano");
+});
+
 test("mapCertifications extracts a 4-digit year from free-form year text", () => {
   const result = mapCertifications(
     baseProfile({
