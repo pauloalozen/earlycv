@@ -16,7 +16,8 @@
     "analysis:purge-retention": "NODE_OPTIONS='--conditions=development' tsx src/scripts/purge-analysis-retention.ts",
     "analysis:backfill-legacy-snapshots": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-legacy-analysis-snapshots.ts",
     "templates:patch-docx-conditionals": "NODE_OPTIONS='--conditions=development' tsx src/scripts/patch-docx-template-conditionals.ts",
-    "jobs:backfill-slugs": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-job-slugs.ts"
+    "jobs:backfill-slugs": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-job-slugs.ts",
+    "talent:backfill-profiles": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-talent-profiles.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1024.0",
