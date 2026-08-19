@@ -20,7 +20,8 @@
     "talent:backfill-profiles": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-talent-profiles.ts",
     "talent:enrich-ai": "NODE_OPTIONS='--conditions=development' tsx src/scripts/enrich-talent-profiles-ai.ts",
     "talent:reconstruct-history": "NODE_OPTIONS='--conditions=development' tsx src/scripts/reconstruct-talent-interaction-history.ts",
-    "talent:metrics": "NODE_OPTIONS='--conditions=development' tsx src/scripts/talent-base-metrics.ts"
+    "talent:metrics": "NODE_OPTIONS='--conditions=development' tsx src/scripts/talent-base-metrics.ts",
+    "talent:cleanup-canonicalize-competencies": "NODE_OPTIONS='--conditions=development' tsx src/scripts/cleanup-canonicalize-existing-talent-competencies.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1024.0",

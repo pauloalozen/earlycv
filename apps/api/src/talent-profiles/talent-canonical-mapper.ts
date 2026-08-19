@@ -133,7 +133,7 @@ function stripAccents(value: string): string {
   return value.normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-function canonicalLanguageLabel(raw: string): string {
+export function canonicalLanguageLabel(raw: string): string {
   const key = stripAccents(normalize(raw));
   const canonical = LANGUAGE_CANONICAL_LABEL[key];
   if (canonical) return canonical;
@@ -212,7 +212,7 @@ const TECH_CANONICAL_LABEL: Record<string, string> = {
   "ci/cd": "CI/CD",
 };
 
-function canonicalTechLabel(raw: string): string {
+export function canonicalTechLabel(raw: string): string {
   const key = stripAccents(normalize(raw)).replace(/\s+/g, " ");
   const canonical = TECH_CANONICAL_LABEL[key];
   if (canonical) return canonical;
