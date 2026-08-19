@@ -10,6 +10,12 @@
 // rodado — perfis sem sinal de identidade resolvido ficam sem histórico
 // aqui (contam como "sem profile resolvido" no relatório).
 //
+// Resolve os profiles com DUAS queries em memória (todo userId->profileId
+// e todo snapshotId->profileId) em vez de uma query por registro — rodando
+// contra produção via proxy público, uma query por registro pra milhares
+// de AnalysisJob/CvAdaptation/JobApplication é lento demais (achado no
+// piloto: matou o processo depois de 15min sem terminar).
+//
 // Por padrão roda em --dry-run. Passe --apply pra gravar de verdade.
 //
 //   npm run talent:reconstruct-history --workspace @earlycv/api
@@ -42,29 +48,50 @@ function emptyCounters(): Counters {
   };
 }
 
-async function resolveProfileId(
+type ProfileLookup = {
+  byUserId: Map<string, string>;
+  bySnapshotId: Map<string, string>;
+};
+
+async function buildProfileLookup(
   prisma: PrismaClient,
+): Promise<ProfileLookup> {
+  const [profiles, signals] = await Promise.all([
+    prisma.talentProfile.findMany({
+      where: { userId: { not: null } },
+      select: { id: true, userId: true },
+    }),
+    prisma.talentIdentitySignal.findMany({
+      where: { sourceRecordType: "AnalysisCvSnapshot" },
+      select: { talentProfileId: true, sourceRecordId: true },
+    }),
+  ]);
+
+  const byUserId = new Map<string, string>();
+  for (const profile of profiles) {
+    if (profile.userId) byUserId.set(profile.userId, profile.id);
+  }
+
+  const bySnapshotId = new Map<string, string>();
+  for (const signal of signals) {
+    bySnapshotId.set(signal.sourceRecordId, signal.talentProfileId);
+  }
+
+  return { byUserId, bySnapshotId };
+}
+
+function resolveProfileId(
+  lookup: ProfileLookup,
   args: { userId: string | null; analysisCvSnapshotId: string | null },
-): Promise<string | null> {
+): string | null {
   if (args.userId) {
-    const profile = await prisma.talentProfile.findUnique({
-      where: { userId: args.userId },
-      select: { id: true },
-    });
-    if (profile) return profile.id;
+    const profileId = lookup.byUserId.get(args.userId);
+    if (profileId) return profileId;
   }
-
   if (args.analysisCvSnapshotId) {
-    const signal = await prisma.talentIdentitySignal.findFirst({
-      where: {
-        sourceRecordType: "AnalysisCvSnapshot",
-        sourceRecordId: args.analysisCvSnapshotId,
-      },
-      select: { talentProfileId: true },
-    });
-    if (signal) return signal.talentProfileId;
+    const profileId = lookup.bySnapshotId.get(args.analysisCvSnapshotId);
+    if (profileId) return profileId;
   }
-
   return null;
 }
 
@@ -103,9 +130,19 @@ async function upsertHistory(
   });
 }
 
-async function processAnalysisJobs(prisma: PrismaClient, counters: Counters) {
+async function processAnalysisJobs(
+  prisma: PrismaClient,
+  lookup: ProfileLookup,
+  counters: Counters,
+) {
   const jobs = await prisma.analysisJob.findMany({
-    where: { status: "succeeded" },
+    where: {
+      status: "succeeded",
+      OR: [
+        { userId: { in: [...lookup.byUserId.keys()] } },
+        { analysisCvSnapshotId: { in: [...lookup.bySnapshotId.keys()] } },
+      ],
+    },
     select: {
       id: true,
       userId: true,
@@ -120,7 +157,7 @@ async function processAnalysisJobs(prisma: PrismaClient, counters: Counters) {
 
   for (const job of jobs) {
     counters.analysisJobsConsidered += 1;
-    const talentProfileId = await resolveProfileId(prisma, {
+    const talentProfileId = resolveProfileId(lookup, {
       userId: job.userId,
       analysisCvSnapshotId: job.analysisCvSnapshotId,
     });
@@ -143,8 +180,13 @@ async function processAnalysisJobs(prisma: PrismaClient, counters: Counters) {
   }
 }
 
-async function processCvAdaptations(prisma: PrismaClient, counters: Counters) {
+async function processCvAdaptations(
+  prisma: PrismaClient,
+  lookup: ProfileLookup,
+  counters: Counters,
+) {
   const adaptations = await prisma.cvAdaptation.findMany({
+    where: { userId: { in: [...lookup.byUserId.keys()] } },
     select: {
       id: true,
       userId: true,
@@ -156,7 +198,7 @@ async function processCvAdaptations(prisma: PrismaClient, counters: Counters) {
 
   for (const adaptation of adaptations) {
     counters.cvAdaptationsConsidered += 1;
-    const talentProfileId = await resolveProfileId(prisma, {
+    const talentProfileId = resolveProfileId(lookup, {
       userId: adaptation.userId,
       analysisCvSnapshotId: null,
     });
@@ -181,10 +223,14 @@ async function processCvAdaptations(prisma: PrismaClient, counters: Counters) {
 
 async function processJobApplications(
   prisma: PrismaClient,
+  lookup: ProfileLookup,
   counters: Counters,
 ) {
   const applications = await prisma.jobApplication.findMany({
-    where: { deletedAt: null },
+    where: {
+      deletedAt: null,
+      userId: { in: [...lookup.byUserId.keys()] },
+    },
     select: {
       id: true,
       userId: true,
@@ -198,7 +244,7 @@ async function processJobApplications(
 
   for (const application of applications) {
     counters.jobApplicationsConsidered += 1;
-    const talentProfileId = await resolveProfileId(prisma, {
+    const talentProfileId = resolveProfileId(lookup, {
       userId: application.userId,
       analysisCvSnapshotId: null,
     });
@@ -230,9 +276,14 @@ async function main() {
   );
 
   try {
-    await processAnalysisJobs(prisma, counters);
-    await processCvAdaptations(prisma, counters);
-    await processJobApplications(prisma, counters);
+    const lookup = await buildProfileLookup(prisma);
+    console.log(
+      `[talent-history] ${lookup.byUserId.size} profiles com userId, ${lookup.bySnapshotId.size} sinais de snapshot resolvidos`,
+    );
+
+    await processAnalysisJobs(prisma, lookup, counters);
+    await processCvAdaptations(prisma, lookup, counters);
+    await processJobApplications(prisma, lookup, counters);
 
     console.log("[talent-history] concluído:");
     console.table(counters);

@@ -45,6 +45,21 @@ test("mapCompetencies normalizes and dedupes skills case-insensitively", () => {
   assert.equal(result[0].category, "TECHNICAL_SKILL");
 });
 
+test("mapCompetencies collapses abbreviation and full name into one canonical label", () => {
+  // Mesmo achado das línguas, agora pra tech: "JS"/"Javascript" e
+  // "PBI"/"Power BI" viravam competências diferentes pra mesma coisa.
+  const result = mapCompetencies(
+    baseProfile({ skills: ["JS", "Javascript", "PBI", "k8s"] }),
+  );
+
+  assert.equal(result.length, 3);
+  assert.deepEqual(result.map((r) => r.valueLabel).sort(), [
+    "JavaScript",
+    "Kubernetes",
+    "Power BI",
+  ]);
+});
+
 test("mapLanguages passes through language + level, skipping blanks", () => {
   const result = mapLanguages(
     baseProfile({
@@ -138,6 +153,29 @@ test("mapExperiences drops entries missing company or role, parses dates and det
   assert.equal(result[0].companyNormalized, "empresa x");
   assert.equal(result[0].isCurrent, true);
   assert.deepEqual(result[0].startDate, new Date(2021, 2, 1));
+});
+
+test("mapExperiences canonicalizes and dedupes technologiesUsed within one experience", () => {
+  const result = mapExperiences(
+    baseProfile({
+      experiences: [
+        {
+          role: "Dev",
+          company: "Empresa Y",
+          location: null,
+          startDate: null,
+          endDate: null,
+          bullets: [],
+          technologies: ["JS", "Javascript", "postgres", "PostgreSQL"],
+        },
+      ],
+    }),
+  );
+
+  assert.deepEqual(result[0].technologiesUsed.sort(), [
+    "JavaScript",
+    "PostgreSQL",
+  ]);
 });
 
 test("mapEducation drops entries without an institution", () => {

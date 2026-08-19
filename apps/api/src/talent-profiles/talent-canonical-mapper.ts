@@ -141,6 +141,97 @@ function canonicalLanguageLabel(raw: string): string {
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
+// Mesmo problema das línguas, mas pra tecnologia/skill: a IA (e o próprio
+// CV) mistura sigla e nome por extenso pro mesmo item — "JS" e
+// "Javascript", "K8s" e "Kubernetes", "PBI" e "Power BI" viravam
+// competências DIFERENTES pra mesma coisa. Cobre só os casos mais comuns em
+// CV de tech BR (não é uma taxonomia completa); qualquer coisa fora daqui
+// só normaliza espaço/maiúscula, sem inventar expansão de sigla.
+const TECH_CANONICAL_LABEL: Record<string, string> = {
+  js: "JavaScript",
+  javascript: "JavaScript",
+  ts: "TypeScript",
+  typescript: "TypeScript",
+  py: "Python",
+  python: "Python",
+  node: "Node.js",
+  nodejs: "Node.js",
+  "node.js": "Node.js",
+  react: "React",
+  reactjs: "React",
+  "react.js": "React",
+  vue: "Vue.js",
+  vuejs: "Vue.js",
+  angular: "Angular",
+  k8s: "Kubernetes",
+  kubernetes: "Kubernetes",
+  docker: "Docker",
+  aws: "AWS",
+  "amazon web services": "AWS",
+  gcp: "GCP",
+  "google cloud": "GCP",
+  "google cloud platform": "GCP",
+  azure: "Azure",
+  "microsoft azure": "Azure",
+  pbi: "Power BI",
+  "power bi": "Power BI",
+  powerbi: "Power BI",
+  sql: "SQL",
+  postgresql: "PostgreSQL",
+  postgres: "PostgreSQL",
+  psql: "PostgreSQL",
+  mysql: "MySQL",
+  mongodb: "MongoDB",
+  mongo: "MongoDB",
+  ml: "Machine Learning",
+  "machine learning": "Machine Learning",
+  ia: "Inteligência Artificial",
+  ai: "Inteligência Artificial",
+  "inteligencia artificial": "Inteligência Artificial",
+  "c#": "C#",
+  csharp: "C#",
+  "c++": "C++",
+  cpp: "C++",
+  golang: "Go",
+  go: "Go",
+  excel: "Excel",
+  "ms excel": "Excel",
+  "microsoft excel": "Excel",
+  git: "Git",
+  github: "GitHub",
+  gitlab: "GitLab",
+  scrum: "Scrum",
+  kanban: "Kanban",
+  agile: "Ágil",
+  agil: "Ágil",
+  api: "API",
+  apis: "API",
+  "rest api": "REST API",
+  restapi: "REST API",
+  ci_cd: "CI/CD",
+  "ci/cd": "CI/CD",
+};
+
+function canonicalTechLabel(raw: string): string {
+  const key = stripAccents(normalize(raw)).replace(/\s+/g, " ");
+  const canonical = TECH_CANONICAL_LABEL[key];
+  if (canonical) return canonical;
+  return raw.trim();
+}
+
+// technologiesUsed é um array livre por experiência (não tem @@unique pra
+// forçar isso no banco como TalentCompetency) — sem isso, "JS" e
+// "Javascript" na mesma experiência viram duas entradas na mesma lista.
+function dedupeCanonicalTechLabels(values: string[]): string[] {
+  const seen = new Map<string, string>();
+  for (const value of values) {
+    if (!value.trim()) continue;
+    const label = canonicalTechLabel(value);
+    seen.set(normalize(label), label);
+  }
+  return [...seen.values()];
+}
+
 function parseYear(value: string | null): number | null {
   if (!value) return null;
   const match = value.match(/\d{4}/);
@@ -218,11 +309,14 @@ export type MappedProfileCache = {
 export function mapCompetencies(profile: CanonicalProfile): MappedCompetency[] {
   const skills = profile.skills
     .filter((skill) => skill.trim().length > 0)
-    .map((skill) => ({
-      category: "TECHNICAL_SKILL" as TalentCompetencyCategory,
-      valueNormalized: normalize(skill),
-      valueLabel: skill.trim(),
-    }));
+    .map((skill) => {
+      const label = canonicalTechLabel(skill);
+      return {
+        category: "TECHNICAL_SKILL" as TalentCompetencyCategory,
+        valueNormalized: normalize(label),
+        valueLabel: label,
+      };
+    });
 
   const dedup = new Map<string, MappedCompetency>();
   for (const skill of skills) {
@@ -271,7 +365,7 @@ export function mapExperiences(profile: CanonicalProfile): MappedExperience[] {
       startDate: parseLooseDate(entry.startDate),
       endDate: parseLooseDate(entry.endDate),
       isCurrent: /presente|atual|current|now/i.test(entry.endDate ?? ""),
-      technologiesUsed: entry.technologies,
+      technologiesUsed: dedupeCanonicalTechLabels(entry.technologies),
       bulletsJson: entry.bullets,
     }));
 }
