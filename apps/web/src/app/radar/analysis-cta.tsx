@@ -5,6 +5,7 @@ import Script from "next/script";
 import { useState } from "react";
 import { analyzeMasterCvForJob } from "@/lib/analyze-master-cv-flow";
 import { useTurnstileToken } from "@/lib/use-turnstile-token";
+import { AnalyzingOverlay } from "./analyzing-overlay";
 import { scoreTier } from "./radar-ui";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -250,6 +251,7 @@ export function AnalysisCtaButtons({
       </a>
 
       {error ? <Toast message={error} onClose={() => setError(null)} /> : null}
+      {loading ? <AnalyzingOverlay /> : null}
     </>
   );
 }

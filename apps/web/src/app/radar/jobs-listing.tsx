@@ -654,9 +654,14 @@ export async function RadarJobsListing({
   }
 
   const hasRadar = !!radarProfile && radarProfile.areas.length > 0;
+  // hasRadar por si só não prova que o usuário tem CV master — o perfil de
+  // radar (área/senioridade) pode ter sido configurado manualmente e
+  // sobrevive à exclusão do CV master (não é limpo junto). Sem
+  // masterResumeId aqui, score/badges de compatibilidade ficariam calculados
+  // "no ar", sugerindo um CV que não existe mais.
   const scoreState: "anonymous" | "has-cv" | "no-cv" = !user
     ? "anonymous"
-    : hasRadar
+    : hasRadar && masterResumeId
       ? "has-cv"
       : "no-cv";
 

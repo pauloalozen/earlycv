@@ -733,6 +733,7 @@ export class DiscoveredCompaniesService {
     }
 
     const outcome = await this.importService.importRow({
+      agendamentoAtivo: "true",
       ativa: "true",
       careersUrl,
       dryRun: false,

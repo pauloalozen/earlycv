@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { analyzeMasterCvForJob } from "@/lib/analyze-master-cv-flow";
+import { AnalyzingOverlay } from "./analyzing-overlay";
 import { AdaptBtn, scoreTier } from "./radar-ui";
 import { useTurnstileAnalyzeToken } from "./turnstile-analyze-context";
 
@@ -126,6 +127,7 @@ export function AnalyzeCardBtn({
         )}
         {loading ? "Analisando..." : "Analisar meu CV"}
       </button>
+      {loading ? <AnalyzingOverlay /> : null}
     </>
   );
 }
