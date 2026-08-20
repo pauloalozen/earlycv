@@ -1939,6 +1939,14 @@ model TalentProfile {
   lastInteractionAt DateTime?
   lastEnrichedAt    DateTime?
 
+  // Qual analise "venceu" o enriquecimento por IA atual — "master" (Resume
+  // master do usuario) sempre prevalece e nunca e sobrescrito por uma
+  // analise avulsa; "avulso" so preenche enquanto nao existir "master".
+  // lastEnrichedSourceId e o AnalysisCvSnapshot.id daquela chamada, usado
+  // pra nunca reprocessar o mesmo snapshot duas vezes (ex: retry).
+  lastEnrichedSourceType String?
+  lastEnrichedSourceId   String?
+
   // Ponteiro direto e permanente pro registro (AnalysisCvSnapshot/Resume)
   // que originou este profile, gravado uma única vez na criação —
   // independente de TalentIdentitySignal. Achado revisando cobertura: um

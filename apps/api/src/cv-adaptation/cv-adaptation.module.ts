@@ -5,6 +5,7 @@ import { DatabaseModule } from "../database/database.module";
 import { JobApplicationsModule } from "../job-applications/job-applications.module";
 import { ProfilesModule } from "../profiles/profiles.module";
 import { ResumeTemplatesModule } from "../resume-templates/resume-templates.module";
+import { TalentProfilesModule } from "../talent-profiles/talent-profiles.module";
 import { CvAdaptationController } from "./cv-adaptation.controller";
 import { CvAdaptationService } from "./cv-adaptation.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
@@ -24,6 +25,7 @@ import { JobRequirementSetsService } from "./job-requirement-sets.service";
     AnalysisProtectionModule,
     JobApplicationsModule,
     ProfilesModule,
+    TalentProfilesModule,
   ],
   controllers: [CvAdaptationController, CvAdaptationPublicController],
   exports: [CvAdaptationService, CvAdaptationAiService],

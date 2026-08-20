@@ -33,6 +33,7 @@ import type { CanonicalProfileData } from "../profiles/profile-canonical.types";
 import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merge.service";
 import { ProfileReadinessService } from "../profiles/profile-readiness.service";
 import { StorageService } from "../storage/storage.service";
+import { TalentProfileCaptureService } from "../talent-profiles/talent-profile-capture.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
 import {
@@ -171,6 +172,16 @@ export class CvAdaptationService {
       JobRequirementSetsService,
       "findByRequirementSourceHash" | "getOrCreateFromAnalysis"
     >,
+    @Optional()
+    @Inject(TalentProfileCaptureService)
+    private readonly talentProfileCapture: Pick<
+      TalentProfileCaptureService,
+      "captureFromSnapshot"
+    > = {
+      captureFromSnapshot() {
+        return;
+      },
+    },
   ) {}
 
   private async triggerJobApplicationHook(
@@ -4651,7 +4662,7 @@ export class CvAdaptationService {
       ? null
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    return this.database.analysisCvSnapshot.create({
+    const snapshot = await this.database.analysisCvSnapshot.create({
       data: {
         userId: input.userId,
         guestSessionHash: input.guestSessionHash,
@@ -4669,6 +4680,18 @@ export class CvAdaptationService {
         expiresAt,
       },
     });
+
+    // Fire-and-forget: popula a Base de Talentos (EarlySignal) em segundo
+    // plano. Nunca aguardado e nunca deve afetar esta análise — ver
+    // talent-profiles/talent-profile-capture.service.ts.
+    this.talentProfileCapture.captureFromSnapshot({
+      snapshotId: snapshot.id,
+      userId: snapshot.userId,
+      sourceType: snapshot.sourceType,
+      text: normalizedText,
+    });
+
+    return snapshot;
   }
 
   private async validateAndClaimSnapshot(input: {
