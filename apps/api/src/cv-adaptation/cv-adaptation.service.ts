@@ -563,6 +563,20 @@ export class CvAdaptationService {
     let newMasterResumeId: string | null = null;
 
     const adaptation = await this.database.$transaction(async (tx) => {
+      const snapshot = await this.validateAndClaimSnapshot({
+        tx,
+        snapshotId: dto.analysisCvSnapshotId,
+        userId,
+        guestSessionHash,
+      });
+
+      const releaseDate = this.getSnapshotEnforcementReleaseDate();
+      if (!snapshot && new Date() >= releaseDate) {
+        throw new BadRequestException(
+          "Analysis snapshot is required to claim this adaptation.",
+        );
+      }
+
       const existingMaster = await tx.resume.findFirst({
         where: { userId, isMaster: true, kind: "master" },
         select: { id: true },
@@ -573,11 +587,19 @@ export class CvAdaptationService {
         masterResumeId = existingMaster.id;
       } else {
         // Sem master existente, este CV vira o primeiro master do usuário
-        // automaticamente — sem perguntar nada.
+        // automaticamente — sem perguntar nada. O título usa o nome do
+        // arquivo que o usuário de fato enviou na análise (guardado no
+        // snapshot), não um placeholder baseado na vaga.
+        const originalFileName = snapshot?.originalFileName ?? null;
         const created = await tx.resume.create({
           data: {
             userId,
-            title: dto.jobTitle ? `CV para ${dto.jobTitle}` : "CV Importado",
+            title: originalFileName
+              ? originalFileName.replace(/\.[^.]+$/, "")
+              : dto.jobTitle
+                ? `CV para ${dto.jobTitle}`
+                : "CV Importado",
+            sourceFileName: originalFileName ?? undefined,
             kind: "master",
             status: "uploaded",
             sourceFileType: "application/pdf",
@@ -593,20 +615,6 @@ export class CvAdaptationService {
         dto.adaptedContentJson,
         dto.selectedMissingKeywords,
       );
-
-      const snapshot = await this.validateAndClaimSnapshot({
-        tx,
-        snapshotId: dto.analysisCvSnapshotId,
-        userId,
-        guestSessionHash,
-      });
-
-      const releaseDate = this.getSnapshotEnforcementReleaseDate();
-      if (!snapshot && new Date() >= releaseDate) {
-        throw new BadRequestException(
-          "Analysis snapshot is required to claim this adaptation.",
-        );
-      }
 
       const created = await tx.cvAdaptation.create({
         data: {
@@ -1862,6 +1870,20 @@ export class CvAdaptationService {
       }
     }
 
+    const snapshot = await this.validateAndClaimSnapshot({
+      tx: this.database,
+      snapshotId: dto.analysisCvSnapshotId,
+      userId,
+      guestSessionHash,
+    });
+
+    const releaseDate = this.getSnapshotEnforcementReleaseDate();
+    if (!snapshot && new Date() >= releaseDate) {
+      throw new BadRequestException(
+        "Analysis snapshot is required to persist this adaptation.",
+      );
+    }
+
     const existingMaster = await this.database.resume.findFirst({
       where: { userId, isMaster: true, kind: "master" },
       select: { id: true },
@@ -1912,11 +1934,19 @@ export class CvAdaptationService {
       masterResumeId = existingMaster.id;
     } else {
       // Sem arquivo e sem master existente — CV colado como texto vira o
-      // primeiro master do usuário automaticamente, sem perguntar nada.
+      // primeiro master do usuário automaticamente, sem perguntar nada. O
+      // título usa o nome do arquivo enviado na análise original (guardado
+      // no snapshot), não um placeholder baseado na vaga.
+      const originalFileName = snapshot?.originalFileName ?? null;
       const created = await this.database.resume.create({
         data: {
           userId,
-          title: dto.jobTitle ? `CV para ${dto.jobTitle}` : "CV Importado",
+          title: originalFileName
+            ? originalFileName.replace(/\.[^.]+$/, "")
+            : dto.jobTitle
+              ? `CV para ${dto.jobTitle}`
+              : "CV Importado",
+          sourceFileName: originalFileName ?? undefined,
           kind: "master",
           status: "uploaded",
           sourceFileType: null,
@@ -1931,20 +1961,6 @@ export class CvAdaptationService {
         resumeId: created.id,
         rawText: dto.masterCvText,
       });
-    }
-
-    const snapshot = await this.validateAndClaimSnapshot({
-      tx: this.database,
-      snapshotId: dto.analysisCvSnapshotId,
-      userId,
-      guestSessionHash,
-    });
-
-    const releaseDate = this.getSnapshotEnforcementReleaseDate();
-    if (!snapshot && new Date() >= releaseDate) {
-      throw new BadRequestException(
-        "Analysis snapshot is required to persist this adaptation.",
-      );
     }
 
     const existingAdaptation = await this.database.cvAdaptation.findFirst({
@@ -4854,6 +4870,7 @@ export class CvAdaptationService {
           expiresAt: Date | null;
           claimedAt: Date | null;
           claimedByUserId: string | null;
+          originalFileName: string | null;
         } | null>;
         update: (args: {
           where: { id: string };
@@ -4861,7 +4878,7 @@ export class CvAdaptationService {
             claimedAt: Date;
             claimedByUserId: string;
           };
-        }) => Promise<{ id: string }>;
+        }) => Promise<{ id: string; originalFileName: string | null }>;
       };
     };
     snapshotId: string;
