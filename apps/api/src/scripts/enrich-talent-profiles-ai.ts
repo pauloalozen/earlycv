@@ -8,15 +8,22 @@
 // competências/idiomas/certificações/experiências/formação.
 //
 // Dedup por hash de conteúdo: dois profiles com o mesmo texto de CV (ex: CV
-// idêntico enviado duas vezes) só pagam UMA chamada de IA — ver estimativa
-// de custo no diagnóstico da sprint (~US$1 pros ~1.4k CVs únicos).
+// idêntico enviado duas vezes) só pagam UMA chamada de IA dentro da MESMA
+// execução — ver estimativa de custo no diagnóstico da sprint (~US$5-15
+// pros ~1.4k CVs únicos).
+//
+// Só considera profiles com lastEnrichedAt nulo (nunca tentado) — sem isso,
+// rodar --limit em lotes crescentes (100, depois 300...) reprocessa e paga
+// de novo pelos profiles já enriquecidos em lotes anteriores (achado no
+// piloto de produção). Passe --force pra reprocessar mesmo assim.
 //
 // Por padrão roda em --dry-run. Passe --apply pra gravar de verdade, e
-// --limit N pra processar só os N primeiros profiles (smoke test barato
-// antes de rodar a base inteira).
+// --limit N pra processar só os N primeiros profiles ainda não enriquecidos
+// (smoke test barato antes de rodar a base inteira).
 //
 //   npm run talent:enrich-ai --workspace @earlycv/api -- --limit 5
 //   npm run talent:enrich-ai --workspace @earlycv/api -- --apply
+//   npm run talent:enrich-ai --workspace @earlycv/api -- --apply --force
 
 import { createHash } from "node:crypto";
 
@@ -40,6 +47,7 @@ import {
 
 const APPLY = process.argv.includes("--apply");
 const DRY_RUN = !APPLY;
+const FORCE = process.argv.includes("--force");
 const LIMIT_ARG = process.argv.find((arg) => arg.startsWith("--limit="));
 const LIMIT = LIMIT_ARG
   ? Number.parseInt(LIMIT_ARG.split("=")[1], 10)
@@ -248,8 +256,11 @@ async function applyCanonicalProfile(
     });
   }
 
+  // Marca lastEnrichedAt mesmo quando a IA não achou nada pra cachear —
+  // é o que impede o profile de ser reprocessado (e recobrado) numa
+  // próxima rodada só porque o CV é pouco informativo.
   const cachePatch = mapProfileCache(canonical);
-  if (!DRY_RUN && Object.keys(cachePatch).length > 0) {
+  if (!DRY_RUN) {
     await prisma.talentProfile.update({
       where: { id: talentProfileId },
       data: { ...cachePatch, lastEnrichedAt: new Date() },
@@ -271,6 +282,7 @@ async function main() {
 
   try {
     const profiles = await prisma.talentProfile.findMany({
+      where: FORCE ? undefined : { lastEnrichedAt: null },
       select: { id: true, userId: true },
       ...(LIMIT ? { take: LIMIT } : {}),
       orderBy: { createdAt: "asc" },
