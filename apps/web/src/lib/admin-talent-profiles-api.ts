@@ -39,6 +39,7 @@ export type TalentJobArea =
 export type TalentProfileRecord = {
   id: string;
   userId: string | null;
+  hasCvSource: boolean;
   identityConfidence: TalentIdentityConfidence;
   fullName: string | null;
   primaryEmail: string | null;
@@ -134,4 +135,11 @@ export async function searchTalentProfiles(
     languageSuggestions: string[];
     profiles: TalentProfileRecord[];
   }>(`/admin/talent-profiles${qs ? `?${qs}` : ""}`, token);
+}
+
+export async function getTalentProfileCvUrl(id: string, token?: string) {
+  return apiRequest<{ url: string | null }>(
+    `/admin/talent-profiles/${id}/cv-url`,
+    token,
+  );
 }

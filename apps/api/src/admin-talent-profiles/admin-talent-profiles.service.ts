@@ -1,7 +1,8 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { StorageService } from "../storage/storage.service";
 import {
   canonicalLanguageLabel,
   canonicalTechLabel,
@@ -10,7 +11,11 @@ import {
 import type { SearchTalentProfilesDto } from "./dto/search-talent-profiles.dto";
 
 const DEFAULT_PAGE_SIZE = 20;
-const SUGGESTION_LIMIT = 300;
+// Cobre o universo inteiro de rótulos distintos hoje (~4k tecnologias, bem
+// menos idiomas) — um limite baixo e alfabético cortava exatamente os
+// termos mais comuns (java/react/typescript vêm depois de milhares de
+// variações de outras ferramentas em ordem alfabética).
+const SUGGESTION_LIMIT = 10_000;
 
 // "javascript, react, ia" -> busca inclusiva (OR): traz quem tem QUALQUER
 // um dos termos, não só quem tem todos — é assim que se agrega gente com
@@ -28,6 +33,8 @@ export class AdminTalentProfilesService {
   constructor(
     @Inject(DatabaseService)
     private readonly database: DatabaseService,
+    @Inject(StorageService)
+    private readonly storage: StorageService,
   ) {}
 
   async search(dto: SearchTalentProfilesDto) {
@@ -103,8 +110,7 @@ export class AdminTalentProfilesService {
               where: {
                 category: { in: ["TECHNICAL_SKILL", "TOOL", "TECHNOLOGY"] },
               },
-              orderBy: { lastObservedAt: "desc" },
-              take: 15,
+              orderBy: { valueLabel: "asc" },
             },
             languages: { orderBy: { language: "asc" } },
           },
@@ -122,6 +128,10 @@ export class AdminTalentProfilesService {
       profiles: profiles.map((profile) => ({
         id: profile.id,
         userId: profile.userId,
+        hasCvSource: Boolean(
+          profile.originSourceRecordType === "AnalysisCvSnapshot" &&
+            profile.originSourceRecordId,
+        ),
         identityConfidence: profile.identityConfidence,
         fullName: profile.fullName,
         primaryEmail: profile.primaryEmail,
@@ -144,6 +154,36 @@ export class AdminTalentProfilesService {
         lastEnrichedAt: profile.lastEnrichedAt,
       })),
     };
+  }
+
+  // Link "ver CV" pra quem não tem conta (guest) — o único jeito de
+  // acessar o CV é pelo snapshot que originou o profile. Prioriza o
+  // arquivo original enviado; sem arquivo (CV colado como texto), cai pro
+  // texto extraído.
+  async getCvUrl(talentProfileId: string): Promise<{ url: string | null }> {
+    const profile = await this.database.talentProfile.findUnique({
+      where: { id: talentProfileId },
+      select: { originSourceRecordType: true, originSourceRecordId: true },
+    });
+    if (!profile) throw new NotFoundException("talent profile not found");
+
+    if (
+      profile.originSourceRecordType !== "AnalysisCvSnapshot" ||
+      !profile.originSourceRecordId
+    ) {
+      return { url: null };
+    }
+
+    const snapshot = await this.database.analysisCvSnapshot.findUnique({
+      where: { id: profile.originSourceRecordId },
+      select: { originalFileStorageKey: true, textStorageKey: true },
+    });
+    if (!snapshot) return { url: null };
+
+    const key = snapshot.originalFileStorageKey ?? snapshot.textStorageKey;
+    if (!key) return { url: null };
+
+    return { url: await this.storage.getPresignedUrl(key) };
   }
 
   // Universo de rótulos já gravados no banco — não filtrado pela busca

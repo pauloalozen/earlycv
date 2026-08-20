@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Inject,
+  Param,
   Query,
   UseGuards,
   ValidationPipe,
@@ -29,5 +30,10 @@ export class AdminTalentProfilesController {
     dto: SearchTalentProfilesDto,
   ) {
     return this.adminTalentProfilesService.search(dto);
+  }
+
+  @Get(":id/cv-url")
+  getCvUrl(@Param("id") id: string) {
+    return this.adminTalentProfilesService.getCvUrl(id);
   }
 }

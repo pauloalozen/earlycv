@@ -57,6 +57,16 @@ const JOB_AREA_OPTIONS: TalentJobArea[] = [
   "OTHER",
 ];
 
+// A IA às vezes cai num trecho descritivo do CV em vez de um cargo curto
+// (ex: um resumo de experiência inteiro) — nesses casos é melhor não
+// mostrar nada do que exibir um parágrafo na coluna, só a senioridade.
+function isPlausibleTitle(title: string | null): title is string {
+  if (!title) return false;
+  if (title.length > 60) return false;
+  if (/[.\n]/.test(title)) return false;
+  return true;
+}
+
 const inputStyle = {
   borderColor: "rgba(10,10,10,0.08)",
   background: "#fafaf6",
@@ -234,6 +244,7 @@ export default async function AdminTalentosPage({
                 <AdminTh>Tecnologias</AdminTh>
                 <AdminTh>Idiomas</AdminTh>
                 <AdminTh w={90}>Origem</AdminTh>
+                <AdminTh w={90}>Perfil</AdminTh>
               </tr>
             </thead>
             <tbody>
@@ -250,29 +261,32 @@ export default async function AdminTalentosPage({
                       .join(", ") || "—"}
                   </AdminTd>
                   <AdminTd>
-                    {profile.currentTitle ?? "—"}
-                    {profile.seniority ? (
-                      <span style={{ color: AT.muted, fontSize: 11 }}>
-                        {" "}
-                        · {profile.seniority}
-                      </span>
-                    ) : null}
+                    {isPlausibleTitle(profile.currentTitle) ? (
+                      <>
+                        {profile.currentTitle}
+                        {profile.seniority ? (
+                          <span style={{ color: AT.muted, fontSize: 11 }}>
+                            {" "}
+                            · {profile.seniority}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      (profile.seniority ?? "—")
+                    )}
                   </AdminTd>
                   <AdminTd align="right" mono>
                     {profile.yearsExperience ?? "—"}
                   </AdminTd>
                   <AdminTd>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                      {profile.technologies.slice(0, 6).map((tech) => (
-                        <AdminPill key={tech} mono tone="neutral">
-                          {tech}
-                        </AdminPill>
-                      ))}
-                      {profile.technologies.length > 6 ? (
-                        <span style={{ fontSize: 11, color: AT.muted }}>
-                          +{profile.technologies.length - 6}
-                        </span>
-                      ) : null}
+                      {profile.technologies.length > 0
+                        ? profile.technologies.map((tech) => (
+                            <AdminPill key={tech} mono tone="neutral">
+                              {tech}
+                            </AdminPill>
+                          ))
+                        : "—"}
                     </div>
                   </AdminTd>
                   <AdminTd muted>
@@ -282,6 +296,32 @@ export default async function AdminTalentosPage({
                     <AdminPill tone={profile.userId ? "ok" : "neutral"}>
                       {profile.userId ? "cadastrado" : "guest"}
                     </AdminPill>
+                  </AdminTd>
+                  <AdminTd>
+                    {profile.userId ? (
+                      <Link
+                        className={buttonVariants({
+                          variant: "outline",
+                          size: "sm",
+                        })}
+                        href={`/admin/usuarios/${profile.userId}`}
+                      >
+                        Ver perfil
+                      </Link>
+                    ) : profile.hasCvSource ? (
+                      <Link
+                        className={buttonVariants({
+                          variant: "outline",
+                          size: "sm",
+                        })}
+                        href={`/admin/talentos/${profile.id}/cv`}
+                        target="_blank"
+                      >
+                        Ver CV
+                      </Link>
+                    ) : (
+                      <span style={{ color: AT.faint, fontSize: 11.5 }}>—</span>
+                    )}
                   </AdminTd>
                 </tr>
               ))}
