@@ -9,6 +9,7 @@ import {
 import { getMyRadarProfile } from "@/lib/radar-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
+import { AnalyzeCardBtn } from "./analyze-card-btn";
 import { Carousel } from "./carousel";
 import { CompanyLogo } from "./company-logo";
 import { type ActiveFilters, FiltersBar } from "./filters-bar";
@@ -24,6 +25,7 @@ import {
   ScorePill,
   SkillChip,
 } from "./radar-ui";
+import { TurnstileAnalyzeProvider } from "./turnstile-analyze-context";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -455,9 +457,11 @@ function NoCvHeroCard({ cvFileName }: { cvFileName: string | null }) {
 function CarouselCard({
   job,
   adaptarHref,
+  masterResumeId,
 }: {
   job: PublicJob;
   adaptarHref: string;
+  masterResumeId: string | null;
 }) {
   const adaptarUrl = adaptarHref.includes("?")
     ? `${adaptarHref}&jobId=${job.id}`
@@ -554,7 +558,14 @@ function CarouselCard({
             fullWidth
           />
         ) : (
-          <AdaptBtn href={adaptarUrl} score={job.score} fullWidth />
+          <AnalyzeCardBtn
+            masterResumeId={masterResumeId}
+            radarJobId={job.id}
+            jobDescriptionText={job.description}
+            adaptarUrl={adaptarUrl}
+            score={job.score}
+            fullWidth
+          />
         )}
       </div>
     </div>
@@ -631,12 +642,14 @@ export async function RadarJobsListing({
 
   let radarProfile: Awaited<ReturnType<typeof getMyRadarProfile>> = null;
   let cvFileName: string | null = null;
+  let masterResumeId: string | null = null;
   if (user) {
     const [master, radar] = await Promise.all([
       getMyMasterResume().catch(() => null),
       getMyRadarProfile(),
     ]);
     cvFileName = master?.sourceFileName ?? null;
+    masterResumeId = master?.id ?? null;
     radarProfile = radar;
   }
 
@@ -766,7 +779,7 @@ export async function RadarJobsListing({
   };
 
   return (
-    <>
+    <TurnstileAnalyzeProvider>
       <script type="application/ld+json">
         {JSON.stringify(itemListJsonLd)}
       </script>
@@ -1333,7 +1346,12 @@ export async function RadarJobsListing({
             }
           >
             {carouselJobs.map((job) => (
-              <CarouselCard key={job.id} job={job} adaptarHref={adaptarHref} />
+              <CarouselCard
+                key={job.id}
+                job={job}
+                adaptarHref={adaptarHref}
+                masterResumeId={masterResumeId}
+              />
             ))}
           </Carousel>
         </div>
@@ -1570,6 +1588,7 @@ export async function RadarJobsListing({
             adaptarHref={adaptarHref}
             showScore={scoreState === "has-cv"}
             isLoggedIn={!!user}
+            masterResumeId={masterResumeId}
           />
         ))}
 
@@ -1690,6 +1709,6 @@ export async function RadarJobsListing({
           </div>
         </nav>
       ) : null}
-    </>
+    </TurnstileAnalyzeProvider>
   );
 }

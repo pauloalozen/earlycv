@@ -112,6 +112,7 @@ function AdaptarPageContent() {
   const searchParams = useSearchParams();
   const jobIdParam = searchParams.get("jobId");
   const [radarJob, setRadarJob] = useState<PublicJob | null>(null);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [cvText, setCvText] = useState("");
   const [jobDescription, setJobDescription] = useState("");
@@ -805,37 +806,6 @@ function AdaptarPageContent() {
             </h1>
           </div>
 
-          {/* Banner de contexto — fluxo de 1 clique a partir do Radar */}
-          {radarJob && !prefillApplicationId ? (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 2,
-                maxWidth: 780,
-                marginBottom: 20,
-                padding: "12px 16px",
-                background: "rgba(198,255,58,0.12)",
-                border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 12,
-              }}
-            >
-              <div style={{ fontSize: 13, fontWeight: 500, color: "#0a0a0a" }}>
-                Analisando para: {radarJob.title} · {radarJob.company}
-              </div>
-              <div
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  color: "#7a7a74",
-                  letterSpacing: 0.2,
-                }}
-              >
-                Descrição carregada automaticamente
-              </div>
-            </div>
-          ) : null}
-
           {/* 2-col grid */}
           <form ref={formRef} onSubmit={handleSubmit}>
             <div
@@ -1380,7 +1350,7 @@ function AdaptarPageContent() {
                         LinkedIn, Gupy, Infojobs, etc.
                       </div>
                     </div>
-                    {!prefillApplicationId && (
+                    {!prefillApplicationId && !radarJob && (
                       <div style={{ display: "flex", gap: 12 }}>
                         <button
                           type="button"
@@ -1418,93 +1388,126 @@ function AdaptarPageContent() {
                       </div>
                     )}
                   </div>
-                  <div
-                    style={{
-                      background: prefillApplicationId ? "#f4f4f0" : "#fafaf6",
-                      border: "1px solid #d8d6ce",
-                      borderRadius: 12,
-                      padding: "12px 14px",
-                    }}
-                  >
-                    <textarea
-                      value={jobDescription}
-                      readOnly={!!prefillApplicationId}
-                      onFocus={() => {
-                        if (
-                          prefillApplicationId ||
-                          jobDescriptionFocusTrackedRef.current
-                        ) {
-                          return;
-                        }
-
-                        jobDescriptionFocusTrackedRef.current = true;
-                        emitUiFunnelEvent("job_description_focus");
-                      }}
-                      onPaste={() => {
-                        if (
-                          prefillApplicationId ||
-                          jobDescriptionPasteTrackedRef.current
-                        ) {
-                          return;
-                        }
-
-                        jobDescriptionPasteTrackedRef.current = true;
-                        emitUiFunnelEvent("job_description_paste");
-                      }}
-                      onChange={(e) => {
-                        if (prefillApplicationId) {
-                          return;
-                        }
-                        const nextJobDescription = e.target.value.slice(
-                          0,
-                          12000,
-                        );
-                        setJobDescription(nextJobDescription);
-
-                        if (
-                          !jobDescriptionFilledTrackedRef.current &&
-                          nextJobDescription.trim()
-                        ) {
-                          jobDescriptionFilledTrackedRef.current = true;
-                          emitUiFunnelEvent("job_description_filled");
-                        }
-                      }}
-                      placeholder="Cole a vaga completa"
-                      style={{
-                        width: "100%",
-                        border: "none",
-                        outline: "none",
-                        fontFamily: GEIST,
-                        fontSize: 13.5,
-                        background: "transparent",
-                        color: prefillApplicationId ? "#555550" : "#0a0a0a",
-                        minHeight: 128,
-                        resize: "none",
-                        lineHeight: 1.55,
-                        cursor: prefillApplicationId ? "default" : undefined,
-                      }}
-                    />
-                    <div
+                  {radarJob && !prefillApplicationId && !descriptionExpanded ? (
+                    <button
+                      type="button"
+                      onClick={() => setDescriptionExpanded(true)}
                       style={{
                         display: "flex",
+                        alignItems: "center",
                         justifyContent: "space-between",
-                        borderTop: "1px solid rgba(10,10,10,0.06)",
-                        paddingTop: 8,
-                        marginTop: 6,
+                        width: "100%",
+                        boxSizing: "border-box",
+                        background: "#fafaf6",
+                        border: "1px solid #d8d6ce",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        fontFamily: GEIST,
                       }}
                     >
+                      <span
+                        style={{
+                          fontSize: 13,
+                          color: "#0a0a0a",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {radarJob.title} · {radarJob.company}
+                      </span>
                       <span
                         style={{
                           fontFamily: MONO,
                           fontSize: 10.5,
                           color: "#8a8a85",
+                          flexShrink: 0,
+                          marginLeft: 12,
                         }}
                       >
-                        {prefillApplicationId
-                          ? "vaga da candidatura · não editável"
-                          : `${jobDescription.length} / 12000`}
+                        ver descrição completa ▾
                       </span>
-                      {!prefillApplicationId && (
+                    </button>
+                  ) : (
+                    <div
+                      style={{
+                        background: prefillApplicationId
+                          ? "#f4f4f0"
+                          : "#fafaf6",
+                        border: "1px solid #d8d6ce",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                      }}
+                    >
+                      <textarea
+                        value={jobDescription}
+                        readOnly={!!prefillApplicationId}
+                        onFocus={() => {
+                          if (
+                            prefillApplicationId ||
+                            jobDescriptionFocusTrackedRef.current
+                          ) {
+                            return;
+                          }
+
+                          jobDescriptionFocusTrackedRef.current = true;
+                          emitUiFunnelEvent("job_description_focus");
+                        }}
+                        onPaste={() => {
+                          if (
+                            prefillApplicationId ||
+                            jobDescriptionPasteTrackedRef.current
+                          ) {
+                            return;
+                          }
+
+                          jobDescriptionPasteTrackedRef.current = true;
+                          emitUiFunnelEvent("job_description_paste");
+                        }}
+                        onChange={(e) => {
+                          if (prefillApplicationId) {
+                            return;
+                          }
+                          const nextJobDescription = e.target.value.slice(
+                            0,
+                            12000,
+                          );
+                          setJobDescription(nextJobDescription);
+
+                          if (
+                            !jobDescriptionFilledTrackedRef.current &&
+                            nextJobDescription.trim()
+                          ) {
+                            jobDescriptionFilledTrackedRef.current = true;
+                            emitUiFunnelEvent("job_description_filled");
+                          }
+                        }}
+                        placeholder="Cole a vaga completa"
+                        style={{
+                          width: "100%",
+                          border: "none",
+                          outline: "none",
+                          fontFamily: GEIST,
+                          fontSize: 13.5,
+                          background: "transparent",
+                          color: prefillApplicationId ? "#555550" : "#0a0a0a",
+                          minHeight: 128,
+                          resize: "none",
+                          lineHeight: 1.55,
+                          cursor: prefillApplicationId ? "default" : undefined,
+                        }}
+                      />
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          borderTop: "1px solid rgba(10,10,10,0.06)",
+                          paddingTop: 8,
+                          marginTop: 6,
+                        }}
+                      >
                         <span
                           style={{
                             fontFamily: MONO,
@@ -1512,11 +1515,24 @@ function AdaptarPageContent() {
                             color: "#8a8a85",
                           }}
                         >
-                          ⌘+V para colar
+                          {prefillApplicationId
+                            ? "vaga da candidatura · não editável"
+                            : `${jobDescription.length} / 12000`}
                         </span>
-                      )}
+                        {!prefillApplicationId && (
+                          <span
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#8a8a85",
+                            }}
+                          >
+                            ⌘+V para colar
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* CTA */}

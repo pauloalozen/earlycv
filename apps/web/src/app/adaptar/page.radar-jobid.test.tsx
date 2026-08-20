@@ -50,7 +50,8 @@ const makeRadarJob = () => ({
   company: "Stefanini",
   companyWebsiteUrl: null,
   country: "BR",
-  description: "Descrição completa da vaga carregada do Radar de Oportunidades.",
+  description:
+    "Descrição completa da vaga carregada do Radar de Oportunidades.",
   descriptionHtml: "<p>Descrição completa</p>",
   employmentType: "clt",
   firstSeenAt: new Date().toISOString(),
@@ -84,11 +85,25 @@ describe("AdaptarPage radar jobId prefill", () => {
     cleanup();
   });
 
-  it("with a valid jobId in the URL: pré-preenche a descrição e mostra o banner de contexto", async () => {
+  it("with a valid jobId in the URL: chega fechada (sem banner), mostrando só título · empresa até expandir", async () => {
     useSearchParamsMock.mockReturnValue(new URLSearchParams("jobId=job-abc"));
     getPublicJobByIdMock.mockResolvedValue(makeRadarJob());
 
     render(<AdaptarPage />);
+
+    const collapsedToggle = await screen.findByText(
+      /Engenheiro de Dados Jr · Stefanini/i,
+    );
+    expect(collapsedToggle).toBeTruthy();
+    expect(screen.getByText(/ver descrição completa/i)).toBeTruthy();
+
+    // O banner verde antigo não existe mais nesse fluxo.
+    expect(
+      screen.queryByText(/Descrição carregada automaticamente/i),
+    ).toBeNull();
+    expect(screen.queryByPlaceholderText(/cole a vaga completa/i)).toBeNull();
+
+    collapsedToggle.click();
 
     const textarea = (await screen.findByPlaceholderText(
       /cole a vaga completa/i,
@@ -100,17 +115,13 @@ describe("AdaptarPage radar jobId prefill", () => {
       );
     });
 
-    expect(
-      await screen.findByText(/Engenheiro de Dados Jr · Stefanini/i),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(/Descrição carregada automaticamente/i),
-    ).toBeTruthy();
     expect(getPublicJobByIdMock).toHaveBeenCalledWith("job-abc");
   });
 
   it("with an invalid/unavailable jobId: ignora silenciosamente e mantém o campo vazio", async () => {
-    useSearchParamsMock.mockReturnValue(new URLSearchParams("jobId=job-missing"));
+    useSearchParamsMock.mockReturnValue(
+      new URLSearchParams("jobId=job-missing"),
+    );
     getPublicJobByIdMock.mockResolvedValue(null);
 
     render(<AdaptarPage />);
