@@ -1394,7 +1394,7 @@ test("create marks adaptation as failed when protected boundary blocks analysis"
   });
 });
 
-test("saveGuestPreview does not auto-promote a resume to master when user did not request it", async () => {
+test("saveGuestPreview auto-promotes the first CV to master when the user has none yet, without being asked", async () => {
   const now = new Date();
   let createdMasterWithFlag = 0;
   let createdResumeWithoutMasterFlag = 0;
@@ -1512,9 +1512,111 @@ test("saveGuestPreview does not auto-promote a resume to master when user did no
     previewText: "preview",
   });
 
-  assert.equal(createdMasterWithFlag, 0);
-  assert.equal(createdResumeWithoutMasterFlag, 1);
+  assert.equal(createdMasterWithFlag, 1);
+  assert.equal(createdResumeWithoutMasterFlag, 0);
   assert.equal(capturedMasterResumeId, "new-master-1");
+});
+
+test("saveGuestPreview reuses the existing master and never creates a new resume when the user already has one", async () => {
+  const now = new Date();
+  let resumeCreateCalls = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resumeTemplate: { findFirst: async () => null },
+      resume: {
+        findFirst: async ({ where }: { where: { kind?: string } }) => {
+          if (where.kind === "master") {
+            return { id: "existing-master-1" };
+          }
+          return { id: "adapted-resume-1" };
+        },
+        create: async () => {
+          resumeCreateCalls += 1;
+          return { id: "should-not-be-created" };
+        },
+      },
+      cvAdaptation: {
+        findFirst: async () => null,
+        findUnique: async () => null,
+        create: async ({
+          data,
+        }: {
+          data: { masterResumeId: string; templateId: string | null };
+        }) => ({
+          adaptedResumeId: null,
+          aiAuditJson: null,
+          companyName: null,
+          createdAt: now,
+          failureReason: null,
+          id: "adapt-2",
+          jobDescriptionText:
+            "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+          jobTitle: null,
+          masterResumeId: data.masterResumeId,
+          paidAt: null,
+          paymentStatus: "none",
+          previewText: "preview",
+          status: "pending",
+          template: null,
+          templateId: data.templateId,
+          updatedAt: now,
+          userId: "user-1",
+        }),
+      },
+      analysisCvSnapshot: {
+        findUnique: async () => ({
+          id: "snapshot-2",
+          userId: "user-1",
+          guestSessionHash: null,
+          expiresAt: null,
+          claimedAt: null,
+          claimedByUserId: null,
+        }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => ({
+        adaptedContentJson: {},
+        previewText: "preview",
+      }),
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-2",
+        result: {
+          adaptedContentJson: { ok: true },
+          masterCvText: "CV base",
+          previewText: "preview",
+        },
+      }),
+    },
+  );
+
+  const adaptation = await service.saveGuestPreview("user-1", {
+    adaptedContentJson: { fit: { headline: "ok" } },
+    companyName: "EarlyCV",
+    jobDescriptionText:
+      "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
+    jobTitle: "Analista",
+    masterCvText: "CV enviado pelo usuario",
+    analysisCvSnapshotId: "snapshot-2",
+    previewText: "preview",
+    // Sem saveAsMaster — usuário já tem master, não pediu pra substituir.
+  });
+
+  assert.equal(resumeCreateCalls, 0);
+  assert.equal(adaptation.masterResumeId, "existing-master-1");
 });
 
 test("saveGuestPreview returns existing adaptation for same snapshot and user", async () => {

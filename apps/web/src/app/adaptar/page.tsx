@@ -133,8 +133,6 @@ function AdaptarPageContent() {
   const [saveMasterCv, setSaveMasterCv] = useState(false);
   const saveMasterDecisionRef = useRef(false);
   const [saveMasterDecided, setSaveMasterDecided] = useState(false);
-  const [showSaveMasterPrompt, setShowSaveMasterPrompt] = useState(false);
-  const saveMasterPromptAnsweredRef = useRef(false);
   const [overlayMsgIndex, setOverlayMsgIndex] = useState(0);
   const [overlayDots, setOverlayDots] = useState(0);
   const [fileHover, setFileHover] = useState(false);
@@ -425,19 +423,17 @@ function AdaptarPageContent() {
       }
     }
 
-    const needsSaveMasterPrompt =
+    // Primeiro CV do usuário: vira CV master automaticamente, sem
+    // perguntar nada — mesma pipeline (uploadMasterResume) que já disparava
+    // quando a pessoa respondia "sim" no popup antigo, só que agora sempre.
+    // Só quem JÁ tem master precisa marcar a opção "substituir CV Master"
+    // pra chegar aqui com saveMasterCv=true.
+    const isFirstCv =
       isAuthenticated &&
       !hasMaster &&
-      !saveMasterPromptAnsweredRef.current &&
       (cvMode === "upload" ? !!file : cvMode === "text");
 
-    if (needsSaveMasterPrompt) {
-      setShowSaveMasterPrompt(true);
-      return;
-    }
-
-    // Checkbox "substituir CV Master" usa a mesma pipeline que o popup
-    if (isAuthenticated && hasMaster && saveMasterCv) {
+    if (isFirstCv || (isAuthenticated && hasMaster && saveMasterCv)) {
       saveMasterDecisionRef.current = true;
       setSaveMasterDecided(true);
     }
@@ -1868,140 +1864,6 @@ function AdaptarPageContent() {
               >
                 Isso pode levar alguns segundos
               </p>
-            </div>
-          </div>
-        )}
-
-        {/* Popup: salvar como CV master */}
-        {showSaveMasterPrompt && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(10,10,10,0.45)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 100,
-              padding: "0 16px",
-            }}
-          >
-            <div
-              style={{
-                background: "#fafaf6",
-                borderRadius: 16,
-                padding: "28px 24px 24px",
-                maxWidth: 420,
-                width: "100%",
-                boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  marginBottom: 12,
-                }}
-              >
-                {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden
-                >
-                  <path
-                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                    stroke="#0a0a0a"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <polyline
-                    points="14 2 14 8 20 8"
-                    stroke="#0a0a0a"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 500,
-                    letterSpacing: -0.2,
-                    fontFamily: GEIST,
-                  }}
-                >
-                  Salvar como CV base?
-                </span>
-              </div>
-              <p
-                style={{
-                  fontFamily: GEIST,
-                  fontSize: 13.5,
-                  color: "#3a3a34",
-                  lineHeight: 1.55,
-                  margin: "0 0 20px",
-                }}
-              >
-                Quer salvar este CV como seu perfil base? Assim você não
-                precisará fazer upload de novo nas próximas candidaturas.
-              </p>
-              <div style={{ display: "flex", gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    saveMasterDecisionRef.current = true;
-                    setSaveMasterDecided(true);
-                    setSaveMasterCv(true);
-                    saveMasterPromptAnsweredRef.current = true;
-                    setShowSaveMasterPrompt(false);
-                    formRef.current?.requestSubmit();
-                  }}
-                  style={{
-                    flex: 1,
-                    background: "#0a0a0a",
-                    color: "#fafaf6",
-                    border: "none",
-                    borderRadius: 10,
-                    padding: "11px 0",
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    fontFamily: GEIST,
-                    cursor: "pointer",
-                  }}
-                >
-                  Sim, salvar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    saveMasterDecisionRef.current = false;
-                    setSaveMasterDecided(false);
-                    setSaveMasterCv(false);
-                    saveMasterPromptAnsweredRef.current = true;
-                    setShowSaveMasterPrompt(false);
-                    formRef.current?.requestSubmit();
-                  }}
-                  style={{
-                    flex: 1,
-                    background: "transparent",
-                    color: "#3a3a34",
-                    border: "1.5px solid rgba(10,10,10,0.12)",
-                    borderRadius: 10,
-                    padding: "11px 0",
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    fontFamily: GEIST,
-                    cursor: "pointer",
-                  }}
-                >
-                  Não, só analisar
-                </button>
-              </div>
             </div>
           </div>
         )}

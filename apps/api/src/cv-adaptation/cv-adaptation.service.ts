@@ -28,6 +28,7 @@ import {
 } from "../common/cv-text-extractor";
 import { DatabaseService } from "../database/database.service";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
+import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
 import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
 import type { CanonicalProfileData } from "../profiles/profile-canonical.types";
 import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merge.service";
@@ -182,7 +183,51 @@ export class CvAdaptationService {
         return;
       },
     },
+    @Optional()
+    @Inject(MasterCvCanonicalExtractionService)
+    private readonly masterCvCanonicalExtractionService?: Pick<
+      MasterCvCanonicalExtractionService,
+      "enqueueFromMasterResumeUpload"
+    >,
   ) {}
+
+  // Fire-and-forget: um CV que virou master durante uma análise (primeiro
+  // CV do usuário, promovido automaticamente, ou explicitamente marcado
+  // via dto.saveAsMaster) precisa passar pelo mesmo preenchimento de perfil
+  // que o upload dedicado em /meu-cv-master já dispara — sem isso o Resume
+  // fica marcado isMaster mas nunca populacionaliza UserProfile. Nunca deve
+  // atrasar nem quebrar a análise em si.
+  private triggerMasterCvExtraction(input: {
+    userId: string;
+    resumeId: string;
+    rawText?: string | null;
+    file?: FileUpload;
+  }): void {
+    if (!this.masterCvCanonicalExtractionService) return;
+    this.masterCvCanonicalExtractionService
+      .enqueueFromMasterResumeUpload({
+        userId: input.userId,
+        resumeId: input.resumeId,
+        ...(input.rawText ? { rawText: input.rawText } : {}),
+        ...(input.file
+          ? {
+              file: {
+                buffer: input.file.buffer,
+                originalname: input.file.originalname,
+                mimetype: input.file.mimetype,
+                size: input.file.size,
+              },
+            }
+          : {}),
+      })
+      .catch((error) => {
+        this.logger.error(
+          `[master-cv-extraction] falha ao enfileirar pro resume ${input.resumeId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
+  }
 
   private async triggerJobApplicationHook(
     input: JobApplicationHookInput,
@@ -263,9 +308,16 @@ export class CvAdaptationService {
 
       const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
 
-      // Create master Resume record
+      // Create master Resume record — primeiro CV do usuário vira master
+      // automaticamente, sem precisar de dto.saveAsMaster (que só existe
+      // pra decidir SUBSTITUIR um master já existente).
       const masterResume = await this.database.$transaction(async (tx) => {
-        if (dto.saveAsMaster) {
+        const existingResumeCount = await tx.resume.count({
+          where: { userId },
+        });
+        const shouldBecomeMaster =
+          existingResumeCount === 0 || dto.saveAsMaster === true;
+        if (shouldBecomeMaster) {
           await tx.resume.updateMany({
             where: { userId, isMaster: true },
             data: { isMaster: false },
@@ -281,12 +333,20 @@ export class CvAdaptationService {
             sourceFileType: file.mimetype,
             sourceFileUrl,
             rawText: masterCvText,
-            isMaster: dto.saveAsMaster === true,
+            isMaster: shouldBecomeMaster,
           },
         });
       });
 
       masterResumeId = masterResume.id;
+      if (masterResume.isMaster) {
+        this.triggerMasterCvExtraction({
+          userId,
+          resumeId: masterResume.id,
+          rawText: masterCvText,
+          file,
+        });
+      }
     }
 
     // Require masterResumeId
@@ -497,6 +557,11 @@ export class CvAdaptationService {
       dto.guestSessionPublicToken ?? analysisContext?.sessionPublicToken,
     );
 
+    // Fora da transação: se ela criar um master novo (primeiro CV do
+    // usuário — não existia nenhum master antes), dispara o preenchimento
+    // de perfil depois que a análise em si já foi persistida.
+    let newMasterResumeId: string | null = null;
+
     const adaptation = await this.database.$transaction(async (tx) => {
       const existingMaster = await tx.resume.findFirst({
         where: { userId, isMaster: true, kind: "master" },
@@ -507,6 +572,8 @@ export class CvAdaptationService {
       if (existingMaster) {
         masterResumeId = existingMaster.id;
       } else {
+        // Sem master existente, este CV vira o primeiro master do usuário
+        // automaticamente — sem perguntar nada.
         const created = await tx.resume.create({
           data: {
             userId,
@@ -515,10 +582,11 @@ export class CvAdaptationService {
             status: "uploaded",
             sourceFileType: "application/pdf",
             rawText: dto.masterCvText,
-            isMaster: false,
+            isMaster: true,
           },
         });
         masterResumeId = created.id;
+        newMasterResumeId = created.id;
       }
 
       const adaptedContent = this.withFrozenMissingKeywords(
@@ -622,6 +690,14 @@ export class CvAdaptationService {
 
       return linked;
     });
+
+    if (newMasterResumeId) {
+      this.triggerMasterCvExtraction({
+        userId,
+        resumeId: newMasterResumeId,
+        rawText: dto.masterCvText,
+      });
+    }
 
     await this.triggerJobApplicationHook({
       cvAdaptationId: adaptation.id,
@@ -1162,6 +1238,11 @@ export class CvAdaptationService {
       | "master_resume"
       | "user_profile" = "master_resume";
     let resolvedMasterCvText: string | null = null;
+    // Setado true dentro do branch de upload de arquivo quando o CV vira
+    // master automaticamente (usuário sem nenhum CV ainda) — usado mais
+    // abaixo pra decidir se roda o preenchimento de perfil mesmo sem
+    // dto.saveAsMaster explícito.
+    let becameMaster = dto.saveAsMaster === true;
 
     // Cache de dedupe é chaveado pelo payload abaixo; no modo "profile" nada
     // ali refletia o conteúdo do UserProfile (masterResumeId/cvFingerprint
@@ -1250,30 +1331,45 @@ export class CvAdaptationService {
               });
             }
 
-            if (dto.saveAsMaster) {
+            const existingResumeCount = await this.database.resume.count({
+              where: { userId },
+            });
+            const shouldBecomeMaster =
+              existingResumeCount === 0 || dto.saveAsMaster === true;
+            becameMaster = shouldBecomeMaster;
+
+            if (shouldBecomeMaster) {
               const sourceFileUrl = await this.uploadResumeSourceFile(
                 userId,
                 file,
               );
 
-              await this.database.$transaction(async (tx) => {
-                await tx.resume.updateMany({
-                  where: { userId, isMaster: true },
-                  data: { isMaster: false },
-                });
-                await tx.resume.create({
-                  data: {
-                    userId,
-                    title: file.originalname.replace(/\.[^.]+$/, ""),
-                    kind: "master",
-                    status: "uploaded",
-                    sourceFileName: file.originalname,
-                    sourceFileType: file.mimetype,
-                    sourceFileUrl,
-                    rawText: masterCvText,
-                    isMaster: true,
-                  },
-                });
+              const createdResume = await this.database.$transaction(
+                async (tx) => {
+                  await tx.resume.updateMany({
+                    where: { userId, isMaster: true },
+                    data: { isMaster: false },
+                  });
+                  return tx.resume.create({
+                    data: {
+                      userId,
+                      title: file.originalname.replace(/\.[^.]+$/, ""),
+                      kind: "master",
+                      status: "uploaded",
+                      sourceFileName: file.originalname,
+                      sourceFileType: file.mimetype,
+                      sourceFileUrl,
+                      rawText: masterCvText,
+                      isMaster: true,
+                    },
+                  });
+                },
+              );
+              this.triggerMasterCvExtraction({
+                userId,
+                resumeId: createdResume.id,
+                rawText: masterCvText,
+                file,
               });
             }
 
@@ -1359,7 +1455,7 @@ export class CvAdaptationService {
       userId,
     });
 
-    if (dto.saveAsMaster) {
+    if (becameMaster) {
       await this.mergeCanonicalProfileFromText({
         source: "base_cv_upload",
         sourceCvId: dto.masterResumeId ?? null,
@@ -1775,9 +1871,13 @@ export class CvAdaptationService {
 
     if (file) {
       const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
+      // Sem master existente, este CV vira o primeiro master automaticamente
+      // — dto.saveAsMaster só importa pra decidir SUBSTITUIR um master que
+      // já existe.
+      const shouldBecomeMaster = !existingMaster || dto.saveAsMaster === true;
 
       const created = await this.database.$transaction(async (tx) => {
-        if (dto.saveAsMaster) {
+        if (shouldBecomeMaster) {
           await tx.resume.updateMany({
             where: { userId, isMaster: true },
             data: { isMaster: false },
@@ -1794,15 +1894,25 @@ export class CvAdaptationService {
             sourceFileType: file.mimetype,
             sourceFileUrl,
             rawText: dto.masterCvText,
-            isMaster: dto.saveAsMaster === true,
+            isMaster: shouldBecomeMaster,
           },
         });
       });
 
       masterResumeId = created.id;
+      if (shouldBecomeMaster) {
+        this.triggerMasterCvExtraction({
+          userId,
+          resumeId: created.id,
+          rawText: dto.masterCvText,
+          file,
+        });
+      }
     } else if (existingMaster) {
       masterResumeId = existingMaster.id;
     } else {
+      // Sem arquivo e sem master existente — CV colado como texto vira o
+      // primeiro master do usuário automaticamente, sem perguntar nada.
       const created = await this.database.resume.create({
         data: {
           userId,
@@ -1811,11 +1921,16 @@ export class CvAdaptationService {
           status: "uploaded",
           sourceFileType: null,
           rawText: dto.masterCvText,
-          isMaster: false,
+          isMaster: true,
         },
       });
 
       masterResumeId = created.id;
+      this.triggerMasterCvExtraction({
+        userId,
+        resumeId: created.id,
+        rawText: dto.masterCvText,
+      });
     }
 
     const snapshot = await this.validateAndClaimSnapshot({

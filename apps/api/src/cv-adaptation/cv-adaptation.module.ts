@@ -3,6 +3,7 @@ import { AnalysisProtectionModule } from "../analysis-protection/analysis-protec
 import { createAiClientFromEnv } from "../common/ai-client-factory";
 import { DatabaseModule } from "../database/database.module";
 import { JobApplicationsModule } from "../job-applications/job-applications.module";
+import { MasterCvCanonicalExtractionModule } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.module";
 import { ProfilesModule } from "../profiles/profiles.module";
 import { ResumeTemplatesModule } from "../resume-templates/resume-templates.module";
 import { TalentProfilesModule } from "../talent-profiles/talent-profiles.module";
@@ -26,6 +27,9 @@ import { JobRequirementSetsService } from "./job-requirement-sets.service";
     JobApplicationsModule,
     ProfilesModule,
     TalentProfilesModule,
+    ...(process.env.MASTER_CV_CANONICAL_EXTRACTION_ENABLED === "true"
+      ? [MasterCvCanonicalExtractionModule]
+      : []),
   ],
   controllers: [CvAdaptationController, CvAdaptationPublicController],
   exports: [CvAdaptationService, CvAdaptationAiService],
