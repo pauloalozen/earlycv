@@ -50,11 +50,12 @@ export default async function ManualRunDetailPage({
   }
 
   try {
-    const [run, items, counts] = await Promise.all([
+    const [run, itemsPage, counts] = await Promise.all([
       getManualRunById(batchRunId),
       listManualRunItems(batchRunId),
       getManualRunItemStatusCounts(batchRunId),
     ]);
+    const items = itemsPage.items;
 
     // Contadores vem do banco (groupBy, ver getManualRunItemStatusCounts) em
     // vez de recontados aqui em cima do array `items` inteiro — mesma fonte

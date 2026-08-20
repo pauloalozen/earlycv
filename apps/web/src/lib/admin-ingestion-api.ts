@@ -614,6 +614,17 @@ export async function getManualRunById(batchRunId: string, token?: string) {
   return apiRequest<ManualRunRecord>(`/runs/manual/${batchRunId}`, token);
 }
 
+export type ManualRunItemsPage = {
+  items: ManualRunItemRecord[];
+  limit: number;
+  page: number;
+  total: number;
+};
+
+// A API sempre devolve o envelope paginado ({items, limit, page, total}),
+// mesmo quando nenhum page/limit é passado (ver
+// ManualIngestionBatchRepository.listRunItems no backend — só o skip/take
+// da query é condicional, o shape do retorno não é).
 export async function listManualRunItems(
   batchRunId: string,
   filters?: {
@@ -632,7 +643,7 @@ export async function listManualRunItems(
     ? `/runs/manual/${batchRunId}/items?${queryString}`
     : `/runs/manual/${batchRunId}/items`;
 
-  return apiRequest<ManualRunItemRecord[]>(path, token);
+  return apiRequest<ManualRunItemsPage>(path, token);
 }
 
 export type ManualRunItemStatusCounts = {
