@@ -106,7 +106,11 @@ export class TalentIdentityResolver {
       ? `dry-run-user-${userId}`
       : (
           await this.prisma.talentProfile.create({
-            data: { userId, identityConfidence: "CONFIRMED_USER" },
+            data: {
+              userId,
+              identityConfidence: "CONFIRMED_USER",
+              ...this.originFields(signals),
+            },
           })
         ).id;
 
@@ -147,13 +151,26 @@ export class TalentIdentityResolver {
       ? `dry-run-guest-${signals[0]?.sourceRecordId ?? "unknown"}`
       : (
           await this.prisma.talentProfile.create({
-            data: { identityConfidence },
+            data: { identityConfidence, ...this.originFields(signals) },
           })
         ).id;
 
     const attached = await this.attachSignals(profileId, signals);
 
     return this.toOutcome(profileId, true, false, attached);
+  }
+
+  // Todo sinal de uma mesma chamada vem do MESMO registro de origem (um
+  // CV/análise) — basta o primeiro. Gravado uma vez na criação,
+  // independente de o sinal em si sobreviver ou colidir com outro profile
+  // (ver comentário do campo no schema).
+  private originFields(signals: CandidateSignal[]) {
+    const origin = signals[0];
+    if (!origin) return {};
+    return {
+      originSourceRecordType: origin.sourceRecordType,
+      originSourceRecordId: origin.sourceRecordId,
+    };
   }
 
   private toOutcome(

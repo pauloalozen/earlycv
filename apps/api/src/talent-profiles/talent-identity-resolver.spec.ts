@@ -47,8 +47,11 @@ async function cleanupProfile(id: string) {
 test("resolveForGuest creates a new profile when no signal matches anything", async () => {
   const resolver = new TalentIdentityResolver(prisma, false);
   const email = `guest-new+${randomUUID()}@example.com`;
+  const sourceRecordId = randomUUID();
 
-  const outcome = await resolver.resolveForGuest([emailSignal(email)]);
+  const outcome = await resolver.resolveForGuest([
+    emailSignal(email, sourceRecordId),
+  ]);
 
   assert.equal(outcome.createdProfile, true);
   assert.equal(outcome.promotedToUser, false);
@@ -59,6 +62,8 @@ test("resolveForGuest creates a new profile when no signal matches anything", as
   });
   assert.equal(profile?.identityConfidence, "STRONG_MATCH");
   assert.equal(profile?.userId, null);
+  assert.equal(profile?.originSourceRecordType, "AnalysisCvSnapshot");
+  assert.equal(profile?.originSourceRecordId, sourceRecordId);
 
   await cleanupProfile(outcome.talentProfileId);
 });

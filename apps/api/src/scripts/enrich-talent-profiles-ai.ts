@@ -136,12 +136,21 @@ async function loadSnapshotSource(
 // Sem master, cai pro snapshot da análise mais recente que virou Kit de
 // Candidatura (CvAdaptation.analysisCvSnapshotId) — achado revisando a
 // cobertura: 144 dos 179 usuários sem CV master tinham exatamente esse
-// caminho disponível e o script não olhava pra ele. Só cai pro
-// TalentIdentitySignal (caso guest) como último recurso.
+// caminho disponível e o script não olhava pra ele. Depois cai pro
+// TalentIdentitySignal (caso guest); e só por último pro
+// originSourceRecordId gravado na criação do profile — cobre o caso em que
+// o próprio sinal de identidade nunca existiu (ex: o único texto extraído
+// do CV foi um cabeçalho de seção genérico como "Contato", que colidiu com
+// outro profile e nunca virou TalentIdentitySignal).
 async function resolveSource(
   prisma: PrismaClient,
   storage: StorageService,
-  profile: { id: string; userId: string | null },
+  profile: {
+    id: string;
+    userId: string | null;
+    originSourceRecordType: string | null;
+    originSourceRecordId: string | null;
+  },
 ): Promise<EnrichmentSource | null> {
   if (profile.userId) {
     const resume = await prisma.resume.findFirst({
@@ -182,9 +191,29 @@ async function resolveSource(
     orderBy: { createdAt: "desc" },
     select: { sourceRecordId: true },
   });
-  if (!signal) return null;
+  if (signal) {
+    const source = await loadSnapshotSource(
+      prisma,
+      storage,
+      profile.id,
+      signal.sourceRecordId,
+    );
+    if (source) return source;
+  }
 
-  return loadSnapshotSource(prisma, storage, profile.id, signal.sourceRecordId);
+  if (
+    profile.originSourceRecordType === "AnalysisCvSnapshot" &&
+    profile.originSourceRecordId
+  ) {
+    return loadSnapshotSource(
+      prisma,
+      storage,
+      profile.id,
+      profile.originSourceRecordId,
+    );
+  }
+
+  return null;
 }
 
 async function applyCanonicalProfile(
@@ -311,7 +340,12 @@ async function main() {
   try {
     const profiles = await prisma.talentProfile.findMany({
       where: FORCE ? undefined : { lastEnrichedAt: null },
-      select: { id: true, userId: true },
+      select: {
+        id: true,
+        userId: true,
+        originSourceRecordType: true,
+        originSourceRecordId: true,
+      },
       ...(LIMIT ? { take: LIMIT } : {}),
       orderBy: { createdAt: "asc" },
     });

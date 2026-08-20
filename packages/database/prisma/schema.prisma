@@ -1939,6 +1939,18 @@ model TalentProfile {
   lastInteractionAt DateTime?
   lastEnrichedAt    DateTime?
 
+  // Ponteiro direto e permanente pro registro (AnalysisCvSnapshot/Resume)
+  // que originou este profile, gravado uma única vez na criação —
+  // independente de TalentIdentitySignal. Achado revisando cobertura: um
+  // guest cujo CV só rendeu um NAME_COMPOSITE genérico ("Contato", "Resumo
+  // Profissional" — cabeçalho de seção, não nome de verdade) podia perder
+  // esse sinal pra outro guest com o mesmo texto genérico (só existe UMA
+  // linha por valor em TalentIdentitySignal), ficando sem NENHUM vínculo
+  // de volta pro próprio CV. Esse campo garante que o vínculo sobrevive
+  // mesmo quando o sinal de identidade colide.
+  originSourceRecordType String?
+  originSourceRecordId   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
