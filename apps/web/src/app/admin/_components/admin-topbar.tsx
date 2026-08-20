@@ -7,6 +7,7 @@ import { useState } from "react";
 const NAV_ITEMS = [
   { id: "visao-geral", label: "Visão geral", href: "/admin", exact: true },
   { id: "usuarios", label: "Usuários", href: "/admin/usuarios" },
+  { id: "talentos", label: "Talentos", href: "/admin/talentos" },
   { id: "pagamentos", label: "Pagamentos", href: "/admin/pagamentos" },
   { id: "recuperacao", label: "Recuperação", href: "/admin/payment-recovery" },
   { id: "liberacoes", label: "Liberações", href: "/admin/liberacoes-cv" },

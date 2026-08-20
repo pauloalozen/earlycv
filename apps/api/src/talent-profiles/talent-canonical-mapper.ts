@@ -96,7 +96,7 @@ const VALID_JOB_AREAS = new Set<string>([
   "ERP_FUNCTIONAL",
 ]);
 
-function normalize(value: string): string {
+export function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 
