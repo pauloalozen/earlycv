@@ -1923,7 +1923,7 @@ model TalentProfile {
   currentTitle    String?
   seniority       SeniorityLevel?
   yearsExperience Int?
-  primaryAreas    JobArea[]
+  primaryAreas    JobArea[] @default([])
 
   completenessScore Int @default(0)
 
