@@ -838,7 +838,10 @@ test("analyzeAuthenticated with inputMode=profile builds masterCvText from UserP
       resume: {
         findFirst: async () => {
           resumeLookupCalled = true;
-          return { id: "resume-1", rawText: "Texto do arquivo, sem cidade nenhuma." };
+          return {
+            id: "resume-1",
+            rawText: "Texto do arquivo, sem cidade nenhuma.",
+          };
         },
       },
       userProfile: {
@@ -3608,7 +3611,10 @@ test("startGuestAnalysisJob returns immediately with a pending job and fills it 
   // ainda nem rodou nesse ponto do teste.
   assert.equal(started.status, "pending");
   assert.equal(started.jobId, "job-async-1");
-  assert.equal((createdJob as Record<string, unknown> | null)?.status, "pending");
+  assert.equal(
+    (createdJob as Record<string, unknown> | null)?.status,
+    "pending",
+  );
 
   await sleep(20);
 
@@ -3679,6 +3685,86 @@ test("startGuestAnalysisJob marks the job as failed when the background analysis
 });
 
 // ─── startAuthenticatedAnalysisJob + radarJobId (fluxo de 1 clique) ───────────
+
+test("startAuthenticatedAnalysisJob prefers the radar Job's title/company over what the AI re-extracts from the text", async () => {
+  const jobUpdates: Array<{ data: Record<string, unknown> }> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: {
+        findFirst: async () => ({ id: "resume-1", rawText: "CV base" }),
+      },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-radar-1" }),
+      },
+      analysisJob: {
+        create: async () => ({ id: "job-radar-title-1" }),
+        update: async (args: { data: Record<string, unknown> }) => {
+          jobUpdates.push(args);
+          return args;
+        },
+      },
+      job: {
+        findUnique: async ({ where }: { where: { id: string } }) => {
+          assert.equal(where.id, "job-abc");
+          return {
+            id: "job-abc",
+            title: "Coordenador de BI",
+            status: "active",
+            descriptionClean:
+              "Descricao da vaga sem repetir o cargo ou o nome da empresa no corpo do texto colado.",
+            company: { name: "HAPVIDA" },
+          };
+        },
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-radar-1",
+        result: {
+          // A IA não achou cargo/empresa no texto colado — exatamente o
+          // caso real investigado (radar job com dado real disponível,
+          // mas o texto extraído não repete cargo/empresa no corpo).
+          adaptedContentJson: {
+            vaga: { cargo: "Não informado", empresa: "Não informado" },
+            scoreBefore: 60,
+            scoreAfter: 85,
+          },
+          masterCvText: "CV completo",
+          previewText: "preview",
+        },
+      }),
+    },
+  );
+
+  await service.startAuthenticatedAnalysisJob("user-1", {
+    masterResumeId: "resume-1",
+    radarJobId: "job-abc",
+    turnstileToken: "token",
+  });
+
+  await sleep(20);
+
+  const finalUpdate = jobUpdates[jobUpdates.length - 1]?.data;
+  assert.equal(finalUpdate?.jobTitle, "Coordenador de BI");
+  assert.equal(finalUpdate?.companyName, "HAPVIDA");
+});
 
 test("startAuthenticatedAnalysisJob with a valid radarJobId loads descriptionClean from the Job", async () => {
   let createdJob: Record<string, unknown> | null = null;
@@ -3774,7 +3860,8 @@ test("startAuthenticatedAnalysisJob throws BadRequestException when the radar jo
         findUnique: async () => ({
           id: "job-inactive",
           status: "closed",
-          descriptionClean: "Descricao valida e longa o suficiente para passar na validacao de tamanho.",
+          descriptionClean:
+            "Descricao valida e longa o suficiente para passar na validacao de tamanho.",
         }),
       },
     },

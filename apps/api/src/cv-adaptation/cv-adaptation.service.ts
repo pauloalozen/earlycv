@@ -882,11 +882,24 @@ export class CvAdaptationService {
   // logo abaixo, de forma síncrona, antes do processamento assíncrono via
   // processAnalysisJob. Se jobDescriptionText já veio preenchido, radarJobId
   // é ignorado (texto colado manualmente sempre tem precedência).
-  private async resolveAnalysisJobDescription(
-    dto: AnalyzeCvDto,
-  ): Promise<string> {
+  // jobTitle/companyName do retorno vêm do Job do radar (fonte confiável,
+  // curada na ingestão) — nunca da IA. Achado investigando análises via
+  // radar salvas com "Não informado": a IA reextrai cargo/empresa do
+  // texto colado (job.descriptionClean), que raramente repete o nome da
+  // empresa no corpo da descrição, então falha silenciosamente mesmo
+  // com o dado real disponível ali no Job. Ver processAnalysisJob, que
+  // agora prioriza esses valores sobre o que a IA extrair.
+  private async resolveAnalysisJobDescription(dto: AnalyzeCvDto): Promise<{
+    text: string;
+    radarJobTitle: string | null;
+    radarCompanyName: string | null;
+  }> {
     if (dto.jobDescriptionText) {
-      return dto.jobDescriptionText;
+      return {
+        text: dto.jobDescriptionText,
+        radarJobTitle: null,
+        radarCompanyName: null,
+      };
     }
 
     if (!dto.radarJobId) {
@@ -897,7 +910,13 @@ export class CvAdaptationService {
 
     const job = await this.database.job.findUnique({
       where: { id: dto.radarJobId },
-      select: { id: true, descriptionClean: true, status: true },
+      select: {
+        id: true,
+        title: true,
+        descriptionClean: true,
+        status: true,
+        company: { select: { name: true } },
+      },
     });
 
     if (!job) {
@@ -914,7 +933,11 @@ export class CvAdaptationService {
       );
     }
 
-    return job.descriptionClean;
+    return {
+      text: job.descriptionClean,
+      radarJobTitle: job.title || null,
+      radarCompanyName: job.company?.name || null,
+    };
   }
 
   async startAuthenticatedAnalysisJob(
@@ -939,7 +962,8 @@ export class CvAdaptationService {
     // Muta o dto com o texto resolvido — analyzeAuthenticated (chamado
     // abaixo, em background) lê dto.jobDescriptionText de novo pra sua
     // própria validação/normalização, e precisa enxergar o mesmo valor.
-    dto.jobDescriptionText = await this.resolveAnalysisJobDescription(dto);
+    const resolved = await this.resolveAnalysisJobDescription(dto);
+    dto.jobDescriptionText = resolved.text;
 
     const job = await this.database.analysisJob.create({
       data: {
@@ -951,8 +975,13 @@ export class CvAdaptationService {
       },
     });
 
-    this.processAnalysisJob(job.id, () =>
-      this.analyzeAuthenticated(userId, dto, file, analysisContext),
+    this.processAnalysisJob(
+      job.id,
+      () => this.analyzeAuthenticated(userId, dto, file, analysisContext),
+      {
+        jobTitle: resolved.radarJobTitle,
+        companyName: resolved.radarCompanyName,
+      },
     ).catch((err) => {
       this.logger.error(
         `[analysis-job] ${job.id} background processing crashed: ${err instanceof Error ? err.message : String(err)}`,
@@ -970,6 +999,12 @@ export class CvAdaptationService {
       masterCvText: string;
       analysisCvSnapshotId: string;
     }>,
+    // Quando a análise veio do radar, o Job já tem cargo/empresa reais e
+    // curados — sempre prevalecem sobre o que a IA reextrair do texto
+    // colado (que frequentemente não repete o nome da empresa no corpo
+    // da descrição e devolve "Não informado" mesmo com o dado certo
+    // disponível). Sem radar, cai pro que a IA extraiu, como antes.
+    radarFallback?: { jobTitle: string | null; companyName: string | null },
   ): Promise<void> {
     await this.database.analysisJob.update({
       where: { id: jobId },
@@ -990,8 +1025,8 @@ export class CvAdaptationService {
           previewText: result.previewText,
           masterCvText: result.masterCvText,
           analysisCvSnapshotId: result.analysisCvSnapshotId,
-          jobTitle: signals.jobTitle,
-          companyName: signals.companyName,
+          jobTitle: radarFallback?.jobTitle ?? signals.jobTitle,
+          companyName: radarFallback?.companyName ?? signals.companyName,
           scoreBefore: signals.scoreBefore,
           scoreAfter: signals.scoreAfter,
         },
