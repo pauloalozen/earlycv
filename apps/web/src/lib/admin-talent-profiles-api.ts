@@ -137,9 +137,14 @@ export async function searchTalentProfiles(
   }>(`/admin/talent-profiles${qs ? `?${qs}` : ""}`, token);
 }
 
-export async function getTalentProfileCvUrl(id: string, token?: string) {
-  return apiRequest<{ url: string | null }>(
-    `/admin/talent-profiles/${id}/cv-url`,
+export type TalentProfileCvSource =
+  | { kind: "text"; text: string }
+  | { kind: "url"; url: string }
+  | { kind: "none" };
+
+export async function resolveTalentProfileCvSource(id: string, token?: string) {
+  return apiRequest<TalentProfileCvSource>(
+    `/admin/talent-profiles/${id}/cv-source`,
     token,
   );
 }

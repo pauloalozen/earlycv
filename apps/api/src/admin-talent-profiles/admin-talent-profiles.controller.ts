@@ -32,8 +32,8 @@ export class AdminTalentProfilesController {
     return this.adminTalentProfilesService.search(dto);
   }
 
-  @Get(":id/cv-url")
-  getCvUrl(@Param("id") id: string) {
-    return this.adminTalentProfilesService.getCvUrl(id);
+  @Get(":id/cv-source")
+  resolveCvSource(@Param("id") id: string) {
+    return this.adminTalentProfilesService.resolveCvSource(id);
   }
 }

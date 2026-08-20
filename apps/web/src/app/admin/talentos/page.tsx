@@ -244,7 +244,7 @@ export default async function AdminTalentosPage({
                 <AdminTh>Tecnologias</AdminTh>
                 <AdminTh>Idiomas</AdminTh>
                 <AdminTh w={90}>Origem</AdminTh>
-                <AdminTh w={90}>Perfil</AdminTh>
+                <AdminTh w={90}>CV</AdminTh>
               </tr>
             </thead>
             <tbody>
@@ -298,17 +298,7 @@ export default async function AdminTalentosPage({
                     </AdminPill>
                   </AdminTd>
                   <AdminTd>
-                    {profile.userId ? (
-                      <Link
-                        className={buttonVariants({
-                          variant: "outline",
-                          size: "sm",
-                        })}
-                        href={`/admin/usuarios/${profile.userId}`}
-                      >
-                        Ver perfil
-                      </Link>
-                    ) : profile.hasCvSource ? (
+                    {profile.hasCvSource ? (
                       <Link
                         className={buttonVariants({
                           variant: "outline",

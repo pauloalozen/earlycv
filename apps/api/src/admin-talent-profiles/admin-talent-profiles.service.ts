@@ -128,9 +128,14 @@ export class AdminTalentProfilesService {
       profiles: profiles.map((profile) => ({
         id: profile.id,
         userId: profile.userId,
+        // Heurística barata pra decidir se mostra o link "ver CV" na
+        // listagem sem pagar o custo da cadeia completa de resolução (só
+        // roda de verdade quando clica) — cobre cadastrado (quase sempre
+        // acha master/adaptação) e guest com origem conhecida.
         hasCvSource: Boolean(
-          profile.originSourceRecordType === "AnalysisCvSnapshot" &&
-            profile.originSourceRecordId,
+          profile.userId ||
+            (profile.originSourceRecordType === "AnalysisCvSnapshot" &&
+              profile.originSourceRecordId),
         ),
         identityConfidence: profile.identityConfidence,
         fullName: profile.fullName,
@@ -156,34 +161,90 @@ export class AdminTalentProfilesService {
     };
   }
 
-  // Link "ver CV" pra quem não tem conta (guest) — o único jeito de
-  // acessar o CV é pelo snapshot que originou o profile. Prioriza o
-  // arquivo original enviado; sem arquivo (CV colado como texto), cai pro
-  // texto extraído.
-  async getCvUrl(talentProfileId: string): Promise<{ url: string | null }> {
+  // Resolve o CV de verdade pra "ver CV" — mesma ordem de prioridade do
+  // enriquecimento por IA (enrich-talent-profiles-ai.ts): Resume master de
+  // quem tem conta primeiro (é o texto mais confiável/atual, já sai como
+  // texto puro — não tem storage key própria); sem master, cai pro
+  // snapshot da análise mais recente que virou Kit de Candidatura; sem
+  // isso, cai pro TalentIdentitySignal (guest); só por último usa o
+  // originSourceRecordId gravado na criação do profile. Guest e usuário
+  // cadastrado passam pela mesma cadeia — um usuário sem master mas com
+  // histórico de análises ainda acha o CV.
+  async resolveCvSource(
+    talentProfileId: string,
+  ): Promise<
+    | { kind: "text"; text: string }
+    | { kind: "url"; url: string }
+    | { kind: "none" }
+  > {
     const profile = await this.database.talentProfile.findUnique({
       where: { id: talentProfileId },
-      select: { originSourceRecordType: true, originSourceRecordId: true },
+      select: {
+        userId: true,
+        originSourceRecordType: true,
+        originSourceRecordId: true,
+      },
     });
     if (!profile) throw new NotFoundException("talent profile not found");
 
-    if (
-      profile.originSourceRecordType !== "AnalysisCvSnapshot" ||
-      !profile.originSourceRecordId
-    ) {
-      return { url: null };
+    if (profile.userId) {
+      const resume = await this.database.resume.findFirst({
+        where: {
+          userId: profile.userId,
+          isMaster: true,
+          rawText: { not: null },
+        },
+        orderBy: { updatedAt: "desc" },
+        select: { rawText: true },
+      });
+      if (resume?.rawText) return { kind: "text", text: resume.rawText };
+
+      const adaptation = await this.database.cvAdaptation.findFirst({
+        where: { userId: profile.userId, analysisCvSnapshotId: { not: null } },
+        orderBy: { createdAt: "desc" },
+        select: { analysisCvSnapshotId: true },
+      });
+      if (adaptation?.analysisCvSnapshotId) {
+        const url = await this.snapshotUrl(adaptation.analysisCvSnapshotId);
+        if (url) return { kind: "url", url };
+      }
     }
 
+    const signal = await this.database.talentIdentitySignal.findFirst({
+      where: { talentProfileId, sourceRecordType: "AnalysisCvSnapshot" },
+      orderBy: { createdAt: "desc" },
+      select: { sourceRecordId: true },
+    });
+    if (signal) {
+      const url = await this.snapshotUrl(signal.sourceRecordId);
+      if (url) return { kind: "url", url };
+    }
+
+    if (
+      profile.originSourceRecordType === "AnalysisCvSnapshot" &&
+      profile.originSourceRecordId
+    ) {
+      const url = await this.snapshotUrl(profile.originSourceRecordId);
+      if (url) return { kind: "url", url };
+    }
+
+    return { kind: "none" };
+  }
+
+  // Prioriza o arquivo original enviado; sem arquivo (CV colado como
+  // texto ou vindo do perfil salvo), cai pro texto extraído (o .md
+  // gerado na análise).
+  private async snapshotUrl(snapshotId: string): Promise<string | null> {
     const snapshot = await this.database.analysisCvSnapshot.findUnique({
-      where: { id: profile.originSourceRecordId },
+      where: { id: snapshotId },
       select: { originalFileStorageKey: true, textStorageKey: true },
     });
-    if (!snapshot) return { url: null };
+    if (!snapshot) return null;
 
     const key = snapshot.originalFileStorageKey ?? snapshot.textStorageKey;
-    if (!key) return { url: null };
+    if (!key) return null;
 
-    return { url: await this.storage.getPresignedUrl(key) };
+    return this.storage.getPresignedUrl(key);
   }
 
   // Universo de rótulos já gravados no banco — não filtrado pela busca

@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { getTalentProfileCvUrl } from "@/lib/admin-talent-profiles-api";
+import { resolveTalentProfileCvSource } from "@/lib/admin-talent-profiles-api";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 
 export const dynamic = "force-dynamic";
 
-// Proxy fino: resolve a URL assinada do CV (S3) via API admin e redireciona
-// pra ela — evita expor o bearer token do backoffice num link clicável.
+// Proxy fino: resolve o CV de verdade via API admin (Resume master do
+// usuário, ou o AnalysisCvSnapshot que originou o profile) e ou redireciona
+// pra URL assinada do arquivo (S3), ou devolve o texto direto quando a
+// fonte é o Resume master (que não tem arquivo próprio, só texto no banco).
 export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
@@ -18,13 +20,21 @@ export async function GET(
   }
 
   try {
-    const { url } = await getTalentProfileCvUrl(id, token);
-    if (!url) {
-      return new NextResponse("Nenhum CV disponível para este perfil.", {
-        status: 404,
+    const source = await resolveTalentProfileCvSource(id, token);
+
+    if (source.kind === "url") {
+      return NextResponse.redirect(source.url);
+    }
+
+    if (source.kind === "text") {
+      return new NextResponse(source.text, {
+        headers: { "content-type": "text/markdown; charset=utf-8" },
       });
     }
-    return NextResponse.redirect(url);
+
+    return new NextResponse("Nenhum CV disponível para este perfil.", {
+      status: 404,
+    });
   } catch {
     return new NextResponse("Falha ao resolver o CV.", { status: 502 });
   }
