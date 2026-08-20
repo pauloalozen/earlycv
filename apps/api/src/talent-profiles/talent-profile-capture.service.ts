@@ -27,6 +27,7 @@ import {
   getAiModel,
 } from "../common/ai-client-factory";
 import { DatabaseService } from "../database/database.service";
+import { protectConfirmedCacheFields } from "./talent-cache-protection";
 import {
   type CanonicalProfile,
   mapCertifications,
@@ -165,11 +166,17 @@ export function isMasterSourceType(sourceType: AnalysisCvSourceType): boolean {
 // análise avulsa nunca sobrescreve um enriquecimento que já veio do master.
 // Também nunca reprocessa o mesmo snapshot duas vezes (ex: retry de rede).
 export function shouldSkipEnrichment(
-  profile: { lastEnrichedSourceType: string | null; lastEnrichedSourceId: string | null },
+  profile: {
+    lastEnrichedSourceType: string | null;
+    lastEnrichedSourceId: string | null;
+  },
   input: { sourceType: AnalysisCvSourceType; snapshotId: string },
 ): boolean {
   if (profile.lastEnrichedSourceId === input.snapshotId) return true;
-  if (!isMasterSourceType(input.sourceType) && profile.lastEnrichedSourceType === "master") {
+  if (
+    !isMasterSourceType(input.sourceType) &&
+    profile.lastEnrichedSourceType === "master"
+  ) {
     return true;
   }
   return false;
@@ -408,7 +415,11 @@ export class TalentProfileCaptureService {
       });
     }
 
-    const cachePatch = mapProfileCache(canonical);
+    const cachePatch = await protectConfirmedCacheFields(
+      this.database,
+      talentProfileId,
+      mapProfileCache(canonical),
+    );
     await this.database.talentProfile.update({
       where: { id: talentProfileId },
       data: {

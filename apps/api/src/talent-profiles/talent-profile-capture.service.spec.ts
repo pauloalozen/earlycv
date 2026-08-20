@@ -28,11 +28,28 @@ function cvText(fullName: string, email: string, phone: string) {
   return `${fullName}\n${email} | ${phone}\n\nExperiencia com SQL e Python.`;
 }
 
+// Cada teste precisa de um telefone único também — reusar o mesmo número
+// fixo entre execuções faz um profile órfão de uma run anterior (ex: uma
+// falhou antes do cleanup) "grudar" sinais novos via esse telefone
+// repetido, quebrando a asserção de forma confusa (achado depurando este
+// próprio arquivo).
+function randomPhone() {
+  const digits = Math.floor(900000000 + Math.random() * 99999999).toString();
+  return `(11) 9${digits.slice(0, 4)}-${digits.slice(4, 8)}`;
+}
+
 async function findProfileByGuestEmail(email: string) {
   const signal = await prisma.talentIdentitySignal.findUnique({
-    where: { signalType_normalizedValue: { signalType: "EMAIL", normalizedValue: email } },
+    where: {
+      signalType_normalizedValue: {
+        signalType: "EMAIL",
+        normalizedValue: email,
+      },
+    },
   });
-  return signal ? prisma.talentProfile.findUnique({ where: { id: signal.talentProfileId } }) : null;
+  return signal
+    ? prisma.talentProfile.findUnique({ where: { id: signal.talentProfileId } })
+    : null;
 }
 
 test("shouldSkipEnrichment: avulso nunca sobrescreve enriquecimento vindo de master", () => {
@@ -75,7 +92,7 @@ test("captureFromSnapshot (guest): cria profile e sinal de identidade a partir d
     snapshotId,
     userId: null,
     sourceType: "uploaded_file",
-    text: cvText("Fulano Da Silva", email, "(11) 98765-4321"),
+    text: cvText("Fulano Da Silva", email, randomPhone()),
   });
 
   // fire-and-forget: espera a run() interna terminar antes de checar.
@@ -108,8 +125,13 @@ test("captureFromSnapshot (usuario autenticado): resolve pelo userId e usa sinal
 
   await new Promise((resolve) => setTimeout(resolve, 500));
 
-  const profile = await prisma.talentProfile.findUnique({ where: { userId: user.id } });
-  assert.ok(profile, "profile deveria existir a partir do userId, mesmo sem sinal extraido do texto");
+  const profile = await prisma.talentProfile.findUnique({
+    where: { userId: user.id },
+  });
+  assert.ok(
+    profile,
+    "profile deveria existir a partir do userId, mesmo sem sinal extraido do texto",
+  );
   assert.equal(profile?.primaryEmail, user.email.toLowerCase());
 
   if (profile) await cleanupProfile(profile.id);

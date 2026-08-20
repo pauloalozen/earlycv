@@ -35,6 +35,7 @@ import {
   getAiModel,
 } from "../common/ai-client-factory";
 import { StorageService } from "../storage/storage.service";
+import { protectConfirmedCacheFields } from "../talent-profiles/talent-cache-protection";
 import {
   type CanonicalProfile,
   mapCertifications,
@@ -316,7 +317,11 @@ async function applyCanonicalProfile(
   // Marca lastEnrichedAt mesmo quando a IA não achou nada pra cachear —
   // é o que impede o profile de ser reprocessado (e recobrado) numa
   // próxima rodada só porque o CV é pouco informativo.
-  const cachePatch = mapProfileCache(canonical);
+  const cachePatch = await protectConfirmedCacheFields(
+    prisma,
+    talentProfileId,
+    mapProfileCache(canonical),
+  );
   if (!DRY_RUN) {
     await prisma.talentProfile.update({
       where: { id: talentProfileId },
