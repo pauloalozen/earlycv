@@ -130,6 +130,8 @@ export async function searchTalentProfiles(
     page: number;
     pageSize: number;
     total: number;
+    technologySuggestions: string[];
+    languageSuggestions: string[];
     profiles: TalentProfileRecord[];
   }>(`/admin/talent-profiles${qs ? `?${qs}` : ""}`, token);
 }

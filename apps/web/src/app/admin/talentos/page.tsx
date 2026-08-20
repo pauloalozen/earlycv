@@ -23,6 +23,7 @@ import {
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { TermMultiInput } from "./_components/term-multi-input";
 
 export const metadata = buildAdminMetadata("Talentos");
 
@@ -122,7 +123,13 @@ export default async function AdminTalentosPage({
     );
   }
 
-  const { profiles, total, pageSize } = result;
+  const {
+    profiles,
+    total,
+    pageSize,
+    technologySuggestions,
+    languageSuggestions,
+  } = result;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
 
@@ -143,19 +150,19 @@ export default async function AdminTalentosPage({
             name="query"
             placeholder="Nome ou email"
           />
-          <input
-            className="h-9 rounded-md border px-3 text-[12.5px]"
-            style={{ ...inputStyle, minWidth: 180 }}
+          <TermMultiInput
             defaultValue={params.technology}
+            minWidth={200}
             name="technology"
-            placeholder="Tecnologia (ex: javascript)"
+            placeholder="Tecnologias (ex: javascript, react, ia)"
+            suggestions={technologySuggestions}
           />
-          <input
-            className="h-9 rounded-md border px-3 text-[12.5px]"
-            style={{ ...inputStyle, minWidth: 160 }}
+          <TermMultiInput
             defaultValue={params.language}
+            minWidth={180}
             name="language"
-            placeholder="Idioma (ex: inglês)"
+            placeholder="Idiomas (ex: inglês, espanhol)"
+            suggestions={languageSuggestions}
           />
           <input
             className="h-9 rounded-md border px-3 text-[12.5px]"
