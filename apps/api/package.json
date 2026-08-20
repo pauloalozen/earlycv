@@ -22,7 +22,8 @@
     "talent:reconstruct-history": "NODE_OPTIONS='--conditions=development' tsx src/scripts/reconstruct-talent-interaction-history.ts",
     "talent:metrics": "NODE_OPTIONS='--conditions=development' tsx src/scripts/talent-base-metrics.ts",
     "talent:cleanup-canonicalize-competencies": "NODE_OPTIONS='--conditions=development' tsx src/scripts/cleanup-canonicalize-existing-talent-competencies.ts",
-    "talent:recover-orphaned-origins": "NODE_OPTIONS='--conditions=development' tsx src/scripts/recover-orphaned-guest-origins.ts"
+    "talent:recover-orphaned-origins": "NODE_OPTIONS='--conditions=development' tsx src/scripts/recover-orphaned-guest-origins.ts",
+    "talent:merge-conflicts": "NODE_OPTIONS='--conditions=development' tsx src/scripts/merge-talent-profile-conflicts.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1024.0",
