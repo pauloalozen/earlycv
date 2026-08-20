@@ -1429,9 +1429,10 @@ function AdaptarPageContent() {
                   ) : (
                     <div
                       style={{
-                        background: prefillApplicationId
-                          ? "#f4f4f0"
-                          : "#fafaf6",
+                        background:
+                          prefillApplicationId || radarJob
+                            ? "#f4f4f0"
+                            : "#fafaf6",
                         border: "1px solid #d8d6ce",
                         borderRadius: 12,
                         padding: "12px 14px",
@@ -1439,10 +1440,11 @@ function AdaptarPageContent() {
                     >
                       <textarea
                         value={jobDescription}
-                        readOnly={!!prefillApplicationId}
+                        readOnly={!!prefillApplicationId || !!radarJob}
                         onFocus={() => {
                           if (
                             prefillApplicationId ||
+                            radarJob ||
                             jobDescriptionFocusTrackedRef.current
                           ) {
                             return;
@@ -1454,6 +1456,7 @@ function AdaptarPageContent() {
                         onPaste={() => {
                           if (
                             prefillApplicationId ||
+                            radarJob ||
                             jobDescriptionPasteTrackedRef.current
                           ) {
                             return;
@@ -1463,7 +1466,7 @@ function AdaptarPageContent() {
                           emitUiFunnelEvent("job_description_paste");
                         }}
                         onChange={(e) => {
-                          if (prefillApplicationId) {
+                          if (prefillApplicationId || radarJob) {
                             return;
                           }
                           const nextJobDescription = e.target.value.slice(
@@ -1488,11 +1491,17 @@ function AdaptarPageContent() {
                           fontFamily: GEIST,
                           fontSize: 13.5,
                           background: "transparent",
-                          color: prefillApplicationId ? "#555550" : "#0a0a0a",
+                          color:
+                            prefillApplicationId || radarJob
+                              ? "#555550"
+                              : "#0a0a0a",
                           minHeight: 128,
                           resize: "none",
                           lineHeight: 1.55,
-                          cursor: prefillApplicationId ? "default" : undefined,
+                          cursor:
+                            prefillApplicationId || radarJob
+                              ? "default"
+                              : undefined,
                         }}
                       />
                       <div
@@ -1513,9 +1522,11 @@ function AdaptarPageContent() {
                         >
                           {prefillApplicationId
                             ? "vaga da candidatura · não editável"
-                            : `${jobDescription.length} / 12000`}
+                            : radarJob
+                              ? "vaga do radar · não editável"
+                              : `${jobDescription.length} / 12000`}
                         </span>
-                        {!prefillApplicationId && (
+                        {!prefillApplicationId && !radarJob && (
                           <span
                             style={{
                               fontFamily: MONO,
