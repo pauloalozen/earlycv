@@ -131,6 +131,13 @@ export async function searchTalentProfiles(
     page: number;
     pageSize: number;
     total: number;
+    registeredCount: number;
+    seniorityBreakdown: {
+      lider: number;
+      senior: number;
+      pleno: number;
+      junior: number;
+    };
     technologySuggestions: string[];
     languageSuggestions: string[];
     profiles: TalentProfileRecord[];

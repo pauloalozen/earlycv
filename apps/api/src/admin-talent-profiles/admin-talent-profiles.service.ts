@@ -28,6 +28,32 @@ function parseTerms(raw: string | undefined): string[] {
     .filter(Boolean);
 }
 
+// "contains" puro casava "java" com "javascript" (substring, não
+// palavra) — aqui o termo só bate quando aparece como token inteiro
+// (início, fim, ou cercado de espaço), então "java" não pega
+// "javascript", mas "azure" ainda pega "azure devops"/"azure pipelines".
+function wordMatchConditions(term: string): Array<{
+  contains?: string;
+  equals?: string;
+  startsWith?: string;
+  endsWith?: string;
+  mode: "insensitive";
+}> {
+  return [
+    { equals: term, mode: "insensitive" },
+    { startsWith: `${term} `, mode: "insensitive" },
+    { endsWith: ` ${term}`, mode: "insensitive" },
+    { contains: ` ${term} `, mode: "insensitive" },
+  ];
+}
+
+const SENIORITY_GROUPS = {
+  lider: ["LEAD", "STAFF", "MANAGER", "DIRECTOR"] as const,
+  senior: ["SENIOR"] as const,
+  pleno: ["MID"] as const,
+  junior: ["JUNIOR"] as const,
+};
+
 @Injectable()
 export class AdminTalentProfilesService {
   constructor(
@@ -60,9 +86,11 @@ export class AdminTalentProfilesService {
     if (technologyTerms.length > 0) {
       where.competencies = {
         some: {
-          OR: technologyTerms.map((term) => ({
-            valueNormalized: { contains: term, mode: "insensitive" },
-          })),
+          OR: technologyTerms.flatMap((term) =>
+            wordMatchConditions(term).map((condition) => ({
+              valueNormalized: condition,
+            })),
+          ),
         },
       };
     }
@@ -73,9 +101,11 @@ export class AdminTalentProfilesService {
     if (languageTerms.length > 0) {
       where.languages = {
         some: {
-          OR: languageTerms.map((term) => ({
-            language: { contains: term, mode: "insensitive" },
-          })),
+          OR: languageTerms.flatMap((term) =>
+            wordMatchConditions(term).map((condition) => ({
+              language: condition,
+            })),
+          ),
         },
       };
     }
@@ -97,32 +127,62 @@ export class AdminTalentProfilesService {
     if (dto.seniority) where.seniority = dto.seniority;
     if (dto.primaryArea) where.primaryAreas = { has: dto.primaryArea };
 
-    const [total, profiles, technologySuggestions, languageSuggestions] =
-      await Promise.all([
-        this.database.talentProfile.count({ where }),
-        this.database.talentProfile.findMany({
-          where,
-          orderBy: { updatedAt: "desc" },
-          skip: (page - 1) * pageSize,
-          take: pageSize,
-          include: {
-            competencies: {
-              where: {
-                category: { in: ["TECHNICAL_SKILL", "TOOL", "TECHNOLOGY"] },
-              },
-              orderBy: { valueLabel: "asc" },
+    const [
+      total,
+      registeredCount,
+      seniorityRows,
+      profiles,
+      technologySuggestions,
+      languageSuggestions,
+    ] = await Promise.all([
+      this.database.talentProfile.count({ where }),
+      this.database.talentProfile.count({
+        where: { ...where, userId: { not: null } },
+      }),
+      this.database.talentProfile.groupBy({
+        by: ["seniority"],
+        where,
+        _count: true,
+      }),
+      this.database.talentProfile.findMany({
+        where,
+        orderBy: { updatedAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          competencies: {
+            where: {
+              category: { in: ["TECHNICAL_SKILL", "TOOL", "TECHNOLOGY"] },
             },
-            languages: { orderBy: { language: "asc" } },
+            orderBy: { valueLabel: "asc" },
           },
-        }),
-        this.listTechnologySuggestions(),
-        this.listLanguageSuggestions(),
-      ]);
+          languages: { orderBy: { language: "asc" } },
+        },
+      }),
+      this.listTechnologySuggestions(),
+      this.listLanguageSuggestions(),
+    ]);
+
+    const seniorityCountByLevel = new Map(
+      seniorityRows.map((row) => [row.seniority, row._count]),
+    );
+    const sumLevels = (levels: readonly string[]) =>
+      levels.reduce(
+        (sum, level) => sum + (seniorityCountByLevel.get(level as never) ?? 0),
+        0,
+      );
 
     return {
       page,
       pageSize,
       total,
+      registeredCount,
+      seniorityBreakdown: {
+        lider: sumLevels(SENIORITY_GROUPS.lider),
+        senior: sumLevels(SENIORITY_GROUPS.senior),
+        pleno: sumLevels(SENIORITY_GROUPS.pleno),
+        junior: sumLevels(SENIORITY_GROUPS.junior),
+      },
       technologySuggestions,
       languageSuggestions,
       profiles: profiles.map((profile) => ({

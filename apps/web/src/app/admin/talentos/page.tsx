@@ -5,6 +5,8 @@ import {
   AdminPageWrap,
   AdminPagination,
   AdminPill,
+  AdminStatCard,
+  AdminStatsRow,
   AdminTable,
   AdminTd,
   AdminTh,
@@ -137,6 +139,8 @@ export default async function AdminTalentosPage({
     profiles,
     total,
     pageSize,
+    registeredCount,
+    seniorityBreakdown,
     technologySuggestions,
     languageSuggestions,
   } = result;
@@ -150,6 +154,24 @@ export default async function AdminTalentosPage({
         subtitle="Busque pessoas já capturadas (cadastradas ou guests) por tecnologia, idioma, senioridade e anos de experiência."
         title="Talentos."
       />
+
+      <AdminStatsRow cols={6}>
+        <AdminStatCard label="Total no filtro" value={String(total)} />
+        <AdminStatCard label="Cadastrados" value={String(registeredCount)} />
+        <AdminStatCard
+          label="Líder+"
+          value={String(seniorityBreakdown.lider)}
+        />
+        <AdminStatCard
+          label="Sênior"
+          value={String(seniorityBreakdown.senior)}
+        />
+        <AdminStatCard label="Pleno" value={String(seniorityBreakdown.pleno)} />
+        <AdminStatCard
+          label="Júnior"
+          value={String(seniorityBreakdown.junior)}
+        />
+      </AdminStatsRow>
 
       <form method="GET" id="talentos-filter" style={{ marginBottom: 16 }}>
         <AdminFilterBar>
