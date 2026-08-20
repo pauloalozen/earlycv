@@ -109,8 +109,35 @@ async function loadSnapshotText(
   }
 }
 
-// Prioriza o Resume master de quem tem conta (texto mais confiável/atual);
-// só cai pro AnalysisCvSnapshot que originou o profile quando não há master.
+async function loadSnapshotSource(
+  prisma: PrismaClient,
+  storage: StorageService,
+  talentProfileId: string,
+  snapshotId: string,
+): Promise<EnrichmentSource | null> {
+  const snapshot = await prisma.analysisCvSnapshot.findUnique({
+    where: { id: snapshotId },
+    select: { id: true, textStorageKey: true },
+  });
+  if (!snapshot) return null;
+
+  const text = await loadSnapshotText(storage, snapshot.textStorageKey);
+  if (!text) return null;
+
+  return {
+    talentProfileId,
+    text,
+    sourceRecordType: "AnalysisCvSnapshot",
+    sourceRecordId: snapshot.id,
+  };
+}
+
+// Prioriza o Resume master de quem tem conta (texto mais confiável/atual).
+// Sem master, cai pro snapshot da análise mais recente que virou Kit de
+// Candidatura (CvAdaptation.analysisCvSnapshotId) — achado revisando a
+// cobertura: 144 dos 179 usuários sem CV master tinham exatamente esse
+// caminho disponível e o script não olhava pra ele. Só cai pro
+// TalentIdentitySignal (caso guest) como último recurso.
 async function resolveSource(
   prisma: PrismaClient,
   storage: StorageService,
@@ -130,6 +157,21 @@ async function resolveSource(
         sourceRecordId: resume.id,
       };
     }
+
+    const adaptation = await prisma.cvAdaptation.findFirst({
+      where: { userId: profile.userId, analysisCvSnapshotId: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { analysisCvSnapshotId: true },
+    });
+    if (adaptation?.analysisCvSnapshotId) {
+      const source = await loadSnapshotSource(
+        prisma,
+        storage,
+        profile.id,
+        adaptation.analysisCvSnapshotId,
+      );
+      if (source) return source;
+    }
   }
 
   const signal = await prisma.talentIdentitySignal.findFirst({
@@ -142,21 +184,7 @@ async function resolveSource(
   });
   if (!signal) return null;
 
-  const snapshot = await prisma.analysisCvSnapshot.findUnique({
-    where: { id: signal.sourceRecordId },
-    select: { id: true, textStorageKey: true },
-  });
-  if (!snapshot) return null;
-
-  const text = await loadSnapshotText(storage, snapshot.textStorageKey);
-  if (!text) return null;
-
-  return {
-    talentProfileId: profile.id,
-    text,
-    sourceRecordType: "AnalysisCvSnapshot",
-    sourceRecordId: snapshot.id,
-  };
+  return loadSnapshotSource(prisma, storage, profile.id, signal.sourceRecordId);
 }
 
 async function applyCanonicalProfile(
