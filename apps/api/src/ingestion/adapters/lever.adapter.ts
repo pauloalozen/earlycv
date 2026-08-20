@@ -9,7 +9,7 @@ import type {
   JobSourceContext,
   NormalizedJobObservation,
 } from "../types";
-import { stripHtml } from "./strip-html";
+import { normalizeDescriptionHtml, stripHtml } from "./strip-html";
 import { normalizeAdapterTitle } from "./title-normalization";
 
 type LeverPosting = {
@@ -270,9 +270,10 @@ export class LeverAdapter implements IngestionSourceAdapter {
       normalizeState(parsedLocation.state)?.sigla ?? parsedLocation.state;
 
     const descriptionRaw = [
-      posting.description ?? "",
+      normalizeDescriptionHtml(posting.description ?? ""),
       ...(posting.lists ?? []).map(
-        (list) => `<h3>${list.text ?? ""}</h3>${list.content ?? ""}`,
+        (list) =>
+          `<h3>${list.text ?? ""}</h3>${normalizeDescriptionHtml(list.content ?? "")}`,
       ),
     ]
       .filter(Boolean)

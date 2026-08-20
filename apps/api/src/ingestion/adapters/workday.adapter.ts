@@ -10,7 +10,7 @@ import type {
   JobSourceContext,
   NormalizedJobObservation,
 } from "../types";
-import { stripHtml } from "./strip-html";
+import { normalizeDescriptionHtml, stripHtml } from "./strip-html";
 import { normalizeAdapterTitle } from "./title-normalization";
 
 type WorkdayListingJob = {
@@ -410,7 +410,7 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
       normalizeState(parsedLocation.state)?.sigla ?? parsedLocation.state;
     const country = detail.country?.descriptor?.trim();
 
-    const descriptionRaw = detail.jobDescription ?? "";
+    const descriptionRaw = normalizeDescriptionHtml(detail.jobDescription ?? "");
     const descriptionClean = stripHtml(descriptionRaw) || title;
     const workModel = inferWorkModel(locationText, title, descriptionClean);
     const publishedAt = normalizeDate(detail.startDate);

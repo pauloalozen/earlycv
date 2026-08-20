@@ -9,7 +9,7 @@ import type {
   JobSourceContext,
   NormalizedJobObservation,
 } from "../types";
-import { stripHtml } from "./strip-html";
+import { normalizeDescriptionHtml, stripHtml } from "./strip-html";
 import { normalizeAdapterTitle } from "./title-normalization";
 
 type GreenhouseJob = {
@@ -260,7 +260,7 @@ export class GreenhouseAdapter implements IngestionSourceAdapter {
     const state =
       normalizeState(parsedLocation.state)?.sigla ?? parsedLocation.state;
 
-    const descriptionRaw = job.content ?? "";
+    const descriptionRaw = normalizeDescriptionHtml(job.content ?? "");
     const descriptionClean = stripHtml(descriptionRaw) || title;
     const workModel = inferWorkModel(locationText, title, descriptionClean);
     const publishedAt = normalizeDate(job.updated_at);

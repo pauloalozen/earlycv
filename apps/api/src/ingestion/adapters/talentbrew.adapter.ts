@@ -10,7 +10,7 @@ import type {
   JobSourceContext,
   NormalizedJobObservation,
 } from "../types";
-import { stripHtml } from "./strip-html";
+import { normalizeDescriptionHtml, stripHtml } from "./strip-html";
 import { normalizeAdapterTitle } from "./title-normalization";
 import { normalizeVacancyType } from "./vacancy-type";
 
@@ -382,7 +382,7 @@ export class TalentbrewAdapter implements IngestionSourceAdapter {
       .filter((value): value is string => Boolean(value))
       .join(", ");
 
-    const descriptionRaw = jobPosting.description ?? "";
+    const descriptionRaw = normalizeDescriptionHtml(jobPosting.description ?? "");
     const descriptionClean = stripHtml(descriptionRaw) || title;
     const workModel = inferWorkModel(locationText || card.location, title, descriptionClean);
     const publishedAt = normalizeDate(jobPosting.datePosted);

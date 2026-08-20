@@ -10,7 +10,7 @@ import type {
   JobSourceContext,
   NormalizedJobObservation,
 } from "../types";
-import { stripHtml } from "./strip-html";
+import { normalizeDescriptionHtml, stripHtml } from "./strip-html";
 import { normalizeAdapterTitle } from "./title-normalization";
 
 type InHireListingJob = {
@@ -318,7 +318,7 @@ export class InHireAdapter implements IngestionSourceAdapter {
       normalizeState(parsedDetailLocation.state)?.sigla ??
       parsedDetailLocation.state;
 
-    const descriptionRaw = detail.description ?? "";
+    const descriptionRaw = normalizeDescriptionHtml(detail.description ?? "");
     const descriptionClean = stripHtml(descriptionRaw) || title;
     const publishedAt = normalizeDate(detail.publishedAt);
 
