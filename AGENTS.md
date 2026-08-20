@@ -95,29 +95,30 @@ Regras especificas:
 - Schema em `packages/database`, client gerado apos cada mudanca.
 - Rotas do Next.js seguem App Router; paginas publicas com SEO completo.
 
-### v3.1 — Proxima versao (branch `develop`)
+### v3.1 — Producao hoje (mergeada em `main`, tag `v3.1.0`)
 
-Radar de oportunidades / portal de vagas: modulo de ingestao de vagas sobre `Company`, `JobSource` e `Job`, preservando `canonicalKey` e `firstSeenAt` como invariantes do produto.
-
-- Adaptadores reais Gupy e Greenhouse (hoje existem apenas mocks)
-- Engine de regras de captura (include/exclude por keyword/departamento)
-- Metricas operacionais ricas no run (discovered/accepted/filtered + summary)
-- UI admin para editar/exibir capture policy
-- Pagina publica de vagas (hoje em mock por decisao de produto)
+Radar de oportunidades / portal de vagas: modulo de ingestao de vagas sobre `Company`, `JobSource` e `Job`, preservando `canonicalKey` e `firstSeenAt` como invariantes do produto. Adapters reais (Gupy, Greenhouse, Lever, Ashby, InHire, Teamtailor, Talentbrew, Workday, Pandape), engine de captura, metricas operacionais no run, UI admin de ingestao/fontes/vagas e pagina publica de vagas.
 
 Especificacoes: `docs/superpowers/specs/2026-04-02-job-ingestion-crawler-design.md`
 Plano de implementacao: `docs/superpowers/plans/2026-04-02-job-ingestion-crawler-implementation.md`
 
+### v3.2 — Proxima versao (branch `develop`): Radar + Inteligencia de Candidatos
+
+Base de Talentos do EarlySignal: transformar o historico de CVs/analises do EarlyCV numa entidade persistente (`TalentProfile`) reutilizavel para matching com oportunidades, com deduplicacao de identidade (userId > email/telefone/LinkedIn normalizados > nunca por nome sozinho), competencias/experiencias/formacao normalizadas com proveniencia (extraido do CV vs observado em interacao vs derivado/inferido), e consultas B2B eficientes (cargo, senioridade, area, localizacao, idiomas, empresa/setor, competencias, recencia, combinacoes).
+
+Fase 1: schema/migration, identidade/deduplicacao, extracao regex, backfill em `--dry-run`, testes.
+Fase 2: enriquecimento via IA dos CVs unicos, popular competencias/experiencias/formacao/idiomas, reconstruir historico observado, metricas finais da Base de Talentos.
+
+Nao mergear em `main` ate revisao final. Nao construir ainda exposicao B2B de dados pessoais nem fluxo de contato — so a fundacao de dados e matching interno.
+
 ### Terceira onda (nao implementar agora)
 
-- Matching entre perfil do usuario e vagas captadas
 - Alerta de vagas novas antes da divulgacao publica (diferencial de timing)
-- Ranking de vagas por compatibilidade com o CV do usuario
-- Historico de candidaturas e acompanhamento
-- Score de compatibilidade CV x vaga com sugestoes de melhoria de perfil
+- Historico de candidaturas e acompanhamento (parcialmente coberto por `JobApplication` desde a v2.1)
 - Painel do usuario com metricas de candidatura
+- ATS completo / fluxo de contratacao ponta a ponta para empresas
 
-Decisoes de arquitetura do v2.1 devem ser reversiveis e nao bloquear essas ondas.
+Decisoes de arquitetura devem ser reversiveis e nao bloquear essas ondas.
 
 ---
 
@@ -127,8 +128,8 @@ Decisoes de arquitetura do v2.1 devem ser reversiveis e nao bloquear essas ondas
 
 | Branch | Proposito | Versao |
 |--------|-----------|--------|
-| `main` | Producao — sempre estavel, sempre deployavel | `2.1.x` |
-| `develop` | Desenvolvimento da proxima versao | `3.1.0-beta` |
+| `main` | Producao — sempre estavel, sempre deployavel | `3.1.0` |
+| `develop` | Desenvolvimento da proxima versao | `3.2.0-beta` |
 
 **Nunca commitar diretamente em `main`.** Todo merge em main exige PR.
 
@@ -170,13 +171,13 @@ Mergear o hotfix em `develop` imediatamente apos o deploy em `main` e obrigatori
 
 ### Versionamento
 
-- Cada hotfix deployado em `main` incrementa o patch: `2.1.0` → `2.1.1` → `2.1.2`
-- `develop` permanece em `3.1.0-beta` durante todo o desenvolvimento
-- Quando a v3.1 estiver pronta: `develop` mergeia em `main`, tag `3.1.0`, novo ciclo comeca
+- Cada hotfix deployado em `main` incrementa o patch: `3.1.0` → `3.1.1` → `3.1.2`
+- `develop` permanece em `3.2.0-beta` durante todo o desenvolvimento
+- Quando a v3.2 estiver pronta: `develop` mergeia em `main`, tag `3.2.0`, novo ciclo comeca
 
 ### Instrucoes para agentes
 
-- **Toda tarefa de v2.1 comeca em `develop`**, nunca em `main`
+- **Toda tarefa comeca em `develop`**, nunca em `main`
 - Antes de iniciar qualquer tarefa, confirmar em qual branch esta: `git branch --show-current`
 - Ao criar uma feature branch, sempre partir de `develop` atualizado: `git checkout develop && git pull`
 - Nunca mergear feature diretamente em `main`

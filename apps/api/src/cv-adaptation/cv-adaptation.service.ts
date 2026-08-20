@@ -28,11 +28,13 @@ import {
 } from "../common/cv-text-extractor";
 import { DatabaseService } from "../database/database.service";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
+import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
 import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
 import type { CanonicalProfileData } from "../profiles/profile-canonical.types";
 import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merge.service";
 import { ProfileReadinessService } from "../profiles/profile-readiness.service";
 import { StorageService } from "../storage/storage.service";
+import { TalentProfileCaptureService } from "../talent-profiles/talent-profile-capture.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
 import {
@@ -171,7 +173,61 @@ export class CvAdaptationService {
       JobRequirementSetsService,
       "findByRequirementSourceHash" | "getOrCreateFromAnalysis"
     >,
+    @Optional()
+    @Inject(TalentProfileCaptureService)
+    private readonly talentProfileCapture: Pick<
+      TalentProfileCaptureService,
+      "captureFromSnapshot"
+    > = {
+      captureFromSnapshot() {
+        return;
+      },
+    },
+    @Optional()
+    @Inject(MasterCvCanonicalExtractionService)
+    private readonly masterCvCanonicalExtractionService?: Pick<
+      MasterCvCanonicalExtractionService,
+      "enqueueFromMasterResumeUpload"
+    >,
   ) {}
+
+  // Fire-and-forget: um CV que virou master durante uma análise (primeiro
+  // CV do usuário, promovido automaticamente, ou explicitamente marcado
+  // via dto.saveAsMaster) precisa passar pelo mesmo preenchimento de perfil
+  // que o upload dedicado em /meu-cv-master já dispara — sem isso o Resume
+  // fica marcado isMaster mas nunca populacionaliza UserProfile. Nunca deve
+  // atrasar nem quebrar a análise em si.
+  private triggerMasterCvExtraction(input: {
+    userId: string;
+    resumeId: string;
+    rawText?: string | null;
+    file?: FileUpload;
+  }): void {
+    if (!this.masterCvCanonicalExtractionService) return;
+    this.masterCvCanonicalExtractionService
+      .enqueueFromMasterResumeUpload({
+        userId: input.userId,
+        resumeId: input.resumeId,
+        ...(input.rawText ? { rawText: input.rawText } : {}),
+        ...(input.file
+          ? {
+              file: {
+                buffer: input.file.buffer,
+                originalname: input.file.originalname,
+                mimetype: input.file.mimetype,
+                size: input.file.size,
+              },
+            }
+          : {}),
+      })
+      .catch((error) => {
+        this.logger.error(
+          `[master-cv-extraction] falha ao enfileirar pro resume ${input.resumeId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
+  }
 
   private async triggerJobApplicationHook(
     input: JobApplicationHookInput,
@@ -252,9 +308,16 @@ export class CvAdaptationService {
 
       const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
 
-      // Create master Resume record
+      // Create master Resume record — primeiro CV do usuário vira master
+      // automaticamente, sem precisar de dto.saveAsMaster (que só existe
+      // pra decidir SUBSTITUIR um master já existente).
       const masterResume = await this.database.$transaction(async (tx) => {
-        if (dto.saveAsMaster) {
+        const existingResumeCount = await tx.resume.count({
+          where: { userId },
+        });
+        const shouldBecomeMaster =
+          existingResumeCount === 0 || dto.saveAsMaster === true;
+        if (shouldBecomeMaster) {
           await tx.resume.updateMany({
             where: { userId, isMaster: true },
             data: { isMaster: false },
@@ -270,12 +333,20 @@ export class CvAdaptationService {
             sourceFileType: file.mimetype,
             sourceFileUrl,
             rawText: masterCvText,
-            isMaster: dto.saveAsMaster === true,
+            isMaster: shouldBecomeMaster,
           },
         });
       });
 
       masterResumeId = masterResume.id;
+      if (masterResume.isMaster) {
+        this.triggerMasterCvExtraction({
+          userId,
+          resumeId: masterResume.id,
+          rawText: masterCvText,
+          file,
+        });
+      }
     }
 
     // Require masterResumeId
@@ -486,35 +557,12 @@ export class CvAdaptationService {
       dto.guestSessionPublicToken ?? analysisContext?.sessionPublicToken,
     );
 
+    // Fora da transação: se ela criar um master novo (primeiro CV do
+    // usuário — não existia nenhum master antes), dispara o preenchimento
+    // de perfil depois que a análise em si já foi persistida.
+    let newMasterResumeId: string | null = null;
+
     const adaptation = await this.database.$transaction(async (tx) => {
-      const existingMaster = await tx.resume.findFirst({
-        where: { userId, isMaster: true, kind: "master" },
-        select: { id: true },
-      });
-
-      let masterResumeId: string;
-      if (existingMaster) {
-        masterResumeId = existingMaster.id;
-      } else {
-        const created = await tx.resume.create({
-          data: {
-            userId,
-            title: dto.jobTitle ? `CV para ${dto.jobTitle}` : "CV Importado",
-            kind: "master",
-            status: "uploaded",
-            sourceFileType: "application/pdf",
-            rawText: dto.masterCvText,
-            isMaster: false,
-          },
-        });
-        masterResumeId = created.id;
-      }
-
-      const adaptedContent = this.withFrozenMissingKeywords(
-        dto.adaptedContentJson,
-        dto.selectedMissingKeywords,
-      );
-
       const snapshot = await this.validateAndClaimSnapshot({
         tx,
         snapshotId: dto.analysisCvSnapshotId,
@@ -528,6 +576,45 @@ export class CvAdaptationService {
           "Analysis snapshot is required to claim this adaptation.",
         );
       }
+
+      const existingMaster = await tx.resume.findFirst({
+        where: { userId, isMaster: true, kind: "master" },
+        select: { id: true },
+      });
+
+      let masterResumeId: string;
+      if (existingMaster) {
+        masterResumeId = existingMaster.id;
+      } else {
+        // Sem master existente, este CV vira o primeiro master do usuário
+        // automaticamente — sem perguntar nada. O título usa o nome do
+        // arquivo que o usuário de fato enviou na análise (guardado no
+        // snapshot), não um placeholder baseado na vaga.
+        const originalFileName = snapshot?.originalFileName ?? null;
+        const created = await tx.resume.create({
+          data: {
+            userId,
+            title: originalFileName
+              ? originalFileName.replace(/\.[^.]+$/, "")
+              : dto.jobTitle
+                ? `CV para ${dto.jobTitle}`
+                : "CV Importado",
+            sourceFileName: originalFileName ?? undefined,
+            kind: "master",
+            status: "uploaded",
+            sourceFileType: "application/pdf",
+            rawText: dto.masterCvText,
+            isMaster: true,
+          },
+        });
+        masterResumeId = created.id;
+        newMasterResumeId = created.id;
+      }
+
+      const adaptedContent = this.withFrozenMissingKeywords(
+        dto.adaptedContentJson,
+        dto.selectedMissingKeywords,
+      );
 
       const created = await tx.cvAdaptation.create({
         data: {
@@ -611,6 +698,14 @@ export class CvAdaptationService {
 
       return linked;
     });
+
+    if (newMasterResumeId) {
+      this.triggerMasterCvExtraction({
+        userId,
+        resumeId: newMasterResumeId,
+        rawText: dto.masterCvText,
+      });
+    }
 
     await this.triggerJobApplicationHook({
       cvAdaptationId: adaptation.id,
@@ -871,11 +966,24 @@ export class CvAdaptationService {
   // logo abaixo, de forma síncrona, antes do processamento assíncrono via
   // processAnalysisJob. Se jobDescriptionText já veio preenchido, radarJobId
   // é ignorado (texto colado manualmente sempre tem precedência).
-  private async resolveAnalysisJobDescription(
-    dto: AnalyzeCvDto,
-  ): Promise<string> {
+  // jobTitle/companyName do retorno vêm do Job do radar (fonte confiável,
+  // curada na ingestão) — nunca da IA. Achado investigando análises via
+  // radar salvas com "Não informado": a IA reextrai cargo/empresa do
+  // texto colado (job.descriptionClean), que raramente repete o nome da
+  // empresa no corpo da descrição, então falha silenciosamente mesmo
+  // com o dado real disponível ali no Job. Ver processAnalysisJob, que
+  // agora prioriza esses valores sobre o que a IA extrair.
+  private async resolveAnalysisJobDescription(dto: AnalyzeCvDto): Promise<{
+    text: string;
+    radarJobTitle: string | null;
+    radarCompanyName: string | null;
+  }> {
     if (dto.jobDescriptionText) {
-      return dto.jobDescriptionText;
+      return {
+        text: dto.jobDescriptionText,
+        radarJobTitle: null,
+        radarCompanyName: null,
+      };
     }
 
     if (!dto.radarJobId) {
@@ -886,7 +994,13 @@ export class CvAdaptationService {
 
     const job = await this.database.job.findUnique({
       where: { id: dto.radarJobId },
-      select: { id: true, descriptionClean: true, status: true },
+      select: {
+        id: true,
+        title: true,
+        descriptionClean: true,
+        status: true,
+        company: { select: { name: true } },
+      },
     });
 
     if (!job) {
@@ -903,7 +1017,11 @@ export class CvAdaptationService {
       );
     }
 
-    return job.descriptionClean;
+    return {
+      text: job.descriptionClean,
+      radarJobTitle: job.title || null,
+      radarCompanyName: job.company?.name || null,
+    };
   }
 
   async startAuthenticatedAnalysisJob(
@@ -928,7 +1046,8 @@ export class CvAdaptationService {
     // Muta o dto com o texto resolvido — analyzeAuthenticated (chamado
     // abaixo, em background) lê dto.jobDescriptionText de novo pra sua
     // própria validação/normalização, e precisa enxergar o mesmo valor.
-    dto.jobDescriptionText = await this.resolveAnalysisJobDescription(dto);
+    const resolved = await this.resolveAnalysisJobDescription(dto);
+    dto.jobDescriptionText = resolved.text;
 
     const job = await this.database.analysisJob.create({
       data: {
@@ -940,8 +1059,13 @@ export class CvAdaptationService {
       },
     });
 
-    this.processAnalysisJob(job.id, () =>
-      this.analyzeAuthenticated(userId, dto, file, analysisContext),
+    this.processAnalysisJob(
+      job.id,
+      () => this.analyzeAuthenticated(userId, dto, file, analysisContext),
+      {
+        jobTitle: resolved.radarJobTitle,
+        companyName: resolved.radarCompanyName,
+      },
     ).catch((err) => {
       this.logger.error(
         `[analysis-job] ${job.id} background processing crashed: ${err instanceof Error ? err.message : String(err)}`,
@@ -959,6 +1083,12 @@ export class CvAdaptationService {
       masterCvText: string;
       analysisCvSnapshotId: string;
     }>,
+    // Quando a análise veio do radar, o Job já tem cargo/empresa reais e
+    // curados — sempre prevalecem sobre o que a IA reextrair do texto
+    // colado (que frequentemente não repete o nome da empresa no corpo
+    // da descrição e devolve "Não informado" mesmo com o dado certo
+    // disponível). Sem radar, cai pro que a IA extraiu, como antes.
+    radarFallback?: { jobTitle: string | null; companyName: string | null },
   ): Promise<void> {
     await this.database.analysisJob.update({
       where: { id: jobId },
@@ -979,8 +1109,8 @@ export class CvAdaptationService {
           previewText: result.previewText,
           masterCvText: result.masterCvText,
           analysisCvSnapshotId: result.analysisCvSnapshotId,
-          jobTitle: signals.jobTitle,
-          companyName: signals.companyName,
+          jobTitle: radarFallback?.jobTitle ?? signals.jobTitle,
+          companyName: radarFallback?.companyName ?? signals.companyName,
           scoreBefore: signals.scoreBefore,
           scoreAfter: signals.scoreAfter,
         },
@@ -1116,6 +1246,11 @@ export class CvAdaptationService {
       | "master_resume"
       | "user_profile" = "master_resume";
     let resolvedMasterCvText: string | null = null;
+    // Setado true dentro do branch de upload de arquivo quando o CV vira
+    // master automaticamente (usuário sem nenhum CV ainda) — usado mais
+    // abaixo pra decidir se roda o preenchimento de perfil mesmo sem
+    // dto.saveAsMaster explícito.
+    let becameMaster = dto.saveAsMaster === true;
 
     // Cache de dedupe é chaveado pelo payload abaixo; no modo "profile" nada
     // ali refletia o conteúdo do UserProfile (masterResumeId/cvFingerprint
@@ -1204,30 +1339,45 @@ export class CvAdaptationService {
               });
             }
 
-            if (dto.saveAsMaster) {
+            const existingResumeCount = await this.database.resume.count({
+              where: { userId },
+            });
+            const shouldBecomeMaster =
+              existingResumeCount === 0 || dto.saveAsMaster === true;
+            becameMaster = shouldBecomeMaster;
+
+            if (shouldBecomeMaster) {
               const sourceFileUrl = await this.uploadResumeSourceFile(
                 userId,
                 file,
               );
 
-              await this.database.$transaction(async (tx) => {
-                await tx.resume.updateMany({
-                  where: { userId, isMaster: true },
-                  data: { isMaster: false },
-                });
-                await tx.resume.create({
-                  data: {
-                    userId,
-                    title: file.originalname.replace(/\.[^.]+$/, ""),
-                    kind: "master",
-                    status: "uploaded",
-                    sourceFileName: file.originalname,
-                    sourceFileType: file.mimetype,
-                    sourceFileUrl,
-                    rawText: masterCvText,
-                    isMaster: true,
-                  },
-                });
+              const createdResume = await this.database.$transaction(
+                async (tx) => {
+                  await tx.resume.updateMany({
+                    where: { userId, isMaster: true },
+                    data: { isMaster: false },
+                  });
+                  return tx.resume.create({
+                    data: {
+                      userId,
+                      title: file.originalname.replace(/\.[^.]+$/, ""),
+                      kind: "master",
+                      status: "uploaded",
+                      sourceFileName: file.originalname,
+                      sourceFileType: file.mimetype,
+                      sourceFileUrl,
+                      rawText: masterCvText,
+                      isMaster: true,
+                    },
+                  });
+                },
+              );
+              this.triggerMasterCvExtraction({
+                userId,
+                resumeId: createdResume.id,
+                rawText: masterCvText,
+                file,
               });
             }
 
@@ -1313,7 +1463,7 @@ export class CvAdaptationService {
       userId,
     });
 
-    if (dto.saveAsMaster) {
+    if (becameMaster) {
       await this.mergeCanonicalProfileFromText({
         source: "base_cv_upload",
         sourceCvId: dto.masterResumeId ?? null,
@@ -1720,6 +1870,20 @@ export class CvAdaptationService {
       }
     }
 
+    const snapshot = await this.validateAndClaimSnapshot({
+      tx: this.database,
+      snapshotId: dto.analysisCvSnapshotId,
+      userId,
+      guestSessionHash,
+    });
+
+    const releaseDate = this.getSnapshotEnforcementReleaseDate();
+    if (!snapshot && new Date() >= releaseDate) {
+      throw new BadRequestException(
+        "Analysis snapshot is required to persist this adaptation.",
+      );
+    }
+
     const existingMaster = await this.database.resume.findFirst({
       where: { userId, isMaster: true, kind: "master" },
       select: { id: true },
@@ -1729,9 +1893,13 @@ export class CvAdaptationService {
 
     if (file) {
       const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
+      // Sem master existente, este CV vira o primeiro master automaticamente
+      // — dto.saveAsMaster só importa pra decidir SUBSTITUIR um master que
+      // já existe.
+      const shouldBecomeMaster = !existingMaster || dto.saveAsMaster === true;
 
       const created = await this.database.$transaction(async (tx) => {
-        if (dto.saveAsMaster) {
+        if (shouldBecomeMaster) {
           await tx.resume.updateMany({
             where: { userId, isMaster: true },
             data: { isMaster: false },
@@ -1748,42 +1916,51 @@ export class CvAdaptationService {
             sourceFileType: file.mimetype,
             sourceFileUrl,
             rawText: dto.masterCvText,
-            isMaster: dto.saveAsMaster === true,
+            isMaster: shouldBecomeMaster,
           },
         });
       });
 
       masterResumeId = created.id;
+      if (shouldBecomeMaster) {
+        this.triggerMasterCvExtraction({
+          userId,
+          resumeId: created.id,
+          rawText: dto.masterCvText,
+          file,
+        });
+      }
     } else if (existingMaster) {
       masterResumeId = existingMaster.id;
     } else {
+      // Sem arquivo e sem master existente — CV colado como texto vira o
+      // primeiro master do usuário automaticamente, sem perguntar nada. O
+      // título usa o nome do arquivo enviado na análise original (guardado
+      // no snapshot), não um placeholder baseado na vaga.
+      const originalFileName = snapshot?.originalFileName ?? null;
       const created = await this.database.resume.create({
         data: {
           userId,
-          title: dto.jobTitle ? `CV para ${dto.jobTitle}` : "CV Importado",
+          title: originalFileName
+            ? originalFileName.replace(/\.[^.]+$/, "")
+            : dto.jobTitle
+              ? `CV para ${dto.jobTitle}`
+              : "CV Importado",
+          sourceFileName: originalFileName ?? undefined,
           kind: "master",
           status: "uploaded",
           sourceFileType: null,
           rawText: dto.masterCvText,
-          isMaster: false,
+          isMaster: true,
         },
       });
 
       masterResumeId = created.id;
-    }
-
-    const snapshot = await this.validateAndClaimSnapshot({
-      tx: this.database,
-      snapshotId: dto.analysisCvSnapshotId,
-      userId,
-      guestSessionHash,
-    });
-
-    const releaseDate = this.getSnapshotEnforcementReleaseDate();
-    if (!snapshot && new Date() >= releaseDate) {
-      throw new BadRequestException(
-        "Analysis snapshot is required to persist this adaptation.",
-      );
+      this.triggerMasterCvExtraction({
+        userId,
+        resumeId: created.id,
+        rawText: dto.masterCvText,
+      });
     }
 
     const existingAdaptation = await this.database.cvAdaptation.findFirst({
@@ -4651,7 +4828,7 @@ export class CvAdaptationService {
       ? null
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    return this.database.analysisCvSnapshot.create({
+    const snapshot = await this.database.analysisCvSnapshot.create({
       data: {
         userId: input.userId,
         guestSessionHash: input.guestSessionHash,
@@ -4669,6 +4846,18 @@ export class CvAdaptationService {
         expiresAt,
       },
     });
+
+    // Fire-and-forget: popula a Base de Talentos (EarlySignal) em segundo
+    // plano. Nunca aguardado e nunca deve afetar esta análise — ver
+    // talent-profiles/talent-profile-capture.service.ts.
+    this.talentProfileCapture.captureFromSnapshot({
+      snapshotId: snapshot.id,
+      userId: snapshot.userId,
+      sourceType: snapshot.sourceType,
+      text: normalizedText,
+    });
+
+    return snapshot;
   }
 
   private async validateAndClaimSnapshot(input: {
@@ -4681,6 +4870,7 @@ export class CvAdaptationService {
           expiresAt: Date | null;
           claimedAt: Date | null;
           claimedByUserId: string | null;
+          originalFileName: string | null;
         } | null>;
         update: (args: {
           where: { id: string };
@@ -4688,7 +4878,7 @@ export class CvAdaptationService {
             claimedAt: Date;
             claimedByUserId: string;
           };
-        }) => Promise<{ id: string }>;
+        }) => Promise<{ id: string; originalFileName: string | null }>;
       };
     };
     snapshotId: string;

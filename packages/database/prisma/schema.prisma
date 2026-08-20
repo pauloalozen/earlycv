@@ -411,6 +411,7 @@ model User {
   analysisJobs                 AnalysisJob[]
   radarProfile                 UserRadarProfile?
   savedJobs                    SavedJob[]
+  talentProfile                TalentProfile?
 }
 
 model UserDailyAnalysisUsage {
@@ -1846,4 +1847,300 @@ model JobApplicationCoverLetter {
   updatedAt            DateTime              @updatedAt
 
   jobApplication JobApplication @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Base de Talentos (EarlySignal) — v3.2
+//
+// Transforma o historico de CVs/analises do EarlyCV numa entidade persistente
+// (TalentProfile) reutilizavel para matching com oportunidades. Ver
+// AGENTS.md secao "v3.2" para o escopo da sprint.
+// ---------------------------------------------------------------------------
+
+enum TalentDataProvenance {
+  EXTRACTED_REGEX
+  EXTRACTED_IA
+  DECLARED_BY_USER
+  OBSERVED_INTERACTION
+  DERIVED_AGGREGATE
+  MANUAL_ADMIN
+}
+
+enum TalentIdentityConfidence {
+  CONFIRMED_USER
+  STRONG_MATCH
+  UNVERIFIED
+}
+
+enum TalentIdentitySignalType {
+  USER_ID
+  EMAIL
+  PHONE
+  LINKEDIN
+  NAME_COMPOSITE
+}
+
+enum TalentB2bExposureStatus {
+  NOT_ELIGIBLE
+  OPT_IN_PENDING
+  OPT_IN_GRANTED
+  OPT_OUT
+}
+
+enum TalentContactAuthorization {
+  NOT_REQUESTED
+  GRANTED
+  DECLINED
+}
+
+enum TalentCompetencyCategory {
+  TECHNICAL_SKILL
+  SOFT_SKILL
+  TOOL
+  METHODOLOGY
+  TECHNOLOGY
+}
+
+// A pessoa. userId nullable de proposito — guest que vira usuario mantem o
+// mesmo TalentProfile, so ganha userId preenchido (nunca cria um profile
+// novo). Campos simples (fullName, primaryEmail, currentTitle, seniority,
+// primaryAreas...) sao cache de leitura derivado das tabelas normalizadas
+// abaixo — nunca escritos diretamente, sempre recalculaveis (ver
+// TalentProfileBackfillService / provenance DERIVED_AGGREGATE).
+model TalentProfile {
+  id                 String                   @id @default(cuid())
+  userId             String?                  @unique
+  identityConfidence TalentIdentityConfidence @default(UNVERIFIED)
+
+  fullName     String?
+  primaryEmail String?
+  phone        String?
+  linkedinUrl  String?
+  city         String?
+  state        String?
+  country      String?
+
+  currentTitle    String?
+  seniority       SeniorityLevel?
+  yearsExperience Int?
+  primaryAreas    JobArea[] @default([])
+
+  completenessScore Int @default(0)
+
+  // Matching interno e sempre permitido por padrao (uso interno legitimo
+  // sobre dado ja coletado no produto) — exposicao B2B e contato sao gates
+  // SEPARADOS, e nunca habilitados pelo backfill (ficam sempre no default
+  // "fechado" abaixo).
+  internalMatchingEnabled Boolean                    @default(true)
+  b2bExposureStatus       TalentB2bExposureStatus    @default(NOT_ELIGIBLE)
+  contactAuthorization    TalentContactAuthorization @default(NOT_REQUESTED)
+
+  lastAnalysisAt    DateTime?
+  lastInteractionAt DateTime?
+  lastEnrichedAt    DateTime?
+
+  // Qual analise "venceu" o enriquecimento por IA atual — "master" (Resume
+  // master do usuario) sempre prevalece e nunca e sobrescrito por uma
+  // analise avulsa; "avulso" so preenche enquanto nao existir "master".
+  // lastEnrichedSourceId e o AnalysisCvSnapshot.id daquela chamada, usado
+  // pra nunca reprocessar o mesmo snapshot duas vezes (ex: retry).
+  lastEnrichedSourceType String?
+  lastEnrichedSourceId   String?
+
+  // Ponteiro direto e permanente pro registro (AnalysisCvSnapshot/Resume)
+  // que originou este profile, gravado uma única vez na criação —
+  // independente de TalentIdentitySignal. Achado revisando cobertura: um
+  // guest cujo CV só rendeu um NAME_COMPOSITE genérico ("Contato", "Resumo
+  // Profissional" — cabeçalho de seção, não nome de verdade) podia perder
+  // esse sinal pra outro guest com o mesmo texto genérico (só existe UMA
+  // linha por valor em TalentIdentitySignal), ficando sem NENHUM vínculo
+  // de volta pro próprio CV. Esse campo garante que o vínculo sobrevive
+  // mesmo quando o sinal de identidade colide.
+  originSourceRecordType String?
+  originSourceRecordId   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user            User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  identitySignals TalentIdentitySignal[]
+  competencies    TalentCompetency[]
+  languages       TalentLanguageSkill[]
+  certifications  TalentCertification[]
+  experiences     TalentExperience[]
+  education       TalentEducation[]
+  interactions    TalentInteractionHistory[]
+  conflictsAsA    TalentIdentityConflict[]   @relation("ConflictProfileA")
+  conflictsAsB    TalentIdentityConflict[]   @relation("ConflictProfileB")
+
+  @@index([identityConfidence])
+  @@index([lastInteractionAt])
+  @@index([b2bExposureStatus])
+  @@index([seniority])
+  @@index([city, state])
+}
+
+// Evidencia de identidade — chave de lookup do backfill idempotente. Merge
+// automatico so acontece quando um sinal STRONG (EMAIL/PHONE/LINKEDIN)
+// normalizado bate exatamente com um ja existente; NAME_COMPOSITE nunca
+// aciona merge sozinho (ver TalentIdentityConflict).
+model TalentIdentitySignal {
+  id               String                   @id @default(cuid())
+  talentProfileId  String
+  signalType       TalentIdentitySignalType
+  normalizedValue  String
+  confidence       TalentIdentityConfidence
+  provenance       TalentDataProvenance
+  sourceRecordType String
+  sourceRecordId   String
+  createdAt        DateTime                 @default(now())
+
+  talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([signalType, normalizedValue])
+  @@index([talentProfileId])
+}
+
+// Par de profiles com sinal STRONG conflitante (ex: mesmo email, telefone
+// diferente) — nunca funde automaticamente, so entra na fila de revisao.
+model TalentIdentityConflict {
+  id                String                   @id @default(cuid())
+  profileAId        String
+  profileBId        String
+  signalType        TalentIdentitySignalType
+  profileAValue     String
+  profileBValue     String
+  detectedAt        DateTime                 @default(now())
+  resolvedAt        DateTime?
+  resolution        String?
+  resolvedByAdminId String?
+
+  profileA TalentProfile @relation("ConflictProfileA", fields: [profileAId], references: [id], onDelete: Cascade)
+  profileB TalentProfile @relation("ConflictProfileB", fields: [profileBId], references: [id], onDelete: Cascade)
+
+  @@index([resolvedAt])
+}
+
+// Skills/tecnologias/ferramentas/metodologias/comportamentais numa unica
+// tabela normalizada (category distingue o tipo) — permite indice unico por
+// (category, valorNormalizado) pra consultas B2B eficientes ("vaga -> quem
+// tem Java+Spring+AWS").
+model TalentCompetency {
+  id               String                    @id @default(cuid())
+  talentProfileId  String
+  category         TalentCompetencyCategory
+  valueNormalized  String
+  valueLabel       String
+  proficiencyLevel String?
+  provenance       TalentDataProvenance
+  sourceRecordType String
+  sourceRecordId   String
+  confidence       Float                     @default(1.0)
+  firstObservedAt  DateTime                  @default(now())
+  lastObservedAt   DateTime                  @default(now())
+
+  talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([talentProfileId, category, valueNormalized])
+  @@index([category, valueNormalized])
+  @@index([talentProfileId])
+}
+
+model TalentLanguageSkill {
+  id               String   @id @default(cuid())
+  talentProfileId  String
+  language         String
+  proficiencyLevel String?
+  provenance       TalentDataProvenance
+  sourceRecordType String
+  sourceRecordId   String
+  observedAt       DateTime @default(now())
+
+  talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([talentProfileId, language])
+  @@index([language])
+}
+
+model TalentCertification {
+  id               String   @id @default(cuid())
+  talentProfileId  String
+  name             String
+  nameNormalized   String
+  issuer           String?
+  year             Int?
+  provenance       TalentDataProvenance
+  sourceRecordType String
+  sourceRecordId   String
+  observedAt       DateTime @default(now())
+
+  talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([talentProfileId, nameNormalized])
+}
+
+model TalentExperience {
+  id                String          @id @default(cuid())
+  talentProfileId   String
+  company           String
+  companyNormalized String
+  role              String
+  roleNormalized    String
+  location          String?
+  startDate         DateTime?
+  endDate           DateTime?
+  isCurrent         Boolean         @default(false)
+  seniorityAtRole   SeniorityLevel?
+  technologiesUsed  String[]
+  bulletsJson       Json?
+  provenance        TalentDataProvenance
+  sourceRecordType  String
+  sourceRecordId    String
+  observedAt        DateTime        @default(now())
+
+  talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([talentProfileId, sourceRecordType, sourceRecordId, companyNormalized, roleNormalized])
+  @@index([talentProfileId])
+  @@index([companyNormalized])
+}
+
+model TalentEducation {
+  id               String    @id @default(cuid())
+  talentProfileId  String
+  institution      String
+  degree           String?
+  fieldOfStudy     String?
+  startDate        DateTime?
+  endDate          DateTime?
+  provenance       TalentDataProvenance
+  sourceRecordType String
+  sourceRecordId   String
+  observedAt       DateTime  @default(now())
+
+  talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([talentProfileId, sourceRecordType, sourceRecordId])
+}
+
+// Fato OBSERVADO de interacao (nunca inferencia) — vaga analisada, empresa,
+// cargo, aderencia.
+model TalentInteractionHistory {
+  id              String          @id @default(cuid())
+  talentProfileId String
+  sourceType      String
+  sourceRecordId  String
+  companyName     String?
+  jobTitle        String?
+  area            JobArea?
+  seniority       SeniorityLevel?
+  scoreBefore     Int?
+  scoreAfter      Int?
+  analyzedAt      DateTime
+
+  talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceType, sourceRecordId])
+  @@index([talentProfileId, analyzedAt])
+  @@index([companyName])
 }

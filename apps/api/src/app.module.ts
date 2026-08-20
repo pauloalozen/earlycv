@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 
 import { AdminProfilesModule } from "./admin-profiles/admin-profiles.module";
 import { AdminResumesModule } from "./admin-resumes/admin-resumes.module";
+import { AdminTalentProfilesModule } from "./admin-talent-profiles/admin-talent-profiles.module";
 import { AdminUsersModule } from "./admin-users/admin-users.module";
 import { AnalysisObservabilityModule } from "./analysis-observability/analysis-observability.module";
 import { AnalysisProtectionModule } from "./analysis-protection/analysis-protection.module";
@@ -50,6 +51,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     AdminUsersModule,
     AdminProfilesModule,
     AdminResumesModule,
+    AdminTalentProfilesModule,
     ProfilesModule,
     ResumesModule,
     ResumeTemplatesModule,

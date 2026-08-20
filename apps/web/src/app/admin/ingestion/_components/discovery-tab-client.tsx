@@ -1,6 +1,13 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
   AdminPill,
@@ -104,8 +111,90 @@ export function DiscoveryTabClient() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [adapterFilter, setAdapterFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortField, setSortField] = useState<"adapterType" | "status" | null>(
+    null,
+  );
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const statuses = view === "fila" ? QUEUE_STATUSES : HISTORY_STATUSES;
+
+  useEffect(() => {
+    setStatusFilter("");
+  }, [view]);
+
+  function toggleSort(field: "adapterType" | "status") {
+    if (sortField !== field) {
+      setSortField(field);
+      setSortDir("asc");
+      return;
+    }
+    if (sortDir === "asc") {
+      setSortDir("desc");
+      return;
+    }
+    setSortField(null);
+  }
+
+  const displayedRows = useMemo(() => {
+    let result = rows;
+    if (adapterFilter) {
+      result = result.filter((r) => r.adapterType === adapterFilter);
+    }
+    if (statusFilter) {
+      result = result.filter((r) => r.status === statusFilter);
+    }
+    if (sortField) {
+      result = [...result].sort((a, b) => {
+        const av = a[sortField] ?? "";
+        const bv = b[sortField] ?? "";
+        const cmp = av.localeCompare(bv);
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
+    return result;
+  }, [rows, adapterFilter, statusFilter, sortField, sortDir]);
+
+  function handleExportCsv() {
+    const header = [
+      "nome",
+      "adapter",
+      "url",
+      "status",
+      "vagas",
+      "vagas_no_board",
+      "detalhes",
+      "criado_em",
+    ];
+    const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const lines = [
+      header.join(","),
+      ...rows.map((row) =>
+        [
+          row.name,
+          row.adapterType ?? "",
+          row.careersUrl ?? "",
+          STATUS_LABELS[row.status],
+          String(row.jobCount),
+          String(row.rawJobCount),
+          row.errorMessage ?? "",
+          row.createdAt,
+        ]
+          .map(escapeCsv)
+          .join(","),
+      ),
+    ];
+    const blob = new Blob([lines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `descoberta-${view}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   const fetchRows = useCallback(async () => {
     setLoading(true);
@@ -345,6 +434,14 @@ export function DiscoveryTabClient() {
           >
             {promotingAll ? "Criando fontes..." : "Criar todas as fontes"}
           </button>
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            disabled={rows.length === 0}
+            onClick={handleExportCsv}
+            type="button"
+          >
+            Exportar CSV
+          </button>
         </div>
       </div>
 
@@ -380,6 +477,43 @@ export function DiscoveryTabClient() {
         >
           Histórico
         </button>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <select
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          onChange={(event) => setAdapterFilter(event.target.value)}
+          style={{
+            background: AT.card,
+            borderColor: AT.border,
+            color: AT.ink2,
+          }}
+          value={adapterFilter}
+        >
+          <option value="">Todos os adapters</option>
+          {MANUAL_ADAPTER_TYPES.map((adapter) => (
+            <option key={adapter} value={adapter}>
+              {adapter}
+            </option>
+          ))}
+        </select>
+        <select
+          className="h-9 rounded-md border px-3 text-[12.5px]"
+          onChange={(event) => setStatusFilter(event.target.value)}
+          style={{
+            background: AT.card,
+            borderColor: AT.border,
+            color: AT.ink2,
+          }}
+          value={statusFilter}
+        >
+          <option value="">Todos os status</option>
+          {statuses.map((status) => (
+            <option key={status} value={status}>
+              {STATUS_LABELS[status]}
+            </option>
+          ))}
+        </select>
       </div>
 
       {view === "fila" &&
@@ -439,9 +573,42 @@ export function DiscoveryTabClient() {
         <thead>
           <tr>
             <AdminTh>Nome</AdminTh>
-            <AdminTh w={110}>Adapter</AdminTh>
+            <AdminTh w={110}>
+              <button
+                onClick={() => toggleSort("adapterType")}
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  gap: 4,
+                }}
+                type="button"
+              >
+                Adapter
+                {sortField === "adapterType" && (
+                  <span>{sortDir === "asc" ? "▲" : "▼"}</span>
+                )}
+              </button>
+            </AdminTh>
             <AdminTh>URL</AdminTh>
-            <AdminTh w={110}>Status</AdminTh>
+            <AdminTh>Detalhes</AdminTh>
+            <AdminTh w={110}>
+              <button
+                onClick={() => toggleSort("status")}
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  gap: 4,
+                }}
+                type="button"
+              >
+                Status
+                {sortField === "status" && (
+                  <span>{sortDir === "asc" ? "▲" : "▼"}</span>
+                )}
+              </button>
+            </AdminTh>
             <AdminTh w={90} align="right">
               Vagas
             </AdminTh>
@@ -455,23 +622,24 @@ export function DiscoveryTabClient() {
             <tr>
               <AdminTd muted>Carregando...</AdminTd>
             </tr>
-          ) : rows.length === 0 ? (
+          ) : displayedRows.length === 0 ? (
             <tr>
               <AdminTd muted>Nenhum candidato nessa visão.</AdminTd>
             </tr>
           ) : (
-            rows.map((row) => (
+            displayedRows.map((row) => (
               <Fragment key={row.id}>
                 <tr>
-                  <AdminTd>
-                    <div>{row.name}</div>
-                    {row.errorMessage && (
+                  <AdminTd>{row.name}</AdminTd>
+                  <AdminTd mono>{row.adapterType ?? "—"}</AdminTd>
+                  <AdminTd mono muted>
+                    {row.careersUrl ?? "—"}
+                  </AdminTd>
+                  <AdminTd muted>
+                    {row.errorMessage ? (
                       <div
                         style={{
-                          color: AT.muted,
-                          fontSize: 10.5,
-                          marginTop: 2,
-                          maxWidth: 320,
+                          maxWidth: 260,
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
@@ -480,11 +648,9 @@ export function DiscoveryTabClient() {
                       >
                         {row.errorMessage}
                       </div>
+                    ) : (
+                      "—"
                     )}
-                  </AdminTd>
-                  <AdminTd mono>{row.adapterType ?? "—"}</AdminTd>
-                  <AdminTd mono muted>
-                    {row.careersUrl ?? "—"}
                   </AdminTd>
                   <AdminTd>
                     <AdminPill tone={STATUS_TONE[row.status]}>
@@ -568,7 +734,7 @@ export function DiscoveryTabClient() {
                 {manualFormRowId === row.id && (
                   <tr key={`${row.id}-manual-form`}>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       style={{
                         padding: "10px 16px",
                         borderBottom: `1px solid ${AT.borderSoft}`,

@@ -9,7 +9,7 @@ import type {
   JobSourceContext,
   NormalizedJobObservation,
 } from "../types";
-import { stripHtml } from "./strip-html";
+import { normalizeDescriptionHtml, stripHtml } from "./strip-html";
 import { normalizeAdapterTitle } from "./title-normalization";
 
 type TeamtailorJobPostingAddress = {
@@ -235,7 +235,9 @@ export class TeamtailorAdapter implements IngestionSourceAdapter {
       .filter((value): value is string => Boolean(value))
       .join(", ");
 
-    const descriptionRaw = item.content_html ?? item._jobposting?.description ?? "";
+    const descriptionRaw = normalizeDescriptionHtml(
+      item.content_html ?? item._jobposting?.description ?? "",
+    );
     const descriptionClean = stripHtml(descriptionRaw) || title;
     const workModel = inferWorkModel(locationText, title, descriptionClean);
     const publishedAt = normalizeDate(item.date_published);

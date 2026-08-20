@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { PublicJob } from "@/lib/public-jobs-api";
+import { AnalyzeCardBtn } from "./analyze-card-btn";
 import { CompanyLogo } from "./company-logo";
 import {
   AdaptBtn,
@@ -510,6 +511,7 @@ export type JobCardProps = {
   adaptarHref: string;
   showScore: boolean;
   isLoggedIn: boolean;
+  masterResumeId?: string | null;
 };
 
 // Card full-width: ring de score dominante à direita + breakdown inline +
@@ -522,6 +524,7 @@ export function JobCard({
   adaptarHref,
   showScore,
   isLoggedIn,
+  masterResumeId = null,
 }: JobCardProps) {
   const bestAnalysisScore = job.existingApplication?.bestScore;
   const hasAnalysis = typeof bestAnalysisScore === "number";
@@ -601,7 +604,13 @@ export function JobCard({
                 variant="view"
               />
             ) : (
-              <AdaptBtn href={adaptarUrl} score={hasScore ? job.score : null} />
+              <AnalyzeCardBtn
+                masterResumeId={masterResumeId}
+                radarJobId={job.id}
+                jobDescriptionText={job.description}
+                adaptarUrl={adaptarUrl}
+                score={hasScore ? job.score : null}
+              />
             )}
           </div>
         </div>

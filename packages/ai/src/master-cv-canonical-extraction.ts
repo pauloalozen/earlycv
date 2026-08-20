@@ -291,7 +291,9 @@ function validateRecord(value: unknown, path: string): Record<string, unknown> {
 // — ao contrário do resto de canonicalProfile, um valor malformado ou
 // inesperado do modelo aqui não deve derrubar a extração inteira. Mesma
 // racional da leniência já aplicada a confidence/evidence acima.
-function sanitizeRadarProfile(value: unknown): CanonicalProfile["radarProfile"] {
+function sanitizeRadarProfile(
+  value: unknown,
+): CanonicalProfile["radarProfile"] {
   const empty: CanonicalProfile["radarProfile"] = {
     areas: [],
     seniority: "UNKNOWN",
@@ -630,11 +632,21 @@ export async function extractMasterCvCanonicalProfile(
       { role: "user", content: prompt },
     ],
     response_format: { type: "json_object" },
+    // Sem isso o provedor aplica o próprio default (visto na prática: baixo
+    // demais pra um CV rico — muitas experiências/bullets — e a resposta é
+    // cortada no meio do JSON, quebrando o parse). CVs observados chegam a
+    // ~4.7k tokens de saída; a folga aqui é deliberada.
+    max_tokens: 8_192,
     ...buildDeepSeekExtraBody(model),
   });
 
   const content = response.choices[0]?.message.content;
   if (!content) throw new Error("No response content from AI model");
+  if (response.choices[0]?.finish_reason === "length") {
+    throw new Error(
+      "AI response was truncated (hit max_tokens) before completing the JSON",
+    );
+  }
 
   let parsed: unknown;
   try {

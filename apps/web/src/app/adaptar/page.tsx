@@ -112,6 +112,7 @@ function AdaptarPageContent() {
   const searchParams = useSearchParams();
   const jobIdParam = searchParams.get("jobId");
   const [radarJob, setRadarJob] = useState<PublicJob | null>(null);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [cvText, setCvText] = useState("");
   const [jobDescription, setJobDescription] = useState("");
@@ -132,8 +133,6 @@ function AdaptarPageContent() {
   const [saveMasterCv, setSaveMasterCv] = useState(false);
   const saveMasterDecisionRef = useRef(false);
   const [saveMasterDecided, setSaveMasterDecided] = useState(false);
-  const [showSaveMasterPrompt, setShowSaveMasterPrompt] = useState(false);
-  const saveMasterPromptAnsweredRef = useRef(false);
   const [overlayMsgIndex, setOverlayMsgIndex] = useState(0);
   const [overlayDots, setOverlayDots] = useState(0);
   const [fileHover, setFileHover] = useState(false);
@@ -424,19 +423,17 @@ function AdaptarPageContent() {
       }
     }
 
-    const needsSaveMasterPrompt =
+    // Primeiro CV do usuário: vira CV master automaticamente, sem
+    // perguntar nada — mesma pipeline (uploadMasterResume) que já disparava
+    // quando a pessoa respondia "sim" no popup antigo, só que agora sempre.
+    // Só quem JÁ tem master precisa marcar a opção "substituir CV Master"
+    // pra chegar aqui com saveMasterCv=true.
+    const isFirstCv =
       isAuthenticated &&
       !hasMaster &&
-      !saveMasterPromptAnsweredRef.current &&
       (cvMode === "upload" ? !!file : cvMode === "text");
 
-    if (needsSaveMasterPrompt) {
-      setShowSaveMasterPrompt(true);
-      return;
-    }
-
-    // Checkbox "substituir CV Master" usa a mesma pipeline que o popup
-    if (isAuthenticated && hasMaster && saveMasterCv) {
+    if (isFirstCv || (isAuthenticated && hasMaster && saveMasterCv)) {
       saveMasterDecisionRef.current = true;
       setSaveMasterDecided(true);
     }
@@ -804,37 +801,6 @@ function AdaptarPageContent() {
               está sendo eliminado.
             </h1>
           </div>
-
-          {/* Banner de contexto — fluxo de 1 clique a partir do Radar */}
-          {radarJob && !prefillApplicationId ? (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 2,
-                maxWidth: 780,
-                marginBottom: 20,
-                padding: "12px 16px",
-                background: "rgba(198,255,58,0.12)",
-                border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 12,
-              }}
-            >
-              <div style={{ fontSize: 13, fontWeight: 500, color: "#0a0a0a" }}>
-                Analisando para: {radarJob.title} · {radarJob.company}
-              </div>
-              <div
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  color: "#7a7a74",
-                  letterSpacing: 0.2,
-                }}
-              >
-                Descrição carregada automaticamente
-              </div>
-            </div>
-          ) : null}
 
           {/* 2-col grid */}
           <form ref={formRef} onSubmit={handleSubmit}>
@@ -1380,7 +1346,7 @@ function AdaptarPageContent() {
                         LinkedIn, Gupy, Infojobs, etc.
                       </div>
                     </div>
-                    {!prefillApplicationId && (
+                    {!prefillApplicationId && !radarJob && (
                       <div style={{ display: "flex", gap: 12 }}>
                         <button
                           type="button"
@@ -1418,93 +1384,135 @@ function AdaptarPageContent() {
                       </div>
                     )}
                   </div>
-                  <div
-                    style={{
-                      background: prefillApplicationId ? "#f4f4f0" : "#fafaf6",
-                      border: "1px solid #d8d6ce",
-                      borderRadius: 12,
-                      padding: "12px 14px",
-                    }}
-                  >
-                    <textarea
-                      value={jobDescription}
-                      readOnly={!!prefillApplicationId}
-                      onFocus={() => {
-                        if (
-                          prefillApplicationId ||
-                          jobDescriptionFocusTrackedRef.current
-                        ) {
-                          return;
-                        }
-
-                        jobDescriptionFocusTrackedRef.current = true;
-                        emitUiFunnelEvent("job_description_focus");
-                      }}
-                      onPaste={() => {
-                        if (
-                          prefillApplicationId ||
-                          jobDescriptionPasteTrackedRef.current
-                        ) {
-                          return;
-                        }
-
-                        jobDescriptionPasteTrackedRef.current = true;
-                        emitUiFunnelEvent("job_description_paste");
-                      }}
-                      onChange={(e) => {
-                        if (prefillApplicationId) {
-                          return;
-                        }
-                        const nextJobDescription = e.target.value.slice(
-                          0,
-                          12000,
-                        );
-                        setJobDescription(nextJobDescription);
-
-                        if (
-                          !jobDescriptionFilledTrackedRef.current &&
-                          nextJobDescription.trim()
-                        ) {
-                          jobDescriptionFilledTrackedRef.current = true;
-                          emitUiFunnelEvent("job_description_filled");
-                        }
-                      }}
-                      placeholder="Cole a vaga completa"
-                      style={{
-                        width: "100%",
-                        border: "none",
-                        outline: "none",
-                        fontFamily: GEIST,
-                        fontSize: 13.5,
-                        background: "transparent",
-                        color: prefillApplicationId ? "#555550" : "#0a0a0a",
-                        minHeight: 128,
-                        resize: "none",
-                        lineHeight: 1.55,
-                        cursor: prefillApplicationId ? "default" : undefined,
-                      }}
-                    />
-                    <div
+                  {radarJob && !prefillApplicationId && !descriptionExpanded ? (
+                    <button
+                      type="button"
+                      onClick={() => setDescriptionExpanded(true)}
                       style={{
                         display: "flex",
+                        alignItems: "center",
                         justifyContent: "space-between",
-                        borderTop: "1px solid rgba(10,10,10,0.06)",
-                        paddingTop: 8,
-                        marginTop: 6,
+                        width: "100%",
+                        boxSizing: "border-box",
+                        background: "#fafaf6",
+                        border: "1px solid #d8d6ce",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        fontFamily: GEIST,
                       }}
                     >
+                      <span
+                        style={{
+                          fontSize: 13,
+                          color: "#0a0a0a",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {radarJob.title} · {radarJob.company}
+                      </span>
                       <span
                         style={{
                           fontFamily: MONO,
                           fontSize: 10.5,
                           color: "#8a8a85",
+                          flexShrink: 0,
+                          marginLeft: 12,
                         }}
                       >
-                        {prefillApplicationId
-                          ? "vaga da candidatura · não editável"
-                          : `${jobDescription.length} / 12000`}
+                        ver descrição completa ▾
                       </span>
-                      {!prefillApplicationId && (
+                    </button>
+                  ) : (
+                    <div
+                      style={{
+                        background:
+                          prefillApplicationId || radarJob
+                            ? "#f4f4f0"
+                            : "#fafaf6",
+                        border: "1px solid #d8d6ce",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                      }}
+                    >
+                      <textarea
+                        value={jobDescription}
+                        readOnly={!!prefillApplicationId || !!radarJob}
+                        onFocus={() => {
+                          if (
+                            prefillApplicationId ||
+                            radarJob ||
+                            jobDescriptionFocusTrackedRef.current
+                          ) {
+                            return;
+                          }
+
+                          jobDescriptionFocusTrackedRef.current = true;
+                          emitUiFunnelEvent("job_description_focus");
+                        }}
+                        onPaste={() => {
+                          if (
+                            prefillApplicationId ||
+                            radarJob ||
+                            jobDescriptionPasteTrackedRef.current
+                          ) {
+                            return;
+                          }
+
+                          jobDescriptionPasteTrackedRef.current = true;
+                          emitUiFunnelEvent("job_description_paste");
+                        }}
+                        onChange={(e) => {
+                          if (prefillApplicationId || radarJob) {
+                            return;
+                          }
+                          const nextJobDescription = e.target.value.slice(
+                            0,
+                            12000,
+                          );
+                          setJobDescription(nextJobDescription);
+
+                          if (
+                            !jobDescriptionFilledTrackedRef.current &&
+                            nextJobDescription.trim()
+                          ) {
+                            jobDescriptionFilledTrackedRef.current = true;
+                            emitUiFunnelEvent("job_description_filled");
+                          }
+                        }}
+                        placeholder="Cole a vaga completa"
+                        style={{
+                          width: "100%",
+                          border: "none",
+                          outline: "none",
+                          fontFamily: GEIST,
+                          fontSize: 13.5,
+                          background: "transparent",
+                          color:
+                            prefillApplicationId || radarJob
+                              ? "#555550"
+                              : "#0a0a0a",
+                          minHeight: 128,
+                          resize: "none",
+                          lineHeight: 1.55,
+                          cursor:
+                            prefillApplicationId || radarJob
+                              ? "default"
+                              : undefined,
+                        }}
+                      />
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          borderTop: "1px solid rgba(10,10,10,0.06)",
+                          paddingTop: 8,
+                          marginTop: 6,
+                        }}
+                      >
                         <span
                           style={{
                             fontFamily: MONO,
@@ -1512,11 +1520,26 @@ function AdaptarPageContent() {
                             color: "#8a8a85",
                           }}
                         >
-                          ⌘+V para colar
+                          {prefillApplicationId
+                            ? "vaga da candidatura · não editável"
+                            : radarJob
+                              ? "vaga do radar · não editável"
+                              : `${jobDescription.length} / 12000`}
                         </span>
-                      )}
+                        {!prefillApplicationId && !radarJob && (
+                          <span
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#8a8a85",
+                            }}
+                          >
+                            ⌘+V para colar
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* CTA */}
@@ -1852,140 +1875,6 @@ function AdaptarPageContent() {
               >
                 Isso pode levar alguns segundos
               </p>
-            </div>
-          </div>
-        )}
-
-        {/* Popup: salvar como CV master */}
-        {showSaveMasterPrompt && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(10,10,10,0.45)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 100,
-              padding: "0 16px",
-            }}
-          >
-            <div
-              style={{
-                background: "#fafaf6",
-                borderRadius: 16,
-                padding: "28px 24px 24px",
-                maxWidth: 420,
-                width: "100%",
-                boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  marginBottom: 12,
-                }}
-              >
-                {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden
-                >
-                  <path
-                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                    stroke="#0a0a0a"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <polyline
-                    points="14 2 14 8 20 8"
-                    stroke="#0a0a0a"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 500,
-                    letterSpacing: -0.2,
-                    fontFamily: GEIST,
-                  }}
-                >
-                  Salvar como CV base?
-                </span>
-              </div>
-              <p
-                style={{
-                  fontFamily: GEIST,
-                  fontSize: 13.5,
-                  color: "#3a3a34",
-                  lineHeight: 1.55,
-                  margin: "0 0 20px",
-                }}
-              >
-                Quer salvar este CV como seu perfil base? Assim você não
-                precisará fazer upload de novo nas próximas candidaturas.
-              </p>
-              <div style={{ display: "flex", gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    saveMasterDecisionRef.current = true;
-                    setSaveMasterDecided(true);
-                    setSaveMasterCv(true);
-                    saveMasterPromptAnsweredRef.current = true;
-                    setShowSaveMasterPrompt(false);
-                    formRef.current?.requestSubmit();
-                  }}
-                  style={{
-                    flex: 1,
-                    background: "#0a0a0a",
-                    color: "#fafaf6",
-                    border: "none",
-                    borderRadius: 10,
-                    padding: "11px 0",
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    fontFamily: GEIST,
-                    cursor: "pointer",
-                  }}
-                >
-                  Sim, salvar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    saveMasterDecisionRef.current = false;
-                    setSaveMasterDecided(false);
-                    setSaveMasterCv(false);
-                    saveMasterPromptAnsweredRef.current = true;
-                    setShowSaveMasterPrompt(false);
-                    formRef.current?.requestSubmit();
-                  }}
-                  style={{
-                    flex: 1,
-                    background: "transparent",
-                    color: "#3a3a34",
-                    border: "1.5px solid rgba(10,10,10,0.12)",
-                    borderRadius: 10,
-                    padding: "11px 0",
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    fontFamily: GEIST,
-                    cursor: "pointer",
-                  }}
-                >
-                  Não, só analisar
-                </button>
-              </div>
             </div>
           </div>
         )}
