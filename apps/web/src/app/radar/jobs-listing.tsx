@@ -581,6 +581,34 @@ export async function RadarJobsListing({
 }: RadarJobsListingProps) {
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
 
+  // Resolvido cedo (antes do default de sort) porque o default depende
+  // disso: sem CV master pra calcular oportunidade, ordenar por "oportunidade"
+  // por padrão não faz sentido (não há score pra rankear) — só data recente.
+  let radarProfile: Awaited<ReturnType<typeof getMyRadarProfile>> = null;
+  let cvFileName: string | null = null;
+  let masterResumeId: string | null = null;
+  if (user) {
+    const [master, radar] = await Promise.all([
+      getMyMasterResume().catch(() => null),
+      getMyRadarProfile(),
+    ]);
+    cvFileName = master?.sourceFileName ?? null;
+    masterResumeId = master?.id ?? null;
+    radarProfile = radar;
+  }
+
+  const hasRadar = !!radarProfile && radarProfile.areas.length > 0;
+  // hasRadar por si só não prova que o usuário tem CV master — o perfil de
+  // radar (área/senioridade) pode ter sido configurado manualmente e
+  // sobrevive à exclusão do CV master (não é limpo junto). Sem
+  // masterResumeId aqui, score/badges de compatibilidade ficariam calculados
+  // "no ar", sugerindo um CV que não existe mais.
+  const scoreState: "anonymous" | "has-cv" | "no-cv" = !user
+    ? "anonymous"
+    : hasRadar && masterResumeId
+      ? "has-cv"
+      : "no-cv";
+
   // fixedFilters sempre vence o que vier na URL — landing pages (ex.:
   // /radar/area/data_ai) não podem ser "escapadas" trocando a querystring
   // na mão.
@@ -599,9 +627,13 @@ export async function RadarJobsListing({
   const publicada = params.publicada;
   const minSkillsPct = params.minSkillsPct;
   const aderencia = params.aderencia;
+  // Sem CV master calculando oportunidade, ordenar por "oportunidade" por
+  // padrão não faz sentido (não há score pra rankear) — cai pra data recente.
+  const defaultSort: SortValue =
+    scoreState === "has-cv" ? "score_desc" : "date_desc";
   const sort: SortValue = SORT_VALUES.includes(params.sort as SortValue)
     ? (params.sort as SortValue)
-    : "score_desc";
+    : defaultSort;
   // Checkbox vem marcado por padrão — só grava na URL quando desmarcado
   // (excludeAnalyzed=false), então ausência do param == filtro ativo.
   const excludeAnalyzed = params.excludeAnalyzed !== "false";
@@ -639,31 +671,6 @@ export async function RadarJobsListing({
     }),
     getPublicJobFacets({ state: estado }).catch(() => null),
   ]);
-
-  let radarProfile: Awaited<ReturnType<typeof getMyRadarProfile>> = null;
-  let cvFileName: string | null = null;
-  let masterResumeId: string | null = null;
-  if (user) {
-    const [master, radar] = await Promise.all([
-      getMyMasterResume().catch(() => null),
-      getMyRadarProfile(),
-    ]);
-    cvFileName = master?.sourceFileName ?? null;
-    masterResumeId = master?.id ?? null;
-    radarProfile = radar;
-  }
-
-  const hasRadar = !!radarProfile && radarProfile.areas.length > 0;
-  // hasRadar por si só não prova que o usuário tem CV master — o perfil de
-  // radar (área/senioridade) pode ter sido configurado manualmente e
-  // sobrevive à exclusão do CV master (não é limpo junto). Sem
-  // masterResumeId aqui, score/badges de compatibilidade ficariam calculados
-  // "no ar", sugerindo um CV que não existe mais.
-  const scoreState: "anonymous" | "has-cv" | "no-cv" = !user
-    ? "anonymous"
-    : hasRadar && masterResumeId
-      ? "has-cv"
-      : "no-cv";
 
   const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar";
   const totalPages = Math.ceil(jobsResult.total / jobsResult.limit);
@@ -733,7 +740,7 @@ export async function RadarJobsListing({
     if (cidade) p.set("cidade", cidade);
     if (minSkillsPct) p.set("minSkillsPct", minSkillsPct);
     if (aderencia) p.set("aderencia", aderencia);
-    if (sortValue !== "score_desc") p.set("sort", sortValue);
+    if (sortValue !== defaultSort) p.set("sort", sortValue);
     if (!excludeAnalyzed) p.set("excludeAnalyzed", "false");
     const qs = p.toString();
     return `${basePath}${qs ? `?${qs}` : ""}`;
