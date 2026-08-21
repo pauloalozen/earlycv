@@ -290,22 +290,12 @@ describe("AdaptarPage submit analytics flow", () => {
     });
   });
 
-  it("emits analysis_started once and before guest analyze request on valid submit", async () => {
-    const order: string[] = [];
-    trackEventMock.mockImplementation(async (payload) => {
-      if (payload.eventName === "analysis_started") {
-        order.push("analysis_started");
-      }
-      return undefined;
-    });
-    analyzeGuestCvMock.mockImplementation(async () => {
-      order.push("analyze_request");
-      return {
-        ok: true,
-        jobId: "job-2",
-        guestSessionPublicToken: "guest-token-2",
-      };
-    });
+  it("never emits analysis_started or cv_upload_completed from the frontend on file upload + submit (backend-owned since analytics v2 Fase A)", async () => {
+    analyzeGuestCvMock.mockImplementation(async () => ({
+      ok: true,
+      jobId: "job-2",
+      guestSessionPublicToken: "guest-token-2",
+    }));
 
     const { container } = render(<AdaptarPage />);
 
@@ -324,6 +314,12 @@ describe("AdaptarPage submit analytics flow", () => {
         files: [new File(["cv"], "cv.pdf", { type: "application/pdf" })],
       },
     });
+
+    const eventNamesAfterUpload = trackEventMock.mock.calls.map(
+      ([payload]) => payload.eventName,
+    );
+    expect(eventNamesAfterUpload).not.toContain("cv_upload_completed");
+
     fireEvent.change(textarea, {
       target: { value: "Descricao da vaga" },
     });
@@ -336,16 +332,12 @@ describe("AdaptarPage submit analytics flow", () => {
       expect(analyzeGuestCvMock).toHaveBeenCalledTimes(1);
     });
 
-    const analysisStartedCalls = trackEventMock.mock.calls.filter(
-      ([payload]) => payload.eventName === "analysis_started",
+    const eventNames = trackEventMock.mock.calls.map(
+      ([payload]) => payload.eventName,
     );
-
-    expect(analysisStartedCalls).toHaveLength(1);
-    expect(order.indexOf("analysis_started")).toBeGreaterThanOrEqual(0);
-    expect(order.indexOf("analyze_request")).toBeGreaterThanOrEqual(0);
-    expect(order.indexOf("analysis_started")).toBeLessThan(
-      order.indexOf("analyze_request"),
-    );
+    expect(eventNames).toContain("analyze_submit_clicked");
+    expect(eventNames).not.toContain("analysis_started");
+    expect(eventNames).not.toContain("cv_upload_completed");
   });
 
   it("blocks submit in text mode when CV text does not look like a resume", async () => {

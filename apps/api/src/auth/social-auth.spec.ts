@@ -8,6 +8,7 @@ import { Test } from "@nestjs/testing";
 
 import { DatabaseModule } from "../database/database.module";
 import { DatabaseService } from "../database/database.service";
+import { PosthogIntegrationModule } from "../posthog-integration/posthog-integration.module";
 import { AuthController } from "./auth.controller";
 import { AuthModule } from "./auth.module";
 import { AuthService, type AuthSession } from "./auth.service";
@@ -48,7 +49,7 @@ async function deleteUserByEmail(database: DatabaseService, email: string) {
 
 test("social login links a Google account to an existing user by verified email", async () => {
   const moduleRef = await Test.createTestingModule({
-    imports: [DatabaseModule, AuthModule],
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
   }).compile();
 
   const database = moduleRef.get(DatabaseService);
@@ -91,13 +92,22 @@ test("social login links a Google account to an existing user by verified email"
   assert.equal(Boolean(linkedAccount), true);
   assert.notEqual(linkedUser?.emailVerifiedAt, null);
 
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: user.id },
+  });
+  assert.equal(
+    signupEvents.length,
+    0,
+    "social login into a pre-existing account must not emit signup_completed",
+  );
+
   await deleteUserByEmail(database, email);
   await moduleRef.close();
 });
 
 test("social login creates a new user for a verified LinkedIn profile when no account exists", async () => {
   const moduleRef = await Test.createTestingModule({
-    imports: [DatabaseModule, AuthModule],
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
   }).compile();
 
   const database = moduleRef.get(DatabaseService);
@@ -127,13 +137,22 @@ test("social login creates a new user for a verified LinkedIn profile when no ac
   assert.equal(createdUser?.authAccounts[0]?.provider, "linkedin");
   assert.notEqual(createdUser?.profile, null);
 
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: createdUser?.id },
+  });
+  assert.equal(signupEvents.length, 1);
+  const metadata = signupEvents[0]?.metadataJson as Record<string, unknown>;
+  assert.equal(metadata?.signup_method, "linkedin");
+  assert.equal(metadata?.is_guest_conversion, false);
+  assert.equal(metadata?.conversion_context, "direct_auth");
+
   await deleteUserByEmail(database, email);
   await moduleRef.close();
 });
 
 test("social login remains idempotent when the same provider profile is completed twice", async () => {
   const moduleRef = await Test.createTestingModule({
-    imports: [DatabaseModule, AuthModule],
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
   }).compile();
 
   const database = moduleRef.get(DatabaseService);
@@ -170,13 +189,22 @@ test("social login remains idempotent when the same provider profile is complete
   assert.equal(users.length, 1);
   assert.equal(authAccounts.length, 1);
 
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: users[0]?.id },
+  });
+  assert.equal(
+    signupEvents.length,
+    1,
+    "concurrent duplicate social signups must record signup_completed only once",
+  );
+
   await deleteUserByEmail(database, email);
   await moduleRef.close();
 });
 
 test("Google strategy enables OAuth state protection", async () => {
   const moduleRef = await Test.createTestingModule({
-    imports: [AuthModule],
+    imports: [PosthogIntegrationModule, AuthModule],
   }).compile();
 
   const strategy = moduleRef.get(GoogleStrategy) as GoogleStrategy & {

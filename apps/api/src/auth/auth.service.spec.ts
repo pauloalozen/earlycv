@@ -9,6 +9,7 @@ import { Test } from "@nestjs/testing";
 
 import { DatabaseModule } from "../database/database.module";
 import { DatabaseService } from "../database/database.service";
+import { PosthogIntegrationModule } from "../posthog-integration/posthog-integration.module";
 import { FakeEmailDeliveryService } from "./fake-email-delivery.service";
 
 type DeleteManyDelegate = {
@@ -89,7 +90,7 @@ test("AuthService registers a user and stores a hashed refresh token", async () 
   const { AuthService } = authServiceExports as { AuthService: never };
 
   const moduleRef = await Test.createTestingModule({
-    imports: [DatabaseModule, AuthModule],
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
   }).compile();
 
   const database = moduleRef.get(DatabaseService);
@@ -156,6 +157,15 @@ test("AuthService registers a user and stores a hashed refresh token", async () 
   assert.equal(storedUser?.authAccounts[0]?.provider, "credentials");
   assert.notEqual(storedUser?.profile, null);
 
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: storedUser?.id },
+  });
+  assert.equal(signupEvents.length, 1);
+  const metadata = signupEvents[0]?.metadataJson as Record<string, unknown>;
+  assert.equal(metadata?.signup_method, "password");
+  assert.equal(metadata?.conversion_context, "direct_auth");
+  assert.equal(metadata?.is_guest_conversion, false);
+
   await deleteUserByEmail(database, email);
   await moduleRef.close();
 });
@@ -171,7 +181,7 @@ test("AuthService rotates refresh tokens and logout revokes the active session",
   const { AuthService } = authServiceExports as { AuthService: never };
 
   const moduleRef = await Test.createTestingModule({
-    imports: [DatabaseModule, AuthModule],
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
   }).compile();
 
   const database = moduleRef.get(DatabaseService);
@@ -224,6 +234,16 @@ test("AuthService rotates refresh tokens and logout revokes the active session",
   await assert.rejects(
     service.refresh({ refreshToken: refreshed.refreshToken }),
     /refresh token/i,
+  );
+
+  const user = await database.user.findUnique({ where: { email } });
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: user?.id },
+  });
+  assert.equal(
+    signupEvents.length,
+    1,
+    "refresh (session restore) and logout must not emit additional signup_completed events",
   );
 
   await deleteUserByEmail(database, email);
