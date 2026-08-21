@@ -32,6 +32,9 @@ export type AnalysisProtectionEventName =
 
 export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   analysis_started: 1,
+  analysis_completed: 1,
+  analysis_failed: 1,
+  analysis_result_viewed: 1,
   analyze_submit_clicked: 1,
   auth_session_identified: 1,
   auth_oauth_redirect_started: 1,
@@ -44,6 +47,9 @@ export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   buy_credits_clicked: 1,
   checkout_abandoned: 1,
   checkout_started: 1,
+  checkout_brick_ready: 1,
+  checkout_brick_submit_started: 1,
+  checkout_brick_submit_failed: 1,
   cv_unlock_completed: 1,
   cv_unlock_started: 1,
   cv_upload_completed: 1,
