@@ -157,28 +157,53 @@ round-trip cross-origin. `googleCallback` lê e limpa a cookie
 (`readAndClearOAuthSignupContext`) antes de chamar `finishSocialLogin`. Valor adulterado ou
 ausente sempre colapsa em `unknown` — nunca quebra o login.
 
-## 5.2 Classificação de sessão: new_user / existing_user / anonymous
+## 5.2 Classificação de jornada por sessão (Fase B.2) — new_user_journey / existing_user_journey / anonymous_journey / unknown
 
-Requisito: dado um `sessionInternalId` (jornada, armazenado em `metadata.sessionInternalId`
-dos eventos — não confundir com a coluna `BusinessFunnelEvent.sessionInternalId`, que tem FK
-pra `AnalysisSession` e é outro conceito), a classificação deve ser determinística:
+Implementado em `apps/api/src/analysis-observability/journey-session-classification.ts`
+(função pura `classifyJourneySession`) e
+`journey-session-classification.service.ts` (`JourneySessionClassificationService`, que
+carrega o histórico real de `BusinessFunnelEvent` de um `sessionInternalId` via filtro JSON
+`metadataJson.sessionInternalId` e aplica a função pura). Exposto para consumo por
+dashboards via `GET /admin/analysis-observability/events/journey-classification/:sessionInternalId`
+(protegido por `JwtAuthGuard`/`RolesGuard`, admin/superadmin) — uma camada derivável e
+sempre recalculada a partir do histórico de eventos, não um valor persistido/denormalizado
+nos eventos em si (não dá pra saber se uma sessão vai terminar em `signup_completed` no
+momento em que o primeiro evento dela é gravado).
 
-- sessão contém `signup_completed` → `new_user`
-- sessão contém `login_completed` → `existing_user`
-- sessão chega já autenticada, sem `login_completed`/`signup_completed` (ex.: sessão de
-  jornada nova mas usuário já tinha token válido) → `existing_user`, derivável via
-  `isAuthenticated`/`user_id` que todo evento de frontend já carrega em
-  `getAnalyticsBaseProperties()`
-- sem nenhuma autenticação na sessão → `anonymous`
-- qualquer outro caso (dado incompleto, múltiplos sinais conflitantes) → `unknown`
+Conjunto fechado (`JOURNEY_SESSION_CLASSIFICATIONS`): `anonymous_journey`,
+`new_user_journey`, `existing_user_journey`, `unknown`.
 
-`auth_session_identified` continua evento técnico (mistura restauração/transição de auth) e
-**não** entra nessa classificação — nem como proxy de signup nem de login. Dashboards de
-aquisição devem excluir jornadas classificadas como `existing_user` (mesmo que os primeiros
-eventos daquela sessão tenham ocorrido anonimamente antes do login), e nunca usar o estado
-*atual* da pessoa como filtro — isso excluiria também quem converteu de fato durante o
-funil. Esta seção documenta o contrato de dados; a consulta/dashboard em si está fora do
-escopo desta rodada (Fase B.1 não altera GA4/PostHog/dashboards).
+Prioridade de classificação (determinística, dado o mesmo conjunto de eventos sempre produz
+o mesmo resultado):
+
+1. sessão contém `signup_completed` → `new_user_journey` (a conta não existia antes; nasceu
+   nesta jornada — vale para qualquer origem: homepage, SEO, Radar, vaga pública, parceiro,
+   `/adaptar`. A origem nunca muda a classificação.)
+2. sessão contém `login_completed`, sem `signup_completed` → `existing_user_journey`
+   (autenticação explícita numa conta que já existia).
+3. primeiro evento da sessão (por `createdAt`) já chega com `metadata.isAuthenticated ===
+   true`, sem `login_completed`/`signup_completed` → `existing_user_journey` (sessão de
+   jornada nova mas com token válido de conta pré-existente).
+4. nenhum evento da sessão jamais autenticado → `anonymous_journey`.
+5. qualquer outro caso (sinais contraditórios — `signup_completed` e `login_completed` na
+   mesma sessão —, virou autenticado no meio da sessão sem `login_completed`/
+   `signup_completed` observável, ou sessão sem nenhum evento) → `unknown`. Nunca inferido
+   por heurística adicional.
+
+Regras deliberadamente **não** usadas, por instrução explícita:
+- **"tem `user_id`" como filtro**: usar isso classificaria erroneamente como
+  `existing_user_journey` qualquer sessão nova que converteu (ganhou `user_id` só depois do
+  próprio `signup_completed`). A função só olha `isAuthenticated` do *primeiro* evento pra
+  decidir "começou logado", e eventos com autenticação aparecendo no meio da sessão sem um
+  evento explícito de login/signup caem em `unknown`, não em `existing_user_journey`.
+- **`auth_session_identified` como critério**: é evento técnico (mistura
+  restauração/transição de auth), nunca tratado como prova de novo cadastro nem de login —
+  nem sozinho nem combinado com `isAuthenticated`.
+
+Dashboards de aquisição (fora do escopo desta rodada) devem excluir jornadas classificadas
+como `existing_user_journey`, mesmo que os primeiros eventos daquela sessão tenham ocorrido
+anonimamente antes do login — e nunca usar o estado *atual* da pessoa como filtro, o que
+excluiria também quem converteu de fato durante o funil.
 
 ## 6. Versionamento
 
