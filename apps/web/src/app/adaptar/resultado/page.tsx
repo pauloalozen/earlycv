@@ -1988,6 +1988,17 @@ export default function ResultadoPage() {
     }).catch(() => undefined);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: emitResultadoEvent is recreated every render; including it would re-fire the event on every render instead of once per result render
+  useEffect(() => {
+    if (!rawData || (!isDemo && isAuthenticated === null)) return;
+
+    emitResultadoEvent("analysis_result_viewed", {
+      analysis_id: isDemo ? null : reviewAdaptationId,
+      mode: isAuthenticated ? "authenticated" : "guest",
+      is_locked: locked,
+    });
+  }, [rawData, isDemo, isAuthenticated, reviewAdaptationId, locked]);
+
   const handleDownload = async (format: "pdf" | "docx") => {
     if (!reviewAdaptationId || downloading) return;
     emitResultadoEvent("optimized_cv_downloaded", { format });
