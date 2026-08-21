@@ -424,7 +424,7 @@ function AnonymousHeroCard() {
       <HeroCtaCard
         buttonLabel="Criar conta grátis"
         description="para ver as melhores oportunidades pro seu perfil"
-        href="/entrar?tab=cadastrar"
+        href="/entrar?tab=cadastrar&ctx=radar"
         title="criar conta"
       />
       <HeroPreviewCard />
@@ -672,7 +672,7 @@ export async function RadarJobsListing({
     getPublicJobFacets({ state: estado }).catch(() => null),
   ]);
 
-  const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar";
+  const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar&ctx=radar";
   const totalPages = Math.ceil(jobsResult.total / jobsResult.limit);
 
   // Dimensões fixas pela landing page nunca entram no ActiveFilters da

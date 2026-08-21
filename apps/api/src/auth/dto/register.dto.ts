@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  MaxLength,
   MinLength,
 } from "class-validator";
 
@@ -13,10 +14,15 @@ import {
   USER_PASSWORD_POLICY_REGEX,
 } from "./password-policy";
 
+// Conjunto fechado — o frontend envia explicitamente qual desses contextos
+// se aplica. O backend nunca infere origem por heurística (rota, referrer
+// etc.); ausência ou valor inválido colapsa para "unknown".
 export const SIGNUP_CONVERSION_CONTEXTS = [
   "analysis_guest",
   "checkout",
   "direct_auth",
+  "radar",
+  "unknown",
 ] as const;
 
 export type SignupConversionContext =
@@ -44,4 +50,9 @@ export class RegisterDto {
   @IsOptional()
   @IsIn(SIGNUP_CONVERSION_CONTEXTS)
   conversionContext?: SignupConversionContext;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  sessionInternalId?: string;
 }

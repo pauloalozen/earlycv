@@ -8,11 +8,13 @@ import {
   Post,
   Redirect,
   Req,
+  Res,
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { SkipThrottle, Throttle } from "@nestjs/throttler";
+import type { Request, Response } from "express";
 
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
@@ -26,6 +28,7 @@ import { RegisterDto } from "./dto/register.dto";
 import { ResendVerificationCodeDto } from "./dto/resend-verification-code.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
+import { readAndClearOAuthSignupContext } from "./oauth-signup-context";
 
 const authValidationPipe = new ValidationPipe({
   transform: true,
@@ -69,9 +72,7 @@ export class AuthController {
     dto: LoginDto,
     @Req() request: { user: { id: string } },
   ) {
-    void dto;
-
-    return this.authService.login(request.user);
+    return this.authService.login(request.user, dto.sessionInternalId);
   }
 
   @Post("refresh")
@@ -167,9 +168,17 @@ export class AuthController {
   @Get("google/callback")
   @UseGuards(AuthGuard("google"))
   @Redirect()
-  async googleCallback(@Req() request: SocialAuthRequest) {
+  async googleCallback(
+    @Req() request: SocialAuthRequest & Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const conversionContext = readAndClearOAuthSignupContext(request, response);
+
     return this.buildSocialRedirect(
-      await this.authService.finishSocialLogin(this.getSocialProfile(request)),
+      await this.authService.finishSocialLogin(
+        this.getSocialProfile(request),
+        conversionContext,
+      ),
     );
   }
 

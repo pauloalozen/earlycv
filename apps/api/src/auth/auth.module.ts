@@ -1,4 +1,9 @@
-import { Module } from "@nestjs/common";
+import {
+  type MiddlewareConsumer,
+  Module,
+  type NestModule,
+  RequestMethod,
+} from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 
@@ -9,6 +14,7 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { EMAIL_DELIVERY_PORT } from "./email-delivery.port";
 import { FakeEmailDeliveryService } from "./fake-email-delivery.service";
+import { captureOAuthSignupContextMiddleware } from "./oauth-signup-context";
 import { ResendEmailDeliveryService } from "./resend-email-delivery.service";
 import { GoogleStrategy } from "./strategies/google.strategy";
 import { JwtStrategy } from "./strategies/jwt.strategy";
@@ -42,4 +48,10 @@ const useResend =
   ],
   exports: [AuthService, FakeEmailDeliveryService, EMAIL_DELIVERY_PORT],
 })
-export class AuthModule {}
+export class AuthModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(captureOAuthSignupContextMiddleware)
+      .forRoutes({ path: "auth/google/start", method: RequestMethod.GET });
+  }
+}

@@ -1,19 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   SIGNUP_PASSWORD_RULES,
   validateSignupPassword,
 } from "@/lib/password-rules";
 import { PasswordInput } from "./password-input";
+import type { SignupConversionContext } from "./signup-conversion-context";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MONO = "var(--font-geist-mono), monospace";
+const JOURNEY_SESSION_KEY = "journey_session_internal_id";
 
-export function RegisterForm({ next }: { next: string }) {
+export function RegisterForm({
+  next,
+  conversionContext,
+}: {
+  next: string;
+  conversionContext: SignupConversionContext;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [touched, setTouched] = useState({ email: false, password: false });
+  const [sessionInternalId, setSessionInternalId] = useState("");
+
+  useEffect(() => {
+    try {
+      setSessionInternalId(sessionStorage.getItem(JOURNEY_SESSION_KEY) ?? "");
+    } catch {
+      // sessionStorage indisponível (privacy mode etc.) — segue sem
+      // correlação de sessão, conversionContext continua enviado.
+    }
+  }, []);
 
   const emailValid = EMAIL_REGEX.test(email);
   const passwordAllValid = validateSignupPassword(password);
@@ -57,6 +75,14 @@ export function RegisterForm({ next }: { next: string }) {
       style={{ display: "flex", flexDirection: "column", gap: 16 }}
     >
       {next && <input type="hidden" name="next" value={next} />}
+      <input type="hidden" name="conversionContext" value={conversionContext} />
+      {sessionInternalId && (
+        <input
+          type="hidden"
+          name="sessionInternalId"
+          value={sessionInternalId}
+        />
+      )}
 
       <div>
         <label htmlFor="register-name" style={labelStyle}>

@@ -21,7 +21,7 @@ function useSaveJobToggle({
 
   function toggle() {
     if (!isLoggedIn) {
-      router.push("/entrar?tab=cadastrar");
+      router.push("/entrar?tab=cadastrar&ctx=radar");
       return;
     }
 

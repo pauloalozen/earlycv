@@ -77,9 +77,17 @@ async function authRequest<T>(path: string, init?: RequestInit) {
   return (await response.json()) as T;
 }
 
-export async function loginWithPassword(email: string, password: string) {
+export async function loginWithPassword(
+  email: string,
+  password: string,
+  sessionInternalId?: string,
+) {
   return authRequest<AuthApiSession>("/auth/login", {
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({
+      email,
+      password,
+      ...(sessionInternalId ? { sessionInternalId } : {}),
+    }),
     method: "POST",
   });
 }
@@ -88,9 +96,17 @@ export async function registerWithPassword(
   email: string,
   password: string,
   name: string,
+  conversionContext?: string,
+  sessionInternalId?: string,
 ) {
   return authRequest<AuthApiSession>("/auth/register", {
-    body: JSON.stringify({ email, name, password }),
+    body: JSON.stringify({
+      email,
+      name,
+      password,
+      ...(conversionContext ? { conversionContext } : {}),
+      ...(sessionInternalId ? { sessionInternalId } : {}),
+    }),
     method: "POST",
   });
 }

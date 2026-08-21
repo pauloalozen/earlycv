@@ -4334,7 +4334,7 @@ export default function ResultadoPage() {
                     ) : (
                       <>
                         <a
-                          href={`/entrar?next=${encodeURIComponent("/adaptar/resultado?autoSave=1")}`}
+                          href={`/entrar?next=${encodeURIComponent("/adaptar/resultado?autoSave=1")}&ctx=analysis_guest`}
                           onClick={() => {
                             emitResultadoEvent("cta_signup_click", {
                               cta_location: "resultado_unlock",

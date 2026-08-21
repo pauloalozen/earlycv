@@ -13,9 +13,19 @@ export async function POST(request: Request) {
   const password = String(formData.get("password") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const next = sanitizeNext(String(formData.get("next") ?? "").trim());
+  const conversionContext =
+    String(formData.get("conversionContext") ?? "").trim() || undefined;
+  const sessionInternalId =
+    String(formData.get("sessionInternalId") ?? "").trim() || undefined;
 
   try {
-    const session = await registerWithPassword(email, password, name);
+    const session = await registerWithPassword(
+      email,
+      password,
+      name,
+      conversionContext,
+      sessionInternalId,
+    );
     await persistAppSession(session);
 
     const verifyUrl = next

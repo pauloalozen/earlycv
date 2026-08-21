@@ -8,6 +8,10 @@ import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { GoogleAuthButton } from "./google-auth-button";
 import { LoginForm } from "./login-form";
 import { RegisterForm } from "./register-form";
+import {
+  isSignupConversionContext,
+  type SignupConversionContext,
+} from "./signup-conversion-context";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -15,7 +19,12 @@ export const metadata: Metadata = {
 };
 
 type EntrarPageProps = {
-  searchParams: Promise<{ tab?: string; error?: string; next?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    error?: string;
+    next?: string;
+    ctx?: string;
+  }>;
 };
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -31,11 +40,22 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
   const tab = params.tab === "entrar" ? "entrar" : "cadastro";
   const error = params.error ?? "";
   const next = params.next ?? "";
+  // Contexto explícito de origem do cadastro — vem só de links internos
+  // que sabem de onde estão linkando (resultado guest, radar, checkout).
+  // Sem esse param, a entrada é direta (login/cadastro), não inferida.
+  const conversionContext: SignupConversionContext = isSignupConversionContext(
+    params.ctx,
+  )
+    ? params.ctx
+    : "direct_auth";
 
   const isLogin = tab === "entrar";
   const rawApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim() ?? "";
   const apiBase = rawApiUrl.endsWith("/api") ? rawApiUrl : `${rawApiUrl}/api`;
-  const googleUrl = `${apiBase}/auth/google/start${next ? `?next=${encodeURIComponent(next)}` : ""}`;
+  const googleStartParams = new URLSearchParams();
+  if (next) googleStartParams.set("next", next);
+  googleStartParams.set("ctx", conversionContext);
+  const googleUrl = `${apiBase}/auth/google/start?${googleStartParams.toString()}`;
 
   return (
     <PageShell>
@@ -390,7 +410,11 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
             </div>
 
             {/* Form */}
-            {isLogin ? <LoginForm next={next} /> : <RegisterForm next={next} />}
+            {isLogin ? (
+              <LoginForm next={next} />
+            ) : (
+              <RegisterForm next={next} conversionContext={conversionContext} />
+            )}
 
             {/* Tab switch */}
             <p

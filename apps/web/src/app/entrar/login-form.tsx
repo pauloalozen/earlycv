@@ -1,15 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PasswordInput } from "./password-input";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MONO = "var(--font-geist-mono), monospace";
+const JOURNEY_SESSION_KEY = "journey_session_internal_id";
 
 export function LoginForm({ next }: { next: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [touched, setTouched] = useState({ email: false, password: false });
+  const [sessionInternalId, setSessionInternalId] = useState("");
+
+  useEffect(() => {
+    try {
+      setSessionInternalId(sessionStorage.getItem(JOURNEY_SESSION_KEY) ?? "");
+    } catch {
+      // sessionStorage indisponível — login segue sem correlação de sessão.
+    }
+  }, []);
 
   const emailValid = EMAIL_REGEX.test(email);
   const passwordValid = password.length >= 1;
@@ -53,6 +63,13 @@ export function LoginForm({ next }: { next: string }) {
       style={{ display: "flex", flexDirection: "column", gap: 16 }}
     >
       {next && <input type="hidden" name="next" value={next} />}
+      {sessionInternalId && (
+        <input
+          type="hidden"
+          name="sessionInternalId"
+          value={sessionInternalId}
+        />
+      )}
 
       <div>
         <label htmlFor="login-email" style={labelStyle}>

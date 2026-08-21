@@ -1,6 +1,7 @@
 # Taxonomia de analytics — EarlyCV (fonte única de verdade)
 
-Última revisão: 2026-08-21, no âmbito da spec `specs/analytics-v2-saneamento-evolucao-plan.md` (Fases A+B).
+Última revisão: 2026-08-21, no âmbito da spec `specs/analytics-v2-saneamento-evolucao-plan.md`
+(Fases A+B, e Fase B.1 — contexto de conversão do signup e classificação de sessão).
 
 Este documento é a referência viva da taxonomia. Doc antiga (versão anterior deste
 arquivo, com contagem "52 eventos" e lista incompleta) estava divergente do código e
@@ -34,6 +35,12 @@ mesmo tempo.
   equivalentes, não tratar como intercambiáveis em dashboards.
 - `user_id` é o campo canônico de usuário autenticado nos eventos EarlyCV. `userId` é
   legado mantido por compatibilidade durante a transição.
+- **Cuidado**: `sessionInternalId` existe em dois lugares com semânticas diferentes —
+  a coluna `BusinessFunnelEvent.sessionInternalId` (FK pra `AnalysisSession`, usada só
+  pelo pipeline de proteção/análise) e `metadata.sessionInternalId` (o UUID de jornada
+  gerado no frontend, `journey_session_internal_id` em `sessionStorage`, usado por
+  `page_view`/`signup_completed`/`login_completed` etc.). Escrever o UUID de jornada na
+  coluna quebra com FK constraint violation — sempre usar `metadata`. Ver seção 5.2.
 
 ## 3. Eventos AnalysisProtectionEvent (27, todos v1, source interno)
 
@@ -74,7 +81,7 @@ produto. Não confundir com `BusinessFunnelEvent`.
 | full_analysis_viewed | backend | **stale catalog** | Está no registry/ownership mas não há emissor real no código hoje. Mantido por compatibilidade histórica; não usar em dashboards novos. |
 | job_description_focus / job_description_filled / job_description_paste | frontend | ativo | |
 | landing_cta_click | frontend | ativo | |
-| login_completed | backend | **stale catalog** | Registrado mas sem emissor real (só usado via ferramenta admin de emissão sintética). |
+| login_completed | backend | **implementado (Fase B.1)** | Exclusivo de autenticação EXPLÍCITA numa conta já existente: senha via `AuthService.login` (`/auth/login`) e login social que resolve pra conta pré-existente em `finishSocialLogin`. Nunca emitido em `refresh()`/restauração de sessão. Propriedades: `user_id`, `login_method` (`password`\|`google`\|`linkedin`), `sessionInternalId` quando disponível. Sem idempotencyKey — cada login explícito é um evento novo por natureza. |
 | page_leave | frontend | ativo | |
 | payment_return_viewed | frontend | ativo | Retorno/visualização pós-provedor. Não representa aprovação. |
 | plan_selected | frontend | ativo | |
@@ -84,7 +91,7 @@ produto. Não confundir com `BusinessFunnelEvent`.
 | payment_approved | backend | ativo | Fonte oficial de pagamento aprovado e receita. Backend-only, não alterado nesta rodada. |
 | payment_failed | backend | ativo | |
 | session_engaged / session_started | frontend | ativo | |
-| signup_completed | backend | **implementado (Fase B)** | Já existia no registry (não emitido). Agora emitido em `AuthService.register` (signup por senha) e `AuthService.finishSocialLogin` (apenas quando a conta é criada de fato — não em login social de conta pré-existente). Propriedades: `user_id`, `signup_method` (`password`\|`google`\|`linkedin`), `is_guest_conversion`, `conversion_context` (`analysis_guest`\|`checkout`\|`direct_auth`, default `direct_auth`). Idempotente por `user_id`. Não representa login nem restauração de sessão. |
+| signup_completed | backend | **implementado (Fase B), contexto corrigido (Fase B.1)** | Emitido em `AuthService.register` (signup por senha) e `AuthService.finishSocialLogin` (apenas quando a conta é criada de fato — não em login social de conta pré-existente, que agora emite `login_completed`). Propriedades: `user_id`, `signup_method` (`password`\|`google`\|`linkedin`), `is_guest_conversion`, `conversion_context` (conjunto fechado: `analysis_guest`\|`checkout`\|`direct_auth`\|`radar`\|`unknown`), `sessionInternalId` quando disponível. Idempotente por `user_id`. Não representa login nem restauração de sessão. Ver seção 5.1 para o contrato completo de `conversion_context`. |
 | signup_started | frontend | ativo | |
 | teaser_scroll / teaser_viewed | frontend/backend | ativo | |
 | unlock_cv_click | frontend | ativo | |
@@ -115,6 +122,63 @@ Ver tabela acima para owner/propriedades resumidos. Detalhe adicional:
   retry de rede).
 - `cv_upload_completed` é chaveado por fingerprint do arquivo (hash do buffer), não por
   job — evita duplicar caso o mesmo arquivo seja reenviado no retry do mesmo request.
+
+## 5.1 `conversion_context` (Fase B.1) — contrato fechado, nunca inferido
+
+O backend **nunca** deduz a origem de um cadastro a partir de heurística (rota, referrer,
+`next` etc.). O frontend envia `conversionContext` explicitamente; ausência ou valor fora
+do conjunto fechado colapsa em `unknown` — nunca em `direct_auth` por omissão silenciosa.
+
+Conjunto fechado (`SIGNUP_CONVERSION_CONTEXTS` em
+`apps/api/src/auth/dto/register.dto.ts`): `analysis_guest`, `checkout`, `direct_auth`,
+`radar`, `unknown`.
+
+| Contexto | Onde é setado |
+|---|---|
+| `analysis_guest` | CTA de criar conta em `/adaptar/resultado` (resultado de análise guest) — `?ctx=analysis_guest` |
+| `checkout` | Redirect pra `/entrar` a partir do fluxo de planos/checkout (`plans/checkout/route.ts`, `planos/page.tsx`) — `?ctx=checkout` |
+| `radar` | CTAs de criar conta no Radar (`radar/[slug]/page.tsx`, `radar/jobs-listing.tsx`, `radar/save-job-btn.tsx`) — `?ctx=radar` |
+| `direct_auth` | Entrada direta em `/entrar` sem `ctx` na URL (nav, landing, footer) — é o default explícito que a própria página `/entrar` resolve, não um fallback do backend |
+| `unknown` | Fallback do backend quando o campo está ausente/inválido no payload (cliente antigo, chamada direta à API, valor fora do enum) |
+
+`is_guest_conversion` só é `true` quando `conversion_context === "analysis_guest"` — é a
+única jornada guest conhecida no conjunto hoje.
+
+**Cadastro por senha**: `RegisterForm` lê `?ctx=` (resolvido em `entrar/page.tsx`) e manda
+como campo hidden `conversionContext` no POST pra `/auth/register-user` → `/auth/register`.
+
+**OAuth (Google)**: o valor não pode ir na URL de callback (token + PII já trafegam ali) nem
+depender de cookie cross-domain frágil. Em vez disso: `GoogleAuthButton` manda `?ctx=` pra
+`/auth/google/start` (mesmo padrão já usado pra `next`); um middleware
+(`captureOAuthSignupContextMiddleware`, registrado só nessa rota via
+`AuthModule.configure()`) valida contra o enum e grava numa cookie httpOnly de curta duração
+(10min), escopada em `/api/auth/google` — a cookie nunca sai do domínio da API, não há
+round-trip cross-origin. `googleCallback` lê e limpa a cookie
+(`readAndClearOAuthSignupContext`) antes de chamar `finishSocialLogin`. Valor adulterado ou
+ausente sempre colapsa em `unknown` — nunca quebra o login.
+
+## 5.2 Classificação de sessão: new_user / existing_user / anonymous
+
+Requisito: dado um `sessionInternalId` (jornada, armazenado em `metadata.sessionInternalId`
+dos eventos — não confundir com a coluna `BusinessFunnelEvent.sessionInternalId`, que tem FK
+pra `AnalysisSession` e é outro conceito), a classificação deve ser determinística:
+
+- sessão contém `signup_completed` → `new_user`
+- sessão contém `login_completed` → `existing_user`
+- sessão chega já autenticada, sem `login_completed`/`signup_completed` (ex.: sessão de
+  jornada nova mas usuário já tinha token válido) → `existing_user`, derivável via
+  `isAuthenticated`/`user_id` que todo evento de frontend já carrega em
+  `getAnalyticsBaseProperties()`
+- sem nenhuma autenticação na sessão → `anonymous`
+- qualquer outro caso (dado incompleto, múltiplos sinais conflitantes) → `unknown`
+
+`auth_session_identified` continua evento técnico (mistura restauração/transição de auth) e
+**não** entra nessa classificação — nem como proxy de signup nem de login. Dashboards de
+aquisição devem excluir jornadas classificadas como `existing_user` (mesmo que os primeiros
+eventos daquela sessão tenham ocorrido anonimamente antes do login), e nunca usar o estado
+*atual* da pessoa como filtro — isso excluiria também quem converteu de fato durante o
+funil. Esta seção documenta o contrato de dados; a consulta/dashboard em si está fora do
+escopo desta rodada (Fase B.1 não altera GA4/PostHog/dashboards).
 
 ## 6. Versionamento
 

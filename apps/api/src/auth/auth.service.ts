@@ -19,7 +19,7 @@ import type { CreateStaffUserDto } from "./dto/create-staff-user.dto";
 import type { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import type { LoginDto } from "./dto/login.dto";
 import type { RefreshDto } from "./dto/refresh.dto";
-import type { RegisterDto } from "./dto/register.dto";
+import type { RegisterDto, SignupConversionContext } from "./dto/register.dto";
 import type { ResendVerificationCodeDto } from "./dto/resend-verification-code.dto";
 import type { ResetPasswordDto } from "./dto/reset-password.dto";
 import type { VerifyEmailDto } from "./dto/verify-email.dto";
@@ -99,6 +99,7 @@ export class AuthService {
     signupMethod: string;
     isGuestConversion: boolean;
     conversionContext: string;
+    sessionInternalId?: string | null;
   }): Promise<void> {
     try {
       await this.funnelEvents.record(
@@ -111,8 +112,58 @@ export class AuthService {
             signup_method: input.signupMethod,
             is_guest_conversion: input.isGuestConversion,
             conversion_context: input.conversionContext,
+            // journey sessionInternalId do frontend (sessionStorage) —
+            // conceito distinto do AnalysisSession referenciado pela FK
+            // da coluna context.sessionInternalId, por isso vai em
+            // metadata, igual ao resto dos eventos originados no
+            // frontend (ver getAnalyticsBaseProperties).
+            ...(input.sessionInternalId
+              ? { sessionInternalId: input.sessionInternalId }
+              : {}),
           },
           routeKey: "auth/signup",
+        },
+        {
+          requestId: randomUUID(),
+          correlationId: randomUUID(),
+          sessionPublicToken: null,
+          sessionInternalId: null,
+          userId: input.userId,
+          ip: null,
+          routePath: null,
+          userAgentHash: null,
+        },
+        "backend",
+      );
+    } catch {
+      // Analytics failures never block signup/login.
+    }
+  }
+
+  // login_completed é exclusivo de autenticação EXPLÍCITA numa conta já
+  // existente (senha via /auth/login, ou social login que resolve pra
+  // conta pré-existente). Nunca chamar em refresh/restauração de sessão —
+  // isso preserva a classificação determinística de sessionInternalId em
+  // new_user (via signup_completed) / existing_user (via login_completed
+  // ou sessão já iniciada autenticada) / anonymous.
+  private async recordLoginCompleted(input: {
+    userId: string;
+    loginMethod: string;
+    sessionInternalId?: string | null;
+  }): Promise<void> {
+    try {
+      await this.funnelEvents.record(
+        {
+          eventName: "login_completed",
+          eventVersion: 1,
+          metadata: {
+            user_id: input.userId,
+            login_method: input.loginMethod,
+            ...(input.sessionInternalId
+              ? { sessionInternalId: input.sessionInternalId }
+              : {}),
+          },
+          routeKey: "auth/login",
         },
         {
           requestId: randomUUID(),
@@ -138,12 +189,13 @@ export class AuthService {
       name: input.name,
     });
 
-    const conversionContext = input.conversionContext ?? "direct_auth";
+    const conversionContext = input.conversionContext ?? "unknown";
     await this.recordSignupCompleted({
       userId: user.id,
       signupMethod: "password",
       isGuestConversion: conversionContext === "analysis_guest",
       conversionContext,
+      sessionInternalId: input.sessionInternalId,
     });
 
     await this.issueEmailVerificationChallenge(user.id, user.email);
@@ -180,7 +232,16 @@ export class AuthService {
     return user;
   }
 
-  async login(user: { id: string }): Promise<AuthSession> {
+  async login(
+    user: { id: string },
+    sessionInternalId?: string | null,
+  ): Promise<AuthSession> {
+    await this.recordLoginCompleted({
+      userId: user.id,
+      loginMethod: "password",
+      sessionInternalId,
+    });
+
     return this.issueSession(user.id);
   }
 
@@ -234,7 +295,10 @@ export class AuthService {
     return { ok: true } as const;
   }
 
-  async finishSocialLogin(input: SocialProfileInput): Promise<AuthSession> {
+  async finishSocialLogin(
+    input: SocialProfileInput,
+    conversionContext: SignupConversionContext = "unknown",
+  ): Promise<AuthSession> {
     const providerEmail = input.email.trim().toLowerCase();
     const providerAccountId = input.providerAccountId.trim();
 
@@ -351,8 +415,13 @@ export class AuthService {
       await this.recordSignupCompleted({
         userId: socialResult.userId,
         signupMethod: input.provider,
-        isGuestConversion: false,
-        conversionContext: "direct_auth",
+        isGuestConversion: conversionContext === "analysis_guest",
+        conversionContext,
+      });
+    } else {
+      await this.recordLoginCompleted({
+        userId: socialResult.userId,
+        loginMethod: input.provider,
       });
     }
 

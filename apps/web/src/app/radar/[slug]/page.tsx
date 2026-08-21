@@ -269,7 +269,7 @@ function CompatCard({
       <CompatCardCta
         title="Cadastre-se para ver sua oportunidade"
         description="Análise gratuita, calculada a partir do seu CV."
-        href="/entrar?tab=cadastrar"
+        href="/entrar?tab=cadastrar&ctx=radar"
         linkLabel="Cadastre-se grátis"
       />
     );
@@ -618,7 +618,7 @@ export default async function JobPage({ params }: JobPageProps) {
   const hasExistingAnalysisScore =
     typeof existingApplication?.bestScore === "number";
 
-  const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar";
+  const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar&ctx=radar";
   const adaptarJobHref = `${adaptarHref}${adaptarHref.includes("?") ? `&jobId=${job.id}` : `?jobId=${job.id}`}`;
 
   const sections = splitHtmlSections(job.descriptionHtml);
