@@ -298,6 +298,7 @@ export class AuthService {
   async finishSocialLogin(
     input: SocialProfileInput,
     conversionContext: SignupConversionContext = "unknown",
+    sessionInternalId?: string | null,
   ): Promise<AuthSession> {
     const providerEmail = input.email.trim().toLowerCase();
     const providerAccountId = input.providerAccountId.trim();
@@ -417,11 +418,13 @@ export class AuthService {
         signupMethod: input.provider,
         isGuestConversion: conversionContext === "analysis_guest",
         conversionContext,
+        sessionInternalId,
       });
     } else {
       await this.recordLoginCompleted({
         userId: socialResult.userId,
         loginMethod: input.provider,
+        sessionInternalId,
       });
     }
 

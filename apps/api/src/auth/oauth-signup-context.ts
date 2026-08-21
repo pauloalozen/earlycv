@@ -4,16 +4,28 @@ import {
   type SignupConversionContext,
 } from "./dto/register.dto";
 
-// Preserva o conversion_context (ex.: "analysis_guest") durante o
-// round-trip do OAuth (start -> Google -> callback) sem colocar nada na
-// URL de callback e sem depender de cookie compartilhado entre domínios:
-// a cookie é setada e lida inteiramente pela própria API, no path
-// /api/auth/google. O valor é validado contra o conjunto fechado em
-// ambas as pontas — nunca inferido, e tentativa de adulteração só
-// resulta em "unknown".
+// Preserva conversion_context e sessionInternalId durante o round-trip do
+// OAuth (start -> Google -> callback) sem colocar nada disso na URL de
+// callback e sem depender de cookie compartilhado entre domínios: as
+// cookies são setadas e lidas inteiramente pela própria API, no path
+// /api/auth/google. Os valores são validados contra formato/enum fechado
+// em ambas as pontas — nunca inferidos; adulteração ou ausência só
+// resulta em "unknown" (contexto) ou null (sessionInternalId), nunca
+// quebra o login.
 export const OAUTH_SIGNUP_CONTEXT_COOKIE = "oauth_signup_ctx";
-const OAUTH_SIGNUP_CONTEXT_COOKIE_PATH = "/api/auth/google";
-const OAUTH_SIGNUP_CONTEXT_MAX_AGE_MS = 10 * 60 * 1000;
+export const OAUTH_JOURNEY_SESSION_COOKIE = "oauth_journey_sid";
+const OAUTH_COOKIE_PATH = "/api/auth/google";
+// Mesmo TTL pros dois — é o mesmo round-trip OAuth, mesma janela de
+// exposição.
+const OAUTH_COOKIE_MAX_AGE_MS = 10 * 60 * 1000;
+
+// Mesmo formato que o frontend gera em buildSessionInternalId()
+// (apps/web/src/lib/analytics-tracking.ts): crypto.randomUUID() ou, no
+// fallback sem crypto.randomUUID, `journey-${Date.now()}`.
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const JOURNEY_FALLBACK_PATTERN = /^journey-[0-9]{10,20}$/;
+const MAX_SESSION_INTERNAL_ID_LENGTH = 128;
 
 function isSignupConversionContext(
   value: unknown,
@@ -24,21 +36,42 @@ function isSignupConversionContext(
   );
 }
 
+function isValidJourneySessionInternalId(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value.length === 0 || value.length > MAX_SESSION_INTERNAL_ID_LENGTH) {
+    return false;
+  }
+  return UUID_PATTERN.test(value) || JOURNEY_FALLBACK_PATTERN.test(value);
+}
+
+function firstQueryValue(value: unknown): unknown {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export function captureOAuthSignupContextMiddleware(
   req: Request,
   res: Response,
   next: NextFunction,
 ): void {
-  const candidate = req.query.ctx;
-  const value = Array.isArray(candidate) ? candidate[0] : candidate;
-
-  if (isSignupConversionContext(value)) {
-    res.cookie(OAUTH_SIGNUP_CONTEXT_COOKIE, value, {
+  const ctxValue = firstQueryValue(req.query.ctx);
+  if (isSignupConversionContext(ctxValue)) {
+    res.cookie(OAUTH_SIGNUP_CONTEXT_COOKIE, ctxValue, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      maxAge: OAUTH_SIGNUP_CONTEXT_MAX_AGE_MS,
-      path: OAUTH_SIGNUP_CONTEXT_COOKIE_PATH,
+      maxAge: OAUTH_COOKIE_MAX_AGE_MS,
+      path: OAUTH_COOKIE_PATH,
+    });
+  }
+
+  const sidValue = firstQueryValue(req.query.sid);
+  if (isValidJourneySessionInternalId(sidValue)) {
+    res.cookie(OAUTH_JOURNEY_SESSION_COOKIE, sidValue, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: OAUTH_COOKIE_MAX_AGE_MS,
+      path: OAUTH_COOKIE_PATH,
     });
   }
 
@@ -61,29 +94,55 @@ function parseCookieHeader(header: string | undefined): Record<string, string> {
   return cookies;
 }
 
+function readRawCookie(req: Request, cookieName: string): string | undefined {
+  const cookies: Record<string, unknown> =
+    req.cookies && typeof req.cookies === "object" ? req.cookies : {};
+  const fromParsedCookies = cookies[cookieName];
+
+  if (typeof fromParsedCookies === "string") {
+    return fromParsedCookies;
+  }
+
+  return parseCookieHeader(req.headers.cookie)[cookieName];
+}
+
+function decodeCookieValue(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return undefined;
+  }
+}
+
 export function readAndClearOAuthSignupContext(
   req: Request,
   res: Response,
 ): SignupConversionContext {
-  const cookies: Record<string, unknown> =
-    req.cookies && typeof req.cookies === "object" ? req.cookies : {};
-  const fromParsedCookies = cookies[OAUTH_SIGNUP_CONTEXT_COOKIE];
-  const raw =
-    typeof fromParsedCookies === "string"
-      ? fromParsedCookies
-      : parseCookieHeader(req.headers.cookie)[OAUTH_SIGNUP_CONTEXT_COOKIE];
+  const decoded = decodeCookieValue(
+    readRawCookie(req, OAUTH_SIGNUP_CONTEXT_COOKIE),
+  );
 
   res.cookie(OAUTH_SIGNUP_CONTEXT_COOKIE, "", {
     maxAge: 0,
-    path: OAUTH_SIGNUP_CONTEXT_COOKIE_PATH,
+    path: OAUTH_COOKIE_PATH,
   });
 
-  let decoded: string | undefined;
-  try {
-    decoded = raw ? decodeURIComponent(raw) : undefined;
-  } catch {
-    decoded = undefined;
-  }
-
   return isSignupConversionContext(decoded) ? decoded : "unknown";
+}
+
+export function readAndClearOAuthJourneySessionId(
+  req: Request,
+  res: Response,
+): string | null {
+  const decoded = decodeCookieValue(
+    readRawCookie(req, OAUTH_JOURNEY_SESSION_COOKIE),
+  );
+
+  res.cookie(OAUTH_JOURNEY_SESSION_COOKIE, "", {
+    maxAge: 0,
+    path: OAUTH_COOKIE_PATH,
+  });
+
+  return isValidJourneySessionInternalId(decoded) ? decoded : null;
 }

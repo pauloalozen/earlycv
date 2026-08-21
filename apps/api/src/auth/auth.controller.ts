@@ -28,7 +28,10 @@ import { RegisterDto } from "./dto/register.dto";
 import { ResendVerificationCodeDto } from "./dto/resend-verification-code.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
-import { readAndClearOAuthSignupContext } from "./oauth-signup-context";
+import {
+  readAndClearOAuthJourneySessionId,
+  readAndClearOAuthSignupContext,
+} from "./oauth-signup-context";
 
 const authValidationPipe = new ValidationPipe({
   transform: true,
@@ -173,11 +176,16 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const conversionContext = readAndClearOAuthSignupContext(request, response);
+    const sessionInternalId = readAndClearOAuthJourneySessionId(
+      request,
+      response,
+    );
 
     return this.buildSocialRedirect(
       await this.authService.finishSocialLogin(
         this.getSocialProfile(request),
         conversionContext,
+        sessionInternalId,
       ),
     );
   }

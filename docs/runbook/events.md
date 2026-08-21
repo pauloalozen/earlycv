@@ -157,7 +157,22 @@ round-trip cross-origin. `googleCallback` lê e limpa a cookie
 (`readAndClearOAuthSignupContext`) antes de chamar `finishSocialLogin`. Valor adulterado ou
 ausente sempre colapsa em `unknown` — nunca quebra o login.
 
-## 5.2 Classificação de jornada por sessão (Fase B.2) — new_user_journey / existing_user_journey / anonymous_journey / unknown
+**`sessionInternalId` no OAuth (Fase B.2)**: mesmo princípio, cookie irmã
+(`OAUTH_JOURNEY_SESSION_COOKIE`, mesmo path `/api/auth/google`, mesmo TTL de 10min).
+`GoogleAuthButton` lê `journey_session_internal_id` do `sessionStorage` no client e manda
+`?sid=` pra `/auth/google/start` — nunca aparece na URL de callback. O mesmo middleware
+`captureOAuthSignupContextMiddleware` valida o formato rigorosamente (UUID de
+`crypto.randomUUID()` ou o fallback `journey-<timestamp>` que o frontend usa quando
+`crypto.randomUUID` não existe — qualquer outro formato é descartado, nunca gravado na
+cookie) antes de gravar. `googleCallback` lê e limpa via
+`readAndClearOAuthJourneySessionId` e propaga pra `finishSocialLogin`, que passa adiante pra
+`recordSignupCompleted`/`recordLoginCompleted` — então `signup_completed` de conta nova via
+Google e `login_completed` de conta Google já existente carregam o mesmo
+`sessionInternalId` da sessão que começou o fluxo, alimentando a classificação de jornada da
+seção 5.2. Cookie ausente/expirada ou valor fora do formato -> `sessionInternalId: null`,
+nunca quebra o login.
+
+## 5.2 Classificação de jornada por sessão — new_user_journey / existing_user_journey / anonymous_journey / unknown
 
 Implementado em `apps/api/src/analysis-observability/journey-session-classification.ts`
 (função pura `classifyJourneySession`) e

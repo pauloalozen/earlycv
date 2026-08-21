@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import type { Request, Response } from "express";
 import {
   captureOAuthSignupContextMiddleware,
+  OAUTH_JOURNEY_SESSION_COOKIE,
   OAUTH_SIGNUP_CONTEXT_COOKIE,
+  readAndClearOAuthJourneySessionId,
   readAndClearOAuthSignupContext,
 } from "./oauth-signup-context";
 
@@ -99,4 +102,146 @@ test("readAndClearOAuthSignupContext falls back to unknown when the cookie is ab
     ),
     "unknown",
   );
+});
+
+// ─── sessionInternalId (Fase B.2) ─────────────────────────────────────────
+
+test("captureOAuthSignupContextMiddleware sets a sid cookie for a valid UUID sessionInternalId", async () => {
+  const { response, cookies } = fakeResponse();
+  const sessionInternalId = randomUUID();
+
+  captureOAuthSignupContextMiddleware(
+    fakeRequest({ query: { sid: sessionInternalId } }),
+    response,
+    () => {},
+  );
+
+  assert.equal(cookies.length, 1);
+  assert.equal(cookies[0]?.name, OAUTH_JOURNEY_SESSION_COOKIE);
+  assert.equal(cookies[0]?.value, sessionInternalId);
+});
+
+test("captureOAuthSignupContextMiddleware sets a sid cookie for the journey-<timestamp> fallback format", async () => {
+  const { response, cookies } = fakeResponse();
+  const sessionInternalId = `journey-${Date.now()}`;
+
+  captureOAuthSignupContextMiddleware(
+    fakeRequest({ query: { sid: sessionInternalId } }),
+    response,
+    () => {},
+  );
+
+  assert.equal(cookies.length, 1);
+  assert.equal(cookies[0]?.value, sessionInternalId);
+});
+
+test("captureOAuthSignupContextMiddleware discards a sid outside the strict format — never persisted, never inferred", async () => {
+  const invalidValues = [
+    "'; DROP TABLE users; --",
+    "<script>alert(1)</script>",
+    "not-a-uuid-or-journey-id",
+    "journey-abc", // não são só dígitos
+    "a".repeat(200), // maior que o limite
+    "",
+  ];
+
+  for (const invalid of invalidValues) {
+    const { response, cookies } = fakeResponse();
+
+    captureOAuthSignupContextMiddleware(
+      fakeRequest({ query: { sid: invalid } }),
+      response,
+      () => {},
+    );
+
+    assert.equal(
+      cookies.length,
+      0,
+      `expected sid "${invalid}" to be discarded, but a cookie was set`,
+    );
+  }
+});
+
+test("captureOAuthSignupContextMiddleware captures both ctx and sid independently in the same pass", async () => {
+  const { response, cookies } = fakeResponse();
+  const sessionInternalId = randomUUID();
+
+  captureOAuthSignupContextMiddleware(
+    fakeRequest({ query: { ctx: "radar", sid: sessionInternalId } }),
+    response,
+    () => {},
+  );
+
+  assert.equal(cookies.length, 2);
+  const byName = Object.fromEntries(cookies.map((c) => [c.name, c.value]));
+  assert.equal(byName[OAUTH_SIGNUP_CONTEXT_COOKIE], "radar");
+  assert.equal(byName[OAUTH_JOURNEY_SESSION_COOKIE], sessionInternalId);
+});
+
+test("readAndClearOAuthJourneySessionId returns the cookie value when valid and clears it", async () => {
+  const { response, cookies } = fakeResponse();
+  const sessionInternalId = randomUUID();
+
+  const value = readAndClearOAuthJourneySessionId(
+    fakeRequest({
+      cookies: { [OAUTH_JOURNEY_SESSION_COOKIE]: sessionInternalId },
+    }),
+    response,
+  );
+
+  assert.equal(value, sessionInternalId);
+  assert.equal(cookies.length, 1);
+  assert.equal(cookies[0]?.name, OAUTH_JOURNEY_SESSION_COOKIE);
+  assert.equal(cookies[0]?.value, "");
+});
+
+test("readAndClearOAuthJourneySessionId returns null (never invented) when the cookie is expired/absent", async () => {
+  const { response, cookies } = fakeResponse();
+
+  const value = readAndClearOAuthJourneySessionId(fakeRequest(), response);
+
+  assert.equal(value, null);
+  // Ainda limpa a cookie por segurança, mesmo sem valor pra ler.
+  assert.equal(cookies.length, 1);
+  assert.equal(cookies[0]?.value, "");
+});
+
+test("readAndClearOAuthJourneySessionId discards a tampered/invalid cookie value instead of trusting it", async () => {
+  const { response } = fakeResponse();
+
+  const value = readAndClearOAuthJourneySessionId(
+    fakeRequest({
+      cookies: { [OAUTH_JOURNEY_SESSION_COOKIE]: "<script>evil()</script>" },
+    }),
+    response,
+  );
+
+  assert.equal(value, null);
+});
+
+test("the journey context of one OAuth flow never leaks into another — each request only ever sees its own cookie", async () => {
+  const sessionA = randomUUID();
+  const sessionB = randomUUID();
+
+  const { response: responseA } = fakeResponse();
+  const valueA = readAndClearOAuthJourneySessionId(
+    fakeRequest({ cookies: { [OAUTH_JOURNEY_SESSION_COOKIE]: sessionA } }),
+    responseA,
+  );
+
+  const { response: responseB } = fakeResponse();
+  const valueB = readAndClearOAuthJourneySessionId(
+    fakeRequest({ cookies: { [OAUTH_JOURNEY_SESSION_COOKIE]: sessionB } }),
+    responseB,
+  );
+
+  assert.equal(valueA, sessionA);
+  assert.equal(valueB, sessionB);
+  assert.notEqual(valueA, valueB);
+
+  // Uma terceira "aba"/callback sem cookie (já consumida ou nunca setada)
+  // nunca reaproveita o valor de outra jornada.
+  const { response: responseC } = fakeResponse();
+  const valueC = readAndClearOAuthJourneySessionId(fakeRequest(), responseC);
+  assert.equal(valueC, null);
 });

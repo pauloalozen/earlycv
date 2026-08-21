@@ -30,6 +30,7 @@ type SocialAuthService = AuthService & {
   finishSocialLogin: (
     input: SocialProfileInput,
     conversionContext?: string,
+    sessionInternalId?: string | null,
   ) => Promise<AuthSession>;
 };
 
@@ -77,13 +78,18 @@ test("social login links a Google account to an existing user by verified email"
     },
   });
 
-  const session = await service.finishSocialLogin({
-    provider: "google",
-    providerAccountId: `google-${randomUUID()}`,
-    email,
-    name: "Ana Silva",
-    emailVerified: true,
-  });
+  const sessionInternalId = `journey-${Date.now()}`;
+  const session = await service.finishSocialLogin(
+    {
+      provider: "google",
+      providerAccountId: `google-${randomUUID()}`,
+      email,
+      name: "Ana Silva",
+      emailVerified: true,
+    },
+    undefined,
+    sessionInternalId,
+  );
 
   const linkedAccount = await database.authAccount.findFirst({
     where: {
@@ -121,6 +127,11 @@ test("social login links a Google account to an existing user by verified email"
   );
   const loginMetadata = loginEvents[0]?.metadataJson as Record<string, unknown>;
   assert.equal(loginMetadata?.login_method, "google");
+  assert.equal(
+    loginMetadata?.sessionInternalId,
+    sessionInternalId,
+    "Google login of an existing account must preserve the journey sessionInternalId that started the flow",
+  );
 
   await deleteUserByEmail(database, email);
   await moduleRef.close();
@@ -193,6 +204,7 @@ test("social login (OAuth) propagates an explicit conversion_context for a new a
 
   await deleteUserByEmail(database, email);
 
+  const sessionInternalId = randomUUID();
   const session = await service.finishSocialLogin(
     {
       provider: "google",
@@ -202,6 +214,7 @@ test("social login (OAuth) propagates an explicit conversion_context for a new a
       emailVerified: true,
     },
     "analysis_guest",
+    sessionInternalId,
   );
 
   assert.equal(typeof session.accessToken, "string");
@@ -214,6 +227,54 @@ test("social login (OAuth) propagates an explicit conversion_context for a new a
   assert.equal(metadata?.conversion_context, "analysis_guest");
   assert.equal(metadata?.is_guest_conversion, true);
   assert.equal(metadata?.signup_method, "google");
+  assert.equal(
+    metadata?.sessionInternalId,
+    sessionInternalId,
+    "Google signup originating from a guest analysis must preserve the journey sessionInternalId",
+  );
+
+  await deleteUserByEmail(database, email);
+  await moduleRef.close();
+});
+
+test("social login (OAuth) propagates conversion_context and sessionInternalId for a new account originating from Radar", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(AuthService) as SocialAuthService;
+  const email = `radaroauth+${randomUUID()}@earlycv.dev`;
+
+  await deleteUserByEmail(database, email);
+
+  const sessionInternalId = randomUUID();
+  const session = await service.finishSocialLogin(
+    {
+      provider: "google",
+      providerAccountId: `google-${randomUUID()}`,
+      email,
+      name: "Fabio Nogueira",
+      emailVerified: true,
+    },
+    "radar",
+    sessionInternalId,
+  );
+
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: session.user.id },
+  });
+  assert.equal(signupEvents.length, 1);
+  const metadata = signupEvents[0]?.metadataJson as Record<string, unknown>;
+  assert.equal(metadata?.conversion_context, "radar");
+  // Radar não é jornada guest conhecida -- is_guest_conversion só é true
+  // pra analysis_guest.
+  assert.equal(metadata?.is_guest_conversion, false);
+  assert.equal(
+    metadata?.sessionInternalId,
+    sessionInternalId,
+    "Google signup originating from Radar must preserve the journey sessionInternalId",
+  );
 
   await deleteUserByEmail(database, email);
   await moduleRef.close();
