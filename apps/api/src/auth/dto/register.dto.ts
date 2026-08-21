@@ -1,10 +1,26 @@
 import { Transform } from "class-transformer";
-import { IsEmail, IsString, Matches, MinLength } from "class-validator";
+import {
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  MinLength,
+} from "class-validator";
 
 import {
   USER_PASSWORD_POLICY_MESSAGE,
   USER_PASSWORD_POLICY_REGEX,
 } from "./password-policy";
+
+export const SIGNUP_CONVERSION_CONTEXTS = [
+  "analysis_guest",
+  "checkout",
+  "direct_auth",
+] as const;
+
+export type SignupConversionContext =
+  (typeof SIGNUP_CONVERSION_CONTEXTS)[number];
 
 export class RegisterDto {
   @Transform(({ value }) =>
@@ -24,4 +40,8 @@ export class RegisterDto {
   @IsString()
   @MinLength(2)
   name!: string;
+
+  @IsOptional()
+  @IsIn(SIGNUP_CONVERSION_CONTEXTS)
+  conversionContext?: SignupConversionContext;
 }

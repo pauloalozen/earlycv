@@ -12,6 +12,7 @@ import { JwtService } from "@nestjs/jwt";
 import { Prisma, type UserStatus } from "@prisma/client";
 import * as argon2 from "argon2";
 
+import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
 import type { CreateStaffUserDto } from "./dto/create-staff-user.dto";
@@ -82,13 +83,67 @@ export class AuthService {
     @Inject(APP_ENV) private readonly env: AppEnv,
     @Inject(EMAIL_DELIVERY_PORT)
     private readonly emailDelivery: EmailDeliveryPort,
+    @Inject(BusinessFunnelEventService)
+    private readonly funnelEvents: Pick<
+      BusinessFunnelEventService,
+      "record"
+    > = {
+      async record() {
+        return { event: {}, ingested: false };
+      },
+    },
   ) {}
+
+  private async recordSignupCompleted(input: {
+    userId: string;
+    signupMethod: string;
+    isGuestConversion: boolean;
+    conversionContext: string;
+  }): Promise<void> {
+    try {
+      await this.funnelEvents.record(
+        {
+          eventName: "signup_completed",
+          eventVersion: 1,
+          idempotencyKey: `signup_completed:${input.userId}`,
+          metadata: {
+            user_id: input.userId,
+            signup_method: input.signupMethod,
+            is_guest_conversion: input.isGuestConversion,
+            conversion_context: input.conversionContext,
+          },
+          routeKey: "auth/signup",
+        },
+        {
+          requestId: randomUUID(),
+          correlationId: randomUUID(),
+          sessionPublicToken: null,
+          sessionInternalId: null,
+          userId: input.userId,
+          ip: null,
+          routePath: null,
+          userAgentHash: null,
+        },
+        "backend",
+      );
+    } catch {
+      // Analytics failures never block signup/login.
+    }
+  }
 
   async register(input: RegisterDto): Promise<AuthSession> {
     const user = await this.createUser({
       email: input.email,
       password: input.password,
       name: input.name,
+    });
+
+    const conversionContext = input.conversionContext ?? "direct_auth";
+    await this.recordSignupCompleted({
+      userId: user.id,
+      signupMethod: "password",
+      isGuestConversion: conversionContext === "analysis_guest",
+      conversionContext,
     });
 
     await this.issueEmailVerificationChallenge(user.id, user.email);
@@ -213,7 +268,7 @@ export class AuthService {
       return null;
     };
 
-    let socialResult: { userId: string };
+    let socialResult: { userId: string; isNewUser: boolean };
 
     try {
       socialResult = await this.database.$transaction(async (tx) => {
@@ -227,8 +282,13 @@ export class AuthService {
         });
 
         if (existingAccount) {
-          return { userId: existingAccount.userId };
+          return { userId: existingAccount.userId, isNewUser: false };
         }
+
+        const existingUserByEmail = await tx.user.findUnique({
+          where: { email: providerEmail },
+          select: { id: true },
+        });
 
         const user = await tx.user.upsert({
           where: { email: providerEmail },
@@ -265,7 +325,10 @@ export class AuthService {
           },
         });
 
-        return { userId: authAccount.userId };
+        return {
+          userId: authAccount.userId,
+          isNewUser: !existingUserByEmail,
+        };
       });
     } catch (error) {
       if (
@@ -281,7 +344,16 @@ export class AuthService {
         throw error;
       }
 
-      socialResult = recovered;
+      socialResult = { ...recovered, isNewUser: false };
+    }
+
+    if (socialResult.isNewUser) {
+      await this.recordSignupCompleted({
+        userId: socialResult.userId,
+        signupMethod: input.provider,
+        isGuestConversion: false,
+        conversionContext: "direct_auth",
+      });
     }
 
     return this.issueSession(socialResult.userId);

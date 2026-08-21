@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 
+import { AnalysisObservabilityModule } from "../analysis-observability/analysis-observability.module";
 import { EnvModule } from "../config/env.module";
 import { DatabaseModule } from "../database/database.module";
 import { AuthController } from "./auth.controller";
@@ -17,7 +18,13 @@ const useResend =
   Boolean(process.env.RESEND_API_KEY) && process.env.APP_ENV === "production";
 
 @Module({
-  imports: [EnvModule, DatabaseModule, PassportModule, JwtModule.register({})],
+  imports: [
+    EnvModule,
+    DatabaseModule,
+    AnalysisObservabilityModule,
+    PassportModule,
+    JwtModule.register({}),
+  ],
   controllers: [AuthController],
   providers: [
     AuthService,
