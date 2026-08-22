@@ -1897,3 +1897,180 @@ test("applyApprovedPurchase is idempotent for completed and blocked for failed/r
     assert.equal(applyCalls, 0);
   }
 });
+
+// ─── Fase B.3: paymentMethod real e product_origin em payment_failed ─────
+
+test("payment_failed reports the real payment method from Mercado Pago, never a hardcoded guess", async () => {
+  const recordedEvents: Array<Record<string, unknown>> = [];
+
+  const service = new PlansService(
+    {
+      paymentAuditLog: { create: async () => ({ id: "audit-pm-1" }) },
+      planPurchase: {
+        findFirst: async () => null,
+        findUnique: async () => null,
+        update: async () => {
+          throw new Error("should not update purchase for failed status");
+        },
+      },
+      user: {
+        update: async () => {
+          throw new Error("should not update user for failed status");
+        },
+      },
+    } as never,
+    {
+      record: async (input: {
+        eventName: string;
+        metadata?: Record<string, unknown>;
+      }) => {
+        recordedEvents.push({
+          eventName: input.eventName,
+          ...(input.metadata ?? {}),
+        });
+        return { event: { id: "evt-pm-1" }, ingested: true };
+      },
+    } as never,
+  );
+
+  (
+    service as {
+      resolveMercadoPagoPayment: (body: unknown) => Promise<unknown>;
+    }
+  ).resolveMercadoPagoPayment = async () => ({
+    merchantOrderId: "ord-pm-1",
+    paymentId: "mp-pm-1",
+    paymentMethod: "credit_card",
+    paymentReference: "pay-ref-pm-1",
+    preferenceId: "pref-pm-1",
+    rawStatus: "rejected",
+    status: "failed",
+  });
+
+  await service.handleWebhook("mercadopago", {
+    data: { id: "mp-pm-1" },
+    type: "payment",
+  });
+
+  assert.equal(recordedEvents[0]?.eventName, "payment_failed");
+  assert.equal(recordedEvents[0]?.paymentMethod, "credit_card");
+  assert.equal(recordedEvents[0]?.product_origin, "unknown");
+});
+
+test("payment_failed falls back paymentMethod to unknown when Mercado Pago does not report it — never a fictitious value", async () => {
+  const recordedEvents: Array<Record<string, unknown>> = [];
+
+  const service = new PlansService(
+    {
+      paymentAuditLog: { create: async () => ({ id: "audit-pm-2" }) },
+      planPurchase: {
+        findFirst: async () => null,
+        findUnique: async () => null,
+        update: async () => {
+          throw new Error("should not update purchase for failed status");
+        },
+      },
+      user: {
+        update: async () => {
+          throw new Error("should not update user for failed status");
+        },
+      },
+    } as never,
+    {
+      record: async (input: {
+        eventName: string;
+        metadata?: Record<string, unknown>;
+      }) => {
+        recordedEvents.push({
+          eventName: input.eventName,
+          ...(input.metadata ?? {}),
+        });
+        return { event: { id: "evt-pm-2" }, ingested: true };
+      },
+    } as never,
+  );
+
+  (
+    service as {
+      resolveMercadoPagoPayment: (body: unknown) => Promise<unknown>;
+    }
+  ).resolveMercadoPagoPayment = async () => ({
+    merchantOrderId: "ord-pm-2",
+    paymentId: "mp-pm-2",
+    paymentMethod: null,
+    paymentReference: "pay-ref-pm-2",
+    preferenceId: "pref-pm-2",
+    rawStatus: "rejected",
+    status: "failed",
+  });
+
+  await service.handleWebhook("mercadopago", {
+    data: { id: "mp-pm-2" },
+    type: "payment",
+  });
+
+  assert.equal(recordedEvents[0]?.paymentMethod, "unknown");
+});
+
+test("payment_failed resolves product_origin=radar from the purchase's originAdaptationId via JobApplication.jobId", async () => {
+  const recordedEvents: Array<Record<string, unknown>> = [];
+
+  const service = new PlansService(
+    {
+      paymentAuditLog: { create: async () => ({ id: "audit-po-1" }) },
+      planPurchase: {
+        findFirst: async () => null,
+        findUnique: async () => ({
+          amountInCents: 2990,
+          creditsGranted: 3,
+          currency: "BRL",
+          id: "purchase-po-1",
+          originAction: "unlock_cv",
+          originAdaptationId: "adapt-radar-po",
+          paymentProvider: "mercadopago",
+          planType: "pro",
+          status: "pending",
+          userId: "user-po-1",
+        }),
+        update: async () => ({ ok: true }),
+      },
+      user: { update: async () => ({ ok: true }) },
+      jobApplication: {
+        findFirst: async () => ({ jobId: "job-radar-po" }),
+      },
+    } as never,
+    {
+      record: async (input: {
+        eventName: string;
+        metadata?: Record<string, unknown>;
+      }) => {
+        recordedEvents.push({
+          eventName: input.eventName,
+          ...(input.metadata ?? {}),
+        });
+        return { event: { id: "evt-po-1" }, ingested: true };
+      },
+    } as never,
+  );
+
+  (
+    service as {
+      resolveMercadoPagoPayment: (body: unknown) => Promise<unknown>;
+    }
+  ).resolveMercadoPagoPayment = async () => ({
+    merchantOrderId: "ord-po-1",
+    paymentId: "mp-po-1",
+    paymentMethod: "pix",
+    paymentReference: "pay-ref-po-1",
+    preferenceId: "pref-po-1",
+    rawStatus: "rejected",
+    status: "failed",
+  });
+
+  await service.handleWebhook("mercadopago", {
+    data: { id: "mp-po-1" },
+    type: "payment",
+  });
+
+  assert.equal(recordedEvents[0]?.product_origin, "radar");
+});

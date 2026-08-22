@@ -13,6 +13,7 @@ import type { Prisma, UserPlanType } from "@prisma/client";
 import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
 
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
+import type { ProductOrigin } from "../analysis-observability/product-origin";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { DatabaseService } from "../database/database.service";
 import { Ga4MeasurementService } from "../ga4/ga4-measurement.service";
@@ -34,6 +35,10 @@ type MercadoPagoPaymentResolution = {
   preferenceId: string | null;
   rawStatus: string | null;
   statusDetail: string | null;
+  // payment_type_id real da API do Mercado Pago (ex.: "pix",
+  // "credit_card", "debit_card", "bank_transfer") — null quando o
+  // payload não trouxe o campo, nunca inferido/adivinhado.
+  paymentMethod: string | null;
 };
 
 type PaymentFailureEnrichmentInput = {
@@ -43,6 +48,7 @@ type PaymentFailureEnrichmentInput = {
   preferenceId: string | null;
   rawStatus: string | null;
   statusDetail: string | null;
+  paymentMethod: string | null;
 };
 
 type ApprovedPaymentEventInput = {
@@ -618,6 +624,7 @@ export class PlansService {
             merchantOrderId: resolution.merchantOrderId,
             rawStatus: resolution.rawStatus,
             statusDetail: resolution.statusDetail,
+            paymentMethod: resolution.paymentMethod,
           },
           purchase,
         );
@@ -773,6 +780,33 @@ export class PlansService {
     return true;
   }
 
+  // Correlação barata (1 lookup indexado, não um join caro em runtime):
+  // reaproveita a relação JobApplication.currentCvAdaptationId ->
+  // JobApplication.jobId que já existe hoje (jobId só é preenchido quando
+  // a candidatura nasceu de uma vaga do Radar — ver
+  // job-applications.service.ts). Sem originAdaptationId, ou sem
+  // candidatura correlacionada, "direct" — nunca inventado.
+  private async resolveProductOriginFromAdaptation(
+    originAdaptationId: string | null | undefined,
+  ): Promise<ProductOrigin> {
+    if (!originAdaptationId) return "direct";
+
+    try {
+      const application = await this.database.jobApplication.findFirst({
+        where: { currentCvAdaptationId: originAdaptationId },
+        select: { jobId: true },
+      });
+
+      if (!application) return "direct";
+      return application.jobId ? "radar" : "analysis";
+    } catch (error) {
+      this.logger.warn(
+        `[analytics] failed to resolve product_origin for adaptation ${originAdaptationId}: ${error}`,
+      );
+      return "unknown";
+    }
+  }
+
   private async recordPaymentApprovedBusinessEvent(
     input: ApprovedPaymentEventInput,
   ): Promise<void> {
@@ -782,8 +816,13 @@ export class PlansService {
 
     if (!input.purchase.id) return;
 
+    const productOrigin = await this.resolveProductOriginFromAdaptation(
+      input.purchase.originAdaptationId,
+    );
+
     const metadata: Record<string, unknown> = {
       purchaseId: input.purchase.id,
+      product_origin: productOrigin,
       paymentId,
       paymentProvider: "mercado_pago",
       paymentReference,
@@ -924,8 +963,16 @@ export class PlansService {
       metadata.currency = resolvedPurchase.currency;
       metadata.originAction = resolvedPurchase.originAction;
       metadata.originAdaptationId = resolvedPurchase.originAdaptationId;
-      metadata.paymentMethod = "pix";
+      metadata.product_origin = await this.resolveProductOriginFromAdaptation(
+        resolvedPurchase.originAdaptationId,
+      );
+    } else {
+      metadata.product_origin = "unknown";
     }
+    // Método real vindo do payload do Mercado Pago (payment_type_id) —
+    // nunca inventado. Sem o dado, "unknown", nunca um valor fixo como
+    // "pix" adivinhado.
+    metadata.paymentMethod = resolution.paymentMethod ?? "unknown";
 
     const context: AnalysisRequestContext = {
       correlationId: `plans-webhook:${resolution.paymentReference}`,
@@ -1455,6 +1502,7 @@ export class PlansService {
       preferenceId: null,
       rawStatus: null,
       statusDetail: null,
+      paymentMethod: null,
     };
 
     if (!body || typeof body !== "object") return empty;
@@ -1487,7 +1535,12 @@ export class PlansService {
     const mp = payment as unknown as {
       preference_id?: string;
       order?: { id?: number };
+      payment_type_id?: string;
     };
+    const paymentMethod =
+      typeof mp.payment_type_id === "string" && mp.payment_type_id.trim()
+        ? mp.payment_type_id.trim()
+        : null;
 
     const externalReference = payment.external_reference ?? null;
     const paymentMetadata = (payment as unknown as { metadata?: unknown })
@@ -1515,6 +1568,7 @@ export class PlansService {
         preferenceId,
         rawStatus,
         statusDetail,
+        paymentMethod,
       };
     }
 
@@ -1534,6 +1588,7 @@ export class PlansService {
         preferenceId,
         rawStatus,
         statusDetail,
+        paymentMethod,
       };
     }
 
@@ -1547,6 +1602,7 @@ export class PlansService {
       preferenceId,
       rawStatus,
       statusDetail,
+      paymentMethod,
     };
   }
 

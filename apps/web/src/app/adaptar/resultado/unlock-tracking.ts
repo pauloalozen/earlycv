@@ -21,7 +21,9 @@ export function emitUnlockStarted(input: {
 export function emitUnlockCompleted(input: {
   adaptationId: string | null;
   emitResultadoEvent: EmitResultadoEvent;
-  remainingCredits: number;
+  // null quando o backend não devolve o saldo pós-consumo de forma
+  // confiável — nunca um 0 fictício.
+  remainingCredits: number | null;
   sourceDetail: string;
   unlockMethod: UnlockMethod;
 }) {

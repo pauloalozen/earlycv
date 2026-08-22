@@ -1776,7 +1776,10 @@ export default function ResultadoPage() {
         adaptationId: payload.id ?? reviewAdaptationId,
         source_detail: "resultado",
         unlockMethod: "credit",
-        remainingCredits: 0,
+        // claim-guest não devolve o saldo pós-consumo no payload — nunca
+        // reportar um 0 fictício (já foi bug: parecia "zerou o saldo"
+        // mesmo quando o usuário tinha mais créditos).
+        remainingCredits: null,
       });
       clearGuestAnalysisRaw();
       const unlockedId = payload.id ?? reviewAdaptationId;
@@ -1940,7 +1943,9 @@ export default function ResultadoPage() {
         adaptationId: reviewAdaptationId,
         source_detail: "resultado",
         unlockMethod: "review_redeem",
-        remainingCredits: 0,
+        // redeem-credit não devolve o saldo pós-consumo no payload —
+        // mesmo raciocínio do claim-guest acima, nunca um 0 fictício.
+        remainingCredits: null,
       });
       // Redireciona direto — a geração do CV roda em background e a tela de
       // destino (/adaptacao-cv) já tem seu próprio polling com microfeedback.
@@ -2001,7 +2006,11 @@ export default function ResultadoPage() {
 
   const handleDownload = async (format: "pdf" | "docx") => {
     if (!reviewAdaptationId || downloading) return;
-    emitResultadoEvent("optimized_cv_downloaded", { format });
+    emitResultadoEvent("optimized_cv_downloaded", {
+      format,
+      adaptation_id: reviewAdaptationId,
+      product_origin: "analysis",
+    });
     if (releaseModalOpen) {
       setReleaseModalVisible(false);
       if (closeReleaseModalTimeoutRef.current !== null) {
