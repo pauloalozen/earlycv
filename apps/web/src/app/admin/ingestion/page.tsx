@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { AdminTokenState } from "../_components/admin-token-state";
+import { AuditTabClient } from "./_components/audit-tab-client";
 import { DiscoveryTabClient } from "./_components/discovery-tab-client";
 import { EnrichmentTabContent } from "./_components/enrichment-tab-content";
 import { FontesTableClient } from "./_components/fontes-table-client";
@@ -23,7 +24,7 @@ import { VagasTabClient } from "./_components/vagas-tab-client";
 export const metadata = buildAdminMetadata("Ingestao");
 
 type SearchParams = Promise<{
-  tab?: "fontes" | "vagas" | "jobs" | "enrichment" | "descoberta";
+  tab?: "fontes" | "vagas" | "jobs" | "enrichment" | "descoberta" | "audit";
   message?: string;
   status?: string;
   vagaQuery?: string;
@@ -140,6 +141,7 @@ export default async function AdminIngestionPage({
     "vagas",
     "enrichment",
     "descoberta",
+    "audit",
   ] as const;
   const activeTab = VALID_TABS.includes(tab as (typeof VALID_TABS)[number])
     ? (tab as (typeof VALID_TABS)[number])
@@ -253,6 +255,9 @@ export default async function AdminIngestionPage({
           <TabLink active={activeTab === "jobs"} href={buildTabHref("jobs")}>
             Jobs
           </TabLink>
+          <TabLink active={activeTab === "audit"} href={buildTabHref("audit")}>
+            Audit de Fontes
+          </TabLink>
         </div>
 
         {/* ── FONTES ── */}
@@ -301,6 +306,9 @@ export default async function AdminIngestionPage({
 
         {/* ── DESCOBERTA ── */}
         {activeTab === "descoberta" && <DiscoveryTabClient />}
+
+        {/* ── AUDIT DE FONTES ── */}
+        {activeTab === "audit" && <AuditTabClient />}
 
         {/* ── ENRIQUECIMENTO ── */}
         {activeTab === "enrichment" && (

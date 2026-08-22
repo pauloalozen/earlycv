@@ -806,6 +806,8 @@ model Company {
   jobs                Job[]
   ingestionBatchItems IngestionBatchItem[]
   discoveredCompanies DiscoveredCompany[]
+  sourceAudits        JobSourceAudit[]     @relation("JobSourceAuditCompany")
+  suspectedOwnerOf    JobSourceAudit[]     @relation("JobSourceAuditSuspectedOwner")
 }
 
 model CvAdaptation {
@@ -1007,9 +1009,52 @@ model JobSource {
   ingestionBatchItems  IngestionBatchItem[]
   discardedTitles      CrawlerDiscardedTitle[]
   ingestionJobs        IngestionJob[]
+  sourceAudits         JobSourceAudit[]
 
   @@unique([companyId, sourceUrl])
   @@index([companyId])
+}
+
+// Fila de revisao do saneamento de Company/JobSource com URL de carreiras
+// atribuida errada (ex: empresa brasileira "VERACEL" apontando pro board da
+// "Vercel"). Gerada por um heuristico deterministico (sem IA) em
+// scripts/audit-company-sources.ts, revisada manualmente (status
+// approved/rejected) e depois aplicada por
+// scripts/apply-company-source-audit.ts. Ver AGENTS.md/runbook de saneamento
+// de fontes para os criterios de tier e de acao por tier.
+model JobSourceAudit {
+  id                 String    @id @default(cuid())
+  companyId          String
+  jobSourceId        String?
+  // Campo com o dado suspeito: "careersUrl"/"websiteUrl" (em Company) ou
+  // "sourceUrl" (em JobSource).
+  field              String
+  currentUrl         String
+  // "confirmed" (bate com outra Company nossa), "high" (dominio claramente
+  // nao pertence, sem match no nosso banco) ou "review" (similaridade
+  // ambigua / fonte estrangeira fora do escopo do produto).
+  tier               String
+  confidence         Float
+  // Preenchido so no tier "confirmed": a Company que realmente e dona dessa
+  // URL. Permite ao apply reatribuir Job/JobSource sem precisar criar
+  // empresa nova.
+  suspectedOwnerId   String?
+  // Nome legivel do dono suspeito quando ele nao existe no nosso banco
+  // (tier "high"/"review") — so informativo, nao usado pelo apply.
+  suspectedOwnerName String?
+  status             String    @default("pending") // pending | approved | rejected | applied
+  reviewNote         String?
+  detectedAt         DateTime  @default(now())
+  reviewedAt         DateTime?
+  appliedAt          DateTime?
+
+  company         Company    @relation("JobSourceAuditCompany", fields: [companyId], references: [id], onDelete: Cascade)
+  jobSource       JobSource? @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  suspectedOwner  Company?   @relation("JobSourceAuditSuspectedOwner", fields: [suspectedOwnerId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, field, currentUrl])
+  @@index([status])
+  @@index([tier])
 }
 
 model CrawlerDiscardedTitle {

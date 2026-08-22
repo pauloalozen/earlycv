@@ -27,27 +27,30 @@ const emptyResult = {
 };
 
 describe("FontesTableClient — ação em massa por adapter", () => {
-  it("não mostra os botões de ativar/desativar em massa sem adapter selecionado", () => {
+  // Os botões ficam sempre no DOM (posição fixa na barra de filtro) — só
+  // desabilitados sem adapter selecionado. Isso evita clique indevido em
+  // botão que "pulou" de lugar quando outro item da barra aparece/some.
+  it("mantém os botões de ativar/desativar em massa desabilitados sem adapter selecionado", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
 
     render(<FontesTableClient initialData={emptyResult} />);
 
-    expect(screen.queryByText(/Ativar agendamento/)).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(/Desativar agendamento/),
-    ).not.toBeInTheDocument();
+    expect(screen.getByText("Ativar agendamento")).toBeDisabled();
+    expect(screen.getByText("Desativar agendamento")).toBeDisabled();
+    expect(screen.getByText("Ativar fontes")).toBeDisabled();
+    expect(screen.getByText("Desativar fontes")).toBeDisabled();
   });
 
-  it("mostra os botões de ativar/desativar em massa quando um adapter é pré-selecionado via URL", () => {
+  it("habilita os botões de ativar/desativar em massa quando um adapter é pré-selecionado via URL", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
 
     render(
       <FontesTableClient initialData={emptyResult} initialTypeFilter="gupy" />,
     );
 
-    expect(screen.getByText("Ativar agendamento (gupy)")).toBeInTheDocument();
-    expect(
-      screen.getByText("Desativar agendamento (gupy)"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Ativar agendamento (gupy)")).toBeEnabled();
+    expect(screen.getByText("Desativar agendamento (gupy)")).toBeEnabled();
+    expect(screen.getByText("Ativar fontes (gupy)")).toBeEnabled();
+    expect(screen.getByText("Desativar fontes (gupy)")).toBeEnabled();
   });
 });

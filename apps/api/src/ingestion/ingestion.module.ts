@@ -18,6 +18,8 @@ import {
 } from "./adapters";
 import { AdminIngestionImportService } from "./admin-ingestion-import.service";
 import { CompanyLogoFetchService } from "./company-logo/company-logo-fetch.service";
+import { CompanySourceAuditController } from "./company-source-audit.controller";
+import { CompanySourceAuditService } from "./company-source-audit.service";
 import { CrawlerDiscardController } from "./crawler-discard.controller";
 import { CrawlerDiscardService } from "./crawler-discard.service";
 import { DashboardAdminController } from "./dashboard-admin.controller";
@@ -62,12 +64,14 @@ import { WebSearchService } from "./web-search/web-search.service";
     CrawlerDiscardController,
     DashboardAdminController,
     DiscoveredCompaniesController,
+    CompanySourceAuditController,
   ],
   providers: [
     IngestionService,
     CompanyLogoFetchService,
     DashboardAdminService,
     DiscoveredCompaniesService,
+    CompanySourceAuditService,
     AdminIngestionImportService,
     CrawlerDiscardService,
     GlobalSchedulerConfigService,
