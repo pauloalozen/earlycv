@@ -9,8 +9,13 @@ import {
   normToken,
   scoreUrlAgainstCompany,
 } from "./company-source-audit-heuristics";
+import { normalizeCompanyName } from "./name-normalization";
 
 const REVIEW_THRESHOLD = 0.4;
+
+function titleCase(slug: string): string {
+  return slug.charAt(0).toUpperCase() + slug.slice(1);
+}
 
 type CompanyRow = {
   id: string;
@@ -40,6 +45,7 @@ export type ApplySummary = {
   processed: number;
   jobSourcesDisabled: number;
   jobSourcesCreated: number;
+  companiesCreated: number;
   companyFieldsCleared: number;
   jobsReassigned: number;
   jobsRemoved: number;
@@ -74,19 +80,32 @@ function safeHost(rawUrl: string): string | null {
 // processa linhas com status="approved" (decidido manualmente via decide()
 // ou pela tela admin).
 //
-// applyApproved(), pro tier "confirmed" (dono real ja e uma Company nossa):
-//   1. Desativa sempre a JobSource errada (isActive=false + pauseReason).
-//   2. Procura entre as fontes do dono real (ativas OU pausadas) uma que
-//      seja o MESMO board (isSameBoard — compara por identidade, nao por
-//      string exata, pra nao perder caso de barra final/maiuscula/dominio
-//      de provedor migrado). Se achar, reatribui as vagas ja importadas
-//      pra ela.
-//   3. Se o dono real nao tem nenhuma fonte pra esse board ainda, CRIA uma
-//      nova JobSource nele (copiando parserKey/sourceType/crawlStrategy da
-//      fonte errada, que e a mesma URL/plataforma, so com o nome errado) e
-//      reatribui as vagas pra essa fonte nova.
-// Tier "high"/"review" (sem dono conhecido no nosso banco): so desativa a
-// fonte errada e marca as vagas ja importadas como "removed".
+// applyApproved() — sempre desativa primeiro a JobSource errada
+// (isActive=false + pauseReason). Depois, pra decidir o que fazer com as
+// vagas ja importadas por ela:
+//
+//   - tier "confirmed" (dono real ja e uma Company nossa): procura entre
+//     as fontes do dono real (ativas OU pausadas) uma que seja o MESMO
+//     board (isSameBoard — compara por identidade, nao string exata, pra
+//     nao perder caso de barra final/maiuscula/dominio de provedor
+//     migrado). Achando, reatribui as vagas pra ela. Nao achando, CRIA uma
+//     nova JobSource nesse dono (copiando parserKey/sourceType/
+//     crawlStrategy da fonte errada) e reatribui pra essa fonte nova, ja
+//     ativa.
+//   - tier "high"/"review" com sugestao de nome unica (nao um match
+//     ambiguo entre varias empresas nossas): cria (ou reaproveita, se
+//     outro achado ja criou) um RASCUNHO de Company com esse nome,
+//     isActive=false — nao aparece em listagem publica nem entra em lote
+//     de crawling ate revisao manual — mais uma JobSource tambem pausada,
+//     e reatribui as vagas pra la com status="inactive" (preservadas, so
+//     fora do radar ate voce revisar/ativar a empresa). Assim nenhum
+//     achado de fonte se perde so por a empresa dona ainda nao existir no
+//     nosso banco.
+//   - tier "review" com match AMBIGUO entre varias empresas nossas (nao da
+//     pra saber sozinho qual delas e a dona real): fica no comportamento
+//     seguro anterior — so desativa a fonte errada e marca as vagas como
+//     "removed". Precisa de decisao manual (ainda nao tem UI pra escolher
+//     entre os candidatos).
 @Injectable()
 export class CompanySourceAuditService {
   constructor(
@@ -189,6 +208,12 @@ export class CompanySourceAuditService {
             // deixar pra revisao humana decidir qual delas e a dona real.
             tier = "review";
             suspectedOwnerName = owners.map((o) => o.name).join(" | ");
+          } else {
+            // Nenhuma Company nossa bate: sem suspectedOwnerId (nao sabemos
+            // quem e), mas guarda um nome sugerido a partir do proprio slug
+            // — usado como nome do rascunho de empresa que o apply cria
+            // quando essa linha for aprovada (ver applyApproved).
+            suspectedOwnerName = titleCase(matchedToken);
           }
         }
 
@@ -342,6 +367,7 @@ export class CompanySourceAuditService {
       processed: approved.length,
       jobSourcesDisabled: 0,
       jobSourcesCreated: 0,
+      companiesCreated: 0,
       companyFieldsCleared: 0,
       jobsReassigned: 0,
       jobsRemoved: 0,
@@ -379,15 +405,63 @@ export class CompanySourceAuditService {
       }
       summary.jobSourcesDisabled += 1;
 
+      // Resolve a Company de destino: o dono confirmado (ja existe no
+      // nosso banco), OU — se ninguem confirmado mas temos um nome
+      // sugerido de UM candidato so (nao a lista "A | B" de match ambiguo,
+      // que precisa de decisao humana manual) — um RASCUNHO de empresa,
+      // reaproveitado se outro achado ja criou um com esse mesmo nome.
+      let destinationCompanyId: string | null = audit.suspectedOwnerId;
+      const isAmbiguousMultiOwner =
+        !destinationCompanyId &&
+        (audit.suspectedOwnerName?.includes(" | ") ?? false);
+      let willCreateDraftInDryRun = false;
+
+      if (
+        !destinationCompanyId &&
+        audit.suspectedOwnerName &&
+        !isAmbiguousMultiOwner
+      ) {
+        const normalizedName = normalizeCompanyName(audit.suspectedOwnerName);
+        if (normalizedName) {
+          const existingDraft = await this.database.company.findUnique({
+            where: { normalizedName },
+          });
+          if (existingDraft) {
+            destinationCompanyId = existingDraft.id;
+          } else if (!dryRun) {
+            // isActive=false: nao aparece em nenhuma listagem publica nem
+            // entra em lote de crawling ate voce revisar (renomear se
+            // preciso) e ativar pela propria aba Audit de Fontes.
+            const draft = await this.database.company.create({
+              data: {
+                name: audit.suspectedOwnerName,
+                normalizedName,
+                careersUrl: audit.currentUrl,
+                isActive: false,
+              },
+            });
+            destinationCompanyId = draft.id;
+            summary.companiesCreated += 1;
+            await this.database.jobSourceAudit.update({
+              where: { id: audit.id },
+              data: { suspectedOwnerId: draft.id },
+            });
+          } else {
+            willCreateDraftInDryRun = true;
+            summary.companiesCreated += 1;
+          }
+        }
+      }
+
       let destination: { companyId: string; jobSourceId: string } | null = null;
 
-      if (audit.tier === "confirmed" && audit.suspectedOwnerId) {
+      if (destinationCompanyId) {
         // Mesmo board, URL so difere de forma cosmetica (barra final,
         // maiuscula, migracao de dominio do provedor) — nao exige URL
         // identica nem fonte ativa: a atribuicao (de quem e a vaga) e
         // independente de estarmos crawleando ali agora.
         const ownerSources = await this.database.jobSource.findMany({
-          where: { companyId: audit.suspectedOwnerId },
+          where: { companyId: destinationCompanyId },
         });
         const correctSource = ownerSources.find((source) =>
           isSameBoard(audit.currentUrl, source.sourceUrl),
@@ -395,19 +469,20 @@ export class CompanySourceAuditService {
 
         if (correctSource) {
           destination = {
-            companyId: audit.suspectedOwnerId,
+            companyId: destinationCompanyId,
             jobSourceId: correctSource.id,
           };
         } else {
-          // Dono real ja existe como Company mas ainda nao tem NENHUMA
-          // fonte pra esse board — cria uma nova (copiando adapter/config
-          // da fonte errada, que e a mesma URL/plataforma, so com o nome
-          // errado) em vez de so descartar a vaga.
+          // Dono (confirmado ou rascunho) ainda nao tem NENHUMA fonte pra
+          // esse board — cria uma nova (copiando adapter/config da fonte
+          // errada, que e a mesma URL/plataforma, so com o nome errado) em
+          // vez de so descartar a vaga. Fonte de rascunho nasce pausada
+          // (isActive=false) ate voce revisar a empresa.
           const ownerName = audit.suspectedOwnerName ?? "Empresa";
           if (!dryRun) {
             const created = await this.database.jobSource.create({
               data: {
-                companyId: audit.suspectedOwnerId,
+                companyId: destinationCompanyId,
                 sourceUrl: audit.currentUrl,
                 sourceName: `${ownerName} careers`,
                 sourceType: wrongSource.sourceType,
@@ -415,30 +490,43 @@ export class CompanySourceAuditService {
                 crawlStrategy: wrongSource.crawlStrategy,
                 checkIntervalMinutes: wrongSource.checkIntervalMinutes,
                 isFallbackAdapter: wrongSource.isFallbackAdapter,
-                isActive: true,
+                isActive: audit.tier === "confirmed",
               },
             });
             destination = {
-              companyId: audit.suspectedOwnerId,
+              companyId: destinationCompanyId,
               jobSourceId: created.id,
             };
           } else {
             destination = {
-              companyId: audit.suspectedOwnerId,
+              companyId: destinationCompanyId,
               jobSourceId: "(dry-run: nova fonte seria criada aqui)",
             };
           }
           summary.jobSourcesCreated += 1;
         }
+      } else if (willCreateDraftInDryRun) {
+        // Dry-run: nem a empresa nem a fonte existem de verdade ainda pra
+        // consultar — so contabiliza o que aconteceria.
+        summary.jobSourcesCreated += 1;
+        destination = {
+          companyId: "(dry-run: rascunho de empresa seria criado aqui)",
+          jobSourceId: "(dry-run: nova fonte seria criada aqui)",
+        };
       }
 
       if (destination) {
+        // Vaga reatribuida a um rascunho (tier != confirmed) fica
+        // "inactive" — preservada (nao "removed"), mas fora do radar
+        // publico ate voce revisar e ativar a empresa.
+        const isDraftDestination = audit.tier !== "confirmed";
         if (!dryRun) {
           const result = await this.database.job.updateMany({
             where: { jobSourceId: audit.jobSourceId },
             data: {
               companyId: destination.companyId,
               jobSourceId: destination.jobSourceId,
+              ...(isDraftDestination ? { status: "inactive" } : {}),
             },
           });
           summary.jobsReassigned += result.count;
@@ -448,6 +536,11 @@ export class CompanySourceAuditService {
           });
         }
       } else {
+        // Match ambiguo entre varias empresas nossas (ver
+        // isAmbiguousMultiOwner) — sem como escolher sozinho qual delas e
+        // a dona real, entao so preserva o comportamento seguro anterior:
+        // desativa a fonte errada e marca as vagas ja importadas como
+        // removed. Precisa de decisao manual (SQL) por enquanto.
         if (!dryRun) {
           const result = await this.database.job.updateMany({
             where: {

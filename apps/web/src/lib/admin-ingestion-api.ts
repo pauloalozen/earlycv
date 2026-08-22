@@ -887,6 +887,7 @@ export type CompanySourceAuditApplySummary = {
   processed: number;
   jobSourcesDisabled: number;
   jobSourcesCreated: number;
+  companiesCreated: number;
   companyFieldsCleared: number;
   jobsReassigned: number;
   jobsRemoved: number;
